@@ -44,6 +44,34 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 
 ---
 
+## Browse
+
+### `GET /api/browse?path=`
+
+Lists directories so clients can offer a folder picker. Omit `path` to get the
+roots — drive letters on Windows, `/` elsewhere.
+
+```json
+{ "path": "D:\\Media", "parent": "D:\\",
+  "entries": [ { "name": "Films", "path": "D:\\Media\\Films" } ] }
+```
+
+`parent` is `null` at the root listing and `""` at a filesystem root, so "up"
+always leads somewhere rather than stranding the picker on one drive.
+
+Directories only — never files, and never file contents. Dotfiles and
+Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and
+`System Volume Information` are not offered as library candidates.
+
+> **Security note.** This endpoint discloses filesystem layout to anyone who
+> can reach the server, and there is no authentication yet. It grants no
+> capability `POST /api/libraries` did not already have — that endpoint accepts
+> and scans any path — but it makes enumeration convenient. Both belong behind
+> auth before LANcast is exposed beyond a trusted LAN. See the security and
+> remote-access areas in [roadmap.md](roadmap.md).
+
+---
+
 ## Libraries
 
 ### `GET /api/libraries`

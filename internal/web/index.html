@@ -175,7 +175,18 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
         <option value="movie">Movies</option><option value="show">TV shows</option><option value="other">Other</option>
       </select>
     </div>
-    <input id="lpath" placeholder="D:\Media\Films" aria-label="Path" required style="width:100%">
+    <div class="row" style="margin-bottom:8px">
+      <input id="lpath" placeholder="D:\Media\Films" aria-label="Path" required style="flex:1">
+      <button type="button" id="browseBtn">Browse…</button>
+    </div>
+    <div id="browser" hidden>
+      <div class="row muted" style="margin-bottom:6px">
+        <button type="button" id="upBtn">↑ Up</button>
+        <span id="crumb" style="overflow-wrap:anywhere"></span>
+      </div>
+      <div id="dirs" style="max-height:260px; overflow:auto; border:1px solid rgba(255,255,255,.08);
+        border-radius:var(--radius-tile); padding:6px"></div>
+    </div>
     <p class="muted" id="lerr" style="min-height:1.2em"></p>
     <div class="row"><button value="cancel">Cancel</button><span class="grow"></span><button id="lsave" value="save">Add</button></div>
   </form>
@@ -415,7 +426,50 @@ $('#setSave').addEventListener('click', async () => {
   pollEnrich();
 });
 
-$('#add').addEventListener('click', () => { $('#lerr').textContent = ''; $('#addlib').showModal(); });
+// Folder picker. Typing absolute paths by hand is miserable, especially on the
+// device you are not sitting at.
+async function openDir(path) {
+  const res = await api('/api/browse' + (path ? `?path=${encodeURIComponent(path)}` : ''));
+  $('#browser').hidden = false;
+  $('#crumb').textContent = res.path || 'This computer';
+  $('#upBtn').disabled = res.parent === null;
+  $('#upBtn').dataset.up = res.parent ?? '';
+
+  // Selecting a folder fills the field; opening it navigates. Both are one
+  // click, so the picker never traps you inside a folder you meant to choose.
+  $('#dirs').innerHTML = res.entries.length
+    ? res.entries.map(e => `<div class="row" style="gap:6px; padding:2px 0">
+        <button type="button" class="grow" style="text-align:left" data-open="${esc(e.path)}">${esc(e.name)}</button>
+        <button type="button" data-pick="${esc(e.path)}">Use</button></div>`).join('')
+    : '<p class="muted" style="margin:6px">No subfolders here.</p>';
+
+  if (res.path) $('#lpath').value = res.path;
+}
+
+$('#browseBtn').addEventListener('click', () => {
+  const start = $('#lpath').value.trim();
+  openDir(start).catch(() => openDir(''));
+});
+$('#upBtn').addEventListener('click', e => openDir(e.target.dataset.up).catch(() => {}));
+$('#dirs').addEventListener('click', e => {
+  const open = e.target.closest('[data-open]');
+  if (open) return openDir(open.dataset.open).catch(err => { $('#lerr').textContent = err.message; });
+  const pick = e.target.closest('[data-pick]');
+  if (pick) {
+    $('#lpath').value = pick.dataset.pick;
+    // Name the library after the folder unless the user already typed one.
+    if (!$('#lname').value.trim()) {
+      $('#lname').value = pick.dataset.pick.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+    }
+    $('#browser').hidden = true;
+  }
+});
+
+$('#add').addEventListener('click', () => {
+  $('#lerr').textContent = '';
+  $('#browser').hidden = true;
+  $('#addlib').showModal();
+});
 $('#addlib').addEventListener('close', async () => {
   const dlg = $('#addlib');
   if (dlg.returnValue !== 'save') return;

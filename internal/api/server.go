@@ -85,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/health", s.health)
 
+	mux.HandleFunc("GET /api/browse", s.browse)
+
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)
 	mux.HandleFunc("POST /api/libraries", s.createLibrary)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.startScan)
