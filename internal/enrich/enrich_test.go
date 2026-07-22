@@ -404,6 +404,62 @@ func TestNFOWriteFailureDoesNotFailEnrichment(t *testing.T) {
 	}
 }
 
+// Remaining must be the real outstanding count, not the last batch size, and
+// it must be recomputed when the run ends. Reporting "25 left" after the job
+// is finished is how a progress display stops being believable.
+func TestStatsRemainingIsAccurate(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	for i := 0; i < 3; i++ {
+		addItem(t, st, lib, `C:\m\`+string(rune('a'+i))+`.mkv`, "Arrival", 2016)
+	}
+
+	reg := meta.NewRegistry()
+	reg.AddProvider(&fakeProvider{
+		id:     "fake",
+		cands:  []meta.Candidate{{Provider: "fake", ExternalID: "1", Kind: meta.KindMovie, Title: "Arrival", Year: 2016, Popularity: 40}},
+		record: arrivalRecord(),
+	})
+
+	w := New(st, reg, &fakeArt{}, quietLog())
+	if err := w.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	s := w.Stats()
+	if s.Total != 3 {
+		t.Errorf("Total = %d, want 3 — the job size when it started", s.Total)
+	}
+	if s.Remaining != 0 {
+		t.Errorf("Remaining = %d, want 0 once the queue is drained", s.Remaining)
+	}
+	if s.Enriched != 3 {
+		t.Errorf("Enriched = %d, want 3", s.Enriched)
+	}
+}
+
+// A run that stops early must still report what is genuinely left.
+func TestStatsRemainingAfterNoProgress(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	addItem(t, st, lib, `C:\m\a.mkv`, "Arrival", 2016)
+	addItem(t, st, lib, `C:\m\b.mkv`, "Arrival", 2016)
+
+	// No providers: nothing can be enriched, so nothing drains.
+	w := New(st, meta.NewRegistry(), &fakeArt{}, quietLog())
+	if err := w.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	s := w.Stats()
+	if s.Remaining != 2 {
+		t.Errorf("Remaining = %d, want 2 — the work is still outstanding", s.Remaining)
+	}
+	if s.Enriched != 0 {
+		t.Errorf("Enriched = %d, want 0", s.Enriched)
+	}
+}
+
 func TestStatsReported(t *testing.T) {
 	ctx := context.Background()
 	st, lib := harness(t)

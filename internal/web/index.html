@@ -340,7 +340,10 @@ function pollEnrich() {
   enrichTimer = setInterval(async () => {
     const s = await api('/api/enrich').catch(() => null);
     if (!s) return clearInterval(enrichTimer);
-    $('#enrichState').textContent = s.running ? `Fetching metadata… ${s.enriched}` : '';
+    // Show work left against the size of the job. A bare count that restarts
+    // whenever a new pass begins reads like the work is being redone.
+    $('#enrichState').textContent = s.running
+      ? `Fetching metadata… ${Math.max(0, s.total - s.remaining)} of ${s.total}` : '';
     if (!s.running) { clearInterval(enrichTimer); await loadItems(); refreshReviewCount(); }
   }, 1200);
 }

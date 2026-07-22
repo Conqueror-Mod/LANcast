@@ -21,6 +21,7 @@ import (
 // Store is the persistence surface the worker needs.
 type Store interface {
 	PendingEnrichment(ctx context.Context, limit int) ([]store.Item, error)
+	PendingCount(ctx context.Context) (int, error)
 	GetLibrary(ctx context.Context, id int64) (*store.Library, error)
 	LockedFields(ctx context.Context, itemID int64) ([]string, error)
 	UpdateItemMetadata(ctx context.Context, itemID int64, m store.ItemMetadata) error
@@ -55,11 +56,17 @@ type Worker struct {
 }
 
 // Stats is a snapshot of enrichment progress.
+//
+// Remaining is the real outstanding count, not the current batch size, and
+// Total is the size of the job when it started. Together they give a figure
+// that means something: a bare count that resets whenever a new pass begins
+// looks like the work is being redone.
 type Stats struct {
 	Running   bool  `json:"running"`
 	Enriched  int   `json:"enriched"`
 	Failed    int   `json:"failed"`
 	Remaining int   `json:"remaining"`
+	Total     int   `json:"total"`
 	UpdatedAt int64 `json:"updated_at"`
 }
 
@@ -118,10 +125,26 @@ func (w *Worker) Run(ctx context.Context) error {
 	w.stats = Stats{Running: true, UpdatedAt: time.Now().Unix()}
 	w.mu.Unlock()
 
+	// Size the job up front so progress can be reported against something.
+	if total, err := w.st.PendingCount(ctx); err == nil {
+		w.mu.Lock()
+		w.stats.Total = total
+		w.stats.Remaining = total
+		w.mu.Unlock()
+	}
+
 	defer func() {
+		// Recompute rather than trusting the last loop value: a run can end
+		// early (no progress possible, context cancelled), and reporting a
+		// stale figure after finishing is how "still 25 left" outlives the job.
+		remaining, err := w.st.PendingCount(context.WithoutCancel(ctx))
+
 		w.mu.Lock()
 		w.running = false
 		w.stats.Running = false
+		if err == nil {
+			w.stats.Remaining = remaining
+		}
 		w.stats.UpdatedAt = time.Now().Unix()
 		w.mu.Unlock()
 	}()
@@ -139,10 +162,6 @@ func (w *Worker) Run(ctx context.Context) error {
 			return nil
 		}
 
-		w.mu.Lock()
-		w.stats.Remaining = len(items)
-		w.mu.Unlock()
-
 		progressed, err := w.processBatch(ctx, items)
 		if err != nil {
 			return err
@@ -155,6 +174,12 @@ func (w *Worker) Run(ctx context.Context) error {
 		if progressed == 0 {
 			w.log.Debug("enrichment made no progress; stopping", "pending", len(items))
 			return nil
+		}
+
+		if remaining, err := w.st.PendingCount(ctx); err == nil {
+			w.mu.Lock()
+			w.stats.Remaining = remaining
+			w.mu.Unlock()
 		}
 	}
 }

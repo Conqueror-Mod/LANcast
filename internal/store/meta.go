@@ -150,6 +150,22 @@ func (s *Store) PendingEnrichment(ctx context.Context, limit int) ([]Item, error
 	return out, rows.Err()
 }
 
+// PendingCount is how many items still await enrichment.
+//
+// The worker's batch length is not this number — reporting the batch size as
+// "remaining" tells the user 50 when there are 3000, and keeps saying 25 after
+// the work is finished.
+func (s *Store) PendingCount(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM media_item
+		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("pending count: %w", err)
+	}
+	return n, nil
+}
+
 // ClearMetadataStamp requeues items for enrichment. Locked fields still survive
 // the refresh — this only schedules the work.
 func (s *Store) ClearMetadataStamp(ctx context.Context, libraryID int64, itemID int64) error {
