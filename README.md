@@ -80,6 +80,13 @@ Settings for posters, synopses, cast, and artwork.
 no-phone-home principle being real rather than decorative. The key is stored
 `0600` outside the database and is never readable back through the API.
 
+Use the **API Key (v3 auth)** — the 32-character hex value. The API Read Access
+Token beside it is a v4 bearer JWT and will be rejected.
+
+> This product uses the TMDB API but is not endorsed or certified by
+> [TMDB](https://www.themoviedb.org). Attribution is a condition of their free
+> tier and is also shown in the app's settings screen.
+
 Build a distributable binary:
 
 ```bash
