@@ -107,13 +107,16 @@ go build -o lancastd ./cmd/lancastd
 
 ## Security
 
-**LANcast has no authentication yet. Do not port-forward it.** Anyone who can
-reach the port can stream your library, browse your filesystem, and add a
-library pointing at any readable path.
+LANcast is guarded by a single password, set on first run.
 
-For access away from home, use a VPN that places your device on the LAN
-(Tailscale, WireGuard) rather than exposing the port. See
-[docs/security.md](docs/security.md) for the full picture.
+**Until you set one, it listens on `127.0.0.1` only** — reachable from the
+machine it runs on, and nowhere else. Set a password in the browser, restart,
+and it binds the network so other devices can reach it.
+
+**There is no TLS. Do not port-forward it.** The password and session cookie
+travel in plaintext. For access away from home, use a VPN that puts your device
+on the LAN (Tailscale, WireGuard), or a reverse proxy terminating TLS. See
+[docs/security.md](docs/security.md).
 
 ## License
 

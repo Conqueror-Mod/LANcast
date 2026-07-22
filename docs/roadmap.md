@@ -74,9 +74,10 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Users, auth, sessions | *unplanned* | Schema already anticipates it |
-| Remote access | *unplanned* | Self-owned; the no-phone-home promise |
-| Security model | *unplanned* | Path traversal, LAN exposure, CSP |
+| Users, auth, sessions | **built** | Single password; multi-user still open |
+| Remote access | documented | VPN or reverse proxy; see security.md |
+| Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
+| Transport security (TLS) | *unplanned* | The largest remaining gap |
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
 | Packaging and distribution | *unplanned* | Windows, Linux, NAS, Pi, service install |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |

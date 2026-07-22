@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 2
+const CurrentSchemaVersion = 3
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -20,6 +20,7 @@ type migration struct {
 // revision 1 on a fresh database; these carry an existing one forward.
 var migrations = []migration{
 	{version: 2, sql: schemaRevision2},
+	{version: 3, sql: schemaRevision3},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -162,4 +163,25 @@ CREATE INDEX IF NOT EXISTS idx_item_review  ON media_item(match_state)
 CREATE INDEX IF NOT EXISTS idx_item_parent  ON media_item(parent_id, season, episode);
 CREATE INDEX IF NOT EXISTS idx_item_enrich  ON media_item(metadata_updated_at, missing);
 CREATE INDEX IF NOT EXISTS idx_credit_item  ON credit(item_id, ord);
+`
+
+// Revision 3 — sessions.
+//
+// Only a SHA-256 of the session token is stored. A stolen database then yields
+// no usable sessions, which matters because the database is the easiest thing
+// to walk off with (it is one file, and backups of it exist by design).
+//
+// Server-side sessions rather than signed cookies: they are revocable. Changing
+// the password can invalidate every existing session, which a self-contained
+// signed cookie cannot express without rotating a signing key.
+const schemaRevision3 = `
+CREATE TABLE IF NOT EXISTS session (
+    token_hash TEXT    PRIMARY KEY,
+    user_id    TEXT    NOT NULL DEFAULT 'local',
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    last_seen  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_expires ON session(expires_at);
 `

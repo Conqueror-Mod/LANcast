@@ -29,6 +29,7 @@ type harness struct {
 	reg      *meta.Registry
 	settings *config.SettingsStore
 	enriched int
+	cookie   *http.Cookie
 }
 
 func newHarness(t *testing.T) *harness {

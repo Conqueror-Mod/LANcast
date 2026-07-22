@@ -16,6 +16,33 @@ breaking changes require a version prefix (`/api/v2`) and the previous version
 keeps working for at least one release. "Clients are thin" is only true if the
 contract they are thin against is stable.
 
+## Authentication
+
+Every endpoint requires a session cookie except `GET /api/health`,
+`GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, and the
+web assets. Unauthenticated calls return `401 unauthorized`.
+
+While no password is set the API is open — but the server binds `127.0.0.1`
+only, so it is reachable solely from the machine it runs on.
+
+**State-changing methods are origin-checked.** `POST`, `PUT`, `PATCH`, and
+`DELETE` must carry an `Origin` or `Referer` matching the request host, or the
+call returns `403 forbidden`. A request with neither header is allowed, so
+non-browser clients work normally.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled}` |
+| `POST /api/auth/setup` | Set the first password; only while unconfigured |
+| `POST /api/auth/login` | `{password}` → session cookie. Throttled per IP |
+| `POST /api/auth/logout` | Ends this session |
+| `POST /api/auth/password` | `{current_password, new_password}`; **revokes all sessions** |
+
+`setup` returns `restart_required: true` when the server is still loopback-bound,
+so the client can explain why other devices cannot connect yet.
+
+---
+
 ## Errors
 
 Every error returns a consistent shape. Handlers never surface raw SQL errors.

@@ -19,7 +19,14 @@ type Settings struct {
 	RatePerSec float64 `json:"rate_per_sec,omitempty"`
 	WriteNFO   bool    `json:"write_nfo"`
 	AutoEnrich bool    `json:"auto_enrich"`
+
+	// PasswordHash is the bcrypt hash guarding the instance. Empty means the
+	// server is unconfigured and will bind to loopback only.
+	PasswordHash string `json:"password_hash,omitempty"`
 }
+
+// Secured reports whether a password has been set.
+func (s Settings) Secured() bool { return s.PasswordHash != "" }
 
 // Defaults returns the settings a fresh install starts with.
 //

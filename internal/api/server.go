@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"lancast/internal/artwork"
+	"lancast/internal/auth"
 	"lancast/internal/config"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
@@ -43,6 +44,10 @@ type Deps struct {
 	Rebuild func(config.Settings)
 	// Enrich triggers a background enrichment pass.
 	Enrich func()
+	// LANBound reports whether the server is listening beyond loopback. An
+	// unsecured server is loopback-only, so the client can explain why a
+	// restart is needed after setting a password.
+	LANBound bool
 }
 
 // Server holds the API dependencies.
@@ -57,6 +62,8 @@ type Server struct {
 	web      http.Handler
 	rebuild  func(config.Settings)
 	enrich   func()
+	lanBound bool
+	throttle *auth.Throttle
 }
 
 func New(d Deps) *Server {
@@ -67,7 +74,8 @@ func New(d Deps) *Server {
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, settings: d.Settings, log: d.Log, web: web,
-		rebuild: d.Rebuild, enrich: d.Enrich,
+		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
+		throttle: auth.NewThrottle(),
 	}
 }
 
@@ -84,6 +92,12 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+
+	mux.HandleFunc("GET /api/auth/status", s.authStatus)
+	mux.HandleFunc("POST /api/auth/setup", s.authSetup)
+	mux.HandleFunc("POST /api/auth/login", s.authLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
+	mux.HandleFunc("POST /api/auth/password", s.authChangePassword)
 
 	mux.HandleFunc("GET /api/browse", s.browse)
 
@@ -112,7 +126,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 
 	mux.Handle("/", s.web)
-	return logRequests(s.log, mux)
+	return logRequests(s.log, s.requireAuth(mux))
 }
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {

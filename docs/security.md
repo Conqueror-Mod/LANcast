@@ -1,40 +1,98 @@
 # Security posture
 
-> **Status: no authentication exists.** This document describes what LANcast
-> protects today, what it does not, and what an attacker on your network can
-> currently do. It is deliberately written before auth is designed, so the
-> design starts from an accurate picture rather than an optimistic one.
+> **Status: single-password authentication.** One password guards the whole
+> instance; an unsecured server binds to loopback only. This document describes
+> what is protected, what is not, and what remains open.
 
-## Current model in one sentence
+## Current model
 
-LANcast trusts everyone who can reach the port.
+**One password guards everything.** Set on first run, verified with bcrypt
+(cost 12), exchanged for a server-side session stored as a SHA-256 of the
+token. The schema is keyed by `user_id` already
+([ADR 0006](adr/0006-playback-state-keyed-by-user.md)), so real multi-user
+accounts can arrive without a migration.
 
-There is no login, no token, no session. Every endpoint — including the ones
-that enumerate directories and stream files — answers any request that arrives.
-The only thing standing between your library and a stranger is that the server
-binds to a LAN address and your router does not forward the port.
+**An unsecured server is loopback-only.** With no password set, LANcast binds
+`127.0.0.1` rather than all interfaces — the port is not open on the network at
+all, not merely refusing. Rejecting requests after accepting them would still
+mean a listening socket answering strangers. Setting a password and restarting
+enables LAN binding.
 
-## What an unauthenticated client on your LAN can do today
+**Why sessions live server-side.** They are revocable. Changing the password
+deletes every session, including the caller's own — a password change that
+leaves old sessions alive has not locked anyone out. A self-contained signed
+cookie cannot express that without rotating a signing key.
 
-| Action | Endpoint |
+**Why only the token hash is stored.** The database is the easiest thing to
+walk off with: it is one file, and backups of it exist by design. A stolen
+copy yields no usable sessions.
+
+## What requires a session
+
+Everything under `/api/` except four endpoints:
+
+| Public | Why |
 |---|---|
-| List and stream every file in every library | `GET /api/stream/{id}` |
-| Enumerate your filesystem, directory by directory | `GET /api/browse` |
-| Add a library pointing at **any** readable path | `POST /api/libraries` |
-| Read and overwrite metadata, locks, and watch state | `PATCH`, `PUT`, `DELETE` |
-| Toggle NFO writing into your media folders | `PUT /api/settings` |
-| Trigger scans and metadata refreshes | `POST .../scan`, `.../refresh` |
+| `GET /api/health` | A monitor should not need credentials |
+| `GET /api/auth/status` | The client must know whether to show setup or login |
+| `POST /api/auth/setup` | Only works while unconfigured, which is loopback-only |
+| `POST /api/auth/login` | Obviously |
+| The web assets | The login form lives in them — gating the page behind a session nobody can obtain yet is a locked door with the key inside |
 
-The two worth dwelling on:
+**Streaming is gated.** `GET /api/stream/{id}` requires a session. A public
+stream URL would make the password decorative.
 
-**Adding a library is arbitrary read access.** `POST /api/libraries` accepts any
-path that exists and is readable. Point it at `C:\Users`, scan, and every video
-file underneath becomes streamable. `GET /api/browse` makes finding such a path
-trivial. Neither grants anything the other did not already imply, but together
-they turn "reachable on the LAN" into "readable filesystem".
+## CSRF
 
-**Settings are writable.** Anyone who can reach the server can enable NFO
-writing, which causes LANcast to write files into media folders.
+Two independent defences, because either alone leaves a gap:
+
+- **`SameSite=Strict` on the session cookie.** A cross-site request does not
+  carry it.
+- **An origin check on every state-changing method.** `POST`, `PUT`, `PATCH`,
+  and `DELETE` must present an `Origin` or `Referer` matching the request host.
+
+A request with neither header is allowed: non-browser clients (curl, a TV app,
+a script) legitimately send neither, and they are not the CSRF threat. Reads
+are not origin-checked — the session gate covers them, and blocking
+cross-origin `GET` would break embedding a stream URL.
+
+This mattered specifically because adding a session cookie to an API that
+previously had nothing worth stealing is what *creates* CSRF exposure. Before
+auth, a malicious page could already reach `localhost:8080`; it just had
+nothing to gain.
+
+## Brute force
+
+Login attempts are throttled per client IP — 10 per 5 minutes, decaying on
+their own. A single shared password is one guessable secret, so unlimited
+attempts against it is the entire attack.
+
+The key is the remote address only. Forwarded headers are attacker-controlled
+unless a trusted proxy sets them, and honouring them here would let anyone
+reset their own counter. **If you deploy behind a reverse proxy, throttling
+will see the proxy as one client** — the proxy should rate-limit instead.
+
+There is deliberately no lockout: an attacker who could lock the owner out of
+their own server has achieved denial of service for free.
+
+## Still unprotected
+
+- **No transport security.** Everything is plaintext HTTP, including the
+  password on login and the session cookie on every request. Anyone on the
+  network path can read both. **This is the largest remaining gap** — use a
+  VPN or a TLS-terminating reverse proxy.
+- **One password, no accounts.** No per-user watch state, no revoking one
+  person's access without changing it for everyone.
+- **No audit trail.** Nothing records who changed what.
+- **No API rate limiting** beyond login.
+
+## Standing risks that authentication does not remove
+
+**Adding a library is arbitrary read access.** `POST /api/libraries` accepts
+any path that exists and is readable. An authenticated client can point it at
+`C:\Users`, scan, and stream every video underneath. `GET /api/browse` makes
+finding such a path trivial. That is acceptable when the only authenticated
+party is the owner — and it is exactly why the password matters.
 
 ## What is protected
 
@@ -77,19 +135,29 @@ system directories are omitted.
 - **No rate limiting on the API.** Only outbound provider calls are limited.
 - **No audit trail.** Nothing records who changed what.
 
-## Deployment guidance until auth exists
+## Deployment guidance
 
-**Do not port-forward LANcast.** Not to test it, not briefly. There is no
-authentication; exposing it publishes your library and hands out filesystem
-enumeration.
+**Do not port-forward LANcast directly.** There is a password now, but no TLS —
+forwarding the port publishes your password and session cookie in plaintext to
+every hop between you and home.
 
-For access away from home, use a VPN that puts your device *on* the LAN —
-Tailscale and WireGuard both do this well — rather than exposing the port.
-That is also the long-term recommendation: it keeps the no-phone-home
-principle intact and avoids reimplementing solved problems badly.
+**Recommended: a VPN that puts your device on the LAN.** Tailscale and
+WireGuard both do this well. Nothing is exposed publicly, traffic is encrypted
+by the VPN, and LANcast needs no configuration at all. This keeps the
+no-phone-home principle intact and avoids reimplementing solved problems badly.
+
+**Alternative: a reverse proxy terminating TLS.** Caddy or nginx in front of
+LANcast, with a real certificate. Forward the original client IP only if you
+also rate-limit at the proxy — LANcast's throttle will otherwise see every
+request as coming from one client.
+
+Built-in HTTPS was considered and rejected for now: certificate management is
+an ongoing burden, and self-signed certificates break TV clients in ways that
+are miserable to debug.
 
 Treat the LAN itself as semi-trusted. A compromised phone, TV, or IoT device on
-your network is already inside the boundary LANcast relies on.
+your network can reach the login endpoint and is inside the boundary LANcast
+relies on.
 
 ## Threats explicitly out of scope
 
@@ -103,16 +171,15 @@ your network is already inside the boundary LANcast relies on.
 
 ## Open decisions
 
-Tracked in [roadmap.md](roadmap.md) under security and remote access:
+Tracked in [roadmap.md](roadmap.md):
 
-1. **Auth model** — single shared password with a session cookie, or real
-   multi-user accounts. `playback_state` is already keyed by `user_id`
-   ([ADR 0006](adr/0006-playback-state-keyed-by-user.md)), so either can arrive
-   without a migration.
-2. **Behavior before a password is set** — binding to localhost until secured
-   makes accidental exposure impossible, at the cost of a first-run step.
-3. **CSRF defence** — required as soon as cookie sessions exist. `SameSite=Strict`
-   plus an origin check is likely sufficient for a same-origin client.
-4. **Transport** — reverse proxy with TLS is the recommendation; built-in HTTPS
-   is possible but certificate management is its own burden and self-signed
-   certificates break TV clients.
+1. **Transport security.** The largest remaining gap. Reverse proxy is the
+   recommendation; built-in TLS remains possible if the proxy step proves too
+   much friction.
+2. **Multi-user accounts.** The schema is ready. Worth doing when more than one
+   person in the house wants their own watch state.
+3. **Session management UI.** Listing and revoking individual sessions, rather
+   than the all-or-nothing password change.
+4. **ffmpeg and untrusted input.** From M3, LANcast will parse media files
+   rather than only serving bytes. That is a genuinely new attack surface and
+   deserves its own review.

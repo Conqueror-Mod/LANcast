@@ -101,6 +101,19 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 <body>
 <div id="field"></div>
 
+<dialog id="gate">
+  <div class="label" id="gateTitle" style="margin-bottom:10px">Sign in</div>
+  <p class="muted" id="gateHelp" style="margin-top:0"></p>
+  <form id="gateForm">
+    <input id="gatePass" type="password" placeholder="Password" autocomplete="current-password"
+           style="width:100%; margin-bottom:6px" required>
+    <input id="gatePass2" type="password" placeholder="Confirm password" autocomplete="new-password"
+           style="width:100%; margin-bottom:6px" hidden>
+    <p class="muted" id="gateErr" style="min-height:1.2em; margin:0 0 8px"></p>
+    <div class="row"><span class="grow"></span><button id="gateGo" type="submit">Continue</button></div>
+  </form>
+</dialog>
+
 <header>
   <span class="brand">LANCAST</span>
   <select id="lib" aria-label="Library"></select>
@@ -157,7 +170,17 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
   </div>
   <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="writeNfo" style="width:auto"> Write .nfo sidecars into media folders</label>
   <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="autoEnrich" style="width:auto"> Fetch metadata automatically</label>
-  <p class="muted" style="border-top:1px solid rgba(255,255,255,.08); padding-top:12px; margin-bottom:0; font-size:12px">
+  <div id="secBlock" style="border-top:1px solid rgba(255,255,255,.08); padding-top:12px; margin-top:12px">
+    <div class="label" style="margin-bottom:8px">Access</div>
+    <p class="muted" id="secState" style="margin-top:0"></p>
+    <div class="row" style="margin-bottom:8px">
+      <input id="curPass" type="password" placeholder="Current password" autocomplete="current-password" style="flex:1">
+      <input id="newPass" type="password" placeholder="New password" autocomplete="new-password" style="flex:1">
+      <button id="changePass">Change</button>
+    </div>
+    <div class="row"><button id="logout">Sign out</button></div>
+  </div>
+  <p class="muted" style="border-top:1px solid rgba(255,255,255,.08); padding-top:12px; margin-bottom:0; margin-top:12px; font-size:12px">
     This product uses the TMDB API but is not endorsed or certified by
     <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer noopener"
        style="color:var(--text-secondary)">TMDB</a>.
@@ -419,7 +442,30 @@ $('#setBtn').addEventListener('click', async () => {
   $('#tmdbKey').value = '';
   $('#writeNfo').checked = s.write_nfo;
   $('#autoEnrich').checked = s.auto_enrich;
+
+  const a = await api('/api/auth/status');
+  $('#secBlock').hidden = !a.configured;
+  $('#secState').textContent = a.lan_enabled
+    ? 'Password set. Reachable from other devices on your network.'
+    : 'Password set, but this instance is still listening on localhost only — restart LANcast to reach it from other devices.';
   $('#settings').showModal();
+});
+
+$('#logout').addEventListener('click', async () => {
+  await api('/api/auth/logout', { method: 'POST' });
+  location.reload();
+});
+
+$('#changePass').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/password', jsonReq('POST', {
+      current_password: $('#curPass').value, new_password: $('#newPass').value,
+    }));
+    // Every session is revoked, including this one — that is the point.
+    location.reload();
+  } catch (err) {
+    $('#secState').textContent = err.message;
+  }
 });
 $('#setClose').addEventListener('click', () => $('#settings').close());
 $('#setSave').addEventListener('click', async () => {
@@ -485,8 +531,54 @@ $('#addlib').addEventListener('close', async () => {
   } catch (err) { $('#lerr').textContent = err.message; dlg.showModal(); }
 });
 
-loadLibraries().catch(err => { $('#empty').hidden = false; $('#empty').textContent = err.message; });
-pollEnrich();
+// Auth gate. An unsecured server binds to loopback only, so the setup form is
+// only ever reachable from the machine itself.
+let needSetup = false;
+
+async function boot() {
+  const s = await api('/api/auth/status');
+  if (s.authenticated) return start();
+
+  needSetup = !s.configured;
+  $('#gateTitle').textContent = needSetup ? 'Set a password' : 'Sign in';
+  $('#gateHelp').textContent = needSetup
+    ? 'LANcast is listening on this machine only until a password is set. Choose one to reach it from other devices.'
+    : '';
+  $('#gatePass').placeholder = needSetup ? 'New password (8+ characters)' : 'Password';
+  $('#gatePass').autocomplete = needSetup ? 'new-password' : 'current-password';
+  $('#gatePass2').hidden = !needSetup;
+  $('#gatePass2').required = needSetup;
+  $('#gate').showModal();
+}
+
+$('#gateForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const pass = $('#gatePass').value;
+  $('#gateErr').textContent = '';
+
+  if (needSetup && pass !== $('#gatePass2').value) {
+    $('#gateErr').textContent = 'Passwords do not match.';
+    return;
+  }
+  try {
+    const res = await api(needSetup ? '/api/auth/setup' : '/api/auth/login',
+      jsonReq('POST', { password: pass }));
+    $('#gate').close();
+    if (res && res.restart_required) {
+      $('#enrichState').textContent = 'Password set — restart LANcast to reach it from other devices.';
+    }
+    start();
+  } catch (err) {
+    $('#gateErr').textContent = err.message;
+  }
+});
+
+function start() {
+  loadLibraries().catch(err => { $('#empty').hidden = false; $('#empty').textContent = err.message; });
+  pollEnrich();
+}
+
+boot().catch(err => { $('#empty').hidden = false; $('#empty').textContent = err.message; });
 </script>
 </body>
 </html>

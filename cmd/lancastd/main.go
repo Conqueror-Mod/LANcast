@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -121,10 +122,22 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	// Safe by default: an unsecured server does not listen beyond loopback.
+	//
+	// Rejecting LAN requests after accepting them would still mean the port is
+	// open and answering. Not binding at all makes accidental exposure
+	// impossible rather than merely discouraged.
+	listenAddr, lanBound := bindAddr(cfg.Addr, settings.Get().Secured())
+	if !lanBound {
+		log.Warn("no password set — listening on loopback only",
+			"addr", listenAddr, "hint", "set a password in Settings, then restart to reach LANcast from other devices")
+	}
+
 	srv := &http.Server{
-		Addr: cfg.Addr,
+		Addr: listenAddr,
 		Handler: api.New(api.Deps{
-			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
+			LANBound: lanBound,
+			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Settings: settings, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
@@ -148,7 +161,7 @@ func run(addr, dataDir string, log *slog.Logger) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.Addr, "data", cfg.DataDir)
+		log.Info("listening", "addr", listenAddr, "data", cfg.DataDir)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}
@@ -165,6 +178,22 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// bindAddr forces an unsecured server onto loopback, preserving the requested
+// port. It reports whether the result is reachable from the network.
+func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
+	if secured {
+		return requested, true
+	}
+
+	_, port, err := net.SplitHostPort(requested)
+	if err != nil {
+		// A bare port like ":8080" or something unparseable: fall back to a
+		// known-safe address rather than guessing.
+		return "127.0.0.1:8080", false
+	}
+	return net.JoinHostPort("127.0.0.1", port), false
 }
 
 func newWorker(st *store.Store, reg *meta.Registry, art *artwork.Cache,
