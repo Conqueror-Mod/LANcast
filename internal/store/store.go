@@ -190,17 +190,22 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (bool, error) {
 }
 
 // FileState is the cheap change-detection tuple for one known file.
+//
+// Missing is part of it deliberately: a file that reappears byte-identical
+// (remounted drive, reconnected share, restored backup) still needs an upsert
+// to clear the flag, so size and mtime alone are not enough to decide a skip.
 type FileState struct {
 	ID        int64
 	SizeBytes *int64
 	MTime     *int64
+	Missing   bool
 }
 
 // KnownFiles returns every non-directory item in a library keyed by path, so
 // the scanner can skip unchanged files without re-parsing them.
 func (s *Store) KnownFiles(ctx context.Context, libraryID int64) (map[string]FileState, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, path, size_bytes, mtime FROM media_item WHERE library_id = ?`, libraryID)
+		`SELECT id, path, size_bytes, mtime, missing FROM media_item WHERE library_id = ?`, libraryID)
 	if err != nil {
 		return nil, fmt.Errorf("known files: %w", err)
 	}
@@ -209,10 +214,12 @@ func (s *Store) KnownFiles(ctx context.Context, libraryID int64) (map[string]Fil
 	out := map[string]FileState{}
 	for rows.Next() {
 		var path string
+		var missing int
 		var st FileState
-		if err := rows.Scan(&st.ID, &path, &st.SizeBytes, &st.MTime); err != nil {
+		if err := rows.Scan(&st.ID, &path, &st.SizeBytes, &st.MTime, &missing); err != nil {
 			return nil, fmt.Errorf("known files: %w", err)
 		}
+		st.Missing = missing != 0
 		out[path] = st
 	}
 	return out, rows.Err()

@@ -147,7 +147,11 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 
 		// Skip unchanged files without re-parsing. This is what makes rescans
 		// cheap on a large library.
-		if st, ok := known[path]; ok &&
+		//
+		// A row currently flagged missing is never skipped, however identical
+		// the file looks: the upsert is what clears the flag, and a file that
+		// comes back byte-identical is the normal case, not the rare one.
+		if st, ok := known[path]; ok && !st.Missing &&
 			st.SizeBytes != nil && *st.SizeBytes == info.Size() &&
 			st.MTime != nil && *st.MTime == info.ModTime().Unix() {
 			return nil
