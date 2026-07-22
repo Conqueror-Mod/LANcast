@@ -188,7 +188,9 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
         border-radius:var(--radius-tile); padding:6px"></div>
     </div>
     <p class="muted" id="lerr" style="min-height:1.2em"></p>
-    <div class="row"><button value="cancel">Cancel</button><span class="grow"></span><button id="lsave" value="save">Add</button></div>
+    <!-- formnovalidate: inside method="dialog" a plain button still submits,
+         so Cancel would trip the required fields it exists to skip. -->
+    <div class="row"><button value="cancel" formnovalidate>Cancel</button><span class="grow"></span><button id="lsave" value="save">Add</button></div>
   </form>
 </dialog>
 
