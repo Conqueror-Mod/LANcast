@@ -1,8 +1,11 @@
 module lancast
 
-go 1.22
+go 1.25.0
 
-require modernc.org/sqlite v1.34.4
+require (
+	golang.org/x/image v0.44.0
+	modernc.org/sqlite v1.34.4
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
