@@ -267,8 +267,33 @@ Returns the media file. Supports `Range` requests — this is what makes seeking
 work, and it is the first thing to test when playback misbehaves. Returns
 `unavailable` if the file is gone from disk.
 
-At M1 this is direct play only: bytes are served as stored. Transcoding at M3
-adds negotiation without changing the URL.
+Direct play only: bytes are served as stored, with range support. Files that a
+browser cannot play use the transcode endpoints below, chosen by the client
+after consulting `/playback`.
+
+### `GET /api/stream/{id}/transcode`
+
+Streams a progressive fragmented MP4 produced by ffmpeg on demand. Plays in any
+browser with no client library. `?t=` seconds sets a start offset; `?audio=`
+selects a specific track by absolute index.
+
+`Accept-Ranges: none` — a live transcode has no length and cannot be
+range-served, since bytes do not exist until ffmpeg produces them. Seeking
+forward restarts the stream from a new `?t=`.
+
+Returns `409 conflict` for a file that can be played directly (transcoding it
+would be wasted CPU), `503` if ffmpeg is not installed, and `429` past the
+concurrent-transcode limit.
+
+### `GET /api/stream/{id}/hls/index.m3u8`
+
+The same transcode as an HLS playlist with fMP4 segments, for clients that
+speak HLS. Segment URLs point back at
+`GET /api/stream/{id}/hls/{session}/{name}`.
+
+### `GET /api/transcode`
+
+Lists running transcode sessions, and whether ffmpeg is available.
 
 ---
 

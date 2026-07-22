@@ -20,6 +20,7 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
+	"lancast/internal/transcode"
 )
 
 // Version is reported by GET /api/health.
@@ -37,6 +38,7 @@ type Deps struct {
 	Artwork  *artwork.Cache
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
+	Trans    *transcode.Manager
 	Settings *config.SettingsStore
 	Log      *slog.Logger
 	Web      http.Handler
@@ -60,6 +62,7 @@ type Server struct {
 	art      *artwork.Cache
 	worker   *enrich.Worker
 	probes   *probe.Worker
+	trans    *transcode.Manager
 	settings *config.SettingsStore
 	log      *slog.Logger
 	web      http.Handler
@@ -76,7 +79,8 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, settings: d.Settings, log: d.Log, web: web,
+		worker: d.Worker, probes: d.Probes, trans: d.Trans,
+		settings: d.Settings, log: d.Log, web: web,
 		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
 		throttle: auth.NewThrottle(),
 	}
@@ -130,6 +134,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/settings", s.putSettings)
 
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
+	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
+	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)
+	mux.HandleFunc("GET /api/stream/{id}/hls/{session}/{name}", s.hlsSegment)
+	mux.HandleFunc("GET /api/transcode", s.transcodeSessions)
 
 	mux.Handle("/", s.web)
 	return logRequests(s.log, s.requireAuth(mux))

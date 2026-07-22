@@ -28,6 +28,7 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
+	"lancast/internal/transcode"
 	"lancast/internal/web"
 )
 
@@ -105,6 +106,11 @@ func run(addr, dataDir string, log *slog.Logger) error {
 
 	prober := probe.New()
 	probes := probe.NewWorker(st, prober, log)
+
+	trans := transcode.NewManager(filepath.Join(cfg.DataDir, "transcode"), log)
+	if !trans.Available() {
+		log.Info("ffmpeg not found; files that cannot be played directly will not be converted")
+	}
 	if !prober.Available() {
 		// Supported, not broken: LANcast serves files fine without ffmpeg, it
 		// just cannot tell whether a client can play them.
@@ -162,7 +168,8 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound,
 			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Settings: settings, Log: log, Web: web.Handler(),
+			Worker: worker, Probes: probes, Trans: trans,
+			Settings: settings, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))
@@ -182,6 +189,11 @@ func run(addr, dataDir string, log *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Clears leftover scratch from a previous run and starts reaping idle
+	// sessions. A closed browser tab does not tell the server it has gone.
+	trans.Start(ctx)
+	defer trans.StopAll()
 
 	// Pick up anything left pending from a previous run.
 	probeSoon()

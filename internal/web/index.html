@@ -293,14 +293,46 @@ $('#grid').addEventListener('click', e => {
   if (t) play(items[+t.dataset.i]);
 });
 
+// Ask the server how a file plays, then pick the source. Direct-playable files
+// use the range-served /stream endpoint (seekable); the rest use the
+// progressive transcode endpoint, which plays in any browser but cannot seek
+// past what has been produced yet.
+async function playInto(v, itemID) {
+  $('#pdecision').textContent = '';
+  let decision = { method: 'direct' };
+  try { decision = (await api(`/api/items/${itemID}/playback`)).decision; } catch {}
+
+  if (decision.method === 'direct') {
+    v.src = `/api/stream/${itemID}`;
+  } else {
+    v.src = `/api/stream/${itemID}/transcode`;
+    $('#pdecision').textContent =
+      `${decision.method === 'remux' ? 'Repackaging' : 'Converting'} for playback — ${decision.reason}. ` +
+      `Seeking is limited while converting.`;
+  }
+  v.load();
+
+  // If the server guessed direct-play wrong — an unprobed file, or a codec
+  // the profile allows but this browser refuses — fall back to transcoding
+  // once rather than showing a black rectangle.
+  v.onerror = () => {
+    if (v.dataset.fellBack || v.src.includes('/transcode')) return;
+    v.dataset.fellBack = '1';
+    $('#pdecision').textContent = 'Direct playback failed; converting instead.';
+    v.src = `/api/stream/${itemID}/transcode`;
+    v.load();
+    v.play().catch(() => {});
+  };
+}
+
 async function play(it) {
   if (it.missing) return;
   current = it;
   const v = $('#video');
   $('#ptitle').textContent = it.series ? `${it.series} — ${it.title}` : it.title;
   $('#psub').textContent = it.year || '';
-  v.src = `/api/stream/${it.id}`;
   $('#player').showModal();
+  playInto(v, it.id);
 
   const d = await api(`/api/items/${it.id}`);
   current = d;
@@ -314,12 +346,6 @@ async function play(it) {
   if (d.credits?.length) bits.push(d.credits.filter(c => c.role === 'actor').slice(0,4).map(c => c.name).join(', '));
   if (d.match_state === 'review') bits.push('match uncertain');
 
-  // "Why is this transcoding" should not require reading logs.
-  api(`/api/items/${it.id}/playback`).then(pb => {
-    const dec = pb.decision;
-    $('#pdecision').textContent = dec.method === 'direct'
-      ? '' : `${dec.method === 'remux' ? 'Repackaging' : 'Transcoding'} — ${dec.reason}`;
-  }).catch(() => {});
   // A lock the user cannot see or release is indistinguishable from a bug.
   const locks = (d.locked_fields || []).map(f =>
     `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`).join('');
@@ -348,7 +374,15 @@ $('#video').addEventListener('timeupdate', () => {
 
 $('#close').addEventListener('click', () => $('#player').close());
 $('#player').addEventListener('close', () => {
-  const v = $('#video'); v.pause(); v.removeAttribute('src'); v.load();
+  const v = $('#video');
+  v.pause();
+  v.onerror = null;
+  delete v.dataset.fellBack;
+  // Clearing the source closes the HTTP response, which is what stops a
+  // running transcode. Leaving it attached keeps ffmpeg alive until the
+  // server's idle reaper notices.
+  v.removeAttribute('src');
+  v.load();
 });
 
 $('#lib').addEventListener('change', () => { loadItems(); refreshReviewCount(); });

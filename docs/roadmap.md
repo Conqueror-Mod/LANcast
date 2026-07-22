@@ -56,9 +56,9 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
 | Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
-| ffmpeg pipeline and HLS | *next* | Segmenting, seeking, session lifecycle |
+| ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | *unplanned* | QSV, NVENC, VAAPI capability matrix |
-| Subtitles | *unplanned* | Sidecar, burn-in, styling, sourcing |
+| Subtitles | *next* | Sidecar, burn-in, styling, sourcing |
 | React client build | *unplanned* | Executes the design system for real |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
 
