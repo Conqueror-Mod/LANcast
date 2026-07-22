@@ -25,6 +25,7 @@ import (
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/tmdb"
+	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/web"
@@ -102,6 +103,15 @@ func run(addr, dataDir string, log *slog.Logger) error {
 
 	worker := newWorker(st, reg, art, settings, log)
 
+	prober := probe.New()
+	probes := probe.NewWorker(st, prober, log)
+	if !prober.Available() {
+		// Supported, not broken: LANcast serves files fine without ffmpeg, it
+		// just cannot tell whether a client can play them.
+		log.Info("ffprobe not found; playback decisions will assume direct play",
+			"hint", "install ffmpeg to enable codec detection")
+	}
+
 	// enrichSoon runs a pass in the background, coalescing concurrent requests.
 	var enrichMu sync.Mutex
 	enrichCtx, cancelEnrich := context.WithCancel(context.Background())
@@ -122,6 +132,20 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	// Probing runs independently of metadata enrichment: it is local, needs no
+	// API key, and playback decisions depend on it. Tying it to enrichment
+	// would mean a library with no TMDB key never gets probed.
+	var probeMu sync.Mutex
+	probeSoon := func() {
+		go func() {
+			probeMu.Lock()
+			defer probeMu.Unlock()
+			if err := probes.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("probe pass failed", "error", err)
+			}
+		}()
+	}
+
 	// Safe by default: an unsecured server does not listen beyond loopback.
 	//
 	// Rejecting LAN requests after accepting them would still mean the port is
@@ -138,7 +162,7 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound,
 			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Settings: settings, Log: log, Web: web.Handler(),
+			Worker: worker, Probes: probes, Settings: settings, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))
@@ -149,14 +173,18 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		// No write timeout: streaming a film is a legitimately long response.
 	}
 
-	// A scan produces pending items; enrichment consumes them. Without this
-	// wiring a fresh scan stays unenriched until the next restart.
-	scanner.OnFinish(enrichSoon)
+	// A scan produces pending items; both workers consume them. Without this
+	// wiring a fresh scan stays unenriched and unprobed until the next restart.
+	scanner.OnFinish(func() {
+		probeSoon()
+		enrichSoon()
+	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// Pick up anything left pending from a previous run.
+	probeSoon()
 	enrichSoon()
 
 	errc := make(chan error, 1)

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 3
+const CurrentSchemaVersion = 4
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -21,6 +21,7 @@ type migration struct {
 var migrations = []migration{
 	{version: 2, sql: schemaRevision2},
 	{version: 3, sql: schemaRevision3},
+	{version: 4, sql: schemaRevision4},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -184,4 +185,41 @@ CREATE TABLE IF NOT EXISTS session (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_expires ON session(expires_at);
+`
+
+// Revision 4 — probe results.
+//
+// The summary columns on media_item are denormalized from media_stream on
+// purpose: a grid rendering 500 tiles needs codec and resolution without a
+// join per tile, and the playback decision reads only the primary streams.
+// media_stream keeps the full track list for the audio and subtitle pickers.
+const schemaRevision4 = `
+ALTER TABLE media_item ADD COLUMN probed_at      INTEGER;
+ALTER TABLE media_item ADD COLUMN video_codec    TEXT;
+ALTER TABLE media_item ADD COLUMN video_profile  TEXT;
+ALTER TABLE media_item ADD COLUMN width          INTEGER;
+ALTER TABLE media_item ADD COLUMN height         INTEGER;
+ALTER TABLE media_item ADD COLUMN video_bitrate  INTEGER;
+ALTER TABLE media_item ADD COLUMN audio_codec    TEXT;
+ALTER TABLE media_item ADD COLUMN audio_channels INTEGER;
+
+CREATE TABLE IF NOT EXISTS media_stream (
+    item_id    INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    idx        INTEGER NOT NULL,
+    kind       TEXT    NOT NULL,          -- video | audio | subtitle
+    codec      TEXT    NOT NULL,
+    profile    TEXT,
+    language   TEXT,
+    title      TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    forced     INTEGER NOT NULL DEFAULT 0,
+    width      INTEGER,
+    height     INTEGER,
+    channels   INTEGER,
+    bit_rate   INTEGER,
+    PRIMARY KEY (item_id, idx)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stream_item ON media_stream(item_id, kind);
+CREATE INDEX IF NOT EXISTS idx_item_probe  ON media_item(probed_at, missing);
 `

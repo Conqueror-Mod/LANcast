@@ -292,5 +292,11 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		s.writeInternal(w, err, "load item detail")
 		return
 	}
+	streams, err := s.st.Streams(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "load streams")
+		return
+	}
+	it.Streams = streams
 	writeJSON(w, http.StatusOK, it)
 }

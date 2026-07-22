@@ -16,6 +16,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
+	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
@@ -54,7 +55,9 @@ func newHarness(t *testing.T) *harness {
 
 	api := New(Deps{
 		Store: st, Scanner: scan.New(st, log), Registry: reg, Artwork: art,
-		Worker: enrich.New(st, reg, art, log), Settings: settings, Log: log,
+		Worker:   enrich.New(st, reg, art, log),
+		Probes:   probe.NewWorker(st, probe.New(), log),
+		Settings: settings, Log: log,
 		Enrich: func() { h.enriched++ },
 	})
 

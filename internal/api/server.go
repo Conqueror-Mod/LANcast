@@ -17,6 +17,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
+	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
@@ -35,6 +36,7 @@ type Deps struct {
 	Registry *meta.Registry
 	Artwork  *artwork.Cache
 	Worker   *enrich.Worker
+	Probes   *probe.Worker
 	Settings *config.SettingsStore
 	Log      *slog.Logger
 	Web      http.Handler
@@ -57,6 +59,7 @@ type Server struct {
 	reg      *meta.Registry
 	art      *artwork.Cache
 	worker   *enrich.Worker
+	probes   *probe.Worker
 	settings *config.SettingsStore
 	log      *slog.Logger
 	web      http.Handler
@@ -73,7 +76,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, settings: d.Settings, log: d.Log, web: web,
+		worker: d.Worker, probes: d.Probes, settings: d.Settings, log: d.Log, web: web,
 		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
 		throttle: auth.NewThrottle(),
 	}
@@ -116,8 +119,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/match", s.applyMatch)
 	mux.HandleFunc("POST /api/items/{id}/refresh", s.refreshItem)
 
+	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
+
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
+	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
 	mux.HandleFunc("GET /api/settings", s.getSettings)

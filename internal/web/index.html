@@ -142,6 +142,7 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
   </div>
   <p class="muted" id="poverview" style="margin:10px 0 0"></p>
   <div class="row muted" id="pmeta" style="margin-top:8px"></div>
+  <p class="muted" id="pdecision" style="margin:6px 0 0; font-size:12px"></p>
 </dialog>
 
 <dialog id="fix">
@@ -220,6 +221,10 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDuration = ms => {
+  const mins = Math.round(ms / 60000);
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+};
 const api = async (path, opts) => {
   const r = await fetch(path, opts);
   if (r.status === 204) return null;
@@ -256,9 +261,12 @@ function render(list, total) {
   $('#grid').innerHTML = list.map((it, i) => {
     const pct = it.progress && it.duration_ms
       ? Math.min(100, Math.round(it.progress.position_ms / it.duration_ms * 100)) : 0;
-    const sub = it.season != null
-      ? `S${String(it.season).padStart(2,'0')}E${String(it.episode).padStart(2,'0')}`
-      : (it.year || '');
+    const sub = [
+      it.season != null
+        ? `S${String(it.season).padStart(2,'0')}E${String(it.episode).padStart(2,'0')}`
+        : (it.year || ''),
+      it.duration_ms ? fmtDuration(it.duration_ms) : '',
+    ].filter(Boolean).join(' · ');
     const name = it.series ? `${it.series} — ${it.title}` : it.title;
     const poster = it.artwork?.poster
       ? `<img src="${art(it.artwork.poster,'poster')}" alt="" loading="lazy">`
@@ -300,8 +308,18 @@ async function play(it) {
   const bits = [];
   if (d.genres?.length) bits.push(d.genres.join(' · '));
   if (d.rating) bits.push(`★ ${d.rating.toFixed(1)}`);
+  if (d.duration_ms) bits.push(fmtDuration(d.duration_ms));
+  if (d.height) bits.push(`${d.height}p`);
+  if (d.video_codec) bits.push([d.video_codec, d.audio_codec].filter(Boolean).join(' / '));
   if (d.credits?.length) bits.push(d.credits.filter(c => c.role === 'actor').slice(0,4).map(c => c.name).join(', '));
   if (d.match_state === 'review') bits.push('match uncertain');
+
+  // "Why is this transcoding" should not require reading logs.
+  api(`/api/items/${it.id}/playback`).then(pb => {
+    const dec = pb.decision;
+    $('#pdecision').textContent = dec.method === 'direct'
+      ? '' : `${dec.method === 'remux' ? 'Repackaging' : 'Transcoding'} — ${dec.reason}`;
+  }).catch(() => {});
   // A lock the user cannot see or release is indistinguishable from a bug.
   const locks = (d.locked_fields || []).map(f =>
     `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`).join('');

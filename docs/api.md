@@ -212,6 +212,53 @@ during playback.
 
 ---
 
+## Playback decisions
+
+> M3. Design reference: [ADR 0012](adr/0012-probe-before-transcode.md).
+
+### `GET /api/items/{id}/playback`
+
+How this file would be delivered to a browser, and why.
+
+```json
+{ "item_id": 87, "probed": true,
+  "decision": { "method": "transcode",
+                "reason": "audio codec eac3 is not supported",
+                "video_action": "copy", "audio_action": "encode",
+                "target_format": "mp4" } }
+```
+
+`method` is `direct`, `remux`, or `transcode`. The actions matter
+independently: a `transcode` with `video_action: "copy"` re-encodes only the
+audio, which is a fraction of the cost of a full re-encode and covers about a
+third of a typical library.
+
+`reason` is always populated. "Why is this transcoding" should not require
+reading server logs.
+
+An unprobed item returns `direct` — the same behavior LANcast had before
+probing existed, rather than guessing at a transcode for a file nothing has
+inspected.
+
+### `GET /api/probe`
+
+Background probing progress.
+
+```json
+{ "available": true, "running": false, "probed": 225,
+  "failed": 0, "remaining": 0, "total": 225 }
+```
+
+`available` is false when ffprobe is not installed. That is a supported
+configuration, not an error: playback decisions fall back to direct play.
+
+Item responses gain `duration_ms`, `width`, `height`, `video_codec`,
+`video_profile`, `video_bitrate`, `audio_codec`, `audio_channels`, and
+`probed_at`. The detail response also carries `streams` — the full track list,
+including subtitle and alternate audio tracks.
+
+---
+
 ## Streaming
 
 ### `GET /api/stream/{id}`

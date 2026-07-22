@@ -160,6 +160,19 @@ type Item struct {
 	// match_state alone defaults to 'unmatched' and cannot express that.
 	MetadataUpdatedAt *int64 `json:"metadata_updated_at"`
 
+	// Probe results. Nil until the file has been inspected.
+	ProbedAt      *int64  `json:"probed_at"`
+	VideoCodec    *string `json:"video_codec"`
+	VideoProfile  *string `json:"video_profile"`
+	Width         *int    `json:"width"`
+	Height        *int    `json:"height"`
+	VideoBitRate  *int64  `json:"video_bitrate"`
+	AudioCodec    *string `json:"audio_codec"`
+	AudioChannels *int    `json:"audio_channels"`
+
+	// Detail-only.
+	Streams []MediaStream `json:"streams,omitempty"`
+
 	// Detail-only; nil on list responses.
 	Genres       []string `json:"genres,omitempty"`
 	Credits      []Credit `json:"credits,omitempty"`
@@ -220,7 +233,11 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (bool, error) {
 			year = excluded.year, series = excluded.series, season = excluded.season,
 			episode = excluded.episode, container = excluded.container,
 			size_bytes = excluded.size_bytes, mtime = excluded.mtime,
-			updated_at = excluded.updated_at, missing = 0`,
+			updated_at = excluded.updated_at, missing = 0,
+			-- The scanner only upserts files whose size or mtime changed, so
+			-- reaching here means the bytes are different and any previous
+			-- probe describes a file that no longer exists.
+			probed_at = NULL`,
 		f.LibraryID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
 		f.Container, f.SizeBytes, f.MTime, now, now)
 	if err != nil {
@@ -306,7 +323,9 @@ type ItemFilter struct {
 const itemCols = `id, library_id, kind, path, title, sort_title, year, series, season, episode,
 	container, size_bytes, mtime, duration_ms, added_at, missing,
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
-	match_state, match_score, metadata_updated_at`
+	match_state, match_score, metadata_updated_at,
+	probed_at, video_codec, video_profile, width, height, video_bitrate,
+	audio_codec, audio_channels`
 
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
@@ -315,7 +334,9 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Container, &it.SizeBytes,
 		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
-		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt)
+		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
+		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
+		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels)
 	if err != nil {
 		return nil, err
 	}

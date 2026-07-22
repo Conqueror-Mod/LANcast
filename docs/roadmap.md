@@ -54,8 +54,9 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Transcode decision tree | *unplanned* | Direct play vs stream vs transcode |
-| ffmpeg pipeline and HLS | *unplanned* | Segmenting, seeking, session lifecycle |
+| Media probing | **built** | ffprobe; codecs, duration, tracks |
+| Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
+| ffmpeg pipeline and HLS | *next* | Segmenting, seeking, session lifecycle |
 | Hardware acceleration | *unplanned* | QSV, NVENC, VAAPI capability matrix |
 | Subtitles | *unplanned* | Sidecar, burn-in, styling, sourcing |
 | React client build | *unplanned* | Executes the design system for real |
