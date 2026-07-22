@@ -38,6 +38,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -140,7 +144,39 @@ type Item struct {
 	AddedAt int64 `json:"added_at"`
 	Missing bool  `json:"missing"`
 
+	// M2 metadata.
+	ParentID      *int64   `json:"parent_id"`
+	Overview      *string  `json:"overview"`
+	Rating        *float64 `json:"rating"`
+	ContentRating *string  `json:"content_rating"`
+	ReleasedAt    *int64   `json:"released_at"`
+	Provider      *string  `json:"provider"`
+	ExternalID    *string  `json:"external_id"`
+	MatchState    string   `json:"match_state"`
+	MatchScore    *float64 `json:"match_score"`
+
+	// Detail-only; nil on list responses.
+	Genres       []string `json:"genres,omitempty"`
+	Credits      []Credit `json:"credits,omitempty"`
+	Artwork      *Artwork `json:"artwork,omitempty"`
+	LockedFields []string `json:"locked_fields,omitempty"`
+
 	Progress *Progress `json:"progress,omitempty"`
+}
+
+// Credit is one person's involvement in an item.
+type Credit struct {
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	Character string `json:"character,omitempty"`
+	Order     int    `json:"-"`
+}
+
+// Artwork holds the content-addressed hashes for an item's images.
+type Artwork struct {
+	Poster string `json:"poster,omitempty"`
+	Fanart string `json:"fanart,omitempty"`
+	Thumb  string `json:"thumb,omitempty"`
 }
 
 // Progress is a user's playback position for an item.
@@ -263,14 +299,18 @@ type ItemFilter struct {
 }
 
 const itemCols = `id, library_id, kind, path, title, sort_title, year, series, season, episode,
-	container, size_bytes, mtime, duration_ms, added_at, missing`
+	container, size_bytes, mtime, duration_ms, added_at, missing,
+	parent_id, overview, rating, content_rating, released_at, provider, external_id,
+	match_state, match_score`
 
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var missing int
 	err := sc.Scan(&it.ID, &it.LibraryID, &it.Kind, &it.Path, &it.Title, &it.SortTitle,
 		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Container, &it.SizeBytes,
-		&it.MTime, &it.DurationMS, &it.AddedAt, &missing)
+		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
+		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
+		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore)
 	if err != nil {
 		return nil, err
 	}
