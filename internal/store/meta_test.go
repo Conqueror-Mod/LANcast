@@ -331,6 +331,55 @@ func TestArtworkRoundTrip(t *testing.T) {
 	}
 }
 
+// The grid renders from the list endpoint, so artwork has to arrive in bulk
+// with the page. Without this, posters are downloaded, stored, and never seen.
+func TestAttachArtwork(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	a := seedItem(t, st, lib, `C:\m\a.mkv`)
+	b := seedItem(t, st, lib, `C:\m\b.mkv`)
+	seedItem(t, st, lib, `C:\m\c.mkv`) // no artwork
+
+	st.PutArtwork(ctx, a, "hash-poster-a", "poster", "u", 342, 513, 1)
+	st.PutArtwork(ctx, a, "hash-fanart-a", "fanart", "u", 1280, 720, 1)
+	st.PutArtwork(ctx, b, "hash-poster-b", "poster", "u", 342, 513, 1)
+
+	items, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Artwork != nil {
+			t.Fatal("ListItems attached artwork on its own; the test would not prove anything")
+		}
+	}
+
+	if err := st.AttachArtwork(ctx, items); err != nil {
+		t.Fatalf("AttachArtwork: %v", err)
+	}
+
+	got := map[int64]*Artwork{}
+	for i := range items {
+		got[items[i].ID] = items[i].Artwork
+	}
+	if got[a] == nil || got[a].Poster != "hash-poster-a" || got[a].Fanart != "hash-fanart-a" {
+		t.Errorf("item a artwork = %+v", got[a])
+	}
+	if got[b] == nil || got[b].Poster != "hash-poster-b" || got[b].Fanart != "" {
+		t.Errorf("item b artwork = %+v", got[b])
+	}
+	for id, art := range got {
+		if id != a && id != b && art != nil {
+			t.Errorf("item %d got artwork it should not have: %+v", id, art)
+		}
+	}
+
+	if err := st.AttachArtwork(ctx, nil); err != nil {
+		t.Errorf("AttachArtwork(nil) = %v, want nil", err)
+	}
+}
+
 func TestProviderCache(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)

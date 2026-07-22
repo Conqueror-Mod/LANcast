@@ -299,6 +299,26 @@ func TestArtworkServing(t *testing.T) {
 	}
 }
 
+// The grid renders from the list endpoint. If artwork only arrives on the
+// detail response, every poster is fetched and stored and never displayed.
+func TestListItemsIncludesArtwork(t *testing.T) {
+	h := newHarness(t)
+	id := h.addFile(t, "a.mkv", make([]byte, 16))
+	h.st.PutArtwork(context.Background(), id, "posterhash", "poster", "u", 342, 513, 1)
+
+	var body struct {
+		Items []store.Item `json:"items"`
+	}
+	decode(t, h.do(t, "GET", "/api/items?library_id=1", nil), &body)
+
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d", len(body.Items))
+	}
+	if body.Items[0].Artwork == nil || body.Items[0].Artwork.Poster != "posterhash" {
+		t.Errorf("list artwork = %+v, want the poster hash", body.Items[0].Artwork)
+	}
+}
+
 func TestArtworkConditionalRequest(t *testing.T) {
 	h := newHarness(t)
 	img := image.NewRGBA(image.Rect(0, 0, 100, 150))

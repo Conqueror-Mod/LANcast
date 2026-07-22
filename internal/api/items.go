@@ -27,6 +27,11 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "attach progress")
 		return
 	}
+	// The grid renders from this response, so posters have to come with it.
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": items})
 }

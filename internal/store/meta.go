@@ -379,6 +379,69 @@ func (s *Store) ItemArtwork(ctx context.Context, itemID int64) (*Artwork, error)
 	return &art, nil
 }
 
+// AttachArtwork fills in Artwork for a page of items in one query.
+//
+// The grid renders from the list endpoint, so without this every poster is
+// downloaded, stored, and then never shown. Doing it per item would be one
+// query per tile, which is exactly the N+1 the batch shape exists to avoid.
+func (s *Store) AttachArtwork(ctx context.Context, items []Item) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	placeholders := make([]byte, 0, len(items)*2)
+	args := make([]any, 0, len(items))
+	for i := range items {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args = append(args, items[i].ID)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ia.item_id, ia.kind, a.hash
+		FROM item_artwork ia
+		JOIN artwork a ON a.id = ia.artwork_id
+		WHERE ia.selected = 1 AND ia.item_id IN (`+string(placeholders)+`)`, args...)
+	if err != nil {
+		return fmt.Errorf("attach artwork: %w", err)
+	}
+	defer rows.Close()
+
+	byID := map[int64]*Artwork{}
+	for rows.Next() {
+		var id int64
+		var kind, hash string
+		if err := rows.Scan(&id, &kind, &hash); err != nil {
+			return fmt.Errorf("attach artwork: %w", err)
+		}
+		art, ok := byID[id]
+		if !ok {
+			art = &Artwork{}
+			byID[id] = art
+		}
+		switch kind {
+		case "poster":
+			art.Poster = hash
+		case "fanart":
+			art.Fanart = hash
+		case "thumb":
+			art.Thumb = hash
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range items {
+		if art, ok := byID[items[i].ID]; ok {
+			items[i].Artwork = art
+		}
+	}
+	return nil
+}
+
 // ArtworkExists reports whether a hash is already stored, so a download can be
 // skipped.
 func (s *Store) ArtworkExists(ctx context.Context, hash string) (bool, error) {
