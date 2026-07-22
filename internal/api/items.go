@@ -1,0 +1,74 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"lancast/internal/store"
+)
+
+func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := store.ItemFilter{
+		LibraryID: int64(queryInt(r, "library_id")),
+		Kind:      q.Get("kind"),
+		Query:     q.Get("q"),
+		Sort:      q.Get("sort"),
+		Limit:     queryInt(r, "limit"),
+		Offset:    queryInt(r, "offset"),
+	}
+
+	items, total, err := s.st.ListItems(r.Context(), f)
+	if err != nil {
+		s.writeInternal(w, err, "list items")
+		return
+	}
+	if err := s.st.AttachProgress(r.Context(), items, localUser); err != nil {
+		s.writeInternal(w, err, "attach progress")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": items})
+}
+
+func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	it, err := s.st.GetItem(r.Context(), id, localUser)
+	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	writeJSON(w, http.StatusOK, it)
+}
+
+func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	var req struct {
+		PositionMS int64 `json:"position_ms"`
+		Watched    bool  `json:"watched"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
+		return
+	}
+	if req.PositionMS < 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "position_ms must not be negative")
+		return
+	}
+
+	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	if err := s.st.SaveProgress(r.Context(), id, localUser, req.PositionMS, req.Watched); err != nil {
+		s.writeInternal(w, err, "save progress")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -1,0 +1,27 @@
+# Binaries.
+# Anchored with a leading slash: a bare "lancastd" also matches the
+# cmd/lancastd/ source directory and silently excludes the entrypoint.
+/lancastd
+/lancastd.exe
+/dist/
+
+# Local state — never commit a library database
+*.db
+*.db-shm
+*.db-wal
+/data/
+
+# Web client build output
+/web/dist/
+/web/node_modules/
+node_modules/
+
+# Editor and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test fixtures may contain real media; keep generated ones out
+/testdata/generated/

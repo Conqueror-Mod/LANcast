@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LANcast</title>
+<style>
+:root{
+  --space-void:#05070f; --space-deep:#070b18; --space-raised:#0a0f22;
+  --gold:#c6a35a; --gold-bright:#e3c179;
+  --gold-dormant:rgba(198,163,90,.20); --gold-ring:rgba(198,163,90,.13);
+  --text-primary:#f2f5fb; --text-secondary:#c3cbe2;
+  --text-muted:#7d88a8; --text-faint:#6f7a99;
+  --radius-tile:6px; --radius-panel:12px;
+  --dur-fast:120ms; --dur-ambient:75s;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--text-primary); background:var(--space-deep); overflow-x:hidden;
+}
+/* The nebula field: three radial ellipses over a linear base. No image assets. */
+#field{
+  position:fixed; inset:-10%; z-index:-1; pointer-events:none;
+  background-color:var(--space-deep);
+  background-image:
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(90,74,158,.38), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 20%,  rgba(38,88,168,.35), transparent 62%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(74,54,140,.30), transparent 65%),
+    linear-gradient(170deg,var(--space-raised) 0%,var(--space-deep) 55%,var(--space-void) 100%);
+  animation:drift var(--dur-ambient) ease-in-out infinite alternate;
+}
+@keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-2%,1.5%,0) scale(1.05)}}
+@media (prefers-reduced-motion:reduce){#field{animation:none}}
+
+header{
+  display:flex; align-items:center; gap:20px; padding:14px 22px;
+  border-bottom:1px solid var(--gold-dormant);
+}
+.brand{font-size:13px; letter-spacing:.22em; color:var(--gold); font-weight:500}
+.label{font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-muted)}
+main{padding:22px; max-width:1500px; margin:0 auto}
+.rule{flex:1; height:1px; background:linear-gradient(90deg,var(--gold-dormant),transparent)}
+.bar{display:flex; align-items:baseline; gap:12px; margin:0 0 16px}
+
+input,select,button{
+  font:inherit; color:var(--text-primary); background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.10); border-radius:var(--radius-tile);
+  padding:7px 11px;
+}
+input::placeholder{color:var(--text-faint)}
+button{cursor:pointer; transition:border-color var(--dur-fast),color var(--dur-fast)}
+button:hover{border-color:var(--gold); color:var(--gold-bright)}
+button:focus-visible,input:focus-visible,select:focus-visible{
+  outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-ring);
+}
+
+#grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:16px}
+.tile{background:none; border:none; padding:0; text-align:left; cursor:pointer}
+/* Gold is earned, not ambient: dormant at rest, full strength on hover/focus. */
+.art{
+  aspect-ratio:2/3; border-radius:var(--radius-tile);
+  border:1px solid var(--gold-dormant);
+  background:linear-gradient(160deg,#243358,#141d38);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-faint); font-size:11px; letter-spacing:.14em;
+  position:relative; overflow:hidden;
+  transition:border-color var(--dur-fast),box-shadow var(--dur-fast);
+}
+.tile:hover .art,.tile:focus-visible .art{
+  border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-ring);
+}
+.tile:focus-visible{outline:none}
+.progress{position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(255,255,255,.10)}
+.progress>i{display:block; height:100%; background:var(--gold)}
+.t{margin:8px 0 0; font-size:12.5px; color:var(--text-secondary); overflow-wrap:anywhere}
+.s{margin:1px 0 0; font-size:11px; color:var(--text-faint)}
+.missing{opacity:.45}
+
+dialog{
+  border:1px solid var(--gold-dormant); border-radius:var(--radius-panel);
+  background:var(--space-raised); color:var(--text-primary);
+  padding:20px; width:min(94vw,900px);
+}
+dialog::backdrop{background:rgba(3,5,12,.82)}
+video{width:100%; border-radius:var(--radius-tile); background:#000; display:block}
+.row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.muted{color:var(--text-muted); font-size:13px}
+.empty{padding:48px 0; text-align:center; color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div id="field"></div>
+
+<header>
+  <span class="brand">LANCAST</span>
+  <select id="lib" aria-label="Library"></select>
+  <button id="scan">Scan now</button>
+  <input id="q" type="search" placeholder="Search" aria-label="Search" style="margin-left:auto;width:220px">
+  <button id="add">Add library</button>
+</header>
+
+<main>
+  <div class="bar"><span class="label" id="heading">Library</span><span class="rule"></span><span class="muted" id="count"></span></div>
+  <div id="grid"></div>
+  <div class="empty" id="empty" hidden></div>
+</main>
+
+<dialog id="player">
+  <video id="video" controls preload="metadata"></video>
+  <div class="row" style="margin-top:12px">
+    <strong id="ptitle"></strong>
+    <span class="muted" id="psub"></span>
+    <button id="close" style="margin-left:auto">Close</button>
+  </div>
+</dialog>
+
+<dialog id="addlib">
+  <form method="dialog">
+    <div class="label" style="margin-bottom:12px">Add library</div>
+    <div class="row" style="margin-bottom:10px">
+      <input id="lname" placeholder="Films" aria-label="Name" required>
+      <select id="lkind" aria-label="Kind">
+        <option value="movie">Movies</option>
+        <option value="show">TV shows</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <input id="lpath" placeholder="D:\Media\Films" aria-label="Path" required style="width:100%">
+    <p class="muted" id="lerr" style="min-height:1.2em"></p>
+    <div class="row"><button value="cancel">Cancel</button><button id="lsave" value="save" style="margin-left:auto">Add</button></div>
+  </form>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (r.status === 204) return null;
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body?.error?.message || r.statusText);
+  return body;
+};
+
+let libraries = [], items = [], saveTimer = 0, current = null;
+
+async function loadLibraries() {
+  libraries = await api('/api/libraries');
+  const sel = $('#lib');
+  sel.innerHTML = libraries.length
+    ? libraries.map(l => `<option value="${l.id}">${l.name} (${l.item_count})</option>`).join('')
+    : '<option value="">No libraries</option>';
+  await loadItems();
+}
+
+async function loadItems() {
+  const id = $('#lib').value, q = $('#q').value.trim();
+  if (!id) { render([], 0); return; }
+  const p = new URLSearchParams({ library_id: id, limit: '500' });
+  if (q) p.set('q', q);
+  const res = await api('/api/items?' + p);
+  items = res.items;
+  render(res.items, res.total);
+}
+
+function render(list, total) {
+  const grid = $('#grid'), empty = $('#empty');
+  $('#count').textContent = total ? `${list.length} of ${total}` : '';
+  grid.innerHTML = list.map((it, i) => {
+    const pct = it.progress && it.duration_ms
+      ? Math.min(100, Math.round(it.progress.position_ms / it.duration_ms * 100)) : 0;
+    const sub = it.season != null
+      ? `S${String(it.season).padStart(2,'0')}E${String(it.episode).padStart(2,'0')}`
+      : (it.year || '');
+    const name = it.series ? `${it.series} — ${it.title}` : it.title;
+    return `<button class="tile${it.missing ? ' missing' : ''}" data-i="${i}">
+      <div class="art"><span>${it.container ? it.container.toUpperCase() : ''}</span>
+      ${pct ? `<div class="progress"><i style="width:${pct}%"></i></div>` : ''}</div>
+      <p class="t">${escapeHTML(name)}</p><p class="s">${escapeHTML(String(sub))}${it.missing ? ' · missing' : ''}</p>
+    </button>`;
+  }).join('');
+  empty.hidden = list.length > 0;
+  empty.textContent = libraries.length ? 'Nothing here yet. Scan the library to populate it.' : 'Add a library to get started.';
+}
+
+const escapeHTML = s => String(s).replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+$('#grid').addEventListener('click', e => {
+  const t = e.target.closest('.tile');
+  if (t) play(items[+t.dataset.i]);
+});
+
+async function play(it) {
+  if (it.missing) return;
+  current = it;
+  const v = $('#video');
+  $('#ptitle').textContent = it.series ? `${it.series} — ${it.title}` : it.title;
+  $('#psub').textContent = it.year || '';
+  v.src = `/api/stream/${it.id}`;
+  $('#player').showModal();
+  const detail = await api(`/api/items/${it.id}`);
+  if (detail.progress?.position_ms > 0) {
+    v.currentTime = detail.progress.position_ms / 1000;
+  }
+  v.play().catch(() => {});
+}
+
+// Throttled to roughly one call per five seconds, per docs/api.md.
+$('#video').addEventListener('timeupdate', () => {
+  if (!current || Date.now() - saveTimer < 5000) return;
+  saveTimer = Date.now();
+  const v = $('#video');
+  api(`/api/items/${current.id}/progress`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      position_ms: Math.floor(v.currentTime * 1000),
+      watched: v.duration ? v.currentTime / v.duration > 0.92 : false,
+    }),
+  }).catch(() => {});
+});
+
+function stopPlayback() {
+  const v = $('#video');
+  v.pause(); v.removeAttribute('src'); v.load();
+  current = null;
+}
+$('#close').addEventListener('click', () => $('#player').close());
+$('#player').addEventListener('close', stopPlayback);
+
+$('#lib').addEventListener('change', loadItems);
+let qTimer = 0;
+$('#q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(loadItems, 200); });
+
+$('#scan').addEventListener('click', async () => {
+  const id = $('#lib').value;
+  if (!id) return;
+  const btn = $('#scan');
+  btn.disabled = true; btn.textContent = 'Scanning…';
+  try { await api(`/api/libraries/${id}/scan`, { method: 'POST' }); } catch {}
+  const poll = setInterval(async () => {
+    const st = await api(`/api/libraries/${id}/scan`).catch(() => null);
+    if (!st || st.state !== 'running') {
+      clearInterval(poll);
+      btn.disabled = false; btn.textContent = 'Scan now';
+      await loadLibraries();
+    } else {
+      btn.textContent = `Scanning… ${st.files_seen}`;
+    }
+  }, 700);
+});
+
+$('#add').addEventListener('click', () => { $('#lerr').textContent = ''; $('#addlib').showModal(); });
+$('#addlib').addEventListener('close', async e => {
+  const dlg = $('#addlib');
+  if (dlg.returnValue !== 'save') return;
+  try {
+    await api('/api/libraries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: $('#lname').value, kind: $('#lkind').value, path: $('#lpath').value }),
+    });
+    await loadLibraries();
+  } catch (err) {
+    $('#lerr').textContent = err.message;
+    dlg.showModal();
+  }
+});
+
+loadLibraries().catch(err => { $('#empty').hidden = false; $('#empty').textContent = err.message; });
+</script>
+</body>
+</html>
