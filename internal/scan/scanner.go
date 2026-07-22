@@ -43,9 +43,10 @@ type Scanner struct {
 	st  *store.Store
 	log *slog.Logger
 
-	mu      sync.Mutex
-	running map[int64]bool
-	last    map[int64]*Progress
+	mu       sync.Mutex
+	running  map[int64]bool
+	last     map[int64]*Progress
+	onFinish func()
 }
 
 func New(st *store.Store, log *slog.Logger) *Scanner {
@@ -55,6 +56,17 @@ func New(st *store.Store, log *slog.Logger) *Scanner {
 		running: map[int64]bool{},
 		last:    map[int64]*Progress{},
 	}
+}
+
+// OnFinish registers a callback invoked after every completed scan.
+//
+// Scanning produces pending items and enrichment consumes them, so without
+// this a fresh scan sits unenriched until the next restart or manual refresh —
+// metadata appears to simply not work.
+func (s *Scanner) OnFinish(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onFinish = fn
 }
 
 // Status returns the most recent progress for a library.
@@ -95,7 +107,6 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	err := s.walk(ctx, lib, p)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now().Unix()
 	p.FinishedAt = &now
 	if err != nil {
@@ -108,6 +119,14 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing)
 	}
 	delete(s.running, lib.ID)
+	done := s.onFinish
+	s.mu.Unlock()
+
+	// Called outside the lock: the callback starts enrichment, which reads
+	// scan status, and holding the mutex here would deadlock.
+	if done != nil {
+		done()
+	}
 }
 
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {

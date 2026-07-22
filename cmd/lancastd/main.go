@@ -12,11 +12,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"lancast/internal/api"
+	"lancast/internal/artwork"
 	"lancast/internal/config"
+	"lancast/internal/enrich"
+	"lancast/internal/meta"
+	"lancast/internal/meta/nfo"
+	"lancast/internal/meta/tmdb"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/web"
@@ -46,22 +53,98 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		return err
 	}
 
+	settings, err := config.LoadSettings(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+
 	st, err := store.Open(cfg.DBPath())
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 
+	version, err := st.SchemaVersion()
+	if err != nil {
+		return err
+	}
+	log.Info("database ready", "path", cfg.DBPath(), "schema", version)
+
 	scanner := scan.New(st, log)
+	art := artwork.New(filepath.Join(cfg.DataDir, "artwork"))
+
+	// The registry is rebuilt whenever settings change so a newly entered API
+	// key takes effect without a restart.
+	reg := meta.NewRegistry()
+	var regMu sync.Mutex
+	rebuild := func(s config.Settings) {
+		regMu.Lock()
+		defer regMu.Unlock()
+
+		next := meta.NewRegistry()
+		next.AddLocal(nfo.New())
+		if s.TMDBKey != "" {
+			next.AddProvider(tmdb.New(s.TMDBKey,
+				tmdb.WithCache(st),
+				tmdb.WithLimiter(meta.NewLimiter(s.RatePerSec, int(s.RatePerSec)+1)),
+			))
+		}
+		*reg = *next
+	}
+	rebuild(settings.Get())
+
+	if settings.Get().TMDBKey == "" {
+		// Not a warning: running without a key is a supported configuration,
+		// and saying so plainly is what makes the no-phone-home promise real.
+		log.Info("no metadata provider configured; using filename and NFO metadata only")
+	}
+
+	worker := newWorker(st, reg, art, settings, log)
+
+	// enrichSoon runs a pass in the background, coalescing concurrent requests.
+	var enrichMu sync.Mutex
+	enrichCtx, cancelEnrich := context.WithCancel(context.Background())
+	defer cancelEnrich()
+
+	enrichSoon := func() {
+		if !settings.Get().AutoEnrich {
+			return
+		}
+		go func() {
+			// Worker.Run already no-ops if a pass is in flight; this mutex
+			// just keeps the goroutine count down.
+			enrichMu.Lock()
+			defer enrichMu.Unlock()
+			if err := worker.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("enrichment pass failed", "error", err)
+			}
+		}()
+	}
+
 	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           api.New(st, scanner, log, web.Handler()).Handler(),
+		Addr: cfg.Addr,
+		Handler: api.New(api.Deps{
+			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
+			Worker: worker, Settings: settings, Log: log, Web: web.Handler(),
+			Rebuild: func(s config.Settings) {
+				rebuild(s)
+				worker.SetNFOWriter(nfoWriterFor(s))
+			},
+			Enrich: enrichSoon,
+		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.
 	}
 
+	// A scan produces pending items; enrichment consumes them. Without this
+	// wiring a fresh scan stays unenriched until the next restart.
+	scanner.OnFinish(enrichSoon)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Pick up anything left pending from a previous run.
+	enrichSoon()
 
 	errc := make(chan error, 1)
 	go func() {
@@ -78,7 +161,26 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		log.Info("shutting down")
 	}
 
+	cancelEnrich()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+func newWorker(st *store.Store, reg *meta.Registry, art *artwork.Cache,
+	settings *config.SettingsStore, log *slog.Logger) *enrich.Worker {
+
+	w := enrich.New(st, reg, art, log)
+	w.SetNFOWriter(nfoWriterFor(settings.Get()))
+	return w
+}
+
+// nfoWriterFor returns a sidecar writer only when the user has opted in.
+// Writing into someone's media folders is not something to do unasked.
+func nfoWriterFor(s config.Settings) func(string, meta.Kind, *meta.Record) error {
+	if !s.WriteNFO {
+		return nil
+	}
+	src := nfo.New()
+	return src.Write
 }

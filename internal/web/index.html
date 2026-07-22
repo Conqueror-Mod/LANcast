@@ -34,20 +34,17 @@ body{
 @keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-2%,1.5%,0) scale(1.05)}}
 @media (prefers-reduced-motion:reduce){#field{animation:none}}
 
-header{
-  display:flex; align-items:center; gap:20px; padding:14px 22px;
-  border-bottom:1px solid var(--gold-dormant);
-}
+header{display:flex; align-items:center; gap:16px; padding:14px 22px;
+  border-bottom:1px solid var(--gold-dormant); flex-wrap:wrap}
 .brand{font-size:13px; letter-spacing:.22em; color:var(--gold); font-weight:500}
 .label{font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-muted)}
-main{padding:22px; max-width:1500px; margin:0 auto}
+main{padding:22px; max-width:1600px; margin:0 auto}
 .rule{flex:1; height:1px; background:linear-gradient(90deg,var(--gold-dormant),transparent)}
 .bar{display:flex; align-items:baseline; gap:12px; margin:0 0 16px}
 
-input,select,button{
+input,select,button,textarea{
   font:inherit; color:var(--text-primary); background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.10); border-radius:var(--radius-tile);
-  padding:7px 11px;
+  border:1px solid rgba(255,255,255,.10); border-radius:var(--radius-tile); padding:7px 11px;
 }
 input::placeholder{color:var(--text-faint)}
 button{cursor:pointer; transition:border-color var(--dur-fast),color var(--dur-fast)}
@@ -55,6 +52,8 @@ button:hover{border-color:var(--gold); color:var(--gold-bright)}
 button:focus-visible,input:focus-visible,select:focus-visible{
   outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-ring);
 }
+.badge{font-size:11px; padding:2px 8px; border-radius:20px;
+  background:rgba(255,255,255,.07); color:var(--text-secondary)}
 
 #grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:16px}
 .tile{background:none; border:none; padding:0; text-align:left; cursor:pointer}
@@ -62,7 +61,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{
 .art{
   aspect-ratio:2/3; border-radius:var(--radius-tile);
   border:1px solid var(--gold-dormant);
-  background:linear-gradient(160deg,#243358,#141d38);
+  background:linear-gradient(160deg,#243358,#141d38) center/cover no-repeat;
   display:flex; align-items:center; justify-content:center;
   color:var(--text-faint); font-size:11px; letter-spacing:.14em;
   position:relative; overflow:hidden;
@@ -72,22 +71,31 @@ button:focus-visible,input:focus-visible,select:focus-visible{
   border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-ring);
 }
 .tile:focus-visible{outline:none}
+.art img{width:100%; height:100%; object-fit:cover; display:block}
 .progress{position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(255,255,255,.10)}
 .progress>i{display:block; height:100%; background:var(--gold)}
+/* Uncertainty is data, not something to hide — but it is never gold. */
+.flag{position:absolute; top:6px; right:6px; font-size:10px; padding:2px 6px;
+  border-radius:3px; background:rgba(5,7,15,.8); color:var(--text-secondary);
+  border:1px solid rgba(255,255,255,.15)}
 .t{margin:8px 0 0; font-size:12.5px; color:var(--text-secondary); overflow-wrap:anywhere}
 .s{margin:1px 0 0; font-size:11px; color:var(--text-faint)}
 .missing{opacity:.45}
 
-dialog{
-  border:1px solid var(--gold-dormant); border-radius:var(--radius-panel);
-  background:var(--space-raised); color:var(--text-primary);
-  padding:20px; width:min(94vw,900px);
-}
+dialog{border:1px solid var(--gold-dormant); border-radius:var(--radius-panel);
+  background:var(--space-raised); color:var(--text-primary); padding:20px; width:min(94vw,900px)}
 dialog::backdrop{background:rgba(3,5,12,.82)}
 video{width:100%; border-radius:var(--radius-tile); background:#000; display:block}
 .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
 .muted{color:var(--text-muted); font-size:13px}
 .empty{padding:48px 0; text-align:center; color:var(--text-muted)}
+.cand{display:flex; gap:12px; padding:10px; border:1px solid rgba(255,255,255,.08);
+  border-radius:var(--radius-tile); margin-bottom:8px; cursor:pointer; text-align:left; width:100%}
+.cand:hover{border-color:var(--gold)}
+.cand img{width:60px; height:90px; object-fit:cover; border-radius:3px; background:#1a2445}
+.lock{font-size:10px; border:1px solid rgba(255,255,255,.2); background:none;
+  color:var(--text-muted); padding:1px 6px; border-radius:3px; margin-left:6px}
+.grow{flex:1}
 </style>
 </head>
 <body>
@@ -96,9 +104,14 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 <header>
   <span class="brand">LANCAST</span>
   <select id="lib" aria-label="Library"></select>
-  <button id="scan">Scan now</button>
-  <input id="q" type="search" placeholder="Search" aria-label="Search" style="margin-left:auto;width:220px">
+  <button id="scan">Scan</button>
+  <button id="refresh" title="Re-fetch metadata, keeping your edits">Refresh metadata</button>
+  <button id="reviewBtn">Review <span class="badge" id="reviewCount">0</span></button>
+  <input id="q" type="search" placeholder="Search" aria-label="Search" style="width:180px">
+  <span class="grow"></span>
+  <span class="muted" id="enrichState"></span>
   <button id="add">Add library</button>
+  <button id="setBtn">Settings</button>
 </header>
 
 <main>
@@ -110,10 +123,42 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 <dialog id="player">
   <video id="video" controls preload="metadata"></video>
   <div class="row" style="margin-top:12px">
-    <strong id="ptitle"></strong>
-    <span class="muted" id="psub"></span>
-    <button id="close" style="margin-left:auto">Close</button>
+    <strong id="ptitle"></strong><span class="muted" id="psub"></span>
+    <span class="grow"></span>
+    <button id="fixBtn">Fix match</button><button id="close">Close</button>
   </div>
+  <p class="muted" id="poverview" style="margin:10px 0 0"></p>
+  <div class="row muted" id="pmeta" style="margin-top:8px"></div>
+</dialog>
+
+<dialog id="fix">
+  <div class="label" style="margin-bottom:10px">Fix match</div>
+  <div class="row" style="margin-bottom:12px">
+    <input id="fixq" placeholder="Search by title" style="flex:1">
+    <button id="fixSearch">Search</button>
+  </div>
+  <div id="fixResults"></div>
+  <div class="row" style="margin-top:10px"><span class="grow"></span><button id="fixClose">Close</button></div>
+</dialog>
+
+<dialog id="review">
+  <div class="label" style="margin-bottom:10px">Needs review</div>
+  <p class="muted" style="margin-top:0">Matches LANcast is not confident about. Confirming one locks it against future rescans.</p>
+  <div id="reviewList"></div>
+  <div class="row" style="margin-top:10px"><span class="grow"></span><button id="reviewClose">Close</button></div>
+</dialog>
+
+<dialog id="settings">
+  <div class="label" style="margin-bottom:12px">Settings</div>
+  <p class="muted" style="margin-top:0">LANcast works without a TMDB key — you just get filename and NFO metadata only.</p>
+  <div class="row" style="margin-bottom:10px">
+    <input id="tmdbKey" type="password" placeholder="TMDB API key" style="flex:1" autocomplete="off">
+    <span class="badge" id="keyState">not set</span>
+  </div>
+  <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="writeNfo" style="width:auto"> Write .nfo sidecars into media folders</label>
+  <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="autoEnrich" style="width:auto"> Fetch metadata automatically</label>
+  <div class="row" style="margin-top:10px"><span class="grow"></span>
+    <button id="setSave">Save</button><button id="setClose">Close</button></div>
 </dialog>
 
 <dialog id="addlib">
@@ -122,19 +167,18 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
     <div class="row" style="margin-bottom:10px">
       <input id="lname" placeholder="Films" aria-label="Name" required>
       <select id="lkind" aria-label="Kind">
-        <option value="movie">Movies</option>
-        <option value="show">TV shows</option>
-        <option value="other">Other</option>
+        <option value="movie">Movies</option><option value="show">TV shows</option><option value="other">Other</option>
       </select>
     </div>
     <input id="lpath" placeholder="D:\Media\Films" aria-label="Path" required style="width:100%">
     <p class="muted" id="lerr" style="min-height:1.2em"></p>
-    <div class="row"><button value="cancel">Cancel</button><button id="lsave" value="save" style="margin-left:auto">Add</button></div>
+    <div class="row"><button value="cancel">Cancel</button><span class="grow"></span><button id="lsave" value="save">Add</button></div>
   </form>
 </dialog>
 
 <script>
 const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api = async (path, opts) => {
   const r = await fetch(path, opts);
   if (r.status === 204) return null;
@@ -142,21 +186,23 @@ const api = async (path, opts) => {
   if (!r.ok) throw new Error(body?.error?.message || r.statusText);
   return body;
 };
+const jsonReq = (method, body) => ({ method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+const art = (hash, size) => `/api/artwork/${hash}?size=${size}`;
 
-let libraries = [], items = [], saveTimer = 0, current = null;
+let libraries = [], items = [], current = null, saveAt = 0, enrichTimer = 0;
 
 async function loadLibraries() {
   libraries = await api('/api/libraries');
-  const sel = $('#lib');
-  sel.innerHTML = libraries.length
-    ? libraries.map(l => `<option value="${l.id}">${l.name} (${l.item_count})</option>`).join('')
+  $('#lib').innerHTML = libraries.length
+    ? libraries.map(l => `<option value="${l.id}">${esc(l.name)} (${l.item_count})</option>`).join('')
     : '<option value="">No libraries</option>';
   await loadItems();
+  refreshReviewCount();
 }
 
 async function loadItems() {
   const id = $('#lib').value, q = $('#q').value.trim();
-  if (!id) { render([], 0); return; }
+  if (!id) return render([], 0);
   const p = new URLSearchParams({ library_id: id, limit: '500' });
   if (q) p.set('q', q);
   const res = await api('/api/items?' + p);
@@ -165,27 +211,33 @@ async function loadItems() {
 }
 
 function render(list, total) {
-  const grid = $('#grid'), empty = $('#empty');
   $('#count').textContent = total ? `${list.length} of ${total}` : '';
-  grid.innerHTML = list.map((it, i) => {
+  $('#grid').innerHTML = list.map((it, i) => {
     const pct = it.progress && it.duration_ms
       ? Math.min(100, Math.round(it.progress.position_ms / it.duration_ms * 100)) : 0;
     const sub = it.season != null
       ? `S${String(it.season).padStart(2,'0')}E${String(it.episode).padStart(2,'0')}`
       : (it.year || '');
     const name = it.series ? `${it.series} — ${it.title}` : it.title;
+    const poster = it.artwork?.poster
+      ? `<img src="${art(it.artwork.poster,'poster')}" alt="" loading="lazy">`
+      : `<span>${esc((it.container||'').toUpperCase())}</span>`;
+    // Uncertainty is surfaced, not hidden — and never in gold. But an item
+    // enrichment has not reached yet is not "no match found"; flagging those
+    // would report a problem where nothing has even been attempted.
+    const looked = it.metadata_updated_at != null;
+    const flag = looked && (it.match_state === 'review' || it.match_state === 'unmatched')
+      ? `<span class="flag">${it.match_state === 'review' ? 'check' : 'no match'}</span>` : '';
     return `<button class="tile${it.missing ? ' missing' : ''}" data-i="${i}">
-      <div class="art"><span>${it.container ? it.container.toUpperCase() : ''}</span>
+      <div class="art">${poster}${flag}
       ${pct ? `<div class="progress"><i style="width:${pct}%"></i></div>` : ''}</div>
-      <p class="t">${escapeHTML(name)}</p><p class="s">${escapeHTML(String(sub))}${it.missing ? ' · missing' : ''}</p>
+      <p class="t">${esc(name)}</p><p class="s">${esc(sub)}${it.missing ? ' · missing' : ''}</p>
     </button>`;
   }).join('');
-  empty.hidden = list.length > 0;
-  empty.textContent = libraries.length ? 'Nothing here yet. Scan the library to populate it.' : 'Add a library to get started.';
+  $('#empty').hidden = list.length > 0;
+  $('#empty').textContent = libraries.length
+    ? 'Nothing here yet. Scan the library to populate it.' : 'Add a library to get started.';
 }
-
-const escapeHTML = s => String(s).replace(/[&<>"']/g, c =>
-  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
 $('#grid').addEventListener('click', e => {
   const t = e.target.closest('.tile');
@@ -200,76 +252,177 @@ async function play(it) {
   $('#psub').textContent = it.year || '';
   v.src = `/api/stream/${it.id}`;
   $('#player').showModal();
-  const detail = await api(`/api/items/${it.id}`);
-  if (detail.progress?.position_ms > 0) {
-    v.currentTime = detail.progress.position_ms / 1000;
-  }
+
+  const d = await api(`/api/items/${it.id}`);
+  current = d;
+  $('#poverview').textContent = d.overview || '';
+  const bits = [];
+  if (d.genres?.length) bits.push(d.genres.join(' · '));
+  if (d.rating) bits.push(`★ ${d.rating.toFixed(1)}`);
+  if (d.credits?.length) bits.push(d.credits.filter(c => c.role === 'actor').slice(0,4).map(c => c.name).join(', '));
+  if (d.match_state === 'review') bits.push('match uncertain');
+  // A lock the user cannot see or release is indistinguishable from a bug.
+  const locks = (d.locked_fields || []).map(f =>
+    `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`).join('');
+  $('#pmeta').innerHTML = esc(bits.join('  ·  ')) + locks;
+
+  if (d.progress?.position_ms > 0) v.currentTime = d.progress.position_ms / 1000;
   v.play().catch(() => {});
 }
 
-// Throttled to roughly one call per five seconds, per docs/api.md.
-$('#video').addEventListener('timeupdate', () => {
-  if (!current || Date.now() - saveTimer < 5000) return;
-  saveTimer = Date.now();
-  const v = $('#video');
-  api(`/api/items/${current.id}/progress`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      position_ms: Math.floor(v.currentTime * 1000),
-      watched: v.duration ? v.currentTime / v.duration > 0.92 : false,
-    }),
-  }).catch(() => {});
+$('#pmeta').addEventListener('click', async e => {
+  const b = e.target.closest('[data-unlock]');
+  if (!b || !current) return;
+  await api(`/api/items/${current.id}/locks/${b.dataset.unlock}`, { method: 'DELETE' });
+  b.remove();
 });
 
-function stopPlayback() {
+$('#video').addEventListener('timeupdate', () => {
+  if (!current || Date.now() - saveAt < 5000) return;
+  saveAt = Date.now();
   const v = $('#video');
-  v.pause(); v.removeAttribute('src'); v.load();
-  current = null;
-}
-$('#close').addEventListener('click', () => $('#player').close());
-$('#player').addEventListener('close', stopPlayback);
+  api(`/api/items/${current.id}/progress`, jsonReq('PUT', {
+    position_ms: Math.floor(v.currentTime * 1000),
+    watched: v.duration ? v.currentTime / v.duration > 0.92 : false,
+  })).catch(() => {});
+});
 
-$('#lib').addEventListener('change', loadItems);
+$('#close').addEventListener('click', () => $('#player').close());
+$('#player').addEventListener('close', () => {
+  const v = $('#video'); v.pause(); v.removeAttribute('src'); v.load();
+});
+
+$('#lib').addEventListener('change', () => { loadItems(); refreshReviewCount(); });
 let qTimer = 0;
 $('#q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(loadItems, 200); });
 
 $('#scan').addEventListener('click', async () => {
-  const id = $('#lib').value;
-  if (!id) return;
-  const btn = $('#scan');
-  btn.disabled = true; btn.textContent = 'Scanning…';
+  const id = $('#lib').value; if (!id) return;
+  const btn = $('#scan'); btn.disabled = true; btn.textContent = 'Scanning…';
   try { await api(`/api/libraries/${id}/scan`, { method: 'POST' }); } catch {}
   const poll = setInterval(async () => {
     const st = await api(`/api/libraries/${id}/scan`).catch(() => null);
     if (!st || st.state !== 'running') {
       clearInterval(poll);
-      btn.disabled = false; btn.textContent = 'Scan now';
-      await loadLibraries();
-    } else {
-      btn.textContent = `Scanning… ${st.files_seen}`;
-    }
+      btn.disabled = false; btn.textContent = 'Scan';
+      await loadLibraries(); pollEnrich();
+    } else btn.textContent = `Scanning… ${st.files_seen}`;
   }, 700);
 });
 
+$('#refresh').addEventListener('click', async () => {
+  const id = $('#lib').value; if (!id) return;
+  await api(`/api/libraries/${id}/refresh`, { method: 'POST' });
+  pollEnrich();
+});
+
+// Enrichment runs in the background; the grid fills in behind the scan.
+function pollEnrich() {
+  clearInterval(enrichTimer);
+  enrichTimer = setInterval(async () => {
+    const s = await api('/api/enrich').catch(() => null);
+    if (!s) return clearInterval(enrichTimer);
+    $('#enrichState').textContent = s.running ? `Fetching metadata… ${s.enriched}` : '';
+    if (!s.running) { clearInterval(enrichTimer); await loadItems(); refreshReviewCount(); }
+  }, 1200);
+}
+
+async function refreshReviewCount() {
+  const id = $('#lib').value;
+  const r = await api('/api/review' + (id ? `?library_id=${id}` : '')).catch(() => null);
+  $('#reviewCount').textContent = r ? r.total : 0;
+}
+
+$('#reviewBtn').addEventListener('click', async () => {
+  const id = $('#lib').value;
+  const r = await api('/api/review' + (id ? `?library_id=${id}` : ''));
+  $('#reviewList').innerHTML = r.items.length
+    ? r.items.map(it => `<div class="cand" style="cursor:default">
+        <div class="grow"><strong>${esc(it.title)}</strong> ${it.year ? esc(it.year) : ''}
+        <div class="muted">${it.match_state === 'review'
+          ? `matched with ${(it.match_score*100).toFixed(0)}% confidence` : 'no match found'}</div></div>
+        <button data-fix="${it.id}">Fix</button></div>`).join('')
+    : '<p class="muted">Nothing needs review.</p>';
+  $('#review').showModal();
+});
+$('#reviewClose').addEventListener('click', () => $('#review').close());
+$('#reviewList').addEventListener('click', e => {
+  const b = e.target.closest('[data-fix]');
+  if (!b) return;
+  $('#review').close();
+  openFix(+b.dataset.fix);
+});
+
+let fixId = null;
+function openFix(id) {
+  fixId = id;
+  const it = items.find(x => x.id === id) || current;
+  $('#fixq').value = it ? (it.series || it.title) : '';
+  $('#fixResults').innerHTML = '';
+  $('#fix').showModal();
+  runFixSearch();
+}
+$('#fixBtn').addEventListener('click', () => { if (current) { $('#player').close(); openFix(current.id); } });
+$('#fixClose').addEventListener('click', () => $('#fix').close());
+$('#fixSearch').addEventListener('click', runFixSearch);
+$('#fixq').addEventListener('keydown', e => { if (e.key === 'Enter') runFixSearch(); });
+
+async function runFixSearch() {
+  if (!fixId) return;
+  $('#fixResults').innerHTML = '<p class="muted">Searching…</p>';
+  try {
+    const cands = await api(`/api/items/${fixId}/candidates?q=${encodeURIComponent($('#fixq').value)}`);
+    $('#fixResults').innerHTML = cands.length ? cands.map(c => `
+      <button class="cand" data-p="${esc(c.provider)}" data-e="${esc(c.external_id)}">
+        ${c.poster_url ? `<img src="${esc(c.poster_url)}" alt="" loading="lazy">` : '<div style="width:60px"></div>'}
+        <div class="grow"><strong>${esc(c.title)}</strong> ${c.year ? esc(c.year) : ''}
+          <span class="badge">${(c.score*100).toFixed(0)}%</span>
+          <div class="muted">${esc((c.overview||'').slice(0,160))}</div></div>
+      </button>`).join('') : '<p class="muted">No results. Is a TMDB key configured in Settings?</p>';
+  } catch (err) {
+    $('#fixResults').innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
+}
+
+$('#fixResults').addEventListener('click', async e => {
+  const b = e.target.closest('.cand');
+  if (!b) return;
+  await api(`/api/items/${fixId}/match`, jsonReq('POST', { provider: b.dataset.p, external_id: b.dataset.e }));
+  $('#fix').close();
+  pollEnrich();
+});
+
+$('#setBtn').addEventListener('click', async () => {
+  const s = await api('/api/settings');
+  $('#keyState').textContent = s.tmdb.configured ? 'configured' : 'not set';
+  $('#tmdbKey').value = '';
+  $('#writeNfo').checked = s.write_nfo;
+  $('#autoEnrich').checked = s.auto_enrich;
+  $('#settings').showModal();
+});
+$('#setClose').addEventListener('click', () => $('#settings').close());
+$('#setSave').addEventListener('click', async () => {
+  const body = { write_nfo: $('#writeNfo').checked, auto_enrich: $('#autoEnrich').checked };
+  // Only send the key when one was typed, so saving other options never clears it.
+  if ($('#tmdbKey').value.trim()) body.tmdb_key = $('#tmdbKey').value.trim();
+  await api('/api/settings', jsonReq('PUT', body));
+  $('#settings').close();
+  pollEnrich();
+});
+
 $('#add').addEventListener('click', () => { $('#lerr').textContent = ''; $('#addlib').showModal(); });
-$('#addlib').addEventListener('close', async e => {
+$('#addlib').addEventListener('close', async () => {
   const dlg = $('#addlib');
   if (dlg.returnValue !== 'save') return;
   try {
-    await api('/api/libraries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: $('#lname').value, kind: $('#lkind').value, path: $('#lpath').value }),
-    });
+    await api('/api/libraries', jsonReq('POST',
+      { name: $('#lname').value, kind: $('#lkind').value, path: $('#lpath').value }));
     await loadLibraries();
-  } catch (err) {
-    $('#lerr').textContent = err.message;
-    dlg.showModal();
-  }
+  } catch (err) { $('#lerr').textContent = err.message; dlg.showModal(); }
 });
 
 loadLibraries().catch(err => { $('#empty').hidden = false; $('#empty').textContent = err.message; });
+pollEnrich();
 </script>
 </body>
 </html>

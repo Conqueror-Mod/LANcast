@@ -166,7 +166,14 @@ func TestSetMatchAndReviewQueue(t *testing.T) {
 
 	st.SetMatch(ctx, good, "tmdb", "1", "matched", 0.95)
 	st.SetMatch(ctx, iffy, "tmdb", "2", "review", 0.62)
-	_ = none // left at the default 'unmatched'
+	st.SetMatch(ctx, none, "tmdb", "", "unmatched", 0.1)
+
+	// Only enriched items qualify; stamp the ones that were "looked at".
+	for _, id := range []int64{good, iffy, none} {
+		if err := st.UpdateItemMetadata(ctx, id, ItemMetadata{}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	queue, err := st.ReviewQueue(ctx, lib.ID, 10)
 	if err != nil {
@@ -199,6 +206,24 @@ func TestNewItemsDefaultToUnmatched(t *testing.T) {
 	it, _ := st.GetItem(ctx, id, "local")
 	if it.MatchState != "unmatched" {
 		t.Errorf("MatchState = %q, want unmatched", it.MatchState)
+	}
+}
+
+// A freshly scanned library must not report every title as needing review.
+// Nothing has looked at them yet, and "not attempted" is not "no match found".
+func TestUnenrichedItemsAreNotInReviewQueue(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	seedItem(t, st, lib, `C:\m\a.mkv`)
+	seedItem(t, st, lib, `C:\m\b.mkv`)
+
+	queue, err := st.ReviewQueue(ctx, lib.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queue) != 0 {
+		t.Errorf("review queue = %d, want 0 before any enrichment has run", len(queue))
 	}
 }
 

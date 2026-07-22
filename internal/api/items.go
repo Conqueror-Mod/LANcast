@@ -37,11 +37,10 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
-	if s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
-	writeJSON(w, http.StatusOK, it)
+	s.respondItem(w, r, id)
 }
 
 func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {

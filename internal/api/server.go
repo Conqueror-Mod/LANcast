@@ -9,29 +9,73 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 
+	"lancast/internal/artwork"
+	"lancast/internal/config"
+	"lancast/internal/enrich"
+	"lancast/internal/meta"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
 
 // Version is reported by GET /api/health.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
-// localUser is the single-user identity for M1. The schema is already keyed by
-// user (ADR 0006), so multi-user arrives without a migration.
+// localUser is the single-user identity for M1/M2. The schema is already keyed
+// by user (ADR 0006), so multi-user arrives without a migration.
 const localUser = "local"
+
+// Deps are the Server's collaborators.
+type Deps struct {
+	Store    *store.Store
+	Scanner  *scan.Scanner
+	Registry *meta.Registry
+	Artwork  *artwork.Cache
+	Worker   *enrich.Worker
+	Settings *config.SettingsStore
+	Log      *slog.Logger
+	Web      http.Handler
+
+	// Rebuild reconfigures providers after a settings change, so a newly
+	// entered API key takes effect without a restart.
+	Rebuild func(config.Settings)
+	// Enrich triggers a background enrichment pass.
+	Enrich func()
+}
 
 // Server holds the API dependencies.
 type Server struct {
-	st      *store.Store
-	scanner *scan.Scanner
-	log     *slog.Logger
-	web     http.Handler
+	st       *store.Store
+	scanner  *scan.Scanner
+	reg      *meta.Registry
+	art      *artwork.Cache
+	worker   *enrich.Worker
+	settings *config.SettingsStore
+	log      *slog.Logger
+	web      http.Handler
+	rebuild  func(config.Settings)
+	enrich   func()
 }
 
-func New(st *store.Store, sc *scan.Scanner, log *slog.Logger, web http.Handler) *Server {
-	return &Server{st: st, scanner: sc, log: log, web: web}
+func New(d Deps) *Server {
+	web := d.Web
+	if web == nil {
+		web = http.NotFoundHandler()
+	}
+	return &Server{
+		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
+		worker: d.Worker, settings: d.Settings, log: d.Log, web: web,
+		rebuild: d.Rebuild, enrich: d.Enrich,
+	}
+}
+
+// enrichSoon kicks the background worker, if one is wired up.
+func (s *Server) enrichSoon() {
+	if s.enrich != nil {
+		s.enrich()
+	}
 }
 
 // Handler builds the router. Go 1.22 method-and-pattern routing covers this
@@ -45,10 +89,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/libraries", s.createLibrary)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.startScan)
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
+	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.refreshLibrary)
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
+	mux.HandleFunc("PATCH /api/items/{id}", s.patchItem)
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
+	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.deleteLock)
+	mux.HandleFunc("GET /api/items/{id}/candidates", s.candidates)
+	mux.HandleFunc("POST /api/items/{id}/match", s.applyMatch)
+	mux.HandleFunc("POST /api/items/{id}/refresh", s.refreshItem)
+
+	mux.HandleFunc("GET /api/review", s.reviewQueue)
+	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
+	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
+
+	mux.HandleFunc("GET /api/settings", s.getSettings)
+	mux.HandleFunc("PUT /api/settings", s.putSettings)
 
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 
@@ -99,7 +156,7 @@ func (s *Server) notFoundOr(w http.ResponseWriter, err error, op, msg string) bo
 	switch {
 	case err == nil:
 		return false
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, os.ErrNotExist):
 		writeError(w, http.StatusNotFound, "not_found", msg)
 	default:
 		s.writeInternal(w, err, op)

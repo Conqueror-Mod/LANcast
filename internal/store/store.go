@@ -155,6 +155,11 @@ type Item struct {
 	MatchState    string   `json:"match_state"`
 	MatchScore    *float64 `json:"match_score"`
 
+	// MetadataUpdatedAt is nil until enrichment has run. Clients need it to
+	// distinguish "not looked at yet" from "looked and found nothing" —
+	// match_state alone defaults to 'unmatched' and cannot express that.
+	MetadataUpdatedAt *int64 `json:"metadata_updated_at"`
+
 	// Detail-only; nil on list responses.
 	Genres       []string `json:"genres,omitempty"`
 	Credits      []Credit `json:"credits,omitempty"`
@@ -301,7 +306,7 @@ type ItemFilter struct {
 const itemCols = `id, library_id, kind, path, title, sort_title, year, series, season, episode,
 	container, size_bytes, mtime, duration_ms, added_at, missing,
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
-	match_state, match_score`
+	match_state, match_score, metadata_updated_at`
 
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
@@ -310,7 +315,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Container, &it.SizeBytes,
 		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
-		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore)
+		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt)
 	if err != nil {
 		return nil, err
 	}

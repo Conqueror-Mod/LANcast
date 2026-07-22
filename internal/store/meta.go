@@ -171,12 +171,19 @@ func (s *Store) ClearMetadataStamp(ctx context.Context, libraryID int64, itemID 
 // ReviewQueue returns items whose identity is uncertain. Applying a
 // low-confidence match is a good default, but it is recorded as uncertain
 // rather than presented as fact.
+//
+// Only items that have actually been through enrichment qualify.
+// match_state defaults to 'unmatched', so without the metadata_updated_at
+// check every freshly scanned item would appear here — reporting "no match
+// found" for titles nothing has looked at yet. That is the same
+// not-attempted versus no-answer distinction the enrichment worker makes.
 func (s *Store) ReviewQueue(ctx context.Context, libraryID int64, limit int) ([]Item, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	args := []any{}
-	where := ` WHERE match_state IN ('review','unmatched') AND missing = 0`
+	where := ` WHERE match_state IN ('review','unmatched') AND missing = 0
+		AND metadata_updated_at IS NOT NULL`
 	if libraryID != 0 {
 		where += ` AND library_id = ?`
 		args = append(args, libraryID)

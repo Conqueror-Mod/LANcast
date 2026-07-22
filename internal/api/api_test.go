@@ -12,39 +12,61 @@ import (
 	"path/filepath"
 	"testing"
 
+	"lancast/internal/artwork"
+	"lancast/internal/config"
+	"lancast/internal/enrich"
+	"lancast/internal/meta"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
 
 type harness struct {
-	srv *httptest.Server
-	st  *store.Store
-	lib *store.Library
-	dir string
+	srv      *httptest.Server
+	st       *store.Store
+	lib      *store.Library
+	dir      string
+	art      *artwork.Cache
+	reg      *meta.Registry
+	settings *config.SettingsStore
+	enriched int
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	dataDir := t.TempDir()
+	st, err := store.Open(filepath.Join(dataDir, "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sc := scan.New(st, log)
-	api := New(st, sc, log, http.NotFoundHandler())
-
-	srv := httptest.NewServer(api.Handler())
-	t.Cleanup(srv.Close)
-
-	dir := t.TempDir()
-	lib, err := st.CreateLibrary(context.Background(), "Media", "movie", dir)
+	settings, err := config.LoadSettings(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &harness{srv: srv, st: st, lib: lib, dir: dir}
+
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	art := artwork.New(filepath.Join(dataDir, "artwork"))
+	reg := meta.NewRegistry()
+	h := &harness{st: st, art: art, reg: reg, settings: settings}
+
+	api := New(Deps{
+		Store: st, Scanner: scan.New(st, log), Registry: reg, Artwork: art,
+		Worker: enrich.New(st, reg, art, log), Settings: settings, Log: log,
+		Enrich: func() { h.enriched++ },
+	})
+
+	h.srv = httptest.NewServer(api.Handler())
+	t.Cleanup(h.srv.Close)
+
+	h.dir = t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "Media", "movie", h.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.lib = lib
+	return h
 }
 
 // addFile writes a real file into the library and registers it, returning its id.

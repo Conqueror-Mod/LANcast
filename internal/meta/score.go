@@ -12,6 +12,12 @@ const (
 	StateReview    = "review"
 	StateUnmatched = "unmatched"
 	StateLocked    = "locked"
+
+	// StateLocal means the identity came from a local source — an NFO the
+	// user or another tool wrote. There is nothing to review: the user
+	// already said what this is, and reporting it as "no match found" would
+	// bury real problems under items that are perfectly resolved.
+	StateLocal = "local"
 )
 
 // Confidence thresholds. The middle band carries the design: a low-confidence
@@ -72,6 +78,11 @@ func scoreEpisode(q Query, c Candidate) float64 {
 	return clamp(titleScore(series, c.Title)*(weightTitle+weightYear) +
 		popularityScore(c.Popularity)*weightPopularity)
 }
+
+// SortTitleOf derives the sort key for a title. It exists so callers outside
+// this package do not reach past it into internal/media and grow a second
+// opinion about normalization.
+func SortTitleOf(title string) string { return media.SortTitle(title) }
 
 // titleScore compares normalized titles. It reuses the normalizer in
 // internal/media so scanning and matching cannot disagree about what a title

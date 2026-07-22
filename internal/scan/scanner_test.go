@@ -233,6 +233,48 @@ func TestReappearingFileClearsMissing(t *testing.T) {
 	}
 }
 
+// Scanning produces pending items and enrichment consumes them. Without this
+// callback a fresh scan stays unenriched until the next restart, and metadata
+// appears to simply not work.
+func TestOnFinishFiresAfterScan(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "a.mkv", 10)
+
+	done := make(chan struct{}, 1)
+	sc.OnFinish(func() { done <- struct{}{} })
+
+	scanAndWait(t, sc, lib)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnFinish was never called after a completed scan")
+	}
+}
+
+// The callback must run outside the scanner's lock, or anything it does that
+// touches scan state deadlocks.
+func TestOnFinishCanReadScannerState(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "a.mkv", 10)
+
+	done := make(chan Progress, 1)
+	sc.OnFinish(func() { done <- sc.Status(lib.ID) })
+
+	scanAndWait(t, sc, lib)
+
+	select {
+	case p := <-done:
+		if p.State == StateRunning {
+			t.Errorf("state seen by callback = %q, want a finished state", p.State)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback deadlocked reading scanner state")
+	}
+}
+
 func TestStatusIdleBeforeAnyScan(t *testing.T) {
 	sc, _ := newScanner(t)
 	if p := sc.Status(42); p.State != StateIdle {

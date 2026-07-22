@@ -84,6 +84,21 @@ func New(st Store, reg *meta.Registry, art ArtCache, log *slog.Logger, opts ...O
 	return w
 }
 
+// SetNFOWriter swaps the sidecar writer at runtime, so toggling the setting
+// takes effect without a restart. Pass nil to disable writing.
+func (w *Worker) SetNFOWriter(fn func(path string, kind meta.Kind, rec *meta.Record) error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.nfoWrite = fn
+}
+
+// nfoWriter reads the hook under lock, since settings can change mid-run.
+func (w *Worker) nfoWriter() func(string, meta.Kind, *meta.Record) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.nfoWrite
+}
+
 // Stats returns the current progress snapshot.
 func (w *Worker) Stats() Stats {
 	w.mu.Lock()
@@ -219,6 +234,13 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 		return false, nil
 	}
 
+	// A local source resolved it and no provider weighed in. That is an
+	// answer, not an absence of one — the user already said what this is.
+	if len(locals) > 0 && state == "" {
+		state = meta.StateLocal
+		score = 1
+	}
+
 	current := currentRecord(item)
 	merged := meta.Merge(current, lockedSet, locals, remotes)
 
@@ -275,8 +297,8 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 		w.storeArtwork(ctx, item.ID, merged.Artwork)
 	}
 
-	if w.nfoWrite != nil {
-		if err := w.nfoWrite(item.Path, kind, &merged); err != nil {
+	if write := w.nfoWriter(); write != nil {
+		if err := write(item.Path, kind, &merged); err != nil {
 			// Failing to write a sidecar must not fail enrichment; the
 			// database is still the working record.
 			w.log.Warn("nfo write failed", "item", item.ID, "error", err)

@@ -1,0 +1,104 @@
+package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sync"
+)
+
+// Settings is the user-editable runtime configuration.
+//
+// The TMDB key lives here rather than in the database because it is a secret:
+// the file is written 0600, and the API never echoes the value back.
+type Settings struct {
+	TMDBKey    string  `json:"tmdb_key,omitempty"`
+	RatePerSec float64 `json:"rate_per_sec,omitempty"`
+	WriteNFO   bool    `json:"write_nfo"`
+	AutoEnrich bool    `json:"auto_enrich"`
+}
+
+// Defaults returns the settings a fresh install starts with.
+//
+// AutoEnrich is on because metadata arriving by itself is the expected
+// behavior; it is a no-op without a key. WriteNFO is off because writing into
+// someone's media folders is not something to do unasked.
+func Defaults() Settings {
+	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true}
+}
+
+// SettingsStore reads and writes the settings file.
+type SettingsStore struct {
+	path string
+	mu   sync.RWMutex
+	cur  Settings
+}
+
+// LoadSettings opens (or initializes) the settings file in dir.
+func LoadSettings(dir string) (*SettingsStore, error) {
+	s := &SettingsStore{
+		path: filepath.Join(dir, "config.json"),
+		cur:  Defaults(),
+	}
+
+	raw, err := os.ReadFile(s.path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return s, nil // defaults; nothing written until something is set
+	case err != nil:
+		return nil, fmt.Errorf("read settings: %w", err)
+	}
+
+	loaded := Defaults()
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		return nil, fmt.Errorf("parse settings %s: %w", s.path, err)
+	}
+	if loaded.RatePerSec <= 0 {
+		loaded.RatePerSec = Defaults().RatePerSec
+	}
+	s.cur = loaded
+	return s, nil
+}
+
+// Get returns a copy of the current settings.
+func (s *SettingsStore) Get() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cur
+}
+
+// Set replaces the settings and persists them with 0600 permissions.
+func (s *SettingsStore) Set(next Settings) error {
+	if next.RatePerSec <= 0 {
+		next.RatePerSec = Defaults().RatePerSec
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	body, err := json.MarshalIndent(next, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode settings: %w", err)
+	}
+
+	// Write via a temp file so a crash never leaves a truncated config, and
+	// create it 0600 from the outset rather than chmod-ing after the secret is
+	// already on disk.
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return fmt.Errorf("write settings: %w", err)
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("replace settings: %w", err)
+	}
+
+	s.cur = next
+	return nil
+}
+
+// Path is the settings file location, for diagnostics.
+func (s *SettingsStore) Path() string { return s.path }

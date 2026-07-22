@@ -238,6 +238,33 @@ func TestLocalSourceOutranksProvider(t *testing.T) {
 	}
 }
 
+// An item fully resolved from a sidecar is not "unmatched" — the user already
+// said what it is, and listing it for review would bury real problems.
+func TestLocalOnlyResolutionIsNotFlaggedForReview(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\arrival.mkv`, "Arrival", 2016)
+
+	reg := meta.NewRegistry() // no providers at all
+	reg.AddLocal(&fakeLocal{id: "nfo", rec: &meta.Record{
+		Source: "nfo",
+		Fields: meta.Fields{Title: meta.S("Arrival"), Overview: meta.S("From the sidecar.")},
+	}})
+
+	if err := New(st, reg, &fakeArt{}, quietLog()).Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if it.MatchState != meta.StateLocal {
+		t.Errorf("MatchState = %q, want %q", it.MatchState, meta.StateLocal)
+	}
+	queue, _ := st.ReviewQueue(ctx, lib.ID, 10)
+	if len(queue) != 0 {
+		t.Errorf("review queue = %d, want 0 — a sidecar-resolved item needs no review", len(queue))
+	}
+}
+
 // A weak match is recorded as uncertain rather than applied as fact.
 func TestLowConfidenceGoesToReviewQueue(t *testing.T) {
 	ctx := context.Background()
