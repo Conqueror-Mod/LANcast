@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-07-22 · **5 of 26 areas planned. M0 and M1 built.**
+Last updated: 2026-07-22 · **5 of 26 areas planned. M0, M1, and M2 built.**
 
 ## Ordering principle
 
@@ -20,7 +20,7 @@ before multi-user exists, and `media_item` does not hardcode a media taxonomy.
 |---|---|---|---|
 | M0 | Library scan | Point at a folder, get rows in a database | **done** |
 | M1 | **Watch something** | Browse in a browser, click, play, seek, resume | **done** |
-| M2 | Metadata | Real titles, artwork, seasons, OST identification | planned |
+| M2 | Metadata | Real titles, artwork, seasons, OST identification | **done** |
 | M3 | Transcoding + real client | Plays anywhere; React client executes the design | |
 | M4 | Extensibility | Plugin runtime with first-party plugins proving the contract | |
 
@@ -44,9 +44,9 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Provider interface | planned | Scraper contract; first real extension point |
-| Matching and confidence | planned | Wrong-match correction — the actual pain point |
-| Artwork pipeline | planned | Fetch, cache, resize; fanart for detail pages |
+| Provider interface | **built** | Scraper contract; first real extension point |
+| Matching and confidence | **built** | Wrong-match correction — the actual pain point |
+| Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
 | Library types beyond video | *unplanned* | Music, photos — proves the taxonomy is open |
 

@@ -1,8 +1,7 @@
 # HTTP API
 
-> **Status:** everything through `GET /api/stream/{id}` is **implemented and
-> verified**. The metadata, artwork, and theme-audio sections are **M2, not yet
-> implemented**, and are marked as such.
+> **Status:** M1 and M2 are **implemented and verified**. Only the theme-audio
+> section remains unbuilt and is marked as such.
 >
 > This file and `internal/api/` must agree exactly — update both in the same commit.
 
@@ -132,9 +131,20 @@ From M2 the response also carries:
   "locked_fields": ["title", "year"] }
 ```
 
-`match_state` is one of `matched`, `review`, `unmatched`, `locked`. A `review`
-state means the match was applied but is uncertain, and the UI should say so —
-uncertainty is data, not something to hide.
+`match_state` is one of:
+
+| State | Meaning |
+|---|---|
+| `matched` | Confident provider match, applied silently |
+| `review` | Applied, but uncertain — the UI should say so |
+| `unmatched` | Looked and found nothing good enough |
+| `locked` | User-confirmed; never re-scored |
+| `local` | Resolved from an NFO sidecar; nothing to review |
+
+**`metadata_updated_at` is null until enrichment has run.** Clients must check
+it before treating `unmatched` as "no match found" — it is the default value,
+so a freshly scanned item carries it before anything has looked at the item at
+all. Reporting those as match failures buries the real ones.
 
 ### `PUT /api/items/{id}/progress`
 

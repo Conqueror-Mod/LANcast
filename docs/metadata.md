@@ -1,7 +1,7 @@
 # Metadata and artwork (M2)
 
-> **Status: planned, not yet implemented.** Design reference for the M2
-> subsystem. Decisions are recorded in ADRs
+> **Status: implemented.** Design reference for the M2 subsystem. Decisions are
+> recorded in ADRs
 > [0007](adr/0007-provider-and-localsource-split.md),
 > [0008](adr/0008-field-level-locking.md),
 > [0009](adr/0009-nfo-round-trip-safety.md), and
@@ -82,6 +82,24 @@ numbers must match exactly or the candidate is rejected outright.
 | 0.55–0.85 | `review` | Applied **and** flagged for review |
 | < 0.55 | `unmatched` | Nothing applied; queued |
 | — | `locked` | User-confirmed; never scored again |
+| — | `local` | Resolved from a sidecar; nothing to review |
+
+### Not attempted is not an answer
+
+`match_state` defaults to `unmatched`, so it cannot by itself distinguish "we
+looked and found nothing" from "nothing has looked at this yet". That
+distinction has to be made explicitly in three places, and getting it wrong in
+any of them reports failures where no attempt was made:
+
+- **The enrichment worker** leaves items pending when no provider is
+  configured, rather than stamping them unmatched.
+- **The review queue** requires `metadata_updated_at IS NOT NULL`.
+- **Clients** must check `metadata_updated_at` before showing a "no match"
+  indicator.
+
+An item resolved entirely from an NFO gets `local` for the same reason: the
+user already said what it is, so listing it for review would bury the items
+that genuinely need attention.
 
 The middle band carries the design. A low-confidence match is usually still
 right, so applying it gives a good default — but it is recorded as uncertain

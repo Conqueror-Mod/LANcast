@@ -4,9 +4,10 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: M1 works.** Scan a folder, browse it in a browser, click a title,
-> and it plays with working seek and resume. No metadata or artwork yet — that
-> is M2. See [docs/roadmap.md](docs/roadmap.md) for what exists and what does not.
+> **Status: M2 works.** Scan a folder, browse it with posters and metadata,
+> click a title, and it plays with working seek and resume. Corrections you
+> make are locked and survive rescans. Transcoding is M3.
+> See [docs/roadmap.md](docs/roadmap.md) for what exists and what does not.
 
 ## Why
 
@@ -67,6 +68,17 @@ and scan it.
 |---|---|---|
 | `-addr` | `:8080` | Listen address |
 | `-data` | `%APPDATA%/LANcast` (platform config dir) | Where `lancast.db` lives |
+| `-v` | off | Verbose logging |
+
+### Metadata
+
+Optional. Add a free [TMDB](https://www.themoviedb.org/settings/api) key under
+Settings for posters, synopses, cast, and artwork.
+
+**LANcast works without one** — it falls back to filenames and Kodi-style
+`.nfo` sidecars, and never reports the missing key as an error. That is the
+no-phone-home principle being real rather than decorative. The key is stored
+`0600` outside the database and is never readable back through the API.
 
 Build a distributable binary:
 
