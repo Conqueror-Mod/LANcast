@@ -90,6 +90,49 @@ func TestSearchThenRankPicksCorrectFilm(t *testing.T) {
 	}
 }
 
+// TMDB's year parameter is a hard filter, so sending it means a filename with
+// a slightly wrong year returns nothing at all instead of a lower-scored
+// match. Scoring handles year proximity; the provider must not pre-filter.
+func TestSearchDoesNotSendYearAsFilter(t *testing.T) {
+	var gotYear string
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		gotYear = r.URL.Query().Get("year") + r.URL.Query().Get("primary_release_year")
+		w.Write([]byte(movieSearchJSON))
+	})
+
+	_, err := newClient(t, srv).Search(context.Background(),
+		meta.Query{Kind: meta.KindMovie, Title: "Blade Runner 2049", Year: 2017})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotYear != "" {
+		t.Errorf("year filter sent as %q — a wrong filename year would return no results", gotYear)
+	}
+}
+
+// The real-world case: the file says 2021, the film is 2022. Without a hard
+// filter the candidate still comes back, and scoring places it just below the
+// auto threshold rather than losing it entirely.
+func TestOffByOneYearStillMatches(t *testing.T) {
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"results":[{"id":616037,"title":"Thor: Love and Thunder","release_date":"2022-07-06","popularity":55}]}`))
+	})
+
+	q := meta.Query{Kind: meta.KindMovie, Title: "Thor Love and Thunder", Year: 2021}
+	cands, err := newClient(t, srv).Search(context.Background(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) != 1 {
+		t.Fatalf("candidates = %d, want the film despite the wrong year", len(cands))
+	}
+	meta.Rank(q, cands)
+	if state := meta.StateFor(cands[0].Score); state == meta.StateUnmatched {
+		t.Errorf("score %.3f gives %q — a one-year slip should not lose the match",
+			cands[0].Score, state)
+	}
+}
+
 func TestSearchTVUsesSeriesName(t *testing.T) {
 	var gotQuery string
 	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {

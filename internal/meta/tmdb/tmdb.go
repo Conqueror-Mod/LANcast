@@ -107,10 +107,17 @@ func (c *Client) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, er
 		return nil, nil
 	}
 
+	// The year is deliberately NOT sent to TMDB.
+	//
+	// Its `year` parameter is a hard filter, so a filename off by one — and
+	// they frequently are, since release years and filename years disagree —
+	// returns zero results rather than a slightly weaker match. That defeats
+	// the entire point of confidence scoring: the provider would be rejecting
+	// imperfect data before the code built to handle imperfect data ever runs.
+	//
+	// Score() already weights year proximity, and it can tell "close" from
+	// "wrong" in a way a filter cannot.
 	params := url.Values{"query": {title}}
-	if q.Year > 0 && kind == meta.KindMovie {
-		params.Set("year", strconv.Itoa(q.Year))
-	}
 
 	var raw searchResponse
 	if err := c.get(ctx, path, params, &raw); err != nil {
