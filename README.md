@@ -101,8 +101,19 @@ go build -o lancastd ./cmd/lancastd
 | [docs/api.md](docs/api.md) | HTTP contract — the promise clients depend on |
 | [docs/design.md](docs/design.md) | Visual design system, the gold rule, keyboard model |
 | [docs/metadata.md](docs/metadata.md) | Providers, matching, locking, artwork (M2) |
+| [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
 | [docs/roadmap.md](docs/roadmap.md) | All 26 planning areas and their status |
 | [docs/adr/](docs/adr/) | Why decisions were made the way they were |
+
+## Security
+
+**LANcast has no authentication yet. Do not port-forward it.** Anyone who can
+reach the port can stream your library, browse your filesystem, and add a
+library pointing at any readable path.
+
+For access away from home, use a VPN that places your device on the LAN
+(Tailscale, WireGuard) rather than exposing the port. See
+[docs/security.md](docs/security.md) for the full picture.
 
 ## License
 
