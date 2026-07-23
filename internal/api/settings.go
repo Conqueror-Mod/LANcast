@@ -17,6 +17,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"tmdb": map[string]any{
 			"configured": cur.TMDBKey != "",
 		},
+		"opensubtitles": map[string]any{
+			"configured": cur.OpenSubtitlesKey != "",
+		},
 		"rate_per_sec": cur.RatePerSec,
 		"write_nfo":    cur.WriteNFO,
 		"auto_enrich":  cur.AutoEnrich,
@@ -27,10 +30,11 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 // client that only wants to toggle NFO writing need not resend the API key.
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TMDBKey    *string  `json:"tmdb_key"`
-		RatePerSec *float64 `json:"rate_per_sec"`
-		WriteNFO   *bool    `json:"write_nfo"`
-		AutoEnrich *bool    `json:"auto_enrich"`
+		TMDBKey          *string  `json:"tmdb_key"`
+		OpenSubtitlesKey *string  `json:"opensubtitles_key"`
+		RatePerSec       *float64 `json:"rate_per_sec"`
+		WriteNFO         *bool    `json:"write_nfo"`
+		AutoEnrich       *bool    `json:"auto_enrich"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -40,6 +44,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	next := s.settings.Get()
 	if req.TMDBKey != nil {
 		next.TMDBKey = strings.TrimSpace(*req.TMDBKey)
+	}
+	if req.OpenSubtitlesKey != nil {
+		next.OpenSubtitlesKey = strings.TrimSpace(*req.OpenSubtitlesKey)
 	}
 	if req.RatePerSec != nil {
 		if *req.RatePerSec <= 0 || *req.RatePerSec > 50 {

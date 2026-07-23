@@ -171,7 +171,7 @@ func run(addr, dataDir string, log *slog.Logger) error {
 			LANBound: lanBound,
 			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Probes: probes, Trans: trans, Subs: subs,
-			Settings: settings, Log: log, Web: web.Handler(),
+			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))

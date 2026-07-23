@@ -207,6 +207,10 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
     <input id="tmdbKey" type="password" placeholder="TMDB API key" style="flex:1" autocomplete="off">
     <span class="badge" id="keyState">not set</span>
   </div>
+  <div class="row" style="margin-bottom:10px">
+    <input id="osKey" type="password" placeholder="OpenSubtitles API key" style="flex:1" autocomplete="off">
+    <span class="badge" id="osState">not set</span>
+  </div>
   <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="writeNfo" style="width:auto"> Write .nfo sidecars into media folders</label>
   <label class="row muted" style="margin-bottom:8px"><input type="checkbox" id="autoEnrich" style="width:auto"> Fetch metadata automatically</label>
   <div id="secBlock" style="border-top:1px solid rgba(255,255,255,.08); padding-top:12px; margin-top:12px">
@@ -457,15 +461,72 @@ function renderSubList() {
 
 // The search view replaces the panel contents rather than opening anything
 // new — same window, same size, no context switch.
-function renderSubSearch() {
+async function renderSubSearch(query) {
   $('#subsBack').hidden = false;
   $('#subsTitle').textContent = 'Search subtitles';
-  $('#subsBody').innerHTML = `
-    <p class="muted" style="padding:10px 10px 4px">
-      Online subtitle search is not connected yet. LANcast will match candidates
-      against this file's runtime, frame rate and edition rather than download
-      count, so the result actually syncs.
-    </p>`;
+  $('#subsBody').innerHTML = `<p class="muted" style="padding:10px">Searching…</p>`;
+
+  const p = new URLSearchParams();
+  if (query) p.set('q', query);
+
+  let res;
+  try {
+    res = await api(`/api/items/${current.id}/subtitles/search?` + p);
+  } catch (err) {
+    $('#subsBody').innerHTML = `<p class="muted" style="padding:10px">${esc(err.message)}</p>`;
+    return;
+  }
+
+  const head = `
+    <div class="row" style="padding:6px 6px 10px">
+      <input id="subq" placeholder="${esc(current.title || 'Search')}" style="flex:1"
+             value="${esc(query || '')}">
+      <button id="subgo">Search</button>
+    </div>
+    ${res.hash_used ? `<p class="muted" style="padding:0 10px 8px; font-size:11px">
+      Matched against this file's hash, frame rate and release.</p>` : ''}`;
+
+  const rows = (res.candidates || []).map(c => {
+    const pct = Math.round(c.score * 100);
+    // A hash match means it was timed against these exact bytes; say so plainly
+    // rather than showing a number that understates the certainty.
+    const why = c.hash_match ? 'exact file match' : (c.reason || '');
+    return `<button class="sub-row" data-file="${c.file_id}" data-lang="${esc(c.language)}"
+              data-name="${esc(c.file_name || c.release)}">
+      <span class="tick">${c.hash_match ? '&#9679;' : ''}</span>
+      <span><span>${esc(c.release || c.file_name)}</span>
+      <span class="sub-sub">${pct}% · ${esc(why)}${c.download_count ? ` · ${c.download_count} downloads` : ''}</span></span>
+    </button>`;
+  }).join('');
+
+  $('#subsBody').innerHTML = head + (rows ||
+    `<p class="muted" style="padding:10px">No matching subtitles found.</p>`);
+
+  $('#subgo')?.addEventListener('click', () => renderSubSearch($('#subq').value.trim()));
+  $('#subq')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') renderSubSearch($('#subq').value.trim());
+  });
+
+  // A strong match is applied without asking. Anything weaker stays a list,
+  // because a subtitle that does not sync is distracting for two hours where
+  // a prompt costs one click.
+  if (res.auto_match && res.candidates.length) {
+    downloadSub(res.candidates[0], true);
+  }
+}
+
+async function downloadSub(c, auto) {
+  $('#subsBody').innerHTML = `<p class="muted" style="padding:10px">
+    ${auto ? 'Best match found — downloading…' : 'Downloading…'}</p>`;
+  try {
+    const added = await api(`/api/items/${current.id}/subtitles/download`, jsonReq('POST', {
+      file_id: c.file_id, language: c.language, file_name: c.file_name || c.release,
+    }));
+    await loadSubtitles(current.id);
+    applySubtitle(added.key);
+  } catch (err) {
+    $('#subsBody').innerHTML = `<p class="muted" style="padding:10px">${esc(err.message)}</p>`;
+  }
 }
 
 function applySubtitle(key) {
@@ -505,6 +566,11 @@ $('#subsBack').addEventListener('click', renderSubList);
 $('#subsBody').addEventListener('click', e => {
   const b = e.target.closest('.sub-row');
   if (!b || b.disabled) return;
+  if (b.dataset.file) {
+    return downloadSub({
+      file_id: +b.dataset.file, language: b.dataset.lang, file_name: b.dataset.name,
+    }, false);
+  }
   if (b.dataset.key === 'search') return renderSubSearch();
   applySubtitle(b.dataset.key);
 });
@@ -632,7 +698,9 @@ $('#fixResults').addEventListener('click', async e => {
 $('#setBtn').addEventListener('click', async () => {
   const s = await api('/api/settings');
   $('#keyState').textContent = s.tmdb.configured ? 'configured' : 'not set';
+  $('#osState').textContent = s.opensubtitles?.configured ? 'configured' : 'not set';
   $('#tmdbKey').value = '';
+  $('#osKey').value = '';
   $('#writeNfo').checked = s.write_nfo;
   $('#autoEnrich').checked = s.auto_enrich;
 
@@ -665,6 +733,7 @@ $('#setSave').addEventListener('click', async () => {
   const body = { write_nfo: $('#writeNfo').checked, auto_enrich: $('#autoEnrich').checked };
   // Only send the key when one was typed, so saving other options never clears it.
   if ($('#tmdbKey').value.trim()) body.tmdb_key = $('#tmdbKey').value.trim();
+  if ($('#osKey').value.trim()) body.opensubtitles_key = $('#osKey').value.trim();
   await api('/api/settings', jsonReq('PUT', body));
   $('#settings').close();
   pollEnrich();

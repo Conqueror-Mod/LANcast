@@ -161,14 +161,15 @@ type Item struct {
 	MetadataUpdatedAt *int64 `json:"metadata_updated_at"`
 
 	// Probe results. Nil until the file has been inspected.
-	ProbedAt      *int64  `json:"probed_at"`
-	VideoCodec    *string `json:"video_codec"`
-	VideoProfile  *string `json:"video_profile"`
-	Width         *int    `json:"width"`
-	Height        *int    `json:"height"`
-	VideoBitRate  *int64  `json:"video_bitrate"`
-	AudioCodec    *string `json:"audio_codec"`
-	AudioChannels *int    `json:"audio_channels"`
+	ProbedAt      *int64   `json:"probed_at"`
+	VideoCodec    *string  `json:"video_codec"`
+	VideoProfile  *string  `json:"video_profile"`
+	Width         *int     `json:"width"`
+	Height        *int     `json:"height"`
+	VideoBitRate  *int64   `json:"video_bitrate"`
+	FrameRate     *float64 `json:"frame_rate"`
+	AudioCodec    *string  `json:"audio_codec"`
+	AudioChannels *int     `json:"audio_channels"`
 
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
@@ -333,7 +334,7 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
-	audio_codec, audio_channels`
+	audio_codec, audio_channels, video_frame_rate`
 
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
@@ -344,7 +345,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
-		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels)
+		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate)
 	if err != nil {
 		return nil, err
 	}

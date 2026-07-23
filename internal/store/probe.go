@@ -32,6 +32,7 @@ type ProbeResult struct {
 	Width         int
 	Height        int
 	VideoBitRate  int64
+	FrameRate     float64
 	AudioCodec    string
 	AudioChannels int
 	Streams       []MediaStream
@@ -52,11 +53,12 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 	_, err = tx.ExecContext(ctx, `
 		UPDATE media_item SET
 			probed_at = ?, duration_ms = ?, video_codec = ?, video_profile = ?,
-			width = ?, height = ?, video_bitrate = ?, audio_codec = ?, audio_channels = ?
+			width = ?, height = ?, video_bitrate = ?, audio_codec = ?, audio_channels = ?,
+			video_frame_rate = ?
 		WHERE id = ?`,
 		time.Now().Unix(), nullZero64(r.DurationMS), nullEmpty(r.VideoCodec), nullEmpty(r.VideoProfile),
 		nullZero(r.Width), nullZero(r.Height), nullZero64(r.VideoBitRate),
-		nullEmpty(r.AudioCodec), nullZero(r.AudioChannels), itemID)
+		nullEmpty(r.AudioCodec), nullZero(r.AudioChannels), nullZeroF(r.FrameRate), itemID)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}
@@ -180,6 +182,13 @@ func nullZero64(n int64) any {
 		return nil
 	}
 	return n
+}
+
+func nullZeroF(f float64) any {
+	if f == 0 {
+		return nil
+	}
+	return f
 }
 
 func boolInt(b bool) int {

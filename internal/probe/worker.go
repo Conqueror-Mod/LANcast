@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"sync"
@@ -204,6 +205,7 @@ func toStoreResult(r *Result) store.ProbeResult {
 	if v := r.Video(); v != nil {
 		out.VideoCodec, out.VideoProfile = v.Codec, v.Profile
 		out.Width, out.Height, out.VideoBitRate = v.Width, v.Height, v.BitRate
+		fmt.Sscanf(v.FrameRate, "%g", &out.FrameRate)
 	}
 	if a := r.Audio(); a != nil {
 		out.AudioCodec, out.AudioChannels = a.Codec, a.Channels

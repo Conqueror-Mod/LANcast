@@ -15,10 +15,13 @@ import (
 // The TMDB key lives here rather than in the database because it is a secret:
 // the file is written 0600, and the API never echoes the value back.
 type Settings struct {
-	TMDBKey    string  `json:"tmdb_key,omitempty"`
-	RatePerSec float64 `json:"rate_per_sec,omitempty"`
-	WriteNFO   bool    `json:"write_nfo"`
-	AutoEnrich bool    `json:"auto_enrich"`
+	TMDBKey string `json:"tmdb_key,omitempty"`
+	// OpenSubtitlesKey enables subtitle search. Optional, like the TMDB key:
+	// without it LANcast still serves embedded and sidecar subtitles.
+	OpenSubtitlesKey string  `json:"opensubtitles_key,omitempty"`
+	RatePerSec       float64 `json:"rate_per_sec,omitempty"`
+	WriteNFO         bool    `json:"write_nfo"`
+	AutoEnrich       bool    `json:"auto_enrich"`
 
 	// PasswordHash is the bcrypt hash guarding the instance. Empty means the
 	// server is unconfigured and will bind to loopback only.

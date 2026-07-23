@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 5
+const CurrentSchemaVersion = 6
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -23,6 +23,7 @@ var migrations = []migration{
 	{version: 3, sql: schemaRevision3},
 	{version: 4, sql: schemaRevision4},
 	{version: 5, sql: schemaRevision5},
+	{version: 6, sql: schemaRevision6},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -246,4 +247,14 @@ CREATE TABLE IF NOT EXISTS external_subtitle (
 );
 
 CREATE INDEX IF NOT EXISTS idx_subtitle_item ON external_subtitle(item_id);
+`
+
+// Revision 6 — video frame rate.
+//
+// Stored on the item rather than only in media_stream because it is needed for
+// subtitle matching on every candidate comparison, and a mismatched frame rate
+// is the failure that drifts progressively worse through a film rather than
+// being a constant offset a viewer could ignore.
+const schemaRevision6 = `
+ALTER TABLE media_item ADD COLUMN video_frame_rate REAL;
 `
