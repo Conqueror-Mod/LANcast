@@ -44,10 +44,13 @@ type Options struct {
 	// AudioChannels for re-encoded audio. 2 keeps browsers happy.
 	AudioChannels int
 	// CRF controls video quality when re-encoding. Lower is better; 23 is the
-	// x264 default and a reasonable balance for a home server.
+	// x264 default and a reasonable balance for a home server. Hardware
+	// encoders spell this differently but mean the same thing.
 	CRF int
-	// Preset trades encode speed for file size.
+	// Preset trades encode speed for file size. Software encoder only.
 	Preset string
+	// Encoder chooses how video is re-encoded. The zero value is software.
+	Encoder Encoder
 }
 
 // withDefaults fills in the values most callers do not care about.
@@ -66,6 +69,12 @@ func (o Options) withDefaults() Options {
 		// stay ahead of playback in real time, and the size difference matters
 		// far less than not stuttering.
 		o.Preset = "veryfast"
+	}
+	if o.Encoder.Name == "" {
+		o.Encoder = Software
+	}
+	if !o.Encoder.Hardware && o.Preset != "" {
+		o.Encoder.presetValue = o.Preset
 	}
 	return o
 }
@@ -101,17 +110,12 @@ func Args(o Options) []string {
 	if o.Decision.VideoAction == "copy" {
 		a = append(a, "-c:v", "copy")
 	} else {
-		a = append(a,
-			"-c:v", "libx264",
-			"-preset", o.Preset,
-			"-crf", strconv.Itoa(o.CRF),
-			// yuv420p because 10-bit and 4:2:2 sources encode to profiles
-			// browsers refuse — the exact trap the decision engine catches on
-			// input, reintroduced on output if left alone.
-			"-pix_fmt", "yuv420p",
-			"-profile:v", "high",
-			"-level", "4.1",
-		)
+		// The encoder supplies its own codec, quality and profile flags:
+		// x264 wants -crf, NVENC -cq, QSV -global_quality, AMF -qp_i. Same
+		// intent, four spellings, and each hardware encoder needs profile and
+		// level stated or it defaults to something browsers refuse.
+		a = append(a, o.Encoder.EncoderArgs(o.CRF)...)
+
 		if o.Output == HLS {
 			// Force keyframes on segment boundaries, or segments cannot start
 			// with an IDR frame and seeking breaks.

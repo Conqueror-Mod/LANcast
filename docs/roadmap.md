@@ -57,7 +57,7 @@ Status: **planned** · **next** · *unplanned*
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
 | Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
-| Hardware acceleration | *unplanned* | QSV, NVENC, VAAPI capability matrix |
+| Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | *unplanned* | Executes the design system for real |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
@@ -85,6 +85,29 @@ Status: **planned** · **next** · *unplanned*
 | Observability | *unplanned* | Scan diagnostics: "why did this not match?" |
 | Testing strategy | *unplanned* | Fixture libraries; no real media in CI |
 | Licensing and open-sourcing | *unplanned* | Decided before the repo goes public |
+
+## Client UX backlog
+
+Noted from use, not yet built. All three point at the same structural gap: the
+player dialog is currently doing the job of two screens.
+
+1. **Separate the information screen from the player.** Clicking a poster
+   should open detail — synopsis, cast, artwork — with a **Play** button,
+   rather than starting playback immediately. This is the full-bleed detail
+   page in [design.md](design.md), and it is the natural home for the other
+   two items.
+2. **Play the official trailer on the information screen**, where one exists,
+   instead of the film starting from the beginning. TMDB exposes trailer links
+   on the video endpoint, so the data path already exists.
+3. **Subtitles belong to the player, not the preview.** The picker is
+   currently reachable from the same dialog that shows metadata; once the two
+   screens split, it goes with playback.
+4. **Reposition "fix match"** — it sits beside playback controls today, which
+   is the wrong neighbourhood for a metadata correction.
+
+Worth doing together rather than piecemeal: patching the current single-file
+client four times costs the same effort as the split and is thrown away at the
+React rebuild.
 
 ## Dependencies that constrain ordering
 

@@ -23,6 +23,11 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"rate_per_sec": cur.RatePerSec,
 		"write_nfo":    cur.WriteNFO,
 		"auto_enrich":  cur.AutoEnrich,
+		"encoder": map[string]any{
+			"preference": firstNonEmptyStr(cur.HardwareEncoder, "auto"),
+			"active":     s.trans.Encoder(),
+			"available":  s.trans.AvailableEncoders(),
+		},
 	})
 }
 
@@ -35,6 +40,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		RatePerSec       *float64 `json:"rate_per_sec"`
 		WriteNFO         *bool    `json:"write_nfo"`
 		AutoEnrich       *bool    `json:"auto_enrich"`
+		HardwareEncoder  *string  `json:"hardware_encoder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -61,6 +67,11 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
 	}
+	encoderChanged := req.HardwareEncoder != nil &&
+		*req.HardwareEncoder != next.HardwareEncoder
+	if req.HardwareEncoder != nil {
+		next.HardwareEncoder = strings.TrimSpace(*req.HardwareEncoder)
+	}
 
 	if err := s.settings.Set(next); err != nil {
 		s.writeInternal(w, err, "save settings")
@@ -70,6 +81,11 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// rather than after a restart.
 	if s.rebuild != nil {
 		s.rebuild(next)
+	}
+	// Re-selecting runs a test encode per candidate, so it is only done when
+	// the preference actually changed rather than on every settings save.
+	if encoderChanged {
+		s.trans.DetectHardware(r.Context(), next.HardwareEncoder)
 	}
 
 	s.getSettings(w, r)

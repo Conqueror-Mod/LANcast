@@ -35,6 +35,10 @@ type Manager struct {
 	// does not tell the server it has gone.
 	IdleTimeout time.Duration
 
+	encMu     sync.RWMutex
+	available []Encoder
+	selected  Encoder
+
 	mu       sync.Mutex
 	sessions map[string]*Session
 
@@ -51,11 +55,47 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 		IdleTimeout: 90 * time.Second,
 		sessions:    map[string]*Session{},
 		stopped:     make(chan struct{}),
+		available:   []Encoder{Software},
+		selected:    Software,
 	}
 	if bin, err := exec.LookPath("ffmpeg"); err == nil {
 		m.bin = bin
 	}
 	return m
+}
+
+// DetectHardware probes for usable encoders and applies a preference.
+//
+// Called at startup and again when the setting changes. Detection runs a real
+// test encode per candidate, so it costs a second or two — worth paying once
+// rather than discovering at playback time that the encoder ffmpeg advertised
+// does not work on this machine.
+func (m *Manager) DetectHardware(ctx context.Context, preference string) {
+	available := DetectEncoders(ctx, m.bin, m.log)
+	selected := SelectEncoder(available, preference, m.log)
+
+	m.encMu.Lock()
+	m.available, m.selected = available, selected
+	m.encMu.Unlock()
+
+	m.log.Info("video encoder selected", "encoder", selected.Name,
+		"hardware", selected.Hardware, "preference", preference)
+}
+
+// Encoder returns the encoder in use.
+func (m *Manager) Encoder() Encoder {
+	m.encMu.RLock()
+	defer m.encMu.RUnlock()
+	return m.selected
+}
+
+// AvailableEncoders returns every verified encoder, best first.
+func (m *Manager) AvailableEncoders() []Encoder {
+	m.encMu.RLock()
+	defer m.encMu.RUnlock()
+	out := make([]Encoder, len(m.available))
+	copy(out, m.available)
+	return out
 }
 
 // Available reports whether transcoding is possible.
@@ -172,6 +212,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, o Options) (io.
 	}
 
 	o.Output = Progressive
+	o.Encoder = m.Encoder()
 	s, stdout, err := startProgressive(ctx, m.bin, o)
 	if err != nil {
 		m.release()
@@ -215,6 +256,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Sess
 
 	id := newID()
 	o.Output = HLS
+	o.Encoder = m.Encoder()
 	o.OutputDir = filepath.Join(m.root, id)
 
 	s, err := startHLS(ctx, m.bin, o)

@@ -198,6 +198,13 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	trans.Start(ctx)
 	defer trans.StopAll()
 
+	// Detection runs a real test encode per candidate, because ffmpeg lists
+	// encoders the machine cannot run. Done in the background so a slow or
+	// wedged GPU driver delays transcoding rather than startup.
+	if trans.Available() {
+		go trans.DetectHardware(ctx, settings.Get().HardwareEncoder)
+	}
+
 	// Pick up anything left pending from a previous run.
 	probeSoon()
 	enrichSoon()

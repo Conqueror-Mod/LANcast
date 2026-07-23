@@ -23,6 +23,10 @@ type Settings struct {
 	WriteNFO         bool    `json:"write_nfo"`
 	AutoEnrich       bool    `json:"auto_enrich"`
 
+	// HardwareEncoder is "auto", "off", or a specific ffmpeg encoder name.
+	// Auto takes the fastest encoder that passed a real test encode.
+	HardwareEncoder string `json:"hardware_encoder,omitempty"`
+
 	// PasswordHash is the bcrypt hash guarding the instance. Empty means the
 	// server is unconfigured and will bind to loopback only.
 	PasswordHash string `json:"password_hash,omitempty"`
@@ -37,7 +41,7 @@ func (s Settings) Secured() bool { return s.PasswordHash != "" }
 // behavior; it is a no-op without a key. WriteNFO is off because writing into
 // someone's media folders is not something to do unasked.
 func Defaults() Settings {
-	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true}
+	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true, HardwareEncoder: "auto"}
 }
 
 // SettingsStore reads and writes the settings file.

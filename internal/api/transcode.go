@@ -150,6 +150,7 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) transcodeSessions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": s.trans.Available(),
+		"encoder":   s.trans.Encoder(),
 		"sessions":  s.trans.Sessions(),
 	})
 }
