@@ -28,6 +28,7 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
+	"lancast/internal/subtitle"
 	"lancast/internal/transcode"
 	"lancast/internal/web"
 )
@@ -107,6 +108,7 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	prober := probe.New()
 	probes := probe.NewWorker(st, prober, log)
 
+	subs := subtitle.NewExtractor(filepath.Join(cfg.DataDir, "subtitles"))
 	trans := transcode.NewManager(filepath.Join(cfg.DataDir, "transcode"), log)
 	if !trans.Available() {
 		log.Info("ffmpeg not found; files that cannot be played directly will not be converted")
@@ -168,7 +170,7 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound,
 			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Trans: trans,
+			Worker: worker, Probes: probes, Trans: trans, Subs: subs,
 			Settings: settings, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)

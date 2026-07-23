@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 4
+const CurrentSchemaVersion = 5
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -22,6 +22,7 @@ var migrations = []migration{
 	{version: 2, sql: schemaRevision2},
 	{version: 3, sql: schemaRevision3},
 	{version: 4, sql: schemaRevision4},
+	{version: 5, sql: schemaRevision5},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -222,4 +223,27 @@ CREATE TABLE IF NOT EXISTS media_stream (
 
 CREATE INDEX IF NOT EXISTS idx_stream_item ON media_stream(item_id, kind);
 CREATE INDEX IF NOT EXISTS idx_item_probe  ON media_item(probed_at, missing);
+`
+
+// Revision 5 — external subtitles.
+//
+// Kept separate from media_stream, which describes tracks inside a container.
+// An external file has a path, can be added or removed without the video
+// changing, and may later be downloaded rather than found — none of which fits
+// a row describing a container's internals.
+const schemaRevision5 = `
+CREATE TABLE IF NOT EXISTS external_subtitle (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id   INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    path      TEXT    NOT NULL,
+    language  TEXT,
+    title     TEXT,
+    forced    INTEGER NOT NULL DEFAULT 0,
+    format    TEXT    NOT NULL,
+    source    TEXT    NOT NULL DEFAULT 'sidecar',   -- sidecar | downloaded
+    added_at  INTEGER NOT NULL,
+    UNIQUE (item_id, path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_subtitle_item ON external_subtitle(item_id);
 `

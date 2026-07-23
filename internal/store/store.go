@@ -220,10 +220,11 @@ type ScanFile struct {
 }
 
 // UpsertItem inserts or updates an item keyed on its unique path. It returns
-// true if the row was created or its metadata changed.
-func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (bool, error) {
+// the row id, so callers that need to attach related records — subtitles, for
+// one — do not have to re-query the whole library to find it.
+func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 	now := time.Now().Unix()
-	res, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
 			(library_id, kind, path, title, sort_title, year, series, season, episode,
 			 container, size_bytes, mtime, added_at, updated_at, missing)
@@ -241,10 +242,17 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (bool, error) {
 		f.LibraryID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
 		f.Container, f.SizeBytes, f.MTime, now, now)
 	if err != nil {
-		return false, fmt.Errorf("upsert item %q: %w", f.Path, err)
+		return 0, fmt.Errorf("upsert item %q: %w", f.Path, err)
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+
+	// LastInsertId is unreliable after an upsert that took the update branch,
+	// so the id is read back by the unique key that identifies the row.
+	var id int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM media_item WHERE path = ?`, f.Path).Scan(&id); err != nil {
+		return 0, fmt.Errorf("upsert item %q: read id: %w", f.Path, err)
+	}
+	return id, nil
 }
 
 // FileState is the cheap change-detection tuple for one known file.

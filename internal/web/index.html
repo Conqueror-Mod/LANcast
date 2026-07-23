@@ -96,6 +96,30 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 .lock{font-size:10px; border:1px solid rgba(255,255,255,.2); background:none;
   color:var(--text-muted); padding:1px 6px; border-radius:3px; margin-left:6px}
 .grow{flex:1}
+
+/* Subtitle side panel. Deliberately not a centre modal: choosing a track is a
+   glance-and-click, not a context switch away from the film. */
+#subs{
+  position:absolute; right:14px; bottom:14px; width:min(88vw,330px);
+  background:rgba(10,15,34,.96); border:1px solid var(--gold-dormant);
+  border-radius:var(--radius-panel); overflow:hidden; display:none;
+}
+#subs.open{display:block}
+#subs header{display:flex; align-items:center; gap:8px; padding:10px 12px;
+  border-bottom:1px solid rgba(255,255,255,.07); font-size:13px}
+#subs .body{max-height:min(48vh,340px); overflow:auto; padding:6px}
+.sub-row{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  background:none; border:1px solid transparent; border-radius:var(--radius-tile);
+  padding:8px 10px; cursor:pointer; color:var(--text-secondary)}
+.sub-row:hover{border-color:var(--gold-dormant); color:var(--text-primary)}
+.sub-row[aria-selected="true"]{color:var(--text-primary)}
+.sub-row .tick{color:var(--gold); width:14px; flex:none}
+.sub-row.off{opacity:.55; cursor:not-allowed}
+.sub-row.off:hover{border-color:transparent}
+.sub-sub{display:block; font-size:11px; color:var(--text-faint)}
+.iconbtn{background:none; border:none; color:var(--text-muted); cursor:pointer;
+  padding:2px 6px; font-size:14px; line-height:1}
+.iconbtn:hover{color:var(--gold-bright)}
 </style>
 </head>
 <body>
@@ -134,10 +158,24 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 </main>
 
 <dialog id="player">
-  <video id="video" controls preload="metadata"></video>
+  <div style="position:relative">
+    <video id="video" controls preload="metadata" crossorigin="use-credentials"></video>
+
+    <!-- Side panel, anchored to the video rather than centred over it. -->
+    <div id="subs">
+      <header>
+        <button class="iconbtn" id="subsBack" hidden aria-label="Back">&#8592;</button>
+        <span class="label" id="subsTitle" style="flex:1">Subtitles</span>
+        <button class="iconbtn" id="subsClose" aria-label="Close">&#10005;</button>
+      </header>
+      <div class="body" id="subsBody"></div>
+    </div>
+  </div>
+
   <div class="row" style="margin-top:12px">
     <strong id="ptitle"></strong><span class="muted" id="psub"></span>
     <span class="grow"></span>
+    <button id="subsBtn">Subtitles</button>
     <button id="fixBtn">Fix match</button><button id="close">Close</button>
   </div>
   <p class="muted" id="poverview" style="margin:10px 0 0"></p>
@@ -351,6 +389,8 @@ async function play(it) {
     `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`).join('');
   $('#pmeta').innerHTML = esc(bits.join('  ·  ')) + locks;
 
+  loadSubtitles(it.id);
+
   if (d.progress?.position_ms > 0) v.currentTime = d.progress.position_ms / 1000;
   v.play().catch(() => {});
 }
@@ -372,12 +412,113 @@ $('#video').addEventListener('timeupdate', () => {
   })).catch(() => {});
 });
 
+// ---------------------------------------------------------------- subtitles
+let subTracks = [], activeSub = null;
+
+async function loadSubtitles(itemID) {
+  subTracks = [];
+  activeSub = null;
+  try { subTracks = (await api(`/api/items/${itemID}/subtitles`)).tracks || []; } catch {}
+  $('#subsBtn').textContent = subTracks.length ? `Subtitles (${subTracks.length})` : 'Subtitles';
+  renderSubList();
+}
+
+function renderSubList() {
+  $('#subsBack').hidden = true;
+  $('#subsTitle').textContent = 'Subtitles';
+
+  const row = (key, label, sub, selected, disabled) => `
+    <button class="sub-row${disabled ? ' off' : ''}" data-key="${esc(key)}"
+            aria-selected="${selected}" ${disabled ? 'disabled' : ''}>
+      <span class="tick">${selected ? '&#10003;' : ''}</span>
+      <span><span>${esc(label)}</span>${sub ? `<span class="sub-sub">${esc(sub)}</span>` : ''}</span>
+    </button>`;
+
+  let html = row('off', 'Off', '', activeSub === null, false);
+
+  if (!subTracks.length) {
+    html += `<p class="muted" style="padding:10px">No subtitle tracks found for this file.</p>`;
+  }
+  for (const t of subTracks) {
+    // Unavailable tracks stay listed with the reason. Hiding them leaves a
+    // viewer wondering why a film they know has subtitles appears to have none.
+    const detail = t.available
+      ? [t.source, t.codec].filter(Boolean).join(' · ').toUpperCase()
+      : t.reason;
+    html += row(t.key, t.label, detail, activeSub === t.key, !t.available);
+  }
+
+  html += `<button class="sub-row" data-key="search"><span class="tick"></span>
+    <span><span>Search for subtitles…</span>
+    <span class="sub-sub">Find a matching subtitle file online</span></span></button>`;
+
+  $('#subsBody').innerHTML = html;
+}
+
+// The search view replaces the panel contents rather than opening anything
+// new — same window, same size, no context switch.
+function renderSubSearch() {
+  $('#subsBack').hidden = false;
+  $('#subsTitle').textContent = 'Search subtitles';
+  $('#subsBody').innerHTML = `
+    <p class="muted" style="padding:10px 10px 4px">
+      Online subtitle search is not connected yet. LANcast will match candidates
+      against this file's runtime, frame rate and edition rather than download
+      count, so the result actually syncs.
+    </p>`;
+}
+
+function applySubtitle(key) {
+  const v = $('#video');
+  // Remove existing tracks; a <track> element cannot have its src swapped
+  // reliably once the browser has parsed it.
+  [...v.querySelectorAll('track')].forEach(t => t.remove());
+
+  if (key === 'off') {
+    activeSub = null;
+    renderSubList();
+    return;
+  }
+  const t = subTracks.find(x => x.key === key);
+  if (!t || !t.available) return;
+
+  const track = document.createElement('track');
+  track.kind = 'subtitles';
+  track.label = t.label;
+  if (t.language) track.srclang = t.language;
+  track.src = `/api/items/${current.id}/subtitles/${encodeURIComponent(t.key)}.vtt`;
+  track.default = true;
+  v.appendChild(track);
+
+  // The browser only exposes textTracks after the element is attached.
+  requestAnimationFrame(() => {
+    for (const tt of v.textTracks) tt.mode = tt.label === t.label ? 'showing' : 'disabled';
+  });
+
+  activeSub = key;
+  renderSubList();
+}
+
+$('#subsBtn').addEventListener('click', () => $('#subs').classList.toggle('open'));
+$('#subsClose').addEventListener('click', () => $('#subs').classList.remove('open'));
+$('#subsBack').addEventListener('click', renderSubList);
+$('#subsBody').addEventListener('click', e => {
+  const b = e.target.closest('.sub-row');
+  if (!b || b.disabled) return;
+  if (b.dataset.key === 'search') return renderSubSearch();
+  applySubtitle(b.dataset.key);
+});
+
 $('#close').addEventListener('click', () => $('#player').close());
 $('#player').addEventListener('close', () => {
   const v = $('#video');
   v.pause();
   v.onerror = null;
   delete v.dataset.fellBack;
+  $('#subs').classList.remove('open');
+  [...v.querySelectorAll('track')].forEach(t => t.remove());
+  subTracks = [];
+  activeSub = null;
   // Clearing the source closes the HTTP response, which is what stops a
   // running transcode. Leaving it attached keeps ffmpeg alive until the
   // server's idle reaper notices.

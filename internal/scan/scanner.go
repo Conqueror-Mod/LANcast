@@ -12,6 +12,7 @@ import (
 
 	"lancast/internal/media"
 	"lancast/internal/store"
+	"lancast/internal/subtitle"
 )
 
 // State is the lifecycle of one library's scan.
@@ -173,13 +174,19 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		if st, ok := known[path]; ok && !st.Missing &&
 			st.SizeBytes != nil && *st.SizeBytes == info.Size() &&
 			st.MTime != nil && *st.MTime == info.ModTime().Unix() {
+			// Subtitles are still re-checked. A sidecar dropped next to an
+			// untouched film is the common way they arrive, and skipping the
+			// video would otherwise mean it is never noticed.
+			s.syncSubtitles(ctx, st.ID, path)
 			return nil
 		}
 
-		if err := s.upsert(ctx, lib, path, info); err != nil {
+		id, err := s.upsert(ctx, lib, path, info)
+		if err != nil {
 			s.log.Warn("upsert failed", "path", path, "error", err)
 			return nil
 		}
+		s.syncSubtitles(ctx, id, path)
 		s.mu.Lock()
 		p.ItemsChanged++
 		s.mu.Unlock()
@@ -207,7 +214,33 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
 }
 
-func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo) error {
+// syncSubtitles records the sidecar files sitting beside a video.
+//
+// Best-effort: a subtitle that cannot be indexed must not fail a scan, and a
+// library on a read-only mount is a normal deployment.
+func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath string) {
+	found := subtitle.FindSidecars(videoPath)
+	if len(found) == 0 {
+		// Still call through, so a sidecar that was deleted stops being listed.
+		if err := s.st.ReplaceSidecarSubtitles(ctx, itemID, nil); err != nil {
+			s.log.Debug("clearing sidecars failed", "item", itemID, "error", err)
+		}
+		return
+	}
+
+	subs := make([]store.ExternalSubtitle, 0, len(found))
+	for _, f := range found {
+		subs = append(subs, store.ExternalSubtitle{
+			ItemID: itemID, Path: f.Path, Language: f.Language,
+			Title: f.Title, Forced: f.Forced, Format: f.Format,
+		})
+	}
+	if err := s.st.ReplaceSidecarSubtitles(ctx, itemID, subs); err != nil {
+		s.log.Warn("indexing sidecars failed", "item", itemID, "error", err)
+	}
+}
+
+func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo) (int64, error) {
 	nfo := media.Parse(lib.Path, path)
 
 	f := store.ScanFile{
@@ -235,8 +268,7 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, in
 		f.Season, f.Episode = &se, &ep
 	}
 
-	_, err := s.st.UpsertItem(ctx, f)
-	return err
+	return s.st.UpsertItem(ctx, f)
 }
 
 func trimDot(ext string) string {

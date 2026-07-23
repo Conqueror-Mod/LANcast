@@ -20,6 +20,7 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
+	"lancast/internal/subtitle"
 	"lancast/internal/transcode"
 )
 
@@ -39,6 +40,7 @@ type Deps struct {
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
 	Trans    *transcode.Manager
+	Subs     *subtitle.Extractor
 	Settings *config.SettingsStore
 	Log      *slog.Logger
 	Web      http.Handler
@@ -63,6 +65,7 @@ type Server struct {
 	worker   *enrich.Worker
 	probes   *probe.Worker
 	trans    *transcode.Manager
+	subs     *subtitle.Extractor
 	settings *config.SettingsStore
 	log      *slog.Logger
 	web      http.Handler
@@ -79,7 +82,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, trans: d.Trans,
+		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, log: d.Log, web: web,
 		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
 		throttle: auth.NewThrottle(),
@@ -124,6 +127,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/refresh", s.refreshItem)
 
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
+	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
+	mux.HandleFunc("GET /api/items/{id}/subtitles/{key}", s.serveSubtitle)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
