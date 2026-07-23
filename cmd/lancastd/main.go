@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -201,10 +202,21 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	probeSoon()
 	enrichSoon()
 
+	// Bind before serving so a port clash is a clear startup failure rather
+	// than a background error nobody sees. An older instance still holding the
+	// port is the failure that looks like "my changes did nothing": the new
+	// process dies and the old build keeps answering the browser.
+	listener, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("cannot listen on %s: %w\n"+
+			"Another LANcast may still be running — close it, or run: taskkill /IM lancastd.exe /F",
+			listenAddr, err)
+	}
+
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("listening", "addr", listenAddr, "data", cfg.DataDir)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 		}
 	}()
