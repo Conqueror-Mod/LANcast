@@ -241,6 +241,68 @@ func (c *Client) fetchEpisode(ctx context.Context, ref meta.Ref) (*meta.Record, 
 	return rec, nil
 }
 
+// Trailer returns the best promotional video for a title.
+//
+// Prefers an official trailer over a teaser or clip, and the most recently
+// published when several qualify — studios re-upload, and the newest is
+// usually the one that still plays.
+func (c *Client) Trailer(ctx context.Context, ref meta.Ref) (*meta.Trailer, error) {
+	if !c.Configured() || ref.ExternalID == "" {
+		return nil, nil
+	}
+
+	path := "/movie/" + ref.ExternalID + "/videos"
+	if ref.Kind == meta.KindShow || ref.Kind == meta.KindSeason || ref.Kind == meta.KindEpisode {
+		path = "/tv/" + ref.ExternalID + "/videos"
+	}
+
+	var doc struct {
+		Results []struct {
+			Name        string `json:"name"`
+			Key         string `json:"key"`
+			Site        string `json:"site"`
+			Type        string `json:"type"`
+			Official    bool   `json:"official"`
+			PublishedAt string `json:"published_at"`
+		} `json:"results"`
+	}
+	if err := c.get(ctx, path, nil, &doc); err != nil {
+		return nil, err
+	}
+
+	best := -1
+	bestRank := -1
+	for i, v := range doc.Results {
+		if !strings.EqualFold(v.Site, "YouTube") || v.Key == "" {
+			continue
+		}
+		rank := 0
+		switch strings.ToLower(v.Type) {
+		case "trailer":
+			rank = 3
+		case "teaser":
+			rank = 2
+		case "clip", "featurette":
+			rank = 1
+		default:
+			continue
+		}
+		if v.Official {
+			rank += 4
+		}
+		if rank > bestRank ||
+			(rank == bestRank && best >= 0 && v.PublishedAt > doc.Results[best].PublishedAt) {
+			best, bestRank = i, rank
+		}
+	}
+	if best < 0 {
+		return nil, nil
+	}
+
+	v := doc.Results[best]
+	return &meta.Trailer{Site: "YouTube", Key: v.Key, Name: v.Name}, nil
+}
+
 // get performs a cached, rate-limited, retrying GET and decodes into out.
 func (c *Client) get(ctx context.Context, path string, params url.Values, out any) error {
 	if params == nil {

@@ -120,6 +120,33 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
 .iconbtn{background:none; border:none; color:var(--text-muted); cursor:pointer;
   padding:2px 6px; font-size:14px; line-height:1}
 .iconbtn:hover{color:var(--gold-bright)}
+
+/* Detail view. A full-bleed page rather than a dialog: the artwork is the
+   content, and a modal would frame it as an interruption. */
+#detail{position:fixed; inset:0; z-index:5; overflow-y:auto; display:none}
+#detail.open{display:block}
+#backdrop{position:fixed; inset:0; z-index:-1; background-size:cover;
+  background-position:center; opacity:.28}
+/* Scrim bottom-to-top so text stays legible over a bright still. */
+#backdrop::after{content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(5,7,15,.55) 0%, rgba(5,7,15,.82) 55%, var(--space-void) 100%)}
+.dwrap{max-width:1100px; margin:0 auto; padding:28px 22px 60px}
+.dtop{display:flex; gap:26px; flex-wrap:wrap}
+.dposter{width:230px; flex:none; aspect-ratio:2/3; border-radius:var(--radius-tile);
+  border:1px solid var(--gold-dormant); background:linear-gradient(160deg,#243358,#141d38);
+  object-fit:cover}
+.dmain{flex:1; min-width:260px}
+.dtitle{font-size:30px; font-weight:500; margin:0 0 6px; line-height:1.15}
+.dfacts{color:var(--text-muted); font-size:13px; margin:0 0 16px}
+.dplot{color:var(--text-secondary); max-width:70ch; margin:0 0 18px}
+/* The one gold-bordered control on the page: the thing you came here to do. */
+.playbtn{border-color:var(--gold); color:var(--gold-bright); padding:10px 22px; font-size:15px}
+.playbtn:hover{box-shadow:0 0 0 3px var(--gold-ring)}
+.dcast{display:flex; gap:14px; flex-wrap:wrap; margin-top:22px}
+.dcast div{font-size:12px; color:var(--text-secondary); max-width:120px}
+.dcast span{display:block; color:var(--text-faint); font-size:11px}
+#trailer{width:100%; aspect-ratio:16/9; border:1px solid var(--gold-dormant);
+  border-radius:var(--radius-tile); margin-top:24px; background:#000}
 </style>
 </head>
 <body>
@@ -157,6 +184,37 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
   <div class="empty" id="empty" hidden></div>
 </main>
 
+<div id="detail">
+  <div id="backdrop"></div>
+  <div class="dwrap">
+    <div class="row" style="margin-bottom:18px">
+      <button id="dback">&#8592; Library</button>
+      <span class="grow"></span>
+      <button id="dfix">Fix match</button>
+      <button id="drefresh">Refresh metadata</button>
+    </div>
+
+    <div class="dtop">
+      <img id="dposter" class="dposter" alt="">
+      <div class="dmain">
+        <h1 class="dtitle" id="dtitle"></h1>
+        <p class="dfacts" id="dfacts"></p>
+        <p class="dplot" id="dplot"></p>
+        <div class="row">
+          <button class="playbtn" id="dplay">&#9654; Play</button>
+          <span class="muted" id="dresume"></span>
+        </div>
+        <p class="muted" id="ddecision" style="margin-top:10px; font-size:12px"></p>
+        <div class="row muted" id="dlocks" style="margin-top:8px"></div>
+        <div class="dcast" id="dcast"></div>
+      </div>
+    </div>
+
+    <iframe id="trailer" hidden allow="autoplay; encrypted-media"
+            referrerpolicy="no-referrer" title="Trailer"></iframe>
+  </div>
+</div>
+
 <dialog id="player">
   <div style="position:relative">
     <video id="video" controls preload="metadata" crossorigin="use-credentials"></video>
@@ -175,11 +233,8 @@ video{width:100%; border-radius:var(--radius-tile); background:#000; display:blo
   <div class="row" style="margin-top:12px">
     <strong id="ptitle"></strong><span class="muted" id="psub"></span>
     <span class="grow"></span>
-    <button id="subsBtn">Subtitles</button>
-    <button id="fixBtn">Fix match</button><button id="close">Close</button>
+    <button id="subsBtn">Subtitles</button><button id="close">Close</button>
   </div>
-  <p class="muted" id="poverview" style="margin:10px 0 0"></p>
-  <div class="row muted" id="pmeta" style="margin-top:8px"></div>
   <p class="muted" id="pdecision" style="margin:6px 0 0; font-size:12px"></p>
 </dialog>
 
@@ -330,9 +385,86 @@ function render(list, total) {
     ? 'Nothing here yet. Scan the library to populate it.' : 'Add a library to get started.';
 }
 
+// A poster opens the detail page. Playback is a deliberate second step —
+// clicking a title to browse it should not start the film from the beginning.
 $('#grid').addEventListener('click', e => {
   const t = e.target.closest('.tile');
-  if (t) play(items[+t.dataset.i]);
+  if (t) openDetail(items[+t.dataset.i].id);
+});
+
+async function openDetail(id) {
+  const d = await api(`/api/items/${id}`);
+  current = d;
+
+  $('#dtitle').textContent = d.series ? `${d.series} — ${d.title}` : d.title;
+  $('#dplot').textContent = d.overview || '';
+
+  const facts = [
+    d.year, d.duration_ms ? fmtDuration(d.duration_ms) : '',
+    d.height ? `${d.height}p` : '',
+    d.rating ? `★ ${d.rating.toFixed(1)}` : '',
+    (d.genres || []).join(' · '),
+  ].filter(Boolean);
+  $('#dfacts').textContent = facts.join('  ·  ');
+
+  const poster = $('#dposter');
+  if (d.artwork?.poster) { poster.src = art(d.artwork.poster, 'poster2x'); poster.hidden = false; }
+  else poster.hidden = true;
+
+  $('#backdrop').style.backgroundImage =
+    d.artwork?.fanart ? `url(${art(d.artwork.fanart, 'fanart')})` : 'none';
+
+  $('#dcast').innerHTML = (d.credits || [])
+    .filter(c => c.role === 'actor').slice(0, 6)
+    .map(c => `<div>${esc(c.name)}<span>${esc(c.character || '')}</span></div>`).join('');
+
+  const pos = d.progress?.position_ms || 0;
+  $('#dresume').textContent = pos > 0 ? `Resumes at ${fmtDuration(pos)}` : '';
+
+  $('#dlocks').innerHTML = (d.locked_fields || []).map(f =>
+    `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`
+  ).join('');
+
+  $('#ddecision').textContent = '';
+  api(`/api/items/${id}/playback`).then(pb => {
+    if (pb.decision.method !== 'direct') {
+      $('#ddecision').textContent =
+        `Will be converted for playback — ${pb.decision.reason}.`;
+    }
+  }).catch(() => {});
+
+  // The trailer is an embed, so it reaches YouTube directly rather than
+  // through LANcast. Loaded only once the page is open, never on the grid.
+  const frame = $('#trailer');
+  frame.hidden = true;
+  frame.removeAttribute('src');
+  api(`/api/items/${id}/trailer`).then(res => {
+    if (!res.trailer?.key) return;
+    frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(res.trailer.key)}`
+      + '?autoplay=1&mute=1&rel=0&modestbranding=1';
+    frame.hidden = false;
+  }).catch(() => {});
+
+  $('#detail').classList.add('open');
+  window.scrollTo(0, 0);
+}
+
+function closeDetail() {
+  // Clearing the iframe source stops the trailer; hiding it alone leaves the
+  // video playing behind the grid.
+  const frame = $('#trailer');
+  frame.removeAttribute('src');
+  frame.hidden = true;
+  $('#detail').classList.remove('open');
+}
+
+$('#dback').addEventListener('click', closeDetail);
+$('#dplay').addEventListener('click', () => { if (current) play(current); });
+$('#dfix').addEventListener('click', () => { if (current) openFix(current.id); });
+$('#drefresh').addEventListener('click', async () => {
+  if (!current) return;
+  await api(`/api/items/${current.id}/refresh`, { method: 'POST' });
+  pollEnrich();
 });
 
 // Ask the server how a file plays, then pick the source. Direct-playable files
@@ -367,39 +499,32 @@ async function playInto(v, itemID) {
   };
 }
 
+// The player does one job. Metadata, cast and corrections live on the detail
+// page; what belongs here is the film and the controls for watching it.
 async function play(it) {
   if (it.missing) return;
-  current = it;
-  const v = $('#video');
-  $('#ptitle').textContent = it.series ? `${it.series} — ${it.title}` : it.title;
-  $('#psub').textContent = it.year || '';
-  $('#player').showModal();
-  playInto(v, it.id);
-
-  const d = await api(`/api/items/${it.id}`);
+  const d = current && current.id === it.id ? current : await api(`/api/items/${it.id}`);
   current = d;
-  $('#poverview').textContent = d.overview || '';
-  const bits = [];
-  if (d.genres?.length) bits.push(d.genres.join(' · '));
-  if (d.rating) bits.push(`★ ${d.rating.toFixed(1)}`);
-  if (d.duration_ms) bits.push(fmtDuration(d.duration_ms));
-  if (d.height) bits.push(`${d.height}p`);
-  if (d.video_codec) bits.push([d.video_codec, d.audio_codec].filter(Boolean).join(' / '));
-  if (d.credits?.length) bits.push(d.credits.filter(c => c.role === 'actor').slice(0,4).map(c => c.name).join(', '));
-  if (d.match_state === 'review') bits.push('match uncertain');
 
-  // A lock the user cannot see or release is indistinguishable from a bug.
-  const locks = (d.locked_fields || []).map(f =>
-    `<button class="lock" data-unlock="${f}" title="Release this field">${esc(f)} locked ✕</button>`).join('');
-  $('#pmeta').innerHTML = esc(bits.join('  ·  ')) + locks;
+  // Stop the trailer before the film starts, or both play at once.
+  $('#trailer').removeAttribute('src');
 
-  loadSubtitles(it.id);
+  const v = $('#video');
+  $('#ptitle').textContent = d.series ? `${d.series} — ${d.title}` : d.title;
+  $('#psub').textContent = [d.year, d.height ? `${d.height}p` : '',
+    [d.video_codec, d.audio_codec].filter(Boolean).join(' / ')].filter(Boolean).join('  ·  ');
+
+  $('#player').showModal();
+  playInto(v, d.id);
+  loadSubtitles(d.id);
 
   if (d.progress?.position_ms > 0) v.currentTime = d.progress.position_ms / 1000;
   v.play().catch(() => {});
 }
 
-$('#pmeta').addEventListener('click', async e => {
+// Locks live with the metadata they guard. A lock the user cannot see or
+// release is indistinguishable from a bug.
+$('#dlocks').addEventListener('click', async e => {
   const b = e.target.closest('[data-unlock]');
   if (!b || !current) return;
   await api(`/api/items/${current.id}/locks/${b.dataset.unlock}`, { method: 'DELETE' });
@@ -665,7 +790,6 @@ function openFix(id) {
   $('#fix').showModal();
   runFixSearch();
 }
-$('#fixBtn').addEventListener('click', () => { if (current) { $('#player').close(); openFix(current.id); } });
 $('#fixClose').addEventListener('click', () => $('#fix').close());
 $('#fixSearch').addEventListener('click', runFixSearch);
 $('#fixq').addEventListener('keydown', e => { if (e.key === 'Enter') runFixSearch(); });
@@ -690,9 +814,15 @@ async function runFixSearch() {
 $('#fixResults').addEventListener('click', async e => {
   const b = e.target.closest('.cand');
   if (!b) return;
-  await api(`/api/items/${fixId}/match`, jsonReq('POST', { provider: b.dataset.p, external_id: b.dataset.e }));
+  const target = fixId;
+  await api(`/api/items/${target}/match`, jsonReq('POST', { provider: b.dataset.p, external_id: b.dataset.e }));
   $('#fix').close();
   pollEnrich();
+  // Re-open the detail page so the correction is visible where it was made,
+  // rather than leaving stale metadata on screen.
+  if ($('#detail').classList.contains('open')) {
+    setTimeout(() => openDetail(target).catch(() => {}), 1200);
+  }
 });
 
 $('#setBtn').addEventListener('click', async () => {

@@ -179,6 +179,39 @@ type LocalSource interface {
 	Read(ctx context.Context, path string, kind Kind) (*Record, error)
 }
 
+// TrailerProvider is an optional capability. Kept off Provider because most
+// sources have no trailers to offer, and a required method they answer with
+// "unsupported" is an abstraction paying no rent (ADR 0007).
+type TrailerProvider interface {
+	Trailer(ctx context.Context, ref Ref) (*Trailer, error)
+}
+
+// Trailer is a promotional video for an item.
+type Trailer struct {
+	Site string `json:"site"` // YouTube
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+// Trailer finds a trailer from the first provider that can supply one.
+func (r *Registry) Trailer(ctx context.Context, providerID string, ref Ref) (*Trailer, error) {
+	for _, p := range r.providers {
+		if providerID != "" && p.ID() != providerID {
+			continue
+		}
+		tp, ok := p.(TrailerProvider)
+		if !ok {
+			continue
+		}
+		t, err := tp.Trailer(ctx, ref)
+		if err != nil || t == nil {
+			continue
+		}
+		return t, nil
+	}
+	return nil, nil
+}
+
 // Registry holds the registered sources in precedence order.
 type Registry struct {
 	providers []Provider

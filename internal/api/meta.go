@@ -225,6 +225,40 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 	s.respondItem(w, r, id)
 }
 
+// trailer returns a promotional video for an item, if a provider has one.
+//
+// Only the video's identity is returned, never a proxied stream: LANcast does
+// not sit between the user and YouTube, and playing it is the client's choice
+// to make.
+func (s *Server) trailer(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	it, err := s.st.GetItem(r.Context(), id, localUser)
+	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	if it.ExternalID == nil || *it.ExternalID == "" {
+		// Nothing matched, so there is nothing to look up. Not an error.
+		writeJSON(w, http.StatusOK, map[string]any{"trailer": nil})
+		return
+	}
+
+	provider := ""
+	if it.Provider != nil {
+		provider = *it.Provider
+	}
+	t, err := s.reg.Trailer(r.Context(), provider, meta.Ref{
+		Kind: meta.Kind(it.Kind), ExternalID: *it.ExternalID,
+	})
+	if err != nil {
+		s.log.Debug("trailer lookup failed", "item", id, "error", err)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trailer": t})
+}
+
 // reviewQueue lists items whose identity is uncertain.
 func (s *Server) reviewQueue(w http.ResponseWriter, r *http.Request) {
 	libraryID := int64(queryInt(r, "library_id"))

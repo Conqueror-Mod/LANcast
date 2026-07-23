@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/refresh", s.refreshItem)
 
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
+	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
 	mux.HandleFunc("GET /api/items/{id}/subtitles/search", s.searchSubtitles)
 	mux.HandleFunc("POST /api/items/{id}/subtitles/download", s.downloadSubtitle)
