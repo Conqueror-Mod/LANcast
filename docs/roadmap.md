@@ -58,7 +58,7 @@ Status: **planned** · **next** · *unplanned*
 | Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | *unplanned* | QSV, NVENC, VAAPI capability matrix |
-| Subtitles | *next* | Sidecar, burn-in, styling, sourcing |
+| Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | *unplanned* | Executes the design system for real |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
 

@@ -212,6 +212,73 @@ during playback.
 
 ---
 
+## Subtitles
+
+> M3. Format classification, conversion, and matching live in
+> `internal/subtitle`.
+
+### `GET /api/items/{id}/subtitles`
+
+Every track for an item — embedded and external, in one list.
+
+```json
+{ "item_id": 87, "tracks": [
+  { "key": "embedded-2", "label": "English", "language": "en",
+    "source": "embedded", "codec": "subrip", "forced": false,
+    "default": true, "available": true },
+  { "key": "embedded-3", "label": "English", "language": "en",
+    "source": "embedded", "codec": "hdmv_pgs_subtitle", "available": false,
+    "reason": "image-based subtitles (HDMV_PGS_SUBTITLE) cannot be shown as text — search for a subtitle file instead" }
+] }
+```
+
+**Unavailable tracks are listed, not hidden.** PGS and VOBSUB are images of
+text, so there is nothing to convert without OCR. Omitting them would leave a
+viewer wondering why a film they know has subtitles appears to have none.
+
+### `GET /api/items/{id}/subtitles/{key}.vtt`
+
+The track as WebVTT, the only subtitle format browsers render. SubRip is
+converted in Go; ASS and embedded tracks go through ffmpeg. Results are cached.
+
+Returns `422 unsupported` for bitmap tracks and `503` when ffmpeg is needed but
+absent.
+
+### `GET /api/items/{id}/subtitles/search`
+
+Searches OpenSubtitles. `?q=` overrides the query, `?language=` the language.
+
+```json
+{ "item_id": 87, "hash_used": true, "auto_match": true,
+  "candidates": [ { "file_id": 99, "release": "Film.2020.1080p.BluRay-GROUP",
+                    "language": "en", "download_count": 4210, "fps": 23.976,
+                    "hash_match": true, "score": 1,
+                    "reason": "matches this exact file" } ] }
+```
+
+The OpenSubtitles movie hash — file size plus the first and last 64KB — is
+computed and sent with every search. A hash match means the subtitle was timed
+against these exact bytes, so it scores 1.0 and short-circuits the rest.
+
+Without a hash match, candidates score on what predicts sync: frame rate
+(0.35), edition (0.25), source (0.20), release group (0.15), resolution (0.05).
+**Download count is a tiebreak worth at most 0.10** and can never carry a
+candidate over the auto-apply line — the most-downloaded entry is frequently
+for a different release.
+
+`auto_match` is true only at 0.90 or above. A subtitle that does not sync is
+distracting for two hours; a prompt costs one click.
+
+Returns `503` without an API key, `429` when the daily quota is spent.
+
+### `POST /api/items/{id}/subtitles/download`
+
+`{file_id, language, file_name}` → downloads and attaches the subtitle,
+returning its `key`. Files are written to the data directory, **never beside
+the media** — the same rule NFO writing follows.
+
+---
+
 ## Playback decisions
 
 > M3. Design reference: [ADR 0012](adr/0012-probe-before-transcode.md).
