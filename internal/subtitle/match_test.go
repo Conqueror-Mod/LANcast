@@ -121,6 +121,68 @@ func TestNoComparableDetailsStaysBelowAutoApply(t *testing.T) {
 	}
 }
 
+// The direct example from the field: a Deadpool 2 subtitle whose frame rate and
+// source agree with Avengers: Infinity War must never auto-apply, because it is
+// a different film. Release-trait agreement is meaningless across movies.
+func TestDifferentTitleNeverAutoApplies(t *testing.T) {
+	target := Target{
+		FileName: "Avengers.Infinity.War.2018.1080p.WEB-DL.mkv",
+		Title:    "Avengers: Infinity War",
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Deadpool.2.2018.720p.WEB-DL.DD5", FPS: 23.976, DownloadCount: 90000},
+	}
+	Rank(target, cands)
+
+	if _, auto := BestAutoMatch(cands); auto {
+		t.Errorf("a different film scored %.2f and would auto-apply: %q",
+			cands[0].Score, cands[0].Reason)
+	}
+	if !contains(cands[0].Reason, "different title") {
+		t.Errorf("reason %q does not explain the title mismatch", cands[0].Reason)
+	}
+}
+
+// A poisoned hash match — the provider claims a hash match but the release names
+// a different movie — must not short-circuit to 1.0. The bytes of one film are
+// not the bytes of another, so this is bad data, not proof.
+func TestHashMatchToWrongTitleIsRejected(t *testing.T) {
+	target := Target{
+		FileName: "Avengers.Infinity.War.2018.1080p.mkv",
+		Title:    "Avengers: Infinity War",
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Deadpool.2.2018.720p.WEB-DL", HashMatch: true, DownloadCount: 5},
+	}
+	Rank(target, cands)
+
+	if cands[0].Score >= AutoApply {
+		t.Errorf("a hash match to the wrong film scored %.2f and would auto-apply", cands[0].Score)
+	}
+}
+
+// The guard must not block correct matches: a subtitle whose release names the
+// same film still ranks and auto-applies on a hash or strong trait agreement,
+// including when the subtitle release name is shorter than the item title.
+func TestSameTitleStillMatches(t *testing.T) {
+	target := Target{
+		FileName: "Avengers.Infinity.War.2018.1080p.BluRay-GRP.mkv",
+		Title:    "Avengers: Infinity War",
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Infinity.War.2018.1080p.BluRay-GRP", FPS: 23.976, HashMatch: true, DownloadCount: 20},
+	}
+	Rank(target, cands)
+
+	if _, auto := BestAutoMatch(cands); !auto {
+		t.Errorf("a correct same-film hash match did not auto-apply (score %.2f, reason %q)",
+			cands[0].Score, cands[0].Reason)
+	}
+}
+
 func TestBestAutoMatchEmpty(t *testing.T) {
 	if _, ok := BestAutoMatch(nil); ok {
 		t.Error("BestAutoMatch reported a match for an empty list")

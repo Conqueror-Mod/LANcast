@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"lancast/internal/store"
@@ -78,6 +79,7 @@ func (s *Server) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 
 	subtitle.Rank(subtitle.Target{
 		FileName:   filepath.Base(path),
+		Title:      query.Query, // the same title asked of the provider
 		FPS:        frameRateOf(it),
 		Height:     derefInt(it.Height),
 		DurationMS: derefInt64(it.DurationMS),
@@ -172,6 +174,66 @@ func (s *Server) downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 		"label":    subtitleLabel(lang, trimLabel(label), false, "Downloaded"),
 	})
 	_ = it
+}
+
+// deleteSubtitle removes a downloaded subtitle: its row and its file.
+//
+// Only downloaded subtitles can be removed this way. An embedded track lives
+// inside the video, and a sidecar lives in the user's library — deleting files
+// there is the same line the scanner refuses to cross ("marks missing, never
+// deletes"). A wrong download, by contrast, is entirely the server's own, so
+// removing it is the one safe case and the one the UI needs.
+func (s *Server) deleteSubtitle(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+
+	kind, rest, ok := strings.Cut(r.PathValue("key"), "-")
+	if !ok || kind != "external" {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"only downloaded subtitles can be removed")
+		return
+	}
+	subID, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid subtitle key")
+		return
+	}
+
+	// Scoped to the item, so a crafted id cannot reach another item's subtitle.
+	ext, err := s.st.ExternalSubtitle(r.Context(), id, subID)
+	if s.notFoundOr(w, err, "get subtitle", "no such subtitle") {
+		return
+	}
+	if ext.Source != "downloaded" {
+		writeError(w, http.StatusForbidden, "forbidden",
+			"only downloaded subtitles can be removed; this one lives in your library")
+		return
+	}
+
+	// Defense in depth: only ever unlink files under our own subtitles directory,
+	// however the stored path looks. This is the same containment boundary every
+	// row-to-path handler re-checks.
+	abs, err := containedPath(filepath.Join(s.dataDir, "subtitles"), ext.Path)
+	if err != nil {
+		writeError(w, http.StatusConflict, "conflict",
+			"this subtitle's file is not one the server manages")
+		return
+	}
+
+	if err := s.st.DeleteExternalSubtitle(r.Context(), id, subID); s.notFoundOr(w, err, "delete subtitle", "no such subtitle") {
+		return
+	}
+	// The row is already gone; a missing file must not fail the request.
+	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
+		s.log.Warn("remove subtitle file failed", "item", id, "path", abs, "error", err)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) writeSubtitleError(w http.ResponseWriter, err error) {

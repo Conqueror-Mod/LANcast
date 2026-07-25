@@ -5,11 +5,15 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"unicode"
+
+	"lancast/internal/media"
 )
 
 // Target describes the file a subtitle needs to match.
 type Target struct {
 	FileName   string  // for release traits
+	Title      string  // the movie/series title, for cross-checking the candidate
 	FPS        float64 // 0 when unknown
 	Height     int
 	DurationMS int64
@@ -56,13 +60,30 @@ func BestAutoMatch(cands []Candidate) (Candidate, bool) {
 }
 
 func score(target Target, want Traits, wantRes string, c Candidate) (float64, string) {
+	name := firstNonEmpty(c.Release, c.FileName)
+
+	// The candidate must be for the same film before anything else is weighed.
+	// The provider is asked for this title, but a hash query returns whatever is
+	// tagged with that hash, and a query search returns near-title noise — so a
+	// subtitle for a different movie routinely appears, and if its frame rate and
+	// source happen to agree it scores high enough to auto-apply. This is how a
+	// Deadpool 2 subtitle ended up on Avengers. A title disagreement overrides
+	// every other signal, including a claimed hash match: a hash that maps to
+	// another movie's file is bad provider data, not evidence. The candidate is
+	// demoted rather than dropped, so it stays selectable if our own title is
+	// wrong, but it can never auto-apply.
+	if target.Title != "" && titleMismatch(target.Title, name) {
+		return clamp(0.15 + popularity(c.DownloadCount)*0.1),
+			"different title (" + releaseTitle(name) + ")"
+	}
+
 	// A hash match means this subtitle was timed against these exact bytes.
 	// Nothing inferred from names can beat that, so it short-circuits.
 	if c.HashMatch {
 		return 1.0, "matches this exact file"
 	}
 
-	got := ParseRelease(firstNonEmpty(c.Release, c.FileName))
+	got := ParseRelease(name)
 
 	var total, weight float64
 	var reasons []string
@@ -155,6 +176,58 @@ func clamp(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+// titleMismatch reports whether a candidate's release name is for a
+// recognizably different title than want. It returns false when either title
+// yields no usable tokens: a missing title is not evidence of a mismatch, and
+// the release-trait scoring still applies.
+func titleMismatch(want, candName string) bool {
+	a := titleTokens(want)
+	b := titleTokens(releaseTitle(candName))
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	// Overlap is measured against the smaller set, so a short subtitle release
+	// ("Infinity War") still matches a fuller item title ("Avengers Infinity
+	// War"). Real different-movie pairs share essentially no significant tokens.
+	small := a
+	if len(b) < len(small) {
+		small = b
+	}
+	shared := 0
+	for tok := range small {
+		if a[tok] && b[tok] {
+			shared++
+		}
+	}
+	return float64(shared)/float64(len(small)) < 0.5
+}
+
+// releaseTitle pulls the film or series name out of a release name, reusing the
+// one filename parser so it agrees with how the library titled the item.
+func releaseTitle(name string) string {
+	info := media.Parse("", name)
+	if info.Series != "" {
+		return info.Series
+	}
+	return info.Title
+}
+
+// titleTokens lowercases a title and splits it into the alphanumeric words
+// worth comparing, dropping one-character fragments like a trailing sequel "2"
+// that carry no title signal.
+func titleTokens(title string) map[string]bool {
+	out := map[string]bool{}
+	fields := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	for _, f := range fields {
+		if len([]rune(f)) >= 2 {
+			out[f] = true
+		}
+	}
+	return out
 }
 
 func firstNonEmpty(vals ...string) string {

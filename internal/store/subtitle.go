@@ -68,6 +68,23 @@ func (s *Store) AddSubtitle(ctx context.Context, sub ExternalSubtitle) (int64, e
 	return res.LastInsertId()
 }
 
+// DeleteExternalSubtitle removes one external subtitle row, scoped to its item
+// so a crafted id cannot delete another item's track. It does not touch files
+// on disk: whether the backing file is the server's to remove is the caller's
+// decision, since a sidecar lives in the user's library and a download does not.
+func (s *Store) DeleteExternalSubtitle(ctx context.Context, itemID, id int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM external_subtitle WHERE id = ? AND item_id = ?`, id, itemID)
+	if err != nil {
+		return fmt.Errorf("delete subtitle: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ExternalSubtitles returns an item's subtitle files.
 func (s *Store) ExternalSubtitles(ctx context.Context, itemID int64) ([]ExternalSubtitle, error) {
 	rows, err := s.db.QueryContext(ctx, `

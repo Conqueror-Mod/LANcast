@@ -30,6 +30,7 @@ type harness struct {
 	art      *artwork.Cache
 	reg      *meta.Registry
 	settings *config.SettingsStore
+	dataDir  string
 	enriched int
 	cookie   *http.Cookie
 }
@@ -52,14 +53,14 @@ func newHarness(t *testing.T) *harness {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	art := artwork.New(filepath.Join(dataDir, "artwork"))
 	reg := meta.NewRegistry()
-	h := &harness{st: st, art: art, reg: reg, settings: settings}
+	h := &harness{st: st, art: art, reg: reg, settings: settings, dataDir: dataDir}
 
 	api := New(Deps{
 		Store: st, Scanner: scan.New(st, log), Registry: reg, Artwork: art,
 		Worker:   enrich.New(st, reg, art, log),
 		Probes:   probe.NewWorker(st, probe.New(), log),
 		Trans:    transcode.NewManager(filepath.Join(dataDir, "transcode"), log),
-		Settings: settings, Log: log,
+		Settings: settings, Log: log, DataDir: dataDir,
 		Enrich: func() { h.enriched++ },
 	})
 

@@ -136,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/subtitles/search", s.searchSubtitles)
 	mux.HandleFunc("POST /api/items/{id}/subtitles/download", s.downloadSubtitle)
 	mux.HandleFunc("GET /api/items/{id}/subtitles/{key}", s.serveSubtitle)
+	mux.HandleFunc("DELETE /api/items/{id}/subtitles/{key}", s.deleteSubtitle)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)

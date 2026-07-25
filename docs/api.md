@@ -260,6 +260,17 @@ The OpenSubtitles movie hash — file size plus the first and last 64KB — is
 computed and sent with every search. A hash match means the subtitle was timed
 against these exact bytes, so it scores 1.0 and short-circuits the rest.
 
+**A candidate for a different film is rejected before anything else is
+weighed.** The provider is asked for this title, but a hash query returns
+whatever is tagged with that hash and a title query returns near-title noise, so
+subtitles for other movies routinely appear; if their release traits happen to
+agree they would otherwise score past the auto-apply line. The candidate's
+parsed title is cross-checked against the item's, and a disagreement overrides
+every other signal — including a claimed hash match, since a hash mapping to
+another movie's file is bad provider data. Such candidates are demoted (`reason`
+begins `different title`), never auto-applied, but stay listed in case the
+item's own title is wrong.
+
 Without a hash match, candidates score on what predicts sync: frame rate
 (0.35), edition (0.25), source (0.20), release group (0.15), resolution (0.05).
 **Download count is a tiebreak worth at most 0.10** and can never carry a
@@ -276,6 +287,17 @@ Returns `503` without an API key, `429` when the daily quota is spent.
 `{file_id, language, file_name}` → downloads and attaches the subtitle,
 returning its `key`. Files are written to the data directory, **never beside
 the media** — the same rule NFO writing follows.
+
+### `DELETE /api/items/{id}/subtitles/{key}`
+
+Removes a **downloaded** subtitle: its row and its file. `204` on success.
+
+Only downloaded subtitles can be removed. An embedded track lives inside the
+video, and a sidecar lives in the user's library — deleting files there is the
+line the scanner refuses to cross (*marks missing, never deletes*). A wrong
+download is entirely the server's own, so it is the one safe case. Embedded or
+malformed keys return `400`; a sidecar returns `403`; an id belonging to another
+item returns `404`, since the lookup is scoped to `{id}`.
 
 ---
 
