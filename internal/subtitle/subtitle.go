@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"lancast/internal/media"
 )
 
 // Kind separates what can become WebVTT from what cannot.
@@ -90,58 +92,140 @@ type Sidecar struct {
 //
 // Looks beside the file and in the conventional Subs/ and Subtitles/
 // subdirectories, since ripping tools commonly put them there.
+//
+// The trap a media server must not fall into is the shared subtitle folder.
+// When several videos share a directory — a flat movie library, or a season of
+// episodes — a subtitle named only for its language ("Subs/English.srt") names
+// no particular film, and handing it to every video is exactly how one movie
+// ends up showing another's subtitles. So the language-only shortcut applies
+// only when this is the sole video in its directory. Otherwise every candidate
+// must name the video: in the filename ("Subs/Film.en.srt") or via a per-video
+// subfolder ("Subs/Film (2020)/English.srt").
 func FindSidecars(videoPath string) []Sidecar {
 	base := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
 	dir := filepath.Dir(videoPath)
-
-	dirs := []string{dir}
-	for _, sub := range []string{"Subs", "subs", "Subtitles", "subtitles"} {
-		candidate := filepath.Join(dir, sub)
-		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			dirs = append(dirs, candidate)
-		}
-	}
+	sole := isSoleVideo(dir, videoPath)
 
 	var out []Sidecar
 	seen := map[string]bool{}
-
-	for _, d := range dirs {
-		entries, err := os.ReadDir(d)
-		if err != nil {
-			continue
+	add := func(path, stem string) {
+		lp := strings.ToLower(path)
+		if seen[lp] {
+			return
 		}
+		seen[lp] = true
+		s := Sidecar{
+			Path:   path,
+			Format: strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), "."),
+		}
+		s.Language, s.Forced, s.Title = parseSidecarName(stem, base)
+		out = append(out, s)
+	}
+
+	// Beside the video: always require the filename to name the video. A loose
+	// "English.srt" next to two films belongs to neither.
+	if entries, err := os.ReadDir(dir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() {
+			if e.IsDir() || !IsSidecar(e.Name()) {
 				continue
 			}
-			name := e.Name()
-			if !IsSidecar(name) {
+			stem := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+			if !nameMatchesVideo(stem, base) {
 				continue
 			}
-
-			stem := strings.TrimSuffix(name, filepath.Ext(name))
-			// A file in a Subs/ directory belongs to the only video there;
-			// requiring a name match would miss the common "Subs/English.srt".
-			if d == dir && !strings.EqualFold(stem, base) &&
-				!strings.HasPrefix(strings.ToLower(stem), strings.ToLower(base)+".") {
-				continue
-			}
-
-			path := filepath.Join(d, name)
-			if seen[strings.ToLower(path)] {
-				continue
-			}
-			seen[strings.ToLower(path)] = true
-
-			s := Sidecar{
-				Path:   path,
-				Format: strings.TrimPrefix(strings.ToLower(filepath.Ext(name)), "."),
-			}
-			s.Language, s.Forced, s.Title = parseSidecarName(stem, base)
-			out = append(out, s)
+			add(filepath.Join(dir, e.Name()), stem)
 		}
 	}
+
+	// Conventional subtitle subdirectories.
+	for _, sub := range []string{"Subs", "subs", "Subtitles", "subtitles"} {
+		subDir := filepath.Join(dir, sub)
+		if st, err := os.Stat(subDir); err != nil || !st.IsDir() {
+			continue
+		}
+		collectFromSubsDir(subDir, base, sole, add)
+	}
 	return out
+}
+
+// collectFromSubsDir gathers subtitles from a Subs/ or Subtitles/ folder,
+// applying the language-only shortcut only when the video is alone in its
+// directory. A per-video subfolder is honored regardless, since its name is an
+// explicit statement of ownership.
+func collectFromSubsDir(subDir, base string, sole bool, add func(path, stem string)) {
+	entries, err := os.ReadDir(subDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() {
+			if nameMatchesVideo(name, base) {
+				collectLangFiles(filepath.Join(subDir, name), base, add)
+			}
+			continue
+		}
+		if !IsSidecar(name) {
+			continue
+		}
+		stem := strings.TrimSuffix(name, filepath.Ext(name))
+		// A file that names the video always belongs to it; a language-only
+		// file does only when there is no other video to confuse it with.
+		if sole || nameMatchesVideo(stem, base) {
+			add(filepath.Join(subDir, name), stem)
+		}
+	}
+}
+
+// collectLangFiles claims every subtitle in a per-video subfolder, where the
+// folder name has already established ownership.
+func collectLangFiles(dir, base string, add func(path, stem string)) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !IsSidecar(e.Name()) {
+			continue
+		}
+		stem := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+		add(filepath.Join(dir, e.Name()), stem)
+	}
+}
+
+// nameMatchesVideo reports whether a subtitle stem (or subfolder name) names
+// the video: an exact match, or the video name followed by a separator and
+// language/flag tokens ("Film.en.forced").
+func nameMatchesVideo(stem, base string) bool {
+	if strings.EqualFold(stem, base) {
+		return true
+	}
+	lower, lb := strings.ToLower(stem), strings.ToLower(base)
+	if !strings.HasPrefix(lower, lb) {
+		return false
+	}
+	rest := lower[len(lb):]
+	return rest != "" && strings.ContainsRune(".-_ ", rune(rest[0]))
+}
+
+// isSoleVideo reports whether videoPath is the only video file in dir. When it
+// is, a language-only subtitle in a Subs/ folder can safely be assumed to
+// belong to it; when it is not, that assumption links movies to the wrong file.
+func isSoleVideo(dir, videoPath string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	self := filepath.Base(videoPath)
+	for _, e := range entries {
+		if e.IsDir() || !media.IsVideo(e.Name()) {
+			continue
+		}
+		if !strings.EqualFold(e.Name(), self) {
+			return false
+		}
+	}
+	return true
 }
 
 // parseSidecarName pulls language and flags out of the part of the filename

@@ -236,6 +236,60 @@ func TestFindSidecarsInSubsDirectory(t *testing.T) {
 	}
 }
 
+// The regression that started this: several films in one directory sharing a
+// single Subs/ folder. A language-only subtitle there names no film, so it must
+// not be claimed by any of them — claiming it for all is how one movie ends up
+// showing another's subtitles.
+func TestFindSidecarsSharedSubsFolderIsNotClaimed(t *testing.T) {
+	dir := t.TempDir()
+	for _, v := range []string{"Film A (2019).mkv", "Film B (2020).mkv"} {
+		os.WriteFile(filepath.Join(dir, v), []byte("x"), 0o644)
+	}
+	subs := filepath.Join(dir, "Subs")
+	os.MkdirAll(subs, 0o755)
+	os.WriteFile(filepath.Join(subs, "English.srt"), []byte("x"), 0o644)
+
+	for _, v := range []string{"Film A (2019).mkv", "Film B (2020).mkv"} {
+		got := FindSidecars(filepath.Join(dir, v))
+		if len(got) != 0 {
+			t.Errorf("%s claimed a language-only shared subtitle: %+v", v, got)
+		}
+	}
+}
+
+// With several films sharing a directory, a subtitle is claimed only when it
+// names the film — in the filename or in a per-film subfolder.
+func TestFindSidecarsMultiVideoNameMatch(t *testing.T) {
+	dir := t.TempDir()
+	for _, v := range []string{"Film A (2019).mkv", "Film B (2020).mkv"} {
+		os.WriteFile(filepath.Join(dir, v), []byte("x"), 0o644)
+	}
+	subs := filepath.Join(dir, "Subs")
+	os.MkdirAll(subs, 0o755)
+	// Named for A directly in Subs/.
+	os.WriteFile(filepath.Join(subs, "Film A (2019).en.srt"), []byte("x"), 0o644)
+	// A per-film subfolder for B.
+	bDir := filepath.Join(subs, "Film B (2020)")
+	os.MkdirAll(bDir, 0o755)
+	os.WriteFile(filepath.Join(bDir, "English.srt"), []byte("x"), 0o644)
+
+	a := FindSidecars(filepath.Join(dir, "Film A (2019).mkv"))
+	if len(a) != 1 || !strings.Contains(a[0].Path, "Film A") {
+		t.Fatalf("Film A did not claim exactly its own subtitle: %+v", a)
+	}
+	if a[0].Language != "en" {
+		t.Errorf("Film A subtitle language = %q, want en", a[0].Language)
+	}
+
+	b := FindSidecars(filepath.Join(dir, "Film B (2020).mkv"))
+	if len(b) != 1 || !strings.Contains(b[0].Path, filepath.Join("Film B (2020)", "English")) {
+		t.Fatalf("Film B did not claim its subfolder subtitle: %+v", b)
+	}
+	if b[0].Language != "en" {
+		t.Errorf("Film B subfolder subtitle language = %q, want en", b[0].Language)
+	}
+}
+
 func TestFindSidecarsNone(t *testing.T) {
 	dir := t.TempDir()
 	video := filepath.Join(dir, "Lonely.mkv")
