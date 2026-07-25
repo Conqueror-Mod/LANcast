@@ -120,5 +120,8 @@ on the LAN (Tailscale, WireGuard), or a reverse proxy terminating TLS. See
 
 ## License
 
-Not yet chosen. LANcast is a personal project built to be open-sourced later;
-the license gets decided before the repo goes public.
+Proprietary — all rights reserved. See [LICENSE](LICENSE).
+
+LANcast is still a personal project and the repository is private. Open-sourcing
+remains the intent; the permissive license gets chosen before the repo goes
+public, and this one is replaced at that point.
