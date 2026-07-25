@@ -311,6 +311,81 @@ func TestScanRecordsLibraryScannedAt(t *testing.T) {
 	}
 }
 
+// TestRescanClearsStaleSidecarLink reproduces the shared-Subs/ bug's aftermath:
+// two films in one directory sharing a language-only Subs/English.srt, where the
+// old scanner had linked that file to a film it does not belong to. A rescan
+// must remove the stale sidecar row (FindSidecars no longer claims it) while
+// leaving a genuinely downloaded subtitle untouched.
+func TestRescanClearsStaleSidecarLink(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+
+	writeFile(t, root, "Film A (2019).mkv", 10)
+	writeFile(t, root, "Film B (2020).mkv", 10)
+	writeFile(t, root, "Subs/English.srt", 5)
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var itemID int64
+	for _, it := range items {
+		if it.Title == "Film A" {
+			itemID = it.ID
+		}
+	}
+	if itemID == 0 {
+		t.Fatalf("Film A not found among %v", func() []string {
+			out := []string{}
+			for _, it := range items {
+				out = append(out, it.Title)
+			}
+			return out
+		}())
+	}
+
+	// Simulate the old buggy state: the shared subtitle linked to Film A, plus a
+	// legitimately downloaded subtitle that must survive the rescan.
+	stalePath := filepath.Join(root, "Subs", "English.srt")
+	if err := st.ReplaceSidecarSubtitles(ctx, itemID, []store.ExternalSubtitle{
+		{ItemID: itemID, Path: stalePath, Language: "en", Format: "srt", Source: "sidecar"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddSubtitle(ctx, store.ExternalSubtitle{
+		ItemID: itemID, Path: filepath.Join(root, "downloaded.en.srt"),
+		Language: "en", Format: "srt", Source: "downloaded",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rescan. syncSubtitles runs even for byte-identical files, so this exercises
+	// the real reconciliation path.
+	scanAndWait(t, sc, lib)
+
+	subs, err := st.ExternalSubtitles(ctx, itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range subs {
+		if s.Source == "sidecar" {
+			t.Errorf("stale sidecar link survived rescan: %+v", s)
+		}
+	}
+	var downloaded int
+	for _, s := range subs {
+		if s.Source == "downloaded" {
+			downloaded++
+		}
+	}
+	if downloaded != 1 {
+		t.Errorf("downloaded subtitle count = %d, want 1 (rescan must not delete it)", downloaded)
+	}
+}
+
 func keys(m map[string]store.Item) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
