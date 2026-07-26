@@ -4,7 +4,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
-import { apiGet, apiSend } from "./client";
+import { apiGet, apiPost, apiSend } from "./client";
 import type {
   Item,
   ItemsPage,
@@ -12,6 +12,8 @@ import type {
   ScanStatus,
   Settings,
   SettingsUpdate,
+  SubtitleCandidate,
+  SubtitleSearchResult,
   SubtitleTrack,
   Trailer,
 } from "./types";
@@ -142,6 +144,57 @@ export function useSubtitles(id: number) {
         signal,
       ).then((r) => r.tracks),
     enabled: id > 0,
+  });
+}
+
+// Online subtitle search. Enabled only once a query is set, so opening the
+// picker does not fire a provider request until the user asks for one.
+export function useSubtitleSearch(
+  id: number,
+  query: string | null,
+  language: string,
+) {
+  return useQuery({
+    queryKey: ["subtitle-search", id, query, language],
+    queryFn: ({ signal }) => {
+      const p = new URLSearchParams({ language });
+      if (query) p.set("q", query);
+      return apiGet<SubtitleSearchResult>(
+        `/api/items/${id}/subtitles/search?${p.toString()}`,
+        signal,
+      );
+    },
+    enabled: id > 0 && query !== null,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+// Downloading a subtitle consumes provider quota, so it is an explicit action.
+// It returns the new track's key; on success the item's track list is
+// refreshed so the track appears in the picker.
+export function useDownloadSubtitle(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (c: SubtitleCandidate) =>
+      apiPost<{ key: string; language: string; label: string }>(
+        `/api/items/${id}/subtitles/download`,
+        {
+          file_id: c.file_id,
+          language: c.language,
+          file_name: c.file_name || c.release,
+        },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subtitles", id] }),
+  });
+}
+
+export function useDeleteSubtitle(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) =>
+      apiSend(`/api/items/${id}/subtitles/${encodeURIComponent(key)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subtitles", id] }),
   });
 }
 

@@ -40,6 +40,29 @@ export interface Trailer {
   name?: string;
 }
 
+export interface SubtitleCandidate {
+  file_id: number;
+  file_name: string;
+  release: string;
+  language: string;
+  download_count: number;
+  fps?: number;
+  hash_match: boolean;
+  hearing_impaired: boolean;
+  forced: boolean;
+  uploader?: string;
+  score: number;
+  reason?: string;
+}
+
+export interface SubtitleSearchResult {
+  item_id: number;
+  hash_used: boolean;
+  candidates: SubtitleCandidate[];
+  auto_match: boolean;
+  auto_match_key: number;
+}
+
 export interface SubtitleTrack {
   key: string;
   label: string;

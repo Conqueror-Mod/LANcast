@@ -196,6 +196,14 @@ export function Player() {
   // ---- keyboard (transport surface owns its keys; spatial nav is suspended) --
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // While typing in the subtitle search box, keys are text — not transport.
+      const ae = document.activeElement;
+      if (
+        ae instanceof HTMLElement &&
+        (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)
+      ) {
+        return;
+      }
       switch (e.key) {
         case " ":
         case "k":
@@ -344,6 +352,9 @@ export function Player() {
               </button>
               {subMenuOpen && (
                 <SubtitleMenu
+                  itemID={itemID}
+                  itemTitle={item?.title ?? ""}
+                  language="en"
                   tracks={tracks}
                   activeKey={subKey}
                   onSelect={(key) => {
