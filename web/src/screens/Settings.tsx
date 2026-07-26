@@ -32,34 +32,66 @@ function LibraryRow({ library }: { library: Library }) {
   const scan = useStartScan();
   const refresh = useRefreshLibrary();
   const running = status?.state === "running";
+  const [showIssues, setShowIssues] = useState(false);
+
+  const skipped = status?.skipped ?? 0;
+  const issues = status?.issues ?? [];
 
   return (
-    <div className="set-row">
-      <div className="set-row__main">
-        <div className="set-row__title">{library.name}</div>
-        <div className="set-row__sub">
-          {library.path} · {library.item_count.toLocaleString()} items ·{" "}
-          {running
-            ? `scanning — ${status?.files_seen ?? 0} seen`
-            : whenScanned(library.scanned_at)}
+    <div className="set-lib">
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">{library.name}</div>
+          <div className="set-row__sub">
+            {library.path} · {library.item_count.toLocaleString()} items ·{" "}
+            {running
+              ? `scanning — ${status?.files_seen ?? 0} seen`
+              : whenScanned(library.scanned_at)}
+            {!running && skipped > 0 && (
+              <>
+                {" · "}
+                <button
+                  className="set-issues-toggle"
+                  onClick={() => setShowIssues((v) => !v)}
+                >
+                  {skipped.toLocaleString()} skipped
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <button
+            className="set-btn"
+            disabled={running || scan.isPending}
+            onClick={() => scan.mutate(library.id)}
+          >
+            {running ? "Scanning…" : "Scan"}
+          </button>
+          <button
+            className="set-btn"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate(library.id)}
+          >
+            Refresh metadata
+          </button>
         </div>
       </div>
-      <div className="set-row__actions">
-        <button
-          className="set-btn"
-          disabled={running || scan.isPending}
-          onClick={() => scan.mutate(library.id)}
-        >
-          {running ? "Scanning…" : "Scan"}
-        </button>
-        <button
-          className="set-btn"
-          disabled={refresh.isPending}
-          onClick={() => refresh.mutate(library.id)}
-        >
-          Refresh metadata
-        </button>
-      </div>
+      {showIssues && issues.length > 0 && (
+        <ul className="set-issues">
+          {issues.map((i, k) => (
+            <li key={k}>
+              <span className="set-issue-path">{i.path}</span>
+              <span className="set-issue-reason">{i.reason}</span>
+            </li>
+          ))}
+          {skipped > issues.length && (
+            <li className="set-issue-more">
+              …and {(skipped - issues.length).toLocaleString()} more
+            </li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

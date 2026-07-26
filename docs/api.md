@@ -137,8 +137,15 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 
 ```json
 { "library_id": 1, "state": "running", "files_seen": 318,
-  "items_added": 12, "items_updated": 3, "started_at": 1753228800 }
+  "items_changed": 12, "items_missing": 0, "skipped": 2,
+  "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
+  "started_at": 1753228800 }
 ```
+
+`skipped` counts files or directories the scan could not process; `issues`
+lists them (capped) with a **library-relative** path — never the absolute
+server path, held back for the same privacy reason item paths are. This is the
+diagnostic answer to "the scan finished but some files are missing — why?"
 
 ---
 

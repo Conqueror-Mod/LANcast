@@ -27,6 +27,51 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.set-issues-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.set-issues-toggle:hover {
+  color: var(--text-primary);
+}
+
+.set-issues {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 14px;
+  border-radius: var(--radius-tile);
+  background: rgba(5, 7, 15, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.set-issues li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.set-issue-path {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.set-issue-reason {
+  flex: none;
+  color: var(--text-faint);
+}
+.set-issue-more {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 .set-row__main {
   flex: 1;
   min-width: 0;
