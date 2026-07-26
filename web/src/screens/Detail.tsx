@@ -5,6 +5,7 @@ import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating } from "@/lib/format";
 import { FixMatch } from "@/components/FixMatch";
+import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -38,6 +39,15 @@ function FixMatchButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+function TrailerButton({ onOpen }: { onOpen: () => void }) {
+  const focusable = useFocusable(onOpen);
+  return (
+    <button {...focusable} className="detail__trailer-btn" onClick={onOpen}>
+      <span aria-hidden="true">▶</span> Trailer
+    </button>
+  );
+}
+
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
 }
@@ -51,6 +61,7 @@ export function Detail() {
   const { data: trailer } = useTrailer(itemID);
 
   const [fixOpen, setFixOpen] = useState(false);
+  const [trailerOpen, setTrailerOpen] = useState(false);
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
 
@@ -131,11 +142,7 @@ export function Detail() {
 
             <div className="detail__actions">
               <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
-              {trailer && (
-                <span className="detail__trailer-note">
-                  Trailer available — playback lands with the player.
-                </span>
-              )}
+              {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
             </div>
 
             {item.overview && <p className="detail__overview">{item.overview}</p>}
@@ -160,6 +167,13 @@ export function Detail() {
       </div>
 
       {fixOpen && <FixMatch item={item} onClose={() => setFixOpen(false)} />}
+      {trailerOpen && trailer && (
+        <TrailerModal
+          trailer={trailer}
+          title={item.title}
+          onClose={() => setTrailerOpen(false)}
+        />
+      )}
     </div>
   );
 }
