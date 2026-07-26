@@ -285,6 +285,12 @@ another movie's file is bad provider data. Such candidates are demoted (`reason`
 begins `different title`), never auto-applied, but stay listed in case the
 item's own title is wrong.
 
+The **year** is checked the same way, for the same reason: "Aladdin (1992)" and
+"Aladdin (2019)" share a title but not a single cue timing, and the title check
+alone cannot separate them. When both years are known and differ, the candidate
+is demoted (`reason` begins `different year`) and cannot auto-apply; a candidate
+that omits its year is not penalised.
+
 Without a hash match, candidates score on what predicts sync: frame rate
 (0.35), edition (0.25), source (0.20), release group (0.15), resolution (0.05).
 **Download count is a tiebreak worth at most 0.10** and can never carry a
