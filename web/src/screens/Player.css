@@ -97,6 +97,18 @@
   margin-left: auto;
 }
 
+.player__subs {
+  position: relative;
+}
+
+/* Active-subtitle state is neutral, never gold — gold means focus alone. A
+   brighter label and a hairline underline carry "on". */
+.player__icon.is-on {
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--text-secondary);
+  border-radius: 0;
+}
+
 .player__time {
   font-size: 13px;
   color: var(--text-secondary);

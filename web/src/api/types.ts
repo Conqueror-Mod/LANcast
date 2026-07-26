@@ -40,6 +40,18 @@ export interface Trailer {
   name?: string;
 }
 
+export interface SubtitleTrack {
+  key: string;
+  label: string;
+  language?: string;
+  source: string; // embedded | sidecar | downloaded
+  codec?: string;
+  forced: boolean;
+  default: boolean;
+  available: boolean;
+  reason?: string;
+}
+
 export interface Item {
   id: number;
   library_id: number;
