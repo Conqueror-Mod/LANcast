@@ -26,15 +26,30 @@ const (
 
 // Progress is a snapshot of a scan, safe to serialize.
 type Progress struct {
-	LibraryID    int64  `json:"library_id"`
-	State        State  `json:"state"`
-	FilesSeen    int    `json:"files_seen"`
-	ItemsChanged int    `json:"items_changed"`
-	ItemsMissing int    `json:"items_missing"`
-	StartedAt    int64  `json:"started_at"`
-	FinishedAt   *int64 `json:"finished_at,omitempty"`
-	Error        string `json:"error,omitempty"`
+	LibraryID    int64   `json:"library_id"`
+	State        State   `json:"state"`
+	FilesSeen    int     `json:"files_seen"`
+	ItemsChanged int     `json:"items_changed"`
+	ItemsMissing int     `json:"items_missing"`
+	Skipped      int     `json:"skipped"`
+	Issues       []Issue `json:"issues,omitempty"`
+	StartedAt    int64   `json:"started_at"`
+	FinishedAt   *int64  `json:"finished_at,omitempty"`
+	Error        string  `json:"error,omitempty"`
 }
+
+// Issue is a file or directory the scan could not fully process. It carries a
+// library-relative path — never the absolute server path, which the API keeps
+// private for the same reason it withholds item paths.
+type Issue struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
+// maxIssues caps the recorded list so a pathological library (thousands of
+// unreadable files) cannot grow scan status without bound. The count keeps
+// counting past the cap.
+const maxIssues = 50
 
 // ErrBusy is returned when a scan is already running for a library.
 var ErrBusy = fmt.Errorf("scan already running")
@@ -130,6 +145,22 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	}
 }
 
+// recordIssue notes a file the scan could not process, under the same lock that
+// guards the rest of Progress. The path is made library-relative before it is
+// stored so the absolute server layout never leaves the machine.
+func (s *Scanner) recordIssue(p *Progress, root, path, reason string) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "" {
+		rel = filepath.Base(path)
+	}
+	s.mu.Lock()
+	p.Skipped++
+	if len(p.Issues) < maxIssues {
+		p.Issues = append(p.Issues, Issue{Path: rel, Reason: reason})
+	}
+	s.mu.Unlock()
+}
+
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {
 	known, err := s.st.KnownFiles(ctx, lib.ID)
 	if err != nil {
@@ -142,6 +173,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		if err != nil {
 			// A single unreadable directory shouldn't abort the whole scan.
 			s.log.Warn("skipping unreadable path", "path", path, "error", err)
+			s.recordIssue(p, lib.Path, path, "unreadable")
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -162,6 +194,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		info, err := d.Info()
 		if err != nil {
 			s.log.Warn("stat failed", "path", path, "error", err)
+			s.recordIssue(p, lib.Path, path, "could not read file info")
 			return nil
 		}
 
@@ -184,6 +217,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		id, err := s.upsert(ctx, lib, path, info)
 		if err != nil {
 			s.log.Warn("upsert failed", "path", path, "error", err)
+			s.recordIssue(p, lib.Path, path, "could not be recorded")
 			return nil
 		}
 		s.syncSubtitles(ctx, id, path)

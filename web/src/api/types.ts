@@ -158,12 +158,19 @@ export interface SettingsUpdate {
   hardware_encoder?: string;
 }
 
+export interface ScanIssue {
+  path: string; // library-relative
+  reason: string;
+}
+
 export interface ScanStatus {
   library_id: number;
   state: string; // idle | running | complete | failed
   files_seen: number;
   items_changed: number;
   items_missing: number;
+  skipped: number;
+  issues?: ScanIssue[];
   started_at: number;
   finished_at?: number;
   error?: string;

@@ -386,6 +386,32 @@ func TestRescanClearsStaleSidecarLink(t *testing.T) {
 	}
 }
 
+// Scan issues must carry a library-relative path (never the absolute server
+// layout) and the recorded list must stay bounded while the count keeps rising.
+func TestScanRecordsIssuesRelativeAndCapped(t *testing.T) {
+	sc, _ := newScanner(t)
+	p := &Progress{}
+	root := filepath.Join("C:", "media")
+
+	for i := 0; i < maxIssues+10; i++ {
+		sc.recordIssue(p, root, filepath.Join(root, "sub", "clip.mkv"), "unreadable")
+	}
+
+	if p.Skipped != maxIssues+10 {
+		t.Errorf("Skipped = %d, want %d (count keeps rising past the cap)", p.Skipped, maxIssues+10)
+	}
+	if len(p.Issues) != maxIssues {
+		t.Errorf("Issues len = %d, want capped at %d", len(p.Issues), maxIssues)
+	}
+	want := filepath.Join("sub", "clip.mkv")
+	if p.Issues[0].Path != want {
+		t.Errorf("issue path = %q, want library-relative %q", p.Issues[0].Path, want)
+	}
+	if filepath.IsAbs(p.Issues[0].Path) {
+		t.Errorf("issue leaked an absolute path: %q", p.Issues[0].Path)
+	}
+}
+
 func keys(m map[string]store.Item) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
