@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "git diff --cached --name-only | grep -q '^web/' && npm --prefix web run build >/dev/null 2>&1 && git add internal/web/dist || true",
+            "timeout": 180,
+            "statusMessage": "Rebuilding embedded client bundle"
+          }
+        ]
+      }
+    ]
+  }
+}
