@@ -1,6 +1,12 @@
 # ADR 0016 — Packaging and distribution
 
-Date: 2026-07-26 · Status: proposed
+Date: 2026-07-26 · Status: proposed · **build deferred**
+
+> **Deferred, decisions recorded.** The build is not being done yet — branding
+> came first. The open questions were settled so the work can start cold later:
+> service management is **built into the binary**; **macOS is dropped** for now
+> (no way to test it currently — revisit if a test path appears); ffmpeg is
+> **documented, not bundled**. The rest of this ADR is the plan to pick up from.
 
 ## Context
 
@@ -40,7 +46,10 @@ checksums, and publishes a GitHub Release. Targets:
 | windows | amd64 | the primary desktop target |
 | linux | amd64 | servers, most NAS |
 | linux | arm64 | Raspberry Pi 4/5, ARM NAS |
-| darwin | amd64, arm64 | macOS, Intel and Apple silicon |
+
+macOS (`darwin`) is deliberately out of the matrix for now: there is no way to
+test it currently. It is a one-line addition to the matrix (and a `launchd`
+plist in `service install`) whenever a test path exists.
 
 No CGO means every one of these builds on a plain `ubuntu-latest` runner with no
 cross toolchain. The committed `internal/web/dist` is what the binary embeds, and
@@ -54,7 +63,8 @@ LANcast to start on boot and stay running:
 - **Windows** via `golang.org/x/sys/windows/svc`, already an indirect dependency
   — a real Windows service, not a Task Scheduler entry.
 - **Linux** by writing and enabling a `systemd` unit.
-- **macOS** by writing a `launchd` plist.
+
+(macOS `launchd` support lands with the macOS target, deferred above.)
 
 This is chosen over a cross-platform service library (kardianos/service and the
 like) to keep the dependency set as small as it is today: the platform pieces
