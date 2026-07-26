@@ -1,0 +1,214 @@
+.detail {
+  position: relative;
+  /* Pull out of the app-shell padding so fanart is truly full-bleed. */
+  margin: -8px -28px 0;
+  min-height: calc(100vh - 60px);
+}
+
+.detail--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 60px 28px;
+}
+
+/*
+ * Fanart fills the viewport behind the nebula field at low opacity, so the room
+ * still reads as the deep-space field with the film's imagery bled into it.
+ */
+.detail__fanart {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 18%;
+  opacity: 0.28;
+  z-index: 0;
+}
+
+/* Scrimmed bottom-to-top for legibility over any backdrop (WCAG AA is the
+   requirement; a bright fanart must not defeat this). */
+.detail__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    to top,
+    var(--space-deep) 8%,
+    rgba(7, 11, 24, 0.75) 40%,
+    rgba(7, 11, 24, 0.35) 100%
+  );
+}
+
+.detail__body {
+  position: relative;
+  z-index: 1;
+  padding: 20px 28px 56px;
+}
+
+.detail__back {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.detail__back:hover,
+.detail__back:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.detail__hero {
+  display: flex;
+  gap: 36px;
+  margin-top: 32px;
+  align-items: flex-start;
+}
+
+.detail__poster {
+  width: 280px;
+  max-width: 34vw;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  flex: none;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.detail__info {
+  flex: 1;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.detail__title {
+  font-size: 40px;
+  line-height: 1.1;
+  margin: 0 0 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail__meta span::after {
+  content: "·";
+  margin-left: 16px;
+  color: var(--text-faint);
+}
+.detail__meta span:last-child::after {
+  content: none;
+}
+
+.detail__genres {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.detail__actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+/* The gold-bordered Play button — the one place gold leads on this screen. */
+.detail__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 28px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold);
+  background: rgba(198, 163, 90, 0.08);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+
+.detail__play:hover,
+.detail__play:focus {
+  background: rgba(198, 163, 90, 0.18);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.detail__play-icon {
+  font-size: 12px;
+  color: var(--gold-bright);
+}
+
+.detail__trailer-note {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.detail__overview {
+  margin-top: 26px;
+  max-width: 70ch;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.detail__cast {
+  margin-top: 34px;
+}
+
+.detail__cast-row {
+  display: flex;
+  gap: 26px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.detail__cast-member {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.detail__cast-name {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.detail__cast-character {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.detail__message {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .detail__hero {
+    flex-direction: column;
+  }
+  .detail__poster {
+    max-width: 60vw;
+  }
+  .detail__title {
+    font-size: 30px;
+  }
+}

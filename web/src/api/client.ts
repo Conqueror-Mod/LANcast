@@ -29,6 +29,28 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return body as T;
 }
 
+// apiSend performs a write (PUT/POST/DELETE), sending JSON when a body is given
+// and tolerating the empty 204 responses these endpoints return.
+export async function apiSend(
+  path: string,
+  method: "PUT" | "POST" | "DELETE",
+  body?: unknown,
+): Promise<void> {
+  const res = await fetch(path, {
+    method,
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok && res.status !== 204) {
+    const err = (await res.json().catch(() => null)) as ApiError | null;
+    throw new ApiFailure(
+      res.status,
+      err?.error?.code ?? "error",
+      err?.error?.message ?? res.statusText,
+    );
+  }
+}
+
 // artworkURL builds a content-addressed image URL. The bytes behind a hash
 // never change, so these are cached immutably by the server.
 export function artworkURL(

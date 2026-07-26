@@ -33,6 +33,8 @@ interface FocusAPI {
   unregister: (id: string) => void;
   setSelect: (id: string, onSelect?: () => void) => void;
   focusFirst: () => void;
+  setBackHandler: (fn: (() => void) | null) => void;
+  setSuspended: (v: boolean) => void;
 }
 
 const FocusContext = createContext<FocusAPI | null>(null);
@@ -109,6 +111,20 @@ function nearest(
 export function FocusProvider({ children }: { children: ReactNode }) {
   const entries = useRef(new Map<string, Entry>());
   const currentID = useRef<string | null>(null);
+  const backHandler = useRef<(() => void) | null>(null);
+  const suspended = useRef(false);
+
+  const setBackHandler = useCallback((fn: (() => void) | null) => {
+    backHandler.current = fn;
+  }, []);
+
+  // A modal transport surface (the player) suspends spatial navigation: while
+  // it is open, arrows mean seek, not move-focus. This is the one place a
+  // component owns its own keys, and it does so by taking the whole layer, not
+  // by fighting the controller. Escape/back still resolves centrally.
+  const setSuspended = useCallback((v: boolean) => {
+    suspended.current = v;
+  }, []);
 
   const setCurrent = useCallback((id: string | null) => {
     const prev = currentID.current;
@@ -169,6 +185,15 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   );
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
+    // Escape is Back/close, resolved centrally so no screen wires its own key.
+    if (e.key === "Escape" && backHandler.current) {
+      e.preventDefault();
+      backHandler.current();
+      return;
+    }
+
+    if (suspended.current) return;
+
     const id = currentID.current;
     if (!id) return;
     const entry = entries.current.get(id);
@@ -200,7 +225,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, [onFocusIn, onKeyDown]);
 
-  const api: FocusAPI = { register, unregister, setSelect, focusFirst };
+  const api: FocusAPI = {
+    register,
+    unregister,
+    setSelect,
+    focusFirst,
+    setBackHandler,
+    setSuspended,
+  };
   return <FocusContext.Provider value={api}>{children}</FocusContext.Provider>;
 }
 
@@ -241,4 +273,24 @@ export function useFocusable(onSelect?: () => void) {
   }, [api, id, onSelect]);
 
   return { ref: setRef, tabIndex: -1 as const, "data-focus-id": id };
+}
+
+// useBackHandler registers what Escape should do for the current screen, and
+// clears it on unmount so the previous screen's handler is not left dangling.
+export function useBackHandler(fn: () => void) {
+  const api = useFocusController();
+  useEffect(() => {
+    api.setBackHandler(fn);
+    return () => api.setBackHandler(null);
+  }, [api, fn]);
+}
+
+// useSuspendFocus turns off spatial navigation while a modal transport surface
+// (the player) is mounted, and restores it on unmount.
+export function useSuspendFocus() {
+  const api = useFocusController();
+  useEffect(() => {
+    api.setSuspended(true);
+    return () => api.setSuspended(false);
+  }, [api]);
 }

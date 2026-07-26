@@ -1,0 +1,46 @@
+.scrubber {
+  position: relative;
+  padding: 10px 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.scrubber__track {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: height var(--dur-fast) ease;
+}
+
+.scrubber:hover .scrubber__track,
+.scrubber.is-dragging .scrubber__track {
+  height: 6px;
+}
+
+.scrubber__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--gold);
+  border-radius: 2px;
+}
+
+.scrubber__knob {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.scrubber:hover .scrubber__knob,
+.scrubber.is-dragging .scrubber__knob {
+  opacity: 1;
+}
