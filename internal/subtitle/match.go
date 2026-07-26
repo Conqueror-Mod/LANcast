@@ -200,16 +200,37 @@ func traitAgreement(target Target, want Traits, wantRes string, got Traits, c Ca
 		}
 	}
 
-	if wantRes != "" && got.Resolution != "" {
-		weight += 0.05
-		if wantRes == got.Resolution {
-			total += 0.05
-		} else {
-			reasons = append(reasons, "different resolution ("+got.Resolution+")")
+	// Resolution: the candidate's named resolution, or the one its source
+	// implies when it names none — a DVD source is standard-definition however
+	// the release is titled. This is what separates a DVD-rip subtitle from an
+	// HD one on a bare-named file: the file's resolution is known from the probe,
+	// and a DVD-sourced sub for a 1080p file is a different, lower master.
+	if wantRes != "" {
+		candRes := got.Resolution
+		if candRes == "" {
+			candRes = sourceResolution(got.Source)
+		}
+		if candRes != "" {
+			weight += 0.05
+			if candRes == wantRes {
+				total += 0.05
+			} else {
+				reasons = append(reasons, "different resolution ("+candRes+")")
+			}
 		}
 	}
 
 	return total, weight, reasons
+}
+
+// sourceResolution returns the resolution a source guarantees when the release
+// names none. Only DVD is unambiguous — it is always standard-definition;
+// BluRay, WEB, and remux span every resolution and imply nothing.
+func sourceResolution(source string) string {
+	if source == "dvd" {
+		return "480p"
+	}
+	return ""
 }
 
 // popularity compresses download counts into 0..1 with diminishing returns.

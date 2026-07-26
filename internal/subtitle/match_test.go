@@ -110,6 +110,27 @@ func TestMultipleHashMatchesRankByRelease(t *testing.T) {
 	}
 }
 
+// The exact field case: a bare-named 1080p file, and a DVD-rip subtitle claiming
+// a hash match with the same frame rate and no resolution token. Only the probe
+// anchors the file at 1080p; the rip's DVD source is standard-definition, a
+// different master, so it must rank below the 1080p release rather than lead on
+// its 89k downloads.
+func TestDVDRipHashDemotedOnHDFile(t *testing.T) {
+	target := Target{FileName: "Corpse Bride.mkv", FPS: 23.976, Height: 1080}
+	cands := []Candidate{
+		{FileID: 1, Release: "Corpse.Bride[2005]DvDrip.AC3[Eng]-aXXo", FPS: 23.976, DownloadCount: 89000, HashMatch: true},
+		{FileID: 2, Release: "Corpse.Bride.2005.1080p.BrRip.x264", FPS: 23.976, DownloadCount: 16000, HashMatch: true},
+	}
+	Rank(target, cands)
+
+	if cands[0].FileID != 2 {
+		t.Fatalf("best = %d, want the 1080p release over the more-downloaded DVD-rip", cands[0].FileID)
+	}
+	if cands[0].Score <= cands[1].Score {
+		t.Error("the DVD-rip must not tie the 1080p release on a 1080p file")
+	}
+}
+
 // Frame rate mismatch drifts progressively worse through a film rather than
 // being a constant offset a viewer could ignore.
 func TestFrameRateMismatchDemoted(t *testing.T) {
