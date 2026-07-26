@@ -65,13 +65,21 @@ export function useLogin() {
   });
 }
 
-// Logout clears the whole cache: another account may sign in next, and stale
-// per-user data (watch progress, admin-only lists) must not bleed across.
+// Logout drops every cached query except auth status, so no per-user data
+// (watch progress, admin-only lists) bleeds into the next session — then
+// refetches auth status so the App gate flips to the login screen. Clearing the
+// auth-status query instead of refetching it would leave the gate with no data
+// to re-evaluate, which is the bug this replaced.
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiSend("/api/auth/logout", "POST"),
-    onSuccess: () => qc.clear(),
+    onSuccess: () => {
+      qc.removeQueries({
+        predicate: (q) => q.queryKey[0] !== "auth-status",
+      });
+      qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
   });
 }
 
