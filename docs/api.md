@@ -428,13 +428,23 @@ Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
 ### `GET /api/items/{id}/candidates?q=`
 
-Search the provider for re-match candidates. `q` defaults to the item's current
-title. Accepts a TMDB id or URL directly in `q` for exact targeting.
+Search the provider for re-match candidates. **Omit `q`** to score against the
+item's full identity — title *and* year — which is what makes the result a
+faithful diagnostic of the current match. Passing `q` overrides the title and
+drops the year, so use it only for a fresh user-driven search; a TMDB id or URL
+in `q` targets exactly.
+
+Each candidate carries a `Breakdown`: the sub-scores that combine, by their
+weights (title 0.60, year 0.30, popularity 0.10), into the total. This is what
+lets the UI explain a score — "title matched, but the year is 27 off" — rather
+than present a bare number.
 
 ```json
-[ { "provider": "tmdb", "external_id": "335984", "title": "Blade Runner 2049",
-    "year": 2017, "score": 0.94, "poster_hash": "9f2c4a…",
-    "overview": "Thirty years after…" } ]
+[ { "Provider": "tmdb", "ExternalID": "335984", "Title": "Blade Runner 2049",
+    "Year": 2017, "Score": 0.94, "PosterURL": "https://…",
+    "Overview": "Thirty years after…",
+    "Breakdown": { "title": 1.0, "year": 1.0, "popularity": 0.31,
+                   "total": 0.94, "year_gap": 0 } } ]
 ```
 
 ### `POST /api/items/{id}/match`

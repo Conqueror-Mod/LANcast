@@ -104,6 +104,16 @@ export interface Item {
   progress?: Progress | null;
 }
 
+// The anatomy of a candidate's score: sub-scores (0..1) that combine by their
+// weights into the total. Nested keys are lowercase (the Go struct tags them).
+export interface ScoreBreakdown {
+  title: number;
+  year: number;
+  popularity: number;
+  total: number;
+  year_gap: number;
+}
+
 // A possible metadata match from a provider. Fields are PascalCase because the
 // server serializes meta.Candidate without json tags.
 export interface MatchCandidate {
@@ -116,6 +126,7 @@ export interface MatchCandidate {
   Popularity: number;
   PosterURL: string;
   Score: number;
+  Breakdown: ScoreBreakdown;
 }
 
 export interface ItemsPage {

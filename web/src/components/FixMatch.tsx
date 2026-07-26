@@ -1,14 +1,58 @@
 import { useState } from "react";
 import { useCandidates, useApplyMatch, useUnlockField } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
-import type { Item, MatchCandidate } from "@/api/types";
+import type { Item, MatchCandidate, ScoreBreakdown } from "@/api/types";
 import "./FixMatch.css";
+
+// A labelled meter for one score component, so a candidate's total is explained
+// rather than asserted. The weak component (e.g. a wrong year) reads at a glance.
+function Meter({ label, v, note }: { label: string; v: number; note?: string }) {
+  const pct = Math.round(Math.max(0, Math.min(1, v)) * 100);
+  return (
+    <div className="fixmatch__meter" title={`${label}: ${pct}%`}>
+      <span className="fixmatch__meter-label">{label}</span>
+      <span className="fixmatch__meter-track">
+        <span className="fixmatch__meter-fill" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="fixmatch__meter-val">{note ?? `${pct}%`}</span>
+    </div>
+  );
+}
+
+function ScoreBar({
+  breakdown,
+  total,
+  showYear,
+}: {
+  breakdown: ScoreBreakdown;
+  total: number;
+  showYear: boolean;
+}) {
+  return (
+    <div className="fixmatch__break">
+      <span className="fixmatch__total">{Math.round(total * 100)}% match</span>
+      <Meter label="Title" v={breakdown.title} />
+      {showYear && (
+        <Meter
+          label="Year"
+          v={breakdown.year}
+          note={breakdown.year_gap ? `${breakdown.year_gap}y off` : undefined}
+        />
+      )}
+      <Meter label="Popularity" v={breakdown.popularity} />
+    </div>
+  );
+}
 
 // Correcting an item's identity: search a provider, pick the right title, and
 // confirm it. Confirming locks the identity so a rescan never re-litigates it.
 export function FixMatch({ item, onClose }: { item: Item; onClose: () => void }) {
   const [text, setText] = useState(item.title);
-  const [query, setQuery] = useState<string | null>(item.title); // auto-search on open
+  // Auto-search on open with an empty query so the server scores against the
+  // item's full identity — title *and* year. Passing the title as ?q= drops the
+  // year server-side, which would blank out the year sub-score and hide the very
+  // thing the breakdown exists to show. A user-typed search still sends ?q=.
+  const [query, setQuery] = useState<string | null>("");
   const candidates = useCandidates(item.id, query);
   const apply = useApplyMatch(item.id);
   const unlock = useUnlockField(item.id);
@@ -110,7 +154,11 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                   {c.Overview && (
                     <div className="fixmatch__overview">{c.Overview}</div>
                   )}
-                  <div className="fixmatch__score">{Math.round(c.Score * 100)}% match</div>
+                  <ScoreBar
+                    breakdown={c.Breakdown}
+                    total={c.Score}
+                    showYear={item.kind !== "episode"}
+                  />
                 </div>
               </button>
             );

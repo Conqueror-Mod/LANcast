@@ -184,6 +184,47 @@ func TestJaroWinklerBounds(t *testing.T) {
 	}
 }
 
+// The breakdown must explain the total: components combine by their weights,
+// and a wrong-year candidate reports the gap that sank it.
+func TestScoreBreakdownExplainsTheTotal(t *testing.T) {
+	q := Query{Kind: KindMovie, Title: "Aladdin", Year: 1992}
+	b := ScoreBreakdown(q, cand("Aladdin", 2019, 800))
+
+	if b.Title < 0.99 {
+		t.Errorf("title sub-score = %.3f, want ~1.0 for an exact title", b.Title)
+	}
+	if b.YearGap != 27 {
+		t.Errorf("year gap = %d, want 27", b.YearGap)
+	}
+	if b.Year != 0 {
+		t.Errorf("year sub-score = %.3f, want 0 for a 27-year gap", b.Year)
+	}
+	// The reported total must equal the weighted recombination and Score().
+	want := b.Title*weightTitle + b.Year*weightYear + b.Popularity*weightPopularity
+	if abs2(b.Total-want) > 1e-9 {
+		t.Errorf("total %.4f != weighted sum %.4f", b.Total, want)
+	}
+	if s := Score(q, cand("Aladdin", 2019, 800)); abs2(s-b.Total) > 1e-9 {
+		t.Errorf("Score %.4f disagrees with Breakdown.Total %.4f", s, b.Total)
+	}
+	// An exact title with a 27-year gap lands in review, not matched — applied
+	// but flagged. The breakdown is what tells a user the year is why: without
+	// it, "0.70, review" is a mystery.
+	if StateFor(b.Total) != StateReview {
+		t.Errorf("wrong-year candidate scored %.3f (%s), want review", b.Total, StateFor(b.Total))
+	}
+	if b.Total >= ThresholdAuto {
+		t.Errorf("wrong-year candidate scored %.3f, should not auto-apply", b.Total)
+	}
+}
+
+func abs2(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
+}
+
 func TestRankSortsBestFirst(t *testing.T) {
 	q := Query{Kind: KindMovie, Title: "Dune", Year: 2021}
 	cands := []Candidate{
