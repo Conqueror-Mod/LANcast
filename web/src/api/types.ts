@@ -82,6 +82,41 @@ export interface ItemsPage {
   total: number;
 }
 
+export interface Encoder {
+  name: string;
+  label: string;
+  hardware: boolean;
+}
+
+export interface Settings {
+  tmdb: { configured: boolean };
+  opensubtitles: { configured: boolean };
+  rate_per_sec: number;
+  write_nfo: boolean;
+  auto_enrich: boolean;
+  encoder: { preference: string; active: Encoder; available: Encoder[] };
+}
+
+export interface SettingsUpdate {
+  tmdb_key?: string;
+  opensubtitles_key?: string;
+  rate_per_sec?: number;
+  write_nfo?: boolean;
+  auto_enrich?: boolean;
+  hardware_encoder?: string;
+}
+
+export interface ScanStatus {
+  library_id: number;
+  state: string; // idle | running | complete | failed
+  files_seen: number;
+  items_changed: number;
+  items_missing: number;
+  started_at: number;
+  finished_at?: number;
+  error?: string;
+}
+
 export interface ApiError {
   error: { code: string; message: string };
 }

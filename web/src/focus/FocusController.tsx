@@ -194,6 +194,20 @@ export function FocusProvider({ children }: { children: ReactNode }) {
 
     if (suspended.current) return;
 
+    // Never hijack arrows or Enter while the user is typing or in a select —
+    // there the keys mean move-cursor and change-option, not move-focus.
+    const ae = document.activeElement as HTMLElement | null;
+    const typing =
+      !!ae &&
+      (ae.tagName === "TEXTAREA" ||
+        ae.isContentEditable ||
+        ae.tagName === "SELECT" ||
+        (ae.tagName === "INPUT" &&
+          !["checkbox", "radio", "button", "submit"].includes(
+            (ae as HTMLInputElement).type,
+          )));
+    if (typing && (KEY_TO_DIR[e.key] || e.key === "Enter")) return;
+
     const id = currentID.current;
     if (!id) return;
     const entry = entries.current.get(id);
