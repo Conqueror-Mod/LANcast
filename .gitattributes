@@ -1,0 +1,3 @@
+# The embedded client bundle is a generated build artifact (committed so
+# `go build` is self-contained). Treat it as binary so line endings never churn.
+internal/web/dist/** -text
