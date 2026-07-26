@@ -80,7 +80,7 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Users, auth, sessions | **built** | Single password; multi-user still open |
+| Users, auth, sessions | **built** | Multi-user accounts with admin/member roles (ADR 0015); per-user watch state |
 | Remote access | documented | VPN or reverse proxy; see security.md |
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
 | Transport security (TLS) | *unplanned* | The largest remaining gap |
