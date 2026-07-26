@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"lancast/internal/media"
 	"lancast/internal/meta"
 	"lancast/internal/store"
 )
@@ -141,6 +142,15 @@ func (s *Server) deleteLock(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func contains(fields []string, want string) bool {
+	for _, f := range fields {
+		if f == want {
+			return true
+		}
+	}
+	return false
+}
+
 // candidates searches providers for possible matches.
 func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
@@ -158,11 +168,29 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		q.Title = v
 		q.Series = v
 	} else {
-		if it.Series != nil {
-			q.Series = *it.Series
-		}
-		if it.Year != nil {
-			q.Year = *it.Year
+		// GetItem does not load locks, so fetch them: a title the user set by
+		// hand is locked and its intent is honoured; a title from a match is not,
+		// and — since Fix Match exists to correct that very match — searching it
+		// would circle the wrong identity. Re-parse the filename in that case to
+		// recover the identity the scanner started from.
+		locks, _ := s.st.LockedFields(r.Context(), it.ID)
+		if contains(locks, meta.FieldTitle) {
+			if it.Series != nil {
+				q.Series = *it.Series
+			}
+			if it.Year != nil {
+				q.Year = *it.Year
+			}
+		} else if lib, err := s.st.GetLibrary(r.Context(), it.LibraryID); err == nil {
+			info := media.Parse(lib.Path, it.Path)
+			if info.Series != "" {
+				q.Title, q.Series = info.Series, info.Series
+			} else if info.Title != "" {
+				q.Title = info.Title
+			}
+			if info.Year > 0 {
+				q.Year = info.Year
+			}
 		}
 	}
 

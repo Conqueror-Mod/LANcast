@@ -16,13 +16,15 @@ import (
 
 // stubProvider lets match and candidate endpoints be tested without a network.
 type stubProvider struct {
-	id    string
-	cands []meta.Candidate
+	id        string
+	cands     []meta.Candidate
+	lastQuery meta.Query // captured for assertions
 }
 
 func (s *stubProvider) ID() string      { return s.id }
 func (s *stubProvider) Caps() meta.Caps { return meta.Caps{Movie: true, Show: true, Episode: true} }
-func (s *stubProvider) Search(context.Context, meta.Query) ([]meta.Candidate, error) {
+func (s *stubProvider) Search(_ context.Context, q meta.Query) ([]meta.Candidate, error) {
+	s.lastQuery = q
 	return s.cands, nil
 }
 func (s *stubProvider) Fetch(context.Context, meta.Ref) (*meta.Record, error) {
@@ -165,6 +167,47 @@ func TestCandidatesRanked(t *testing.T) {
 	}
 	if cands[0].Score <= cands[1].Score {
 		t.Error("candidates are not ranked best first")
+	}
+}
+
+// When the title came from a match (unlocked), Fix Match's default search must
+// query by what the file is named — recovered from the filename — not by the
+// stored title, which after a wrong match is the wrong film. Otherwise the
+// search circles the wrong identity and never surfaces the right one.
+func TestCandidatesDefaultSearchesByFilenameWhenUnlocked(t *testing.T) {
+	h := newHarness(t)
+	stub := &stubProvider{id: "stub"}
+	h.reg.AddProvider(stub)
+
+	// addFile stores the raw name as the title, unlocked — standing in for a
+	// match-derived title. The filename parses to "Antz" (2001, from the name).
+	id := h.addFile(t, "Antz (2001).mkv", make([]byte, 16))
+	h.do(t, "GET", "/api/items/"+itoa(id)+"/candidates", nil).Body.Close()
+
+	if stub.lastQuery.Title != "Antz" {
+		t.Errorf("default search queried %q, want the parsed filename title %q",
+			stub.lastQuery.Title, "Antz")
+	}
+	if stub.lastQuery.Year != 2001 {
+		t.Errorf("default search year = %d, want 2001 parsed from the filename", stub.lastQuery.Year)
+	}
+}
+
+// A title the user set by hand is locked; Fix Match honours that intent and
+// searches it rather than re-parsing the filename.
+func TestCandidatesDefaultHonoursLockedTitle(t *testing.T) {
+	h := newHarness(t)
+	stub := &stubProvider{id: "stub"}
+	h.reg.AddProvider(stub)
+
+	id := h.addFile(t, "Antz (2001).mkv", make([]byte, 16))
+	// A hand correction locks the title.
+	h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"title": "Corrected Name"}).Body.Close()
+
+	h.do(t, "GET", "/api/items/"+itoa(id)+"/candidates", nil).Body.Close()
+
+	if stub.lastQuery.Title != "Corrected Name" {
+		t.Errorf("default search queried %q, want the locked title", stub.lastQuery.Title)
 	}
 }
 
