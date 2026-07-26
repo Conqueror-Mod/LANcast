@@ -8,6 +8,7 @@ import {
   useRefreshLibrary,
   useScanStatus,
 } from "@/api/hooks";
+import { DirectoryPicker } from "@/components/DirectoryPicker";
 import type { Library } from "@/api/types";
 import "./Settings.css";
 
@@ -69,6 +70,7 @@ function AddLibrary() {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [kind, setKind] = useState("movie");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   if (!open) {
     return (
@@ -108,6 +110,9 @@ function AddLibrary() {
         onChange={(e) => setPath(e.target.value)}
         required
       />
+      <button className="set-btn" type="button" onClick={() => setPickerOpen(true)}>
+        Browse…
+      </button>
       <select
         className="set-input"
         value={kind}
@@ -126,6 +131,15 @@ function AddLibrary() {
       </button>
       {create.isError && (
         <span className="set-error">{(create.error as Error).message}</span>
+      )}
+      {pickerOpen && (
+        <DirectoryPicker
+          onSelect={(p) => {
+            setPath(p);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </form>
   );
