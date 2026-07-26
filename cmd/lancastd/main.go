@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
+	"lancast/internal/tlscert"
 	"lancast/internal/transcode"
 	"lancast/internal/web"
 )
@@ -213,6 +215,21 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	// than a background error nobody sees. An older instance still holding the
 	// port is the failure that looks like "my changes did nothing": the new
 	// process dies and the old build keeps answering the browser.
+	// TLS encrypts the wire whenever the server is reachable beyond loopback, so
+	// the password and session cookie no longer travel in plaintext on a
+	// semi-trusted LAN. A loopback-only server stays plain HTTP: nothing on the
+	// wire is worth protecting, and a certificate warning on localhost is pure
+	// setup friction (ADR 0014).
+	var tlsConfig *tls.Config
+	if lanBound {
+		cert, mode, err := loadTLSCert(cfg, settings.Get(), log)
+		if err != nil {
+			return err
+		}
+		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		log.Info("TLS enabled", "certificate", mode)
+	}
+
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("cannot listen on %s: %w\n"+
@@ -220,13 +237,37 @@ func run(addr, dataDir string, log *slog.Logger) error {
 			listenAddr, err)
 	}
 
+	// redirectSrv only exists under TLS, to answer bookmarked http:// requests
+	// with a redirect on the same port. Declared here so shutdown can reach it.
+	var redirectSrv *http.Server
+
 	errc := make(chan error, 1)
-	go func() {
-		log.Info("listening", "addr", listenAddr, "data", cfg.DataDir)
-		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errc <- err
+	if tlsConfig != nil {
+		tlsLn, plainLn := splitTLS(listener, log)
+		redirectSrv = &http.Server{
+			Handler:           http.HandlerFunc(httpsRedirect),
+			ReadHeaderTimeout: 10 * time.Second,
 		}
-	}()
+		go func() {
+			// Best-effort: a failing redirect listener must not take down HTTPS.
+			if err := redirectSrv.Serve(plainLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Warn("http redirect listener stopped", "error", err)
+			}
+		}()
+		go func() {
+			log.Info("listening", "addr", listenAddr, "scheme", "https", "data", cfg.DataDir)
+			if err := srv.Serve(tls.NewListener(tlsLn, tlsConfig)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errc <- err
+			}
+		}()
+	} else {
+		go func() {
+			log.Info("listening", "addr", listenAddr, "scheme", "http", "data", cfg.DataDir)
+			if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				errc <- err
+			}
+		}()
+	}
 
 	select {
 	case err := <-errc:
@@ -238,6 +279,9 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	cancelEnrich()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if redirectSrv != nil {
+		_ = redirectSrv.Shutdown(shutdownCtx)
+	}
 	return srv.Shutdown(shutdownCtx)
 }
 
@@ -255,6 +299,32 @@ func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 		return "127.0.0.1:8080", false
 	}
 	return net.JoinHostPort("127.0.0.1", port), false
+}
+
+// loadTLSCert returns the certificate to serve and a human-readable description
+// of where it came from. A supplied cert (bring-your-own) is used verbatim;
+// otherwise a self-signed certificate is generated and persisted under the data
+// directory, covering loopback and the machine's LAN addresses (ADR 0014).
+func loadTLSCert(cfg config.Config, s config.Settings, log *slog.Logger) (tls.Certificate, string, error) {
+	if s.CustomTLS() {
+		cert, err := tls.LoadX509KeyPair(s.TLSCertFile, s.TLSKeyFile)
+		if err != nil {
+			return tls.Certificate{}, "", fmt.Errorf("load TLS certificate from %s / %s: %w",
+				s.TLSCertFile, s.TLSKeyFile, err)
+		}
+		return cert, "supplied", nil
+	}
+
+	dir := filepath.Join(cfg.DataDir, "tls")
+	cert, err := tlscert.LoadOrGenerate(dir, tlscert.LocalIPs())
+	if err != nil {
+		return tls.Certificate{}, "", fmt.Errorf("prepare self-signed certificate: %w", err)
+	}
+	// Honest about what a self-signed cert does and does not buy, and how to
+	// replace it — a first HTTPS visit will show a browser warning.
+	log.Info("using a self-signed certificate; browsers will warn until it is trusted",
+		"dir", dir, "hint", "set tls_cert_file and tls_key_file in settings to use your own certificate")
+	return cert, "self-signed", nil
 }
 
 func newWorker(st *store.Store, reg *meta.Registry, art *artwork.Cache,

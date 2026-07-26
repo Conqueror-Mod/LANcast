@@ -82,14 +82,15 @@ func HashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Cookie builds the session cookie.
+// Cookie builds the session cookie. secure marks it Secure so it is only sent
+// over HTTPS — pass true when the request that mints it arrived over TLS.
 //
 // SameSite=Strict is load-bearing rather than decorative: without it, any page
 // in the user's browser could issue authenticated requests to the server on
 // localhost or a LAN address, and every state-changing endpoint would carry
 // their session. Combined with the origin check in the API middleware, that is
 // the CSRF defence.
-func Cookie(token string, ttl time.Duration) *http.Cookie {
+func Cookie(token string, ttl time.Duration, secure bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     CookieName,
 		Value:    token,
@@ -98,9 +99,12 @@ func Cookie(token string, ttl time.Duration) *http.Cookie {
 		SameSite: http.SameSiteStrictMode,
 		Expires:  time.Now().Add(ttl),
 		MaxAge:   int(ttl.Seconds()),
-		// Secure is deliberately unset: LANcast serves plain HTTP, and a
-		// Secure cookie would simply never be sent. TLS belongs at a reverse
-		// proxy, which can set it correctly. See docs/security.md.
+		// Secure follows the connection: a LAN-bound server serves HTTPS
+		// (ADR 0014), and marking the cookie Secure there stops it being
+		// downgraded to a plaintext request. A loopback-only server serves
+		// plain HTTP, where a Secure cookie would never be sent at all — so it
+		// is set only when the minting request arrived over TLS.
+		Secure: secure,
 	}
 }
 

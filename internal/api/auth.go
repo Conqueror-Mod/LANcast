@@ -234,5 +234,5 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "create session")
 		return
 	}
-	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL))
+	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
 }

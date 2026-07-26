@@ -75,12 +75,39 @@ will see the proxy as one client** — the proxy should rate-limit instead.
 There is deliberately no lockout: an attacker who could lock the owner out of
 their own server has achieved denial of service for free.
 
+## Transport security
+
+**A server reachable beyond loopback serves HTTPS**
+([ADR 0014](adr/0014-transport-security.md)). The password on login and the
+session cookie on every request are therefore encrypted on the wire rather than
+readable by anyone on the network path — which, on a semi-trusted LAN, is the
+gap that mattered most.
+
+**A loopback-only server stays plain HTTP.** When no password is set the server
+binds `127.0.0.1` only; nothing on that wire is worth protecting, and a
+certificate warning on `localhost` is pure setup friction. TLS turns on at the
+same boundary that enables LAN binding.
+
+**The certificate is either supplied or self-signed.** Set `tls_cert_file` and
+`tls_key_file` to serve a certificate you trust — from an internal CA, `mkcert`,
+or copied in — and clients connect with no warning. This is the recommended
+configuration. With neither set, LANcast generates a self-signed certificate on
+first LAN-bound run, persists it `0600` under `<data>/tls/`, and reuses it
+across restarts. A self-signed cert **encrypts the wire but does not
+authenticate the server**: the first HTTPS visit shows a browser warning until
+the cert is trusted or replaced.
+
+**Enabling TLS does not break `http://` bookmarks.** The listening port answers
+a plaintext request with a permanent redirect to the same address over HTTPS,
+so an old bookmark upgrades transparently instead of failing a TLS handshake.
+
+**No ACME / Let's Encrypt.** Automatic public certificates require the server to
+be internet-reachable and to contact an external CA — public exposure and
+phone-home, both of which LANcast rejects. For a publicly trusted certificate,
+terminate TLS at a reverse proxy.
+
 ## Still unprotected
 
-- **No transport security.** Everything is plaintext HTTP, including the
-  password on login and the session cookie on every request. Anyone on the
-  network path can read both. **This is the largest remaining gap** — use a
-  VPN or a TLS-terminating reverse proxy.
 - **One password, no accounts.** No per-user watch state, no revoking one
   person's access without changing it for everyone.
 - **No audit trail.** Nothing records who changed what.
@@ -124,9 +151,6 @@ system directories are omitted.
 ## What is not protected
 
 - **No authentication or authorization**, anywhere.
-- **No transport security.** Everything is plaintext HTTP. Credentials do not
-  exist yet, but watch history, library contents, and the TMDB key in transit
-  during a settings write are all readable by anyone on the path.
 - **No CSRF protection.** A page in your browser can issue requests to
   `localhost:8080` and to LAN addresses. With no auth there is nothing to
   steal, but the moment a session cookie exists this becomes urgent — the same
@@ -137,9 +161,11 @@ system directories are omitted.
 
 ## Deployment guidance
 
-**Do not port-forward LANcast directly.** There is a password now, but no TLS —
-forwarding the port publishes your password and session cookie in plaintext to
-every hop between you and home.
+**Do not port-forward LANcast directly.** There is a password and TLS now, but a
+self-signed certificate cannot prove the server's identity to a client that has
+never seen it, and exposing the login endpoint to the whole internet invites
+credential-guessing that per-IP throttling only blunts. A VPN keeps the server
+off the public internet entirely.
 
 **Recommended: a VPN that puts your device on the LAN.** Tailscale and
 WireGuard both do this well. Nothing is exposed publicly, traffic is encrypted
@@ -147,13 +173,15 @@ by the VPN, and LANcast needs no configuration at all. This keeps the
 no-phone-home principle intact and avoids reimplementing solved problems badly.
 
 **Alternative: a reverse proxy terminating TLS.** Caddy or nginx in front of
-LANcast, with a real certificate. Forward the original client IP only if you
-also rate-limit at the proxy — LANcast's throttle will otherwise see every
-request as coming from one client.
+LANcast, with a publicly trusted certificate — the way to get a real certificate
+without LANcast contacting a CA itself. Forward the original client IP only if
+you also rate-limit at the proxy — LANcast's throttle will otherwise see every
+request as coming from one client. Point the proxy at LANcast over HTTPS, or run
+LANcast loopback-only behind it.
 
-Built-in HTTPS was considered and rejected for now: certificate management is
-an ongoing burden, and self-signed certificates break TV clients in ways that
-are miserable to debug.
+Built-in TLS ([ADR 0014](adr/0014-transport-security.md)) closes the plaintext
+hole on the LAN; it is not a substitute for either of the above when reaching
+LANcast from outside the network.
 
 Treat the LAN itself as semi-trusted. A compromised phone, TV, or IoT device on
 your network can reach the login endpoint and is inside the boundary LANcast
@@ -173,9 +201,9 @@ relies on.
 
 Tracked in [roadmap.md](roadmap.md):
 
-1. **Transport security.** The largest remaining gap. Reverse proxy is the
-   recommendation; built-in TLS remains possible if the proxy step proves too
-   much friction.
+1. ~~**Transport security.**~~ **Resolved** — built-in TLS with bring-your-own or
+   self-signed certificates ([ADR 0014](adr/0014-transport-security.md)). A VPN
+   or reverse proxy remains the path for reaching LANcast from outside the LAN.
 2. **Multi-user accounts.** The schema is ready. Worth doing when more than one
    person in the house wants their own watch state.
 3. **Session management UI.** Listing and revoking individual sessions, rather

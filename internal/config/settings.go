@@ -30,7 +30,17 @@ type Settings struct {
 	// PasswordHash is the bcrypt hash guarding the instance. Empty means the
 	// server is unconfigured and will bind to loopback only.
 	PasswordHash string `json:"password_hash,omitempty"`
+
+	// TLSCertFile and TLSKeyFile point at a PEM certificate and private key the
+	// operator supplies (bring-your-own-cert). When both are set, LANcast serves
+	// HTTPS with them. When empty and the server binds beyond loopback, a
+	// self-signed certificate is generated and persisted instead (ADR 0014).
+	TLSCertFile string `json:"tls_cert_file,omitempty"`
+	TLSKeyFile  string `json:"tls_key_file,omitempty"`
 }
+
+// CustomTLS reports whether the operator supplied their own certificate and key.
+func (s Settings) CustomTLS() bool { return s.TLSCertFile != "" && s.TLSKeyFile != "" }
 
 // Secured reports whether a password has been set.
 func (s Settings) Secured() bool { return s.PasswordHash != "" }

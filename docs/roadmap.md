@@ -2,9 +2,10 @@
 
 Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
-diagnostics) and CI are in place. Theme music (blocked on OST identification)
-and branding/splash are the remaining M3 depth; **security and remote access is
-the next planning area** — the largest gap between this and real-world use.
+diagnostics) and CI are in place. Transport security (TLS) is built — the
+largest gap to real-world use is closed. Theme music (blocked on OST
+identification) and branding/splash are the remaining M3 depth; **multi-user
+accounts and packaging/distribution are the next planning areas**.
 
 ## Ordering principle
 
@@ -83,7 +84,7 @@ Status: **planned** · **next** · *unplanned*
 | Users, auth, sessions | **built** | Single password; multi-user still open |
 | Remote access | documented | VPN or reverse proxy; see security.md |
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
-| Transport security (TLS) | *unplanned* | The largest remaining gap |
+| Transport security (TLS) | **built** | HTTPS beyond loopback; bring-your-own or self-signed cert, http→https redirect (ADR 0014) |
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
 | Packaging and distribution | *unplanned* | Windows, Linux, NAS, Pi, service install |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
@@ -126,8 +127,9 @@ All four are resolved; the backlog is closed.
    [metadata.md](metadata.md) and ADRs 0007–0010.
 2. ~~Transcoding + React client (M3)~~ — **built.** Client executes design.md;
    theme music remains, blocked on OST identification.
-3. **Security and remote access.** Decided before anything is exposed past
-   localhost, not after.
+3. ~~Security and remote access~~ — **transport security built** ([ADR 0014](adr/0014-transport-security.md));
+   multi-user accounts and session-management UI remain, tracked in
+   [security.md](security.md).
 4. **Plugin architecture (M4).** Last, informed by all of the above.
 
 ## Amendments to schema revision 1
