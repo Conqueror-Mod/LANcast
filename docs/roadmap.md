@@ -1,7 +1,10 @@
 # Roadmap
 
 Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
-system; theme music (blocked on OST identification) is the remaining M3 depth.
+system and the client-UX backlog is closed. Observability (match, review, scan
+diagnostics) and CI are in place. Theme music (blocked on OST identification)
+is the remaining M3 depth; **security and remote access is the next planning
+area** — the largest gap between this and real-world use.
 
 ## Ordering principle
 
@@ -83,8 +86,8 @@ Status: **planned** · **next** · *unplanned*
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
 | Packaging and distribution | *unplanned* | Windows, Linux, NAS, Pi, service install |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
-| Observability | *unplanned* | Scan diagnostics: "why did this not match?" |
-| Testing strategy | *unplanned* | Fixture libraries; no real media in CI |
+| Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
+| Testing strategy | planned | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
 | Licensing and open-sourcing | *unplanned* | Decided before the repo goes public |
 
 ## Client UX backlog
@@ -95,13 +98,16 @@ rebuild, which split the player dialog into distinct screens.
 1. ~~**Separate the information screen from the player.**~~ **Done** — clicking a
    poster opens the full-bleed detail page (synopsis, cast, artwork) with a
    **Play** button; playback is its own screen.
-2. **Play the official trailer on the information screen.** *Partial* — the
-   trailer is surfaced on Detail (via the trailer endpoint) but shown as a note;
-   in-page trailer playback is not built yet.
+2. ~~**Play the official trailer on the information screen.**~~ **Done** — a
+   Trailer button opens a lightbox that embeds and autoplays the provider's
+   trailer, on the detail page.
 3. ~~**Subtitles belong to the player, not the preview.**~~ **Done** — the picker
    lives in the player, with local tracks, online search, and removal.
-4. **Reposition "fix match".** *Open* — the metadata-correction UI is not yet
-   ported to the React client at all.
+4. ~~**Reposition "fix match".**~~ **Done** — metadata correction is a modal on
+   the detail page, with a score breakdown that explains each candidate, and a
+   dedicated Review screen queues everything the matcher was unsure about.
+
+All four are resolved; the backlog is closed.
 
 ## Dependencies that constrain ordering
 
