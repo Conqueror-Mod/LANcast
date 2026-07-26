@@ -176,9 +176,52 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.fixmatch__score {
+.fixmatch__break {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fixmatch__total {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 2px;
+}
+
+.fixmatch__meter {
+  display: grid;
+  grid-template-columns: 64px 1fr 52px;
+  align-items: center;
+  gap: 8px;
+}
+
+.fixmatch__meter-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.fixmatch__meter-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+/* Neutral, not gold — a data bar, not a focus signal. */
+.fixmatch__meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--text-muted);
+  border-radius: 2px;
+}
+
+.fixmatch__meter-val {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }

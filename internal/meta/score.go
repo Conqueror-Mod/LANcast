@@ -49,8 +49,24 @@ func StateFor(score float64) string {
 	}
 }
 
+// Breakdown is the anatomy of a score: the component sub-scores (each 0..1)
+// that combine, by their weights, into the total. It exists so the match can
+// explain itself — "title matched but the year is off by 27" — rather than
+// presenting a bare number the user cannot argue with.
+type Breakdown struct {
+	Title      float64 `json:"title"`      // title similarity, 0..1
+	Year       float64 `json:"year"`       // year agreement, 0..1 (1.0 for episodes: n/a)
+	Popularity float64 `json:"popularity"` // popularity, 0..1
+	Total      float64 `json:"total"`      // the weighted sum, 0..1
+	YearGap    int     `json:"year_gap"`   // |want-got| years, 0 when either is unknown
+}
+
 // Score rates a candidate against a query, 0.0 to 1.0.
-func Score(q Query, c Candidate) float64 {
+func Score(q Query, c Candidate) float64 { return ScoreBreakdown(q, c).Total }
+
+// ScoreBreakdown is Score with its work shown. Score delegates here so the two
+// can never disagree about what a candidate is worth.
+func ScoreBreakdown(q Query, c Candidate) Breakdown {
 	if q.Kind == KindEpisode {
 		return scoreEpisode(q, c)
 	}
@@ -61,22 +77,40 @@ func Score(q Query, c Candidate) float64 {
 	// films — so the result lands in the review band instead of auto-applying.
 	// Inflating the title weight to compensate would manufacture confidence
 	// the evidence does not support.
-	return clamp(titleScore(q.Title, c.Title)*weightTitle +
-		yearScore(q.Year, c.Year)*weightYear +
-		popularityScore(c.Popularity)*weightPopularity)
+	t := titleScore(q.Title, c.Title)
+	y := yearScore(q.Year, c.Year)
+	p := popularityScore(c.Popularity)
+	b := Breakdown{
+		Title:      t,
+		Year:       y,
+		Popularity: p,
+		Total:      clamp(t*weightTitle + y*weightYear + p*weightPopularity),
+	}
+	if q.Year != 0 && c.Year != 0 {
+		b.YearGap = abs(q.Year - c.Year)
+	}
+	return b
 }
 
 // scoreEpisode matches on the parent series name. Season and episode numbers
 // are not scored — they are looked up exactly when fetching the episode, so a
 // numbering mismatch is not a weak match, it is a different episode and never
 // reaches scoring at all.
-func scoreEpisode(q Query, c Candidate) float64 {
+func scoreEpisode(q Query, c Candidate) Breakdown {
 	series := q.Series
 	if series == "" {
 		series = q.Title
 	}
-	return clamp(titleScore(series, c.Title)*(weightTitle+weightYear) +
-		popularityScore(c.Popularity)*weightPopularity)
+	t := titleScore(series, c.Title)
+	p := popularityScore(c.Popularity)
+	// The year weight folds into the title for episodes; report Year as 1.0 so
+	// the breakdown does not read as a year failure where year does not apply.
+	return Breakdown{
+		Title:      t,
+		Year:       1,
+		Popularity: p,
+		Total:      clamp(t*(weightTitle+weightYear) + p*weightPopularity),
+	}
 }
 
 // SortTitleOf derives the sort key for a title. It exists so callers outside

@@ -71,8 +71,9 @@ type Candidate struct {
 	Popularity float64
 	PosterURL  string
 
-	// Score is filled in by Rank, not by the provider.
-	Score float64
+	// Score and Breakdown are filled in by Rank, not by the provider.
+	Score     float64
+	Breakdown Breakdown
 }
 
 // ArtKind names an image role.
@@ -281,7 +282,8 @@ func (r *Registry) Search(ctx context.Context, q Query) ([]Candidate, error) {
 // Rank scores candidates against the query and sorts them best first.
 func Rank(q Query, cands []Candidate) {
 	for i := range cands {
-		cands[i].Score = Score(q, cands[i])
+		cands[i].Breakdown = ScoreBreakdown(q, cands[i])
+		cands[i].Score = cands[i].Breakdown.Total
 	}
 	sort.SliceStable(cands, func(i, j int) bool {
 		return cands[i].Score > cands[j].Score
