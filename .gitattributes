@@ -11,3 +11,6 @@ internal/web/dist/assets/*.css text eol=lf
 # The HTML template Vite passes through to dist/index.html: keep it LF so the
 # generated file's endings don't diverge by build platform.
 web/index.html text eol=lf
+
+# Brand source art — binary, never normalized.
+assets/** binary
