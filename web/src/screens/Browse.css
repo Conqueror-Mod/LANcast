@@ -1,0 +1,66 @@
+.browse {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.browse__header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-top: 12px;
+}
+
+.browse__heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Section header: a wide-tracked label with a gold-to-transparent hairline
+   trailing right. */
+.browse__rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--gold-dormant), transparent);
+}
+
+.browse__count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.browse__search {
+  width: 240px;
+  padding: 8px 12px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.6);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+
+.browse__search::placeholder {
+  color: var(--text-faint);
+}
+
+.browse__search:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.browse__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 22px 18px;
+}
+
+.browse__message {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 40px 0;
+}

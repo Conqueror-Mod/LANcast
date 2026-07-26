@@ -1,0 +1,38 @@
+/*
+ * The single source of truth for LANcast's canonical look. These are not user
+ * themes — there is one look, deliberately (ADR 0003). See docs/design.md.
+ */
+:root {
+  /* Space — the page floor and elevated surfaces. */
+  --space-void: #05070f;
+  --space-deep: #070b18;
+  --space-raised: #0a0f22;
+
+  /* Nebula — the field gradient. Blues with desaturated violet wisps. */
+  --nebula-blue: #2658a8;
+  --nebula-violet: #5a4a9e;
+  --nebula-indigo: #4a368c;
+
+  /* Gold — the only accent. Earned, never ambient (see the gold rule). */
+  --gold: #c6a35a;
+  --gold-bright: #e3c179;
+  --gold-dormant: rgba(198, 163, 90, 0.2);
+  --gold-ring: rgba(198, 163, 90, 0.13);
+
+  /* Text. */
+  --text-primary: #f2f5fb;
+  --text-secondary: #c3cbe2;
+  --text-muted: #7d88a8;
+  --text-faint: #6f7a99;
+
+  /* Geometry. */
+  --radius-tile: 6px;
+  --radius-panel: 12px;
+
+  /* Motion. */
+  --dur-fast: 120ms; /* hover / focus */
+  --dur-base: 280ms; /* page and panel transitions */
+  --dur-ambient: 75s; /* nebula drift cycle */
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
