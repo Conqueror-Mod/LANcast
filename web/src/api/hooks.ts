@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend } from "./client";
 import type {
+  BrowseResult,
   Item,
   ItemsPage,
   Library,
@@ -18,6 +19,19 @@ import type {
   SubtitleTrack,
   Trailer,
 } from "./types";
+
+// Lists directories for the folder picker. An empty path asks for the roots
+// (drive letters on Windows, / elsewhere).
+export function useBrowse(path: string) {
+  return useQuery({
+    queryKey: ["browse", path],
+    queryFn: ({ signal }) => {
+      const p = path ? `?path=${encodeURIComponent(path)}` : "";
+      return apiGet<BrowseResult>(`/api/browse${p}`, signal);
+    },
+    staleTime: 15_000,
+  });
+}
 
 export function useSettings() {
   return useQuery({
