@@ -120,6 +120,41 @@
   font-size: 13px;
 }
 
+.detail__metafix {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Neutral, never gold — a metadata state, not focus. */
+.detail__matchbadge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text-secondary);
+}
+
+.detail__fix {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+.detail__fix:hover,
+.detail__fix:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
 .detail__actions {
   display: flex;
   align-items: center;

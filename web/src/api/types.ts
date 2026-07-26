@@ -94,10 +94,28 @@ export interface Item {
   released_at?: number | null;
   genres?: string[];
   credits?: Credit[];
+  provider?: string | null;
+  external_id?: string | null;
   match_state?: MatchState;
+  match_score?: number | null;
   metadata_updated_at?: number | null;
+  locked_fields?: string[] | null;
   artwork?: Artwork;
   progress?: Progress | null;
+}
+
+// A possible metadata match from a provider. Fields are PascalCase because the
+// server serializes meta.Candidate without json tags.
+export interface MatchCandidate {
+  Provider: string;
+  ExternalID: string;
+  Kind: string;
+  Title: string;
+  Year: number;
+  Overview: string;
+  Popularity: number;
+  PosterURL: string;
+  Score: number;
 }
 
 export interface ItemsPage {

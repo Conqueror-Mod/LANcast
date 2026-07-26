@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useItem, useTrailer } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating } from "@/lib/format";
+import { FixMatch } from "@/components/FixMatch";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -28,6 +29,15 @@ function BackButton({ onBack }: { onBack: () => void }) {
   );
 }
 
+function FixMatchButton({ onOpen }: { onOpen: () => void }) {
+  const focusable = useFocusable(onOpen);
+  return (
+    <button {...focusable} className="detail__fix" onClick={onOpen}>
+      Fix match
+    </button>
+  );
+}
+
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
 }
@@ -40,6 +50,7 @@ export function Detail() {
   const { data: item, isLoading, isError } = useItem(itemID);
   const { data: trailer } = useTrailer(itemID);
 
+  const [fixOpen, setFixOpen] = useState(false);
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
 
@@ -105,6 +116,19 @@ export function Detail() {
               <div className="detail__genres">{item.genres.join(" · ")}</div>
             )}
 
+            {/* Metadata correction lives with the metadata, not the playback
+                controls — that was the point of moving it here. */}
+            <div className="detail__metafix">
+              {item.metadata_updated_at != null &&
+                (item.match_state === "review" ||
+                  item.match_state === "unmatched") && (
+                  <span className="detail__matchbadge">
+                    {item.match_state === "review" ? "Needs review" : "No match"}
+                  </span>
+                )}
+              <FixMatchButton onOpen={() => setFixOpen(true)} />
+            </div>
+
             <div className="detail__actions">
               <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
               {trailer && (
@@ -134,6 +158,8 @@ export function Detail() {
           </div>
         </div>
       </div>
+
+      {fixOpen && <FixMatch item={item} onClose={() => setFixOpen(false)} />}
     </div>
   );
 }
