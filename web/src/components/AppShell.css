@@ -87,3 +87,47 @@
   flex: 1;
   padding: 8px 28px 48px;
 }
+
+/* The signed-in account sits at the far right. The name is quiet content type;
+   Sign out is a neutral control that earns a gold ring only on hover/focus. */
+.app-shell__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 20px;
+}
+
+.app-shell__user {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell__signout {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.app-shell__signout:hover:not(:disabled),
+.app-shell__signout:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.app-shell__signout:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -7,8 +7,23 @@ import { Player } from "@/screens/Player";
 import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Stub } from "@/screens/Stub";
+import { Setup, Login } from "@/screens/Auth";
+import { useAuthStatus } from "@/api/hooks";
 
 export function App() {
+  const { data: auth, isLoading } = useAuthStatus();
+
+  // Hold the gate until we know: flashing the library and then yanking it back
+  // to a login screen is worse than a beat of nothing over the nebula field.
+  if (isLoading || !auth) return null;
+
+  // No account yet — first run. The server is loopback-only until one exists,
+  // so this is only reachable from the machine itself.
+  if (!auth.configured) return <Setup lanEnabled={auth.lan_enabled} />;
+
+  // Configured but not signed in.
+  if (!auth.authenticated) return <Login />;
+
   return (
     <AppShell>
       <Routes>
