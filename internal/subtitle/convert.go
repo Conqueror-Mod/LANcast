@@ -68,10 +68,14 @@ func SRTToVTT(r io.Reader) ([]byte, error) {
 			continue
 		}
 
-		// A bare number directly before a timing line is SRT's cue counter.
-		// WebVTT allows cue identifiers, so keeping it is harmless — but
-		// dropping it keeps the output tidy and matches what players expect.
-		if !sawTiming && isCueNumber(line) && len(pending) == 0 {
+		// A bare number at the start of a cue block is SRT's cue counter. An
+		// empty pending buffer means we are at that boundary (just after a blank
+		// line), so a lone number here is the counter, not subtitle text — a
+		// numeric line of actual text arrives after the timing line, when
+		// pending is non-empty. WebVTT allows cue identifiers so keeping it would
+		// render, but dropping every counter (not just the first) keeps the
+		// output tidy and matches what players expect.
+		if isCueNumber(line) && len(pending) == 0 {
 			continue
 		}
 

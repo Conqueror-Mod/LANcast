@@ -92,9 +92,19 @@ func TestSRTToVTT(t *testing.T) {
 		t.Errorf("multi-line cue was mangled:\n%s", got)
 	}
 
-	// Cue counters are SRT bookkeeping and add nothing to WebVTT.
-	if strings.Contains(got, "\n1\n00:00:01") {
-		t.Error("SRT cue number leaked into the output")
+	// Cue counters are SRT bookkeeping and add nothing to WebVTT — and every
+	// counter must be dropped, not only the first. A leaked counter sits as a
+	// stray identifier line right before its timing.
+	for _, leak := range []string{"\n1\n00:00:01", "\n2\n00:00:05", "\n3\n00:01:02"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("an SRT cue number leaked into the output near %q:\n%s", leak, got)
+		}
+	}
+
+	// A numeric line of actual cue text must survive — it arrives after the
+	// timing line, so it is text, not a counter.
+	if !strings.Contains(got, "2040") {
+		t.Errorf("numeric cue text was wrongly stripped as a counter:\n%s", got)
 	}
 }
 
