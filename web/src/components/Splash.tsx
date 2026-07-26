@@ -67,7 +67,8 @@ export function Splash() {
         <video
           className="splash__logo"
           src="/splash.mp4"
-          poster="/splash-poster.png"
+          // No poster: the clip now opens on black and fades the logo up, so a
+          // poster of the settled logo would flash it, then jump back to black.
           autoPlay
           muted
           playsInline
