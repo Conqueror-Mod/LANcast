@@ -92,6 +92,82 @@ func SRTToVTT(r io.Reader) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// vttTiming matches a WebVTT cue timing line, capturing the two timestamps and
+// whatever cue settings trail them.
+var vttTiming = regexp.MustCompile(
+	`^(\d{1,2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}\.\d{3})(.*)$`)
+
+// ShiftVTT moves every cue earlier by offset seconds, so a subtitle lines up
+// with a transcode that began partway into the film. A transcode restarts the
+// media timeline at zero for whatever offset it was asked for, while cue times
+// are absolute; without this shift, resuming a film mid-way leaves the cues
+// sitting in a future the player never reaches — the subtitles simply never
+// appear. Cues that end before the offset are dropped; a cue straddling it is
+// clamped to start at zero.
+func ShiftVTT(vtt []byte, offset float64) []byte {
+	if offset <= 0 {
+		return vtt
+	}
+
+	var out bytes.Buffer
+	scanner := bufio.NewScanner(bytes.NewReader(vtt))
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
+	// drop suppresses the text lines of a cue whose timing fell entirely before
+	// the offset, until the blank line that ends the cue.
+	drop := false
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.TrimSpace(line) == "" {
+			drop = false
+			out.WriteString(line)
+			out.WriteByte('\n')
+			continue
+		}
+
+		if m := vttTiming.FindStringSubmatch(line); m != nil {
+			start := parseVTTStamp(m[1]) - offset
+			end := parseVTTStamp(m[2]) - offset
+			if end <= 0 {
+				drop = true // this cue is in the past; skip it and its text
+				continue
+			}
+			if start < 0 {
+				start = 0
+			}
+			out.WriteString(fmt.Sprintf("%s --> %s%s\n", formatVTTStamp(start), formatVTTStamp(end), m[3]))
+			continue
+		}
+
+		if drop {
+			continue
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	return out.Bytes()
+}
+
+func parseVTTStamp(s string) float64 {
+	var h, m int
+	var sec float64
+	if _, err := fmt.Sscanf(s, "%d:%d:%f", &h, &m, &sec); err != nil {
+		return 0
+	}
+	return float64(h*3600+m*60) + sec
+}
+
+func formatVTTStamp(t float64) string {
+	if t < 0 {
+		t = 0
+	}
+	h := int(t) / 3600
+	m := (int(t) % 3600) / 60
+	s := t - float64(h*3600+m*60)
+	return fmt.Sprintf("%02d:%02d:%06.3f", h, m, s)
+}
+
 // EnsureVTTHeader adds the WebVTT signature if it is missing.
 //
 // Files named .vtt in the wild are frequently SRT with the extension changed.

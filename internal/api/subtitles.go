@@ -136,10 +136,17 @@ func (s *Server) serveSubtitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A transcode restarts the media timeline at zero for the offset it was
+	// asked to begin at, so a resumed film needs its cues moved earlier by the
+	// same offset or they never reach the screen. The client passes that offset
+	// as ?t=; direct play omits it and the subtitle is served unshifted.
+	if t, err := strconv.ParseFloat(r.URL.Query().Get("t"), 64); err == nil && t > 0 {
+		body = subtitle.ShiftVTT(body, t)
+	}
+
 	w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
-	// Conversion is cached on disk and a track's content does not change
-	// without the file changing, so a short cache is safe and keeps track
-	// switching instant.
+	// Content depends on both the track and the offset, and both are in the URL,
+	// so a short private cache is safe and keeps track switching instant.
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(body)
 }

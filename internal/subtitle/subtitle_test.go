@@ -126,6 +126,35 @@ func TestSRTToVTTHandlesCRLFAndBOM(t *testing.T) {
 	}
 }
 
+func TestShiftVTT(t *testing.T) {
+	vtt := "WEBVTT\n\n" +
+		"00:00:02.000 --> 00:00:05.000\nEarly cue, dropped\n\n" +
+		"00:00:10.000 --> 00:00:13.000\nStraddles the offset\n\n" +
+		"00:01:00.000 --> 00:01:03.000\nLater cue\n"
+
+	// Resume at 12s: the first cue (ends at 5) is in the past and dropped; the
+	// second (10–13) straddles 12 and clamps to start at 0; the third shifts by 12.
+	got := string(ShiftVTT([]byte(vtt), 12))
+
+	if strings.Contains(got, "Early cue") {
+		t.Errorf("a cue entirely before the offset was not dropped:\n%s", got)
+	}
+	if !strings.Contains(got, "00:00:00.000 --> 00:00:01.000") {
+		t.Errorf("straddling cue was not clamped to zero:\n%s", got)
+	}
+	if !strings.Contains(got, "00:00:48.000 --> 00:00:51.000") {
+		t.Errorf("later cue was not shifted by the offset:\n%s", got)
+	}
+	if !strings.HasPrefix(got, "WEBVTT") {
+		t.Errorf("header lost:\n%s", got)
+	}
+
+	// A zero or negative offset is a no-op (direct play).
+	if string(ShiftVTT([]byte(vtt), 0)) != vtt {
+		t.Error("a zero offset must not alter the subtitle")
+	}
+}
+
 func TestSRTToVTTRejectsNonSubtitle(t *testing.T) {
 	if _, err := SRTToVTT(strings.NewReader("this is just prose\nwith no timings")); err == nil {
 		t.Error("SRTToVTT accepted a file with no cues")

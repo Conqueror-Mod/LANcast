@@ -43,6 +43,10 @@ export function Player() {
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Mirrors the transcode offset (offset.current) as state, so the subtitle
+  // track re-renders and re-fetches its cues shifted whenever the timeline's
+  // zero point moves. Stays 0 for direct play.
+  const [subOffset, setSubOffset] = useState(0);
   const [muted, setMuted] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [note, setNote] = useState("");
@@ -126,6 +130,7 @@ export function Player() {
           `${decision.current.method === "remux" ? "Repackaging" : "Converting"} — ${decision.current.reason}`,
         );
         offset.current = startedFrom.current;
+        setSubOffset(startedFrom.current);
       }
       v.src = sourceURL(itemID, decision.current.method, startedFrom.current);
       v.load();
@@ -158,6 +163,7 @@ export function Player() {
       const t = Math.max(0, Math.min(target, totalDuration || target));
       if (transcoding.current) {
         offset.current = t;
+        setSubOffset(t);
         setCurrent(0);
         v.src = sourceURL(itemID, decision.current.method, t);
         v.load();
@@ -250,7 +256,9 @@ export function Player() {
     for (const tt of v.textTracks) {
       tt.mode = activeSub ? "showing" : "disabled";
     }
-  }, [activeSub, subKey]);
+    // subOffset is included because a transcode seek remounts the track with a
+    // new offset-shifted src; the fresh track must be switched to showing too.
+  }, [activeSub, subKey, subOffset]);
 
   // ---- auto-hide chrome -----------------------------------------------------
   const idleTimer = useRef<number>();
@@ -308,10 +316,16 @@ export function Player() {
       >
         {activeSub && (
           <track
-            key={activeSub.key}
+            // Keyed by offset too: a transcode seek changes the media timeline's
+            // zero point, so the cues must be re-fetched shifted to match, or a
+            // resumed film shows no subtitles at all.
+            key={`${activeSub.key}@${subOffset}`}
             kind="subtitles"
             default
-            src={`/api/items/${itemID}/subtitles/${encodeURIComponent(activeSub.key)}.vtt`}
+            src={
+              `/api/items/${itemID}/subtitles/${encodeURIComponent(activeSub.key)}.vtt` +
+              (subOffset > 0 ? `?t=${subOffset}` : "")
+            }
             srcLang={activeSub.language || undefined}
             label={activeSub.label}
           />
