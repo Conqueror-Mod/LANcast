@@ -143,6 +143,7 @@ export function useApplyMatch(id: number) {
       qc.invalidateQueries({ queryKey: ["item", id] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["recently-added"] });
+      qc.invalidateQueries({ queryKey: ["review"] });
     },
   });
 }
@@ -166,6 +167,18 @@ export function useTrailer(id: number) {
         .catch(() => null),
     enabled: id > 0,
     staleTime: Infinity,
+  });
+}
+
+// Items whose identity is uncertain — review (applied but flagged) and
+// unmatched (nothing good enough was found). The metadata-health queue.
+export function useReview(libraryID?: number) {
+  const p = libraryID ? `?library_id=${libraryID}` : "";
+  return useQuery({
+    queryKey: ["review", libraryID ?? 0],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[]; total: number }>(`/api/review${p}`, signal),
+    staleTime: 15_000,
   });
 }
 

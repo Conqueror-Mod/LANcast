@@ -267,6 +267,12 @@ func (s *Server) reviewQueue(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "review queue")
 		return
 	}
+	// Review-band items matched (and so have a poster); attach it so the queue
+	// can show artwork. Unmatched items simply have none.
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"total": len(items), "items": items})
 }
 

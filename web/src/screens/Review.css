@@ -1,0 +1,123 @@
+.review {
+  max-width: 720px;
+  padding-top: 16px;
+}
+
+.review__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.review__rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--gold-dormant), transparent);
+}
+.review__count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.review__lead {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 10px 0 20px;
+  max-width: 60ch;
+  line-height: 1.6;
+}
+
+.review__empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 30px 0;
+}
+
+.review__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  border: 1px solid transparent;
+  background: rgba(10, 15, 34, 0.5);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+.review-row:hover,
+.review-row:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.review-row__poster {
+  width: 40px;
+  height: 60px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--space-deep);
+}
+.review-row__poster--empty {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.review-row__main {
+  flex: 1;
+  min-width: 0;
+}
+.review-row__title {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-row__year {
+  color: var(--text-faint);
+}
+.review-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Neutral state badges — never gold. */
+.review-row__badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text-secondary);
+}
+.review-row__badge--unmatched {
+  color: var(--text-muted);
+}
+
+.review-row__score {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.review-row__fix {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.review-row:hover .review-row__fix,
+.review-row:focus .review-row__fix {
+  color: var(--text-primary);
+}
