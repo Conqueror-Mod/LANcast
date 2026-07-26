@@ -3,8 +3,8 @@
 Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Theme music (blocked on OST identification)
-is the remaining M3 depth; **security and remote access is the next planning
-area** — the largest gap between this and real-world use.
+and branding/splash are the remaining M3 depth; **security and remote access is
+the next planning area** — the largest gap between this and real-world use.
 
 ## Ordering principle
 
@@ -65,6 +65,7 @@ Status: **planned** · **next** · *unplanned*
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
+| Branding & splash | planned | App icons and favicon from the LANcast logo, and a splash screen using the animated logo. Source art in `/assets` (`LANcast_logo.png`, `LANcast_logo_animated.mp4`) — gold-on-nebula, matches the design system |
 
 ### Extensibility · M4
 
