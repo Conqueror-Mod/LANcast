@@ -107,11 +107,13 @@ go build -o lancastd ./cmd/lancastd
 
 ## Security
 
-LANcast is guarded by a single password, set on first run.
+LANcast is guarded by accounts — the first, created on first run, is an admin;
+others can be members who browse and play but cannot manage libraries, settings,
+or users.
 
-**Until you set one, it listens on `127.0.0.1` only** — reachable from the
-machine it runs on, and nowhere else. Set a password in the browser, restart,
-and it binds the network so other devices can reach it.
+**Until the first account exists, it listens on `127.0.0.1` only** — reachable
+from the machine it runs on, and nowhere else. Create the account in the
+browser, restart, and it binds the network so other devices can reach it.
 
 **Once it binds the network, it serves HTTPS.** Supply your own certificate
 (`tls_cert_file` / `tls_key_file`) or let LANcast generate a self-signed one —

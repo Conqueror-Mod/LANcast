@@ -1,27 +1,30 @@
 # Security posture
 
-> **Status: single-password authentication.** One password guards the whole
-> instance; an unsecured server binds to loopback only. This document describes
-> what is protected, what is not, and what remains open.
+> **Status: multi-user accounts.** Each person has an account with a role
+> (admin or member); an unsecured server binds to loopback only. This document
+> describes what is protected, what is not, and what remains open.
 
 ## Current model
 
-**One password guards everything.** Set on first run, verified with bcrypt
-(cost 12), exchanged for a server-side session stored as a SHA-256 of the
-token. The schema is keyed by `user_id` already
-([ADR 0006](adr/0006-playback-state-keyed-by-user.md)), so real multi-user
-accounts can arrive without a migration.
+**Accounts with roles.** Each user has a name and password (bcrypt, cost 12),
+exchanged for a server-side session stored as a SHA-256 of the token. Every
+account is an **admin** or a **member** ([ADR 0015](adr/0015-multi-user-accounts.md)):
+an admin manages users, creates libraries, and reaches settings; a member
+browses, plays, and owns their own watch state. The role split is a real
+privilege boundary enforced on the server, not merely hidden in the client.
 
-**An unsecured server is loopback-only.** With no password set, LANcast binds
+**An unsecured server is loopback-only.** With no account created, LANcast binds
 `127.0.0.1` rather than all interfaces — the port is not open on the network at
 all, not merely refusing. Rejecting requests after accepting them would still
-mean a listening socket answering strangers. Setting a password and restarting
-enables LAN binding.
+mean a listening socket answering strangers. Creating the first account (an
+admin) and restarting enables LAN binding.
 
-**Why sessions live server-side.** They are revocable. Changing the password
-deletes every session, including the caller's own — a password change that
-leaves old sessions alive has not locked anyone out. A self-contained signed
-cookie cannot express that without rotating a signing key.
+**Why sessions live server-side.** They are revocable. Changing your own
+password, or an admin resetting yours, deletes your sessions — a password change
+that leaves old sessions alive has not locked anyone out. A self-contained
+signed cookie cannot express that without rotating a signing key. (One shared
+password once revoked *every* session; with accounts, a change revokes only that
+user's, so one person cannot log everyone else out.)
 
 **Why only the token hash is stored.** The database is the easiest thing to
 walk off with: it is one file, and backups of it exist by design. A stolen
@@ -108,18 +111,21 @@ terminate TLS at a reverse proxy.
 
 ## Still unprotected
 
-- **One password, no accounts.** No per-user watch state, no revoking one
-  person's access without changing it for everyone.
 - **No audit trail.** Nothing records who changed what.
 - **No API rate limiting** beyond login.
+- **No per-library visibility.** Every member sees every library; a member
+  cannot be scoped to a subset. Roles gate *management*, not *visibility*.
 
 ## Standing risks that authentication does not remove
 
-**Adding a library is arbitrary read access.** `POST /api/libraries` accepts
-any path that exists and is readable. An authenticated client can point it at
-`C:\Users`, scan, and stream every video underneath. `GET /api/browse` makes
-finding such a path trivial. That is acceptable when the only authenticated
-party is the owner — and it is exactly why the password matters.
+**Adding a library is arbitrary read access — now bounded to admins.**
+`POST /api/libraries` accepts any path that exists and is readable, so it can be
+pointed at `C:\Users` to scan and stream everything underneath, and `GET
+/api/browse` makes finding such a path trivial. Both are **admin-only**
+([ADR 0015](adr/0015-multi-user-accounts.md)), so this power belongs to the
+owner and whoever they deliberately promote — not to every account. A member
+cannot reach either endpoint. This is the first version where handing someone a
+login does not hand them the filesystem.
 
 ## What is protected
 
@@ -147,17 +153,6 @@ sessions.
 
 **Browse lists directories only.** Never files, never contents, and hidden or
 system directories are omitted.
-
-## What is not protected
-
-- **No authentication or authorization**, anywhere.
-- **No CSRF protection.** A page in your browser can issue requests to
-  `localhost:8080` and to LAN addresses. With no auth there is nothing to
-  steal, but the moment a session cookie exists this becomes urgent — the same
-  request that creates a library from a malicious page would then carry your
-  session.
-- **No rate limiting on the API.** Only outbound provider calls are limited.
-- **No audit trail.** Nothing records who changed what.
 
 ## Deployment guidance
 
@@ -204,10 +199,12 @@ Tracked in [roadmap.md](roadmap.md):
 1. ~~**Transport security.**~~ **Resolved** — built-in TLS with bring-your-own or
    self-signed certificates ([ADR 0014](adr/0014-transport-security.md)). A VPN
    or reverse proxy remains the path for reaching LANcast from outside the LAN.
-2. **Multi-user accounts.** The schema is ready. Worth doing when more than one
-   person in the house wants their own watch state.
+2. ~~**Multi-user accounts.**~~ **Resolved** — accounts with an admin/member
+   role split ([ADR 0015](adr/0015-multi-user-accounts.md)); per-user watch
+   state. Per-library visibility (scoping a member to a subset of libraries)
+   remains open.
 3. **Session management UI.** Listing and revoking individual sessions, rather
-   than the all-or-nothing password change.
+   than revoking a whole user's on a password change.
 4. **ffmpeg and untrusted input.** From M3, LANcast will parse media files
    rather than only serving bytes. That is a genuinely new attack surface and
    deserves its own review.
