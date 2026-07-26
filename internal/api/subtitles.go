@@ -34,7 +34,7 @@ func (s *Server) listSubtitles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -94,7 +94,7 @@ func (s *Server) serveSubtitle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}

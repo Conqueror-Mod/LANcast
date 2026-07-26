@@ -22,7 +22,7 @@ Every endpoint requires a session cookie except `GET /api/health`,
 `GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, and the
 web assets. Unauthenticated calls return `401 unauthorized`.
 
-While no password is set the API is open — but the server binds `127.0.0.1`
+While no account exists the API is open — but the server binds `127.0.0.1`
 only, so it is reachable solely from the machine it runs on.
 
 **State-changing methods are origin-checked.** `POST`, `PUT`, `PATCH`, and
@@ -32,14 +32,39 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled}` |
-| `POST /api/auth/setup` | Set the first password; only while unconfigured |
-| `POST /api/auth/login` | `{password}` → session cookie. Throttled per IP |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, user?}` |
+| `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
+| `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
 | `POST /api/auth/logout` | Ends this session |
-| `POST /api/auth/password` | `{current_password, new_password}`; **revokes all sessions** |
+| `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
 
-`setup` returns `restart_required: true` when the server is still loopback-bound,
-so the client can explain why other devices cannot connect yet.
+When a session is active, `status`, `setup`, and `login` include
+`user: {id, name, role}`. `setup` returns `restart_required: true` when the
+server is still loopback-bound, so the client can explain why other devices
+cannot connect yet. A wrong username and a wrong password are reported
+identically as `401 unauthorized`.
+
+### Roles
+
+Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).
+
+- **admin** — everything, including the management surfaces below.
+- **member** — browse, play, and their own watch state. A member calling an
+  admin-only endpoint gets `403 forbidden`.
+
+Admin-only endpoints: `GET /api/browse`; `POST`/`DELETE /api/libraries…`, library
+`scan` and `refresh`; item metadata mutation (`PATCH /api/items/{id}`, lock
+delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
+`/api/users`. Everything else a signed-in member may call.
+
+### Users (admin only)
+
+| Route | Purpose |
+|---|---|
+| `GET /api/users` | `{users: [{id, name, role}]}` |
+| `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
+| `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
+| `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 
 ---
 

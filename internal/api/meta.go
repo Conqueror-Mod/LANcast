@@ -18,7 +18,7 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -131,7 +131,7 @@ func (s *Server) deleteLock(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "unknown field: "+field)
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 	if err := s.st.UnlockField(r.Context(), id, field); err != nil {
@@ -148,7 +148,7 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
@@ -190,7 +190,7 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -236,7 +236,7 @@ func (s *Server) trailer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
@@ -284,7 +284,7 @@ func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 	if err := s.st.ClearMetadataStamp(r.Context(), 0, id); err != nil {
@@ -319,7 +319,7 @@ func (s *Server) enrichStatus(w http.ResponseWriter, r *http.Request) {
 
 // respondItem writes an item with its detail fields attached.
 func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "no such item")

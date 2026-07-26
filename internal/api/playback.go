@@ -18,7 +18,7 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}

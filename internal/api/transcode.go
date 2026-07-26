@@ -164,7 +164,7 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (*store
 		return nil, probe.Decision{}, false
 	}
 
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return nil, probe.Decision{}, false
 	}

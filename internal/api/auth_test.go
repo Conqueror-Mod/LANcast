@@ -10,10 +10,14 @@ import (
 	"lancast/internal/auth"
 )
 
-// login sets a password and returns a client carrying the session cookie.
+// testUser is the admin account the harness creates in secure().
+const testUser = "admin"
+
+// login creates the first admin and returns a client carrying the session
+// cookie.
 func (h *harness) secure(t *testing.T, password string) *http.Client {
 	t.Helper()
-	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{"password": password})
+	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{"username": testUser, "password": password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -114,14 +118,14 @@ func TestStreamRequiresAuth(t *testing.T) {
 
 func TestSetupRejectsWeakPassword(t *testing.T) {
 	h := newHarness(t)
-	wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"password": "short"}),
+	wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"username": "admin", "password": "short"}),
 		400, "bad_request")
 }
 
 func TestSetupTwiceIsRefused(t *testing.T) {
 	h := newHarness(t)
 	h.secure(t, "a good long password")
-	wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"password": "another password"}),
+	wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"username": "other", "password": "another password"}),
 		409, "conflict")
 }
 
@@ -130,10 +134,10 @@ func TestLogin(t *testing.T) {
 	h.secure(t, "a good long password")
 	h.cookie = nil
 
-	wantError(t, h.do(t, "POST", "/api/auth/login", map[string]any{"password": "wrong"}),
+	wantError(t, h.do(t, "POST", "/api/auth/login", map[string]any{"username": testUser, "password": "wrong"}),
 		401, "unauthorized")
 
-	resp := h.do(t, "POST", "/api/auth/login", map[string]any{"password": "a good long password"})
+	resp := h.do(t, "POST", "/api/auth/login", map[string]any{"username": testUser, "password": "a good long password"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -260,7 +264,7 @@ func TestLoginThrottled(t *testing.T) {
 
 	var throttled bool
 	for i := 0; i < 25; i++ {
-		resp := h.do(t, "POST", "/api/auth/login", map[string]any{"password": "wrong"})
+		resp := h.do(t, "POST", "/api/auth/login", map[string]any{"username": testUser, "password": "wrong"})
 		code := resp.StatusCode
 		resp.Body.Close()
 		if code == http.StatusTooManyRequests {
