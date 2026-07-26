@@ -113,10 +113,15 @@ LANcast is guarded by a single password, set on first run.
 machine it runs on, and nowhere else. Set a password in the browser, restart,
 and it binds the network so other devices can reach it.
 
-**There is no TLS. Do not port-forward it.** The password and session cookie
-travel in plaintext. For access away from home, use a VPN that puts your device
-on the LAN (Tailscale, WireGuard), or a reverse proxy terminating TLS. See
-[docs/security.md](docs/security.md).
+**Once it binds the network, it serves HTTPS.** Supply your own certificate
+(`tls_cert_file` / `tls_key_file`) or let LANcast generate a self-signed one —
+either way the password and session cookie are encrypted on the LAN. A
+self-signed cert shows a browser warning until you trust it.
+
+**Do not port-forward it anyway.** A self-signed cert cannot prove the server's
+identity to the public internet. For access away from home, use a VPN that puts
+your device on the LAN (Tailscale, WireGuard), or a reverse proxy terminating
+TLS with a real certificate. See [docs/security.md](docs/security.md).
 
 ## License
 
