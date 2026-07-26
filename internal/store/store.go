@@ -118,6 +118,22 @@ func (s *Store) TouchLibraryScanned(ctx context.Context, id int64) error {
 	return err
 }
 
+// DeleteLibrary removes a library and, by ON DELETE CASCADE, its items and
+// everything hanging off them (playback state, subtitles). It touches nothing
+// on disk: LANcast only ever stored paths, so forgetting a library never
+// destroys media. Returns ErrNotFound if there was no such library.
+func (s *Store) DeleteLibrary(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM library WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete library: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // -------------------------------------------------------------------- items
 
 // Item is one row of media_item. Path is never serialized: clients have no use

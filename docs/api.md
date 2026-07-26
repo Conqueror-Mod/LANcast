@@ -122,6 +122,13 @@ directory; both are validated before insert.
 Returns `201` with the created library. Returns `conflict` if the path is
 already registered.
 
+### `DELETE /api/libraries/{id}`
+
+Forgets a library: its rows and, by `ON DELETE CASCADE`, its items, playback
+state, and subtitles. **Never deletes media from disk** — LANcast only ever
+stored paths, so this is "stop tracking this folder", not a destroy. `204` on
+success, `404` if unknown, `409` if a scan is running for it.
+
 ### `POST /api/libraries/{id}/scan`
 
 Starts an asynchronous scan and returns `202` immediately. Returns `conflict`

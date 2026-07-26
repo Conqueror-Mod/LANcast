@@ -219,6 +219,48 @@ func TestContinueWatching(t *testing.T) {
 	}
 }
 
+func TestDeleteLibraryCascadesAndSpares(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+
+	keep := mustLibrary(t, st)
+	gone, err := st.CreateLibrary(ctx, "Doomed", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st.UpsertItem(ctx, file(keep.ID, `C:\k\a.mkv`, "A"))
+	st.UpsertItem(ctx, file(gone.ID, `C:\g\b.mkv`, "B"))
+	knownGone, _ := st.KnownFiles(ctx, gone.ID)
+	goneItem := knownGone[`C:\g\b.mkv`].ID
+	if err := st.SaveProgress(ctx, goneItem, "local", 500, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.DeleteLibrary(ctx, gone.ID); err != nil {
+		t.Fatalf("DeleteLibrary: %v", err)
+	}
+
+	// The library is gone, and its item cascaded away with it.
+	if _, err := st.GetLibrary(ctx, gone.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetLibrary(deleted) = %v, want ErrNotFound", err)
+	}
+	if items, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: gone.ID}); len(items) != 0 {
+		t.Errorf("deleted library still has %d items", len(items))
+	}
+	// The other library is untouched.
+	if _, err := st.GetLibrary(ctx, keep.ID); err != nil {
+		t.Errorf("kept library was affected: %v", err)
+	}
+	if items, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: keep.ID}); len(items) != 1 {
+		t.Errorf("kept library items = %d, want 1", len(items))
+	}
+	// Deleting a nonexistent library is a clear not-found.
+	if err := st.DeleteLibrary(ctx, 9999); !errors.Is(err, ErrNotFound) {
+		t.Errorf("DeleteLibrary(9999) = %v, want ErrNotFound", err)
+	}
+}
+
 func TestMarkMissingEmptyIsNoOp(t *testing.T) {
 	if err := newStore(t).MarkMissing(context.Background(), nil); err != nil {
 		t.Fatalf("MarkMissing(nil) = %v, want nil", err)

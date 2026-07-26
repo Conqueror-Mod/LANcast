@@ -122,6 +122,22 @@
   cursor: default;
 }
 
+/* Destructive actions read in a warm red on intent, never gold. */
+.set-btn--danger {
+  color: var(--text-muted);
+}
+.set-btn--danger:hover:not(:disabled),
+.set-btn--danger:focus {
+  color: #e79080;
+  border-color: #a6584c;
+  box-shadow: 0 0 0 3px rgba(166, 88, 76, 0.25);
+}
+
+.set-confirm {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .set-input {
   padding: 7px 10px;
   border-radius: var(--radius-tile);
