@@ -36,6 +36,22 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": items})
 }
 
+// continueWatching lists the user's in-progress items, most recently played
+// first — the home screen's first shelf. Progress is included so tiles can draw
+// their resume bar without a second call.
+func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
+	items, err := s.st.ContinueWatching(r.Context(), localUser, queryInt(r, "limit"))
+	if err != nil {
+		s.writeInternal(w, err, "continue watching")
+		return
+	}
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {

@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -336,6 +337,18 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
 	audio_codec, audio_channels, video_frame_rate`
 
+// itemColsMI is itemCols qualified with the media_item alias "mi", for queries
+// that join another table carrying same-named columns (duration_ms, watched).
+var itemColsMI = qualifyCols(itemCols, "mi")
+
+func qualifyCols(cols, alias string) string {
+	parts := strings.Split(cols, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var missing int
@@ -405,6 +418,43 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		out = append(out, *it)
 	}
 	return out, total, rows.Err()
+}
+
+// ContinueWatching returns a user's in-progress items, most recently played
+// first: everything they have started but not finished. "Started" means a saved
+// position past zero; "not finished" means the watched flag is unset, so an item
+// played to the end drops off the shelf rather than inviting a replay.
+func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int) ([]Item, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`
+		FROM media_item mi
+		JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
+		WHERE ps.position_ms > 0 AND ps.watched = 0 AND mi.missing = 0
+		ORDER BY ps.updated_at DESC
+		LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("continue watching: %w", err)
+	}
+	defer rows.Close()
+
+	out := []Item{}
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, fmt.Errorf("continue watching: %w", err)
+		}
+		out = append(out, *it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Reuse the one progress-attach path rather than widening the scan.
+	if err := s.AttachProgress(ctx, out, userID); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // GetItem returns one item with the given user's playback progress attached.

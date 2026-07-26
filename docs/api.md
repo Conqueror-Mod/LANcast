@@ -167,6 +167,20 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 filesystem paths, and withholding them keeps the layout private when the server
 is reachable beyond the LAN.
 
+### `GET /api/continue`
+
+The user's in-progress items, most recently played first — the home screen's
+first shelf. `limit` defaults to 20 (max 100).
+
+```json
+{ "items": [ { "id": 87, "title": "Arrival", ...,
+  "progress": { "position_ms": 1284000, "watched": false } } ] }
+```
+
+"In progress" is a saved position past zero with `watched` unset: an item played
+to the end drops off rather than inviting a replay. Progress and artwork are
+included so a tile draws its resume bar and poster without a second call.
+
 ### `GET /api/items/{id}`
 
 The list shape plus M2 metadata and a `theme` block (both below). Returns
