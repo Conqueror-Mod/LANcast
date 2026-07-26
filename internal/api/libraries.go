@@ -106,3 +106,28 @@ func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, s.scanner.Status(id))
 }
+
+// deleteLibrary forgets a library: its rows and everything cascading off them.
+// It never deletes media from disk — LANcast only stored paths — so this is a
+// safe "stop tracking this folder", not a destroy.
+func (s *Server) deleteLibrary(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	// A scan mid-write against this library must not have it deleted out from
+	// under it. Make the caller wait rather than risk a torn state.
+	if s.scanner.Status(id).State == scan.StateRunning {
+		writeError(w, http.StatusConflict, "conflict",
+			"a scan is running; wait for it to finish before removing the library")
+		return
+	}
+	if err := s.st.DeleteLibrary(r.Context(), id); s.notFoundOr(w, err, "delete library", "no such library") {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -58,6 +58,23 @@ export function useCreateLibrary() {
   });
 }
 
+// Forgets a library (never deletes files). Its items vanish from every view, so
+// the lists that could be showing them are refreshed.
+export function useDeleteLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (libraryID: number) =>
+      apiSend(`/api/libraries/${libraryID}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["review"] });
+      qc.invalidateQueries({ queryKey: ["recently-added"] });
+      qc.invalidateQueries({ queryKey: ["continue"] });
+    },
+  });
+}
+
 // A scan (and a metadata refresh) run in the background; the caller then polls
 // useScanStatus to show progress.
 export function useStartScan() {

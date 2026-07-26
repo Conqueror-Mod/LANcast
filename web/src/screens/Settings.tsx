@@ -4,6 +4,7 @@ import {
   useSettings,
   useUpdateSettings,
   useCreateLibrary,
+  useDeleteLibrary,
   useStartScan,
   useRefreshLibrary,
   useScanStatus,
@@ -31,8 +32,10 @@ function LibraryRow({ library }: { library: Library }) {
   const { data: status } = useScanStatus(library.id);
   const scan = useStartScan();
   const refresh = useRefreshLibrary();
+  const del = useDeleteLibrary();
   const running = status?.state === "running";
   const [showIssues, setShowIssues] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const skipped = status?.skipped ?? 0;
   const issues = status?.issues ?? [];
@@ -75,6 +78,30 @@ function LibraryRow({ library }: { library: Library }) {
           >
             Refresh metadata
           </button>
+          {confirming ? (
+            <>
+              <span className="set-confirm">Remove?</span>
+              <button
+                className="set-btn set-btn--danger"
+                disabled={del.isPending || running}
+                onClick={() => del.mutate(library.id)}
+              >
+                Yes, remove
+              </button>
+              <button className="set-btn" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="set-btn set-btn--danger"
+              disabled={running}
+              title={running ? "Wait for the scan to finish" : undefined}
+              onClick={() => setConfirming(true)}
+            >
+              Remove
+            </button>
+          )}
         </div>
       </div>
       {showIssues && issues.length > 0 && (
