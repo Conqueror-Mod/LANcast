@@ -1,0 +1,34 @@
+/* A full-screen greeting over the space floor. The logo art carries its own
+   nebula, so the surround is just the deepest background — the logo appears to
+   float in the same field the app reveals behind it. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--space-void, #05070f);
+  opacity: 1;
+  transition: opacity 650ms ease;
+  cursor: pointer;
+}
+
+.splash--leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash__logo {
+  width: min(72vmin, 560px);
+  height: auto;
+  border-radius: var(--radius-panel, 12px);
+  /* A soft gold breath, at rest — structural, not a highlight. */
+  box-shadow: 0 0 80px rgba(198, 163, 90, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash {
+    transition: opacity 300ms ease;
+  }
+}
