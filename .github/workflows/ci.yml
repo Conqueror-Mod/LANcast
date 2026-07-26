@@ -64,11 +64,17 @@ jobs:
         working-directory: web
 
       # The committed internal/web/dist is what the Go binary embeds. If a client
-      # change was committed without rebuilding it, a fresh build here differs
-      # from what's checked in — the exact drift that shipped a stale UI once.
+      # change was committed without rebuilding it, a fresh build here differs —
+      # the exact drift that shipped a stale UI once (#10).
+      #
+      # Checked against the hashed assets, not index.html: Vite fingerprints the
+      # bundle by content, so any source change yields new asset filenames and a
+      # diff here. index.html is a generated pointer to those hashes, and its
+      # line endings are platform-dependent (Windows build vs Linux CI), so
+      # comparing it byte-for-byte is fragile; the assets are the real signal.
       - name: embedded bundle is in sync with source
         run: |
-          if ! git diff --quiet -- internal/web/dist; then
+          if ! git diff --quiet -- internal/web/dist/assets; then
             echo "internal/web/dist is out of sync with web/ source."
             echo "Run 'npm run build' in web/ and commit the regenerated internal/web/dist."
             git diff --stat -- internal/web/dist
