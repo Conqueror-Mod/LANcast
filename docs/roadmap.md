@@ -1,6 +1,7 @@
 # Roadmap
 
-Last updated: 2026-07-22 · **5 of 26 areas planned. M0, M1, and M2 built.**
+Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
+system; theme music (blocked on OST identification) is the remaining M3 depth.
 
 ## Ordering principle
 
@@ -21,7 +22,7 @@ before multi-user exists, and `media_item` does not hardcode a media taxonomy.
 | M0 | Library scan | Point at a folder, get rows in a database | **done** |
 | M1 | **Watch something** | Browse in a browser, click, play, seek, resume | **done** |
 | M2 | Metadata | Real titles, artwork, seasons, OST identification | **done** |
-| M3 | Transcoding + real client | Plays anywhere; React client executes the design | |
+| M3 | Transcoding + real client | Plays anywhere; React client executes the design | **done** |
 | M4 | Extensibility | Plugin runtime with first-party plugins proving the contract | |
 
 M1 is the milestone that matters. Everything before it is scaffolding and
@@ -36,7 +37,7 @@ Status: **planned** · **next** · *unplanned*
 | Area | Status | Note |
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
-| UI/UX design system | planned | Nebula field, gold rule, keyboard model — M1 client carries the tokens only |
+| UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
 | Data model evolution and migrations | *unplanned* | Strategy past revision 1 |
 | API contract and versioning | *unplanned* | Decide before any third-party client |
 
@@ -59,7 +60,7 @@ Status: **planned** · **next** · *unplanned*
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
-| React client build | *unplanned* | Executes the design system for real |
+| React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
 
 ### Extensibility · M4
@@ -88,26 +89,19 @@ Status: **planned** · **next** · *unplanned*
 
 ## Client UX backlog
 
-Noted from use, not yet built. All three point at the same structural gap: the
-player dialog is currently doing the job of two screens.
+Noted from use of the old single-file client, and largely resolved by the React
+rebuild, which split the player dialog into distinct screens.
 
-1. **Separate the information screen from the player.** Clicking a poster
-   should open detail — synopsis, cast, artwork — with a **Play** button,
-   rather than starting playback immediately. This is the full-bleed detail
-   page in [design.md](design.md), and it is the natural home for the other
-   two items.
-2. **Play the official trailer on the information screen**, where one exists,
-   instead of the film starting from the beginning. TMDB exposes trailer links
-   on the video endpoint, so the data path already exists.
-3. **Subtitles belong to the player, not the preview.** The picker is
-   currently reachable from the same dialog that shows metadata; once the two
-   screens split, it goes with playback.
-4. **Reposition "fix match"** — it sits beside playback controls today, which
-   is the wrong neighbourhood for a metadata correction.
-
-Worth doing together rather than piecemeal: patching the current single-file
-client four times costs the same effort as the split and is thrown away at the
-React rebuild.
+1. ~~**Separate the information screen from the player.**~~ **Done** — clicking a
+   poster opens the full-bleed detail page (synopsis, cast, artwork) with a
+   **Play** button; playback is its own screen.
+2. **Play the official trailer on the information screen.** *Partial* — the
+   trailer is surfaced on Detail (via the trailer endpoint) but shown as a note;
+   in-page trailer playback is not built yet.
+3. ~~**Subtitles belong to the player, not the preview.**~~ **Done** — the picker
+   lives in the player, with local tracks, online search, and removal.
+4. **Reposition "fix match".** *Open* — the metadata-correction UI is not yet
+   ported to the React client at all.
 
 ## Dependencies that constrain ordering
 
@@ -121,11 +115,12 @@ React rebuild.
 
 ## Next planning order
 
-1. ~~Metadata and artwork (M2)~~ — **planned.** See
+1. ~~Metadata and artwork (M2)~~ — **built.** See
    [metadata.md](metadata.md) and ADRs 0007–0010.
-2. **Security and remote access.** Decided before anything is exposed past
+2. ~~Transcoding + React client (M3)~~ — **built.** Client executes design.md;
+   theme music remains, blocked on OST identification.
+3. **Security and remote access.** Decided before anything is exposed past
    localhost, not after.
-3. **Transcoding (M3).** The hardest engineering; plan it immediately before building.
 4. **Plugin architecture (M4).** Last, informed by all of the above.
 
 ## Amendments to schema revision 1
