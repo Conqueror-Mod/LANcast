@@ -1,12 +1,83 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { apiGet } from "./client";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { apiGet, apiSend } from "./client";
 import type {
   Item,
   ItemsPage,
   Library,
+  ScanStatus,
+  Settings,
+  SettingsUpdate,
   SubtitleTrack,
   Trailer,
 } from "./types";
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ["settings"],
+    queryFn: ({ signal }) => apiGet<Settings>("/api/settings", signal),
+  });
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (update: SettingsUpdate) =>
+      apiSend("/api/settings", "PUT", update),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
+export function useCreateLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lib: { name: string; kind: string; path: string }) =>
+      apiSend("/api/libraries", "POST", lib),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["libraries"] }),
+  });
+}
+
+// A scan (and a metadata refresh) run in the background; the caller then polls
+// useScanStatus to show progress.
+export function useStartScan() {
+  return useMutation({
+    mutationFn: (libraryID: number) =>
+      apiSend(`/api/libraries/${libraryID}/scan`, "POST"),
+  });
+}
+
+export function useRefreshLibrary() {
+  return useMutation({
+    mutationFn: (libraryID: number) =>
+      apiSend(`/api/libraries/${libraryID}/refresh`, "POST"),
+  });
+}
+
+// Polls scan status while a scan is running; idle once it finishes, at which
+// point the library list is refreshed so counts and "last scanned" update.
+export function useScanStatus(libraryID: number) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["scan", libraryID],
+    queryFn: async ({ signal }) => {
+      const s = await apiGet<ScanStatus>(
+        `/api/libraries/${libraryID}/scan`,
+        signal,
+      );
+      if (s.state !== "running") {
+        qc.invalidateQueries({ queryKey: ["libraries"] });
+      }
+      return s;
+    },
+    refetchInterval: (q) =>
+      q.state.data?.state === "running" ? 1000 : false,
+    enabled: libraryID > 0,
+  });
+}
 
 export function useLibraries() {
   return useQuery({
