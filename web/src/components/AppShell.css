@@ -1,0 +1,67 @@
+.app-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 28px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(
+    to bottom,
+    rgba(5, 7, 15, 0.85),
+    rgba(5, 7, 15, 0)
+  );
+  backdrop-filter: blur(6px);
+}
+
+.app-shell__brand {
+  font-size: 13px;
+  letter-spacing: 0.28em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.app-shell__libs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.app-shell__lib,
+.app-shell__settings {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 4px 2px;
+  border-bottom: 1px solid transparent;
+  transition: color var(--dur-fast) ease;
+}
+
+.app-shell__lib:hover,
+.app-shell__settings:hover {
+  color: var(--text-secondary);
+}
+
+/* Gold marks where you are — nothing else. */
+.app-shell__lib.is-active,
+.app-shell__settings.is-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--gold);
+}
+
+.app-shell__settings {
+  margin-left: auto;
+}
+
+.app-shell__main {
+  flex: 1;
+  padding: 8px 28px 48px;
+}

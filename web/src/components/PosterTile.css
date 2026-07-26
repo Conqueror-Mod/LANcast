@@ -1,0 +1,90 @@
+.poster-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.poster-tile__art {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-tile);
+  overflow: hidden;
+  background: var(--space-raised);
+  /* Gold is earned: a barely-there hairline at rest. */
+  border: 1px solid var(--gold-dormant);
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.poster-tile__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.poster-tile__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Full-strength gold + soft ring on focus. This is the focus indicator — the
+   aesthetic and the accessibility affordance are the same object. */
+.poster-tile:focus .poster-tile__art,
+.poster-tile:hover .poster-tile__art {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.poster-tile:focus .poster-tile__art {
+  transform: translateY(-2px);
+}
+
+/* Continue-watching progress: a 3px gold bar on the tile's bottom edge. */
+.poster-tile__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--gold);
+}
+
+.poster-tile__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px;
+}
+
+.poster-tile__title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poster-tile:focus .poster-tile__title,
+.poster-tile:hover .poster-tile__title {
+  color: var(--text-primary);
+}
+
+.poster-tile__year {
+  font-size: 11px;
+  color: var(--text-faint);
+}

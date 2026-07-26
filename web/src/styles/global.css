@@ -1,0 +1,94 @@
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--space-deep);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * The nebula field. Three radial ellipses over a linear base — cheap,
+ * resolution-independent, no image assets. It sits behind everything as a fixed
+ * layer so scrolling content drifts over a still field.
+ */
+.nebula-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--space-deep);
+  background-image:
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(90, 74, 158, 0.38), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 20%, rgba(38, 88, 168, 0.35), transparent 62%),
+    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(74, 54, 140, 0.3), transparent 65%),
+    linear-gradient(170deg, var(--space-raised) 0%, var(--space-deep) 55%, var(--space-void) 100%);
+}
+
+/*
+ * Drift must be imperceptible under direct attention — noticeable only if you
+ * look away and back. If you can see it move, it is too fast.
+ */
+.nebula-field::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background: inherit;
+  opacity: 0.5;
+  animation: nebula-drift var(--dur-ambient) ease-in-out infinite alternate;
+}
+
+@keyframes nebula-drift {
+  from {
+    transform: translate3d(-1.5%, -1%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(1.5%, 1%, 0) scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nebula-field::after {
+    animation: none;
+  }
+}
+
+/* Section labels — the Trek signal is the tracking, not the typeface. */
+.section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/*
+ * The browser's own focus outline is suppressed only because the gold ring
+ * replaces it as a stronger, deliberate indicator. Focus is never invisible.
+ */
+:focus {
+  outline: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
