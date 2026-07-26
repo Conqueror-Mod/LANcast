@@ -75,7 +75,7 @@ func TestTokensAreUniqueAndHashed(t *testing.T) {
 // SameSite=Strict is the first half of the CSRF defence; without it any page in
 // the user's browser could issue authenticated requests to the server.
 func TestCookieAttributes(t *testing.T) {
-	c := Cookie("tok", time.Hour)
+	c := Cookie("tok", time.Hour, false)
 	if !c.HttpOnly {
 		t.Error("cookie is not HttpOnly — script could read the session")
 	}
@@ -83,10 +83,16 @@ func TestCookieAttributes(t *testing.T) {
 		t.Error("cookie is not SameSite=Strict")
 	}
 	if c.Secure {
-		t.Error("Secure is set, but LANcast serves plain HTTP; the cookie would never be sent")
+		t.Error("Secure is set for a plain-HTTP connection; the cookie would never be sent")
 	}
 	if c.Path != "/" {
 		t.Errorf("Path = %q", c.Path)
+	}
+
+	// Over TLS the cookie must be Secure so it cannot be downgraded to a
+	// plaintext request (ADR 0014).
+	if !Cookie("tok", time.Hour, true).Secure {
+		t.Error("Secure is not set for a TLS connection")
 	}
 
 	if cleared := ClearCookie(); cleared.MaxAge >= 0 || cleared.Value != "" {
