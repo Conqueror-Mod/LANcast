@@ -1,3 +1,13 @@
 # The embedded client bundle is a generated build artifact (committed so
-# `go build` is self-contained). Treat it as binary so line endings never churn.
+# `go build` is self-contained). Keep it out of general line-ending churn, but
+# pin its text files to LF so a Windows build and a Linux CI build produce
+# byte-identical output — Vite emits LF everywhere except index.html, whose
+# endings otherwise diverge by platform and break the CI drift check.
 internal/web/dist/** -text
+internal/web/dist/index.html text eol=lf
+internal/web/dist/assets/*.js text eol=lf
+internal/web/dist/assets/*.css text eol=lf
+
+# The HTML template Vite passes through to dist/index.html: keep it LF so the
+# generated file's endings don't diverge by build platform.
+web/index.html text eol=lf

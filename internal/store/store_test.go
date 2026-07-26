@@ -188,8 +188,8 @@ func TestContinueWatching(t *testing.T) {
 	}
 	must(st.SaveProgress(ctx, a, "local", 1000, false))
 	must(st.SaveProgress(ctx, b, "local", 2000, false))
-	must(st.SaveProgress(ctx, c, "local", 3000, true))  // watched
-	must(st.SaveProgress(ctx, d, "local", 0, false))     // zero position
+	must(st.SaveProgress(ctx, c, "local", 3000, true)) // watched
+	must(st.SaveProgress(ctx, d, "local", 0, false))   // zero position
 	must(st.SaveProgress(ctx, e, "local", 1500, false))
 	must(st.MarkMissing(ctx, []int64{e}))
 
