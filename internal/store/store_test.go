@@ -162,6 +162,63 @@ func TestMarkMissingPreservesRowAndProgress(t *testing.T) {
 	}
 }
 
+func TestContinueWatching(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	id := func(path, title string) int64 {
+		if _, err := st.UpsertItem(ctx, file(lib.ID, path, title)); err != nil {
+			t.Fatal(err)
+		}
+		known, _ := st.KnownFiles(ctx, lib.ID)
+		return known[path].ID
+	}
+
+	a := id(`C:\m\a.mkv`, "A") // in progress
+	b := id(`C:\m\b.mkv`, "B") // in progress
+	c := id(`C:\m\c.mkv`, "C") // finished — excluded
+	d := id(`C:\m\d.mkv`, "D") // never started — excluded
+	e := id(`C:\m\e.mkv`, "E") // in progress but missing — excluded
+
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(st.SaveProgress(ctx, a, "local", 1000, false))
+	must(st.SaveProgress(ctx, b, "local", 2000, false))
+	must(st.SaveProgress(ctx, c, "local", 3000, true))  // watched
+	must(st.SaveProgress(ctx, d, "local", 0, false))     // zero position
+	must(st.SaveProgress(ctx, e, "local", 1500, false))
+	must(st.MarkMissing(ctx, []int64{e}))
+
+	got, err := st.ContinueWatching(ctx, "local", 20)
+	if err != nil {
+		t.Fatalf("ContinueWatching: %v", err)
+	}
+
+	titles := map[string]bool{}
+	for _, it := range got {
+		titles[it.Title] = true
+		if it.Progress == nil || it.Progress.PositionMS == 0 {
+			t.Errorf("%s returned without progress attached: %+v", it.Title, it.Progress)
+		}
+	}
+	if len(got) != 2 || !titles["A"] || !titles["B"] {
+		t.Fatalf("ContinueWatching returned %v, want exactly {A, B}", titles)
+	}
+
+	// A different user shares no progress.
+	other, err := st.ContinueWatching(ctx, "someone-else", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(other) != 0 {
+		t.Errorf("another user saw %d in-progress items, want 0", len(other))
+	}
+}
+
 func TestMarkMissingEmptyIsNoOp(t *testing.T) {
 	if err := newStore(t).MarkMissing(context.Background(), nil); err != nil {
 		t.Fatalf("MarkMissing(nil) = %v, want nil", err)

@@ -1,0 +1,45 @@
+.shelf {
+  margin-bottom: 34px;
+}
+
+.shelf__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.shelf__rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--gold-dormant), transparent);
+}
+
+.shelf__all {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color var(--dur-fast) ease;
+}
+
+.shelf__all:hover,
+.shelf__all:focus {
+  color: var(--text-primary);
+}
+
+.shelf__track {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding-bottom: 8px;
+  /* Room so a focused tile's lift and ring are not clipped by the scroll box. */
+  padding-top: 6px;
+  scrollbar-width: thin;
+}
+
+.shelf__item {
+  width: 150px;
+  flex: none;
+}

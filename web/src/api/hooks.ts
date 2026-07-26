@@ -38,6 +38,30 @@ export function useTrailer(id: number) {
   });
 }
 
+export function useContinueWatching(limit = 20) {
+  return useQuery({
+    queryKey: ["continue", limit],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[] }>(`/api/continue?limit=${limit}`, signal).then(
+        (r) => r.items,
+      ),
+    staleTime: 10_000,
+  });
+}
+
+// Recently added, across every library. Its own hook rather than useItems so a
+// home shelf is not entangled with the Browse grid's library scoping.
+export function useRecentlyAdded(limit = 20) {
+  return useQuery({
+    queryKey: ["recently-added", limit],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?sort=added&limit=${limit}`, signal).then(
+        (r) => r.items,
+      ),
+    staleTime: 30_000,
+  });
+}
+
 export function useSubtitles(id: number) {
   return useQuery({
     queryKey: ["subtitles", id],

@@ -122,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.refreshLibrary)
 
 	mux.HandleFunc("GET /api/items", s.listItems)
+	mux.HandleFunc("GET /api/continue", s.continueWatching)
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	mux.HandleFunc("PATCH /api/items/{id}", s.patchItem)
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
