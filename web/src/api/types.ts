@@ -190,3 +190,19 @@ export interface BrowseResult {
 export interface ApiError {
   error: { code: string; message: string };
 }
+
+export type Role = "admin" | "member";
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  role: Role;
+}
+
+// GET /api/auth/status. `user` is present only when a session is active.
+export interface AuthStatus {
+  configured: boolean;
+  authenticated: boolean;
+  lan_enabled: boolean;
+  user?: AuthUser;
+}

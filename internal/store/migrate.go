@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 6
+const CurrentSchemaVersion = 7
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -24,6 +24,7 @@ var migrations = []migration{
 	{version: 4, sql: schemaRevision4},
 	{version: 5, sql: schemaRevision5},
 	{version: 6, sql: schemaRevision6},
+	{version: 7, sql: schemaRevision7},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -257,4 +258,27 @@ CREATE INDEX IF NOT EXISTS idx_subtitle_item ON external_subtitle(item_id);
 // being a constant offset a viewer could ignore.
 const schemaRevision6 = `
 ALTER TABLE media_item ADD COLUMN video_frame_rate REAL;
+`
+
+// Revision 7 — user accounts (ADR 0015).
+//
+// The schema has carried session.user_id and playback_state.user_id since
+// revision 1 (ADR 0006), defaulting to 'local'. This turns that latent column
+// into real accounts. No back-fill is needed here: the migration only creates
+// the table, and a startup step seeds the existing single password as a 'local'
+// admin so every pre-existing session and resume point keeps resolving.
+//
+// name is COLLATE NOCASE so "Chris" and "chris" are the same account — a login
+// name that depends on capitalisation is a support call waiting to happen. No
+// foreign key from session to user is added: LookupSession joins to user, so a
+// deleted user's sessions simply stop resolving without a schema-level cascade
+// that SQLite cannot add to an existing table cleanly.
+const schemaRevision7 = `
+CREATE TABLE IF NOT EXISTS user (
+    id            TEXT    PRIMARY KEY,
+    name          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    role          TEXT    NOT NULL,          -- admin | member
+    created_at    INTEGER NOT NULL
+);
 `

@@ -92,9 +92,19 @@ func TestSRTToVTT(t *testing.T) {
 		t.Errorf("multi-line cue was mangled:\n%s", got)
 	}
 
-	// Cue counters are SRT bookkeeping and add nothing to WebVTT.
-	if strings.Contains(got, "\n1\n00:00:01") {
-		t.Error("SRT cue number leaked into the output")
+	// Cue counters are SRT bookkeeping and add nothing to WebVTT — and every
+	// counter must be dropped, not only the first. A leaked counter sits as a
+	// stray identifier line right before its timing.
+	for _, leak := range []string{"\n1\n00:00:01", "\n2\n00:00:05", "\n3\n00:01:02"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("an SRT cue number leaked into the output near %q:\n%s", leak, got)
+		}
+	}
+
+	// A numeric line of actual cue text must survive — it arrives after the
+	// timing line, so it is text, not a counter.
+	if !strings.Contains(got, "2040") {
+		t.Errorf("numeric cue text was wrongly stripped as a counter:\n%s", got)
 	}
 }
 
@@ -113,6 +123,35 @@ func TestSRTToVTTHandlesCRLFAndBOM(t *testing.T) {
 	}
 	if !strings.Contains(got, "Hello") {
 		t.Errorf("cue text lost:\n%s", got)
+	}
+}
+
+func TestShiftVTT(t *testing.T) {
+	vtt := "WEBVTT\n\n" +
+		"00:00:02.000 --> 00:00:05.000\nEarly cue, dropped\n\n" +
+		"00:00:10.000 --> 00:00:13.000\nStraddles the offset\n\n" +
+		"00:01:00.000 --> 00:01:03.000\nLater cue\n"
+
+	// Resume at 12s: the first cue (ends at 5) is in the past and dropped; the
+	// second (10–13) straddles 12 and clamps to start at 0; the third shifts by 12.
+	got := string(ShiftVTT([]byte(vtt), 12))
+
+	if strings.Contains(got, "Early cue") {
+		t.Errorf("a cue entirely before the offset was not dropped:\n%s", got)
+	}
+	if !strings.Contains(got, "00:00:00.000 --> 00:00:01.000") {
+		t.Errorf("straddling cue was not clamped to zero:\n%s", got)
+	}
+	if !strings.Contains(got, "00:00:48.000 --> 00:00:51.000") {
+		t.Errorf("later cue was not shifted by the offset:\n%s", got)
+	}
+	if !strings.HasPrefix(got, "WEBVTT") {
+		t.Errorf("header lost:\n%s", got)
+	}
+
+	// A zero or negative offset is a no-op (direct play).
+	if string(ShiftVTT([]byte(vtt), 0)) != vtt {
+		t.Error("a zero offset must not alter the subtitle")
 	}
 }
 

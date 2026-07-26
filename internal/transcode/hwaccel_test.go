@@ -51,6 +51,11 @@ func TestHardwareEncodersUseTheirOwnQualityFlag(t *testing.T) {
 		if !hasArgPair(args, "-profile:v", "high") {
 			t.Errorf("%s does not state a profile", name)
 		}
+		// And they must force 8-bit: a 10-bit HEVC source otherwise reaches an
+		// H.264 hardware encoder that answers 10-bit input with a black frame.
+		if !hasArgPair(args, "-pix_fmt", "yuv420p") {
+			t.Errorf("%s does not force yuv420p; 10-bit input would encode to black", name)
+		}
 	}
 }
 

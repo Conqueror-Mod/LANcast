@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useLibraries, useReview } from "@/api/hooks";
+import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
 import type { ReactNode } from "react";
 import "./AppShell.css";
 
@@ -8,6 +8,8 @@ import "./AppShell.css";
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: libraries } = useLibraries();
   const { data: review } = useReview();
+  const user = useCurrentUser();
+  const logout = useLogout();
   const location = useLocation();
   const reviewCount = review?.total ?? 0;
 
@@ -49,6 +51,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           Settings
         </NavLink>
+        {user && (
+          <div className="app-shell__account">
+            <span className="app-shell__user" title={`Signed in as ${user.name}`}>
+              {user.name}
+            </span>
+            <button
+              type="button"
+              className="app-shell__signout"
+              onClick={() => logout.mutate()}
+              disabled={logout.isPending}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </header>
       <main className="app-shell__main">{children}</main>
     </div>

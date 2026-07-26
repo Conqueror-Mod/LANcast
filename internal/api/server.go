@@ -27,10 +27,6 @@ import (
 // Version is reported by GET /api/health.
 const Version = "0.2.0"
 
-// localUser is the single-user identity for M1/M2. The schema is already keyed
-// by user (ADR 0006), so multi-user arrives without a migration.
-const localUser = "local"
-
 // Deps are the Server's collaborators.
 type Deps struct {
 	Store    *store.Store
@@ -113,24 +109,28 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("POST /api/auth/password", s.authChangePassword)
 
-	mux.HandleFunc("GET /api/browse", s.browse)
+	// Filesystem enumeration is reconnaissance for library creation, so it is an
+	// admin-only power like library creation itself.
+	mux.HandleFunc("GET /api/browse", s.adminOnly(s.browse))
 
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)
-	mux.HandleFunc("POST /api/libraries", s.createLibrary)
-	mux.HandleFunc("DELETE /api/libraries/{id}", s.deleteLibrary)
-	mux.HandleFunc("POST /api/libraries/{id}/scan", s.startScan)
+	mux.HandleFunc("POST /api/libraries", s.adminOnly(s.createLibrary))
+	mux.HandleFunc("DELETE /api/libraries/{id}", s.adminOnly(s.deleteLibrary))
+	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
-	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.refreshLibrary)
+	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.adminOnly(s.refreshLibrary))
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
-	mux.HandleFunc("PATCH /api/items/{id}", s.patchItem)
+	// Editing shared metadata or identity re-litigates the library for everyone,
+	// so it is an admin action. Watching and progress are not.
+	mux.HandleFunc("PATCH /api/items/{id}", s.adminOnly(s.patchItem))
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
-	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.deleteLock)
+	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.adminOnly(s.deleteLock))
 	mux.HandleFunc("GET /api/items/{id}/candidates", s.candidates)
-	mux.HandleFunc("POST /api/items/{id}/match", s.applyMatch)
-	mux.HandleFunc("POST /api/items/{id}/refresh", s.refreshItem)
+	mux.HandleFunc("POST /api/items/{id}/match", s.adminOnly(s.applyMatch))
+	mux.HandleFunc("POST /api/items/{id}/refresh", s.adminOnly(s.refreshItem))
 
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
@@ -145,8 +145,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
-	mux.HandleFunc("GET /api/settings", s.getSettings)
-	mux.HandleFunc("PUT /api/settings", s.putSettings)
+	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
+	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
+
+	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
+	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))
+	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
+	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
 
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)

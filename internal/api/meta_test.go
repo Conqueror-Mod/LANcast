@@ -16,17 +16,25 @@ import (
 
 // stubProvider lets match and candidate endpoints be tested without a network.
 type stubProvider struct {
-	id    string
-	cands []meta.Candidate
+	id         string
+	cands      []meta.Candidate
+	fetchTitle string     // when set, Fetch returns a record carrying this title
+	lastQuery  meta.Query // captured for assertions
 }
 
 func (s *stubProvider) ID() string      { return s.id }
 func (s *stubProvider) Caps() meta.Caps { return meta.Caps{Movie: true, Show: true, Episode: true} }
-func (s *stubProvider) Search(context.Context, meta.Query) ([]meta.Candidate, error) {
+func (s *stubProvider) Search(_ context.Context, q meta.Query) ([]meta.Candidate, error) {
+	s.lastQuery = q
 	return s.cands, nil
 }
-func (s *stubProvider) Fetch(context.Context, meta.Ref) (*meta.Record, error) {
-	return &meta.Record{Source: s.id, ExternalID: "1"}, nil
+func (s *stubProvider) Fetch(_ context.Context, ref meta.Ref) (*meta.Record, error) {
+	// A real provider returns a record for the id it was asked for.
+	rec := &meta.Record{Source: s.id, ExternalID: ref.ExternalID}
+	if s.fetchTitle != "" {
+		rec.Fields.Title = &s.fetchTitle
+	}
+	return rec, nil
 }
 
 func TestPatchItemLocksEditedFields(t *testing.T) {
@@ -168,6 +176,47 @@ func TestCandidatesRanked(t *testing.T) {
 	}
 }
 
+// When the title came from a match (unlocked), Fix Match's default search must
+// query by what the file is named — recovered from the filename — not by the
+// stored title, which after a wrong match is the wrong film. Otherwise the
+// search circles the wrong identity and never surfaces the right one.
+func TestCandidatesDefaultSearchesByFilenameWhenUnlocked(t *testing.T) {
+	h := newHarness(t)
+	stub := &stubProvider{id: "stub"}
+	h.reg.AddProvider(stub)
+
+	// addFile stores the raw name as the title, unlocked — standing in for a
+	// match-derived title. The filename parses to "Antz" (2001, from the name).
+	id := h.addFile(t, "Antz (2001).mkv", make([]byte, 16))
+	h.do(t, "GET", "/api/items/"+itoa(id)+"/candidates", nil).Body.Close()
+
+	if stub.lastQuery.Title != "Antz" {
+		t.Errorf("default search queried %q, want the parsed filename title %q",
+			stub.lastQuery.Title, "Antz")
+	}
+	if stub.lastQuery.Year != 2001 {
+		t.Errorf("default search year = %d, want 2001 parsed from the filename", stub.lastQuery.Year)
+	}
+}
+
+// A title the user set by hand is locked; Fix Match honours that intent and
+// searches it rather than re-parsing the filename.
+func TestCandidatesDefaultHonoursLockedTitle(t *testing.T) {
+	h := newHarness(t)
+	stub := &stubProvider{id: "stub"}
+	h.reg.AddProvider(stub)
+
+	id := h.addFile(t, "Antz (2001).mkv", make([]byte, 16))
+	// A hand correction locks the title.
+	h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"title": "Corrected Name"}).Body.Close()
+
+	h.do(t, "GET", "/api/items/"+itoa(id)+"/candidates", nil).Body.Close()
+
+	if stub.lastQuery.Title != "Corrected Name" {
+		t.Errorf("default search queried %q, want the locked title", stub.lastQuery.Title)
+	}
+}
+
 func TestApplyMatchLocksIdentity(t *testing.T) {
 	h := newHarness(t)
 	h.reg.AddProvider(&stubProvider{id: "stub"})
@@ -189,6 +238,34 @@ func TestApplyMatchLocksIdentity(t *testing.T) {
 	}
 	if h.enriched == 0 {
 		t.Error("confirming a match did not trigger enrichment")
+	}
+}
+
+// Confirming a match must fetch and apply the chosen record then and there.
+// It previously requeued the item, but the background pass skips locked items
+// and re-searches, so the confirmed identity's metadata never landed — the
+// item's title never updated.
+func TestApplyMatchUpdatesMetadata(t *testing.T) {
+	h := newHarness(t)
+	h.reg.AddProvider(&stubProvider{id: "stub", fetchTitle: "Antz"})
+	id := h.addFile(t, "wrong title.mkv", make([]byte, 16))
+
+	resp := h.do(t, "POST", "/api/items/"+itoa(id)+"/match",
+		map[string]any{"provider": "stub", "external_id": "8916"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var it store.Item
+	decode(t, resp, &it)
+
+	if it.Title != "Antz" {
+		t.Errorf("title = %q, want the confirmed record's title applied", it.Title)
+	}
+	if it.ExternalID == nil || *it.ExternalID != "8916" {
+		t.Errorf("external id = %v, want the confirmed id 8916", it.ExternalID)
+	}
+	if it.MatchState != meta.StateLocked {
+		t.Errorf("match state = %q, want locked", it.MatchState)
 	}
 }
 

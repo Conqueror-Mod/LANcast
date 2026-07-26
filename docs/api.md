@@ -22,7 +22,7 @@ Every endpoint requires a session cookie except `GET /api/health`,
 `GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, and the
 web assets. Unauthenticated calls return `401 unauthorized`.
 
-While no password is set the API is open — but the server binds `127.0.0.1`
+While no account exists the API is open — but the server binds `127.0.0.1`
 only, so it is reachable solely from the machine it runs on.
 
 **State-changing methods are origin-checked.** `POST`, `PUT`, `PATCH`, and
@@ -32,14 +32,39 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled}` |
-| `POST /api/auth/setup` | Set the first password; only while unconfigured |
-| `POST /api/auth/login` | `{password}` → session cookie. Throttled per IP |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, user?}` |
+| `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
+| `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
 | `POST /api/auth/logout` | Ends this session |
-| `POST /api/auth/password` | `{current_password, new_password}`; **revokes all sessions** |
+| `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
 
-`setup` returns `restart_required: true` when the server is still loopback-bound,
-so the client can explain why other devices cannot connect yet.
+When a session is active, `status`, `setup`, and `login` include
+`user: {id, name, role}`. `setup` returns `restart_required: true` when the
+server is still loopback-bound, so the client can explain why other devices
+cannot connect yet. A wrong username and a wrong password are reported
+identically as `401 unauthorized`.
+
+### Roles
+
+Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).
+
+- **admin** — everything, including the management surfaces below.
+- **member** — browse, play, and their own watch state. A member calling an
+  admin-only endpoint gets `403 forbidden`.
+
+Admin-only endpoints: `GET /api/browse`; `POST`/`DELETE /api/libraries…`, library
+`scan` and `refresh`; item metadata mutation (`PATCH /api/items/{id}`, lock
+delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
+`/api/users`. Everything else a signed-in member may call.
+
+### Users (admin only)
+
+| Route | Purpose |
+|---|---|
+| `GET /api/users` | `{users: [{id, name, role}]}` |
+| `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
+| `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
+| `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 
 ---
 
@@ -442,11 +467,12 @@ Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
 ### `GET /api/items/{id}/candidates?q=`
 
-Search the provider for re-match candidates. **Omit `q`** to score against the
-item's full identity — title *and* year — which is what makes the result a
-faithful diagnostic of the current match. Passing `q` overrides the title and
-drops the year, so use it only for a fresh user-driven search; a TMDB id or URL
-in `q` targets exactly.
+Search the provider for re-match candidates. **Omit `q`** to search by what the
+file is named — the identity re-derived from the filename — not by the current
+stored title, which after a wrong match *is* the wrong film; scoring against it
+would make the search circle the wrong identity. A title the user locked by hand
+is honoured instead. Passing `q` overrides the title (and drops the year), for a
+fresh user-driven search; a TMDB id or URL in `q` targets exactly.
 
 Each candidate carries a `Breakdown`: the sub-scores that combine, by their
 weights (title 0.60, year 0.30, popularity 0.10), into the total. This is what
@@ -463,8 +489,12 @@ than present a bare number.
 
 ### `POST /api/items/{id}/match`
 
-Apply a chosen candidate. Sets `match_state` to `locked`, so the item is never
-re-scored or re-searched by any later scan.
+Apply a chosen candidate. Fetches that exact record from the provider and
+applies it immediately (honouring locked fields), then sets `match_state` to
+`locked` so the item is never re-scored or re-searched by any later scan. The
+response is the updated item, already carrying the new metadata. Applying is
+synchronous and deliberately does not go through the background pass, which
+skips locked items and re-searches — that would re-pick the rejected candidate.
 
 ```json
 { "provider": "tmdb", "external_id": "335984" }

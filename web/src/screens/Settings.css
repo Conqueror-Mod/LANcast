@@ -216,3 +216,16 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* A neutral inline tag (e.g. "you") — a quiet label, never gold. */
+.set-tag {
+  margin-left: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}

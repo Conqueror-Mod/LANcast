@@ -77,6 +77,15 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	}
 	log.Info("database ready", "path", cfg.DBPath(), "schema", version)
 
+	// Multi-user migration completion (ADR 0015). Migration 7 only creates the
+	// user table; it cannot read config.json, so the pre-existing single password
+	// is turned into a 'local' admin here. The 'local' id matches the default
+	// every session and playback_state row already carries, so nothing is
+	// orphaned.
+	if err := seedLegacyOwner(st, settings, log); err != nil {
+		return err
+	}
+
 	scanner := scan.New(st, log)
 	art := artwork.New(filepath.Join(cfg.DataDir, "artwork"))
 
@@ -162,10 +171,14 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	// Rejecting LAN requests after accepting them would still mean the port is
 	// open and answering. Not binding at all makes accidental exposure
 	// impossible rather than merely discouraged.
-	listenAddr, lanBound := bindAddr(cfg.Addr, settings.Get().Secured())
+	userCount, err := st.CountUsers(context.Background())
+	if err != nil {
+		return err
+	}
+	listenAddr, lanBound := bindAddr(cfg.Addr, userCount > 0)
 	if !lanBound {
-		log.Warn("no password set — listening on loopback only",
-			"addr", listenAddr, "hint", "set a password in Settings, then restart to reach LANcast from other devices")
+		log.Warn("no account set — listening on loopback only",
+			"addr", listenAddr, "hint", "create an account in the browser, then restart to reach LANcast from other devices")
 	}
 
 	srv := &http.Server{
@@ -325,6 +338,35 @@ func loadTLSCert(cfg config.Config, s config.Settings, log *slog.Logger) (tls.Ce
 	log.Info("using a self-signed certificate; browsers will warn until it is trusted",
 		"dir", dir, "hint", "set tls_cert_file and tls_key_file in settings to use your own certificate")
 	return cert, "self-signed", nil
+}
+
+// seedLegacyOwner completes the multi-user migration (ADR 0015): with no
+// accounts but a legacy single password still in config.json, that password
+// becomes the 'local' admin and is then cleared from settings, so credentials
+// have one home rather than two. A fresh install has neither and is left for
+// setup to create the first admin.
+func seedLegacyOwner(st *store.Store, settings *config.SettingsStore, log *slog.Logger) error {
+	ctx := context.Background()
+	n, err := st.CountUsers(ctx)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	cur := settings.Get()
+	if cur.PasswordHash == "" {
+		return nil
+	}
+	if _, err := st.CreateUser(ctx, store.LocalUserID, "admin", cur.PasswordHash, store.RoleAdmin); err != nil {
+		return fmt.Errorf("seed local admin: %w", err)
+	}
+	cur.PasswordHash = ""
+	if err := settings.Set(cur); err != nil {
+		return fmt.Errorf("clear legacy password: %w", err)
+	}
+	log.Info("migrated the single password to a 'local' admin account", "name", "admin")
+	return nil
 }
 
 func newWorker(st *store.Store, reg *meta.Registry, art *artwork.Cache,

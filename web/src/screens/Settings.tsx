@@ -8,9 +8,17 @@ import {
   useStartScan,
   useRefreshLibrary,
   useScanStatus,
+  useCurrentUser,
+  useIsAdmin,
+  useUsers,
+  useCreateUser,
+  useDeleteUser,
+  useResetUserPassword,
+  useChangePassword,
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
-import type { Library } from "@/api/types";
+import { ApiFailure } from "@/api/client";
+import type { AuthUser, Library } from "@/api/types";
 import "./Settings.css";
 
 const KEYS: [string, string][] = [
@@ -247,15 +255,233 @@ function ProviderKey({
   );
 }
 
-export function Settings() {
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiFailure) return err.message;
+  if (err instanceof Error) return err.message;
+  return "Something went wrong.";
+}
+
+function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
+  const del = useDeleteUser();
+  const reset = useResetUserPassword();
+  const [resetting, setResetting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [done, setDone] = useState(false);
+
+  return (
+    <div className="set-lib">
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">
+            {user.name}
+            {isSelf && <span className="set-tag">you</span>}
+          </div>
+          <div className="set-row__sub">{user.role}</div>
+        </div>
+        <div className="set-row__actions">
+          {resetting ? (
+            <>
+              <input
+                className="set-input"
+                type="password"
+                placeholder="New password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                className="set-btn"
+                disabled={!password || reset.isPending}
+                onClick={() =>
+                  reset.mutate(
+                    { id: user.id, password },
+                    {
+                      onSuccess: () => {
+                        setResetting(false);
+                        setPassword("");
+                        setDone(true);
+                      },
+                    },
+                  )
+                }
+              >
+                Set
+              </button>
+              <button className="set-btn" onClick={() => setResetting(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              {done && <span className="set-row__sub">password reset</span>}
+              <button className="set-btn" onClick={() => setResetting(true)}>
+                Reset password
+              </button>
+              {!isSelf && (
+                <button
+                  className="set-btn set-btn--danger"
+                  disabled={del.isPending}
+                  onClick={() => del.mutate(user.id)}
+                >
+                  Remove
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {(del.isError || reset.isError) && (
+        <span className="set-error">
+          {errorMessage(del.error ?? reset.error)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AddUser() {
+  const create = useCreateUser();
+  const [open, setOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("member");
+
+  if (!open) {
+    return (
+      <button className="set-btn" onClick={() => setOpen(true)}>
+        + Add user
+      </button>
+    );
+  }
+  return (
+    <form
+      className="set-add"
+      onSubmit={(e) => {
+        e.preventDefault();
+        create.mutate(
+          { username, password, role },
+          {
+            onSuccess: () => {
+              setOpen(false);
+              setUsername("");
+              setPassword("");
+              setRole("member");
+            },
+          },
+        );
+      }}
+    >
+      <input
+        className="set-input"
+        placeholder="Username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        required
+      />
+      <input
+        className="set-input"
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+      <select
+        className="set-input"
+        value={role}
+        onChange={(e) => setRole(e.target.value)}
+      >
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </select>
+      <button className="set-btn" type="submit" disabled={create.isPending}>
+        Create
+      </button>
+      <button className="set-btn" type="button" onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+      {create.isError && (
+        <span className="set-error">{errorMessage(create.error)}</span>
+      )}
+    </form>
+  );
+}
+
+// Admin-only. Members never mount this, so its admin-only queries never fire.
+function UsersSection() {
+  const { data: users } = useUsers();
+  const me = useCurrentUser();
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Users</span>
+      {users?.map((u) => (
+        <UserRow key={u.id} user={u} isSelf={u.id === me?.id} />
+      ))}
+      <AddUser />
+    </section>
+  );
+}
+
+// Everyone can change their own password. The server revokes the caller's
+// sessions on success, so the auth gate returns them to the login screen.
+function AccountSection() {
+  const change = useChangePassword();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Account</span>
+      <form
+        className="set-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          change.mutate({ current_password: current, new_password: next });
+        }}
+      >
+        <input
+          className="set-input"
+          type="password"
+          placeholder="Current password"
+          autoComplete="current-password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+          required
+        />
+        <input
+          className="set-input"
+          type="password"
+          placeholder="New password"
+          autoComplete="new-password"
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          required
+        />
+        <button
+          className="set-btn"
+          type="submit"
+          disabled={change.isPending || !current || !next}
+        >
+          Change password
+        </button>
+        {change.isError && (
+          <span className="set-error">{errorMessage(change.error)}</span>
+        )}
+      </form>
+    </section>
+  );
+}
+
+// The metadata, playback, and library sections all read admin-only settings, so
+// they live in a child that members never mount.
+function AdminSections() {
   const { data: libraries } = useLibraries();
-  const { data: settings } = useSettings();
+  const { data: settings } = useSettings(true);
   const update = useUpdateSettings();
 
   return (
-    <div className="settings">
-      <h1 className="settings__title">Settings</h1>
-
+    <>
       <section className="settings__section">
         <span className="section-label">Libraries</span>
         {libraries?.map((lib) => (
@@ -333,17 +559,40 @@ export function Settings() {
         )}
       </section>
 
-      <section className="settings__section">
-        <span className="section-label">Keyboard</span>
-        <div className="set-keys">
-          {KEYS.map(([k, d]) => (
-            <div className="set-key" key={k}>
-              <kbd>{k}</kbd>
-              <span>{d}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+    </>
+  );
+}
+
+function KeyboardSection() {
+  return (
+    <section className="settings__section">
+      <span className="section-label">Keyboard</span>
+      <div className="set-keys">
+        {KEYS.map(([k, d]) => (
+          <div className="set-key" key={k}>
+            <kbd>{k}</kbd>
+            <span>{d}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function Settings() {
+  const isAdmin = useIsAdmin();
+
+  return (
+    <div className="settings">
+      <h1 className="settings__title">Settings</h1>
+      {isAdmin && (
+        <>
+          <AdminSections />
+          <UsersSection />
+        </>
+      )}
+      <AccountSection />
+      <KeyboardSection />
     </div>
   );
 }

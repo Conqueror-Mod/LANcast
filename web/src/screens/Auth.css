@@ -1,0 +1,113 @@
+/* The auth screens sit on the nebula field with one quiet card. Gold is earned
+   here too: dormant on the submit button at rest, full-strength on focus. */
+.auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth__card {
+  width: 100%;
+  max-width: 360px;
+  padding: 32px 30px 30px;
+  border-radius: var(--radius-panel);
+  background: rgba(10, 15, 34, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(6px);
+}
+
+.auth__brand {
+  font-size: 13px;
+  letter-spacing: 0.32em;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.auth__label {
+  margin-top: 22px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+}
+
+.auth__intro {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.auth__form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth__field > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.auth__field input {
+  padding: 9px 11px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(5, 7, 15, 0.6);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.auth__field input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.auth__error {
+  margin: 0;
+  font-size: 12px;
+  color: #e08a7a;
+}
+
+.auth__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.auth__submit {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.auth__submit:hover:not(:disabled),
+.auth__submit:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.auth__submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

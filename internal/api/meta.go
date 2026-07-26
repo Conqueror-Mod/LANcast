@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"lancast/internal/media"
 	"lancast/internal/meta"
 	"lancast/internal/store"
 )
@@ -18,7 +19,7 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -131,7 +132,7 @@ func (s *Server) deleteLock(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "unknown field: "+field)
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 	if err := s.st.UnlockField(r.Context(), id, field); err != nil {
@@ -141,6 +142,15 @@ func (s *Server) deleteLock(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func contains(fields []string, want string) bool {
+	for _, f := range fields {
+		if f == want {
+			return true
+		}
+	}
+	return false
+}
+
 // candidates searches providers for possible matches.
 func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
@@ -148,7 +158,7 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
@@ -158,11 +168,29 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		q.Title = v
 		q.Series = v
 	} else {
-		if it.Series != nil {
-			q.Series = *it.Series
-		}
-		if it.Year != nil {
-			q.Year = *it.Year
+		// GetItem does not load locks, so fetch them: a title the user set by
+		// hand is locked and its intent is honoured; a title from a match is not,
+		// and — since Fix Match exists to correct that very match — searching it
+		// would circle the wrong identity. Re-parse the filename in that case to
+		// recover the identity the scanner started from.
+		locks, _ := s.st.LockedFields(r.Context(), it.ID)
+		if contains(locks, meta.FieldTitle) {
+			if it.Series != nil {
+				q.Series = *it.Series
+			}
+			if it.Year != nil {
+				q.Year = *it.Year
+			}
+		} else if lib, err := s.st.GetLibrary(r.Context(), it.LibraryID); err == nil {
+			info := media.Parse(lib.Path, it.Path)
+			if info.Series != "" {
+				q.Title, q.Series = info.Series, info.Series
+			} else if info.Title != "" {
+				q.Title = info.Title
+			}
+			if info.Year > 0 {
+				q.Year = info.Year
+			}
 		}
 	}
 
@@ -190,7 +218,8 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -211,13 +240,12 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.st.SetMatch(r.Context(), id, req.Provider, req.ExternalID, meta.StateLocked, 1.0); err != nil {
-		s.writeInternal(w, err, "set match")
-		return
-	}
-	// Requeue so the confirmed identity is fetched and applied.
-	if err := s.st.ClearMetadataStamp(r.Context(), 0, id); err != nil {
-		s.writeInternal(w, err, "requeue item")
+	// Fetch and apply the chosen record synchronously. It cannot go through the
+	// background pass: that queue skips locked items and re-searches, which would
+	// re-pick the candidate the user just rejected. The item is then locked so a
+	// rescan reconciles files without re-litigating this identity.
+	if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID); err != nil {
+		s.writeInternal(w, err, "apply match")
 		return
 	}
 	s.enrichSoon()
@@ -236,7 +264,7 @@ func (s *Server) trailer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
@@ -284,7 +312,7 @@ func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 	if err := s.st.ClearMetadataStamp(r.Context(), 0, id); err != nil {
@@ -319,7 +347,7 @@ func (s *Server) enrichStatus(w http.ResponseWriter, r *http.Request) {
 
 // respondItem writes an item with its detail fields attached.
 func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
-	it, err := s.st.GetItem(r.Context(), id, localUser)
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "no such item")

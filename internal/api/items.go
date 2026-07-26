@@ -23,7 +23,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list items")
 		return
 	}
-	if err := s.st.AttachProgress(r.Context(), items, localUser); err != nil {
+	if err := s.st.AttachProgress(r.Context(), items, s.userID(r)); err != nil {
 		s.writeInternal(w, err, "attach progress")
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 // first — the home screen's first shelf. Progress is included so tiles can draw
 // their resume bar without a second call.
 func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
-	items, err := s.st.ContinueWatching(r.Context(), localUser, queryInt(r, "limit"))
+	items, err := s.st.ContinueWatching(r.Context(), s.userID(r), queryInt(r, "limit"))
 	if err != nil {
 		s.writeInternal(w, err, "continue watching")
 		return
@@ -58,7 +58,7 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 	s.respondItem(w, r, id)
@@ -83,10 +83,10 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.st.GetItem(r.Context(), id, localUser); s.notFoundOr(w, err, "get item", "no such item") {
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
-	if err := s.st.SaveProgress(r.Context(), id, localUser, req.PositionMS, req.Watched); err != nil {
+	if err := s.st.SaveProgress(r.Context(), id, s.userID(r), req.PositionMS, req.Watched); err != nil {
 		s.writeInternal(w, err, "save progress")
 		return
 	}
