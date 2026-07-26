@@ -9,6 +9,7 @@ import type {
   Item,
   ItemsPage,
   Library,
+  MatchCandidate,
   ScanStatus,
   Settings,
   SettingsUpdate,
@@ -99,6 +100,49 @@ export function useItem(id: number) {
 
 // The trailer is a separate call: it is optional, and a detail page should
 // render fully without waiting on it. A 404 is a normal "no trailer" answer.
+// Provider matches for correcting an item's identity. Lazy: only searches once
+// a query is set, so opening Fix match does not fire a provider call until asked.
+export function useCandidates(id: number, query: string | null) {
+  return useQuery({
+    queryKey: ["candidates", id, query],
+    queryFn: ({ signal }) => {
+      const p = query ? `?q=${encodeURIComponent(query)}` : "";
+      return apiGet<MatchCandidate[]>(`/api/items/${id}/candidates${p}`, signal);
+    },
+    enabled: id > 0 && query !== null,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+// Confirming a match locks the identity against re-scoring and requeues the
+// item for enrichment. The item (and any list showing it) is refreshed.
+export function useApplyMatch(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (c: MatchCandidate) =>
+      apiSend(`/api/items/${id}/match`, "POST", {
+        provider: c.Provider,
+        external_id: c.ExternalID,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["item", id] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["recently-added"] });
+    },
+  });
+}
+
+// Releasing a locked field lets a future refresh or match overwrite it again.
+export function useUnlockField(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (field: string) =>
+      apiSend(`/api/items/${id}/locks/${encodeURIComponent(field)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["item", id] }),
+  });
+}
+
 export function useTrailer(id: number) {
   return useQuery({
     queryKey: ["trailer", id],
