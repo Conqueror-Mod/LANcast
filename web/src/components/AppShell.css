@@ -36,7 +36,8 @@
 }
 
 .app-shell__lib,
-.app-shell__settings {
+.app-shell__settings,
+.app-shell__review {
   font-size: 13px;
   color: var(--text-muted);
   white-space: nowrap;
@@ -46,19 +47,40 @@
 }
 
 .app-shell__lib:hover,
-.app-shell__settings:hover {
+.app-shell__settings:hover,
+.app-shell__review:hover {
   color: var(--text-secondary);
 }
 
 /* Gold marks where you are — nothing else. */
 .app-shell__lib.is-active,
-.app-shell__settings.is-active {
+.app-shell__settings.is-active,
+.app-shell__review.is-active {
   color: var(--text-primary);
   border-bottom-color: var(--gold);
 }
 
+/* The review link and settings form the right-aligned group. */
+.app-shell__review {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .app-shell__settings {
   margin-left: auto;
+}
+
+/* A neutral count, not gold — this is a quantity, not focus. */
+.app-shell__badge {
+  font-size: 10px;
+  min-width: 16px;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .app-shell__main {

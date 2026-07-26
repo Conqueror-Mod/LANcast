@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useLibraries } from "@/api/hooks";
+import { useLibraries, useReview } from "@/api/hooks";
 import type { ReactNode } from "react";
 import "./AppShell.css";
 
@@ -7,7 +7,9 @@ import "./AppShell.css";
 // convenience, never a gate (the deliberate fix for the main Plex complaint).
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: libraries } = useLibraries();
+  const { data: review } = useReview();
   const location = useLocation();
+  const reviewCount = review?.total ?? 0;
 
   return (
     <div className="app-shell">
@@ -28,6 +30,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
+        {reviewCount > 0 && (
+          <NavLink
+            to="/review"
+            className={({ isActive }) =>
+              "app-shell__review" + (isActive ? " is-active" : "")
+            }
+          >
+            Review<span className="app-shell__badge">{reviewCount}</span>
+          </NavLink>
+        )}
         <NavLink
           to="/settings"
           className={
