@@ -54,20 +54,22 @@ func (e Encoder) EncoderArgs(quality int) []string {
 		args = append(args, e.qualityFlag, strconv.Itoa(quality))
 	}
 
-	if e.Hardware {
-		// Hardware encoders need the profile and level stated explicitly;
-		// several default to settings browsers refuse, which produces a black
-		// rectangle rather than an error.
-		args = append(args, "-profile:v", "high", "-level", "4.1")
-		// AMF in particular defaults to a rate control that ignores -qp_i
-		// unless told to use constant QP.
-		if e.Name == "h264_amf" {
-			args = append(args, "-rc", "cqp", "-qp_p", strconv.Itoa(quality))
-		}
-		return args
+	// Force 8-bit 4:2:0 for every encoder. A 10-bit source — common in HEVC
+	// Main10 — otherwise reaches an H.264 encoder that cannot accept 10-bit, and
+	// the hardware encoders answer that with a black frame rather than an error.
+	// There is no -hwaccel decode, so frames are in system memory and this is a
+	// plain swscale conversion the encoder accepts; on an already-8-bit source it
+	// is a no-op. Profile and level are stated explicitly for the same reason —
+	// several hardware encoders default to settings browsers refuse.
+	args = append(args, "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1")
+
+	// AMF defaults to a rate control that ignores -qp_i unless told to use
+	// constant QP.
+	if e.Name == "h264_amf" {
+		args = append(args, "-rc", "cqp", "-qp_p", strconv.Itoa(quality))
 	}
 
-	return append(args, "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1")
+	return args
 }
 
 // DetectEncoders returns the usable encoders, best first, always ending with

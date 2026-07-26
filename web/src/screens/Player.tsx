@@ -71,10 +71,14 @@ export function Player() {
   useSuspendFocus();
   useBackHandler(close);
 
-  // Total runtime: the element's own duration when it knows it (direct play),
-  // otherwise the probed runtime, since a transcode never reports one.
-  const totalDuration =
-    duration || (item?.duration_ms ? item.duration_ms / 1000 : 0);
+  // Total runtime. A transcode or remux streams a fragmented MP4 whose element
+  // duration is whatever has been produced so far — a few seconds — so for those
+  // the probed runtime is authoritative and the element's value is ignored.
+  // Direct play trusts the element, which is exact for the actual file.
+  const probedDuration = item?.duration_ms ? item.duration_ms / 1000 : 0;
+  const totalDuration = transcoding.current
+    ? probedDuration || duration
+    : duration || probedDuration;
 
   const displayTime = transcoding.current ? offset.current + current : current;
 
