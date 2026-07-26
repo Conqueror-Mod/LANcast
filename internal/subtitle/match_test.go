@@ -47,24 +47,66 @@ func TestHeightToResolution(t *testing.T) {
 	}
 }
 
-// A hash match means the subtitle was timed against these exact bytes. Nothing
-// inferred from names can beat that.
-func TestHashMatchWinsOutright(t *testing.T) {
+// A hash match whose release traits agree scores 1.0 and wins: the hash still
+// carries decisive weight, it is just no longer trusted blindly across releases.
+func TestHashMatchWithAgreeingTraitsWins(t *testing.T) {
 	target := Target{FileName: "Film.2020.1080p.BluRay-GROUP.mkv", FPS: 23.976, Height: 1080}
 	cands := []Candidate{
-		{FileID: 1, Release: "Film.2020.1080p.BluRay-GROUP", FPS: 23.976, DownloadCount: 50000},
-		{FileID: 2, Release: "Film.2020.720p.WEB-OTHER", FPS: 25, DownloadCount: 3, HashMatch: true},
+		{FileID: 1, Release: "Film.2020.1080p.WEB-OTHER", FPS: 23.976, DownloadCount: 50000},
+		{FileID: 2, Release: "Film.2020.1080p.BluRay-GROUP", FPS: 23.976, DownloadCount: 3, HashMatch: true},
 	}
 	Rank(target, cands)
 
 	if cands[0].FileID != 2 {
-		t.Fatalf("best = %d, want the hash match to win", cands[0].FileID)
+		t.Fatalf("best = %d, want the agreeing hash match to win", cands[0].FileID)
 	}
 	if cands[0].Score != 1.0 {
-		t.Errorf("hash match scored %.2f, want 1.0", cands[0].Score)
+		t.Errorf("agreeing hash match scored %.2f, want 1.0", cands[0].Score)
 	}
 	if _, auto := BestAutoMatch(cands); !auto {
-		t.Error("a hash match did not qualify for auto-apply")
+		t.Error("a hash match with agreeing traits did not qualify for auto-apply")
+	}
+}
+
+// A claimed hash match at a conflicting frame rate drifts through the film, so
+// it must not win over — or auto-apply above — a release that matches this file,
+// however many more downloads it has. OpenSubtitles marks several different
+// encodes as matching one file's hash, so the flag alone is not proof.
+func TestHashMatchDemotedOnFrameRateConflict(t *testing.T) {
+	target := Target{FileName: "Film.2020.1080p.BluRay-GROUP.mkv", FPS: 23.976, Height: 1080}
+	cands := []Candidate{
+		{FileID: 1, Release: "Film.2020.1080p.BluRay-GROUP", FPS: 23.976, DownloadCount: 10},
+		{FileID: 2, Release: "Film.2020.DVDRip", FPS: 25, DownloadCount: 90000, HashMatch: true},
+	}
+	Rank(target, cands)
+
+	if cands[0].FileID != 1 {
+		t.Fatalf("best = %d, want the matching frame rate over the claimed hash match", cands[0].FileID)
+	}
+	for _, c := range cands {
+		if c.FileID == 2 && c.Score >= AutoApply {
+			t.Errorf("a frame-rate-conflicting hash match scored %.2f and would auto-apply", c.Score)
+		}
+	}
+}
+
+// The Corpse Bride case from the field: OpenSubtitles returns several releases
+// of the same film, all flagged as hash matches. They must not all tie at 1.0
+// and sort by downloads — which puts a lower-resolution rip on top of a 1080p
+// file. The release that matches this file ranks first.
+func TestMultipleHashMatchesRankByRelease(t *testing.T) {
+	target := Target{FileName: "Corpse.Bride.2005.1080p.BluRay.x264.mkv", FPS: 23.976, Height: 1080}
+	cands := []Candidate{
+		{FileID: 1, Release: "Corpse.Bride.2005.720p.BluRay.x264", FPS: 23.976, DownloadCount: 90000, HashMatch: true},
+		{FileID: 2, Release: "Corpse.Bride.2005.1080p.BluRay.x264", FPS: 23.976, DownloadCount: 20000, HashMatch: true},
+	}
+	Rank(target, cands)
+
+	if cands[0].FileID != 2 {
+		t.Fatalf("best = %d, want the 1080p release over the more-downloaded 720p hash match", cands[0].FileID)
+	}
+	if cands[0].Score <= cands[1].Score {
+		t.Error("the release-matching hash match should outscore the mismatched one, not tie")
 	}
 }
 
