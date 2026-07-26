@@ -8,9 +8,13 @@ import (
 	"time"
 )
 
-// Session is an authenticated login.
+// Session is an authenticated login, resolved together with the account it
+// belongs to. Role and Name come from the joined user row, so every handler can
+// authorize without a second query.
 type Session struct {
 	UserID    string
+	Name      string
+	Role      string
 	ExpiresAt int64
 }
 
@@ -29,13 +33,18 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash, userID string, ttl
 	return nil
 }
 
-// LookupSession returns the session for a token hash if it exists and has not
-// expired. Expired rows are treated as absent whether or not cleanup has run.
+// LookupSession returns the session for a token hash if it exists, has not
+// expired, and still belongs to a live user. Expired rows are treated as absent
+// whether or not cleanup has run. The inner join to user means a deleted
+// account's sessions stop resolving immediately, without a schema-level cascade.
 func (s *Store) LookupSession(ctx context.Context, tokenHash string) (*Session, error) {
 	var sess Session
-	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id, expires_at FROM session WHERE token_hash = ?`, tokenHash).
-		Scan(&sess.UserID, &sess.ExpiresAt)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT s.user_id, u.name, u.role, s.expires_at
+		FROM session s
+		JOIN user u ON u.id = s.user_id
+		WHERE s.token_hash = ?`, tokenHash).
+		Scan(&sess.UserID, &sess.Name, &sess.Role, &sess.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
