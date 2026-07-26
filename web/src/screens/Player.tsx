@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useItem } from "@/api/hooks";
+import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend } from "@/api/client";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
+import { SubtitleMenu } from "@/components/SubtitleMenu";
 import "./Player.css";
 
 interface Decision {
@@ -27,6 +28,8 @@ export function Player() {
   const itemID = Number(id);
   const navigate = useNavigate();
   const { data: item } = useItem(itemID);
+  const { data: subtitles } = useSubtitles(itemID);
+  const tracks = subtitles ?? [];
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,6 +46,26 @@ export function Player() {
   const [muted, setMuted] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [note, setNote] = useState("");
+  const [subKey, setSubKey] = useState<string | null>(null);
+  const [subMenuOpen, setSubMenuOpen] = useState(false);
+
+  const activeSub = tracks.find((t) => t.key === subKey && t.available) ?? null;
+
+  // Cycle Off → each usable track → Off, for the [ and ] keys. Bitmap tracks
+  // that cannot become WebVTT are skipped; they are pickable in the menu (with
+  // their reason) but not worth cycling to.
+  const cycleSub = useCallback(
+    (dir: 1 | -1) => {
+      const order: (string | null)[] = [
+        null,
+        ...tracks.filter((t) => t.available).map((t) => t.key),
+      ];
+      const idx = order.indexOf(subKey);
+      const next = (idx + dir + order.length) % order.length;
+      setSubKey(order[next]);
+    },
+    [tracks, subKey],
+  );
 
   const close = useCallback(() => navigate(-1), [navigate]);
   useSuspendFocus();
@@ -193,13 +216,29 @@ export function Player() {
           e.preventDefault();
           seekBy(10);
           break;
+        case "[":
+          cycleSub(-1);
+          break;
+        case "]":
+          cycleSub(1);
+          break;
       }
       wakeChrome();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [togglePlay, toggleFullscreen, toggleMute, seekBy]);
+  }, [togglePlay, toggleFullscreen, toggleMute, seekBy, cycleSub]);
+
+  // A browser will not swap a <track> src reliably once parsed, so the active
+  // track is keyed and remounted on change; here it is switched to showing.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    for (const tt of v.textTracks) {
+      tt.mode = activeSub ? "showing" : "disabled";
+    }
+  }, [activeSub, subKey]);
 
   // ---- auto-hide chrome -----------------------------------------------------
   const idleTimer = useRef<number>();
@@ -233,6 +272,12 @@ export function Player() {
           if (!transcoding.current && startedFrom.current > 0) {
             v.currentTime = startedFrom.current;
           }
+          // A transcode seek reloads the source, which re-parses the <track> at
+          // its default mode. Re-assert the selection so subtitles survive a
+          // seek rather than silently switching off.
+          for (const tt of v.textTracks) {
+            tt.mode = activeSub ? "showing" : "disabled";
+          }
         }}
         onTimeUpdate={(e) => {
           setCurrent(e.currentTarget.currentTime);
@@ -248,7 +293,18 @@ export function Player() {
           saveProgress(true);
         }}
         onEnded={() => saveProgress(true)}
-      />
+      >
+        {activeSub && (
+          <track
+            key={activeSub.key}
+            kind="subtitles"
+            default
+            src={`/api/items/${itemID}/subtitles/${encodeURIComponent(activeSub.key)}.vtt`}
+            srcLang={activeSub.language || undefined}
+            label={activeSub.label}
+          />
+        )}
+      </video>
 
       <div className="player__chrome">
         <div className="player__top">
@@ -276,8 +332,29 @@ export function Player() {
               {clock(displayTime)} <span className="player__time-sep">/</span>{" "}
               {clock(totalDuration)}
             </span>
+
+            <div className="player__subs player__icon--right">
+              <button
+                className={"player__icon" + (activeSub ? " is-on" : "")}
+                onClick={() => setSubMenuOpen((o) => !o)}
+                aria-label="Subtitles"
+                aria-expanded={subMenuOpen}
+              >
+                CC
+              </button>
+              {subMenuOpen && (
+                <SubtitleMenu
+                  tracks={tracks}
+                  activeKey={subKey}
+                  onSelect={(key) => {
+                    setSubKey(key);
+                    setSubMenuOpen(false);
+                  }}
+                />
+              )}
+            </div>
             <button
-              className="player__icon player__icon--right"
+              className="player__icon"
               onClick={toggleFullscreen}
               aria-label="Fullscreen"
             >

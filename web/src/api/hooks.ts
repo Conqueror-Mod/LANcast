@@ -1,6 +1,12 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiGet } from "./client";
-import type { Item, ItemsPage, Library, Trailer } from "./types";
+import type {
+  Item,
+  ItemsPage,
+  Library,
+  SubtitleTrack,
+  Trailer,
+} from "./types";
 
 export function useLibraries() {
   return useQuery({
@@ -29,6 +35,18 @@ export function useTrailer(id: number) {
         .catch(() => null),
     enabled: id > 0,
     staleTime: Infinity,
+  });
+}
+
+export function useSubtitles(id: number) {
+  return useQuery({
+    queryKey: ["subtitles", id],
+    queryFn: ({ signal }) =>
+      apiGet<{ tracks: SubtitleTrack[] }>(
+        `/api/items/${id}/subtitles`,
+        signal,
+      ).then((r) => r.tracks),
+    enabled: id > 0,
   });
 }
 
