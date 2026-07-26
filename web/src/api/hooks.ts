@@ -1,12 +1,34 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiGet } from "./client";
-import type { ItemsPage, Library } from "./types";
+import type { Item, ItemsPage, Library, Trailer } from "./types";
 
 export function useLibraries() {
   return useQuery({
     queryKey: ["libraries"],
     queryFn: ({ signal }) => apiGet<Library[]>("/api/libraries", signal),
     staleTime: 30_000,
+  });
+}
+
+export function useItem(id: number) {
+  return useQuery({
+    queryKey: ["item", id],
+    queryFn: ({ signal }) => apiGet<Item>(`/api/items/${id}`, signal),
+    enabled: id > 0,
+  });
+}
+
+// The trailer is a separate call: it is optional, and a detail page should
+// render fully without waiting on it. A 404 is a normal "no trailer" answer.
+export function useTrailer(id: number) {
+  return useQuery({
+    queryKey: ["trailer", id],
+    queryFn: ({ signal }) =>
+      apiGet<{ trailer: Trailer | null }>(`/api/items/${id}/trailer`, signal)
+        .then((r) => r.trailer)
+        .catch(() => null),
+    enabled: id > 0,
+    staleTime: Infinity,
   });
 }
 

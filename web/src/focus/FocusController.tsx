@@ -33,6 +33,7 @@ interface FocusAPI {
   unregister: (id: string) => void;
   setSelect: (id: string, onSelect?: () => void) => void;
   focusFirst: () => void;
+  setBackHandler: (fn: (() => void) | null) => void;
 }
 
 const FocusContext = createContext<FocusAPI | null>(null);
@@ -109,6 +110,11 @@ function nearest(
 export function FocusProvider({ children }: { children: ReactNode }) {
   const entries = useRef(new Map<string, Entry>());
   const currentID = useRef<string | null>(null);
+  const backHandler = useRef<(() => void) | null>(null);
+
+  const setBackHandler = useCallback((fn: (() => void) | null) => {
+    backHandler.current = fn;
+  }, []);
 
   const setCurrent = useCallback((id: string | null) => {
     const prev = currentID.current;
@@ -169,6 +175,13 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   );
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
+    // Escape is Back/close, resolved centrally so no screen wires its own key.
+    if (e.key === "Escape" && backHandler.current) {
+      e.preventDefault();
+      backHandler.current();
+      return;
+    }
+
     const id = currentID.current;
     if (!id) return;
     const entry = entries.current.get(id);
@@ -200,7 +213,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, [onFocusIn, onKeyDown]);
 
-  const api: FocusAPI = { register, unregister, setSelect, focusFirst };
+  const api: FocusAPI = { register, unregister, setSelect, focusFirst, setBackHandler };
   return <FocusContext.Provider value={api}>{children}</FocusContext.Provider>;
 }
 
@@ -241,4 +254,14 @@ export function useFocusable(onSelect?: () => void) {
   }, [api, id, onSelect]);
 
   return { ref: setRef, tabIndex: -1 as const, "data-focus-id": id };
+}
+
+// useBackHandler registers what Escape should do for the current screen, and
+// clears it on unmount so the previous screen's handler is not left dangling.
+export function useBackHandler(fn: () => void) {
+  const api = useFocusController();
+  useEffect(() => {
+    api.setBackHandler(fn);
+    return () => api.setBackHandler(null);
+  }, [api, fn]);
 }

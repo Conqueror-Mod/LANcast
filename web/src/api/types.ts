@@ -28,6 +28,18 @@ export interface Progress {
   watched: boolean;
 }
 
+export interface Credit {
+  name: string;
+  role: string;
+  character?: string;
+}
+
+export interface Trailer {
+  site: string;
+  key: string;
+  name?: string;
+}
+
 export interface Item {
   id: number;
   library_id: number;
@@ -43,6 +55,10 @@ export interface Item {
   parent_id: number | null;
   overview?: string | null;
   rating?: number | null;
+  content_rating?: string | null;
+  released_at?: number | null;
+  genres?: string[];
+  credits?: Credit[];
   match_state?: MatchState;
   metadata_updated_at?: number | null;
   artwork?: Artwork;
