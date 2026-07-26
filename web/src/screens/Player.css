@@ -1,0 +1,108 @@
+/* The player is a modal surface: it fills the viewport, above the app shell,
+   and the video is the only content. Chrome recedes entirely. */
+.player {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  overflow: hidden;
+}
+
+.player--idle {
+  cursor: none;
+}
+
+.player__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Controls fade in on movement, out after idle. Everything here is neutral —
+   gold is spent only on the scrubber fill, where it signals position. */
+.player__chrome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity var(--dur-base) ease;
+}
+
+.player--idle .player__chrome {
+  opacity: 0;
+}
+
+.player__chrome > * {
+  pointer-events: auto;
+}
+
+.player__top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+}
+
+.player__title {
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.player__note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.player__bottom {
+  padding: 12px 24px 20px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+}
+
+.player__controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.player__icon {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-tile);
+  line-height: 1;
+  transition: color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+
+.player__icon:hover,
+.player__icon:focus {
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.player__icon--play {
+  font-size: 18px;
+}
+
+.player__icon--right {
+  margin-left: auto;
+}
+
+.player__time {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.player__time-sep {
+  color: var(--text-faint);
+}

@@ -34,6 +34,7 @@ interface FocusAPI {
   setSelect: (id: string, onSelect?: () => void) => void;
   focusFirst: () => void;
   setBackHandler: (fn: (() => void) | null) => void;
+  setSuspended: (v: boolean) => void;
 }
 
 const FocusContext = createContext<FocusAPI | null>(null);
@@ -111,9 +112,18 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   const entries = useRef(new Map<string, Entry>());
   const currentID = useRef<string | null>(null);
   const backHandler = useRef<(() => void) | null>(null);
+  const suspended = useRef(false);
 
   const setBackHandler = useCallback((fn: (() => void) | null) => {
     backHandler.current = fn;
+  }, []);
+
+  // A modal transport surface (the player) suspends spatial navigation: while
+  // it is open, arrows mean seek, not move-focus. This is the one place a
+  // component owns its own keys, and it does so by taking the whole layer, not
+  // by fighting the controller. Escape/back still resolves centrally.
+  const setSuspended = useCallback((v: boolean) => {
+    suspended.current = v;
   }, []);
 
   const setCurrent = useCallback((id: string | null) => {
@@ -182,6 +192,8 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (suspended.current) return;
+
     const id = currentID.current;
     if (!id) return;
     const entry = entries.current.get(id);
@@ -213,7 +225,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, [onFocusIn, onKeyDown]);
 
-  const api: FocusAPI = { register, unregister, setSelect, focusFirst, setBackHandler };
+  const api: FocusAPI = {
+    register,
+    unregister,
+    setSelect,
+    focusFirst,
+    setBackHandler,
+    setSuspended,
+  };
   return <FocusContext.Provider value={api}>{children}</FocusContext.Provider>;
 }
 
@@ -264,4 +283,14 @@ export function useBackHandler(fn: () => void) {
     api.setBackHandler(fn);
     return () => api.setBackHandler(null);
   }, [api, fn]);
+}
+
+// useSuspendFocus turns off spatial navigation while a modal transport surface
+// (the player) is mounted, and restores it on unmount.
+export function useSuspendFocus() {
+  const api = useFocusController();
+  useEffect(() => {
+    api.setSuspended(true);
+    return () => api.setSuspended(false);
+  }, [api]);
 }
