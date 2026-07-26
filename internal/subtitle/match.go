@@ -29,6 +29,15 @@ type Target struct {
 const (
 	AutoApply      = 0.90
 	PlausibleMatch = 0.55
+
+	// hashBand is the floor for a verified hash match: with no comparable
+	// traits a hash match still scores 1.0, but when the release traits are
+	// comparable the score spans [hashBand, 1.0] by how well they agree, so
+	// several subtitles claiming the same hash for different releases no longer
+	// tie at 1.0. The band stays at or above AutoApply so a hash match with a
+	// matching frame rate still auto-applies; a frame-rate *conflict* is handled
+	// separately and demoted below it.
+	hashBand = 0.95
 )
 
 // Rank scores candidates against the target and sorts them best first.
@@ -90,20 +99,63 @@ func score(target Target, want Traits, wantRes string, c Candidate) (float64, st
 			fmt.Sprintf("different year (%d)", got.Year)
 	}
 
-	// A hash match means this subtitle was timed against these exact bytes.
-	// Nothing inferred from names can beat that, so it short-circuits.
+	got := ParseRelease(name)
+	total, weight, reasons := traitAgreement(target, want, wantRes, got, c)
+
+	// A hash match claims this subtitle was timed against these exact bytes.
+	// But OpenSubtitles routinely marks several *different-release* subtitles as
+	// matching one file's hash — a DVD-rip, a 1080p BluRay, and a 720p WEB of the
+	// same film all flagged "exact file match" — when only one can match this
+	// file. So the claim is verified against the release traits we know from the
+	// probe rather than trusted outright.
 	if c.HashMatch {
-		return 1.0, "matches this exact file"
+		// A frame-rate conflict overrides the hash outright: a subtitle timed at
+		// a different frame rate drifts progressively out of sync no matter what
+		// the hash says. Like the title and year gates, this demotes, not drops.
+		if target.FPS > 0 && c.FPS > 0 && math.Abs(target.FPS-c.FPS) >= 0.02 {
+			return 0.5, fmt.Sprintf("hash claimed, but a different frame rate (%.3f) would drift", c.FPS)
+		}
+		// With no comparable traits there is nothing to check the claim against,
+		// so trust it. Otherwise score within a high band by trait agreement, so
+		// the subtitle whose release actually matches this file ranks above the
+		// other claimed hash matches instead of tying with them and being ordered
+		// by download count — which is how a DVD-rip ends up on a 1080p file.
+		if weight == 0 {
+			return 1.0, "matches this exact file"
+		}
+		s := clamp(hashBand + (1-hashBand)*(total/weight))
+		if total/weight >= 0.999 || len(reasons) == 0 {
+			return s, "matches this exact file"
+		}
+		return s, "hash match · " + strings.Join(reasons, ", ")
 	}
 
-	got := ParseRelease(name)
+	if weight == 0 {
+		// Nothing comparable. Popularity is all that is left, and it is a weak
+		// enough signal that the result must stay below auto-apply.
+		return clamp(0.30 + popularity(c.DownloadCount)*0.2), "no matching details; ranked by popularity"
+	}
 
-	var total, weight float64
-	var reasons []string
+	normalized := total / weight
+	// Popularity contributes a small amount and can never carry a candidate
+	// over the line on its own.
+	final := clamp(normalized*0.9 + popularity(c.DownloadCount)*0.1)
 
-	// Frame rate is the strongest name-independent signal available: a
-	// mismatch drifts progressively worse through the film rather than being
-	// a constant offset a viewer could ignore.
+	if len(reasons) == 0 {
+		return final, ""
+	}
+	return final, strings.Join(reasons, ", ")
+}
+
+// traitAgreement scores how well a candidate's release traits agree with the
+// target file, returning the weighted total, the total weight of the traits
+// that were comparable, and human-readable reasons. Shared by the name-based
+// path and by hash-match verification so the two cannot disagree about what
+// "the same release" means.
+func traitAgreement(target Target, want Traits, wantRes string, got Traits, c Candidate) (total, weight float64, reasons []string) {
+	// Frame rate is the strongest name-independent signal available: a mismatch
+	// drifts progressively worse through the film rather than being a constant
+	// offset a viewer could ignore.
 	if target.FPS > 0 && c.FPS > 0 {
 		weight += 0.35
 		if math.Abs(target.FPS-c.FPS) < 0.02 {
@@ -148,28 +200,37 @@ func score(target Target, want Traits, wantRes string, c Candidate) (float64, st
 		}
 	}
 
-	if wantRes != "" && got.Resolution != "" {
-		weight += 0.05
-		if wantRes == got.Resolution {
-			total += 0.05
+	// Resolution: the candidate's named resolution, or the one its source
+	// implies when it names none — a DVD source is standard-definition however
+	// the release is titled. This is what separates a DVD-rip subtitle from an
+	// HD one on a bare-named file: the file's resolution is known from the probe,
+	// and a DVD-sourced sub for a 1080p file is a different, lower master.
+	if wantRes != "" {
+		candRes := got.Resolution
+		if candRes == "" {
+			candRes = sourceResolution(got.Source)
+		}
+		if candRes != "" {
+			weight += 0.05
+			if candRes == wantRes {
+				total += 0.05
+			} else {
+				reasons = append(reasons, "different resolution ("+candRes+")")
+			}
 		}
 	}
 
-	if weight == 0 {
-		// Nothing comparable. Popularity is all that is left, and it is a weak
-		// enough signal that the result must stay below auto-apply.
-		return clamp(0.30 + popularity(c.DownloadCount)*0.2), "no matching details; ranked by popularity"
-	}
+	return total, weight, reasons
+}
 
-	normalized := total / weight
-	// Popularity contributes a small amount and can never carry a candidate
-	// over the line on its own.
-	final := clamp(normalized*0.9 + popularity(c.DownloadCount)*0.1)
-
-	if len(reasons) == 0 {
-		return final, ""
+// sourceResolution returns the resolution a source guarantees when the release
+// names none. Only DVD is unambiguous — it is always standard-definition;
+// BluRay, WEB, and remux span every resolution and imply nothing.
+func sourceResolution(source string) string {
+	if source == "dvd" {
+		return "480p"
 	}
-	return final, strings.Join(reasons, ", ")
+	return ""
 }
 
 // popularity compresses download counts into 0..1 with diminishing returns.

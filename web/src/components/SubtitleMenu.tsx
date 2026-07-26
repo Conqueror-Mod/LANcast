@@ -178,7 +178,7 @@ function SearchView({
             {c.release || c.file_name}
             <span className="submenu__sub">
               {Math.round(c.score * 100)}% ·{" "}
-              {c.hash_match ? "exact file match" : c.reason || "ranked"}
+              {c.reason || (c.hash_match ? "exact file match" : "ranked")}
               {c.download_count ? ` · ${c.download_count.toLocaleString()} dl` : ""}
             </span>
           </span>
