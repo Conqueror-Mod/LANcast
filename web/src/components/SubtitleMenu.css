@@ -67,3 +67,92 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* A track row that carries a remove control sits in a line with it. */
+.submenu__line {
+  display: flex;
+  align-items: stretch;
+}
+
+.submenu__line .submenu__row {
+  flex: 1;
+}
+
+.submenu__del {
+  flex: none;
+  width: 30px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-faint);
+  font-size: 15px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+}
+
+.submenu__del:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.submenu__search-open {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+}
+
+.submenu__searchbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 10px;
+}
+
+.submenu__back {
+  flex: none;
+  width: 28px;
+  height: 30px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: var(--radius-tile);
+}
+
+.submenu__back:hover {
+  color: var(--text-primary);
+}
+
+.submenu__input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(5, 7, 15, 0.6);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.submenu__input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.submenu__go {
+  flex: none;
+  padding: 7px 12px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.submenu__go:hover {
+  color: var(--text-primary);
+  border-color: var(--gold);
+}

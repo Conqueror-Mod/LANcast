@@ -51,6 +51,26 @@ export async function apiSend(
   }
 }
 
+// apiPost sends JSON and returns the parsed response body — for writes that
+// answer with data (a created resource), unlike apiSend which discards it.
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const parsed = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = parsed as ApiError | null;
+    throw new ApiFailure(
+      res.status,
+      err?.error?.code ?? "error",
+      err?.error?.message ?? res.statusText,
+    );
+  }
+  return parsed as T;
+}
+
 // artworkURL builds a content-addressed image URL. The bytes behind a hash
 // never change, so these are cached immutably by the server.
 export function artworkURL(
