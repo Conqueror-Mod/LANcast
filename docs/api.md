@@ -467,11 +467,12 @@ Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
 ### `GET /api/items/{id}/candidates?q=`
 
-Search the provider for re-match candidates. **Omit `q`** to score against the
-item's full identity — title *and* year — which is what makes the result a
-faithful diagnostic of the current match. Passing `q` overrides the title and
-drops the year, so use it only for a fresh user-driven search; a TMDB id or URL
-in `q` targets exactly.
+Search the provider for re-match candidates. **Omit `q`** to search by what the
+file is named — the identity re-derived from the filename — not by the current
+stored title, which after a wrong match *is* the wrong film; scoring against it
+would make the search circle the wrong identity. A title the user locked by hand
+is honoured instead. Passing `q` overrides the title (and drops the year), for a
+fresh user-driven search; a TMDB id or URL in `q` targets exactly.
 
 Each candidate carries a `Breakdown`: the sub-scores that combine, by their
 weights (title 0.60, year 0.30, popularity 0.10), into the total. This is what
@@ -488,8 +489,12 @@ than present a bare number.
 
 ### `POST /api/items/{id}/match`
 
-Apply a chosen candidate. Sets `match_state` to `locked`, so the item is never
-re-scored or re-searched by any later scan.
+Apply a chosen candidate. Fetches that exact record from the provider and
+applies it immediately (honouring locked fields), then sets `match_state` to
+`locked` so the item is never re-scored or re-searched by any later scan. The
+response is the updated item, already carrying the new metadata. Applying is
+synchronous and deliberately does not go through the background pass, which
+skips locked items and re-searches — that would re-pick the rejected candidate.
 
 ```json
 { "provider": "tmdb", "external_id": "335984" }

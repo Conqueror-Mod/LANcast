@@ -218,7 +218,8 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
-	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
@@ -239,13 +240,12 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.st.SetMatch(r.Context(), id, req.Provider, req.ExternalID, meta.StateLocked, 1.0); err != nil {
-		s.writeInternal(w, err, "set match")
-		return
-	}
-	// Requeue so the confirmed identity is fetched and applied.
-	if err := s.st.ClearMetadataStamp(r.Context(), 0, id); err != nil {
-		s.writeInternal(w, err, "requeue item")
+	// Fetch and apply the chosen record synchronously. It cannot go through the
+	// background pass: that queue skips locked items and re-searches, which would
+	// re-pick the candidate the user just rejected. The item is then locked so a
+	// rescan reconciles files without re-litigating this identity.
+	if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID); err != nil {
+		s.writeInternal(w, err, "apply match")
 		return
 	}
 	s.enrichSoon()

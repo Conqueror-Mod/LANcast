@@ -8,6 +8,7 @@ package enrich
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -266,6 +267,54 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 		score = 1
 	}
 
+	return true, w.applyRecords(ctx, item, kind, lockedSet, locals, remotes, state, score)
+}
+
+// ApplyMatch writes a user-confirmed identity. Unlike the background pass it
+// does not search or score — the user already chose the exact record — and it
+// operates on a locked item, which the pending queue deliberately skips. This
+// is why confirming a match cannot go through that queue: it would re-search and
+// re-pick the very candidate the user rejected.
+func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, externalID string) error {
+	kind := meta.Kind(item.Kind)
+
+	provider, ok := w.reg.Provider(providerID)
+	if !ok {
+		return fmt.Errorf("unknown provider %q", providerID)
+	}
+	ref := meta.Ref{Kind: kind, ExternalID: externalID}
+	if kind == meta.KindEpisode {
+		ref.Season = derefInt(item.Season)
+		ref.Episode = derefInt(item.Episode)
+	}
+	rec, err := provider.Fetch(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("fetch confirmed match: %w", err)
+	}
+	if rec == nil {
+		return fmt.Errorf("provider %q returned no record for %q", providerID, externalID)
+	}
+
+	locked, err := w.st.LockedFields(ctx, item.ID)
+	if err != nil {
+		return err
+	}
+	lockedSet := meta.LockedSet(locked)
+
+	var locals []meta.Record
+	for _, src := range w.reg.Locals() {
+		if r, err := src.Read(ctx, item.Path, kind); err == nil && r != nil {
+			locals = append(locals, *r)
+		}
+	}
+
+	return w.applyRecords(ctx, item, kind, lockedSet, locals, []meta.Record{*rec}, meta.StateLocked, 1.0)
+}
+
+// applyRecords merges resolved records over an item's current metadata and
+// writes the result, honouring locked fields. Shared by the background pass and
+// a confirmed match so the two can never disagree about how a record is applied.
+func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Kind, lockedSet map[string]bool, locals, remotes []meta.Record, state string, score float64) error {
 	current := currentRecord(item)
 	merged := meta.Merge(current, lockedSet, locals, remotes)
 
@@ -300,11 +349,11 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 	}
 
 	if err := w.st.UpdateItemMetadata(ctx, item.ID, upd); err != nil {
-		return false, err
+		return err
 	}
 	if len(merged.Genres) > 0 && !lockedSet[meta.FieldGenres] {
 		if err := w.st.ReplaceGenres(ctx, item.ID, merged.Genres); err != nil {
-			return false, err
+			return err
 		}
 	}
 	if len(merged.Credits) > 0 && !lockedSet[meta.FieldCredits] {
@@ -315,7 +364,7 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 			})
 		}
 		if err := w.st.ReplaceCredits(ctx, item.ID, merged.Source, credits); err != nil {
-			return false, err
+			return err
 		}
 	}
 	if !lockedSet[meta.FieldArtwork] {
@@ -329,7 +378,7 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 			w.log.Warn("nfo write failed", "item", item.ID, "error", err)
 		}
 	}
-	return true, nil
+	return nil
 }
 
 // fetchRemote searches providers, scores the candidates, and fetches the best
