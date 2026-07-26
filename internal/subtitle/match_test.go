@@ -183,6 +183,77 @@ func TestSameTitleStillMatches(t *testing.T) {
 	}
 }
 
+// The field case that motivated this: "Aladdin (1992)" and an "Aladdin.2019"
+// subtitle share a title, so the title gate passes them, but they are different
+// films. A wrong-year candidate — even a claimed hash match — must never
+// auto-apply, and must rank below the correct-year release.
+func TestDifferentYearNeverAutoApplies(t *testing.T) {
+	target := Target{
+		FileName: "Aladdin.1992.1080p.BluRay-GRP.mkv",
+		Title:    "Aladdin",
+		Year:     1992,
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Aladdin.2019.1080p.WEBRip.x264", HashMatch: true, DownloadCount: 800000},
+		{FileID: 2, Release: "Aladdin.1992.1080p.BluRay-GRP", FPS: 23.976, DownloadCount: 40},
+	}
+	Rank(target, cands)
+
+	if cands[0].FileID != 2 {
+		t.Fatalf("best = %d, want the 1992 release ranked over the popular 2019 hash match", cands[0].FileID)
+	}
+	// The 2019 hash match must be demoted and explained.
+	for _, c := range cands {
+		if c.FileID == 1 {
+			if c.Score >= AutoApply {
+				t.Errorf("the 2019 subtitle scored %.2f and would auto-apply", c.Score)
+			}
+			if !contains(c.Reason, "different year") {
+				t.Errorf("reason %q does not explain the year mismatch", c.Reason)
+			}
+		}
+	}
+}
+
+// The year gate must not block a correct match: same title, same year still
+// auto-applies on a hash match.
+func TestSameYearAutoApplies(t *testing.T) {
+	target := Target{
+		FileName: "Aladdin.1992.1080p.BluRay-GRP.mkv",
+		Title:    "Aladdin",
+		Year:     1992,
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Aladdin.1992.720p.WEB-DL", HashMatch: true, DownloadCount: 5},
+	}
+	Rank(target, cands)
+	if _, auto := BestAutoMatch(cands); !auto {
+		t.Errorf("a same-year hash match did not auto-apply (score %.2f, reason %q)",
+			cands[0].Score, cands[0].Reason)
+	}
+}
+
+// A candidate that omits its year is not penalised — a missing year is not a
+// mismatch, so trait scoring still decides.
+func TestUnknownCandidateYearNotPenalised(t *testing.T) {
+	target := Target{
+		FileName: "Aladdin.1992.1080p.BluRay-GRP.mkv",
+		Title:    "Aladdin",
+		Year:     1992,
+		FPS:      23.976, Height: 1080,
+	}
+	cands := []Candidate{
+		{FileID: 1, Release: "Aladdin.1080p.BluRay-GRP", HashMatch: true, DownloadCount: 5},
+	}
+	Rank(target, cands)
+	if _, auto := BestAutoMatch(cands); !auto {
+		t.Errorf("a yearless hash match was wrongly demoted (score %.2f, reason %q)",
+			cands[0].Score, cands[0].Reason)
+	}
+}
+
 func TestBestAutoMatchEmpty(t *testing.T) {
 	if _, ok := BestAutoMatch(nil); ok {
 		t.Error("BestAutoMatch reported a match for an empty list")

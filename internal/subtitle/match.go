@@ -14,6 +14,7 @@ import (
 type Target struct {
 	FileName   string  // for release traits
 	Title      string  // the movie/series title, for cross-checking the candidate
+	Year       int     // 0 when unknown; guards against same-title-different-year
 	FPS        float64 // 0 when unknown
 	Height     int
 	DurationMS int64
@@ -75,6 +76,18 @@ func score(target Target, want Traits, wantRes string, c Candidate) (float64, st
 	if target.Title != "" && titleMismatch(target.Title, name) {
 		return clamp(0.15 + popularity(c.DownloadCount)*0.1),
 			"different title (" + releaseTitle(name) + ")"
+	}
+
+	// Same title, different year is a different film or a different edition —
+	// "Aladdin (1992)" and "Aladdin (2019)" share a title but not a single cue
+	// timing. The title gate cannot see this, since both parse to "Aladdin", so
+	// the year is checked separately. Like the title gate it overrides a claimed
+	// hash match (a hash mapping to another year's release is bad provider data)
+	// and demotes rather than drops, so it stays selectable when a candidate
+	// simply failed to name its year. Both years must be known to judge.
+	if got := media.Parse("", name); target.Year > 0 && got.Year > 0 && got.Year != target.Year {
+		return clamp(0.20 + popularity(c.DownloadCount)*0.1),
+			fmt.Sprintf("different year (%d)", got.Year)
 	}
 
 	// A hash match means this subtitle was timed against these exact bytes.

@@ -80,6 +80,7 @@ func (s *Server) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 	subtitle.Rank(subtitle.Target{
 		FileName:   filepath.Base(path),
 		Title:      query.Query, // the same title asked of the provider
+		Year:       derefInt(it.Year),
 		FPS:        frameRateOf(it),
 		Height:     derefInt(it.Height),
 		DurationMS: derefInt64(it.DurationMS),
