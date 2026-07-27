@@ -196,6 +196,16 @@ lists them (capped) with a **library-relative** path — never the absolute
 server path, held back for the same privacy reason item paths are. This is the
 diagnostic answer to "the scan finished but some files are missing — why?"
 
+### `GET /api/libraries/{id}/facets`
+
+The filter values a library's browse view offers — genres and decades that are
+actually present among its top-level items, so a chosen filter never yields an
+empty grid. Genres are sorted; decades are newest-first.
+
+```json
+{ "genres": ["Comedy", "Drama", "Science Fiction"], "decades": [2010, 1990] }
+```
+
 ---
 
 ## Items
@@ -209,6 +219,8 @@ diagnostic answer to "the scan finished but some files are missing — why?"
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `q` | Case-insensitive substring match on title and series |
+| `genre` | Restrict to items carrying this exact genre name |
+| `decade` | Restrict to a decade — `1990` means 1990–1999 |
 | `sort` | `title` (default), `year`, `added` |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
 

@@ -148,6 +148,25 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// libraryFacets returns the genres and decades a library's browse view can
+// filter by — only values actually present, so a filter never yields nothing.
+func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	facets, err := s.st.LibraryFacets(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "library facets")
+		return
+	}
+	writeJSON(w, http.StatusOK, facets)
+}
+
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -174,6 +193,8 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Kind:      q.Get("kind"),
 		Query:     q.Get("q"),
 		Sort:      q.Get("sort"),
+		Genre:     q.Get("genre"),
+		Decade:    queryInt(r, "decade"),
 		Limit:     queryInt(r, "limit"),
 		Offset:    queryInt(r, "offset"),
 	}

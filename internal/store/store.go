@@ -356,6 +356,8 @@ type ItemFilter struct {
 	Kind      string
 	Query     string
 	Sort      string // title | year | added
+	Genre     string // exact genre name; empty means no genre filter
+	Decade    int    // e.g. 1990 restricts to 1990–1999; 0 means no year filter
 
 	// TopLevel restricts the listing to rows with no parent — the browse-grid
 	// default. Children (seasons, episodes, parts, chapters) have a parent_id
@@ -455,6 +457,18 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
 	}
+	if f.Genre != "" {
+		// EXISTS rather than a join, so a multi-genre item is not duplicated in
+		// the result or double-counted in the total.
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_genre ig JOIN genre g ON g.id = ig.genre_id
+			WHERE ig.item_id = media_item.id AND g.name = ?)`
+		args = append(args, f.Genre)
+	}
+	if f.Decade != 0 {
+		where += ` AND year >= ? AND year <= ?`
+		args = append(args, f.Decade, f.Decade+9)
+	}
 
 	var total int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_item`+where, args...).Scan(&total); err != nil {
@@ -490,6 +504,58 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		out = append(out, *it)
 	}
 	return out, total, rows.Err()
+}
+
+// Facets is the set of filter values present in a library — what a browse view
+// offers in its genre and decade dropdowns. Only values actually on top-level,
+// present items are returned, so a filter never yields an empty grid.
+type Facets struct {
+	Genres  []string `json:"genres"`
+	Decades []int    `json:"decades"`
+}
+
+// LibraryFacets returns the genres and decades present among a library's
+// top-level items.
+func (s *Store) LibraryFacets(ctx context.Context, libraryID int64) (Facets, error) {
+	f := Facets{Genres: []string{}, Decades: []int{}}
+
+	grows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT g.name FROM genre g
+		JOIN item_genre ig ON ig.genre_id = g.id
+		JOIN media_item m ON m.id = ig.item_id
+		WHERE m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0
+		ORDER BY g.name`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (genres): %w", err)
+	}
+	defer grows.Close()
+	for grows.Next() {
+		var name string
+		if err := grows.Scan(&name); err != nil {
+			return f, fmt.Errorf("library facets (genres): %w", err)
+		}
+		f.Genres = append(f.Genres, name)
+	}
+	if err := grows.Err(); err != nil {
+		return f, err
+	}
+
+	drows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT (year / 10) * 10 AS decade FROM media_item
+		WHERE library_id = ? AND parent_id IS NULL AND missing = 0 AND year IS NOT NULL
+		ORDER BY decade DESC`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (decades): %w", err)
+	}
+	defer drows.Close()
+	for drows.Next() {
+		var d int
+		if err := drows.Scan(&d); err != nil {
+			return f, fmt.Errorf("library facets (decades): %w", err)
+		}
+		f.Decades = append(f.Decades, d)
+	}
+	return f, drows.Err()
 }
 
 // SetParent records that childID is contained by parentID — a season under a

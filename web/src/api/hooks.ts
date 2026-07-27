@@ -458,25 +458,54 @@ export function useDeleteSubtitle(id: number) {
 export interface ItemQuery {
   libraryID: number;
   q?: string;
+  sort?: string; // title | year | added
+  genre?: string;
+  decade?: number;
   limit?: number;
   offset?: number;
 }
 
-export function useItems({ libraryID, q, limit = 120, offset = 0 }: ItemQuery) {
+export function useItems({
+  libraryID,
+  q,
+  sort,
+  genre,
+  decade,
+  limit = 120,
+  offset = 0,
+}: ItemQuery) {
   const params = new URLSearchParams({
     library_id: String(libraryID),
     limit: String(limit),
     offset: String(offset),
   });
   if (q) params.set("q", q);
+  if (sort) params.set("sort", sort);
+  if (genre) params.set("genre", genre);
+  if (decade) params.set("decade", String(decade));
 
   return useQuery({
-    queryKey: ["items", libraryID, q ?? "", limit, offset],
+    queryKey: ["items", libraryID, q ?? "", sort ?? "", genre ?? "", decade ?? 0, limit, offset],
     queryFn: ({ signal }) =>
       apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal),
     // Keep the previous grid visible while a new search or page loads, so the
     // library does not flash empty on every keystroke.
     placeholderData: keepPreviousData,
     enabled: libraryID > 0,
+  });
+}
+
+// The filter values a library's browse view offers — genres and decades that
+// are actually present, so a chosen filter never empties the grid.
+export function useFacets(libraryID: number) {
+  return useQuery({
+    queryKey: ["facets", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<{ genres: string[]; decades: number[] }>(
+        `/api/libraries/${libraryID}/facets`,
+        signal,
+      ),
+    enabled: libraryID > 0,
+    staleTime: 30_000,
   });
 }

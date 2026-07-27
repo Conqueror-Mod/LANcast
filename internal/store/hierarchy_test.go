@@ -78,6 +78,56 @@ func TestSingletonCollectionsHiddenFromGrid(t *testing.T) {
 	}
 }
 
+// The browse view filters by genre and decade, and facets report only the
+// values actually present so a filter never empties the grid.
+func TestBrowseFiltersAndFacets(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	mk := func(path, title string, year int, genres []string) int64 {
+		y := year
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: path, Kind: "movie", Title: title,
+			SortTitle: title, Year: &y, Container: "mkv", SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.ReplaceGenres(ctx, id, genres); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	a := mk("/m/a.mkv", "Arrival", 2016, []string{"Drama", "Science Fiction"})
+	mk("/m/b.mkv", "Booksmart", 2019, []string{"Comedy"})
+	c := mk("/m/c.mkv", "Contact", 1997, []string{"Drama"})
+
+	// Facets: sorted genres, decades newest-first.
+	f, err := st.LibraryFacets(ctx, lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Genres; len(got) != 3 || got[0] != "Comedy" || got[2] != "Science Fiction" {
+		t.Errorf("genres = %v, want [Comedy Drama Science Fiction]", got)
+	}
+	if got := f.Decades; len(got) != 2 || got[0] != 2010 || got[1] != 1990 {
+		t.Errorf("decades = %v, want [2010 1990]", got)
+	}
+
+	// Genre filter.
+	drama, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genre: "Drama"})
+	if g := ids(drama); len(drama) != 2 || !g[a] || !g[c] {
+		t.Errorf("Drama = %v, want Arrival + Contact", g)
+	}
+
+	// Decade filter, combined with genre.
+	both, total, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genre: "Drama", Decade: 2010})
+	if len(both) != 1 || both[0].ID != a || total != 1 {
+		t.Errorf("Drama+2010s = %v (total %d), want just Arrival", ids(both), total)
+	}
+}
+
 // A parented child (season, episode, part, chapter) must never appear in the
 // default top-level grid — it belongs under its parent. This is the guard ADR
 // 0010 and ADR 0017 require; without it a container's pieces leak in as if they
