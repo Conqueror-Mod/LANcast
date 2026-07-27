@@ -1,6 +1,11 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useItem, useTrailer, useChildren } from "@/api/hooks";
+import {
+  useItem,
+  useTrailer,
+  useChildren,
+  useCollectionMembers,
+} from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating } from "@/lib/format";
@@ -64,9 +69,13 @@ export function Detail() {
 
   // A container (show, season, collection, or a multi-part work) has no file to
   // play — it holds other items. Fetch those; the query stays idle for a plain
-  // leaf. child_count comes from the item response, so this settles once loaded.
+  // leaf. A collection's members come through the join table, everything else
+  // through parent_id, so exactly one of these fires.
   const container = item ? isContainer(item) : false;
-  const { data: children } = useChildren(itemID, container);
+  const isCollection = item?.kind === "collection";
+  const { data: parentChildren } = useChildren(itemID, container && !isCollection);
+  const { data: members } = useCollectionMembers(itemID, container && isCollection);
+  const children = isCollection ? members : parentChildren;
 
   const [fixOpen, setFixOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);

@@ -26,6 +26,58 @@ func ids(items []Item) map[int64]bool {
 	return m
 }
 
+// A collection is worth showing only when it groups two or more present
+// members. A provider hands us a franchise even for a single owned film, and a
+// collection of one is just a duplicate tile of that film (the Aladdin-Collection
+// clutter). Its member count is reported through ChildCount like any container.
+func TestSingletonCollectionsHiddenFromGrid(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	// A real series: two owned films grouped.
+	toy1 := mkItem(t, st, lib.ID, "movie", "/m/Toy1.mkv", "Toy Story")
+	toy2 := mkItem(t, st, lib.ID, "movie", "/m/Toy2.mkv", "Toy Story 2")
+	toyColl := mkItem(t, st, lib.ID, "collection", "/c/toy", "Toy Story Collection")
+	// A singleton: one owned film that names a franchise.
+	aladdin := mkItem(t, st, lib.ID, "movie", "/m/Aladdin.mkv", "Aladdin")
+	aladdinColl := mkItem(t, st, lib.ID, "collection", "/c/aladdin", "Aladdin Collection")
+
+	for _, l := range []struct {
+		item, coll int64
+		ord        int
+	}{{toy1, toyColl, 0}, {toy2, toyColl, 1}, {aladdin, aladdinColl, 0}} {
+		if err := st.AddToCollection(ctx, l.item, l.coll, l.ord); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	top, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(top)
+	if !got[toyColl] {
+		t.Error("Toy Story Collection (2 members) missing from the grid")
+	}
+	if got[aladdinColl] {
+		t.Error("Aladdin Collection (1 member) leaked into the grid — singletons must hide")
+	}
+	// The films themselves always show.
+	if !got[toy1] || !got[aladdin] {
+		t.Error("member films must remain top-level")
+	}
+
+	// ChildCount reflects join-table membership for a collection.
+	coll := []Item{{ID: toyColl}}
+	if err := st.AttachChildCounts(ctx, coll); err != nil {
+		t.Fatal(err)
+	}
+	if coll[0].ChildCount != 2 {
+		t.Errorf("Toy collection ChildCount = %d, want 2", coll[0].ChildCount)
+	}
+}
+
 // A parented child (season, episode, part, chapter) must never appear in the
 // default top-level grid — it belongs under its parent. This is the guard ADR
 // 0010 and ADR 0017 require; without it a container's pieces leak in as if they

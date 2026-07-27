@@ -242,9 +242,10 @@ export function useItem(id: number) {
   });
 }
 
-// The children of a container item — a show's seasons, a season's episodes, a
-// collection's films — in hierarchy order. Enabled only for containers, so a
-// plain movie detail never fires it.
+// The parent_id children of a container — a show's seasons, a season's
+// episodes, a work's parts — in hierarchy order. Enabled only for containers, so
+// a plain leaf detail never fires it. A collection is the exception: its members
+// live in a join table, so it uses useCollectionMembers instead.
 export function useChildren(parentID: number, enabled: boolean) {
   return useQuery({
     queryKey: ["children", parentID],
@@ -253,6 +254,20 @@ export function useChildren(parentID: number, enabled: boolean) {
         (r) => r.items,
       ),
     enabled: enabled && parentID > 0,
+  });
+}
+
+// The members of a collection, in curated order. Membership is many-to-many and
+// keyed through item_collection, so it is a different endpoint from the
+// parent_id children above.
+export function useCollectionMembers(collectionID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["collection-members", collectionID],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?collection_id=${collectionID}`, signal).then(
+        (r) => r.items,
+      ),
+    enabled: enabled && collectionID > 0,
   });
 }
 

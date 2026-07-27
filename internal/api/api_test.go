@@ -302,6 +302,48 @@ func TestListItemsHierarchy(t *testing.T) {
 	wantError(t, h.do(t, "GET", "/api/items?parent_id=abc", nil), 400, "bad_request")
 }
 
+// A collection's members are reached through collection_id (the join table),
+// not parent_id — the bug that made every collection page open blank.
+func TestListItemsCollectionMembers(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	m1 := h.addFile(t, "Toy Story.mkv", make([]byte, 16))
+	m2 := h.addFile(t, "Toy Story 2.mkv", make([]byte, 16))
+	coll, err := h.st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: h.lib.ID, Path: "lancast:collection:test:1", Kind: "collection",
+		Title: "Toy Story Collection", SortTitle: "toy story collection",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.AddToCollection(ctx, m1, coll, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.AddToCollection(ctx, m2, coll, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	var body struct {
+		Total int          `json:"total"`
+		Items []store.Item `json:"items"`
+	}
+	decode(t, h.do(t, "GET", "/api/items?collection_id="+itoa(coll), nil), &body)
+	got := map[int64]bool{}
+	for _, it := range body.Items {
+		got[it.ID] = true
+	}
+	if !got[m1] || !got[m2] || len(body.Items) != 2 {
+		t.Errorf("collection members = %v, want the two films %d and %d", got, m1, m2)
+	}
+	// parent_id, by contrast, is empty for a collection.
+	decode(t, h.do(t, "GET", "/api/items?parent_id="+itoa(coll), nil), &body)
+	if len(body.Items) != 0 {
+		t.Errorf("parent_id on a collection returned %d items, want 0", len(body.Items))
+	}
+
+	wantError(t, h.do(t, "GET", "/api/items?collection_id=abc", nil), 400, "bad_request")
+}
+
 // Server filesystem paths must never reach a client.
 func TestItemResponseOmitsPath(t *testing.T) {
 	h := newHarness(t)
