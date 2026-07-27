@@ -10,6 +10,25 @@ import (
 
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+
+	// collection_id returns a collection's members, which live in a join table
+	// rather than parent_id — so it takes its own path, not the media_item
+	// filter below (ADR 0017).
+	if v := q.Get("collection_id"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid collection_id")
+			return
+		}
+		items, err := s.st.CollectionMembers(r.Context(), id)
+		if err != nil {
+			s.writeInternal(w, err, "collection members")
+			return
+		}
+		s.decorateAndWriteItems(w, r, items)
+		return
+	}
+
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
 		Kind:      q.Get("kind"),
@@ -38,6 +57,14 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list items")
 		return
 	}
+	s.decorateAndWriteItems(w, r, items, total)
+}
+
+// decorateAndWriteItems attaches the per-user and grid data every item listing
+// needs — progress, artwork, and child counts — then writes the page. total is
+// the count for a paged query; pass -1 for a whole set (a collection's members),
+// where the response reports len(items).
+func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, items []store.Item, total ...int) {
 	if err := s.st.AttachProgress(r.Context(), items, s.userID(r)); err != nil {
 		s.writeInternal(w, err, "attach progress")
 		return
@@ -47,14 +74,17 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "attach artwork")
 		return
 	}
-	// So a tile knows whether it is a container (a show, a multi-part work) and
-	// should open a children view rather than offer Play.
+	// So a tile knows whether it is a container (a show, a collection, a
+	// multi-part work) and should open a children view rather than offer Play.
 	if err := s.st.AttachChildCounts(r.Context(), items); err != nil {
 		s.writeInternal(w, err, "attach child counts")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": items})
+	n := len(items)
+	if len(total) > 0 {
+		n = total[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"total": n, "items": items})
 }
 
 // continueWatching lists the user's in-progress items, most recently played

@@ -207,6 +207,7 @@ diagnostic answer to "the scan finished but some files are missing — why?"
 | `library_id` | Restrict to one library |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `track`, `other` |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
+| `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `q` | Case-insensitive substring match on title and series |
 | `sort` | `title` (default), `year`, `added` |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
@@ -227,10 +228,20 @@ assume the list above is exhaustive.
 
 A **collection** (`kind: "collection"`) groups otherwise-independent items —
 a film series, a franchise — through many-to-many membership, not `parent_id`;
-its members stay top-level and may belong to more than one collection. A
-**multi-part work** (a two-part film, a serial, a miniseries) instead *contains*
-its pieces through `parent_id`: the parent carries the identity, the `part` /
-`chapter` children carry the files.
+its members stay top-level and may belong to more than one collection. Fetch its
+members with `?collection_id=`, **not** `?parent_id=` (which is always empty for
+a collection). A collection is shown in the top-level grid only when it groups
+**at least two present members**: a provider supplies a franchise even when the
+library holds a single film from it, and a collection of one is just a duplicate
+tile of that film.
+
+A **multi-part work** (a two-part film, a serial, a miniseries) instead
+*contains* its pieces through `parent_id`: the parent carries the identity, the
+`part` / `chapter` children carry the files.
+
+`child_count` counts whichever applies — `parent_id` children for a work or
+show, join-table members for a collection — so a client can treat any container
+uniformly.
 
 ```json
 { "total": 412, "items": [ { "id": 87, "library_id": 1, "kind": "movie",

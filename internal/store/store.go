@@ -438,7 +438,16 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND parent_id = ?`
 		args = append(args, *f.ParentID)
 	case f.TopLevel:
-		where += ` AND parent_id IS NULL`
+		// Top-level: no parent, and a collection is shown only when it groups at
+		// least two present members. A provider hands us a franchise even when
+		// the library holds a single film from it, and a collection of one is
+		// just a duplicate tile of that film (ADR 0017).
+		where += ` AND parent_id IS NULL
+			AND (kind != 'collection' OR (
+				SELECT COUNT(*) FROM item_collection ic
+				JOIN media_item m2 ON m2.id = ic.item_id
+				WHERE ic.collection_id = media_item.id AND m2.missing = 0
+			) >= 2)`
 	}
 	if f.Query != "" {
 		where += ` AND (title LIKE ? OR series LIKE ?)`
@@ -702,10 +711,12 @@ func (s *Store) PromoteToChild(ctx context.Context, itemID, parentID int64, kind
 	return nil
 }
 
-// AttachChildCounts fills ChildCount for each item from a single grouped query,
-// so a caller can tell a container (a show, a collection, a multi-part work)
-// from a leaf without a query per row. Missing children are not counted — a
-// container whose files are all offline reads as empty, not as a phantom.
+// AttachChildCounts fills ChildCount for each item, so a caller can tell a
+// container from a leaf without a query per row. It counts both kinds of
+// containment: parent_id children (a show's seasons, a work's parts) and
+// collection membership (a collection's films), which live in a join table
+// rather than parent_id. Missing children are not counted — a container whose
+// files are all offline reads as empty, not as a phantom.
 func (s *Store) AttachChildCounts(ctx context.Context, items []Item) error {
 	if len(items) == 0 {
 		return nil
@@ -718,9 +729,12 @@ func (s *Store) AttachChildCounts(ctx context.Context, items []Item) error {
 		ph[i] = "?"
 		args[i] = items[i].ID
 	}
+	in := strings.Join(ph, ",")
+
+	// parent_id children.
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT parent_id, COUNT(*) FROM media_item
-		WHERE parent_id IN (`+strings.Join(ph, ",")+`) AND missing = 0
+		WHERE parent_id IN (`+in+`) AND missing = 0
 		GROUP BY parent_id`, args...)
 	if err != nil {
 		return fmt.Errorf("attach child counts: %w", err)
@@ -736,7 +750,32 @@ func (s *Store) AttachChildCounts(ctx context.Context, items []Item) error {
 			it.ChildCount = n
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Collection members (join table, not parent_id).
+	crows, err := s.db.QueryContext(ctx, `
+		SELECT ic.collection_id, COUNT(*)
+		FROM item_collection ic
+		JOIN media_item m ON m.id = ic.item_id
+		WHERE ic.collection_id IN (`+in+`) AND m.missing = 0
+		GROUP BY ic.collection_id`, args...)
+	if err != nil {
+		return fmt.Errorf("attach collection counts: %w", err)
+	}
+	defer crows.Close()
+	for crows.Next() {
+		var coll int64
+		var n int
+		if err := crows.Scan(&coll, &n); err != nil {
+			return fmt.Errorf("attach collection counts: %w", err)
+		}
+		if it := byID[coll]; it != nil {
+			it.ChildCount = n
+		}
+	}
+	return crows.Err()
 }
 
 // AddToCollection links an item into a collection (ADR 0017). Membership is
