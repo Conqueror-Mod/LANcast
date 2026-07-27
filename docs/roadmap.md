@@ -45,7 +45,7 @@ Status: **planned** · **next** · *unplanned*
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
 | Data model evolution and migrations | *unplanned* | Strategy past revision 1 |
-| API contract and versioning | *unplanned* | Decide before any third-party client |
+| API contract and versioning | **planned** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)) |
 
 ### Metadata and artwork · M2
 

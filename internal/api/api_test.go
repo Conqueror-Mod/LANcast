@@ -148,10 +148,13 @@ func TestHealth(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var body map[string]string
+	var body map[string]any
 	decode(t, resp, &body)
 	if body["status"] != "ok" || body["version"] == "" {
 		t.Errorf("body = %v, want ok status and a version", body)
+	}
+	if body["api_version"] != float64(1) {
+		t.Errorf("api_version = %v, want 1", body["api_version"])
 	}
 }
 
