@@ -66,7 +66,16 @@ var (
 	// and is not modelled here).
 	rePart    = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 	reChapter = regexp.MustCompile(`(?i)\b(?:chapter|ch\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
+	// A bare episode marker with no season — "Storm of the Century E2",
+	// "…Episode 3", "…Ep 2". The bare "e" only matches adjacent to digits at a
+	// word boundary, so "Se7en" and "WALL-E" are safe. Used only in a show
+	// library, where such a file is a miniseries part rather than a film.
+	reEpisodeMark = regexp.MustCompile(`(?i)\b(?:episode[\s._-]*|ep[\s._-]*|e)(\d{1,2})\b`)
 )
+
+// LibShow is the library kind that marks a library as television, which biases
+// how ambiguous filenames are read (a bare "E2" is an episode, not a film).
+const LibShow = "show"
 
 var numberWords = map[string]int{
 	"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -129,7 +138,10 @@ func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 
 // Parse infers metadata for a media file. root is the library root, used to
 // derive series names from directory layout when the filename is uninformative.
-func Parse(root, path string) Info {
+// libKind is the owning library's kind ("movie", "show", …); it biases the
+// reading of ambiguous names — in a show library a bare "E2" is a miniseries
+// episode, where in a movie library the same name is left a film.
+func Parse(root, path, libKind string) Info {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	info := Info{Kind: KindOther}
 
@@ -156,6 +168,23 @@ func Parse(root, path string) Info {
 			info.Title = "Episode " + strconv.Itoa(info.Episode)
 		}
 		return info
+	}
+
+	// In a show library a bare episode marker with no season — "Storm of the
+	// Century E2" — is still a TV episode (of season 1), not a same-named film.
+	// This is what lets a miniseries match against TMDB's TV data: episode and
+	// show kinds search /tv, where a movie kind searches /movie and can only ever
+	// find the wrong, same-named film. Gated to show libraries so a movie's odd
+	// name never trips it.
+	if libKind == LibShow {
+		if series, episode, ok := markerOf(path, reEpisodeMark); ok {
+			info.Kind = KindEpisode
+			info.Series = series
+			info.Season = 1
+			info.Episode = episode
+			info.Title = "Episode " + strconv.Itoa(episode)
+			return info
+		}
 	}
 
 	info.Kind = KindMovie

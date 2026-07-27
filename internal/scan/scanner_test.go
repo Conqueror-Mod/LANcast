@@ -332,6 +332,50 @@ func TestSerialGrouping(t *testing.T) {
 	}
 }
 
+// In a show library, a miniseries named with bare episode markers ("Storm of
+// the Century E2/E3") becomes a real show with episodes — the shape that matches
+// against TMDB TV. In a movie library the same files would stay films. This is
+// the library-kind fix for the Nat-Geo-mismatch bug.
+func TestShowLibraryGroupsBareEpisodesIntoShow(t *testing.T) {
+	sc, st := newScanner(t)
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "TV", "show", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "Storm of the Century/Storm of the Century E2.mkv", 10)
+	writeFile(t, root, "Storm of the Century/Storm of the Century E3.mkv", 10)
+
+	scanAndWait(t, sc, *lib)
+	ctx := context.Background()
+
+	all, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	byTitle := map[string]store.Item{}
+	for _, it := range all {
+		kinds[it.Kind]++
+		byTitle[it.Title] = it
+	}
+	// A show, a season, and two episodes — the enrichable TV shape.
+	if kinds["show"] != 1 || kinds["episode"] != 2 {
+		t.Errorf("kinds = %v, want 1 show + 2 episodes", kinds)
+	}
+	show, ok := byTitle["Storm of the Century"]
+	if !ok || show.Kind != "show" {
+		t.Fatalf("no Storm of the Century show; got %v", keys(byTitle))
+	}
+	// Top-level shows the show only; episodes are nested and match against TV.
+	top, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	for _, it := range top {
+		if it.Kind == "episode" {
+			t.Errorf("episode %q is loose at top level", it.Title)
+		}
+	}
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)
