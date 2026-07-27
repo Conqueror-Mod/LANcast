@@ -260,6 +260,48 @@ func TestListItems(t *testing.T) {
 	}
 }
 
+// The grid endpoint returns top-level items by default; a parented child is
+// reached only through parent_id, never loose in the list (ADR 0010/0017).
+func TestListItemsHierarchy(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	movie := h.addFile(t, "Arrival.mkv", make([]byte, 16))
+	show, err := h.st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: h.lib.ID, Path: filepath.Join(h.dir, "Show"), Kind: "show",
+		Title: "Some Show", SortTitle: "Some Show",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := h.addFile(t, "S01E01.mkv", make([]byte, 16))
+	if err := h.st.SetParent(ctx, ep, &show); err != nil {
+		t.Fatal(err)
+	}
+
+	var body struct {
+		Total int          `json:"total"`
+		Items []store.Item `json:"items"`
+	}
+	decode(t, h.do(t, "GET", "/api/items?library_id=1", nil), &body)
+	got := map[int64]bool{}
+	for _, it := range body.Items {
+		got[it.ID] = true
+	}
+	if !got[movie] || !got[show] {
+		t.Errorf("default listing = %v, want movie %d and show %d", got, movie, show)
+	}
+	if got[ep] {
+		t.Errorf("default listing includes parented episode %d — should be hidden", ep)
+	}
+
+	decode(t, h.do(t, "GET", "/api/items?parent_id="+itoa(show), nil), &body)
+	if len(body.Items) != 1 || body.Items[0].ID != ep {
+		t.Errorf("parent_id listing = %v, want just episode %d", got, ep)
+	}
+
+	wantError(t, h.do(t, "GET", "/api/items?parent_id=abc", nil), 400, "bad_request")
+}
+
 // Server filesystem paths must never reach a client.
 func TestItemResponseOmitsPath(t *testing.T) {
 	h := newHarness(t)

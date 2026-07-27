@@ -205,10 +205,32 @@ diagnostic answer to "the scan finished but some files are missing — why?"
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
-| `kind` | `movie`, `episode`, `track`, `other` |
+| `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `track`, `other` |
+| `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `q` | Case-insensitive substring match on title and series |
 | `sort` | `title` (default), `year`, `added` |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
+
+**By default the listing is top-level only** — rows with no parent. Children
+(seasons, episodes, and the `part`/`chapter` pieces of a multi-part work) have a
+parent and are reached through `parent_id`, never returned loose in the grid, so
+a container's pieces do not appear as if they were features ([ADR 0010](adr/0010-shows-as-media-items.md),
+[ADR 0017](adr/0017-collections-and-multi-part-works.md)). Passing an explicit
+`kind` lifts that default, for a deliberate cross-cutting query (every episode,
+say). Passing `parent_id` returns exactly that item's children in hierarchy
+order.
+
+`kind` is an **open set** — new media types (`collection`, `part`, `serial`, …)
+appear without an API version bump, so a client must tolerate a `kind` it does
+not recognise ([ADR 0018](adr/0018-api-contract-and-versioning.md)) rather than
+assume the list above is exhaustive.
+
+A **collection** (`kind: "collection"`) groups otherwise-independent items —
+a film series, a franchise — through many-to-many membership, not `parent_id`;
+its members stay top-level and may belong to more than one collection. A
+**multi-part work** (a two-part film, a serial, a miniseries) instead *contains*
+its pieces through `parent_id`: the parent carries the identity, the `part` /
+`chapter` children carry the files.
 
 ```json
 { "total": 412, "items": [ { "id": 87, "library_id": 1, "kind": "movie",

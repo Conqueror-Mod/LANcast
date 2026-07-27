@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"lancast/internal/store"
 )
@@ -16,6 +17,20 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Sort:      q.Get("sort"),
 		Limit:     queryInt(r, "limit"),
 		Offset:    queryInt(r, "offset"),
+	}
+	// parent_id fetches the children of one item — a show's episodes, a work's
+	// parts. Otherwise the grid shows top-level entries only, so a container's
+	// children never leak in loose (ADR 0010, ADR 0017). An explicit kind is
+	// treated as a deliberate cross-cutting query and is not forced top-level.
+	if v := q.Get("parent_id"); v != "" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.ParentID = &id
+		} else {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid parent_id")
+			return
+		}
+	} else if f.Kind == "" {
+		f.TopLevel = true
 	}
 
 	items, total, err := s.st.ListItems(r.Context(), f)

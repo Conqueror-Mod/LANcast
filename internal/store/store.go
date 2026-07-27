@@ -342,8 +342,20 @@ type ItemFilter struct {
 	Kind      string
 	Query     string
 	Sort      string // title | year | added
-	Limit     int
-	Offset    int
+
+	// TopLevel restricts the listing to rows with no parent — the browse-grid
+	// default. Children (seasons, episodes, parts, chapters) have a parent_id
+	// and belong under it, never loose in the grid; this is the guard ADR 0010
+	// and ADR 0017 require so a container's pieces do not leak in as if they
+	// were features. Ignored when ParentID is set.
+	TopLevel bool
+
+	// ParentID, when non-nil, returns exactly the children of that item —
+	// ordered as a hierarchy (season, then episode/part). Overrides TopLevel.
+	ParentID *int64
+
+	Limit  int
+	Offset int
 }
 
 const itemCols = `id, library_id, kind, path, title, sort_title, year, series, season, episode,
@@ -382,6 +394,20 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	return &it, nil
 }
 
+// scanItems drains rows selecting the item columns (in either the bare or the
+// "mi"-qualified order, which scan identically) into a slice.
+func scanItems(rows *sql.Rows) ([]Item, error) {
+	out := []Item{}
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *it)
+	}
+	return out, rows.Err()
+}
+
 // ListItems returns a page of items plus the total matching the filter.
 func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error) {
 	where := ` WHERE 1=1`
@@ -393,6 +419,13 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	if f.Kind != "" {
 		where += ` AND kind = ?`
 		args = append(args, f.Kind)
+	}
+	switch {
+	case f.ParentID != nil:
+		where += ` AND parent_id = ?`
+		args = append(args, *f.ParentID)
+	case f.TopLevel:
+		where += ` AND parent_id IS NULL`
 	}
 	if f.Query != "" {
 		where += ` AND (title LIKE ? OR series LIKE ?)`
@@ -434,6 +467,85 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		out = append(out, *it)
 	}
 	return out, total, rows.Err()
+}
+
+// SetParent records that childID is contained by parentID — a season under a
+// show, a part or chapter under a work (ADR 0010, ADR 0017). Passing a nil
+// parent detaches the child, so a re-parent is one call. The child drops out of
+// the top-level browse grid the moment this is set, because ListItems' default
+// excludes rows with a parent.
+func (s *Store) SetParent(ctx context.Context, childID int64, parentID *int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE media_item SET parent_id = ?, updated_at = ? WHERE id = ?`,
+		parentID, time.Now().Unix(), childID)
+	if err != nil {
+		return fmt.Errorf("set parent of %d: %w", childID, err)
+	}
+	return nil
+}
+
+// Children returns the items contained by parentID, in hierarchy order. It is
+// the same query ListItems runs for a ParentID filter, exposed directly for
+// callers assembling a detail page (a show's episodes, a work's parts).
+func (s *Store) Children(ctx context.Context, parentID int64) ([]Item, error) {
+	items, _, err := s.ListItems(ctx, ItemFilter{ParentID: &parentID, Limit: 500})
+	return items, err
+}
+
+// AddToCollection links an item into a collection (ADR 0017). Membership is
+// many-to-many and deliberately not parent_id: a member — an "Anne" film, a
+// franchise entry — stays a top-level, independently browsable item that may
+// belong to several collections. ord positions it within the collection. Re-
+// adding updates the order rather than erroring, so ingestion is idempotent.
+func (s *Store) AddToCollection(ctx context.Context, itemID, collectionID int64, ord int) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO item_collection (item_id, collection_id, ord)
+		VALUES (?, ?, ?)
+		ON CONFLICT(item_id, collection_id) DO UPDATE SET ord = excluded.ord`,
+		itemID, collectionID, ord)
+	if err != nil {
+		return fmt.Errorf("add item %d to collection %d: %w", itemID, collectionID, err)
+	}
+	return nil
+}
+
+// RemoveFromCollection unlinks an item without deleting either row.
+func (s *Store) RemoveFromCollection(ctx context.Context, itemID, collectionID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM item_collection WHERE item_id = ? AND collection_id = ?`,
+		itemID, collectionID)
+	if err != nil {
+		return fmt.Errorf("remove item %d from collection %d: %w", itemID, collectionID, err)
+	}
+	return nil
+}
+
+// CollectionMembers returns a collection's members in their curated order.
+func (s *Store) CollectionMembers(ctx context.Context, collectionID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`
+		FROM media_item mi
+		JOIN item_collection ic ON ic.item_id = mi.id
+		WHERE ic.collection_id = ?
+		ORDER BY ic.ord, mi.sort_title`, collectionID)
+	if err != nil {
+		return nil, fmt.Errorf("collection members: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+// CollectionsOf returns the collections an item belongs to.
+func (s *Store) CollectionsOf(ctx context.Context, itemID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`
+		FROM media_item mi
+		JOIN item_collection ic ON ic.collection_id = mi.id
+		WHERE ic.item_id = ?
+		ORDER BY mi.sort_title`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("collections of item: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
 }
 
 // ContinueWatching returns a user's in-progress items, most recently played
