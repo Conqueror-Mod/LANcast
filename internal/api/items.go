@@ -4,10 +4,63 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
+	"lancast/internal/media"
 	"lancast/internal/store"
 )
+
+// sidecarExt is the set of companion-file extensions a "delete from disk"
+// removes alongside a video — subtitles, the Kodi .nfo, and artwork.
+var sidecarExt = map[string]bool{
+	".srt": true, ".vtt": true, ".ass": true, ".ssa": true, ".sub": true,
+	".idx": true, ".nfo": true, ".tbn": true,
+	".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
+}
+
+// associatedSidecars returns the companion files that belong to one video —
+// its subtitles, .nfo, and artwork — so deleting the video does not strand
+// leftovers. It is deliberately narrow: a file counts only when its name is the
+// video's stem followed by a '.' or '-' separator (never a space), so a
+// sibling's files — "Show S01E02.srt" beside "Show S01E01.mkv", "Part 2.nfo"
+// beside "Part 1.mkv" — are left untouched, and a folder-level "poster.jpg"
+// shared by the whole folder is never swept. The boundary check is stricter
+// than the scanner's subtitle matching on purpose: attaching a stray subtitle
+// for display is harmless, deleting the wrong file is not.
+func associatedSidecars(videoPath string) []string {
+	dir := filepath.Dir(videoPath)
+	base := filepath.Base(videoPath)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == base || !strings.HasPrefix(name, stem) {
+			continue
+		}
+		rest := name[len(stem):]
+		if rest == "" || (rest[0] != '.' && rest[0] != '-') {
+			// A different title's file ("Part 1" vs "Part 10", "…E01" vs "…E02")
+			// or an unrelated name — never touched.
+			continue
+		}
+		if media.IsVideo(name) {
+			continue
+		}
+		if sidecarExt[strings.ToLower(filepath.Ext(name))] {
+			out = append(out, filepath.Join(dir, name))
+		}
+	}
+	return out
+}
 
 // deleteItem removes a title from the library. mode decides what happens to the
 // files on disk:
@@ -59,8 +112,15 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		// Verify every path is inside the library before removing anything, so a
 		// single bad row cannot delete a file outside the library and a partial
 		// delete is avoided.
-		abs := make([]string, 0, len(files))
+		// Expand each video to itself plus its companion files (subtitles, nfo,
+		// artwork), so a delete does not leave leftovers behind.
+		toRemove := make([]string, 0, len(files)*2)
 		for _, f := range files {
+			toRemove = append(toRemove, f)
+			toRemove = append(toRemove, associatedSidecars(f)...)
+		}
+		abs := make([]string, 0, len(toRemove))
+		for _, f := range toRemove {
 			a, err := containedPath(lib.Path, f)
 			if err != nil {
 				s.log.Error("delete containment check failed", "item", id, "path", f, "error", err)
