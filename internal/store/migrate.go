@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 7
+const CurrentSchemaVersion = 8
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -25,6 +25,7 @@ var migrations = []migration{
 	{version: 5, sql: schemaRevision5},
 	{version: 6, sql: schemaRevision6},
 	{version: 7, sql: schemaRevision7},
+	{version: 8, sql: schemaRevision8},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -281,4 +282,32 @@ CREATE TABLE IF NOT EXISTS user (
     role          TEXT    NOT NULL,          -- admin | member
     created_at    INTEGER NOT NULL
 );
+`
+
+// Revision 8 — collections and multi-part works (ADR 0017).
+//
+// Two grouping relationships, two mechanisms. Multi-part works (Baahubali,
+// serials, miniseries) are pure containment and need no DDL: they are new
+// `kind` values ('part', 'chapter', 'serial') hanging off the existing
+// parent_id, exactly as episodes hang off a show. This migration adds only the
+// membership side.
+//
+// A collection is a media_item with kind = 'collection' — it earns its own
+// artwork, overview, locks, and match state for free, the ADR 0010 payoff.
+// Membership is many-to-many because a film stays a top-level, independently
+// browsable item that may belong to more than one collection (a franchise and a
+// themed set), which a single-parent column cannot express. This is the side
+// table ADR 0002 reserved for exactly this long-tail case.
+//
+// Both columns reference media_item(id); ON DELETE CASCADE on each keeps the
+// join clean whether the collection or a member is removed.
+const schemaRevision8 = `
+CREATE TABLE IF NOT EXISTS item_collection (
+    item_id       INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    collection_id INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    ord           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (item_id, collection_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_members ON item_collection(collection_id, ord);
 `
