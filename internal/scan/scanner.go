@@ -439,7 +439,7 @@ func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath str
 }
 
 func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo) (int64, error) {
-	nfo := media.Parse(lib.Path, path)
+	nfo := media.Parse(lib.Path, path, lib.Kind)
 
 	f := store.ScanFile{
 		LibraryID: lib.ID,

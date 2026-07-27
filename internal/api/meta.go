@@ -182,7 +182,7 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 				q.Year = *it.Year
 			}
 		} else if lib, err := s.st.GetLibrary(r.Context(), it.LibraryID); err == nil {
-			info := media.Parse(lib.Path, it.Path)
+			info := media.Parse(lib.Path, it.Path, lib.Kind)
 			if info.Series != "" {
 				q.Title, q.Series = info.Series, info.Series
 			} else if info.Title != "" {

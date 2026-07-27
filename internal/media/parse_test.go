@@ -64,7 +64,7 @@ func TestParse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Parse(root, filepath.Join(root, tt.path))
+			got := Parse(root, filepath.Join(root, tt.path), "movie")
 			if got != tt.want {
 				t.Errorf("Parse(%q)\n got: %+v\nwant: %+v", tt.path, got, tt.want)
 			}
@@ -170,6 +170,43 @@ func TestChapterOf(t *testing.T) {
 	// never fight over the same file.
 	if _, _, ok := PartOf("Batman Chapter 1.mkv"); ok {
 		t.Error("PartOf matched a Chapter filename")
+	}
+}
+
+// In a show library a bare episode marker ("Storm of the Century E2") is a TV
+// episode of season 1, so it matches against TMDB TV rather than being taken for
+// a same-named film. In a movie library the identical name stays a film — the
+// gate that keeps an oddly-named movie from being torn into a fake series.
+func TestParseLibraryKindBiasesEpisodes(t *testing.T) {
+	root := filepath.Join("R", "TV")
+	file := filepath.Join(root, "Storm of the Century", "Storm of the Century E2.mkv")
+
+	inShow := Parse(root, file, "show")
+	if inShow.Kind != KindEpisode || inShow.Series != "Storm of the Century" ||
+		inShow.Season != 1 || inShow.Episode != 2 {
+		t.Errorf("show library: got %+v, want episode S1E2 of Storm of the Century", inShow)
+	}
+
+	inMovie := Parse(root, file, "movie")
+	if inMovie.Kind != KindMovie {
+		t.Errorf("movie library: got kind %q, want movie (E2 must not become an episode)", inMovie.Kind)
+	}
+
+	// In a show library, Part and Chapter markers are episodes too — everything
+	// there is television. In a movie library Part stays a film work.
+	partFile := filepath.Join(root, "Storm of the Century", "Storm of the Century Part 2.mkv")
+	if p := Parse(root, partFile, "show"); p.Kind != KindEpisode || p.Episode != 2 {
+		t.Errorf("show library Part 2: got %+v, want episode 2", p)
+	}
+	if p := Parse(root, partFile, "movie"); p.Kind != KindMovie {
+		t.Errorf("movie library Part 2: got kind %q, want movie work", p.Kind)
+	}
+
+	// The guard still holds inside a show library: a real film with an "e"+digit
+	// in its name is not shredded into an episode.
+	se7en := Parse(root, filepath.Join(root, "Se7en (1995).mkv"), "show")
+	if se7en.Kind != KindMovie {
+		t.Errorf("Se7en in a show library became %q, want movie", se7en.Kind)
 	}
 }
 
