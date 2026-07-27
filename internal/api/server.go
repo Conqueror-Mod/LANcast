@@ -27,6 +27,11 @@ import (
 // Version is reported by GET /api/health.
 const Version = "0.2.0"
 
+// APIVersion is the HTTP contract revision. It changes only when a new
+// /api/vN prefix ships, independently of the application Version (ADR 0018).
+// /api is permanently version 1.
+const APIVersion = 1
+
 // Deps are the Server's collaborators.
 type Deps struct {
 	Store    *store.Store
@@ -171,7 +176,7 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": Version})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": Version, "api_version": APIVersion})
 }
 
 // ------------------------------------------------------------------ helpers

@@ -10,11 +10,25 @@ streams. Times are Unix seconds. Durations and positions are milliseconds.
 
 ## Versioning
 
-Until the first external client exists, the API may change freely and this
-document is the record of what it is. Once anything third-party depends on it,
-breaking changes require a version prefix (`/api/v2`) and the previous version
-keeps working for at least one release. "Clients are thin" is only true if the
-contract they are thin against is stable.
+The full policy is [ADR 0018](adr/0018-api-contract-and-versioning.md). In short:
+
+- **`/api` is permanently version 1.** A breaking revision ships at `/api/v2`;
+  `/api` never changes meaning. `GET /api/health` reports `api_version` so a
+  client can assert the contract it was built against.
+- **Additive changes are non-breaking** and may ship at any time: a new response
+  field, a new endpoint, a new value in an **open set** (`kind`, `match_state`),
+  a new optional parameter, or a new error `code`. **Breaking** — removing or
+  renaming a field, changing a type or status code, tightening validation,
+  changing the meaning of an existing `kind`/`match_state`/`code` — requires
+  `/api/v2`, and v1 then keeps working for at least one release.
+- **Two client obligations make this safe:** clients **must ignore unknown
+  response fields**, and **must tolerate unknown `kind`, `match_state`, and
+  error `code` values**, degrading gracefully rather than crashing. New media
+  types (`collection`, `part`, `serial` — [ADR 0017](adr/0017-collections-and-multi-part-works.md))
+  arrive this way, so a client with an exhaustive `kind` switch is relying on a
+  guarantee this contract does not give.
+
+"Clients are thin" is only true if the contract they are thin against is stable.
 
 ## Authentication
 
@@ -91,8 +105,11 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "version": "0.1.0" }
+{ "status": "ok", "version": "0.2.0", "api_version": 1 }
 ```
+
+`version` is the application release (semver); `api_version` is the HTTP
+contract revision and changes only when a new `/api/vN` prefix ships.
 
 ---
 
