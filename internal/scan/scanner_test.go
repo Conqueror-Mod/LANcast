@@ -276,6 +276,62 @@ func TestMultiPartGrouping(t *testing.T) {
 	}
 }
 
+// Chaptered files group into a serial: a 'serial' container with ordered
+// 'chapter' children (ADR 0017), distinct from the 'movie'/'part' shape a
+// multi-part film gets. A single library can hold both without them colliding.
+func TestSerialGrouping(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	for _, c := range []string{"1", "2", "3"} {
+		writeFile(t, root, "Batman/Batman Chapter "+c+".mkv", 10)
+	}
+	// A multi-part film alongside, to prove the two passes stay separate.
+	writeFile(t, root, "Baahubali/Baahubali Part 1.mkv", 10)
+	writeFile(t, root, "Baahubali/Baahubali Part 2.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+	ctx := context.Background()
+
+	all, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	byTitle := map[string]store.Item{}
+	for _, it := range all {
+		kinds[it.Kind]++
+		byTitle[it.Title] = it
+	}
+	if kinds["serial"] != 1 || kinds["chapter"] != 3 {
+		t.Errorf("kinds = %v, want 1 serial + 3 chapters", kinds)
+	}
+	if kinds["movie"] != 1 || kinds["part"] != 2 {
+		t.Errorf("kinds = %v, want the Baahubali work (1 movie) + 2 parts", kinds)
+	}
+
+	serial, ok := byTitle["Batman"]
+	if !ok || serial.Kind != "serial" {
+		t.Fatalf("no Batman serial; got %v", keys(byTitle))
+	}
+	chapters, err := st.Children(ctx, serial.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chapters) != 3 || chapters[0].Kind != "chapter" || chapters[0].Episode == nil || *chapters[0].Episode != 1 {
+		t.Errorf("chapters = %+v, want three ordered chapter rows", chapters)
+	}
+
+	// Neither container is loose in the top-level grid.
+	top, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	tops := map[string]bool{}
+	for _, it := range top {
+		tops[it.Kind] = true
+	}
+	if tops["chapter"] || tops["part"] {
+		t.Error("a chapter or part leaked into the top-level grid")
+	}
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)

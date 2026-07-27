@@ -250,8 +250,13 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		// exist and play; a failure here must not fail the whole scan.
 		s.log.Warn("hierarchy reconciliation failed", "library", lib.ID, "error", err)
 	}
+	// Multi-part films first, then serials: both re-parse the movie files, and a
+	// file promoted to a part or chapter drops out of the second pass's query.
 	if err := s.reconcileParts(ctx, lib); err != nil {
 		s.log.Warn("multi-part reconciliation failed", "library", lib.ID, "error", err)
+	}
+	if err := s.reconcileSerials(ctx, lib); err != nil {
+		s.log.Warn("serial reconciliation failed", "library", lib.ID, "error", err)
 	}
 
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
@@ -327,51 +332,65 @@ func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) err
 	return nil
 }
 
-// reconcileParts groups multi-part films — "Baahubali Part 1/2", a serial's
-// chapters — under a single work (ADR 0017). A movie file is only pulled into a
-// work when two or more files in the same directory share a work title, which is
-// what keeps a standalone film that merely has "Part" in its name intact.
-//
-// The work is a container 'movie' with no file of its own; each member becomes a
-// 'part' ordered by its part number. Grouping is scoped to a directory so two
-// unrelated "Part 1" films in different folders never merge.
+// reconcileParts groups multi-part films — "Baahubali Part 1/2" — under a single
+// 'movie' work with 'part' children (ADR 0017).
 func (s *Scanner) reconcileParts(ctx context.Context, lib store.Library) error {
+	return s.reconcileGrouped(ctx, lib, media.PartOf, s.st.EnsureWork, "part")
+}
+
+// reconcileSerials groups the chapters of a theatrical serial or miniseries —
+// "Batman Chapter 1..15" — under a 'serial' container with 'chapter' children.
+func (s *Scanner) reconcileSerials(ctx context.Context, lib store.Library) error {
+	return s.reconcileGrouped(ctx, lib, media.ChapterOf, s.st.EnsureSerial, "chapter")
+}
+
+// reconcileGrouped is the shared body: re-parse the movie files, group those
+// that share a work title in the same directory, and — only when two or more
+// agree, which is what keeps a standalone film with "Part" in its name intact —
+// create the container and fold its members in as ordered children.
+//
+// Grouping is scoped to a directory so two unrelated "Part 1" films in different
+// folders never merge. Idempotent across rescans: the ensure and promote calls
+// re-apply the same values.
+func (s *Scanner) reconcileGrouped(
+	ctx context.Context,
+	lib store.Library,
+	detect func(path string) (string, int, bool),
+	ensure func(ctx context.Context, libraryID int64, workKey, title, sortTitle string) (int64, bool, error),
+	childKind string,
+) error {
 	movies, err := s.st.LibraryMovieFiles(ctx, lib.ID)
 	if err != nil {
 		return err
 	}
 
 	type member struct {
-		item store.Item
-		part int
+		item  store.Item
+		order int
 	}
 	groups := map[string][]member{}
 	titles := map[string]string{}
 	for _, m := range movies {
-		work, part, ok := media.PartOf(m.Path)
+		work, order, ok := detect(m.Path)
 		if !ok {
 			continue
 		}
-		// Scope the group to the directory, so "X Part 1" here and "X Part 1"
-		// in another folder are not conflated.
 		key := filepath.Dir(m.Path) + "|" + media.SortTitle(work)
-		groups[key] = append(groups[key], member{item: m, part: part})
+		groups[key] = append(groups[key], member{item: m, order: order})
 		titles[key] = work
 	}
 
 	for key, members := range groups {
 		if len(members) < 2 {
-			// A lone "Part 1" is just a movie — leave it be.
 			continue
 		}
 		work := titles[key]
-		workID, _, err := s.st.EnsureWork(ctx, lib.ID, key, work, media.SortTitle(work))
+		parentID, _, err := ensure(ctx, lib.ID, key, work, media.SortTitle(work))
 		if err != nil {
 			return err
 		}
 		for _, mem := range members {
-			title := fmt.Sprintf("Part %d", mem.part)
-			if err := s.st.PromoteToPart(ctx, mem.item.ID, workID, mem.part, title); err != nil {
+			if err := s.st.PromoteToChild(ctx, mem.item.ID, parentID, childKind, mem.order); err != nil {
 				return err
 			}
 		}
