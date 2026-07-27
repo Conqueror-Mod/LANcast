@@ -376,6 +376,48 @@ func TestDeleteItemModes(t *testing.T) {
 	wantError(t, h.do(t, "DELETE", "/api/items/"+itoa(x), nil), 400, "bad_request")
 }
 
+// Deleting a movie from disk sweeps its companion files — subtitles, nfo,
+// artwork — but never a sibling's files or folder-level art.
+func TestDeleteRemovesSidecars(t *testing.T) {
+	h := newHarness(t)
+	write := func(name string) string {
+		p := filepath.Join(h.dir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	id := h.addFile(t, "Film.mkv", make([]byte, 16))
+	own := []string{
+		write("Film.srt"), write("Film.en.srt"), write("Film.nfo"),
+		write("Film-thumb.jpg"), write("Film.jpg"),
+	}
+	// A different title in the same folder, and shared folder art — must survive.
+	survivors := []string{
+		write("Film 2.srt"), // belongs to a hypothetical "Film 2"
+		write("poster.jpg"), // folder-level, shared
+	}
+
+	if resp := h.do(t, "DELETE", "/api/items/"+itoa(id)+"?mode=delete", nil); resp.StatusCode != 204 {
+		t.Fatalf("delete status = %d, want 204", resp.StatusCode)
+	}
+
+	if _, err := os.Stat(filepath.Join(h.dir, "Film.mkv")); !os.IsNotExist(err) {
+		t.Error("video not deleted")
+	}
+	for _, p := range own {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("sidecar not removed: %s", filepath.Base(p))
+		}
+	}
+	for _, p := range survivors {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("unrelated file wrongly removed: %s", filepath.Base(p))
+		}
+	}
+}
+
 // Server filesystem paths must never reach a client.
 func TestItemResponseOmitsPath(t *testing.T) {
 	h := newHarness(t)
