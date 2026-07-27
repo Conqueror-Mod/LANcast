@@ -133,9 +133,10 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
           {candidates.data?.map((c) => {
             const current =
               c.Provider === item.provider && c.ExternalID === item.external_id;
+            const isTV = c.Kind === "show" || c.Kind === "episode" || c.Kind === "season";
             return (
               <button
-                key={`${c.Provider}-${c.ExternalID}`}
+                key={`${c.Provider}-${c.Kind}-${c.ExternalID}`}
                 className={"fixmatch__cand" + (current ? " is-current" : "")}
                 disabled={apply.isPending}
                 onClick={() => pick(c)}
@@ -149,6 +150,7 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                   <div className="fixmatch__cand-title">
                     {c.Title}
                     {c.Year ? <span className="fixmatch__year"> ({c.Year})</span> : null}
+                    <span className="fixmatch__kind">{isTV ? "TV" : "Movie"}</span>
                     {current && <span className="fixmatch__current-tag">current</span>}
                   </div>
                   {c.Overview && (

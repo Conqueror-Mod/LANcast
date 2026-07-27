@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend } from "@/api/client";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
@@ -27,7 +27,22 @@ export function Player() {
   const { id } = useParams();
   const itemID = Number(id);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: item } = useItem(itemID);
+
+  // "Play all" passes the ordered ids of a container's children as ?queue=; the
+  // player advances through them as each finishes. Absent for a lone item.
+  const queue = searchParams.get("queue");
+  const advanceQueue = useCallback((): boolean => {
+    if (!queue) return false;
+    const ids = queue.split(",").map(Number);
+    const idx = ids.indexOf(itemID);
+    if (idx < 0 || idx + 1 >= ids.length) return false;
+    // Replace, not push, so Back returns to the container detail rather than
+    // walking backwards through every part already watched.
+    navigate(`/watch/${ids[idx + 1]}?queue=${queue}`, { replace: true });
+    return true;
+  }, [queue, itemID, navigate]);
   const { data: subtitles } = useSubtitles(itemID);
   const tracks = subtitles ?? [];
 
@@ -312,7 +327,11 @@ export function Player() {
           setChromeVisible(true);
           saveProgress(true);
         }}
-        onEnded={() => saveProgress(true)}
+        onEnded={() => {
+          saveProgress(true);
+          // Roll on to the next queued item; if there is none, it ends here.
+          advanceQueue();
+        }}
       >
         {activeSub && (
           <track

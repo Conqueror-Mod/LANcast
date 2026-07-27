@@ -320,6 +320,10 @@ export function useApplyMatch(id: number) {
       apiSend(`/api/items/${id}/match`, "POST", {
         provider: c.Provider,
         external_id: c.ExternalID,
+        // The candidate's kind may differ from the item's — correcting a
+        // movie-scanned miniseries to its TV entry — so the server fetches from
+        // the right endpoint.
+        kind: c.Kind,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["item", id] });
