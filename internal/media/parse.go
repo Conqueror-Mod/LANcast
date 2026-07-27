@@ -129,6 +129,34 @@ func findYear(s string) (year, cut int, ok bool) {
 // seriesFromDirs walks up from the file looking for the first ancestor that
 // isn't a "Season N" folder, stopping at the library root.
 func seriesFromDirs(root, path string) string {
+	if dir := showDirWalk(root, path); dir != "" {
+		return clean(filepath.Base(dir))
+	}
+	return ""
+}
+
+// ShowDir returns the directory that owns an episode's show — the first
+// ancestor that is not a "Season N" folder, without climbing above the library
+// root. It is what a show media_item uses as its path, so tvshow.nfo lands in
+// the right place (ADR 0010). Empty when the file sits directly in the root,
+// which is not a show layout.
+func ShowDir(root, path string) string {
+	return showDirWalk(root, path)
+}
+
+// SeasonDir returns the immediate parent directory of an episode when that
+// parent is a "Season N" folder, and empty otherwise — a show whose episodes
+// sit loose in the show folder has no season directory, and the caller
+// synthesizes a season identity instead.
+func SeasonDir(path string) string {
+	dir := filepath.Dir(path)
+	if reSeasonDir.MatchString(filepath.Base(dir)) {
+		return dir
+	}
+	return ""
+}
+
+func showDirWalk(root, path string) string {
 	dir := filepath.Dir(path)
 	rootAbs := filepath.Clean(root)
 	for i := 0; i < 4; i++ {
@@ -137,7 +165,7 @@ func seriesFromDirs(root, path string) string {
 		}
 		name := filepath.Base(dir)
 		if !reSeasonDir.MatchString(name) {
-			return clean(name)
+			return dir
 		}
 		dir = filepath.Dir(dir)
 	}

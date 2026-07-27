@@ -285,11 +285,18 @@ type FileState struct {
 	Missing   bool
 }
 
-// KnownFiles returns every non-directory item in a library keyed by path, so
-// the scanner can skip unchanged files without re-parsing them.
+// KnownFiles returns every file-backed item in a library keyed by path, so the
+// scanner can skip unchanged files without re-parsing them.
+//
+// It excludes rows that are not files on disk — shows, seasons, and collections
+// have a null container and a directory or synthetic path (ADR 0010, ADR 0017).
+// Including them would be a data-loss bug: the walk only ever "sees" video
+// files, so every container row would be absent from the seen set and marked
+// missing on the next scan.
 func (s *Store) KnownFiles(ctx context.Context, libraryID int64) (map[string]FileState, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, path, size_bytes, mtime, missing FROM media_item WHERE library_id = ?`, libraryID)
+		`SELECT id, path, size_bytes, mtime, missing FROM media_item
+		 WHERE library_id = ? AND container IS NOT NULL`, libraryID)
 	if err != nil {
 		return nil, fmt.Errorf("known files: %w", err)
 	}
@@ -490,6 +497,81 @@ func (s *Store) SetParent(ctx context.Context, childID int64, parentID *int64) e
 func (s *Store) Children(ctx context.Context, parentID int64) ([]Item, error) {
 	items, _, err := s.ListItems(ctx, ItemFilter{ParentID: &parentID, Limit: 500})
 	return items, err
+}
+
+// EnsureShow find-or-creates the show media_item for a series directory,
+// returning its id and whether it was just created. Identity is the show
+// directory path, which is UNIQUE and is also where tvshow.nfo is written
+// (ADR 0010). Unlike a collection, a show is a real metadata subject: it is
+// left pending (metadata_updated_at null) so the enricher fetches its poster,
+// overview, and cast like any other item.
+//
+// sortTitle must be normalized by the caller through internal/media.
+func (s *Store) EnsureShow(ctx context.Context, libraryID int64, path, title, sortTitle string) (int64, bool, error) {
+	now := time.Now().Unix()
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO media_item
+			(library_id, kind, path, title, sort_title, series, added_at, updated_at, missing)
+		VALUES (?, 'show', ?, ?, ?, ?, ?, ?, 0)
+		ON CONFLICT(path) DO NOTHING`,
+		libraryID, path, title, sortTitle, title, now, now)
+	if err != nil {
+		return 0, false, fmt.Errorf("ensure show %q: %w", path, err)
+	}
+	created := false
+	if n, err := res.RowsAffected(); err == nil {
+		created = n == 1
+	}
+	var id int64
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+		return 0, false, fmt.Errorf("ensure show %q: read id: %w", path, err)
+	}
+	return id, created, nil
+}
+
+// EnsureSeason find-or-creates a season under a show. path is the season
+// directory when one exists, else a synthetic identity the caller derives from
+// the show and season number, so it stays UNIQUE either way. A season is
+// stamped resolved at birth: its identity comes from the show, and the provider
+// season endpoint (its own poster, overview) is deferred depth — enriching it
+// today would only re-fetch the show it already hangs off.
+//
+// sortTitle must be normalized by the caller through internal/media.
+func (s *Store) EnsureSeason(ctx context.Context, libraryID, showID int64, seasonNum int, path, title, sortTitle string) (int64, bool, error) {
+	now := time.Now().Unix()
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO media_item
+			(library_id, kind, path, title, sort_title, season, parent_id,
+			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
+		VALUES (?, 'season', ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+		ON CONFLICT(path) DO NOTHING`,
+		libraryID, path, title, sortTitle, seasonNum, showID, now, now, now)
+	if err != nil {
+		return 0, false, fmt.Errorf("ensure season %q: %w", path, err)
+	}
+	created := false
+	if n, err := res.RowsAffected(); err == nil {
+		created = n == 1
+	}
+	var id int64
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+		return 0, false, fmt.Errorf("ensure season %q: read id: %w", path, err)
+	}
+	return id, created, nil
+}
+
+// LibraryEpisodes returns every episode row in a library, for the scanner's
+// hierarchy reconciliation. It returns all of them, not only the unparented
+// ones, so a series that was re-organised on disk re-parents correctly rather
+// than keeping a stale link.
+func (s *Store) LibraryEpisodes(ctx context.Context, libraryID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+itemCols+` FROM media_item WHERE library_id = ? AND kind = 'episode'`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("library episodes: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
 }
 
 // AddToCollection links an item into a collection (ADR 0017). Membership is
