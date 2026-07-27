@@ -286,6 +286,7 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 // to clear the flag, so size and mtime alone are not enough to decide a skip.
 type FileState struct {
 	ID        int64
+	Kind      string
 	SizeBytes *int64
 	MTime     *int64
 	Missing   bool
@@ -301,7 +302,7 @@ type FileState struct {
 // missing on the next scan.
 func (s *Store) KnownFiles(ctx context.Context, libraryID int64) (map[string]FileState, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, path, size_bytes, mtime, missing FROM media_item
+		`SELECT id, kind, path, size_bytes, mtime, missing FROM media_item
 		 WHERE library_id = ? AND container IS NOT NULL`, libraryID)
 	if err != nil {
 		return nil, fmt.Errorf("known files: %w", err)
@@ -313,7 +314,7 @@ func (s *Store) KnownFiles(ctx context.Context, libraryID int64) (map[string]Fil
 		var path string
 		var missing int
 		var st FileState
-		if err := rows.Scan(&st.ID, &path, &st.SizeBytes, &st.MTime, &missing); err != nil {
+		if err := rows.Scan(&st.ID, &st.Kind, &path, &st.SizeBytes, &st.MTime, &missing); err != nil {
 			return nil, fmt.Errorf("known files: %w", err)
 		}
 		st.Missing = missing != 0
@@ -709,6 +710,26 @@ func (s *Store) PromoteToChild(ctx context.Context, itemID, parentID int64, kind
 		return fmt.Errorf("promote item %d to %s: %w", itemID, kind, err)
 	}
 	return nil
+}
+
+// PruneEmptyContainers deletes container rows that no longer hold anything — a
+// show with no episodes, a work whose parts became episodes, a collection with
+// no members. Containers have a null container column (they are not files), so
+// this can never touch a real movie or episode. It runs after reconciliation,
+// once children have been re-parented, so a container is pruned only when it is
+// genuinely orphaned rather than mid-rebuild.
+func (s *Store) PruneEmptyContainers(ctx context.Context, libraryID int64) (int, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM media_item
+		WHERE library_id = ? AND container IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM media_item c WHERE c.parent_id = media_item.id)
+		  AND NOT EXISTS (SELECT 1 FROM item_collection ic WHERE ic.collection_id = media_item.id)`,
+		libraryID)
+	if err != nil {
+		return 0, fmt.Errorf("prune empty containers: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 // AttachChildCounts fills ChildCount for each item, so a caller can tell a
