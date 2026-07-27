@@ -44,7 +44,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | *unplanned* | Strategy past revision 1 |
+| Data model evolution and migrations | **planned** | Forward-only migrations (rev 1→8); multi-part & serial works decided ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **planned** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)) |
 
 ### Metadata and artwork · M2
@@ -168,11 +168,16 @@ group is not priority.
 - **Keyboard-control shortcut map and customizer** — building on the existing
   spatial focus model (ADR 0004).
 
-### Open modeling question — multi-part and serial works
+### Resolved modeling question — multi-part and serial works
 
-A ruling is needed for how the data model represents complex, multi-part
-movies, movie series, and serials, so they group and play sensibly rather than
-scattering as unrelated items. Motivating cases:
+**Decided in [ADR 0017](adr/0017-collections-and-multi-part-works.md).** The
+four cases split on one axis — are the pieces independent works or parts of one
+work? Independent works that continue a story are a **collection** (many-to-many
+membership, a side table; members stay top-level). Pieces of one work are
+**containment** via `parent_id`, with new `kind` values `part`/`chapter` and a
+`serial` kind for a closed, play-through-whole story. Schema landed in revision
+8; provider ingestion is deferred to M2-provider depth. Original framing kept
+below for the record. Motivating cases:
 
 - **Storm of the Century** — a Stephen King TV miniseries (one story, several
   parts).
