@@ -1,0 +1,106 @@
+.removedlg__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.removedlg {
+  width: 100%;
+  max-width: 420px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  padding: 18px 20px 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.removedlg__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.removedlg__x {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.removedlg__title {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 6px 0 14px;
+}
+
+.removedlg__error {
+  color: var(--danger, #ff6b6b);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.removedlg__opt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.removedlg__opt:hover:not(:disabled),
+.removedlg__opt:focus-visible {
+  border-color: var(--gold);
+}
+
+.removedlg__opt:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.removedlg__opt--danger:hover:not(:disabled),
+.removedlg__opt--danger:focus-visible {
+  border-color: var(--danger, #ff6b6b);
+}
+
+.removedlg__opt-title {
+  font-size: 14px;
+}
+
+.removedlg__opt--danger .removedlg__opt-title {
+  color: var(--danger, #ff6b6b);
+}
+
+.removedlg__opt-sub {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.removedlg__cancel {
+  width: 100%;
+  padding: 9px;
+  margin-top: 2px;
+  border-radius: var(--radius-tile, 8px);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.removedlg__cancel:hover {
+  color: var(--text-primary);
+}

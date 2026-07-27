@@ -376,6 +376,48 @@ func TestShowLibraryGroupsBareEpisodesIntoShow(t *testing.T) {
 	}
 }
 
+// An ignored path is skipped by the scanner: the file stays on disk, but a
+// rescan never re-adds it to the library. This is the non-destructive removal.
+func TestScanSkipsIgnoredPaths(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	ctx := context.Background()
+	writeFile(t, root, "Keep.mkv", 10)
+	ignorePath := writeFile(t, root, "Ignore Me.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+	known, _ := st.KnownFiles(ctx, lib.ID)
+	if len(known) != 2 {
+		t.Fatalf("first scan found %d files, want 2", len(known))
+	}
+
+	// Remove the title the way the ignore mode does: record the path, drop the
+	// row. The file is left on disk.
+	if err := st.IgnorePaths(ctx, lib.ID, []string{ignorePath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteItems(ctx, []int64{known[ignorePath].ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	scanAndWait(t, sc, lib)
+	after, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if len(after) != 1 || after[0].Title != "Keep" {
+		t.Errorf("after ignore + rescan = %v, want only Keep", titlesOf(after))
+	}
+	if _, err := os.Stat(ignorePath); err != nil {
+		t.Errorf("ignored file was removed from disk: %v", err)
+	}
+}
+
+func titlesOf(items []store.Item) []string {
+	var out []string
+	for _, it := range items {
+		out = append(out, it.Title)
+	}
+	return out
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)

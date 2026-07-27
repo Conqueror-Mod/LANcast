@@ -711,6 +711,111 @@ func (s *Store) PromoteToChild(ctx context.Context, itemID, parentID int64, kind
 	return nil
 }
 
+// RemovalTarget is one row a delete or ignore touches: its id, its file path
+// (empty for a container row that is not a file), and whether it is a file.
+type RemovalTarget struct {
+	ID     int64
+	Path   string
+	IsFile bool
+}
+
+// ItemSubtree returns an item and every descendant under it via parent_id — a
+// show with its seasons and episodes, a work with its parts. It is what a
+// container-level delete or ignore operates on. Collection membership is not
+// containment, so a collection's members are not included: removing a collection
+// removes the grouping, never the films.
+func (s *Store) ItemSubtree(ctx context.Context, id int64) ([]RemovalTarget, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH RECURSIVE tree(id) AS (
+			SELECT ?
+			UNION ALL
+			SELECT m.id FROM media_item m JOIN tree t ON m.parent_id = t.id
+		)
+		SELECT m.id, m.path, m.container IS NOT NULL
+		FROM media_item m JOIN tree ON m.id = tree.id`, id)
+	if err != nil {
+		return nil, fmt.Errorf("item subtree: %w", err)
+	}
+	defer rows.Close()
+	var out []RemovalTarget
+	for rows.Next() {
+		var t RemovalTarget
+		if err := rows.Scan(&t.ID, &t.Path, &t.IsFile); err != nil {
+			return nil, fmt.Errorf("item subtree: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// DeleteItems removes rows by id. Everything hanging off them — locks, artwork
+// links, credits, playback state, subtitles, streams, collection membership —
+// goes with them via ON DELETE CASCADE. This never touches disk.
+func (s *Store) DeleteItems(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		ph[i] = "?"
+		args[i] = id
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM media_item WHERE id IN (`+strings.Join(ph, ",")+`)`, args...); err != nil {
+		return fmt.Errorf("delete items: %w", err)
+	}
+	return nil
+}
+
+// IgnorePaths records paths the scanner must skip, so a removed-but-not-deleted
+// title is never re-added on the next scan.
+func (s *Store) IgnorePaths(ctx context.Context, libraryID int64, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("ignore paths: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT OR IGNORE INTO ignored_path (library_id, path, added_at) VALUES (?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("ignore paths: %w", err)
+	}
+	defer stmt.Close()
+	now := time.Now().Unix()
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, err := stmt.ExecContext(ctx, libraryID, p, now); err != nil {
+			return fmt.Errorf("ignore paths: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// IgnoredPaths returns the ignore list for a library, for the scanner to skip.
+func (s *Store) IgnoredPaths(ctx context.Context, libraryID int64) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT path FROM ignored_path WHERE library_id = ?`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("ignored paths: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("ignored paths: %w", err)
+		}
+		out[p] = true
+	}
+	return out, rows.Err()
+}
+
 // AttachChildCounts fills ChildCount for each item, so a caller can tell a
 // container from a leaf without a query per row. It counts both kinds of
 // containment: parent_id children (a show's seasons, a work's parts) and

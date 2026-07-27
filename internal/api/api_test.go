@@ -344,6 +344,38 @@ func TestListItemsCollectionMembers(t *testing.T) {
 	wantError(t, h.do(t, "GET", "/api/items?collection_id=abc", nil), 400, "bad_request")
 }
 
+// Deleting a title: 'delete' removes the file from disk, 'ignore' keeps it and
+// only drops the row; a bad mode is rejected.
+func TestDeleteItemModes(t *testing.T) {
+	h := newHarness(t)
+
+	// delete mode removes the file and the row.
+	trash := h.addFile(t, "Trash.mkv", make([]byte, 16))
+	trashPath := filepath.Join(h.dir, "Trash.mkv")
+	if resp := h.do(t, "DELETE", "/api/items/"+itoa(trash)+"?mode=delete", nil); resp.StatusCode != 204 {
+		t.Fatalf("delete status = %d, want 204", resp.StatusCode)
+	}
+	if _, err := os.Stat(trashPath); !os.IsNotExist(err) {
+		t.Errorf("file still on disk after delete: %v", err)
+	}
+	wantError(t, h.do(t, "GET", "/api/items/"+itoa(trash), nil), 404, "not_found")
+
+	// ignore mode keeps the file, drops the row.
+	keep := h.addFile(t, "Keep.mkv", make([]byte, 16))
+	keepPath := filepath.Join(h.dir, "Keep.mkv")
+	if resp := h.do(t, "DELETE", "/api/items/"+itoa(keep)+"?mode=ignore", nil); resp.StatusCode != 204 {
+		t.Fatalf("ignore status = %d, want 204", resp.StatusCode)
+	}
+	if _, err := os.Stat(keepPath); err != nil {
+		t.Errorf("ignore removed the file from disk: %v", err)
+	}
+	wantError(t, h.do(t, "GET", "/api/items/"+itoa(keep), nil), 404, "not_found")
+
+	// a missing mode is a bad request.
+	x := h.addFile(t, "X.mkv", make([]byte, 16))
+	wantError(t, h.do(t, "DELETE", "/api/items/"+itoa(x), nil), 400, "bad_request")
+}
+
 // Server filesystem paths must never reach a client.
 func TestItemResponseOmitsPath(t *testing.T) {
 	h := newHarness(t)
