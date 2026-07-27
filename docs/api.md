@@ -532,15 +532,22 @@ would make the search circle the wrong identity. A title the user locked by hand
 is honoured instead. Passing `q` overrides the title (and drops the year), for a
 fresh user-driven search; a TMDB id or URL in `q` targets exactly.
 
+**The search spans both film and television**, regardless of the item's own
+kind, and each candidate reports its `Kind` (`movie` or `show`). A TV miniseries
+scanned into a movie library — Storm of the Century as a multi-part work — can
+only be corrected if Fix match can reach TMDB's TV data; a movie-scoped search
+returns only the wrong, same-named film. The client labels each candidate Movie
+or TV so the two are distinguishable.
+
 Each candidate carries a `Breakdown`: the sub-scores that combine, by their
 weights (title 0.60, year 0.30, popularity 0.10), into the total. This is what
 lets the UI explain a score — "title matched, but the year is 27 off" — rather
 than present a bare number.
 
 ```json
-[ { "Provider": "tmdb", "ExternalID": "335984", "Title": "Blade Runner 2049",
-    "Year": 2017, "Score": 0.94, "PosterURL": "https://…",
-    "Overview": "Thirty years after…",
+[ { "Provider": "tmdb", "ExternalID": "335984", "Kind": "movie",
+    "Title": "Blade Runner 2049", "Year": 2017, "Score": 0.94,
+    "PosterURL": "https://…", "Overview": "Thirty years after…",
     "Breakdown": { "title": 1.0, "year": 1.0, "popularity": 0.31,
                    "total": 0.94, "year_gap": 0 } } ]
 ```
@@ -554,8 +561,12 @@ response is the updated item, already carrying the new metadata. Applying is
 synchronous and deliberately does not go through the background pass, which
 skips locked items and re-searches — that would re-pick the rejected candidate.
 
+`kind` is the chosen candidate's kind and may differ from the item's own — this
+is how a movie-scanned miniseries is corrected to its TV entry, fetched from the
+provider's TV endpoint. Omit it to fetch as the item's existing kind.
+
 ```json
-{ "provider": "tmdb", "external_id": "335984" }
+{ "provider": "tmdb", "external_id": "335984", "kind": "movie" }
 ```
 
 ### `GET /api/review?library_id=`
