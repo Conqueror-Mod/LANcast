@@ -646,16 +646,33 @@ func (s *Store) LibraryMovieFiles(ctx context.Context, libraryID int64) ([]Item,
 // title, so the same work groups idempotently across rescans. sortTitle must be
 // normalized by the caller through internal/media.
 func (s *Store) EnsureWork(ctx context.Context, libraryID int64, workKey, title, sortTitle string) (int64, bool, error) {
-	path := fmt.Sprintf("lancast:work:%d:%s", libraryID, workKey)
+	return s.ensureContainer(ctx, libraryID, "movie",
+		fmt.Sprintf("lancast:work:%d:%s", libraryID, workKey), title, sortTitle)
+}
+
+// EnsureSerial find-or-creates the parent for a chaptered serial or miniseries —
+// a closed, finite story played through as a whole (ADR 0017). Unlike a
+// multi-part film's 'movie' parent, its kind is 'serial', which is what tells a
+// client "play the whole thing" rather than "pick a film".
+func (s *Store) EnsureSerial(ctx context.Context, libraryID int64, workKey, title, sortTitle string) (int64, bool, error) {
+	return s.ensureContainer(ctx, libraryID, "serial",
+		fmt.Sprintf("lancast:serial:%d:%s", libraryID, workKey), title, sortTitle)
+}
+
+// ensureContainer is the shared body behind EnsureWork and EnsureSerial: a
+// no-file parent row on a synthetic, deterministic path, left pending so the
+// enricher gives it its own artwork. The distinct path schemes keep a work and a
+// serial that happen to share a title from colliding on the UNIQUE path.
+func (s *Store) ensureContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string) (int64, bool, error) {
 	now := time.Now().Unix()
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
 			(library_id, kind, path, title, sort_title, added_at, updated_at, missing)
-		VALUES (?, 'movie', ?, ?, ?, ?, ?, 0)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0)
 		ON CONFLICT(path) DO NOTHING`,
-		libraryID, path, title, sortTitle, now, now)
+		libraryID, kind, path, title, sortTitle, now, now)
 	if err != nil {
-		return 0, false, fmt.Errorf("ensure work %q: %w", workKey, err)
+		return 0, false, fmt.Errorf("ensure %s %q: %w", kind, path, err)
 	}
 	created := false
 	if n, err := res.RowsAffected(); err == nil {
@@ -663,25 +680,24 @@ func (s *Store) EnsureWork(ctx context.Context, libraryID int64, workKey, title,
 	}
 	var id int64
 	if err := s.db.QueryRowContext(ctx, `SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
-		return 0, false, fmt.Errorf("ensure work %q: read id: %w", workKey, err)
+		return 0, false, fmt.Errorf("ensure %s %q: read id: %w", kind, path, err)
 	}
 	return id, created, nil
 }
 
-// PromoteToPart turns a movie file into an ordered part of a work: it becomes
-// kind 'part' under parentID, with its order in the episode column (the ordering
-// column ADR 0017 reuses) and a "Part N" title. Idempotent — re-running a scan
-// re-applies the same values. The title is only rewritten while it still looks
-// like an auto-derived part label, so a user's manual rename survives.
-func (s *Store) PromoteToPart(ctx context.Context, itemID, parentID int64, order int, title string) error {
+// PromoteToChild turns a movie file into an ordered child of a container — a
+// 'part' of a multi-part work, a 'chapter' of a serial — under parentID, with
+// its order in the episode column (the ordering column ADR 0017 reuses). The
+// file's own title is left as scanned ("Baahubali Part 1"), which already reads
+// well and preserves any manual rename. Idempotent across rescans.
+func (s *Store) PromoteToChild(ctx context.Context, itemID, parentID int64, kind string, order int) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE media_item
-		SET kind = 'part', parent_id = ?, episode = ?, updated_at = ?,
-		    title = CASE WHEN title LIKE 'Part %' OR title = ? THEN ? ELSE title END
+		SET kind = ?, parent_id = ?, episode = ?, updated_at = ?
 		WHERE id = ?`,
-		parentID, order, time.Now().Unix(), title, title, itemID)
+		kind, parentID, order, time.Now().Unix(), itemID)
 	if err != nil {
-		return fmt.Errorf("promote item %d to part: %w", itemID, err)
+		return fmt.Errorf("promote item %d to %s: %w", itemID, kind, err)
 	}
 	return nil
 }

@@ -60,14 +60,15 @@ var (
 	reNoise     = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|sdr|bluray|blu-ray|bdrip|brrip|dvdrip|webrip|web-dl|webdl|hdtv|remux|x264|x265|h264|h265|hevc|avc|xvid|divx|aac|ac3|eac3|dts|dts-hd|truehd|atmos|ddp5|dd5|10bit|8bit|proper|repack|extended|unrated|remastered|imax|multi)\b`)
 	reSeasonDir = regexp.MustCompile(`(?i)^(?:season|series|s)[\s._-]*(\d{1,2})$`)
 	reSpaces    = regexp.MustCompile(`\s+`)
-	// An explicit multi-part marker: "Part 2", "Part Two", "Pt. 3". Deliberately
-	// narrow — no roman numerals (ambiguous with sequels: "Part II" vs a second
-	// film), no "Vol"/"CD" (a different concept — one work split for size, which
-	// plays as a single item and is not modelled here).
-	rePart = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
+	// Explicit grouping markers. Deliberately narrow — no roman numerals
+	// (ambiguous with sequels: "Part II" vs a second film), no "Vol"/"CD" (a
+	// different concept — one work split for size, which plays as a single item
+	// and is not modelled here).
+	rePart    = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
+	reChapter = regexp.MustCompile(`(?i)\b(?:chapter|ch\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 )
 
-var partWords = map[string]int{
+var numberWords = map[string]int{
 	"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
 	"six": 6, "seven": 7, "eight": 8, "nine": 9,
 }
@@ -81,18 +82,32 @@ var partWords = map[string]int{
 // a work title (ADR 0017), which is what keeps a standalone film that merely
 // has "Part" in its name from being torn into pieces.
 func PartOf(path string) (work string, part int, ok bool) {
+	return markerOf(path, rePart)
+}
+
+// ChapterOf is PartOf for theatrical serials — "Batman Chapter 1", the chaptered
+// 1940s serials ADR 0017 calls out. Same grouping rules; a distinct marker so a
+// serial's pieces are labelled chapters, not parts.
+func ChapterOf(path string) (work string, chapter int, ok bool) {
+	return markerOf(path, reChapter)
+}
+
+// markerOf finds an explicit ordinal marker (Part N, Chapter N) in a filename
+// and splits off the work title before it. Shared by PartOf and ChapterOf so the
+// two cannot drift in how they parse a number or trim a title.
+func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 	base := stripNoise(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
-	loc := rePart.FindStringSubmatchIndex(base)
+	loc := re.FindStringSubmatchIndex(base)
 	if loc == nil {
 		return "", 0, false
 	}
 	token := strings.ToLower(base[loc[2]:loc[3]])
 	if n, err := strconv.Atoi(token); err == nil {
-		part = n
+		num = n
 	} else {
-		part = partWords[token]
+		num = numberWords[token]
 	}
-	if part == 0 {
+	if num == 0 {
 		return "", 0, false
 	}
 
@@ -109,7 +124,7 @@ func PartOf(path string) (work string, part int, ok bool) {
 		// with confidence, so it stays an ordinary movie.
 		return "", 0, false
 	}
-	return work, part, true
+	return work, num, true
 }
 
 // Parse infers metadata for a media file. root is the library root, used to

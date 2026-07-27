@@ -141,6 +141,38 @@ func TestPartOf(t *testing.T) {
 	}
 }
 
+func TestChapterOf(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantWork string
+		wantCh   int
+		wantOK   bool
+	}{
+		{"Batman Chapter 1", "Batman", 1, true},
+		{"Batman.Chapter.15.1080p.WEBRip", "Batman", 15, true},
+		{"The Phantom Ch. 3", "The Phantom", 3, true},
+		{"Superman Chapter Four", "Superman", 4, true},
+		// A part marker is not a chapter, and vice versa — the two stay disjoint.
+		{"Baahubali Part 1", "", 0, false},
+		{"Some Movie", "", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			work, ch, ok := ChapterOf(tt.name + ".mkv")
+			if ok != tt.wantOK || ch != tt.wantCh || work != tt.wantWork {
+				t.Errorf("ChapterOf(%q) = (%q, %d, %v), want (%q, %d, %v)",
+					tt.name, work, ch, ok, tt.wantWork, tt.wantCh, tt.wantOK)
+			}
+		})
+	}
+
+	// A part filename must not be seen as a chapter, so the two grouping passes
+	// never fight over the same file.
+	if _, _, ok := PartOf("Batman Chapter 1.mkv"); ok {
+		t.Error("PartOf matched a Chapter filename")
+	}
+}
+
 func TestIsVideo(t *testing.T) {
 	yes := []string{"a.mkv", "b.MP4", "c.avi", "d.m2ts"}
 	no := []string{"a.srt", "b.nfo", "c.jpg", "d", "e.mkv.part"}
