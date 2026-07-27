@@ -16,14 +16,20 @@ import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
-function PlayButton({ onPlay }: { onPlay: () => void }) {
+function PlayButton({
+  onPlay,
+  label = "Play",
+}: {
+  onPlay: () => void;
+  label?: string;
+}) {
   const focusable = useFocusable(onPlay);
   return (
     <button {...focusable} className="detail__play" onClick={onPlay}>
       <span className="detail__play-icon" aria-hidden="true">
         ▶
       </span>
-      Play
+      {label}
     </button>
   );
 }
@@ -103,6 +109,10 @@ export function Detail() {
   const poster = artworkURL(item.artwork?.poster, "poster2x");
   const cast = castOf(item.credits);
   const canFixMatch = item.kind !== "collection" && item.kind !== "season";
+  // Children that can be played directly (not themselves containers), in order —
+  // the queue behind Play all. A show's children are seasons, so it gets none;
+  // a season's episodes, a work's parts, and a collection's films all qualify.
+  const playableChildren = (children ?? []).filter((c) => !isContainer(c));
 
   const meta = [
     item.year ? String(item.year) : "",
@@ -165,11 +175,26 @@ export function Detail() {
               </div>
             )}
 
-            {/* A container has nothing to play — it holds other items, shown in
-                the grid below. Only leaves get a Play button. */}
+            {/* A leaf plays itself. A container whose children are themselves
+                playable (a work's parts, a serial's chapters, a season's
+                episodes, a collection's films) offers Play all, which queues
+                them in order. A show, whose children are seasons, gets neither —
+                you drill into a season first. */}
             <div className="detail__actions">
               {!container && (
                 <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
+              )}
+              {container && playableChildren.length > 0 && (
+                <PlayButton
+                  label="Play all"
+                  onPlay={() =>
+                    navigate(
+                      `/watch/${playableChildren[0].id}?queue=${playableChildren
+                        .map((c) => c.id)
+                        .join(",")}`,
+                    )
+                  }
+                />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
             </div>
