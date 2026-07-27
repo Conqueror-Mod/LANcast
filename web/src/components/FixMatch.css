@@ -167,6 +167,17 @@
   letter-spacing: 0.1em;
   color: var(--text-muted);
 }
+.fixmatch__kind {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  vertical-align: middle;
+}
 .fixmatch__overview {
   font-size: 12px;
   color: var(--text-faint);

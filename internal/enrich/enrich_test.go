@@ -13,12 +13,13 @@ import (
 
 // fakeProvider serves canned candidates and records without a network.
 type fakeProvider struct {
-	id      string
-	cands   []meta.Candidate
-	record  *meta.Record
-	searchN int
-	fetchN  int
-	err     error
+	id        string
+	cands     []meta.Candidate
+	record    *meta.Record
+	searchN   int
+	fetchN    int
+	lastFetch meta.Ref
+	err       error
 }
 
 func (f *fakeProvider) ID() string      { return f.id }
@@ -36,6 +37,7 @@ func (f *fakeProvider) Search(ctx context.Context, q meta.Query) ([]meta.Candida
 
 func (f *fakeProvider) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) {
 	f.fetchN++
+	f.lastFetch = ref
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -563,5 +565,39 @@ func TestCancelledContextStopsRun(t *testing.T) {
 	reg := meta.NewRegistry()
 	if err := New(st, reg, &fakeArt{}, quietLog()).Run(ctx); err == nil {
 		t.Error("Run ignored a cancelled context")
+	}
+}
+
+// ApplyMatch honours a candidate kind that differs from the item's own — a
+// movie-scanned miniseries corrected to its TV entry fetches from /tv, and the
+// TV metadata lands on the item even though it stays a movie.
+func TestApplyMatchCrossKind(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\storm.mkv`, "Storm of the Century", 1999)
+
+	p := &fakeProvider{id: "fake", record: &meta.Record{
+		Source: "fake", ExternalID: "60622", Kind: meta.KindShow,
+		Fields: meta.Fields{Title: meta.S("Storm of the Century"), Year: meta.I(1999),
+			Overview: meta.S("A miniseries.")},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := w.ApplyMatch(ctx, *it, "fake", "60622", meta.KindShow); err != nil {
+		t.Fatalf("ApplyMatch: %v", err)
+	}
+	// Fetched from the TV endpoint, not the item's movie kind.
+	if p.lastFetch.Kind != meta.KindShow {
+		t.Errorf("fetched kind = %q, want show", p.lastFetch.Kind)
+	}
+	got, _ := st.GetItem(ctx, id, "local")
+	if got.Overview == nil || *got.Overview != "A miniseries." {
+		t.Errorf("overview = %v, want the TV record applied", got.Overview)
+	}
+	if got.MatchState != meta.StateLocked {
+		t.Errorf("match state = %q, want locked", got.MatchState)
 	}
 }

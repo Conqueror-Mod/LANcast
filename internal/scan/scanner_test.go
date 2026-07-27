@@ -376,6 +376,64 @@ func TestShowLibraryGroupsBareEpisodesIntoShow(t *testing.T) {
 	}
 }
 
+// A rescan re-interprets unchanged files whose classification has moved
+// families — the retroactive case. Content scanned before a library was typed as
+// shows (so it became a movie work with parts) is converted to a show with
+// episodes on the next scan, without a byte changing, and the now-empty work is
+// pruned.
+func TestRescanReinterpretsChangedKind(t *testing.T) {
+	sc, st := newScanner(t)
+	ctx := context.Background()
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(ctx, "TV", "show", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate the pre-fix state: the two files stored as a movie work's parts.
+	work, _, err := st.EnsureWork(ctx, lib.ID, "storm", "Storm of the Century", "storm of the century")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, rel := range []string{"Storm/Storm of the Century Part 1.mkv", "Storm/Storm of the Century Part 2.mkv"} {
+		path := writeFile(t, root, rel, 10)
+		info, _ := os.Stat(path)
+		id, err := st.UpsertItem(ctx, store.ScanFile{
+			LibraryID: lib.ID, Path: path, Kind: "movie", Title: "Storm of the Century Part",
+			SortTitle: "storm", Container: "mkv", SizeBytes: info.Size(), MTime: info.ModTime().Unix(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.PromoteToChild(ctx, id, work, "part", i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Rescan: bytes are unchanged, but a show library reads "Part N" as an
+	// episode, so the files are reinterpreted and regrouped.
+	scanAndWait(t, sc, *lib)
+
+	all, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	for _, it := range all {
+		kinds[it.Kind]++
+	}
+	if kinds["episode"] != 2 || kinds["show"] != 1 {
+		t.Errorf("kinds = %v, want 2 episodes + 1 show after reinterpretation", kinds)
+	}
+	if kinds["part"] != 0 {
+		t.Errorf("still %d part rows, want 0", kinds["part"])
+	}
+	// The old movie work is orphaned and pruned.
+	if kinds["movie"] != 0 {
+		t.Errorf("empty movie work not pruned: %v", kinds)
+	}
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)
