@@ -166,6 +166,12 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	if err != nil {
 		return err
 	}
+	// Paths the user removed from the server without deleting the file. They are
+	// skipped so a rescan never re-adds them.
+	ignored, err := s.st.IgnoredPaths(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
 
 	seen := make(map[string]bool, len(known))
 
@@ -183,6 +189,11 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			return nil
 		}
 		if !media.IsVideo(path) {
+			return nil
+		}
+		if ignored[path] {
+			// On the ignore list — present on disk, deliberately kept out of the
+			// library. Not counted as seen, so it is never re-added.
 			return nil
 		}
 

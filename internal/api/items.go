@@ -3,10 +3,90 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 
 	"lancast/internal/store"
 )
+
+// deleteItem removes a title from the library. mode decides what happens to the
+// files on disk:
+//
+//   - ignore: the files stay on disk; their paths are added to the ignore list
+//     so a rescan never re-adds them. Non-destructive.
+//   - delete: the files are removed from disk. Each is containment-checked
+//     against its library root first (a bad row must never delete outside the
+//     library), and a file already gone is not an error.
+//
+// A container (show, work) removes its whole subtree — every episode or part.
+// A collection removes only the grouping, never the member films. Admin-only.
+func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	mode := r.URL.Query().Get("mode")
+	if mode != "ignore" && mode != "delete" {
+		writeError(w, http.StatusBadRequest, "bad_request", "mode must be 'ignore' or 'delete'")
+		return
+	}
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
+	if err != nil {
+		s.writeInternal(w, err, "get library")
+		return
+	}
+	targets, err := s.st.ItemSubtree(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "item subtree")
+		return
+	}
+
+	var files []string
+	var rowIDs []int64
+	for _, t := range targets {
+		rowIDs = append(rowIDs, t.ID)
+		if t.IsFile && t.Path != "" {
+			files = append(files, t.Path)
+		}
+	}
+
+	if mode == "delete" {
+		// Verify every path is inside the library before removing anything, so a
+		// single bad row cannot delete a file outside the library and a partial
+		// delete is avoided.
+		abs := make([]string, 0, len(files))
+		for _, f := range files {
+			a, err := containedPath(lib.Path, f)
+			if err != nil {
+				s.log.Error("delete containment check failed", "item", id, "path", f, "error", err)
+				writeError(w, http.StatusInternalServerError, "internal", "a file path escaped its library; nothing was deleted")
+				return
+			}
+			abs = append(abs, a)
+		}
+		for _, a := range abs {
+			if err := os.Remove(a); err != nil && !os.IsNotExist(err) {
+				s.log.Warn("delete file failed", "path", a, "error", err)
+			}
+		}
+	} else {
+		if err := s.st.IgnorePaths(r.Context(), it.LibraryID, files); err != nil {
+			s.writeInternal(w, err, "ignore paths")
+			return
+		}
+	}
+
+	if err := s.st.DeleteItems(r.Context(), rowIDs); err != nil {
+		s.writeInternal(w, err, "delete items")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()

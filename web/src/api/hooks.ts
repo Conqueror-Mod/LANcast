@@ -271,6 +271,29 @@ export function useCollectionMembers(collectionID: number, enabled: boolean) {
   });
 }
 
+// Removes a title. mode "ignore" keeps the files on disk (and skips them on
+// future scans); mode "delete" removes the files too. Every list that could be
+// showing the item is refreshed afterwards.
+export function useDeleteItem(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: "ignore" | "delete") =>
+      apiSend(`/api/items/${id}?mode=${mode}`, "DELETE"),
+    onSuccess: () => {
+      for (const key of [
+        "items",
+        "recently-added",
+        "continue",
+        "review",
+        "children",
+        "collection-members",
+      ]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
 // The trailer is a separate call: it is optional, and a detail page should
 // render fully without waiting on it. A 404 is a normal "no trailer" answer.
 // Provider matches for correcting an item's identity. Lazy: only searches once

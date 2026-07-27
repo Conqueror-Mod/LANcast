@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 8
+const CurrentSchemaVersion = 9
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -26,6 +26,7 @@ var migrations = []migration{
 	{version: 6, sql: schemaRevision6},
 	{version: 7, sql: schemaRevision7},
 	{version: 8, sql: schemaRevision8},
+	{version: 9, sql: schemaRevision9},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -310,4 +311,20 @@ CREATE TABLE IF NOT EXISTS item_collection (
 );
 
 CREATE INDEX IF NOT EXISTS idx_collection_members ON item_collection(collection_id, ord);
+`
+
+// Revision 9 — the ignore list.
+//
+// A user can remove a title from the server while leaving its file on disk. Its
+// path is recorded here, and the scanner skips any file at or beneath an ignored
+// path, so a rescan never re-adds it. This is the non-destructive counterpart to
+// deleting the file: "stop tracking this" versus "erase it". Paths are stored as
+// scanned (the absolute path on the server) since that is what the walk compares.
+const schemaRevision9 = `
+CREATE TABLE IF NOT EXISTS ignored_path (
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    path       TEXT    NOT NULL,
+    added_at   INTEGER NOT NULL,
+    PRIMARY KEY (library_id, path)
+);
 `

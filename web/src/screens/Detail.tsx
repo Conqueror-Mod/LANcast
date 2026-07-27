@@ -5,12 +5,14 @@ import {
   useTrailer,
   useChildren,
   useCollectionMembers,
+  useIsAdmin,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating } from "@/lib/format";
 import { isContainer, childLabel } from "@/lib/kind";
 import { FixMatch } from "@/components/FixMatch";
+import { RemoveDialog } from "@/components/RemoveDialog";
 import { PosterTile } from "@/components/PosterTile";
 import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
@@ -61,6 +63,15 @@ function TrailerButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+function RemoveButton({ onOpen }: { onOpen: () => void }) {
+  const focusable = useFocusable(onOpen);
+  return (
+    <button {...focusable} className="detail__remove" onClick={onOpen}>
+      Remove
+    </button>
+  );
+}
+
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
 }
@@ -85,6 +96,8 @@ export function Detail() {
 
   const [fixOpen, setFixOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const isAdmin = useIsAdmin();
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
 
@@ -197,6 +210,12 @@ export function Detail() {
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
+              {/* A collection is a provider-derived grouping with no file of its
+                  own, so removing it is not offered; its member films are removed
+                  individually. */}
+              {isAdmin && item.kind !== "collection" && (
+                <RemoveButton onOpen={() => setRemoveOpen(true)} />
+              )}
             </div>
 
             {item.overview && <p className="detail__overview">{item.overview}</p>}
@@ -232,6 +251,16 @@ export function Detail() {
       </div>
 
       {fixOpen && <FixMatch item={item} onClose={() => setFixOpen(false)} />}
+      {removeOpen && (
+        <RemoveDialog
+          item={item}
+          onClose={() => setRemoveOpen(false)}
+          onDone={() => {
+            setRemoveOpen(false);
+            back();
+          }}
+        />
+      )}
       {trailerOpen && trailer && (
         <TrailerModal
           trailer={trailer}

@@ -321,6 +321,23 @@ all. Reporting those as match failures buries the real ones.
 Returns `204`. Clients should throttle to roughly one call per five seconds
 during playback.
 
+### `DELETE /api/items/{id}?mode=`
+
+Removes a title. **Admin only.** `mode` is required:
+
+- `ignore` — the files stay on disk; their paths are added to a per-library
+  ignore list so a rescan never re-adds them. The non-destructive "stop
+  tracking this" removal.
+- `delete` — the files are removed from disk. Each is re-verified as contained
+  within its library root first, so a bad row can never delete outside the
+  library; if any path fails that check nothing is deleted (`500`). A file
+  already gone is not an error.
+
+A container (a show, a multi-part work) removes its whole subtree — every
+episode or part. A collection is a grouping with no file of its own, so
+removing one drops only the grouping row, never the member films. `204` on
+success, `404` if unknown, `400` if `mode` is missing or invalid.
+
 ---
 
 ## Subtitles

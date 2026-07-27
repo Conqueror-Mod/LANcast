@@ -147,6 +147,24 @@
   transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
     box-shadow var(--dur-fast) ease;
 }
+
+.detail__remove {
+  align-self: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+.detail__remove:hover,
+.detail__remove:focus-visible {
+  color: var(--danger, #ff6b6b);
+  border-color: var(--danger, #ff6b6b);
+}
 .detail__fix:hover,
 .detail__fix:focus {
   color: var(--text-primary);
