@@ -216,6 +216,50 @@ func TestFetchMovie(t *testing.T) {
 	}
 }
 
+// A movie in a franchise carries its belongs_to_collection through as a
+// CollectionRef, so the enricher can group it (ADR 0017). A standalone film
+// leaves Collection nil.
+func TestFetchMovieCollection(t *testing.T) {
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+		 "title":"The Fellowship of the Ring","release_date":"2001-12-19",
+		 "belongs_to_collection":{"id":119,"name":"The Lord of the Rings Collection",
+		   "poster_path":"/cp.jpg","backdrop_path":"/cb.jpg"}}`))
+	})
+
+	rec, err := newClient(t, srv).Fetch(context.Background(),
+		meta.Ref{Kind: meta.KindMovie, ExternalID: "120"})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if rec.Collection == nil {
+		t.Fatal("Collection is nil, want the LOTR collection")
+	}
+	if rec.Collection.ExternalID != "119" {
+		t.Errorf("Collection.ExternalID = %q, want 119", rec.Collection.ExternalID)
+	}
+	if rec.Collection.Name != "The Lord of the Rings Collection" {
+		t.Errorf("Collection.Name = %q", rec.Collection.Name)
+	}
+	if len(rec.Collection.Artwork) != 2 {
+		t.Errorf("Collection.Artwork = %+v, want poster and backdrop", rec.Collection.Artwork)
+	}
+}
+
+func TestFetchMovieNoCollection(t *testing.T) {
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"title":"Arrival","release_date":"2016-11-11"}`))
+	})
+	rec, err := newClient(t, srv).Fetch(context.Background(),
+		meta.Ref{Kind: meta.KindMovie, ExternalID: "329865"})
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if rec.Collection != nil {
+		t.Errorf("Collection = %+v, want nil for a standalone film", rec.Collection)
+	}
+}
+
 func TestFetchEpisode(t *testing.T) {
 	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/tv/83867/season/1/episode/7" {

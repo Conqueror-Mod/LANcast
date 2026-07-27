@@ -492,6 +492,48 @@ func (s *Store) Children(ctx context.Context, parentID int64) ([]Item, error) {
 	return items, err
 }
 
+// EnsureCollection finds or creates the collection media_item for a provider's
+// grouping (TMDB's belongs_to_collection), returning its id and whether it was
+// just created — so a caller downloads collection artwork once, not once per
+// member. Identity is the synthetic, deterministic path, which the UNIQUE
+// constraint makes idempotent under the concurrent enrichment workers.
+//
+// The row is stamped metadata_updated_at and match_state 'matched' at birth: a
+// collection is resolved the moment it is created (its identity came straight
+// from the provider), so it must never enter the enrichment queue, which has no
+// provider that can search for kind 'collection' anyway.
+//
+// The synthetic path is not a filesystem path and never resolves to one — the
+// containment checks that guard file-serving handlers reject it, which is
+// correct: a collection has no bytes to stream.
+// sortTitle must already be normalized by the caller through the single
+// normalizer in internal/media — store owns no title-normalization opinion.
+func (s *Store) EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error) {
+	path := fmt.Sprintf("lancast:collection:%s:%s", provider, externalID)
+	now := time.Now().Unix()
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO media_item
+			(library_id, kind, path, title, sort_title, provider, external_id,
+			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
+		VALUES (?, 'collection', ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+		ON CONFLICT(path) DO NOTHING`,
+		libraryID, path, name, sortTitle, provider, externalID, now, now, now)
+	if err != nil {
+		return 0, false, fmt.Errorf("ensure collection %q: %w", externalID, err)
+	}
+	created := false
+	if n, err := res.RowsAffected(); err == nil {
+		created = n == 1
+	}
+
+	var id int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+		return 0, false, fmt.Errorf("ensure collection %q: read id: %w", externalID, err)
+	}
+	return id, created, nil
+}
+
 // AddToCollection links an item into a collection (ADR 0017). Membership is
 // many-to-many and deliberately not parent_id: a member — an "Anne" film, a
 // franchise entry — stays a top-level, independently browsable item that may
