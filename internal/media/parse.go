@@ -66,11 +66,12 @@ var (
 	// and is not modelled here).
 	rePart    = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 	reChapter = regexp.MustCompile(`(?i)\b(?:chapter|ch\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
-	// A bare episode marker with no season — "Storm of the Century E2",
-	// "…Episode 3", "…Ep 2". The bare "e" only matches adjacent to digits at a
-	// word boundary, so "Se7en" and "WALL-E" are safe. Used only in a show
-	// library, where such a file is a miniseries part rather than a film.
-	reEpisodeMark = regexp.MustCompile(`(?i)\b(?:episode[\s._-]*|ep[\s._-]*|e)(\d{1,2})\b`)
+	// An ordinal marker with no season — "Storm of the Century E2", "…Episode 3",
+	// "…Part 2", "…Chapter 1". In a show library every one of these means a
+	// miniseries part (an episode), where in a movie library Part means a film
+	// work and Chapter a serial. The bare "e" only matches adjacent to digits at
+	// a word boundary, so "Se7en" and "WALL-E" are safe.
+	reShowOrdinal = regexp.MustCompile(`(?i)\b(?:part[\s._-]*|pt\.?[\s._-]*|chapter[\s._-]*|ch\.?[\s._-]*|episode[\s._-]*|ep[\s._-]*|e)(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 )
 
 // LibShow is the library kind that marks a library as television, which biases
@@ -170,14 +171,16 @@ func Parse(root, path, libKind string) Info {
 		return info
 	}
 
-	// In a show library a bare episode marker with no season — "Storm of the
-	// Century E2" — is still a TV episode (of season 1), not a same-named film.
-	// This is what lets a miniseries match against TMDB's TV data: episode and
-	// show kinds search /tv, where a movie kind searches /movie and can only ever
-	// find the wrong, same-named film. Gated to show libraries so a movie's odd
-	// name never trips it.
+	// In a show library an ordinal marker with no season — "Storm of the Century
+	// E2", "…Part 2", "…Chapter 1" — is a TV episode (of season 1), not a
+	// same-named film or a movie work. This is what lets a miniseries match
+	// against TMDB's TV data: episode and show kinds search /tv, where a movie
+	// kind searches /movie and can only ever find the wrong, same-named film.
+	// Everything in a show library is television, so Part here means an episode,
+	// not the multi-part film work it means in a movie library. Gated to show
+	// libraries so a movie's odd name never trips it.
 	if libKind == LibShow {
-		if series, episode, ok := markerOf(path, reEpisodeMark); ok {
+		if series, episode, ok := markerOf(path, reShowOrdinal); ok {
 			info.Kind = KindEpisode
 			info.Series = series
 			info.Season = 1

@@ -192,6 +192,16 @@ func TestParseLibraryKindBiasesEpisodes(t *testing.T) {
 		t.Errorf("movie library: got kind %q, want movie (E2 must not become an episode)", inMovie.Kind)
 	}
 
+	// In a show library, Part and Chapter markers are episodes too — everything
+	// there is television. In a movie library Part stays a film work.
+	partFile := filepath.Join(root, "Storm of the Century", "Storm of the Century Part 2.mkv")
+	if p := Parse(root, partFile, "show"); p.Kind != KindEpisode || p.Episode != 2 {
+		t.Errorf("show library Part 2: got %+v, want episode 2", p)
+	}
+	if p := Parse(root, partFile, "movie"); p.Kind != KindMovie {
+		t.Errorf("movie library Part 2: got kind %q, want movie work", p.Kind)
+	}
+
 	// The guard still holds inside a show library: a real film with an "e"+digit
 	// in its name is not shredded into an episode.
 	se7en := Parse(root, filepath.Join(root, "Se7en (1995).mkv"), "show")
