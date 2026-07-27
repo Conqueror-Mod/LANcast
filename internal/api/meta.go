@@ -366,5 +366,13 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	it.Streams = streams
+	// Attach the child count so the detail page can render a container (its
+	// seasons, films, or parts) rather than a dead-end Play (ADR 0017).
+	counted := []store.Item{*it}
+	if err := s.st.AttachChildCounts(r.Context(), counted); err != nil {
+		s.writeInternal(w, err, "attach child counts")
+		return
+	}
+	it.ChildCount = counted[0].ChildCount
 	writeJSON(w, http.StatusOK, it)
 }

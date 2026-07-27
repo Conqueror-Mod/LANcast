@@ -245,6 +245,14 @@ its pieces through `parent_id`: the parent carries the identity, the `part` /
 filesystem paths, and withholding them keeps the layout private when the server
 is reachable beyond the LAN.
 
+`child_count` is the number of present items that name this one as parent —
+nonzero for a container (a show, a season, a collection, a multi-part work). It
+is omitted when zero. A client uses it to tell a container from a leaf: a
+container opens its children (via `parent_id`) and offers no Play, so a
+`movie`-kind parent of `part` children — a two-part film ([ADR 0017](adr/0017-collections-and-multi-part-works.md))
+— is not given a dead-end Play button. `kind` alone cannot express that, which
+is why the count is part of the item shape.
+
 ### `GET /api/continue`
 
 The user's in-progress items, most recently played first — the home screen's

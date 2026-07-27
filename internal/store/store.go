@@ -188,6 +188,12 @@ type Item struct {
 	AudioCodec    *string  `json:"audio_codec"`
 	AudioChannels *int     `json:"audio_channels"`
 
+	// ChildCount is how many (present) items name this one as parent — nonzero
+	// for a container (show, season, collection, multi-part work). It lets a
+	// client tell a container from a leaf without a follow-up query, so a
+	// movie-parent of parts is not offered a dead-end Play (ADR 0017).
+	ChildCount int `json:"child_count,omitempty"`
+
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
 
@@ -614,6 +620,107 @@ func (s *Store) LibraryEpisodes(ctx context.Context, libraryID int64) ([]Item, e
 	}
 	defer rows.Close()
 	return scanItems(rows)
+}
+
+// LibraryMovieFiles returns the file-backed movie rows in a library — the
+// candidates the scanner re-parses for multi-part grouping. It excludes the
+// synthetic parent-work rows (which have a null container) so a work is never
+// mistaken for one of its own parts.
+func (s *Store) LibraryMovieFiles(ctx context.Context, libraryID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+itemCols+` FROM media_item
+		 WHERE library_id = ? AND kind = 'movie' AND container IS NOT NULL`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("library movie files: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+// EnsureWork find-or-creates the parent media_item for a multi-part film — the
+// work "Baahubali" over its two parts (ADR 0017). Per that ADR the parent is a
+// 'movie', a container with no file of its own; its parts carry the files. It is
+// left pending so the enricher gives the work its own poster and overview.
+//
+// Identity is a synthetic path derived from the library and the normalized work
+// title, so the same work groups idempotently across rescans. sortTitle must be
+// normalized by the caller through internal/media.
+func (s *Store) EnsureWork(ctx context.Context, libraryID int64, workKey, title, sortTitle string) (int64, bool, error) {
+	path := fmt.Sprintf("lancast:work:%d:%s", libraryID, workKey)
+	now := time.Now().Unix()
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO media_item
+			(library_id, kind, path, title, sort_title, added_at, updated_at, missing)
+		VALUES (?, 'movie', ?, ?, ?, ?, ?, 0)
+		ON CONFLICT(path) DO NOTHING`,
+		libraryID, path, title, sortTitle, now, now)
+	if err != nil {
+		return 0, false, fmt.Errorf("ensure work %q: %w", workKey, err)
+	}
+	created := false
+	if n, err := res.RowsAffected(); err == nil {
+		created = n == 1
+	}
+	var id int64
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+		return 0, false, fmt.Errorf("ensure work %q: read id: %w", workKey, err)
+	}
+	return id, created, nil
+}
+
+// PromoteToPart turns a movie file into an ordered part of a work: it becomes
+// kind 'part' under parentID, with its order in the episode column (the ordering
+// column ADR 0017 reuses) and a "Part N" title. Idempotent — re-running a scan
+// re-applies the same values. The title is only rewritten while it still looks
+// like an auto-derived part label, so a user's manual rename survives.
+func (s *Store) PromoteToPart(ctx context.Context, itemID, parentID int64, order int, title string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE media_item
+		SET kind = 'part', parent_id = ?, episode = ?, updated_at = ?,
+		    title = CASE WHEN title LIKE 'Part %' OR title = ? THEN ? ELSE title END
+		WHERE id = ?`,
+		parentID, order, time.Now().Unix(), title, title, itemID)
+	if err != nil {
+		return fmt.Errorf("promote item %d to part: %w", itemID, err)
+	}
+	return nil
+}
+
+// AttachChildCounts fills ChildCount for each item from a single grouped query,
+// so a caller can tell a container (a show, a collection, a multi-part work)
+// from a leaf without a query per row. Missing children are not counted — a
+// container whose files are all offline reads as empty, not as a phantom.
+func (s *Store) AttachChildCounts(ctx context.Context, items []Item) error {
+	if len(items) == 0 {
+		return nil
+	}
+	byID := make(map[int64]*Item, len(items))
+	ph := make([]string, len(items))
+	args := make([]any, len(items))
+	for i := range items {
+		byID[items[i].ID] = &items[i]
+		ph[i] = "?"
+		args[i] = items[i].ID
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT parent_id, COUNT(*) FROM media_item
+		WHERE parent_id IN (`+strings.Join(ph, ",")+`) AND missing = 0
+		GROUP BY parent_id`, args...)
+	if err != nil {
+		return fmt.Errorf("attach child counts: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var parent int64
+		var n int
+		if err := rows.Scan(&parent, &n); err != nil {
+			return fmt.Errorf("attach child counts: %w", err)
+		}
+		if it := byID[parent]; it != nil {
+			it.ChildCount = n
+		}
+	}
+	return rows.Err()
 }
 
 // AddToCollection links an item into a collection (ADR 0017). Membership is

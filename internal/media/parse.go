@@ -60,7 +60,57 @@ var (
 	reNoise     = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|sdr|bluray|blu-ray|bdrip|brrip|dvdrip|webrip|web-dl|webdl|hdtv|remux|x264|x265|h264|h265|hevc|avc|xvid|divx|aac|ac3|eac3|dts|dts-hd|truehd|atmos|ddp5|dd5|10bit|8bit|proper|repack|extended|unrated|remastered|imax|multi)\b`)
 	reSeasonDir = regexp.MustCompile(`(?i)^(?:season|series|s)[\s._-]*(\d{1,2})$`)
 	reSpaces    = regexp.MustCompile(`\s+`)
+	// An explicit multi-part marker: "Part 2", "Part Two", "Pt. 3". Deliberately
+	// narrow — no roman numerals (ambiguous with sequels: "Part II" vs a second
+	// film), no "Vol"/"CD" (a different concept — one work split for size, which
+	// plays as a single item and is not modelled here).
+	rePart = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 )
+
+var partWords = map[string]int{
+	"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+	"six": 6, "seven": 7, "eight": 8, "nine": 9,
+}
+
+// PartOf reports whether a filename names an explicit part of a larger work —
+// "Baahubali Part 1", "Storm of the Century Pt. 2" — returning the work title
+// (the stem before the marker) and the part number.
+//
+// It is only a signal: a lone part is still just a movie. Grouping into a
+// multi-part work happens in the scanner, and only when two or more files share
+// a work title (ADR 0017), which is what keeps a standalone film that merely
+// has "Part" in its name from being torn into pieces.
+func PartOf(path string) (work string, part int, ok bool) {
+	base := stripNoise(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
+	loc := rePart.FindStringSubmatchIndex(base)
+	if loc == nil {
+		return "", 0, false
+	}
+	token := strings.ToLower(base[loc[2]:loc[3]])
+	if n, err := strconv.Atoi(token); err == nil {
+		part = n
+	} else {
+		part = partWords[token]
+	}
+	if part == 0 {
+		return "", 0, false
+	}
+
+	// Drop a trailing bracketed or bare year so "Movie (2020) Part 1" and
+	// "Movie (2020) Part 2" group under the same work title. Done before clean,
+	// which would otherwise strip the brackets the year detector keys on.
+	raw := base[:loc[0]]
+	if _, cut, hasYear := findYear(raw); hasYear {
+		raw = raw[:cut]
+	}
+	work = clean(raw)
+	if work == "" {
+		// Nothing identifies the work — "Part 1.mkv" alone cannot be grouped
+		// with confidence, so it stays an ordinary movie.
+		return "", 0, false
+	}
+	return work, part, true
+}
 
 // Parse infers metadata for a media file. root is the library root, used to
 // derive series names from directory layout when the filename is uninformative.

@@ -62,9 +62,10 @@ export function Detail() {
   const { data: item, isLoading, isError } = useItem(itemID);
   const { data: trailer } = useTrailer(itemID);
 
-  // A container (show, season, collection, serial) has no file to play — it
-  // holds other items. Fetch those; the query stays idle for a plain movie.
-  const container = isContainer(item?.kind ?? "");
+  // A container (show, season, collection, or a multi-part work) has no file to
+  // play — it holds other items. Fetch those; the query stays idle for a plain
+  // leaf. child_count comes from the item response, so this settles once loaded.
+  const container = item ? isContainer(item) : false;
   const { data: children } = useChildren(itemID, container);
 
   const [fixOpen, setFixOpen] = useState(false);
@@ -186,7 +187,7 @@ export function Detail() {
 
         {container && children && children.length > 0 && (
           <section className="detail__children">
-            <span className="section-label">{childLabel(item.kind)}</span>
+            <span className="section-label">{childLabel(children[0]?.kind)}</span>
             <div className="detail__children-grid">
               {children.map((child) => (
                 <PosterTile key={child.id} item={child} />

@@ -113,6 +113,34 @@ func TestShowAndSeasonDir(t *testing.T) {
 	}
 }
 
+func TestPartOf(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantWork string
+		wantPart int
+		wantOK   bool
+	}{
+		{"Baahubali Part 1", "Baahubali", 1, true},
+		{"Baahubali.Part.2.1080p.BluRay.x264", "Baahubali", 2, true},
+		{"Nymphomaniac Part Two", "Nymphomaniac", 2, true},
+		{"Storm of the Century Pt. 3", "Storm of the Century", 3, true},
+		{"Movie (2020) Part 1", "Movie", 1, true}, // trailing year dropped
+		// Not multi-part: no marker, or nothing identifies the work.
+		{"Ocean's Eleven", "", 0, false},
+		{"2 Fast 2 Furious", "", 0, false},
+		{"Part 1", "", 0, false}, // no work title to group on
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			work, part, ok := PartOf(tt.name + ".mkv")
+			if ok != tt.wantOK || part != tt.wantPart || work != tt.wantWork {
+				t.Errorf("PartOf(%q) = (%q, %d, %v), want (%q, %d, %v)",
+					tt.name, work, part, ok, tt.wantWork, tt.wantPart, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestIsVideo(t *testing.T) {
 	yes := []string{"a.mkv", "b.MP4", "c.avi", "d.m2ts"}
 	no := []string{"a.srt", "b.nfo", "c.jpg", "d", "e.mkv.part"}
