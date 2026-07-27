@@ -1,11 +1,21 @@
 # Roadmap
 
-Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
+Last updated: 2026-07-27 · **M0–M3 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
-accounts (admin/member roles) are built, and branding & splash shipped. Theme
-music (blocked on OST identification) is the remaining M3 depth. Packaging &
-distribution is specced but deferred ([ADR 0016](adr/0016-packaging-and-distribution.md)).
+accounts (admin/member roles) are built, and branding & splash shipped.
+
+The two early-lock Foundation decisions are now **built, not just decided**: the
+data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
+schema at **revision 9**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
+On top of them, **media organisation shipped end to end** — collections, the
+show → season → episode hierarchy, multi-part works and serials/miniseries, a
+library-kind that drives movie-vs-TV matching, Fix match that reaches TV,
+retroactive re-parse on rescan, Play-all queues, and Remove (ignore or delete,
+with a sidecar sweep). Theme music (blocked on OST identification) is the
+remaining M3 depth. Packaging & distribution is specced but deferred
+([ADR 0016](adr/0016-packaging-and-distribution.md)).
+
 A **feature backlog is captured below**; **plugin architecture (M4)** remains
 the last milestone.
 
@@ -44,16 +54,17 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **planned** | Forward-only migrations (rev 1→8); multi-part & serial works decided ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
-| API contract and versioning | **planned** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→9); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
 
 | Area | Status | Note |
 |---|---|---|
 | Provider interface | **built** | Scraper contract; first real extension point |
-| Matching and confidence | **built** | Wrong-match correction — the actual pain point |
-| Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages |
+| Matching and confidence | **built** | Wrong-match correction; library-kind biases movie-vs-TV; Fix match reaches TV, not just film |
+| Media organisation | **built** | Collections, show→season→episode, multi-part works, serials/miniseries; retroactive re-parse; Remove (ignore/delete) ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
 | Library types beyond video | *unplanned* | Music, photos — proves the taxonomy is open |
 
@@ -91,7 +102,7 @@ Status: **planned** · **next** · *unplanned*
 | Packaging and distribution | specced · deferred | One binary per platform, goreleaser matrix, in-binary service install ([ADR 0016](adr/0016-packaging-and-distribution.md)); build deferred |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
-| Testing strategy | planned | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
+| Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
 | Licensing and open-sourcing | *unplanned* | Decided before the repo goes public |
 
 ## Client UX backlog
@@ -170,14 +181,18 @@ group is not priority.
 
 ### Resolved modeling question — multi-part and serial works
 
-**Decided in [ADR 0017](adr/0017-collections-and-multi-part-works.md).** The
-four cases split on one axis — are the pieces independent works or parts of one
-work? Independent works that continue a story are a **collection** (many-to-many
-membership, a side table; members stay top-level). Pieces of one work are
-**containment** via `parent_id`, with new `kind` values `part`/`chapter` and a
-`serial` kind for a closed, play-through-whole story. Schema landed in revision
-8; provider ingestion is deferred to M2-provider depth. Original framing kept
-below for the record. Motivating cases:
+**Decided in [ADR 0017](adr/0017-collections-and-multi-part-works.md) and now
+built end to end.** The four cases split on one axis — are the pieces
+independent works or parts of one work? Independent works that continue a story
+are a **collection** (many-to-many membership, a side table; members stay
+top-level). Pieces of one work are **containment** via `parent_id`, with `kind`
+values `part`/`chapter` and a `serial` kind for a closed, play-through-whole
+story. All of it is implemented: TMDB `belongs_to_collection` ingestion, the
+scanner's grouping heuristics, the client's members/parts views, Play-all, and
+a library-kind that routes a miniseries to TV matching. Every motivating case
+now works — Storm of the Century matches its miniseries, Toy Story's collection
+groups, Baahubali is one work in two parts. Original framing kept for the
+record:
 
 - **Storm of the Century** — a Stephen King TV miniseries (one story, several
   parts).
@@ -206,10 +221,15 @@ where that openness gets exercised.
    [metadata.md](metadata.md) and ADRs 0007–0010.
 2. ~~Transcoding + React client (M3)~~ — **built.** Client executes design.md;
    theme music remains, blocked on OST identification.
-3. ~~Security and remote access~~ — **transport security built** ([ADR 0014](adr/0014-transport-security.md));
-   multi-user accounts and session-management UI remain, tracked in
-   [security.md](security.md).
-4. **Plugin architecture (M4).** Last, informed by all of the above.
+3. ~~Security and remote access~~ — **transport security and multi-user
+   accounts built** ([ADR 0014](adr/0014-transport-security.md), [ADR 0015](adr/0015-multi-user-accounts.md)).
+4. ~~Data model past revision 1 + media organisation~~ — **built** (ADRs
+   [0017](adr/0017-collections-and-multi-part-works.md)/[0018](adr/0018-api-contract-and-versioning.md)):
+   collections, hierarchy, multi-part works, library-kind matching, delete/ignore.
+5. **Next, pick one:** the browse-experience feature backlog (media-type library
+   pages, Plex-style filters, per-library counts, ratings) — the direct payoff
+   of the taxonomy above; or **plugin architecture (M4)**, the last milestone,
+   planned right before it is built and validated by a first-party plugin.
 
 ## Amendments to schema revision 1
 
