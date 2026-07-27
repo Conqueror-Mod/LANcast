@@ -152,6 +152,16 @@ func IsField(name string) bool {
 	return false
 }
 
+// CollectionRef is a grouping a record belongs to — TMDB's belongs_to_collection
+// for a movie in a franchise or series. It is membership, not containment
+// (ADR 0017): the item stays a top-level work; this only names the set it is
+// part of, so the enricher can create the collection and link the item into it.
+type CollectionRef struct {
+	ExternalID string
+	Name       string
+	Artwork    []ArtRef
+}
+
 // Record is the normalized payload every source produces. Normalizing at the
 // source boundary is what keeps everything downstream provider-agnostic.
 type Record struct {
@@ -163,6 +173,10 @@ type Record struct {
 	Genres  []string
 	Credits []Credit
 	Artwork []ArtRef
+
+	// Collection is set when the source knows this item belongs to a franchise
+	// or series. Nil for the common standalone case.
+	Collection *CollectionRef
 }
 
 // Provider is a searchable remote metadata source.
