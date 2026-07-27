@@ -88,6 +88,7 @@ export interface Item {
   added_at: number;
   missing: boolean;
   parent_id: number | null;
+  child_count?: number;
   overview?: string | null;
   rating?: number | null;
   content_rating?: string | null;

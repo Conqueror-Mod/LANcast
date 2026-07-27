@@ -210,6 +210,72 @@ func TestHierarchyStableAcrossRescans(t *testing.T) {
 	}
 }
 
+// Two files that share a work title and carry explicit part markers group into
+// a single multi-part work: a container 'movie' parent with 'part' children,
+// ordered, and dropped from the top-level grid (ADR 0017). A standalone film is
+// left alone.
+func TestMultiPartGrouping(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Baahubali/Baahubali Part 1.mkv", 10)
+	writeFile(t, root, "Baahubali/Baahubali Part 2.mkv", 10)
+	// A lone "Part 1" with no sibling must stay an ordinary movie.
+	writeFile(t, root, "Solo/Some Film Part 1.mkv", 10)
+	// An ordinary film with no part marker.
+	writeFile(t, root, "Arrival (2016).mkv", 10)
+
+	scanAndWait(t, sc, lib)
+	ctx := context.Background()
+
+	kinds := map[string]int{}
+	all, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byTitle := map[string]store.Item{}
+	for _, it := range all {
+		kinds[it.Kind]++
+		byTitle[it.Title] = it
+	}
+	// One work container, two parts, two standalone movies (lone part + Arrival).
+	if kinds["part"] != 2 {
+		t.Errorf("part rows = %d, want 2 (%v)", kinds["part"], keys(byTitle))
+	}
+	work, ok := byTitle["Baahubali"]
+	if !ok || work.Kind != "movie" {
+		t.Fatalf("no Baahubali work container; got %v", keys(byTitle))
+	}
+
+	// The work is top-level; its parts are nested and ordered.
+	top, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	for _, it := range top {
+		if it.Kind == "part" {
+			t.Errorf("part %q is top-level, should be nested", it.Title)
+		}
+	}
+	parts, err := st.Children(ctx, work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 2 || parts[0].Episode == nil || *parts[0].Episode != 1 {
+		t.Errorf("parts = %+v, want two ordered by part number", parts)
+	}
+
+	// The lone part and Arrival stayed ordinary top-level movies.
+	if it := byTitle["Some Film Part 1"]; it.Kind != "movie" {
+		t.Errorf("lone part became %q, want movie (needs a sibling to group)", it.Kind)
+	}
+
+	// The work is a container: AttachChildCounts reports its parts.
+	counts := []store.Item{work}
+	if err := st.AttachChildCounts(ctx, counts); err != nil {
+		t.Fatal(err)
+	}
+	if counts[0].ChildCount != 2 {
+		t.Errorf("work ChildCount = %d, want 2", counts[0].ChildCount)
+	}
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)

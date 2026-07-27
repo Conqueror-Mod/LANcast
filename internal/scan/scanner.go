@@ -250,6 +250,9 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		// exist and play; a failure here must not fail the whole scan.
 		s.log.Warn("hierarchy reconciliation failed", "library", lib.ID, "error", err)
 	}
+	if err := s.reconcileParts(ctx, lib); err != nil {
+		s.log.Warn("multi-part reconciliation failed", "library", lib.ID, "error", err)
+	}
 
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
 }
@@ -317,6 +320,58 @@ func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) err
 
 		if ep.ParentID == nil || *ep.ParentID != seasonID {
 			if err := s.st.SetParent(ctx, ep.ID, &seasonID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// reconcileParts groups multi-part films — "Baahubali Part 1/2", a serial's
+// chapters — under a single work (ADR 0017). A movie file is only pulled into a
+// work when two or more files in the same directory share a work title, which is
+// what keeps a standalone film that merely has "Part" in its name intact.
+//
+// The work is a container 'movie' with no file of its own; each member becomes a
+// 'part' ordered by its part number. Grouping is scoped to a directory so two
+// unrelated "Part 1" films in different folders never merge.
+func (s *Scanner) reconcileParts(ctx context.Context, lib store.Library) error {
+	movies, err := s.st.LibraryMovieFiles(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
+
+	type member struct {
+		item store.Item
+		part int
+	}
+	groups := map[string][]member{}
+	titles := map[string]string{}
+	for _, m := range movies {
+		work, part, ok := media.PartOf(m.Path)
+		if !ok {
+			continue
+		}
+		// Scope the group to the directory, so "X Part 1" here and "X Part 1"
+		// in another folder are not conflated.
+		key := filepath.Dir(m.Path) + "|" + media.SortTitle(work)
+		groups[key] = append(groups[key], member{item: m, part: part})
+		titles[key] = work
+	}
+
+	for key, members := range groups {
+		if len(members) < 2 {
+			// A lone "Part 1" is just a movie — leave it be.
+			continue
+		}
+		work := titles[key]
+		workID, _, err := s.st.EnsureWork(ctx, lib.ID, key, work, media.SortTitle(work))
+		if err != nil {
+			return err
+		}
+		for _, mem := range members {
+			title := fmt.Sprintf("Part %d", mem.part)
+			if err := s.st.PromoteToPart(ctx, mem.item.ID, workID, mem.part, title); err != nil {
 				return err
 			}
 		}

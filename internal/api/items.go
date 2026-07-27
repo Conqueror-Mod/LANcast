@@ -47,6 +47,12 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "attach artwork")
 		return
 	}
+	// So a tile knows whether it is a container (a show, a multi-part work) and
+	// should open a children view rather than offer Play.
+	if err := s.st.AttachChildCounts(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "attach child counts")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": items})
 }
