@@ -242,6 +242,20 @@ export function useItem(id: number) {
   });
 }
 
+// The children of a container item — a show's seasons, a season's episodes, a
+// collection's films — in hierarchy order. Enabled only for containers, so a
+// plain movie detail never fires it.
+export function useChildren(parentID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["children", parentID],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?parent_id=${parentID}`, signal).then(
+        (r) => r.items,
+      ),
+    enabled: enabled && parentID > 0,
+  });
+}
+
 // The trailer is a separate call: it is optional, and a detail page should
 // render fully without waiting on it. A 404 is a normal "no trailer" answer.
 // Provider matches for correcting an item's identity. Lazy: only searches once
