@@ -2,10 +2,12 @@
 
 Last updated: 2026-07-26 · **M0–M3 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
-diagnostics) and CI are in place. Transport security (TLS) is built — the
-largest gap to real-world use is closed. Theme music (blocked on OST
-identification) and branding/splash are the remaining M3 depth; **multi-user
-accounts and packaging/distribution are the next planning areas**.
+diagnostics) and CI are in place. Transport security (TLS) and multi-user
+accounts (admin/member roles) are built, and branding & splash shipped. Theme
+music (blocked on OST identification) is the remaining M3 depth. Packaging &
+distribution is specced but deferred ([ADR 0016](adr/0016-packaging-and-distribution.md)).
+A **feature backlog is captured below**; **plugin architecture (M4)** remains
+the last milestone.
 
 ## Ordering principle
 
@@ -66,7 +68,7 @@ Status: **planned** · **next** · *unplanned*
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
-| Branding & splash | planned | App icons and favicon from the LANcast logo, and a splash screen using the animated logo. Source art in `/assets` (`LANcast_logo.png`, `LANcast_logo_animated.mp4`) — gold-on-nebula, matches the design system |
+| Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
 
 ### Extensibility · M4
 
@@ -86,7 +88,7 @@ Status: **planned** · **next** · *unplanned*
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
 | Transport security (TLS) | **built** | HTTPS beyond loopback; bring-your-own or self-signed cert, http→https redirect (ADR 0014) |
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
-| Packaging and distribution | *unplanned* | Windows, Linux, NAS, Pi, service install |
+| Packaging and distribution | specced · deferred | One binary per platform, goreleaser matrix, in-binary service install ([ADR 0016](adr/0016-packaging-and-distribution.md)); build deferred |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
 | Testing strategy | planned | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
@@ -110,6 +112,78 @@ rebuild, which split the player dialog into distinct screens.
    dedicated Review screen queues everything the matcher was unsure about.
 
 All four are resolved; the backlog is closed.
+
+## Feature backlog
+
+Captured, not yet designed. Each of these is planned immediately before it is
+built, not here — this section is the running list of *what*, so nothing is
+lost, deliberately ahead of the *how*. Grouped for legibility; order within a
+group is not priority.
+
+### Pages and navigation
+
+- **More branded, thematic home page** — beyond functional shelves.
+- **Auto-expanding / collapsing navigation bar** — expands on hover/focus,
+  collapses otherwise (the Plex behaviour).
+- **Movie library page** and **TV-show library page** — media-type-specific
+  browse views, not one generic grid.
+- **Add-ons page** — placeholder for now; add-ons themselves come later in the
+  app's life (M4 territory).
+- **More defined settings page** — a real structure, not a flat list.
+- **Downloads page** and a **download handler** that manages downloaded content
+  from any library, any library type, or any add-on.
+- **Profile page** (details under Social and profiles below).
+- **Bigscreen (10-foot) mode** — with a settings option to enable it at startup.
+
+### Libraries and media types
+
+- **Wide-scope audio codec support** — MP3, FLAC, WAV.
+- **Music library.**
+- **Photo library** with a built-in **image viewer**.
+- **Live TV** — a tuner page and function.
+
+### Metadata, ratings and discovery
+
+- **Ratings system** that also ties to Metacritic / Rotten Tomatoes.
+- **Plex-style filter settings**, with a **total movie/show count per library
+  page**.
+
+### Social and profiles
+
+- **Profile page**: watch/play/view history, Find Friends, Trending (trends
+  computed per library), ratings/reviews, a viewer-stats list, profile edit,
+  and profile information.
+- **Watch Together** — synchronised playback across viewers.
+- **Better profile manager.**
+
+### System, operations and diagnostics
+
+- **Crash reporting.**
+- **Debug logging** and an **internal log viewer.**
+- **Clear cache and data** and **reset settings** actions.
+- **Check for updates** with an **auto-update** toggle.
+
+### Input and control
+
+- **Keyboard-control shortcut map and customizer** — building on the existing
+  spatial focus model (ADR 0004).
+
+### Open modeling question — multi-part and serial works
+
+A ruling is needed for how the data model represents complex, multi-part
+movies, movie series, and serials, so they group and play sensibly rather than
+scattering as unrelated items. Motivating cases:
+
+- **Storm of the Century** — a Stephen King TV miniseries (one story, several
+  parts).
+- **Anne of Green Gables / Anne of Avonlea** — a film series that is one
+  continuing story.
+- **1940s Batman / Superman serials** — chaptered theatrical serials.
+- **Baahubali** — a two-part film that is one work.
+
+These do not fit "movie" or "episode of a show" cleanly, and the taxonomy is
+deliberately open ([ADR 0002](adr/0002-one-wide-media-item-table.md)); this is
+where that openness gets exercised.
 
 ## Dependencies that constrain ordering
 
