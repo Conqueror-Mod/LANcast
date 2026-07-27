@@ -258,6 +258,9 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	if err := s.reconcileSerials(ctx, lib); err != nil {
 		s.log.Warn("serial reconciliation failed", "library", lib.ID, "error", err)
 	}
+	if err := s.reconcileMiniseries(ctx, lib); err != nil {
+		s.log.Warn("miniseries reconciliation failed", "library", lib.ID, "error", err)
+	}
 
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
 }
@@ -338,10 +341,18 @@ func (s *Scanner) reconcileParts(ctx context.Context, lib store.Library) error {
 	return s.reconcileGrouped(ctx, lib, media.PartOf, s.st.EnsureWork, "part")
 }
 
-// reconcileSerials groups the chapters of a theatrical serial or miniseries —
-// "Batman Chapter 1..15" — under a 'serial' container with 'chapter' children.
+// reconcileSerials groups the chapters of a theatrical serial — "Batman Chapter
+// 1..15" — under a 'serial' container with 'chapter' children.
 func (s *Scanner) reconcileSerials(ctx context.Context, lib store.Library) error {
 	return s.reconcileGrouped(ctx, lib, media.ChapterOf, s.st.EnsureSerial, "chapter")
+}
+
+// reconcileMiniseries groups a miniseries whose parts are named with bare
+// episode markers — "Storm of the Century E2/E3" — which carry no season and so
+// are not show episodes. Same 'serial' container as a chaptered serial; a
+// miniseries and a serial are the same shape (a closed, ordered, whole story).
+func (s *Scanner) reconcileMiniseries(ctx context.Context, lib store.Library) error {
+	return s.reconcileGrouped(ctx, lib, media.EpisodeMarkerOf, s.st.EnsureSerial, "chapter")
 }
 
 // reconcileGrouped is the shared body: re-parse the movie files, group those

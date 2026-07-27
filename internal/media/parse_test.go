@@ -173,6 +173,42 @@ func TestChapterOf(t *testing.T) {
 	}
 }
 
+func TestEpisodeMarkerOf(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantWork string
+		wantEp   int
+		wantOK   bool
+	}{
+		{"Storm of the Century E2", "Storm of the Century", 2, true},
+		{"Storm of the Century E3", "Storm of the Century", 3, true},
+		{"Storm of the Century Episode 1", "Storm of the Century", 1, true},
+		{"Angels in America Ep 2", "Angels in America", 2, true},
+		// Guards against false positives — a bare "e" adjacent to a digit only
+		// matches at a word boundary, so these stay ordinary movies.
+		{"Se7en", "", 0, false},
+		{"WALL-E", "", 0, false},
+		{"Blade Runner 2049", "", 0, false},
+		{"2 Fast 2 Furious", "", 0, false},
+		{"E2", "", 0, false}, // no work title to group on
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			work, ep, ok := EpisodeMarkerOf(tt.name + ".mkv")
+			if ok != tt.wantOK || ep != tt.wantEp || work != tt.wantWork {
+				t.Errorf("EpisodeMarkerOf(%q) = (%q, %d, %v), want (%q, %d, %v)",
+					tt.name, work, ep, ok, tt.wantWork, tt.wantEp, tt.wantOK)
+			}
+		})
+	}
+
+	// A season-numbered file is a show episode, handled before this — it must
+	// not also be read as a bare miniseries marker.
+	if info := Parse("R", "R/Andor/Andor.S01E07.mkv"); info.Kind != KindEpisode {
+		t.Errorf("S01E07 parsed as %q, want episode", info.Kind)
+	}
+}
+
 func TestIsVideo(t *testing.T) {
 	yes := []string{"a.mkv", "b.MP4", "c.avi", "d.m2ts"}
 	no := []string{"a.srt", "b.nfo", "c.jpg", "d", "e.mkv.part"}

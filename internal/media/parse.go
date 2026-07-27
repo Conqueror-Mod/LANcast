@@ -66,6 +66,10 @@ var (
 	// and is not modelled here).
 	rePart    = regexp.MustCompile(`(?i)\b(?:part|pt\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
 	reChapter = regexp.MustCompile(`(?i)\b(?:chapter|ch\.?)[\s._-]*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine)\b`)
+	// A miniseries part marker: "Episode 2", "Ep 2", or a bare "E2" (adjacent, no
+	// separator — so "Se7en" and "Wall-E" are safe). Season-numbered files
+	// (S01E02) are episodes of a show and handled by reSeasonEp before this.
+	reEpisodeMark = regexp.MustCompile(`(?i)\b(?:episode[\s._-]*|ep[\s._-]*|e)(\d{1,2})\b`)
 )
 
 var numberWords = map[string]int{
@@ -92,9 +96,17 @@ func ChapterOf(path string) (work string, chapter int, ok bool) {
 	return markerOf(path, reChapter)
 }
 
-// markerOf finds an explicit ordinal marker (Part N, Chapter N) in a filename
-// and splits off the work title before it. Shared by PartOf and ChapterOf so the
-// two cannot drift in how they parse a number or trim a title.
+// EpisodeMarkerOf detects a miniseries part named with a bare episode marker —
+// "Storm of the Century E2", "Storm of the Century Episode 3" — that carries no
+// season and so is not a show episode (reSeasonEp needs S<n>E<n>). Same grouping
+// rules as PartOf; the scanner folds these into a serial.
+func EpisodeMarkerOf(path string) (work string, episode int, ok bool) {
+	return markerOf(path, reEpisodeMark)
+}
+
+// markerOf finds an explicit ordinal marker (Part N, Chapter N, E N) in a
+// filename and splits off the work title before it. Shared by the detectors so
+// they cannot drift in how they parse a number or trim a title.
 func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 	base := stripNoise(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
 	loc := re.FindStringSubmatchIndex(base)

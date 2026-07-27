@@ -332,6 +332,50 @@ func TestSerialGrouping(t *testing.T) {
 	}
 }
 
+// A miniseries whose parts use bare episode markers — "Storm of the Century
+// E2/E3" — groups into a serial, the same as a chaptered serial. These carry no
+// season, so nothing else catches them and they would otherwise scatter as loose
+// movies (the bug a real library surfaced).
+func TestMiniseriesEpisodeMarkerGrouping(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Storm of the Century/Storm of the Century E2.mkv", 10)
+	writeFile(t, root, "Storm of the Century/Storm of the Century E3.mkv", 10)
+	// A standalone film with an "e"+digit in its name must not be dragged in.
+	writeFile(t, root, "Se7en (1995).mkv", 10)
+
+	scanAndWait(t, sc, lib)
+	ctx := context.Background()
+
+	all, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	byTitle := map[string]store.Item{}
+	for _, it := range all {
+		kinds[it.Kind]++
+		byTitle[it.Title] = it
+	}
+	if kinds["serial"] != 1 || kinds["chapter"] != 2 {
+		t.Errorf("kinds = %v, want 1 serial + 2 chapters", kinds)
+	}
+	if _, ok := byTitle["Se7en"]; !ok || byTitle["Se7en"].Kind != "movie" {
+		t.Errorf("Se7en became %q, want an untouched movie", byTitle["Se7en"].Kind)
+	}
+	serial, ok := byTitle["Storm of the Century"]
+	if !ok || serial.Kind != "serial" {
+		t.Fatalf("no Storm of the Century serial; got %v", keys(byTitle))
+	}
+	parts, err := st.Children(ctx, serial.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 2 || parts[0].Episode == nil || *parts[0].Episode != 2 {
+		t.Errorf("parts = %+v, want E2 and E3 ordered", parts)
+	}
+}
+
 func TestRescanDetectsChangedFile(t *testing.T) {
 	sc, st := newScanner(t)
 	lib, root := fixture(t, sc, st)
