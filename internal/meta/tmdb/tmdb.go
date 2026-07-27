@@ -437,15 +437,15 @@ type creditsBlock struct {
 }
 
 type movieDetail struct {
-	Title        string         `json:"title"`
-	Overview     string         `json:"overview"`
-	ReleaseDate  string         `json:"release_date"`
-	Runtime      int            `json:"runtime"`
-	VoteAverage  float64        `json:"vote_average"`
-	Genres       []tmdbGenre    `json:"genres"`
-	PosterPath   string         `json:"poster_path"`
-	BackdropPath string         `json:"backdrop_path"`
-	Credits      creditsBlock   `json:"credits"`
+	Title        string          `json:"title"`
+	Overview     string          `json:"overview"`
+	ReleaseDate  string          `json:"release_date"`
+	Runtime      int             `json:"runtime"`
+	VoteAverage  float64         `json:"vote_average"`
+	Genres       []tmdbGenre     `json:"genres"`
+	PosterPath   string          `json:"poster_path"`
+	BackdropPath string          `json:"backdrop_path"`
+	Credits      creditsBlock    `json:"credits"`
 	Collection   *tmdbCollection `json:"belongs_to_collection"`
 }
 
