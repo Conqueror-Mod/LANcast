@@ -207,6 +207,22 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		if st, ok := known[path]; ok && !st.Missing &&
 			st.SizeBytes != nil && *st.SizeBytes == info.Size() &&
 			st.MTime != nil && *st.MTime == info.ModTime().Unix() {
+			// The bytes are unchanged, but the *interpretation* may not be:
+			// re-typing a library as shows makes a "Part 2" file an episode
+			// rather than a movie work, and better parsing in a new build can
+			// reclassify a file too. Re-parsing a name is nearly free (no I/O),
+			// so do it and act only when the classification actually moved
+			// families — otherwise a rescan stays the cheap no-op it must be.
+			if reinterpreted(st.Kind, media.Parse(lib.Path, path, lib.Kind).Kind) {
+				if _, err := s.upsert(ctx, lib, path, info); err == nil {
+					// A changed identity must be re-matched; the stamp is what
+					// removes it from the enrichment queue.
+					_ = s.st.ClearMetadataStamp(ctx, lib.ID, st.ID)
+					s.mu.Lock()
+					p.ItemsChanged++
+					s.mu.Unlock()
+				}
+			}
 			// Subtitles are still re-checked. A sidecar dropped next to an
 			// untouched film is the common way they arrive, and skipping the
 			// video would otherwise mean it is never noticed.
@@ -257,6 +273,13 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	}
 	if err := s.reconcileSerials(ctx, lib); err != nil {
 		s.log.Warn("serial reconciliation failed", "library", lib.ID, "error", err)
+	}
+	// After reconciliation, a container left empty by a reinterpretation (a
+	// movie work whose parts became a show's episodes) is an orphan; remove it.
+	if n, err := s.st.PruneEmptyContainers(ctx, lib.ID); err != nil {
+		s.log.Warn("pruning empty containers failed", "library", lib.ID, "error", err)
+	} else if n > 0 {
+		s.log.Info("pruned empty containers", "library", lib.ID, "count", n)
 	}
 
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
@@ -396,6 +419,23 @@ func (s *Scanner) reconcileGrouped(
 		}
 	}
 	return nil
+}
+
+// reinterpreted reports whether a freshly parsed kind belongs to a different
+// family than what is stored — the signal that an unchanged file must be
+// re-recorded. A movie parse and its grouped forms (part, chapter) are one
+// family, so grouping a film into a work is not a reinterpretation and does not
+// churn every scan; a movie turning into an episode (a Part file in a library
+// now typed as shows) is.
+func reinterpreted(stored string, parsed media.Kind) bool {
+	switch parsed {
+	case media.KindEpisode:
+		return stored != "episode"
+	case media.KindMovie:
+		return stored != "movie" && stored != "part" && stored != "chapter"
+	default:
+		return stored != "other"
+	}
 }
 
 func deref(p *string) string {
