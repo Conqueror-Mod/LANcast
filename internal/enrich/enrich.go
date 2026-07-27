@@ -30,6 +30,8 @@ type Store interface {
 	ReplaceCredits(ctx context.Context, itemID int64, provider string, credits []store.Credit) error
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
 	ArtworkExists(ctx context.Context, hash string) (bool, error)
+	EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error)
+	AddToCollection(ctx context.Context, itemID, collectionID int64, ord int) error
 }
 
 // ArtCache is the artwork side of the worker.
@@ -371,6 +373,8 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		w.storeArtwork(ctx, item.ID, merged.Artwork)
 	}
 
+	w.ingestCollection(ctx, item, remotes)
+
 	if write := w.nfoWriter(); write != nil {
 		if err := write(item.Path, kind, &merged); err != nil {
 			// Failing to write a sidecar must not fail enrichment; the
@@ -442,6 +446,38 @@ func (w *Worker) fetchRemote(ctx context.Context, item store.Item, kind meta.Kin
 		return nil, best.Score, state
 	}
 	return []meta.Record{*rec}, best.Score, state
+}
+
+// ingestCollection links an item into the franchise or series a provider says
+// it belongs to (ADR 0017). It is membership, not containment: the item stays a
+// top-level work and is only linked into a collection media_item, which is
+// created on first sighting and given its own artwork once.
+//
+// Only remote records carry a collection — a local NFO does not model one — so
+// this reads the remotes, not the merged record. Re-running is idempotent:
+// EnsureCollection and AddToCollection both upsert.
+func (w *Worker) ingestCollection(ctx context.Context, item store.Item, remotes []meta.Record) {
+	for _, rec := range remotes {
+		c := rec.Collection
+		if c == nil || c.ExternalID == "" {
+			continue
+		}
+		collID, created, err := w.st.EnsureCollection(
+			ctx, item.LibraryID, rec.Source, c.ExternalID, c.Name, media.SortTitle(c.Name))
+		if err != nil {
+			w.log.Warn("ensure collection failed", "item", item.ID, "collection", c.Name, "error", err)
+			return
+		}
+		if err := w.st.AddToCollection(ctx, item.ID, collID, 0); err != nil {
+			w.log.Warn("add to collection failed", "item", item.ID, "collection", c.Name, "error", err)
+		}
+		// Download the collection's poster and backdrop once, when it is first
+		// created — every other member would fetch the identical images.
+		if created {
+			w.storeArtwork(ctx, collID, c.Artwork)
+		}
+		return
+	}
 }
 
 // storeArtwork downloads and records images, skipping any already cached.

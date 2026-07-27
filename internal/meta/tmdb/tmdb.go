@@ -182,6 +182,13 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	rec.Genres = genreNames(m.Genres)
 	rec.Credits = convertCredits(m.Credits)
 	rec.Artwork = artRefs(m.PosterPath, m.BackdropPath)
+	if m.Collection != nil && m.Collection.ID != 0 {
+		rec.Collection = &meta.CollectionRef{
+			ExternalID: strconv.Itoa(m.Collection.ID),
+			Name:       m.Collection.Name,
+			Artwork:    artRefs(m.Collection.PosterPath, m.Collection.BackdropPath),
+		}
+	}
 	return rec, nil
 }
 
@@ -430,15 +437,25 @@ type creditsBlock struct {
 }
 
 type movieDetail struct {
-	Title        string       `json:"title"`
-	Overview     string       `json:"overview"`
-	ReleaseDate  string       `json:"release_date"`
-	Runtime      int          `json:"runtime"`
-	VoteAverage  float64      `json:"vote_average"`
-	Genres       []tmdbGenre  `json:"genres"`
-	PosterPath   string       `json:"poster_path"`
-	BackdropPath string       `json:"backdrop_path"`
-	Credits      creditsBlock `json:"credits"`
+	Title        string          `json:"title"`
+	Overview     string          `json:"overview"`
+	ReleaseDate  string          `json:"release_date"`
+	Runtime      int             `json:"runtime"`
+	VoteAverage  float64         `json:"vote_average"`
+	Genres       []tmdbGenre     `json:"genres"`
+	PosterPath   string          `json:"poster_path"`
+	BackdropPath string          `json:"backdrop_path"`
+	Credits      creditsBlock    `json:"credits"`
+	Collection   *tmdbCollection `json:"belongs_to_collection"`
+}
+
+// tmdbCollection is TMDB's belongs_to_collection block — the franchise or
+// series a movie is part of ("The Lord of the Rings Collection").
+type tmdbCollection struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	PosterPath   string `json:"poster_path"`
+	BackdropPath string `json:"backdrop_path"`
 }
 
 type showDetail struct {

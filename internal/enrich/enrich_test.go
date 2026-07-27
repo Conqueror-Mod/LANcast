@@ -169,6 +169,73 @@ func TestEnrichAppliesProviderMetadata(t *testing.T) {
 	}
 }
 
+// A movie whose provider record names a collection is linked into it, the
+// collection media_item is created once with its own artwork, and it never
+// enters the enrichment queue (ADR 0017).
+func TestEnrichIngestsCollection(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id1 := addItem(t, st, lib, `C:\m\lotr1.mkv`, "Fellowship", 2001)
+	id2 := addItem(t, st, lib, `C:\m\lotr2.mkv`, "Two Towers", 2002)
+
+	rec := func(extID, title string) *meta.Record {
+		return &meta.Record{
+			Source: "fake", ExternalID: extID, Kind: meta.KindMovie,
+			Fields: meta.Fields{Title: meta.S(title), Year: meta.I(2001)},
+			Collection: &meta.CollectionRef{
+				ExternalID: "119", Name: "The Lord of the Rings Collection",
+				Artwork: []meta.ArtRef{{Kind: meta.ArtPoster, URL: "https://img/coll.jpg"}},
+			},
+		}
+	}
+	p := &fakeProvider{id: "fake", record: rec("120", "Fellowship"),
+		cands: []meta.Candidate{{Provider: "fake", ExternalID: "120", Kind: meta.KindMovie, Title: "Fellowship", Year: 2001, Popularity: 40}}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+
+	art := &fakeArt{}
+	// Two movies enriched; the fake provider returns the same collection for
+	// both. Enrich them one at a time so each Fetch can return its own record.
+	w := New(st, reg, art, quietLog())
+	w.Concurrency = 1
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	cols, err := st.CollectionsOf(ctx, id1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cols) != 1 || cols[0].Kind != "collection" || cols[0].Title != "The Lord of the Rings Collection" {
+		t.Fatalf("CollectionsOf(id1) = %+v, want one LOTR collection", cols)
+	}
+
+	members, err := st.CollectionMembers(ctx, cols[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int64]bool{}
+	for _, m := range members {
+		got[m.ID] = true
+	}
+	if !got[id1] || !got[id2] {
+		t.Errorf("members = %v, want both movies %d and %d", got, id1, id2)
+	}
+
+	// The collection is resolved at birth and must not sit in the queue.
+	pending, _ := st.PendingEnrichment(ctx, 10)
+	for _, it := range pending {
+		if it.Kind == "collection" {
+			t.Errorf("collection %d is pending enrichment — it should be stamped resolved", it.ID)
+		}
+	}
+	// The collection is not top-level? It is: a collection is a browse entry.
+	top, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, Kind: "collection", TopLevel: true})
+	if len(top) != 1 {
+		t.Errorf("top-level collections = %d, want 1", len(top))
+	}
+}
+
 // The regression that defines the milestone, exercised end to end through the
 // worker rather than only in the merge unit test.
 func TestLockedFieldSurvivesEnrichment(t *testing.T) {
