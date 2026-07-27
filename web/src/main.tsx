@@ -9,6 +9,7 @@ import {
 import { FocusProvider } from "@/focus/FocusController";
 import { ApiFailure } from "@/api/client";
 import { App } from "@/App";
+import { Splash } from "@/components/Splash";
 import "@/styles/global.css";
 
 // A 401 anywhere means the session lapsed or was revoked (a password change, an
@@ -37,6 +38,7 @@ createRoot(document.getElementById("root")!).render(
         <FocusProvider>
           <div className="nebula-field" aria-hidden="true" />
           <App />
+          <Splash />
         </FocusProvider>
       </BrowserRouter>
     </QueryClientProvider>
