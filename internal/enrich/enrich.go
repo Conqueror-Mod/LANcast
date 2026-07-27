@@ -277,15 +277,24 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 // operates on a locked item, which the pending queue deliberately skips. This
 // is why confirming a match cannot go through that queue: it would re-search and
 // re-pick the very candidate the user rejected.
-func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, externalID string) error {
-	kind := meta.Kind(item.Kind)
+//
+// matchKind is the chosen candidate's kind, which may differ from the item's own
+// — correcting a movie-scanned miniseries to its TV entry fetches from /tv even
+// though the item is a 'movie'. Empty falls back to the item's kind. The record
+// is fetched as matchKind but applied under the item's own kind, so the metadata
+// is right without a local-source or nfo path being read against the wrong type.
+func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, externalID string, matchKind meta.Kind) error {
+	itemKind := meta.Kind(item.Kind)
+	if matchKind == "" {
+		matchKind = itemKind
+	}
 
 	provider, ok := w.reg.Provider(providerID)
 	if !ok {
 		return fmt.Errorf("unknown provider %q", providerID)
 	}
-	ref := meta.Ref{Kind: kind, ExternalID: externalID}
-	if kind == meta.KindEpisode {
+	ref := meta.Ref{Kind: matchKind, ExternalID: externalID}
+	if matchKind == meta.KindEpisode {
 		ref.Season = derefInt(item.Season)
 		ref.Episode = derefInt(item.Episode)
 	}
@@ -305,12 +314,12 @@ func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, ex
 
 	var locals []meta.Record
 	for _, src := range w.reg.Locals() {
-		if r, err := src.Read(ctx, item.Path, kind); err == nil && r != nil {
+		if r, err := src.Read(ctx, item.Path, itemKind); err == nil && r != nil {
 			locals = append(locals, *r)
 		}
 	}
 
-	return w.applyRecords(ctx, item, kind, lockedSet, locals, []meta.Record{*rec}, meta.StateLocked, 1.0)
+	return w.applyRecords(ctx, item, itemKind, lockedSet, locals, []meta.Record{*rec}, meta.StateLocked, 1.0)
 }
 
 // applyRecords merges resolved records over an item's current metadata and

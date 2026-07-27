@@ -194,16 +194,46 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cands, err := s.reg.Search(r.Context(), q)
-	if err != nil {
-		// A provider that is unconfigured or unreachable is not a server
-		// fault; report it as unavailable so the UI can explain.
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "no metadata provider is available")
+	// Search both film and television, not just the item's own kind. A TV
+	// miniseries scanned into a movie library (Storm of the Century) can only be
+	// corrected if Fix match can reach TMDB's TV data — a movie-scoped search
+	// finds only the wrong, same-named film. The candidate carries its own kind,
+	// so applying a TV result fetches from /tv.
+	var cands []meta.Candidate
+	seen := map[string]bool{}
+	var lastErr error
+	for _, k := range []meta.Kind{meta.KindMovie, meta.KindShow} {
+		qk := q
+		qk.Kind = k
+		found, err := s.reg.Search(r.Context(), qk)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		for _, c := range found {
+			key := c.Provider + ":" + string(c.Kind) + ":" + c.ExternalID
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			cands = append(cands, c)
+		}
+	}
+	if len(cands) == 0 {
+		if lastErr != nil {
+			// A provider that is unconfigured or unreachable is not a server
+			// fault; report it as unavailable so the UI can explain.
+			writeError(w, http.StatusServiceUnavailable, "unavailable", "no metadata provider is available")
+			return
+		}
+		writeJSON(w, http.StatusOK, []meta.Candidate{})
 		return
 	}
-	if cands == nil {
-		cands = []meta.Candidate{}
-	}
+	// Re-rank the merged list against the query as a film (year scored), so film
+	// and TV candidates are ordered together rather than within their kind.
+	rankQ := q
+	rankQ.Kind = meta.KindMovie
+	meta.Rank(rankQ, cands)
 	if len(cands) > 20 {
 		cands = cands[:20]
 	}
@@ -226,6 +256,10 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Provider   string `json:"provider"`
 		ExternalID string `json:"external_id"`
+		// Kind is the chosen candidate's kind, which may differ from the item's
+		// own — correcting a movie-scanned miniseries to its TV entry. Empty
+		// falls back to the item's kind (the common same-kind correction).
+		Kind string `json:"kind"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -244,7 +278,7 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 	// background pass: that queue skips locked items and re-searches, which would
 	// re-pick the candidate the user just rejected. The item is then locked so a
 	// rescan reconciles files without re-litigating this identity.
-	if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID); err != nil {
+	if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID, meta.Kind(req.Kind)); err != nil {
 		s.writeInternal(w, err, "apply match")
 		return
 	}
