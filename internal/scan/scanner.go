@@ -245,7 +245,97 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	p.ItemsMissing = len(gone)
 	s.mu.Unlock()
 
+	if err := s.reconcileHierarchy(ctx, lib); err != nil {
+		// Hierarchy is a grouping convenience layered over episodes that already
+		// exist and play; a failure here must not fail the whole scan.
+		s.log.Warn("hierarchy reconciliation failed", "library", lib.ID, "error", err)
+	}
+
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
+}
+
+// reconcileHierarchy builds the show → season → episode structure ADR 0010
+// describes: every episode is nested under a season media_item, itself under a
+// show media_item, with the relationship held in parent_id. It runs over every
+// episode each scan (not only new ones) so a library re-organised on disk, or
+// one scanned before this existed, is brought into shape without a rescan of
+// unchanged files.
+//
+// Shows and seasons are keyed by their directory paths, which the ensure calls
+// make idempotent, so re-running is cheap and safe. A show whose episodes sit
+// loose in the show folder still gets a season, under a synthetic identity
+// derived from the show and season number.
+func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) error {
+	episodes, err := s.st.LibraryEpisodes(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
+	shows := map[string]int64{}   // show dir  -> show id
+	seasons := map[string]int64{} // season key -> season id
+
+	for _, ep := range episodes {
+		showDir := media.ShowDir(lib.Path, ep.Path)
+		if showDir == "" {
+			// An episode sitting directly in the library root is not a show
+			// layout; leave it top-level rather than invent a show for it.
+			continue
+		}
+
+		showID, ok := shows[showDir]
+		if !ok {
+			title := deref(ep.Series)
+			if title == "" {
+				title = filepath.Base(showDir)
+			}
+			id, _, err := s.st.EnsureShow(ctx, lib.ID, showDir, title, media.SortTitle(title))
+			if err != nil {
+				return err
+			}
+			shows[showDir] = id
+			showID = id
+		}
+
+		seasonNum := deref2(ep.Season)
+		seasonPath := media.SeasonDir(ep.Path)
+		if seasonPath == "" {
+			// No "Season N" folder: synthesize a stable identity under the show.
+			seasonPath = fmt.Sprintf("%s::season=%d", showDir, seasonNum)
+		}
+		seasonID, ok := seasons[seasonPath]
+		if !ok {
+			title := fmt.Sprintf("Season %d", seasonNum)
+			if seasonNum == 0 {
+				title = "Specials"
+			}
+			id, _, err := s.st.EnsureSeason(ctx, lib.ID, showID, seasonNum, seasonPath, title, media.SortTitle(title))
+			if err != nil {
+				return err
+			}
+			seasons[seasonPath] = id
+			seasonID = id
+		}
+
+		if ep.ParentID == nil || *ep.ParentID != seasonID {
+			if err := s.st.SetParent(ctx, ep.ID, &seasonID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func deref2(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // syncSubtitles records the sidecar files sitting beside a video.

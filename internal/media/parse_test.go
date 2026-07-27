@@ -87,6 +87,32 @@ func TestSortTitle(t *testing.T) {
 	}
 }
 
+func TestShowAndSeasonDir(t *testing.T) {
+	root := filepath.Join("R", "TV")
+	nested := filepath.Join(root, "Andor", "Season 01", "Andor.S01E07.mkv")
+	loose := filepath.Join(root, "Firefly", "Firefly.S01E01.mkv")
+	atRoot := filepath.Join(root, "Stray.S01E01.mkv")
+
+	if got, want := ShowDir(root, nested), filepath.Join(root, "Andor"); got != want {
+		t.Errorf("ShowDir(nested) = %q, want %q", got, want)
+	}
+	if got, want := ShowDir(root, loose), filepath.Join(root, "Firefly"); got != want {
+		t.Errorf("ShowDir(loose) = %q, want %q", got, want)
+	}
+	// A file directly in the root is not a show layout.
+	if got := ShowDir(root, atRoot); got != "" {
+		t.Errorf("ShowDir(atRoot) = %q, want empty", got)
+	}
+
+	if got, want := SeasonDir(nested), filepath.Join(root, "Andor", "Season 01"); got != want {
+		t.Errorf("SeasonDir(nested) = %q, want %q", got, want)
+	}
+	// No "Season N" folder — the caller must synthesize an identity instead.
+	if got := SeasonDir(loose); got != "" {
+		t.Errorf("SeasonDir(loose) = %q, want empty", got)
+	}
+}
+
 func TestIsVideo(t *testing.T) {
 	yes := []string{"a.mkv", "b.MP4", "c.avi", "d.m2ts"}
 	no := []string{"a.srt", "b.nfo", "c.jpg", "d", "e.mkv.part"}

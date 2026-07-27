@@ -89,13 +89,25 @@ func TestScanFindsVideosAndSkipsOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 3 {
-		t.Fatalf("total = %d, want 3", total)
+	// Three files, plus the show and season media_item rows reconciliation
+	// creates for the one episode (ADR 0010).
+	if total != 5 {
+		t.Fatalf("total = %d, want 5 (3 files + Andor show + season)", total)
 	}
 
 	byTitle := map[string]store.Item{}
 	for _, it := range items {
 		byTitle[it.Title] = it
+	}
+
+	// The episode is nested: a show and a season exist, and the episode points
+	// at the season, so it is no longer loose in the grid.
+	show, ok := byTitle["Andor"]
+	if !ok || show.Kind != "show" {
+		t.Fatalf("no Andor show row; got %v", keys(byTitle))
+	}
+	if ep := byTitle["Announcement"]; ep.ParentID == nil {
+		t.Error("episode has no parent after reconciliation")
 	}
 
 	// The regression the parser suite exists for, verified through the scanner.
@@ -143,6 +155,58 @@ func TestRescanSkipsUnchangedFiles(t *testing.T) {
 	_, total, _ := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
 	if total != 2 {
 		t.Errorf("total = %d after rescan, want 2 (no duplicates)", total)
+	}
+}
+
+// The hierarchy is built once and stays stable across rescans: the show and
+// season rows are not duplicated, and — the subtle part — they are never marked
+// missing even though the walk only ever sees the episode file, not the
+// directories those rows are keyed on.
+func TestHierarchyStableAcrossRescans(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Andor/Season 01/Andor.S01E01.mkv", 10)
+	writeFile(t, root, "Andor/Season 01/Andor.S01E02.mkv", 10)
+	// An episode loose in the show folder, no Season directory.
+	writeFile(t, root, "Firefly/Firefly.S01E01.mkv", 10)
+
+	first := scanAndWait(t, sc, lib)
+	if first.ItemsMissing != 0 {
+		t.Fatalf("first scan missing = %d, want 0", first.ItemsMissing)
+	}
+
+	countKind := func(kind string) int {
+		items, _, err := st.ListItems(context.Background(),
+			store.ItemFilter{LibraryID: lib.ID, Kind: kind})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(items)
+	}
+	if got := countKind("show"); got != 2 {
+		t.Errorf("shows = %d, want 2 (Andor, Firefly)", got)
+	}
+	if got := countKind("season"); got != 2 {
+		t.Errorf("seasons = %d, want 2 (one each; Firefly's is synthetic)", got)
+	}
+
+	second := scanAndWait(t, sc, lib)
+	if second.ItemsMissing != 0 {
+		t.Errorf("rescan marked %d missing — show/season rows must not be swept", second.ItemsMissing)
+	}
+	if got := countKind("show"); got != 2 {
+		t.Errorf("shows after rescan = %d, want 2 (no duplicates)", got)
+	}
+	if got := countKind("season"); got != 2 {
+		t.Errorf("seasons after rescan = %d, want 2 (no duplicates)", got)
+	}
+
+	// Every episode is parented; none is loose at the top level.
+	top, _, _ := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	for _, it := range top {
+		if it.Kind == "episode" {
+			t.Errorf("episode %q is top-level after reconciliation", it.Title)
+		}
 	}
 }
 
