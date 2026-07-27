@@ -256,6 +256,17 @@
   font-size: 14px;
 }
 
+.detail__children {
+  margin-top: 44px;
+}
+
+.detail__children-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 22px;
+  margin-top: 16px;
+}
+
 @media (max-width: 720px) {
   .detail__hero {
     flex-direction: column;

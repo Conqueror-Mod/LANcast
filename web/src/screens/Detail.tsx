@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useItem, useTrailer } from "@/api/hooks";
+import { useItem, useTrailer, useChildren } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating } from "@/lib/format";
+import { isContainer, childLabel } from "@/lib/kind";
 import { FixMatch } from "@/components/FixMatch";
+import { PosterTile } from "@/components/PosterTile";
 import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
@@ -60,6 +62,11 @@ export function Detail() {
   const { data: item, isLoading, isError } = useItem(itemID);
   const { data: trailer } = useTrailer(itemID);
 
+  // A container (show, season, collection, serial) has no file to play — it
+  // holds other items. Fetch those; the query stays idle for a plain movie.
+  const container = isContainer(item?.kind ?? "");
+  const { data: children } = useChildren(itemID, container);
+
   const [fixOpen, setFixOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const back = useCallback(() => navigate(-1), [navigate]);
@@ -85,6 +92,7 @@ export function Detail() {
   const fanart = artworkURL(item.artwork?.fanart, "fanart");
   const poster = artworkURL(item.artwork?.poster, "poster2x");
   const cast = castOf(item.credits);
+  const canFixMatch = item.kind !== "collection" && item.kind !== "season";
 
   const meta = [
     item.year ? String(item.year) : "",
@@ -128,20 +136,31 @@ export function Detail() {
             )}
 
             {/* Metadata correction lives with the metadata, not the playback
-                controls — that was the point of moving it here. */}
-            <div className="detail__metafix">
-              {item.metadata_updated_at != null &&
-                (item.match_state === "review" ||
-                  item.match_state === "unmatched") && (
-                  <span className="detail__matchbadge">
-                    {item.match_state === "review" ? "Needs review" : "No match"}
-                  </span>
-                )}
-              <FixMatchButton onOpen={() => setFixOpen(true)} />
-            </div>
+                controls — that was the point of moving it here. A collection
+                and a season have no user-correctable identity of their own
+                (one is provider-derived, the other structural), so Fix match
+                does not apply to them. */}
+            {canFixMatch && (
+              <div className="detail__metafix">
+                {item.metadata_updated_at != null &&
+                  (item.match_state === "review" ||
+                    item.match_state === "unmatched") && (
+                    <span className="detail__matchbadge">
+                      {item.match_state === "review"
+                        ? "Needs review"
+                        : "No match"}
+                    </span>
+                  )}
+                <FixMatchButton onOpen={() => setFixOpen(true)} />
+              </div>
+            )}
 
+            {/* A container has nothing to play — it holds other items, shown in
+                the grid below. Only leaves get a Play button. */}
             <div className="detail__actions">
-              <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
+              {!container && (
+                <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
+              )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
             </div>
 
@@ -164,6 +183,17 @@ export function Detail() {
             )}
           </div>
         </div>
+
+        {container && children && children.length > 0 && (
+          <section className="detail__children">
+            <span className="section-label">{childLabel(item.kind)}</span>
+            <div className="detail__children-grid">
+              {children.map((child) => (
+                <PosterTile key={child.id} item={child} />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {fixOpen && <FixMatch item={item} onClose={() => setFixOpen(false)} />}
