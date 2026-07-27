@@ -1,0 +1,159 @@
+package store
+
+import (
+	"context"
+	"testing"
+)
+
+// mkItem upserts a bare item of the given kind and returns its id.
+func mkItem(t *testing.T, st *Store, libID int64, kind, path, title string) int64 {
+	t.Helper()
+	id, err := st.UpsertItem(context.Background(), ScanFile{
+		LibraryID: libID, Path: path, Kind: kind,
+		Title: title, SortTitle: title,
+	})
+	if err != nil {
+		t.Fatalf("UpsertItem(%s %q): %v", kind, path, err)
+	}
+	return id
+}
+
+func ids(items []Item) map[int64]bool {
+	m := map[int64]bool{}
+	for _, it := range items {
+		m[it.ID] = true
+	}
+	return m
+}
+
+// A parented child (season, episode, part, chapter) must never appear in the
+// default top-level grid — it belongs under its parent. This is the guard ADR
+// 0010 and ADR 0017 require; without it a container's pieces leak in as if they
+// were features.
+func TestTopLevelFilterExcludesChildren(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	movie := mkItem(t, st, lib.ID, "movie", "/m/Arrival.mkv", "Arrival")
+	show := mkItem(t, st, lib.ID, "show", "/tv/Show", "Some Show")
+	episode := mkItem(t, st, lib.ID, "episode", "/tv/Show/S01E01.mkv", "Pilot")
+
+	if err := st.SetParent(ctx, episode, &show); err != nil {
+		t.Fatalf("SetParent: %v", err)
+	}
+
+	top, total, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if err != nil {
+		t.Fatalf("ListItems top-level: %v", err)
+	}
+	got := ids(top)
+	if !got[movie] || !got[show] {
+		t.Errorf("top-level = %v, want movie %d and show %d present", got, movie, show)
+	}
+	if got[episode] {
+		t.Errorf("top-level includes parented episode %d — it should be hidden under its show", episode)
+	}
+	if total != 2 {
+		t.Errorf("top-level total = %d, want 2 (movie + show)", total)
+	}
+
+	// Without the flag, everything is returned — the flag is opt-in so existing
+	// callers are unaffected.
+	all, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatalf("ListItems all: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("unfiltered = %d items, want 3", len(all))
+	}
+}
+
+// A ParentID filter returns exactly that item's children, and overrides
+// TopLevel — it is how a detail page loads a show's episodes or a work's parts.
+func TestChildrenReturnsContained(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	show := mkItem(t, st, lib.ID, "show", "/tv/Show", "Some Show")
+	e1 := mkItem(t, st, lib.ID, "episode", "/tv/Show/S01E01.mkv", "Pilot")
+	e2 := mkItem(t, st, lib.ID, "episode", "/tv/Show/S01E02.mkv", "Second")
+	other := mkItem(t, st, lib.ID, "episode", "/tv/Other/S01E01.mkv", "Unrelated")
+	for _, id := range []int64{e1, e2} {
+		if err := st.SetParent(ctx, id, &show); err != nil {
+			t.Fatalf("SetParent(%d): %v", id, err)
+		}
+	}
+
+	kids, err := st.Children(ctx, show)
+	if err != nil {
+		t.Fatalf("Children: %v", err)
+	}
+	got := ids(kids)
+	if len(kids) != 2 || !got[e1] || !got[e2] || got[other] {
+		t.Errorf("Children(show) = %v, want exactly episodes %d and %d", got, e1, e2)
+	}
+}
+
+// Collection membership is many-to-many and independent of parent_id: a member
+// stays top-level and may belong to more than one collection (ADR 0017).
+func TestCollectionMembership(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	anne1 := mkItem(t, st, lib.ID, "movie", "/m/Anne1.mkv", "Anne of Green Gables")
+	anne2 := mkItem(t, st, lib.ID, "movie", "/m/Anne2.mkv", "Anne of Avonlea")
+	series := mkItem(t, st, lib.ID, "collection", "/c/anne", "Anne Series")
+	themed := mkItem(t, st, lib.ID, "collection", "/c/cozy", "Cozy Classics")
+
+	if err := st.AddToCollection(ctx, anne1, series, 0); err != nil {
+		t.Fatalf("AddToCollection: %v", err)
+	}
+	if err := st.AddToCollection(ctx, anne2, series, 1); err != nil {
+		t.Fatalf("AddToCollection: %v", err)
+	}
+	// A member can belong to a second collection.
+	if err := st.AddToCollection(ctx, anne1, themed, 0); err != nil {
+		t.Fatalf("AddToCollection second: %v", err)
+	}
+
+	members, err := st.CollectionMembers(ctx, series)
+	if err != nil {
+		t.Fatalf("CollectionMembers: %v", err)
+	}
+	if len(members) != 2 || members[0].ID != anne1 || members[1].ID != anne2 {
+		t.Errorf("members = %v, want [anne1 %d, anne2 %d] in order", ids(members), anne1, anne2)
+	}
+
+	cols, err := st.CollectionsOf(ctx, anne1)
+	if err != nil {
+		t.Fatalf("CollectionsOf: %v", err)
+	}
+	if len(cols) != 2 {
+		t.Errorf("CollectionsOf(anne1) = %d collections, want 2", len(cols))
+	}
+
+	// Members remain top-level items: membership is not containment, so it must
+	// not hide them from the grid.
+	top, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, Kind: "movie", TopLevel: true})
+	if err != nil {
+		t.Fatalf("ListItems: %v", err)
+	}
+	if g := ids(top); !g[anne1] || !g[anne2] {
+		t.Errorf("collection members missing from top-level movies: %v", g)
+	}
+
+	// Re-adding updates order rather than erroring — ingestion is idempotent.
+	if err := st.AddToCollection(ctx, anne1, series, 5); err != nil {
+		t.Fatalf("re-add: %v", err)
+	}
+	if err := st.RemoveFromCollection(ctx, anne2, series); err != nil {
+		t.Fatalf("RemoveFromCollection: %v", err)
+	}
+	members, _ = st.CollectionMembers(ctx, series)
+	if len(members) != 1 || members[0].ID != anne1 {
+		t.Errorf("after remove, members = %v, want just anne1 %d", ids(members), anne1)
+	}
+}
