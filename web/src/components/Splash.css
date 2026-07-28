@@ -19,12 +19,14 @@
   pointer-events: none;
 }
 
+/* The clip is a full 1920×1080 and opens on black, its nebula edges bleeding
+   into the same void behind it, so it fills the whole viewport as one field.
+   contain keeps its aspect — no crop of the emblem — letterboxing into the void
+   on a non-16:9 screen, where the bars are invisible against the same colour. */
 .splash__logo {
-  width: min(72vmin, 560px);
-  height: auto;
-  border-radius: var(--radius-panel, 12px);
-  /* A soft gold breath, at rest — structural, not a highlight. */
-  box-shadow: 0 0 80px rgba(198, 163, 90, 0.12);
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 @media (prefers-reduced-motion: reduce) {
