@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { containerCountLabel } from "@/lib/kind";
+import { rating } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
@@ -21,6 +22,7 @@ export function PosterTile({ item }: { item: Item }) {
   const pct = progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
   const count = containerCountLabel(item);
+  const score = rating(item.rating);
 
   return (
     <button
@@ -37,6 +39,17 @@ export function PosterTile({ item }: { item: Item }) {
           <div className="poster-tile__placeholder">
             <span>{item.title}</span>
           </div>
+        )}
+        {item.content_rating && (
+          <span className="poster-tile__cert">{item.content_rating}</span>
+        )}
+        {score && (
+          <span className="poster-tile__rating">
+            <span className="poster-tile__star" aria-hidden="true">
+              ★
+            </span>
+            {score}
+          </span>
         )}
         {pct > 0 && (
           <div className="poster-tile__progress" style={{ width: `${pct}%` }} />

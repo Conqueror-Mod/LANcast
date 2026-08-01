@@ -13,14 +13,14 @@ export interface LibraryKindConfig {
   sorts: SortOption[];
 }
 
-// Only sort values the API supports today (title | year | added). Richer sorts
-// (rating, recently-aired) arrive with the Phase 2/3 API work.
+// Sort values the API supports (title | year | added | rating).
 const MOVIE: LibraryKindConfig = {
   searchPlaceholder: "Search this library",
   sorts: [
     { value: "title", label: "Title" },
     { value: "year", label: "Year" },
     { value: "added", label: "Recently added" },
+    { value: "rating", label: "Rating" },
   ],
 };
 
@@ -30,6 +30,7 @@ const SHOW: LibraryKindConfig = {
     { value: "title", label: "Title" },
     { value: "year", label: "First aired" },
     { value: "added", label: "Recently added" },
+    { value: "rating", label: "Rating" },
   ],
 };
 

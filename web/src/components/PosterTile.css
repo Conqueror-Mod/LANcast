@@ -55,6 +55,41 @@
   transform: translateY(-2px);
 }
 
+/* Corner badges on the art. Both sit on a dark scrim and read monochrome —
+   deliberately NOT gold, which is reserved for focus/where-you-are. The rating's
+   star is a glyph, not a colour, so it never competes with the focus signal. */
+.poster-tile__rating,
+.poster-tile__cert {
+  position: absolute;
+  top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(5, 7, 15, 0.72);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-primary);
+  backdrop-filter: blur(2px);
+}
+
+.poster-tile__rating {
+  right: 6px;
+  font-weight: 600;
+}
+
+.poster-tile__star {
+  color: var(--text-secondary);
+}
+
+.poster-tile__cert {
+  left: 6px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
 /* Continue-watching progress: a 3px gold bar on the tile's bottom edge. */
 .poster-tile__progress {
   position: absolute;
