@@ -1,6 +1,6 @@
 # ADR 0019 — External ratings (Rotten Tomatoes, Metacritic, IMDb) via OMDb
 
-Date: 2026-08-01 · Status: proposed
+Date: 2026-08-01 · Status: accepted
 
 ## Context
 
