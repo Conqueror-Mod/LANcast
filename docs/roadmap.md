@@ -1,9 +1,16 @@
 # Roadmap
 
-Last updated: 2026-07-27 · **M0–M3 built.** The React client executes the design
+Last updated: 2026-08-01 · **M0–M3 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
+
+The **browse-experience backlog shipped** in three PRs
+([plan](browse-experience-plan.md)): media-type-aware library views, Plex-style
+multi-select filters (genre, decade, content rating) with per-library counts and
+an unwatched toggle, and a ratings display with a rating sort. What remains of it
+is **external ratings** (Rotten Tomatoes / Metacritic / IMDb), now specced in
+[ADR 0019](adr/0019-external-ratings.md) and awaiting a build.
 
 The two early-lock Foundation decisions are now **built, not just decided**: the
 data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
@@ -65,6 +72,7 @@ Status: **planned** · **next** · *unplanned*
 | Matching and confidence | **built** | Wrong-match correction; library-kind biases movie-vs-TV; Fix match reaches TV, not just film |
 | Media organisation | **built** | Collections, show→season→episode, multi-part works, serials/miniseries; retroactive re-parse; Remove (ignore/delete) ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
+| External ratings | specced | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
 | Library types beyond video | *unplanned* | Music, photos — proves the taxonomy is open |
 
@@ -136,8 +144,8 @@ group is not priority.
 - **More branded, thematic home page** — beyond functional shelves.
 - **Auto-expanding / collapsing navigation bar** — expands on hover/focus,
   collapses otherwise (the Plex behaviour).
-- **Movie library page** and **TV-show library page** — media-type-specific
-  browse views, not one generic grid.
+- ~~**Movie library page** and **TV-show library page**~~ — **done**
+  (Phase 1): media-type-aware browse views selected by library kind.
 - **Add-ons page** — placeholder for now; add-ons themselves come later in the
   app's life (M4 territory).
 - **More defined settings page** — a real structure, not a flat list.
@@ -155,9 +163,12 @@ group is not priority.
 
 ### Metadata, ratings and discovery
 
-- **Ratings system** that also ties to Metacritic / Rotten Tomatoes.
-- **Plex-style filter settings**, with a **total movie/show count per library
-  page**.
+- **Ratings system** — TMDB rating display + rating sort **done** (Phase 3);
+  the **Metacritic / Rotten Tomatoes** tie-in is specced in
+  [ADR 0019](adr/0019-external-ratings.md), not yet built.
+- ~~**Plex-style filter settings**, with a **total movie/show count per library
+  page**~~ — **done** (Phase 2): multi-select genre/decade/content-rating
+  filters, unwatched toggle, per-library counts in the nav.
 
 ### Social and profiles
 
@@ -226,10 +237,13 @@ where that openness gets exercised.
 4. ~~Data model past revision 1 + media organisation~~ — **built** (ADRs
    [0017](adr/0017-collections-and-multi-part-works.md)/[0018](adr/0018-api-contract-and-versioning.md)):
    collections, hierarchy, multi-part works, library-kind matching, delete/ignore.
-5. **Next, pick one:** the browse-experience feature backlog (media-type library
-   pages, Plex-style filters, per-library counts, ratings) — the direct payoff
-   of the taxonomy above; or **plugin architecture (M4)**, the last milestone,
-   planned right before it is built and validated by a first-party plugin.
+5. ~~Browse-experience feature backlog~~ — **built** in three PRs
+   ([plan](browse-experience-plan.md)): media-type library pages, Plex-style
+   filters, per-library counts, ratings display.
+6. **Next, pick one:** **external ratings** (RT/Metacritic/IMDb) — specced and
+   ready to build ([ADR 0019](adr/0019-external-ratings.md)); or **plugin
+   architecture (M4)**, the last milestone, planned right before it is built and
+   validated by a first-party plugin.
 
 ## Amendments to schema revision 1
 
