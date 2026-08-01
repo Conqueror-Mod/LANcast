@@ -581,6 +581,9 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 	if it.LockedFields, err = s.LockedFields(ctx, it.ID); err != nil {
 		return err
 	}
+	if it.Ratings, err = s.ItemRatings(ctx, it.ID); err != nil {
+		return err
+	}
 	return nil
 }
 

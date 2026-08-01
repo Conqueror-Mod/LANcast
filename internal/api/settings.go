@@ -20,6 +20,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"opensubtitles": map[string]any{
 			"configured": cur.OpenSubtitlesKey != "",
 		},
+		"omdb": map[string]any{
+			"configured": cur.OMDbKey != "",
+		},
 		"rate_per_sec": cur.RatePerSec,
 		"write_nfo":    cur.WriteNFO,
 		"auto_enrich":  cur.AutoEnrich,
@@ -37,6 +40,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TMDBKey          *string  `json:"tmdb_key"`
 		OpenSubtitlesKey *string  `json:"opensubtitles_key"`
+		OMDbKey          *string  `json:"omdb_key"`
 		RatePerSec       *float64 `json:"rate_per_sec"`
 		WriteNFO         *bool    `json:"write_nfo"`
 		AutoEnrich       *bool    `json:"auto_enrich"`
@@ -53,6 +57,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.OpenSubtitlesKey != nil {
 		next.OpenSubtitlesKey = strings.TrimSpace(*req.OpenSubtitlesKey)
+	}
+	if req.OMDbKey != nil {
+		next.OMDbKey = strings.TrimSpace(*req.OMDbKey)
 	}
 	if req.RatePerSec != nil {
 		if *req.RatePerSec <= 0 || *req.RatePerSec > 50 {

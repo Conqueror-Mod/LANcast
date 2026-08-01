@@ -203,10 +203,11 @@ type Item struct {
 	Streams []MediaStream `json:"streams,omitempty"`
 
 	// Detail-only; nil on list responses.
-	Genres       []string `json:"genres,omitempty"`
-	Credits      []Credit `json:"credits,omitempty"`
-	Artwork      *Artwork `json:"artwork,omitempty"`
-	LockedFields []string `json:"locked_fields,omitempty"`
+	Genres       []string     `json:"genres,omitempty"`
+	Credits      []Credit     `json:"credits,omitempty"`
+	Artwork      *Artwork     `json:"artwork,omitempty"`
+	LockedFields []string     `json:"locked_fields,omitempty"`
+	Ratings      []ItemRating `json:"ratings,omitempty"`
 
 	Progress *Progress `json:"progress,omitempty"`
 }

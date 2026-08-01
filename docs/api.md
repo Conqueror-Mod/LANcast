@@ -321,8 +321,19 @@ From M2 the response also carries:
   "artwork": { "poster": "9f2c4a…", "fanart": "3b81ee…" },
   "parent_id": null,
   "match_state": "locked", "match_score": 0.94,
-  "locked_fields": ["title", "year"] }
+  "locked_fields": ["title", "year"],
+  "ratings": [ { "source": "rotten_tomatoes", "score": 8.8, "display": "88%" },
+               { "source": "imdb", "score": 8.0, "display": "8.0", "votes": 634000 } ] }
 ```
+
+`ratings` is the external scores from third-party sources ([ADR 0019](adr/0019-external-ratings.md)),
+highest normalized `score` (0–10) first, each with a source-native `display`
+string (`"88%"`, `"81"`, `"8.0"`) and an optional `votes` count. `source` is an
+**open set** — `imdb`, `rotten_tomatoes`, `metacritic`, and more later — so a
+client renders whatever arrives rather than switching on a fixed list. The field
+is **omitted** when no external ratings are known (no OMDb key, or a title the
+source does not cover), which is a normal state, not an error. `rating` (the
+single TMDB scalar) is unchanged and independent.
 
 `match_state` is one of:
 
@@ -633,11 +644,15 @@ a hash cannot change.
 
 ### `GET` / `PUT /api/settings/providers`
 
-TMDB key, rate limit, and the per-library NFO write toggle.
+TMDB key, OpenSubtitles key, OMDb key (external ratings, [ADR 0019](adr/0019-external-ratings.md)),
+rate limit, and the per-library NFO write toggle.
 
-**The key is write-only.** `GET` returns `{"tmdb": {"configured": true}}` and
-never the value itself. It is stored in the config file at `0600`, never in the
-database.
+**Every key is write-only.** `GET` returns each provider's configured flag only —
+`{"tmdb": {"configured": true}, "omdb": {"configured": false}, …}` — never the
+value itself. Keys are stored in the config file at `0600`, never in the
+database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
+empty string) turns external ratings off again, and without it the pass never
+runs and nothing is fetched.
 
 ---
 

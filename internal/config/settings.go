@@ -18,8 +18,12 @@ type Settings struct {
 	TMDBKey string `json:"tmdb_key,omitempty"`
 	// OpenSubtitlesKey enables subtitle search. Optional, like the TMDB key:
 	// without it LANcast still serves embedded and sidecar subtitles.
-	OpenSubtitlesKey string  `json:"opensubtitles_key,omitempty"`
-	RatePerSec       float64 `json:"rate_per_sec,omitempty"`
+	OpenSubtitlesKey string `json:"opensubtitles_key,omitempty"`
+	// OMDbKey enables external ratings (Rotten Tomatoes / Metacritic / IMDb via
+	// OMDb, ADR 0019). Optional and write-only like the other keys; without it
+	// the rating pass never runs and nothing leaves the machine.
+	OMDbKey    string  `json:"omdb_key,omitempty"`
+	RatePerSec float64 `json:"rate_per_sec,omitempty"`
 	WriteNFO         bool    `json:"write_nfo"`
 	AutoEnrich       bool    `json:"auto_enrich"`
 
