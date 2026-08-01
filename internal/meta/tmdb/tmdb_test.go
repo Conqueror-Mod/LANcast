@@ -167,6 +167,7 @@ func TestFetchMovie(t *testing.T) {
 		w.Write([]byte(`{
 		 "title":"Blade Runner 2049","overview":"K discovers a secret.",
 		 "release_date":"2017-10-04","runtime":164,"vote_average":7.5,
+		 "imdb_id":"tt1856101",
 		 "genres":[{"name":"Science Fiction"},{"name":"Drama"}],
 		 "poster_path":"/p.jpg","backdrop_path":"/b.jpg",
 		 "credits":{"cast":[{"name":"Ryan Gosling","character":"K","order":0}],
@@ -191,6 +192,9 @@ func TestFetchMovie(t *testing.T) {
 	}
 	if *rec.Fields.Rating != 7.5 {
 		t.Errorf("Rating = %v", *rec.Fields.Rating)
+	}
+	if rec.IMDbID != "tt1856101" {
+		t.Errorf("IMDbID = %q, want tt1856101 (the OMDb join key)", rec.IMDbID)
 	}
 	if rec.Fields.ReleasedAt == nil {
 		t.Error("ReleasedAt was not parsed")

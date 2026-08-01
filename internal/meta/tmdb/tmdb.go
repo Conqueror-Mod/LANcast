@@ -162,7 +162,7 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 		return nil, err
 	}
 
-	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindMovie}
+	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindMovie, IMDbID: m.IMDbID}
 	rec.Fields.Title = meta.S(m.Title)
 	if m.Overview != "" {
 		rec.Fields.Overview = meta.S(m.Overview)
@@ -194,11 +194,11 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 
 func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error) {
 	var s showDetail
-	if err := c.get(ctx, "/tv/"+id, url.Values{"append_to_response": {"credits"}}, &s); err != nil {
+	if err := c.get(ctx, "/tv/"+id, url.Values{"append_to_response": {"credits,external_ids"}}, &s); err != nil {
 		return nil, err
 	}
 
-	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindShow}
+	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindShow, IMDbID: s.ExternalIDs.IMDbID}
 	rec.Fields.Title = meta.S(s.Name)
 	rec.Fields.Series = meta.S(s.Name)
 	if s.Overview != "" {
@@ -447,6 +447,7 @@ type movieDetail struct {
 	BackdropPath string          `json:"backdrop_path"`
 	Credits      creditsBlock    `json:"credits"`
 	Collection   *tmdbCollection `json:"belongs_to_collection"`
+	IMDbID       string          `json:"imdb_id"`
 }
 
 // tmdbCollection is TMDB's belongs_to_collection block — the franchise or
@@ -467,6 +468,15 @@ type showDetail struct {
 	PosterPath   string       `json:"poster_path"`
 	BackdropPath string       `json:"backdrop_path"`
 	Credits      creditsBlock `json:"credits"`
+	// TV imdb ids live under external_ids, not on the detail root as they do for
+	// movies, so the fetch appends that block.
+	ExternalIDs externalIDs `json:"external_ids"`
+}
+
+// externalIDs is TMDB's external_ids block — the cross-service ids for a title.
+// Only the imdb id is used today (ADR 0019).
+type externalIDs struct {
+	IMDbID string `json:"imdb_id"`
 }
 
 type episodeDetail struct {

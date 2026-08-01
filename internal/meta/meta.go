@@ -169,6 +169,11 @@ type Record struct {
 	ExternalID string
 	Kind       Kind
 
+	// IMDbID is the external imdb id when the source knows it (TMDB via
+	// external_ids). It is the key third-party rating sources join on (ADR 0019),
+	// and empty for sources that do not carry it.
+	IMDbID string
+
 	Fields  Fields
 	Genres  []string
 	Credits []Credit
@@ -208,6 +213,26 @@ type Trailer struct {
 	Name string `json:"name"`
 }
 
+// RatingSource returns third-party scores for an item already identified by its
+// IMDb id. It is deliberately not a Provider: it cannot search for identity, and
+// forcing Search/Fetch on it would mean faking a confidence-scored candidate for
+// a service that has no opinion on what a title is (ADR 0007, ADR 0019). The
+// identity is resolved before it is ever called.
+type RatingSource interface {
+	ID() string
+	Ratings(ctx context.Context, imdbID string) ([]Rating, error)
+}
+
+// Rating is one score from one source. Score is normalized to 0–10 so scores
+// from different scales sort and compare uniformly; Display keeps the
+// source-native form ("92%", "74", "7.7") for the UI.
+type Rating struct {
+	Source  string  // imdb | rotten_tomatoes | metacritic | …
+	Score   float64 // normalized 0–10
+	Display string  // source-native string
+	Votes   int     // 0 when the source reports no count
+}
+
 // Trailer finds a trailer from the first provider that can supply one.
 func (r *Registry) Trailer(ctx context.Context, providerID string, ref Ref) (*Trailer, error) {
 	for _, p := range r.providers {
@@ -231,6 +256,7 @@ func (r *Registry) Trailer(ctx context.Context, providerID string, ref Ref) (*Tr
 type Registry struct {
 	providers []Provider
 	locals    []LocalSource
+	ratings   []RatingSource
 }
 
 func NewRegistry() *Registry { return &Registry{} }
@@ -256,6 +282,36 @@ func (r *Registry) Providers(k Kind) []Provider {
 
 // Locals returns every registered local source in priority order.
 func (r *Registry) Locals() []LocalSource { return r.locals }
+
+// AddRatingSource registers a third-party rating source (ADR 0019).
+func (r *Registry) AddRatingSource(rs RatingSource) { r.ratings = append(r.ratings, rs) }
+
+// HasRatingSources reports whether any rating source is configured, so the
+// enricher can skip the rating pass entirely rather than resolve imdb ids for a
+// lookup nothing will answer.
+func (r *Registry) HasRatingSources() bool { return len(r.ratings) > 0 }
+
+// Ratings collects scores for one imdb id from every rating source, in
+// registration order. A source failing is logged by the caller, not fatal: a
+// partial set is the expected state, since coverage differs per source.
+func (r *Registry) Ratings(ctx context.Context, imdbID string) ([]Rating, error) {
+	if imdbID == "" {
+		return nil, nil
+	}
+	var all []Rating
+	var firstErr error
+	for _, rs := range r.ratings {
+		got, err := rs.Ratings(ctx, imdbID)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		all = append(all, got...)
+	}
+	return all, firstErr
+}
 
 // Provider looks up a registered provider by id.
 func (r *Registry) Provider(id string) (Provider, bool) {
