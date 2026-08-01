@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 9
+const CurrentSchemaVersion = 10
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -27,6 +27,7 @@ var migrations = []migration{
 	{version: 7, sql: schemaRevision7},
 	{version: 8, sql: schemaRevision8},
 	{version: 9, sql: schemaRevision9},
+	{version: 10, sql: schemaRevision10},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -326,5 +327,32 @@ CREATE TABLE IF NOT EXISTS ignored_path (
     path       TEXT    NOT NULL,
     added_at   INTEGER NOT NULL,
     PRIMARY KEY (library_id, path)
+);
+`
+
+// Revision 10 — external ratings (ADR 0019).
+//
+// Two additions. First, media_item.imdb_id: the join key third-party rating
+// services key on, populated from TMDB's external_ids. Nullable because not
+// every item resolves one, and it doubles as the id the OpenSubtitles search can
+// fall back to when a file hash misses.
+//
+// Second, item_rating: a source-keyed side table rather than a column per
+// service, because the set of sources is open (ADR 0002) — a new one is a row
+// value, not a migration. `score` is normalized to 0–10 so any sort or aggregate
+// stays a pure numeric operation; `display` keeps the source-native form ("92%",
+// "74") so the UI renders each in its own scale. media_item.rating stays the
+// canonical scalar the badge and sort read, so nothing built so far changes.
+const schemaRevision10 = `
+ALTER TABLE media_item ADD COLUMN imdb_id TEXT;
+
+CREATE TABLE IF NOT EXISTS item_rating (
+    item_id    INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    source     TEXT    NOT NULL,          -- imdb | rotten_tomatoes | metacritic | tmdb | …
+    score      REAL    NOT NULL,          -- normalized 0–10
+    display    TEXT    NOT NULL,          -- source-native string for the UI
+    votes      INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (item_id, source)
 );
 `
