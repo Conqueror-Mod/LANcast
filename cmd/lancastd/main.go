@@ -28,6 +28,7 @@ import (
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
+	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -90,6 +91,30 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	scanner := scan.New(st, log)
 	art := artwork.New(filepath.Join(cfg.DataDir, "artwork"))
 
+	// Plugins (ADR 0020) are loaded once from the data dir and registered into
+	// each rebuilt registry. The runtime hands them a secret resolver scoped to
+	// what each plugin's manifest grants — a plugin never reads config directly.
+	pluginRT, err := plugin.NewRuntime(context.Background(), log,
+		plugin.WithSecretResolver(func(name string) string {
+			s := settings.Get()
+			switch name {
+			case "omdb_key":
+				return s.OMDbKey
+			case "tmdb_key":
+				return s.TMDBKey
+			case "opensubtitles_key":
+				return s.OpenSubtitlesKey
+			default:
+				return ""
+			}
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("plugin runtime: %w", err)
+	}
+	defer pluginRT.Close(context.Background())
+	plugins := pluginRT.LoadAll(context.Background(), filepath.Join(cfg.DataDir, "plugins"))
+
 	// The registry is rebuilt whenever settings change so a newly entered API
 	// key takes effect without a restart.
 	reg := meta.NewRegistry()
@@ -111,6 +136,9 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		if s.OMDbKey != "" {
 			next.AddRatingSource(omdb.New(s.OMDbKey, omdb.WithCache(st)))
 		}
+		// Plugin-provided sources register the same way — indistinguishable
+		// downstream from the native ones (ADR 0007).
+		plugin.RegisterInto(next, plugins, log)
 		*reg = *next
 	}
 	rebuild(settings.Get())
