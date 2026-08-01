@@ -10,7 +10,10 @@
 // Build: GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o ../fixture.wasm .
 package main
 
-import "unsafe"
+import (
+	"encoding/json"
+	"unsafe"
+)
 
 func main() {}
 
@@ -87,4 +90,24 @@ func getsecret(ptr, length uint32) uint64 {
 func logit(ptr, length uint32) uint64 {
 	hostLog(1, ptr, length)
 	return ret(bytesAt(ptr, length))
+}
+
+// ratings is the rating_source entrypoint. It unmarshals {"imdb_id":...} and
+// returns one rating whose display echoes the id — enough for the host adapter
+// test to prove the request reached the guest and the response marshalled back.
+//
+//go:wasmexport ratings
+func ratings(ptr, length uint32) uint64 {
+	var req struct {
+		IMDbID string `json:"imdb_id"`
+	}
+	_ = json.Unmarshal(bytesAt(ptr, length), &req)
+	resp := []map[string]any{
+		{"source": "imdb", "score": 7.9, "display": req.IMDbID, "votes": 42},
+	}
+	out, err := json.Marshal(resp)
+	if err != nil {
+		return 0
+	}
+	return ret(out)
 }
