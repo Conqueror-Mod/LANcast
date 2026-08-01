@@ -359,6 +359,39 @@ func TestListItemsFilterAndSort(t *testing.T) {
 		}
 	})
 
+	t.Run("sort by rating, unrated last", func(t *testing.T) {
+		// Rate Arrival above The Matrix; the episode stays unrated.
+		movies, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, Kind: "movie"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range movies {
+			var r float64
+			switch m.Title {
+			case "Arrival":
+				r = 8.0
+			case "The Matrix":
+				r = 7.0
+			}
+			if r > 0 {
+				if err := st.UpdateItemMetadata(ctx, m.ID, ItemMetadata{Rating: &r}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		items, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, Sort: "rating"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if items[0].Title != "Arrival" || items[1].Title != "The Matrix" {
+			t.Errorf("rating order = %q, %q; want Arrival then The Matrix", items[0].Title, items[1].Title)
+		}
+		// The unrated episode sinks to the bottom rather than sorting as zero.
+		if last := items[len(items)-1]; last.Title != "Announcement" {
+			t.Errorf("last by rating = %q, want the unrated episode", last.Title)
+		}
+	})
+
 	t.Run("pagination", func(t *testing.T) {
 		items, total, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, Limit: 2, Offset: 2})
 		if err != nil {

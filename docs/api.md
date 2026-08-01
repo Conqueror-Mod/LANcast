@@ -230,7 +230,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
-| `sort` | `title` (default), `year`, `added` |
+| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last) |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
 
 Repeatable filters are **OR within a facet and AND across facets**: two genres

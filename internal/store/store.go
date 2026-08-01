@@ -355,7 +355,7 @@ type ItemFilter struct {
 	LibraryID int64
 	Kind      string
 	Query     string
-	Sort      string // title | year | added
+	Sort      string // title | year | added | rating
 
 	// Facet filters. Each is OR within itself and AND across facets — the Plex
 	// semantics: pick two genres to widen, add a decade to narrow. Empty slices
@@ -524,6 +524,10 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		order = ` ORDER BY year DESC, sort_title`
 	case "added":
 		order = ` ORDER BY added_at DESC, sort_title`
+	case "rating":
+		// Highest rated first; unrated rows sink to the bottom rather than
+		// sorting as if they were zero-rated.
+		order = ` ORDER BY rating IS NULL, rating DESC, sort_title`
 	}
 
 	limit := f.Limit
