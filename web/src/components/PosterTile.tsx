@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
+import { containerCountLabel } from "@/lib/kind";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
@@ -18,6 +19,8 @@ export function PosterTile({ item }: { item: Item }) {
 
   const poster = artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
+  // A container shows how much it holds ("3 seasons"); a leaf shows its year.
+  const count = containerCountLabel(item);
 
   return (
     <button
@@ -41,7 +44,11 @@ export function PosterTile({ item }: { item: Item }) {
       </div>
       <div className="poster-tile__meta">
         <span className="poster-tile__title">{item.title}</span>
-        {item.year && <span className="poster-tile__year">{item.year}</span>}
+        {count ? (
+          <span className="poster-tile__year">{count}</span>
+        ) : (
+          item.year && <span className="poster-tile__year">{item.year}</span>
+        )}
       </div>
     </button>
   );

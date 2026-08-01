@@ -35,3 +35,31 @@ export function childLabel(childKind: string | undefined): string {
       return "Contents";
   }
 }
+
+// containerNoun is the singular word for what a container of this kind holds,
+// derived from the container's own kind — the children's kind is not on the
+// parent row in a grid listing. A movie-kind parent of parts (ADR 0017) reads
+// "part"; a collection reads "film".
+function containerNoun(kind: string): string {
+  switch (kind) {
+    case "show":
+      return "season";
+    case "collection":
+      return "film";
+    case "serial":
+    case "movie":
+      return "part";
+    default:
+      return "item";
+  }
+}
+
+// containerCountLabel renders a container's child count as a short noun phrase —
+// "3 seasons", "2 parts", "1 film" — or null for a leaf, so a poster tile can
+// show at a glance that opening it leads to more items rather than a Play button.
+export function containerCountLabel(item: Item): string | null {
+  const n = item.child_count ?? 0;
+  if (!isContainer(item) || n <= 0) return null;
+  const noun = containerNoun(item.kind);
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
