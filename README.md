@@ -87,6 +87,20 @@ Token beside it is a v4 bearer JWT and will be rejected.
 > [TMDB](https://www.themoviedb.org). Attribution is a condition of their free
 > tier and is also shown in the app's settings screen.
 
+### Ratings
+
+Optional. Add a free [OMDb](https://www.omdbapi.com/apikey.aspx) key under
+Settings to show **Rotten Tomatoes, Metacritic, and IMDb** scores on the detail
+page, alongside the TMDB rating.
+
+The key is **your own OMDb account**, not something LANcast supplies: nothing is
+fetched until you enter one, the key is stored `0600` outside the database and is
+never readable back through the API, and clearing it turns the feature off again.
+LANcast is a client pointed at your OMDb subscription — it does not redistribute
+ratings data. Use of the key is subject to
+[OMDb's terms](https://www.omdbapi.com/legal.htm); the free tier is intended for
+personal, non-commercial use, and each score is shown labelled with its source.
+
 Build a distributable binary:
 
 ```bash
