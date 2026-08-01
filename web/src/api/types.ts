@@ -135,6 +135,16 @@ export interface ItemsPage {
   total: number;
 }
 
+// The filter values a library's browse view offers. Only values actually
+// present are returned, so a chosen filter never empties the grid. has_watched
+// gates the unwatched-only toggle: offered only when it would remove something.
+export interface Facets {
+  genres: string[];
+  decades: number[];
+  content_ratings: string[];
+  has_watched: boolean;
+}
+
 export interface Encoder {
   name: string;
   label: string;

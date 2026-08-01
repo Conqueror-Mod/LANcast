@@ -104,7 +104,7 @@ func TestBrowseFiltersAndFacets(t *testing.T) {
 	c := mk("/m/c.mkv", "Contact", 1997, []string{"Drama"})
 
 	// Facets: sorted genres, decades newest-first.
-	f, err := st.LibraryFacets(ctx, lib.ID)
+	f, err := st.LibraryFacets(ctx, lib.ID, "u1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,17 +114,54 @@ func TestBrowseFiltersAndFacets(t *testing.T) {
 	if got := f.Decades; len(got) != 2 || got[0] != 2010 || got[1] != 1990 {
 		t.Errorf("decades = %v, want [2010 1990]", got)
 	}
+	if f.HasWatched {
+		t.Errorf("HasWatched = true with nothing watched, want false")
+	}
 
 	// Genre filter.
-	drama, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genre: "Drama"})
+	drama, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genres: []string{"Drama"}})
 	if g := ids(drama); len(drama) != 2 || !g[a] || !g[c] {
 		t.Errorf("Drama = %v, want Arrival + Contact", g)
 	}
 
-	// Decade filter, combined with genre.
-	both, total, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genre: "Drama", Decade: 2010})
+	// Two genres widen (OR within the facet): Comedy or Science Fiction.
+	widen, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genres: []string{"Comedy", "Science Fiction"}})
+	if len(widen) != 2 {
+		t.Errorf("Comedy|SciFi = %v, want Arrival + Booksmart", ids(widen))
+	}
+
+	// Decade filter, combined with genre (AND across facets).
+	both, total, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genres: []string{"Drama"}, Decades: []int{2010}})
 	if len(both) != 1 || both[0].ID != a || total != 1 {
 		t.Errorf("Drama+2010s = %v (total %d), want just Arrival", ids(both), total)
+	}
+
+	// Two decades widen: 1990s or 2010s (both Drama films).
+	twoDec, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Genres: []string{"Drama"}, Decades: []int{1990, 2010}})
+	if len(twoDec) != 2 {
+		t.Errorf("Drama+{1990s,2010s} = %v, want Arrival + Contact", ids(twoDec))
+	}
+
+	// Unwatched filter: mark Arrival watched, it drops out.
+	if err := st.SaveProgress(ctx, a, "u1", 1000, true); err != nil {
+		t.Fatal(err)
+	}
+	unwatched, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Unwatched: true, UserID: "u1"})
+	if g := ids(unwatched); g[a] || len(unwatched) != 2 {
+		t.Errorf("unwatched = %v, want Booksmart + Contact (not Arrival)", g)
+	}
+	// A different user has watched nothing, so sees all three.
+	other, _, _ := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true, Unwatched: true, UserID: "u2"})
+	if len(other) != 3 {
+		t.Errorf("unwatched for u2 = %v, want all three", ids(other))
+	}
+	// And the facet now reports a watched item exists for u1.
+	f2, _ := st.LibraryFacets(ctx, lib.ID, "u1")
+	if !f2.HasWatched {
+		t.Errorf("HasWatched = false after watching Arrival, want true")
+	}
+	if len(f2.ContentRatings) != 0 {
+		t.Errorf("ContentRatings = %v, want empty (none set)", f2.ContentRatings)
 	}
 }
 

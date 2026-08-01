@@ -159,12 +159,48 @@ func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
-	facets, err := s.st.LibraryFacets(r.Context(), id)
+	facets, err := s.st.LibraryFacets(r.Context(), id, s.userID(r))
 	if err != nil {
 		s.writeInternal(w, err, "library facets")
 		return
 	}
 	writeJSON(w, http.StatusOK, facets)
+}
+
+// nonEmpty drops blank entries from a repeated query parameter, so a stray
+// "&genre=" never becomes a filter for the empty string.
+func nonEmpty(vs []string) []string {
+	out := make([]string, 0, len(vs))
+	for _, v := range vs {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// parseDecades parses the repeatable decade parameter. A blank entry is skipped;
+// a non-numeric one is an error, so a malformed filter is reported rather than
+// silently widening the grid.
+func parseDecades(vs []string) ([]int, bool) {
+	out := make([]int, 0, len(vs))
+	for _, v := range vs {
+		if v == "" {
+			continue
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, true
+	}
+	return out, true
 }
 
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
@@ -188,13 +224,26 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Genre, decade, and content_rating are repeatable: ?genre=A&genre=B widens
+	// within a facet. Empty values are dropped so a trailing "&genre=" is a
+	// no-op rather than a filter for the empty string.
+	decades, ok := parseDecades(q["decade"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid decade")
+		return
+	}
 	f := store.ItemFilter{
-		LibraryID: int64(queryInt(r, "library_id")),
-		Kind:      q.Get("kind"),
-		Query:     q.Get("q"),
-		Sort:      q.Get("sort"),
-		Genre:     q.Get("genre"),
-		Decade:    queryInt(r, "decade"),
+		LibraryID:      int64(queryInt(r, "library_id")),
+		Kind:           q.Get("kind"),
+		Query:          q.Get("q"),
+		Sort:           q.Get("sort"),
+		Genres:         nonEmpty(q["genre"]),
+		Decades:        decades,
+		ContentRatings: nonEmpty(q["content_rating"]),
+		// Only the unwatched-only case is expressed; watched=true (watched-only)
+		// is not a browse affordance today, so any value but "false" is ignored.
+		Unwatched: q.Get("watched") == "false",
+		UserID:    s.userID(r),
 		Limit:     queryInt(r, "limit"),
 		Offset:    queryInt(r, "offset"),
 	}

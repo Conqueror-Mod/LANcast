@@ -29,6 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               }
             >
               {lib.name}
+              <span className="app-shell__lib-count">{lib.item_count}</span>
             </NavLink>
           ))}
         </nav>

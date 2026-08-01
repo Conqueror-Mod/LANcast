@@ -356,8 +356,20 @@ type ItemFilter struct {
 	Kind      string
 	Query     string
 	Sort      string // title | year | added
-	Genre     string // exact genre name; empty means no genre filter
-	Decade    int    // e.g. 1990 restricts to 1990–1999; 0 means no year filter
+
+	// Facet filters. Each is OR within itself and AND across facets — the Plex
+	// semantics: pick two genres to widen, add a decade to narrow. Empty slices
+	// mean no restriction on that facet.
+	Genres         []string // exact genre names
+	Decades        []int    // e.g. 1990 restricts to 1990–1999
+	ContentRatings []string // exact content-rating labels (PG, R, TV-MA…)
+
+	// Unwatched restricts to items the user has not finished. It is keyed by
+	// UserID, which must be set when Unwatched is true. Watched state lives on the
+	// leaf's own playback row, so this filters movies and episodes; a container
+	// (a show) carries no watched flag and is unaffected.
+	Unwatched bool
+	UserID    string
 
 	// TopLevel restricts the listing to rows with no parent — the browse-grid
 	// default. Children (seasons, episodes, parts, chapters) have a parent_id
@@ -384,6 +396,15 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
 var itemColsMI = qualifyCols(itemCols, "mi")
+
+// placeholders returns "?, ?, …" with n slots, for an IN (…) clause whose
+// values are appended to the args slice in the same order.
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Repeat("?, ", n-1) + "?"
+}
 
 func qualifyCols(cols, alias string) string {
 	parts := strings.Split(cols, ",")
@@ -457,17 +478,39 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
 	}
-	if f.Genre != "" {
+	if len(f.Genres) > 0 {
 		// EXISTS rather than a join, so a multi-genre item is not duplicated in
-		// the result or double-counted in the total.
+		// the result or double-counted in the total. IN over the chosen names is
+		// the OR-within-facet part.
 		where += ` AND EXISTS (
 			SELECT 1 FROM item_genre ig JOIN genre g ON g.id = ig.genre_id
-			WHERE ig.item_id = media_item.id AND g.name = ?)`
-		args = append(args, f.Genre)
+			WHERE ig.item_id = media_item.id AND g.name IN (` + placeholders(len(f.Genres)) + `))`
+		for _, g := range f.Genres {
+			args = append(args, g)
+		}
 	}
-	if f.Decade != 0 {
-		where += ` AND year >= ? AND year <= ?`
-		args = append(args, f.Decade, f.Decade+9)
+	if len(f.Decades) > 0 {
+		parts := make([]string, len(f.Decades))
+		for i, d := range f.Decades {
+			parts[i] = `(year >= ? AND year <= ?)`
+			args = append(args, d, d+9)
+		}
+		where += ` AND (` + strings.Join(parts, " OR ") + `)`
+	}
+	if len(f.ContentRatings) > 0 {
+		where += ` AND content_rating IN (` + placeholders(len(f.ContentRatings)) + `)`
+		for _, cr := range f.ContentRatings {
+			args = append(args, cr)
+		}
+	}
+	if f.Unwatched {
+		// Not finished for this user: no playback row with the watched flag set.
+		// An in-progress-but-unfinished item (watched = 0) counts as unwatched,
+		// matching the continue-watching semantics.
+		where += ` AND NOT EXISTS (
+			SELECT 1 FROM playback_state ps
+			WHERE ps.item_id = media_item.id AND ps.user_id = ? AND ps.watched = 1)`
+		args = append(args, f.UserID)
 	}
 
 	var total int
@@ -507,17 +550,21 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 }
 
 // Facets is the set of filter values present in a library — what a browse view
-// offers in its genre and decade dropdowns. Only values actually on top-level,
-// present items are returned, so a filter never yields an empty grid.
+// offers in its filter controls. Only values actually on top-level, present
+// items are returned, so a filter never yields an empty grid. HasWatched says
+// whether any top-level item is watched by this user, so the client offers the
+// unwatched-only toggle only when it would actually remove something.
 type Facets struct {
-	Genres  []string `json:"genres"`
-	Decades []int    `json:"decades"`
+	Genres         []string `json:"genres"`
+	Decades        []int    `json:"decades"`
+	ContentRatings []string `json:"content_ratings"`
+	HasWatched     bool     `json:"has_watched"`
 }
 
-// LibraryFacets returns the genres and decades present among a library's
-// top-level items.
-func (s *Store) LibraryFacets(ctx context.Context, libraryID int64) (Facets, error) {
-	f := Facets{Genres: []string{}, Decades: []int{}}
+// LibraryFacets returns the filter values present among a library's top-level
+// items, and whether this user has watched any of them.
+func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID string) (Facets, error) {
+	f := Facets{Genres: []string{}, Decades: []int{}, ContentRatings: []string{}}
 
 	grows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT g.name FROM genre g
@@ -555,7 +602,43 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64) (Facets, err
 		}
 		f.Decades = append(f.Decades, d)
 	}
-	return f, drows.Err()
+	if err := drows.Err(); err != nil {
+		return f, err
+	}
+
+	crows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT content_rating FROM media_item
+		WHERE library_id = ? AND parent_id IS NULL AND missing = 0
+			AND content_rating IS NOT NULL AND content_rating != ''
+		ORDER BY content_rating`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (content ratings): %w", err)
+	}
+	defer crows.Close()
+	for crows.Next() {
+		var cr string
+		if err := crows.Scan(&cr); err != nil {
+			return f, fmt.Errorf("library facets (content ratings): %w", err)
+		}
+		f.ContentRatings = append(f.ContentRatings, cr)
+	}
+	if err := crows.Err(); err != nil {
+		return f, err
+	}
+
+	// Whether the unwatched-only toggle is worth offering: true when this user
+	// has finished at least one top-level item, so filtering them out removes
+	// something rather than being a silent no-op.
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM media_item m
+			JOIN playback_state ps ON ps.item_id = m.id
+			WHERE m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0
+				AND ps.user_id = ? AND ps.watched = 1)`,
+		libraryID, userID).Scan(&f.HasWatched); err != nil {
+		return f, fmt.Errorf("library facets (has watched): %w", err)
+	}
+	return f, nil
 }
 
 // SetParent records that childID is contained by parentID — a season under a
