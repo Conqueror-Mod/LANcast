@@ -9,6 +9,7 @@ import type {
   AuthStatus,
   AuthUser,
   BrowseResult,
+  Facets,
   Item,
   ItemsPage,
   Library,
@@ -459,8 +460,10 @@ export interface ItemQuery {
   libraryID: number;
   q?: string;
   sort?: string; // title | year | added
-  genre?: string;
-  decade?: number;
+  genres?: string[];
+  decades?: number[];
+  contentRatings?: string[];
+  unwatched?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -469,8 +472,10 @@ export function useItems({
   libraryID,
   q,
   sort,
-  genre,
-  decade,
+  genres = [],
+  decades = [],
+  contentRatings = [],
+  unwatched = false,
   limit = 120,
   offset = 0,
 }: ItemQuery) {
@@ -481,11 +486,16 @@ export function useItems({
   });
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
-  if (genre) params.set("genre", genre);
-  if (decade) params.set("decade", String(decade));
+  // Repeatable facet filters — one param per chosen value (OR within a facet).
+  for (const g of genres) params.append("genre", g);
+  for (const d of decades) params.append("decade", String(d));
+  for (const c of contentRatings) params.append("content_rating", c);
+  if (unwatched) params.set("watched", "false");
 
   return useQuery({
-    queryKey: ["items", libraryID, q ?? "", sort ?? "", genre ?? "", decade ?? 0, limit, offset],
+    // The query string fully identifies the request, so it is the cache key —
+    // no need to enumerate every filter dimension by hand.
+    queryKey: ["items", params.toString()],
     queryFn: ({ signal }) =>
       apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal),
     // Keep the previous grid visible while a new search or page loads, so the
@@ -495,16 +505,14 @@ export function useItems({
   });
 }
 
-// The filter values a library's browse view offers — genres and decades that
-// are actually present, so a chosen filter never empties the grid.
+// The filter values a library's browse view offers — genres, decades, and
+// content ratings actually present, plus whether an unwatched toggle is worth
+// showing, so a chosen filter never empties the grid.
 export function useFacets(libraryID: number) {
   return useQuery({
     queryKey: ["facets", libraryID],
     queryFn: ({ signal }) =>
-      apiGet<{ genres: string[]; decades: number[] }>(
-        `/api/libraries/${libraryID}/facets`,
-        signal,
-      ),
+      apiGet<Facets>(`/api/libraries/${libraryID}/facets`, signal),
     enabled: libraryID > 0,
     staleTime: 30_000,
   });

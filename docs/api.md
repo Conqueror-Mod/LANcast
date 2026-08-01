@@ -198,13 +198,20 @@ diagnostic answer to "the scan finished but some files are missing — why?"
 
 ### `GET /api/libraries/{id}/facets`
 
-The filter values a library's browse view offers — genres and decades that are
-actually present among its top-level items, so a chosen filter never yields an
-empty grid. Genres are sorted; decades are newest-first.
+The filter values a library's browse view offers — genres, decades, and content
+ratings actually present among its top-level items, so a chosen filter never
+yields an empty grid. Genres and content ratings are sorted; decades are
+newest-first.
 
 ```json
-{ "genres": ["Comedy", "Drama", "Science Fiction"], "decades": [2010, 1990] }
+{ "genres": ["Comedy", "Drama", "Science Fiction"], "decades": [2010, 1990],
+  "content_ratings": ["PG", "PG-13", "R"], "has_watched": true }
 ```
+
+`has_watched` is true when the calling user has finished at least one top-level
+item in the library, so the client offers the unwatched-only toggle only when it
+would actually remove something rather than being a silent no-op. `genres`,
+`decades`, and `content_ratings` are always present, empty when nothing applies.
 
 ---
 
@@ -219,10 +226,18 @@ empty grid. Genres are sorted; decades are newest-first.
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `q` | Case-insensitive substring match on title and series |
-| `genre` | Restrict to items carrying this exact genre name |
-| `decade` | Restrict to a decade — `1990` means 1990–1999 |
+| `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
+| `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
+| `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
+| `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
 | `sort` | `title` (default), `year`, `added` |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
+
+Repeatable filters are **OR within a facet and AND across facets**: two genres
+widen the grid, adding a decade narrows it. A blank value (`genre=`) is dropped
+rather than treated as a filter for the empty string. `watched` keys off the
+leaf's own play state, so it filters movies and episodes; a container (a show)
+carries no watched flag and is unaffected.
 
 **By default the listing is top-level only** — rows with no parent. Children
 (seasons, episodes, and the `part`/`chapter` pieces of a multi-part work) have a

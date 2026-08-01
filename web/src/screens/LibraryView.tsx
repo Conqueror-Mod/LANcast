@@ -1,9 +1,14 @@
 import { useSearchParams } from "react-router-dom";
 import { useItems, useFacets } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
+import { FilterChips } from "@/components/FilterChips";
 import type { Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
 import "./Browse.css";
+
+// The facet params that live in the URL as repeated keys. Search, sort, and the
+// watched toggle are single-valued and handled separately.
+const FACET_KEYS = ["genre", "decade", "content_rating"] as const;
 
 // The shared browse shell — header, count, search, filter row, and grid. The
 // per-kind differences (sort options, copy) come in as `config`, so a movie
@@ -20,20 +25,24 @@ export function LibraryView({
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const sort = params.get("sort") ?? "title";
-  const genre = params.get("genre") ?? "";
-  const decade = params.get("decade") ?? "";
+  const genres = params.getAll("genre");
+  const decades = params.getAll("decade");
+  const contentRatings = params.getAll("content_rating");
+  const unwatched = params.get("watched") === "false";
 
   const { data: facets } = useFacets(libraryID);
   const { data, isLoading, isError, error } = useItems({
     libraryID,
     q,
     sort,
-    genre: genre || undefined,
-    decade: decade ? Number(decade) : undefined,
+    genres,
+    decades: decades.map(Number),
+    contentRatings,
+    unwatched,
   });
 
   // Every control lives in the URL, so a filtered view is linkable and survives
-  // reload. An empty value clears the key.
+  // reload. Single-valued keys set/clear; an empty value removes the key.
   const setParam = (key: string, value: string) => {
     setParams(
       (prev) => {
@@ -45,8 +54,40 @@ export function LibraryView({
     );
   };
 
+  // Multi-valued facets: toggle one value in a repeated key without disturbing
+  // the others.
+  const toggleParam = (key: string, value: string) => {
+    setParams(
+      (prev) => {
+        const cur = prev.getAll(key);
+        prev.delete(key);
+        const next = cur.includes(value)
+          ? cur.filter((v) => v !== value)
+          : [...cur, value];
+        for (const v of next) prev.append(key, v);
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
+  const clearFilters = () => {
+    setParams(
+      (prev) => {
+        for (const k of [...FACET_KEYS, "q", "watched"]) prev.delete(k);
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
   const items = data?.items ?? [];
-  const filtered = q || genre || decade;
+  const filtered =
+    !!q ||
+    genres.length > 0 ||
+    decades.length > 0 ||
+    contentRatings.length > 0 ||
+    unwatched;
 
   return (
     <div className="browse">
@@ -80,53 +121,51 @@ export function LibraryView({
           </select>
         </label>
 
-        {facets && facets.genres.length > 0 && (
-          <label className="browse__filter">
-            <span>Genre</span>
-            <select
-              value={genre}
-              onChange={(e) => setParam("genre", e.target.value)}
-            >
-              <option value="">All</option>
-              {facets.genres.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <FilterChips
+          label="Genre"
+          options={(facets?.genres ?? []).map((g) => ({ value: g, label: g }))}
+          selected={new Set(genres)}
+          onToggle={(v) => toggleParam("genre", v)}
+        />
 
-        {facets && facets.decades.length > 0 && (
-          <label className="browse__filter">
-            <span>Decade</span>
-            <select
-              value={decade}
-              onChange={(e) => setParam("decade", e.target.value)}
-            >
-              <option value="">All</option>
-              {facets.decades.map((d) => (
-                <option key={d} value={String(d)}>
-                  {d}s
-                </option>
-              ))}
-            </select>
-          </label>
+        <FilterChips
+          label="Decade"
+          options={(facets?.decades ?? []).map((d) => ({
+            value: String(d),
+            label: `${d}s`,
+          }))}
+          selected={new Set(decades)}
+          onToggle={(v) => toggleParam("decade", v)}
+        />
+
+        <FilterChips
+          label="Rating"
+          options={(facets?.content_ratings ?? []).map((c) => ({
+            value: c,
+            label: c,
+          }))}
+          selected={new Set(contentRatings)}
+          onToggle={(v) => toggleParam("content_rating", v)}
+        />
+
+        {facets?.has_watched && (
+          <div className="chips">
+            <span className="chips__label">Status</span>
+            <div className="chips__row">
+              <button
+                type="button"
+                className={"chip" + (unwatched ? " is-on" : "")}
+                aria-pressed={unwatched}
+                onClick={() => setParam("watched", unwatched ? "" : "false")}
+              >
+                Unwatched
+              </button>
+            </div>
+          </div>
         )}
 
         {filtered && (
-          <button
-            className="browse__clear"
-            onClick={() => {
-              setParams(
-                (prev) => {
-                  for (const k of ["q", "genre", "decade"]) prev.delete(k);
-                  return prev;
-                },
-                { replace: true },
-              );
-            }}
-          >
+          <button className="browse__clear" onClick={clearFilters}>
             Clear
           </button>
         )}

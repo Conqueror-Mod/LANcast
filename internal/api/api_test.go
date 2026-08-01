@@ -260,6 +260,40 @@ func TestListItems(t *testing.T) {
 	}
 }
 
+// Facets carry the Phase-2 filter values (content ratings) and the has_watched
+// hint, and the grid's repeatable filter params degrade sensibly: a blank value
+// is a no-op, a non-numeric decade is a 400.
+func TestBrowseFacetsAndFilterParams(t *testing.T) {
+	h := newHarness(t)
+	h.addFile(t, "one.mkv", make([]byte, 16))
+
+	var facets struct {
+		Genres         []string `json:"genres"`
+		Decades        []int    `json:"decades"`
+		ContentRatings []string `json:"content_ratings"`
+		HasWatched     bool     `json:"has_watched"`
+	}
+	decode(t, h.do(t, "GET", "/api/libraries/1/facets", nil), &facets)
+	if facets.ContentRatings == nil {
+		t.Errorf("content_ratings should serialize as [], got nil")
+	}
+	if facets.HasWatched {
+		t.Errorf("has_watched = true with nothing watched, want false")
+	}
+
+	// A non-numeric decade is rejected rather than silently ignored.
+	wantError(t, h.do(t, "GET", "/api/items?library_id=1&decade=abc", nil), 400, "bad_request")
+
+	// A blank repeated filter is a no-op, not a filter for the empty string.
+	var body struct {
+		Total int `json:"total"`
+	}
+	decode(t, h.do(t, "GET", "/api/items?library_id=1&genre=", nil), &body)
+	if body.Total != 1 {
+		t.Errorf("empty genre filter total = %d, want 1", body.Total)
+	}
+}
+
 // The grid endpoint returns top-level items by default; a parented child is
 // reached only through parent_id, never loose in the list (ADR 0010/0017).
 func TestListItemsHierarchy(t *testing.T) {
