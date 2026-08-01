@@ -4,9 +4,12 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: M2 works.** Scan a folder, browse it with posters and metadata,
-> click a title, and it plays with working seek and resume. Corrections you
-> make are locked and survive rescans. Transcoding is M3.
+> **Status: M0–M3 built.** Scan a folder, browse it in a media-type-aware,
+> filterable React client, click a title, and it plays anywhere — direct play,
+> remux, or transcode, with working seek and resume. Real metadata, artwork,
+> ratings (TMDB plus Rotten Tomatoes / Metacritic / IMDb via OMDb), subtitles,
+> multi-user accounts, and HTTPS. Corrections you make are locked and survive
+> rescans. **Plugins (M4) are the last milestone** and not yet built.
 > See [docs/roadmap.md](docs/roadmap.md) for what exists and what does not.
 
 ## Why
@@ -43,7 +46,9 @@ internet for the server to work. Remote access is opt-in and self-owned
 ## Requirements
 
 - **Go 1.22+** — required to build
-- **ffmpeg** — not needed yet; required from M3 (transcoding) onward
+- **ffmpeg** — required for transcoding and probing; without it, files that
+  cannot be played directly are not converted (LANcast still runs and serves
+  direct-play files)
 
 ```bash
 winget install --id GoLang.Go -e && winget install --id Gyan.FFmpeg -e
