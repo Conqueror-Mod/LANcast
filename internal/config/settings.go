@@ -24,8 +24,8 @@ type Settings struct {
 	// the rating pass never runs and nothing leaves the machine.
 	OMDbKey    string  `json:"omdb_key,omitempty"`
 	RatePerSec float64 `json:"rate_per_sec,omitempty"`
-	WriteNFO         bool    `json:"write_nfo"`
-	AutoEnrich       bool    `json:"auto_enrich"`
+	WriteNFO   bool    `json:"write_nfo"`
+	AutoEnrich bool    `json:"auto_enrich"`
 
 	// HardwareEncoder is "auto", "off", or a specific ffmpeg encoder name.
 	// Auto takes the fastest encoder that passed a real test encode.
