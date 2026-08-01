@@ -9,8 +9,9 @@ The **browse-experience backlog shipped** in three PRs
 ([plan](browse-experience-plan.md)): media-type-aware library views, Plex-style
 multi-select filters (genre, decade, content rating) with per-library counts and
 an unwatched toggle, and a ratings display with a rating sort. What remains of it
-is **external ratings** (Rotten Tomatoes / Metacritic / IMDb), now specced in
-[ADR 0019](adr/0019-external-ratings.md) and awaiting a build.
+was **external ratings** (Rotten Tomatoes / Metacritic / IMDb via OMDb), specced
+in [ADR 0019](adr/0019-external-ratings.md) and now **built** — leaving plugin
+architecture (M4) as the last milestone.
 
 The two early-lock Foundation decisions are now **built, not just decided**: the
 data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
@@ -72,7 +73,7 @@ Status: **planned** · **next** · *unplanned*
 | Matching and confidence | **built** | Wrong-match correction; library-kind biases movie-vs-TV; Fix match reaches TV, not just film |
 | Media organisation | **built** | Collections, show→season→episode, multi-part works, serials/miniseries; retroactive re-parse; Remove (ignore/delete) ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
-| External ratings | specced | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
+| External ratings | **built** | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
 | Library types beyond video | *unplanned* | Music, photos — proves the taxonomy is open |
 
@@ -163,9 +164,9 @@ group is not priority.
 
 ### Metadata, ratings and discovery
 
-- **Ratings system** — TMDB rating display + rating sort **done** (Phase 3);
-  the **Metacritic / Rotten Tomatoes** tie-in is specced in
-  [ADR 0019](adr/0019-external-ratings.md), not yet built.
+- ~~**Ratings system**~~ — **done**: TMDB rating display + rating sort (Phase 3),
+  and the **Metacritic / Rotten Tomatoes / IMDb** tie-in via OMDb
+  ([ADR 0019](adr/0019-external-ratings.md)).
 - ~~**Plex-style filter settings**, with a **total movie/show count per library
   page**~~ — **done** (Phase 2): multi-select genre/decade/content-rating
   filters, unwatched toggle, per-library counts in the nav.
@@ -240,10 +241,11 @@ where that openness gets exercised.
 5. ~~Browse-experience feature backlog~~ — **built** in three PRs
    ([plan](browse-experience-plan.md)): media-type library pages, Plex-style
    filters, per-library counts, ratings display.
-6. **Next, pick one:** **external ratings** (RT/Metacritic/IMDb) — specced and
-   ready to build ([ADR 0019](adr/0019-external-ratings.md)); or **plugin
-   architecture (M4)**, the last milestone, planned right before it is built and
-   validated by a first-party plugin.
+6. ~~External ratings (RT/Metacritic/IMDb)~~ — **built**
+   ([ADR 0019](adr/0019-external-ratings.md)): OMDb `RatingSource`, `item_rating`
+   side table, `imdb_id` from TMDB, enrichment pass, detail display.
+7. **Next: plugin architecture (M4)** — the last milestone, planned right before
+   it is built and validated by a first-party plugin.
 
 ## Amendments to schema revision 1
 

@@ -120,6 +120,37 @@
   font-size: 13px;
 }
 
+/* External ratings (ADR 0019): a row of source chips. Monochrome on the raised
+   surface — never gold, which stays the focus signal. */
+.detail__ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.detail__rating {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+}
+
+.detail__rating-src {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.detail__rating-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .detail__metafix {
   display: flex;
   align-items: center;

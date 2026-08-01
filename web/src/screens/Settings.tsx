@@ -217,11 +217,13 @@ function ProviderKey({
   configured,
   onSave,
   pending,
+  hint,
 }: {
   label: string;
   configured: boolean;
   onSave: (value: string) => void;
   pending: boolean;
+  hint?: string;
 }) {
   const [value, setValue] = useState("");
   return (
@@ -229,6 +231,7 @@ function ProviderKey({
       <div className="set-row__main">
         <div className="set-row__title">{label}</div>
         <div className="set-row__sub">
+          {hint ? `${hint} · ` : ""}
           {configured ? "Key configured" : "Not set"} · stored write-only
         </div>
       </div>
@@ -505,6 +508,13 @@ function AdminSections() {
               configured={settings.opensubtitles.configured}
               pending={update.isPending}
               onSave={(v) => update.mutate({ opensubtitles_key: v })}
+            />
+            <ProviderKey
+              label="OMDb"
+              hint="Rotten Tomatoes, Metacritic & IMDb ratings"
+              configured={settings.omdb.configured}
+              pending={update.isPending}
+              onSave={(v) => update.mutate({ omdb_key: v })}
             />
             <label className="set-toggle">
               <input

@@ -460,3 +460,69 @@ func TestCascadeDeleteCleansMetadata(t *testing.T) {
 		}
 	}
 }
+
+// External ratings (ADR 0019): imdb_id round-trips through metadata, and the
+// item_rating side table upserts per source without cross-source clobbering.
+func TestRatingsAndIMDbID(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id, err := st.UpsertItem(ctx, ScanFile{LibraryID: lib.ID, Path: `C:\m\a.mkv`, Kind: "movie",
+		Title: "Arrival", SortTitle: "arrival", Container: "mkv"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// imdb_id writes through metadata and reads back on the item.
+	imdb := "tt2543164"
+	if err := st.UpdateItemMetadata(ctx, id, ItemMetadata{IMDbID: &imdb}); err != nil {
+		t.Fatal(err)
+	}
+	it, err := st.GetItem(ctx, id, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.IMDbID == nil || *it.IMDbID != imdb {
+		t.Fatalf("IMDbID = %v, want %q", it.IMDbID, imdb)
+	}
+
+	// Ratings upsert and read back highest normalized score first.
+	if err := st.SaveRatings(ctx, id, []ItemRating{
+		{Source: "metacritic", Score: 8.1, Display: "81"},
+		{Source: "rotten_tomatoes", Score: 9.4, Display: "94%"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.ItemRatings(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Source != "rotten_tomatoes" || got[0].Display != "94%" {
+		t.Fatalf("ratings = %+v, want RT first", got)
+	}
+
+	// Re-saving one source replaces it, leaves the other, and a new source adds.
+	if err := st.SaveRatings(ctx, id, []ItemRating{
+		{Source: "rotten_tomatoes", Score: 5.0, Display: "50%"},
+		{Source: "imdb", Score: 7.7, Display: "7.7", Votes: 12000},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = st.ItemRatings(ctx, id)
+	if len(got) != 3 {
+		t.Fatalf("after upsert = %+v, want 3 sources", got)
+	}
+	m := map[string]ItemRating{}
+	for _, r := range got {
+		m[r.Source] = r
+	}
+	if m["rotten_tomatoes"].Display != "50%" {
+		t.Errorf("RT not replaced: %+v", m["rotten_tomatoes"])
+	}
+	if m["metacritic"].Display != "81" {
+		t.Errorf("metacritic clobbered: %+v", m["metacritic"])
+	}
+	if m["imdb"].Votes != 12000 {
+		t.Errorf("imdb votes = %d, want 12000", m["imdb"].Votes)
+	}
+}

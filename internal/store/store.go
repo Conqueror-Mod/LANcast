@@ -172,6 +172,11 @@ type Item struct {
 	MatchState    string   `json:"match_state"`
 	MatchScore    *float64 `json:"match_score"`
 
+	// IMDbID is TMDB's external imdb id for the item, the key third-party rating
+	// services join on (ADR 0019). Not exposed to clients — they read ratings
+	// through the ratings array, not this id.
+	IMDbID *string `json:"-"`
+
 	// MetadataUpdatedAt is nil until enrichment has run. Clients need it to
 	// distinguish "not looked at yet" from "looked and found nothing" —
 	// match_state alone defaults to 'unmatched' and cannot express that.
@@ -198,10 +203,11 @@ type Item struct {
 	Streams []MediaStream `json:"streams,omitempty"`
 
 	// Detail-only; nil on list responses.
-	Genres       []string `json:"genres,omitempty"`
-	Credits      []Credit `json:"credits,omitempty"`
-	Artwork      *Artwork `json:"artwork,omitempty"`
-	LockedFields []string `json:"locked_fields,omitempty"`
+	Genres       []string     `json:"genres,omitempty"`
+	Credits      []Credit     `json:"credits,omitempty"`
+	Artwork      *Artwork     `json:"artwork,omitempty"`
+	LockedFields []string     `json:"locked_fields,omitempty"`
+	Ratings      []ItemRating `json:"ratings,omitempty"`
 
 	Progress *Progress `json:"progress,omitempty"`
 }
@@ -391,7 +397,7 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
-	audio_codec, audio_channels, video_frame_rate`
+	audio_codec, audio_channels, video_frame_rate, imdb_id`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -423,7 +429,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
-		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate)
+		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID)
 	if err != nil {
 		return nil, err
 	}

@@ -34,6 +34,17 @@ export interface Credit {
   character?: string;
 }
 
+// One external score (ADR 0019). `source` is an open set — imdb, rotten_tomatoes,
+// metacritic, and more later — so the client renders whatever arrives rather
+// than switching on a fixed list. `score` is normalized 0–10; `display` is the
+// source-native string ("88%", "81", "8.0").
+export interface Rating {
+  source: string;
+  score: number;
+  display: string;
+  votes?: number;
+}
+
 export interface Trailer {
   site: string;
   key: string;
@@ -101,6 +112,7 @@ export interface Item {
   match_score?: number | null;
   metadata_updated_at?: number | null;
   locked_fields?: string[] | null;
+  ratings?: Rating[];
   artwork?: Artwork;
   progress?: Progress | null;
 }
@@ -154,6 +166,7 @@ export interface Encoder {
 export interface Settings {
   tmdb: { configured: boolean };
   opensubtitles: { configured: boolean };
+  omdb: { configured: boolean };
   rate_per_sec: number;
   write_nfo: boolean;
   auto_enrich: boolean;
@@ -163,6 +176,7 @@ export interface Settings {
 export interface SettingsUpdate {
   tmdb_key?: string;
   opensubtitles_key?: string;
+  omdb_key?: string;
   rate_per_sec?: number;
   write_nfo?: boolean;
   auto_enrich?: boolean;

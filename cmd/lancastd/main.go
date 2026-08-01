@@ -26,6 +26,7 @@ import (
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
+	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
@@ -104,6 +105,11 @@ func run(addr, dataDir string, log *slog.Logger) error {
 				tmdb.WithCache(st),
 				tmdb.WithLimiter(meta.NewLimiter(s.RatePerSec, int(s.RatePerSec)+1)),
 			))
+		}
+		// External ratings (ADR 0019): registered only when a key is present, so
+		// no key means the rating pass never runs and nothing phones home.
+		if s.OMDbKey != "" {
+			next.AddRatingSource(omdb.New(s.OMDbKey, omdb.WithCache(st)))
 		}
 		*reg = *next
 	}

@@ -13,6 +13,22 @@ export function rating(value: number | null | undefined): string {
   return value.toFixed(1);
 }
 
+// A human label for an external rating source (ADR 0019). The set is open, so an
+// unknown source falls back to a tidied version of its own id rather than
+// vanishing — a new source shows up labelled, just not prettily.
+const RATING_LABELS: Record<string, string> = {
+  imdb: "IMDb",
+  rotten_tomatoes: "Rotten Tomatoes",
+  metacritic: "Metacritic",
+  tmdb: "TMDB",
+};
+export function ratingLabel(source: string): string {
+  return (
+    RATING_LABELS[source] ??
+    source.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
 // Seconds → clock, "M:SS" under an hour and "H:MM:SS" over. For the player.
 export function clock(totalSeconds: number): string {
   if (!isFinite(totalSeconds) || totalSeconds < 0) totalSeconds = 0;

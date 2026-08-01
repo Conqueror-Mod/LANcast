@@ -171,6 +171,99 @@ func TestEnrichAppliesProviderMetadata(t *testing.T) {
 	}
 }
 
+// fakeRatingSource returns canned scores for an imdb id, recording the id it was
+// asked about so a test can assert it was keyed off the resolved imdb id.
+type fakeRatingSource struct {
+	ratings  []meta.Rating
+	askedFor string
+	err      error
+}
+
+func (f *fakeRatingSource) ID() string { return "fake-ratings" }
+func (f *fakeRatingSource) Ratings(ctx context.Context, imdbID string) ([]meta.Rating, error) {
+	f.askedFor = imdbID
+	return f.ratings, f.err
+}
+
+// When a provider resolves an imdb id and a rating source is configured, the
+// enricher fetches and stores third-party scores keyed on that id (ADR 0019).
+func TestEnrichFetchesExternalRatings(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\arrival.mkv`, "Arrival", 2016)
+
+	rec := arrivalRecord()
+	rec.IMDbID = "tt2543164"
+	p := &fakeProvider{
+		id:     "fake",
+		cands:  []meta.Candidate{{Provider: "fake", ExternalID: "329865", Kind: meta.KindMovie, Title: "Arrival", Year: 2016, Popularity: 40}},
+		record: rec,
+	}
+	rs := &fakeRatingSource{ratings: []meta.Rating{
+		{Source: "rotten_tomatoes", Score: 9.4, Display: "94%"},
+		{Source: "imdb", Score: 7.9, Display: "7.9", Votes: 700000},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	reg.AddRatingSource(rs)
+
+	w := New(st, reg, &fakeArt{}, quietLog())
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if rs.askedFor != "tt2543164" {
+		t.Errorf("rating source asked for %q, want the resolved imdb id tt2543164", rs.askedFor)
+	}
+	it, err := st.GetItem(ctx, id, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.IMDbID == nil || *it.IMDbID != "tt2543164" {
+		t.Errorf("imdb_id = %v, want tt2543164 stored on the item", it.IMDbID)
+	}
+	if err := st.LoadDetail(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	if len(it.Ratings) != 2 || it.Ratings[0].Source != "rotten_tomatoes" {
+		t.Fatalf("ratings = %+v, want RT + IMDb with RT first", it.Ratings)
+	}
+}
+
+// Without a rating source the pass is skipped cleanly — no imdb id lookup, no
+// stored ratings — and enrichment still completes.
+func TestEnrichSkipsRatingsWithoutSource(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\arrival.mkv`, "Arrival", 2016)
+
+	rec := arrivalRecord()
+	rec.IMDbID = "tt2543164"
+	reg := meta.NewRegistry()
+	reg.AddProvider(&fakeProvider{
+		id:     "fake",
+		cands:  []meta.Candidate{{Provider: "fake", ExternalID: "329865", Kind: meta.KindMovie, Title: "Arrival", Year: 2016, Popularity: 40}},
+		record: rec,
+	})
+
+	w := New(st, reg, &fakeArt{}, quietLog())
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := st.LoadDetail(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	if len(it.Ratings) != 0 {
+		t.Errorf("ratings = %+v, want none without a source", it.Ratings)
+	}
+	// The imdb id is still recorded — it is useful beyond ratings (subtitle search).
+	if it.IMDbID == nil || *it.IMDbID != "tt2543164" {
+		t.Errorf("imdb_id = %v, want it stored regardless of the rating pass", it.IMDbID)
+	}
+}
+
 // A movie whose provider record names a collection is linked into it, the
 // collection media_item is created once with its own artwork, and it never
 // enters the enrichment queue (ADR 0017).

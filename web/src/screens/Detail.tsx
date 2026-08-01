@@ -9,7 +9,7 @@ import {
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
-import { runtime, rating } from "@/lib/format";
+import { runtime, rating, ratingLabel } from "@/lib/format";
 import { isContainer, childLabel } from "@/lib/kind";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
@@ -166,6 +166,17 @@ export function Detail() {
 
             {item.genres && item.genres.length > 0 && (
               <div className="detail__genres">{item.genres.join(" · ")}</div>
+            )}
+
+            {item.ratings && item.ratings.length > 0 && (
+              <div className="detail__ratings">
+                {item.ratings.map((r) => (
+                  <span className="detail__rating" key={r.source}>
+                    <span className="detail__rating-src">{ratingLabel(r.source)}</span>
+                    <span className="detail__rating-val">{r.display}</span>
+                  </span>
+                ))}
+              </div>
             )}
 
             {/* Metadata correction lives with the metadata, not the playback

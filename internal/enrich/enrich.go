@@ -26,6 +26,7 @@ type Store interface {
 	GetLibrary(ctx context.Context, id int64) (*store.Library, error)
 	LockedFields(ctx context.Context, itemID int64) ([]string, error)
 	UpdateItemMetadata(ctx context.Context, itemID int64, m store.ItemMetadata) error
+	SaveRatings(ctx context.Context, itemID int64, ratings []store.ItemRating) error
 	ReplaceGenres(ctx context.Context, itemID int64, names []string) error
 	ReplaceCredits(ctx context.Context, itemID int64, provider string, credits []store.Credit) error
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
@@ -358,6 +359,18 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		upd.MatchState = &state
 		upd.MatchScore = &score
 	}
+	// The imdb id is the join key for external ratings (ADR 0019). Only remote
+	// records carry it — a local NFO does not model one — so read the remotes.
+	imdbID := ""
+	for _, rec := range remotes {
+		if rec.IMDbID != "" {
+			imdbID = rec.IMDbID
+			break
+		}
+	}
+	if imdbID != "" {
+		upd.IMDbID = &imdbID
+	}
 
 	if err := w.st.UpdateItemMetadata(ctx, item.ID, upd); err != nil {
 		return err
@@ -383,6 +396,7 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 	}
 
 	w.ingestCollection(ctx, item, remotes)
+	w.fetchRatings(ctx, item.ID, imdbID)
 
 	if write := w.nfoWriter(); write != nil {
 		if err := write(item.Path, kind, &merged); err != nil {
@@ -486,6 +500,33 @@ func (w *Worker) ingestCollection(ctx context.Context, item store.Item, remotes 
 			w.storeArtwork(ctx, collID, c.Artwork)
 		}
 		return
+	}
+}
+
+// fetchRatings pulls third-party scores for an item's imdb id and stores them
+// (ADR 0019). It is best-effort: no imdb id or no rating source configured is a
+// clean skip, a source failing is logged not fatal, and an empty result (the
+// common case for older or non-US titles) simply writes nothing. It never blocks
+// the item from being marked enriched — identity has already been applied.
+func (w *Worker) fetchRatings(ctx context.Context, itemID int64, imdbID string) {
+	if imdbID == "" || !w.reg.HasRatingSources() {
+		return
+	}
+	ratings, err := w.reg.Ratings(ctx, imdbID)
+	if err != nil {
+		w.log.Debug("rating source failed", "item", itemID, "error", err)
+	}
+	if len(ratings) == 0 {
+		return
+	}
+	rows := make([]store.ItemRating, 0, len(ratings))
+	for _, r := range ratings {
+		rows = append(rows, store.ItemRating{
+			Source: r.Source, Score: r.Score, Display: r.Display, Votes: r.Votes,
+		})
+	}
+	if err := w.st.SaveRatings(ctx, itemID, rows); err != nil {
+		w.log.Warn("save ratings failed", "item", itemID, "error", err)
 	}
 }
 

@@ -71,6 +71,7 @@ type ItemMetadata struct {
 	ExternalID *string
 	MatchState *string
 	MatchScore *float64
+	IMDbID     *string
 }
 
 // UpdateItemMetadata writes resolved metadata and stamps metadata_updated_at,
@@ -101,6 +102,7 @@ func (s *Store) UpdateItemMetadata(ctx context.Context, itemID int64, m ItemMeta
 	add("external_id", derefStr(m.ExternalID), m.ExternalID == nil)
 	add("match_state", derefStr(m.MatchState), m.MatchState == nil)
 	add("match_score", derefFloat(m.MatchScore), m.MatchScore == nil)
+	add("imdb_id", derefStr(m.IMDbID), m.IMDbID == nil)
 
 	q := `UPDATE media_item SET ` + join(set, ", ") + `, updated_at = ? WHERE id = ?`
 	args = append(args, time.Now().Unix(), itemID)
@@ -123,6 +125,69 @@ func (s *Store) SetMatch(ctx context.Context, itemID int64, provider, externalID
 		return fmt.Errorf("set match: %w", err)
 	}
 	return nil
+}
+
+// -------------------------------------------------------------- external ratings
+
+// ItemRating is one third-party score for an item (ADR 0019). Score is
+// normalized to 0–10 so it sorts and compares uniformly; Display keeps the
+// source-native form ("92%", "74") so the UI renders each in its own scale.
+type ItemRating struct {
+	Source    string  `json:"source"`
+	Score     float64 `json:"score"`
+	Display   string  `json:"display"`
+	Votes     int     `json:"votes,omitempty"`
+	UpdatedAt int64   `json:"-"`
+}
+
+// SaveRatings upserts an item's scores, one row per source. A source already
+// present is replaced (a refresh re-fetches it); sources not in the set are left
+// untouched, so two rating sources writing independently do not clobber each
+// other.
+func (s *Store) SaveRatings(ctx context.Context, itemID int64, ratings []ItemRating) error {
+	if len(ratings) == 0 {
+		return nil
+	}
+	now := time.Now().Unix()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("save ratings: %w", err)
+	}
+	defer tx.Rollback()
+	for _, r := range ratings {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO item_rating (item_id, source, score, display, votes, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(item_id, source) DO UPDATE SET
+				score = excluded.score, display = excluded.display,
+				votes = excluded.votes, updated_at = excluded.updated_at`,
+			itemID, r.Source, r.Score, r.Display, r.Votes, now); err != nil {
+			return fmt.Errorf("save ratings: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ItemRatings returns an item's third-party scores, highest normalized score
+// first so the UI leads with the strongest.
+func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT source, score, display, votes, updated_at
+		FROM item_rating WHERE item_id = ?
+		ORDER BY score DESC, source`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("item ratings: %w", err)
+	}
+	defer rows.Close()
+	out := []ItemRating{}
+	for rows.Next() {
+		var r ItemRating
+		if err := rows.Scan(&r.Source, &r.Score, &r.Display, &r.Votes, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("item ratings: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
@@ -514,6 +579,9 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 		return err
 	}
 	if it.LockedFields, err = s.LockedFields(ctx, it.ID); err != nil {
+		return err
+	}
+	if it.Ratings, err = s.ItemRatings(ctx, it.ID); err != nil {
 		return err
 	}
 	return nil
