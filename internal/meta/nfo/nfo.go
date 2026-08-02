@@ -114,6 +114,12 @@ func (s *Source) Write(path string, kind meta.Kind, rec *meta.Record) error {
 		},
 	})
 
+	// Drop the indentation the parser handed back as text before re-indenting,
+	// or every write bakes the previous write's formatting into the file as
+	// data. See dropLayoutText: this compounds, and a real sidecar had grown
+	// from 10 escaped newlines to 16 in a single rewrite.
+	root.dropLayoutText()
+
 	out, err := xml.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return fmt.Errorf("nfo: marshal: %w", err)
@@ -249,6 +255,32 @@ type node struct {
 	Attrs   []xml.Attr `xml:",any,attr"`
 	Content string     `xml:",chardata"`
 	Nodes   []node     `xml:",any"`
+}
+
+// dropLayoutText clears character data that is only whitespace.
+//
+// `xml:",chardata"` captures everything between an element's children,
+// including the newlines and indentation that MarshalIndent itself produced
+// last time. Marshalling that back out writes it as content — and Go escapes
+// newlines in character data, so it lands in the file as runs of `&#xA;`.
+// Re-indenting then adds a fresh layer around it, so the noise compounds on
+// every write: one observed sidecar went from 10 escaped newlines to 16 in a
+// single rewrite, and would keep growing on every enrichment pass.
+//
+// Whitespace-only text carries no information — the values live in the leaf
+// elements and MarshalIndent recreates the layout — so dropping it is lossless.
+// Text that is not purely whitespace is left exactly as it was: that is a real
+// value, and trimming it would edit the user's data on a write that was only
+// supposed to reformat.
+//
+// Existing files repair themselves the next time they are written.
+func (n *node) dropLayoutText() {
+	if strings.TrimSpace(n.Content) == "" {
+		n.Content = ""
+	}
+	for i := range n.Nodes {
+		n.Nodes[i].dropLayoutText()
+	}
 }
 
 func (n *node) child(name string) (*node, bool) {

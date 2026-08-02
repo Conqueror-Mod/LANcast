@@ -379,3 +379,124 @@ func removeMarker(s string) string {
 	}
 	return s
 }
+
+// Writing the same record repeatedly must produce the same bytes.
+//
+// It did not: `xml:",chardata"` captured the indentation MarshalIndent wrote
+// last time, re-marshalling emitted it as content with the newlines escaped,
+// and re-indenting wrapped a fresh layer around that. A real sidecar grew from
+// 10 escaped newlines to 16 in one rewrite and would have kept growing on
+// every enrichment pass.
+func TestRepeatedWritesAreByteStable(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	src := New()
+
+	var prev string
+	for i := 0; i < 5; i++ {
+		if err := src.Write(media, meta.KindMovie, movieRecord()); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, "Arrival.nfo"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The marker carries a timestamp, so compare everything but that line.
+		got := stripMarker(string(raw))
+		if i > 0 && got != prev {
+			t.Fatalf("write %d changed the file with no change to the record:\n--- before ---\n%s\n--- after ---\n%s",
+				i, prev, got)
+		}
+		prev = got
+	}
+}
+
+// The symptom, pinned directly: escaped newlines must never appear in output.
+func TestWriteEmitsNoEscapedNewlines(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	src := New()
+
+	for i := 0; i < 3; i++ {
+		if err := src.Write(media, meta.KindMovie, movieRecord()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "Arrival.nfo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(raw), "&#xA;"); n != 0 {
+		t.Errorf("found %d escaped newlines in the sidecar:\n%s", n, raw)
+	}
+}
+
+// A file already carrying the damage repairs itself on the next write rather
+// than needing a migration.
+func TestWriteRepairsAnAlreadyBloatedFile(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	bloated := `<?xml version="1.0" encoding="UTF-8"?>
+<movie>&#xA;  &#xA;  &#xA;  &#xA;&#xA;  &#xA;
+  <title>Arrival</title>
+  <year>2016</year>
+</movie>
+`
+	if err := os.WriteFile(filepath.Join(dir, "Arrival.nfo"), []byte(bloated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := New().Write(media, meta.KindMovie, movieRecord()); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "Arrival.nfo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "&#xA;") {
+		t.Errorf("pre-existing escaped newlines survived a rewrite:\n%s", raw)
+	}
+	// The real values must still be there — repair is not permission to drop data.
+	if !strings.Contains(string(raw), "<title>Arrival</title>") {
+		t.Errorf("title lost during repair:\n%s", raw)
+	}
+}
+
+// Text that is not purely whitespace is a value, not layout, and must survive
+// untouched — including its surrounding spaces.
+func TestNonWhitespaceContentIsNotTrimmed(t *testing.T) {
+	n := &node{
+		Content: "  ",
+		Nodes: []node{
+			{Content: "\n\t\n"},
+			{Content: " a real value "},
+			{Content: "multi\nline value"},
+		},
+	}
+	n.dropLayoutText()
+
+	if n.Content != "" {
+		t.Errorf("root layout text survived: %q", n.Content)
+	}
+	if n.Nodes[0].Content != "" {
+		t.Errorf("whitespace-only child survived: %q", n.Nodes[0].Content)
+	}
+	if n.Nodes[1].Content != " a real value " {
+		t.Errorf("real value was altered: %q", n.Nodes[1].Content)
+	}
+	if n.Nodes[2].Content != "multi\nline value" {
+		t.Errorf("multi-line value was altered: %q", n.Nodes[2].Content)
+	}
+}
+
+// stripMarker removes the provenance line, whose timestamp changes every write.
+func stripMarker(s string) string {
+	var keep []string
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "<"+MarkerElement) {
+			continue
+		}
+		keep = append(keep, line)
+	}
+	return strings.Join(keep, "\n")
+}
