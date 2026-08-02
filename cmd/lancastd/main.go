@@ -317,10 +317,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		return err
 	}
 	listenAddr, lanBound := bindAddr(cfg.Addr, userCount > 0)
+
+	restartWidens := restartWidensBind(cfg.Addr, lanBound)
+
 	switch {
-	case userCount == 0:
+	case userCount == 0 && restartWidens:
 		log.Warn("no account set — listening on loopback only",
 			"addr", listenAddr, "hint", "create an account in the browser, then restart to reach LANcast from other devices")
+	case userCount == 0:
+		log.Warn("no account set — listening on loopback only",
+			"addr", listenAddr, "hint", "create an account in the browser to unlock the rest of the API")
 	case !lanBound:
 		// Secured, but the operator asked for a loopback address. Not a
 		// warning — it is a deliberate configuration, and the only surprise
@@ -332,8 +338,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	srv := &http.Server{
 		Addr: listenAddr,
 		Handler: api.New(api.Deps{
-			LANBound: lanBound,
-			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
+			LANBound: lanBound, RestartWidens: restartWidens,
+			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Probes: probes, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
@@ -464,6 +470,23 @@ func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 		return "127.0.0.1:8080", false
 	}
 	return net.JoinHostPort("127.0.0.1", port), false
+}
+
+// restartWidensBind reports whether restarting would bind wider than the
+// server is bound right now.
+//
+// Two conditions, and both matter. The loopback restriction has to be what is
+// holding it back — a server already reaching the network gains nothing from a
+// restart — and the configured address has to actually reach further once that
+// restriction lifts. An operator who set `-addr 127.0.0.1:8080` and is told
+// "restart to reach LANcast from other devices" will restart, see no change,
+// and have no way to tell whether the advice or their setup is wrong.
+//
+// requested is the *configured* address, not the resolved one: the resolved
+// address of an unsecured server is always loopback, which is precisely the
+// state this question is asked from.
+func restartWidensBind(requested string, lanBound bool) bool {
+	return !lanBound && !loopbackOnly(requested)
 }
 
 // loopbackOnly reports whether a listen address reaches only this machine.

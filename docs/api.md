@@ -46,17 +46,23 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, user?}` |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}` |
 | `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
 | `POST /api/auth/logout` | Ends this session |
 | `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
 
 When a session is active, `status`, `setup`, and `login` include
-`user: {id, name, role}`. `setup` returns `restart_required: true` when the
-server is still loopback-bound, so the client can explain why other devices
-cannot connect yet. A wrong username and a wrong password are reported
+`user: {id, name, role}`. A wrong username and a wrong password are reported
 identically as `401 unauthorized`.
+
+`restart_required` is returned by both `status` and `setup`, and is true only
+when restarting would actually bind wider than the server is bound right now —
+the loopback restriction is what is holding it back, *and* the configured
+address reaches further once lifted. A server the operator deliberately bound
+to a loopback address reports `false`: a restart would change nothing there,
+and a client that promises otherwise sends them to do something that cannot
+work. It is not the inverse of `lan_enabled`.
 
 `lan_enabled` reports whether the socket actually reaches beyond this machine —
 not whether a password is set. An unsecured server is always `false`, because

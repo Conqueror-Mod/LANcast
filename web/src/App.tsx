@@ -19,7 +19,7 @@ export function App() {
 
   // No account yet — first run. The server is loopback-only until one exists,
   // so this is only reachable from the machine itself.
-  if (!auth.configured) return <Setup lanEnabled={auth.lan_enabled} />;
+  if (!auth.configured) return <Setup restartRequired={auth.restart_required} />;
 
   // Configured but not signed in.
   if (!auth.authenticated) return <Login />;

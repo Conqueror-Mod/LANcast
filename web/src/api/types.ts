@@ -260,6 +260,10 @@ export interface AuthStatus {
   configured: boolean;
   authenticated: boolean;
   lan_enabled: boolean;
+  // Whether restarting would let other devices reach the server. False when a
+  // loopback address was configured deliberately — there a restart changes
+  // nothing, so promising otherwise sends the operator on a dead end.
+  restart_required: boolean;
   user?: AuthUser;
 }
 
