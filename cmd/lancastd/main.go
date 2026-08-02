@@ -39,6 +39,16 @@ import (
 )
 
 func main() {
+	// Subcommands come before flags: `lancastd service install -data …`. Routed
+	// here so flag.Parse never sees the subcommand token.
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		if err := runService(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd service:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")
@@ -52,19 +62,31 @@ func main() {
 		return
 	}
 
-	level := slog.LevelInfo
-	if *verbose {
-		level = slog.LevelDebug
-	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	log := newLogger(*verbose)
 
-	if err := run(*addr, *dataDir, log); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, *addr, *dataDir, log); err != nil {
 		log.Error("fatal", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(addr, dataDir string, log *slog.Logger) error {
+// newLogger builds the stderr logger used foreground and by the service run mode.
+func newLogger(verbose bool) *slog.Logger {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+// run boots and serves until ctx is cancelled. The caller owns the shutdown
+// signal: interactive mode passes a Ctrl-C/SIGTERM context, and the Windows
+// service handler passes one it cancels when the SCM asks it to stop — so the
+// same server runs identically foreground or as a service (ADR 0016).
+func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	cfg, err := config.Resolve(addr, dataDir)
 	if err != nil {
 		return err
@@ -271,9 +293,6 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		probeSoon()
 		enrichSoon()
 	})
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
