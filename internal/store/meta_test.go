@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -524,5 +526,38 @@ func TestRatingsAndIMDbID(t *testing.T) {
 	}
 	if m["imdb"].Votes != 12000 {
 		t.Errorf("imdb votes = %d, want 12000", m["imdb"].Votes)
+	}
+}
+
+// A wrongly matched title cannot be corrected if there is no way to tell which
+// file it is, so detail carries the base name — and only the base name, since
+// the directory would disclose the server's layout.
+func TestLoadDetailExposesFileNameNotPath(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	// Built with the host separator: a hardcoded Windows path is not split by
+	// filepath.Base on Linux, and a path always matches the OS that scanned it.
+	path := filepath.Join("Media", "Anthology", "01 Magnetic Rose.mkv")
+	id, err := st.UpsertItem(ctx, ScanFile{
+		LibraryID: lib.ID, Path: path,
+		Kind: "movie", Title: "01 Magnetic Rose", SortTitle: "01 magnetic rose",
+		Container: "mkv",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it, err := st.GetItem(ctx, id, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.LoadDetail(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	if it.FileName != "01 Magnetic Rose.mkv" {
+		t.Errorf("FileName = %q, want the base name", it.FileName)
+	}
+	if strings.Contains(it.FileName, "Media") || strings.Contains(it.FileName, string(filepath.Separator)) {
+		t.Errorf("FileName %q leaks directory structure", it.FileName)
 	}
 }

@@ -118,3 +118,27 @@
 .player__time-sep {
   color: var(--text-faint);
 }
+
+/* Volume: the mute button and its slider travel together. The slider is
+   deliberately compact — it widens on hover/focus so it is discoverable without
+   crowding the transport controls. */
+.player__volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.player__volume-slider {
+  width: 0;
+  opacity: 0;
+  height: 4px;
+  accent-color: var(--gold);
+  cursor: pointer;
+  transition: width var(--dur-fast) ease, opacity var(--dur-fast) ease;
+}
+
+.player__volume:hover .player__volume-slider,
+.player__volume-slider:focus-visible {
+  width: 84px;
+  opacity: 1;
+}

@@ -280,6 +280,11 @@ uniformly.
   "progress": { "position_ms": 1284000, "watched": false } } ] }
 ```
 
+The item **detail** response carries `file_name` — the base name of the file,
+never the directory. A title whose metadata is wrong cannot be corrected if there
+is no way to tell which file it is (`01 Magnetic Rose` against its siblings), and
+the name alone gives that without disclosing where anything lives.
+
 `path` is deliberately **not** exposed. Clients have no use for server
 filesystem paths, and withholding them keeps the layout private when the server
 is reachable beyond the LAN.

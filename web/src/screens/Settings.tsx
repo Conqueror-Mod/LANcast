@@ -39,6 +39,7 @@ const KEYS: [string, string][] = [
   ["Space · K", "Play / pause (player)"],
   ["← · →", "Seek ∓10s (player)"],
   ["[ · ]", "Cycle subtitle track (player)"],
+  ["↑ · ↓", "Volume up · down (player)"],
   ["F · M", "Fullscreen · mute (player)"],
 ];
 

@@ -111,6 +111,7 @@ export interface Item {
   match_state?: MatchState;
   match_score?: number | null;
   metadata_updated_at?: number | null;
+  file_name?: string;
   locked_fields?: string[] | null;
   ratings?: Rating[];
   artwork?: Artwork;
