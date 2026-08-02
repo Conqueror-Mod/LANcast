@@ -1,6 +1,6 @@
 # ADR 0016 — Packaging and distribution
 
-Date: 2026-07-26 · Status: proposed · **build deferred**
+Date: 2026-07-26 · Status: proposed · **build deferred** · **amended by [ADR 0022](0022-client-and-server-executables.md)** (two executables, no terminal)
 
 > **Deferred, decisions recorded.** The build is not being done yet — branding
 > came first. The open questions were settled so the work can start cold later:
