@@ -42,7 +42,15 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")
+	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	// -version answers "which build is this?" without starting anything — the
+	// same string GET /api/health reports, injected at release build (ADR 0016).
+	if *version {
+		fmt.Println(api.Version)
+		return
+	}
 
 	level := slog.LevelInfo
 	if *verbose {
