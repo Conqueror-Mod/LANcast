@@ -10,8 +10,8 @@
 set -euo pipefail
 
 version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
-out="lancastd"
-[ "${OS:-}" = "Windows_NT" ] && out="lancastd.exe"
+out="LANcast-Server"
+[ "${OS:-}" = "Windows_NT" ] && out="LANcast-Server.exe"
 
 ldflags="-X lancast/internal/api.Version=${version}"
 # WINDOWLESS=1 links the Windows GUI subsystem so a double-click shows no console

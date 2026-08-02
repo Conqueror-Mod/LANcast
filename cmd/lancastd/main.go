@@ -31,6 +31,7 @@ import (
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
+	"lancast/internal/singleton"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 	"lancast/internal/tlscert"
@@ -59,6 +60,17 @@ func main() {
 		return
 	}
 
+	// A bare launch — a double-click, no arguments — has no console on Windows.
+	// Running the server foreground there would start an invisible process the
+	// user can neither see nor stop, so show the tray instead (ADR 0022).
+	if len(os.Args) == 1 && bareLaunchUsesTray {
+		if err := runTray(nil); err != nil {
+			alert("LANcast", err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")
@@ -73,6 +85,15 @@ func main() {
 	}
 
 	log := newLogger(*verbose)
+
+	// One server at a time. A second instance says so and exits rather than
+	// racing the first for the port and the database.
+	release, held, err := singleton.Acquire(singleton.Server)
+	if err == nil && !held {
+		log.Error("another LANcast server is already running")
+		os.Exit(1)
+	}
+	defer release()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

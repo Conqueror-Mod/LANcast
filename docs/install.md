@@ -1,7 +1,8 @@
 # Installing LANcast
 
-LANcast ships as two small executables — `lancastd` (the server) and `lancast`
-(the launcher you open) — with no runtime to install. ffmpeg is an optional extra
+LANcast ships as two small executables — `LANcast-Server` (the daemon) and
+`LANcast-Client` (the launcher you open) — with no runtime to install. ffmpeg is
+an optional extra
 for transcoding.
 
 ## The one rule that matters most
@@ -9,9 +10,9 @@ for transcoding.
 > **A service uses an explicit, machine-wide data directory.** A Windows service
 > runs as a service account whose per-user config dir is *not* yours, so a service
 > left on the default would build a **second, empty library** somewhere you never
-> look. `lancastd service install` pins the data dir explicitly —
+> look. `LANcast-Server service install` pins the data dir explicitly —
 > `%ProgramData%\LANcast` on Windows, `/var/lib/lancast` on Linux — and any
-> interactive `lancastd` you point at that same path sees the same library
+> interactive `LANcast-Server` you point at that same path sees the same library
 > ([ADR 0016](adr/0016-packaging-and-distribution.md)).
 
 If your library ever looks empty after installing as a service, this is why:
@@ -33,13 +34,13 @@ removes the service and shortcuts but **leaves your library** in
 
 Unzip `lancast_<version>_windows_amd64.zip` anywhere, then either:
 
-- **Just run it**: double-click `lancast.exe`. It starts the server (windowless)
+- **Just run it**: double-click `LANcast-Client.exe`. It starts the server (windowless)
   and opens your browser, and sits in the system tray.
 - **Run it on boot as a service** (an elevated terminal):
 
   ```
-  lancastd.exe service install
-  lancastd.exe service start
+  LANcast-Server.exe service install
+  LANcast-Server.exe service start
   ```
 
 ## Linux (server / NAS / Raspberry Pi)
@@ -48,12 +49,12 @@ Extract the archive for your architecture (`linux_amd64` or `linux_arm64`), then
 install the service:
 
 ```
-sudo ./lancastd service install
-sudo ./lancastd service start
+sudo ./LANcast-Server service install
+sudo ./LANcast-Server service start
 ```
 
 This writes a systemd unit pinned to `/var/lib/lancast` and enables it on boot.
-Then open `http://<host>:8080` in a browser. `lancast` (the launcher) is a desktop
+Then open `http://<host>:8080` in a browser. `LANcast-Client` (the launcher) is a desktop
 convenience and is not needed on a headless server.
 
 Manage it with `service status | stop | uninstall`, or `systemctl … lancastd`.

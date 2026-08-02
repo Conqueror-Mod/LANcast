@@ -110,13 +110,14 @@ personal, non-commercial use, and each score is shown labelled with its source.
 Build a distributable binary:
 
 ```bash
-go build -o lancastd ./cmd/lancastd
+go build -o LANcast-Server ./cmd/lancastd
 ```
 
 ## Install a release
 
-Releases ship two executables — `lancastd` (the server) and `lancast` (the
-launcher you open) — with no runtime to install. On Windows the installer
+Releases ship two executables — `LANcast-Server` (the daemon) and
+`LANcast-Client` (the launcher you open) — with no runtime to install. On
+Windows the installer
 registers the server as a service and adds a shortcut; on Linux/NAS it runs as a
 systemd service. Full steps, including the one data-directory rule that matters
 most, are in **[docs/install.md](docs/install.md)**.

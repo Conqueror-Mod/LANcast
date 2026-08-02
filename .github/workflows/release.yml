@@ -57,8 +57,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sudo apt-get update && sudo apt-get install -y nsis
-          cp "$(find dist -name lancastd.exe | head -1)" installer/lancastd.exe
-          cp "$(find dist -name lancast.exe | head -1)" installer/lancast.exe
+          cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
+          cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
           version="${GITHUB_REF_NAME#v}"
           makensis -DVERSION="${version}" installer/lancast.nsi
           gh release upload "${GITHUB_REF_NAME}" installer/LANcast-Setup-*.exe --clobber
