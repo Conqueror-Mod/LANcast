@@ -62,7 +62,7 @@ func trayRun(addr, dataDir string) error {
 			for {
 				select {
 				case <-mOpen.ClickedCh:
-					if err := desktop.OpenBrowser(desktop.UIURL(addr)); err != nil {
+					if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
 						log.Warn("could not open browser", "error", err)
 					}
 				case <-mQuit.ClickedCh:
@@ -85,5 +85,5 @@ func trayRun(addr, dataDir string) error {
 // openExisting hands the user to the server that is already running, which is
 // what they wanted by launching this, and returns so the process exits.
 func openExisting(addr string) error {
-	return desktop.OpenBrowser(desktop.UIURL(addr))
+	return desktop.OpenBrowser(desktop.ResolvedURL(addr))
 }
