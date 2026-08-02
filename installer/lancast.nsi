@@ -19,12 +19,17 @@ InstallDir "$PROGRAMFILES64\LANcast"
 ; Program Files and service registration both need elevation.
 RequestExecutionLevel admin
 
-; Branding: the app icon for the installer, the wordmark on the welcome/finish
-; pages.
+; Branding: the app icon for the installer, and the L mark on the welcome/finish
+; side panel. The panel is only 164px wide, so the wordmark's tagline is
+; illegible there — the tagline is set as real text below instead, which stays
+; crisp at any DPI.
 !define MUI_ICON "..\assets\lancast.ico"
 !define MUI_UNICON "..\assets\lancast.ico"
 !define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp"
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome.bmp"
+
+!define MUI_WELCOMEPAGE_TITLE "LANcast$\r$\nYour gateway to everything on your LAN"
+!define MUI_WELCOMEPAGE_TEXT "Setup will install LANcast on your computer.$\r$\n$\r$\nLANcast runs as a background service and starts with Windows. When Setup finishes, open the LANcast shortcut to get to your library — no terminal required.$\r$\n$\r$\nClick Next to continue."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"

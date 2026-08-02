@@ -15,25 +15,43 @@ import (
 // mode (ADR 0022). The tray menu opens the UI and quits; quitting cancels the
 // same shutdown context the service and Ctrl-C use. Windows-only: headless
 // targets have no tray.
+//
+// If a server is already answering on this address — the installed service, or an
+// earlier launch — the tray attaches to it rather than starting a second one that
+// could not bind the port anyway. Quitting then closes the tray and leaves that
+// server alone, because this process did not start it.
 func trayRun(addr, dataDir string) error {
 	log := newLogger(false)
+	attached := desktop.ServerRunning(addr)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 
 	onReady := func() {
 		systray.SetIcon(branding.IconICO)
 		systray.SetTitle("LANcast")
-		systray.SetTooltip("LANcast media server")
+		if attached {
+			systray.SetTooltip("LANcast (server already running)")
+		} else {
+			systray.SetTooltip("LANcast media server")
+		}
 		mOpen := systray.AddMenuItem("Open LANcast", "Open the LANcast web UI")
 		systray.AddSeparator()
-		mQuit := systray.AddMenuItem("Quit", "Stop the server and quit")
+		mQuit := systray.AddMenuItem("Quit", "Close LANcast")
 
-		go func() {
-			if err := run(ctx, addr, dataDir, log); err != nil && err != context.Canceled {
-				log.Error("server exited", "error", err)
-			}
-			errc <- nil
-		}()
+		if !attached {
+			go func() {
+				err := run(ctx, addr, dataDir, log)
+				if err != nil && err != context.Canceled {
+					log.Error("server exited", "error", err)
+					// windowsgui has no console, so a bind clash or a bad data
+					// dir would be silent without this.
+					alert("LANcast could not start", err.Error())
+					systray.Quit()
+				}
+				errc <- err
+			}()
+		}
 
 		go func() {
 			for {
@@ -50,10 +68,13 @@ func trayRun(addr, dataDir string) error {
 		}()
 	}
 
-	// onExit runs when systray.Quit is called: stop the server and let it drain.
+	// onExit runs when systray.Quit is called: stop the server we started (if
+	// any) and let it drain. An attached tray leaves the other server running.
 	onExit := func() {
 		cancel()
-		<-errc
+		if !attached {
+			<-errc
+		}
 	}
 
 	systray.Run(onReady, onExit)

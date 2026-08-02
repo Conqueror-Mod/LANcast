@@ -59,6 +59,17 @@ func main() {
 		return
 	}
 
+	// A bare launch — a double-click, no arguments — has no console on Windows.
+	// Running the server foreground there would start an invisible process the
+	// user can neither see nor stop, so show the tray instead (ADR 0022).
+	if len(os.Args) == 1 && bareLaunchUsesTray {
+		if err := runTray(nil); err != nil {
+			alert("LANcast", err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")
