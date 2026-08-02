@@ -8,13 +8,15 @@ import (
 	"testing"
 )
 
+// The launcher finds the server by name next to itself, so this name has to
+// match what the release archives and the installer lay down.
 func TestServerExeName(t *testing.T) {
 	got := serverExeName()
-	if runtime.GOOS == "windows" && got != "lancastd.exe" {
-		t.Errorf("windows server exe = %q, want lancastd.exe", got)
+	if runtime.GOOS == "windows" && got != "LANcast-Server.exe" {
+		t.Errorf("windows server exe = %q, want LANcast-Server.exe", got)
 	}
-	if runtime.GOOS != "windows" && got != "lancastd" {
-		t.Errorf("non-windows server exe = %q, want lancastd", got)
+	if runtime.GOOS != "windows" && got != "LANcast-Server" {
+		t.Errorf("non-windows server exe = %q, want LANcast-Server", got)
 	}
 }
 

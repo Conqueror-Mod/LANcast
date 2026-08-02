@@ -4,6 +4,10 @@
 /lancastd
 /lancastd.exe
 /lancast.exe
+/LANcast-Server
+/LANcast-Server.exe
+/LANcast-Client
+/LANcast-Client.exe
 /dist/
 
 # Installer build artifacts: the exes copied in from the release build and the

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 
 	"lancast/internal/service"
+	"lancast/internal/singleton"
 )
 
 // serviceRun hosts the server under the Windows service control manager. When
@@ -18,6 +20,14 @@ import (
 // service run` is debuggable.
 func serviceRun(dataDir, addr string) error {
 	log := newLogger(false)
+
+	// One server at a time — the service holds the name so an interactive launch
+	// finds it and opens the UI instead of starting a duplicate.
+	release, held, err := singleton.Acquire(singleton.Server)
+	if err == nil && !held {
+		return fmt.Errorf("another LANcast server is already running")
+	}
+	defer release()
 
 	isSvc, err := svc.IsWindowsService()
 	if err != nil {

@@ -35,7 +35,7 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\lancast.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\LANcast-Client.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Open LANcast"
 !insertmacro MUI_PAGE_FINISH
 
@@ -47,37 +47,47 @@ RequestExecutionLevel admin
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LANcast"
 
 Section "LANcast"
+  ; Upgrade path. An earlier install registered the service from differently
+  ; named executables (lancastd.exe / lancast.exe); leaving that registration
+  ; behind would orphan a service pointing at a file this install removes. Stop
+  ; and delete any existing service by name first — sc reports an error when the
+  ; service is absent, which is fine and ignored.
+  nsExec::ExecToLog 'sc.exe stop lancastd'
+  nsExec::ExecToLog 'sc.exe delete lancastd'
+  Delete "$INSTDIR\lancastd.exe"
+  Delete "$INSTDIR\lancast.exe"
+
   SetOutPath "$INSTDIR"
-  File "lancastd.exe"
-  File "lancast.exe"
+  File "LANcast-Server.exe"
+  File "LANcast-Client.exe"
   File "..\README.md"
   File "..\LICENSE"
 
   ; Register the server as a service pinned to the machine-wide data dir, and
   ; start it. `service install` refuses an unset --data, so the pin is enforced.
-  nsExec::ExecToLog '"$INSTDIR\lancastd.exe" service install'
-  nsExec::ExecToLog '"$INSTDIR\lancastd.exe" service start'
+  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service install'
+  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service start'
 
   ; Shortcuts point at the launcher, not the daemon.
   CreateDirectory "$SMPROGRAMS\LANcast"
-  CreateShortcut "$SMPROGRAMS\LANcast\LANcast.lnk" "$INSTDIR\lancast.exe"
-  CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\lancast.exe"
+  CreateShortcut "$SMPROGRAMS\LANcast\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
+  CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "LANcast"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\lancast.exe"
+  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\LANcast-Client.exe"
   WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "LANcast"
 SectionEnd
 
 Section "Uninstall"
   ; Stop and remove the service before deleting its binary.
-  nsExec::ExecToLog '"$INSTDIR\lancastd.exe" service stop'
-  nsExec::ExecToLog '"$INSTDIR\lancastd.exe" service uninstall'
+  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service stop'
+  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service uninstall'
 
-  Delete "$INSTDIR\lancastd.exe"
-  Delete "$INSTDIR\lancast.exe"
+  Delete "$INSTDIR\LANcast-Server.exe"
+  Delete "$INSTDIR\LANcast-Client.exe"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\uninstall.exe"

@@ -13,19 +13,30 @@ import (
 	"time"
 
 	"lancast/internal/desktop"
+	"lancast/internal/singleton"
 )
 
 func main() {
 	addr := flag.String("addr", ":8080", "server listen address")
 	flag.Parse()
 
+	// One client at a time. Launching again — a second double-click of the
+	// shortcut — reopens the UI rather than adding a duplicate process and a
+	// second tray icon.
+	release, held, err := singleton.Acquire(singleton.Client)
+	if err == nil && !held {
+		_ = desktop.OpenBrowser(desktop.UIURL(*addr))
+		return
+	}
+	defer release()
+
 	l := &launcher{addr: *addr}
 	if err := l.ensureServer(); err != nil {
-		fmt.Fprintln(os.Stderr, "lancast:", err)
+		alert("LANcast", err.Error())
 		os.Exit(1)
 	}
 	if err := desktop.OpenBrowser(desktop.UIURL(l.addr)); err != nil {
-		fmt.Fprintln(os.Stderr, "lancast: could not open browser:", err)
+		alert("LANcast", "could not open the browser: "+err.Error())
 	}
 	runLauncherTray(l)
 }
@@ -83,7 +94,7 @@ func serverExePath() (string, error) {
 
 func serverExeName() string {
 	if runtime.GOOS == "windows" {
-		return "lancastd.exe"
+		return "LANcast-Server.exe"
 	}
-	return "lancastd"
+	return "LANcast-Server"
 }

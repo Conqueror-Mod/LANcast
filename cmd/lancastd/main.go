@@ -31,6 +31,7 @@ import (
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
+	"lancast/internal/singleton"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 	"lancast/internal/tlscert"
@@ -84,6 +85,15 @@ func main() {
 	}
 
 	log := newLogger(*verbose)
+
+	// One server at a time. A second instance says so and exits rather than
+	// racing the first for the port and the database.
+	release, held, err := singleton.Acquire(singleton.Server)
+	if err == nil && !held {
+		log.Error("another LANcast server is already running")
+		os.Exit(1)
+	}
+	defer release()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

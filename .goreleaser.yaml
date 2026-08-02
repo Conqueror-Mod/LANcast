@@ -7,7 +7,7 @@ version: 2
 builds:
   - id: lancastd
     main: ./cmd/lancastd
-    binary: lancastd
+    binary: LANcast-Server
     env:
       - CGO_ENABLED=0
     goos: [linux, windows]
@@ -24,7 +24,7 @@ builds:
 
   - id: lancast
     main: ./cmd/lancast
-    binary: lancast
+    binary: LANcast-Client
     env:
       - CGO_ENABLED=0
     goos: [linux, windows]
