@@ -229,3 +229,107 @@
   padding: 1px 6px;
   vertical-align: middle;
 }
+
+/* ---- Add-ons ------------------------------------------------------------ */
+
+.addon-version {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signer badges: provenance, read in colour but never gold. First-party is the
+   nebula-blue that also marks plugin selection; unsigned is a caution amber. */
+.addon-signer {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dormant);
+  color: var(--text-muted);
+}
+.addon-signer--first_party {
+  color: var(--text-primary);
+  background: var(--nebula-blue);
+  border-color: var(--nebula-blue);
+}
+.addon-signer--pinned {
+  color: var(--text-secondary);
+}
+.addon-signer--unsigned {
+  color: #e0b070;
+  border-color: #7a5a2a;
+}
+
+/* The capability-approval dialog. */
+.addon-dialog__scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 15, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  backdrop-filter: blur(2px);
+}
+
+.addon-dialog {
+  width: min(420px, 92vw);
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.addon-dialog__title {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.addon-dialog__signer {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.addon-dialog__lead {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.addon-dialog__caps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.addon-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* A primary action reads in nebula-blue — deliberate weight, not the gold that
+   means "where you are". */
+.set-btn--primary {
+  color: var(--text-primary);
+  border-color: var(--nebula-blue);
+  background: var(--nebula-blue);
+}
+.set-btn--primary:hover:not(:disabled),
+.set-btn--primary:focus {
+  color: var(--text-primary);
+  border-color: var(--nebula-blue);
+  box-shadow: 0 0 0 3px rgba(38, 88, 168, 0.4);
+}

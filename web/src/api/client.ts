@@ -71,6 +71,26 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return parsed as T;
 }
 
+// apiUpload sends raw bytes (a plugin bundle) and returns the parsed response.
+// Distinct from apiPost, which sends JSON.
+export async function apiUpload<T>(path: string, data: ArrayBuffer): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: data,
+  });
+  const parsed = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = parsed as ApiError | null;
+    throw new ApiFailure(
+      res.status,
+      err?.error?.code ?? "error",
+      err?.error?.message ?? res.statusText,
+    );
+  }
+  return parsed as T;
+}
+
 // artworkURL builds a content-addressed image URL. The bytes behind a hash
 // never change, so these are cached immutably by the server.
 export function artworkURL(

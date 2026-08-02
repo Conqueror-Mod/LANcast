@@ -216,6 +216,28 @@ export interface ApiError {
   error: { code: string; message: string };
 }
 
+// A plugin's capability set — the hosts it may reach and the secrets it may
+// read (ADR 0021). Shown as "requested" (what the manifest asks) vs "granted"
+// (what the operator approved).
+export interface PluginCaps {
+  http: string[];
+  secrets: string[];
+}
+
+export type PluginSigner = "first_party" | "pinned" | "unsigned";
+
+export interface Plugin {
+  name: string;
+  version: string;
+  kind: string;
+  signer: PluginSigner;
+  enabled: boolean;
+  digest: string;
+  requested: PluginCaps;
+  granted: PluginCaps;
+  installed_at?: number;
+}
+
 export type Role = "admin" | "member";
 
 export interface AuthUser {
