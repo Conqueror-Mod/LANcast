@@ -17,6 +17,8 @@ import type {
   MatchCandidate,
   Plugin,
   PluginCaps,
+  ProbeStatus,
+  ReprobeResult,
   ScanStatus,
   Settings,
   SettingsUpdate,
@@ -163,6 +165,30 @@ export function useUpdateSettings() {
     mutationFn: (update: SettingsUpdate) =>
       apiSend("/api/settings", "PUT", update),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
+// Background probing progress. Polled only while a pass is running: probing is
+// a background chore, and a settings page that polls forever is a settings page
+// that never lets the machine idle.
+export function useProbeStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["probe"],
+    queryFn: () => apiGet<ProbeStatus>("/api/probe"),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.running ? 2000 : false),
+  });
+}
+
+// Re-probes already-probed files. "incomplete" re-reads only what a current
+// build would learn something from; "all" re-reads everything, which on a large
+// library is hours of ffprobe.
+export function useReprobe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (scope: "incomplete" | "all") =>
+      apiPost<ReprobeResult>(`/api/probe/refresh?scope=${scope}`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["probe"] }),
   });
 }
 

@@ -8,6 +8,8 @@ import {
   useStartScan,
   useRefreshLibrary,
   useScanStatus,
+  useProbeStatus,
+  useReprobe,
   useCurrentUser,
   useIsAdmin,
   useUsers,
@@ -529,6 +531,7 @@ function AdminSections() {
               onSave={(v) => update.mutate({ omdb_key: v })}
             />
             <MediaToolsRow settings={settings} update={update} />
+            <ReprobeRow available={!!settings.media_tools?.probe_available} />
             <label className="set-toggle">
               <input
                 type="checkbox"
@@ -649,6 +652,94 @@ function MediaToolsRow({
         >
           Save
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Re-probing. Sits under the media-tools row because it is the same subject:
+// what the server knows about your files, and what to do when that knowledge
+// is out of date.
+//
+// Exists because a probe is only as good as the build that made it. Nothing
+// revisits an already-probed file on its own, so when the prober learns to read
+// something new — bit depth being the case that prompted this — every older
+// file keeps a playback decision made without it, permanently.
+//
+// The full re-probe asks for confirmation inline rather than in a dialog. It is
+// not destructive (nothing is deleted, and playback keeps working throughout),
+// so a modal would overstate it — but it is hours of work on a large library,
+// which is more than a single click should start.
+function ReprobeRow({ available }: { available: boolean }) {
+  const status = useProbeStatus(available);
+  const reprobe = useReprobe();
+  const [confirming, setConfirming] = useState(false);
+  const [queued, setQueued] = useState<number | null>(null);
+
+  const running = status.data?.running ?? false;
+  const busy = reprobe.isPending || running;
+
+  function run(scope: "incomplete" | "all") {
+    setConfirming(false);
+    reprobe.mutate(scope, {
+      onSuccess: (r) => setQueued(r.queued),
+    });
+  }
+
+  let sub: string;
+  if (!available) {
+    sub = "Install ffmpeg to inspect your files.";
+  } else if (running) {
+    const { probed = 0, total = 0 } = status.data ?? {};
+    sub = total > 0 ? `Reading files — ${probed} of ${total}.` : "Reading files…";
+  } else if (reprobe.isError) {
+    sub = (reprobe.error as Error).message;
+  } else if (queued === 0) {
+    sub = "Nothing to re-read — every file is already up to date.";
+  } else if (queued !== null) {
+    sub = `Queued ${queued} file${queued === 1 ? "" : "s"}.`;
+  } else {
+    sub =
+      "Re-read your files with the current version of LANcast. Worth doing after an upgrade: files inspected by an older version can be missing detail that playback decisions depend on.";
+  }
+
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">Re-read media files</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        {confirming ? (
+          <>
+            <span className="set-confirm">
+              Runs on every file — this can take hours.
+            </span>
+            <button className="set-btn" onClick={() => run("all")}>
+              Re-read everything
+            </button>
+            <button className="set-btn" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              className="set-btn"
+              disabled={!available || busy}
+              onClick={() => run("incomplete")}
+            >
+              Only what's missing
+            </button>
+            <button
+              className="set-btn"
+              disabled={!available || busy}
+              onClick={() => setConfirming(true)}
+            >
+              Everything
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

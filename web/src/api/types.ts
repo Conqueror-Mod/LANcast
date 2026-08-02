@@ -262,3 +262,21 @@ export interface AuthStatus {
   lan_enabled: boolean;
   user?: AuthUser;
 }
+
+// Background probing progress. `available` is false when ffprobe is not
+// installed, which is a supported configuration rather than an error.
+export interface ProbeStatus {
+  available: boolean;
+  running: boolean;
+  probed: number;
+  failed: number;
+  remaining: number;
+  total: number;
+}
+
+// What a re-probe queued. `scope` echoes back which one ran, since the default
+// is the narrow one and the caller should be able to tell them apart.
+export interface ReprobeResult {
+  scope: "incomplete" | "all";
+  queued: number;
+}
