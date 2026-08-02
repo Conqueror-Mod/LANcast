@@ -119,6 +119,55 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// CountSessions reports how many live sessions exist, so a reset can say what
+// it is about to revoke before it does it.
+func (s *Store) CountSessions(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM session`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count sessions: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteAllUsers removes every account and every session, returning the counts
+// removed. It is the recovery path for an operator locked out of their own
+// server, and it is deliberately not reachable over HTTP — an authenticated
+// caller does not need it, and an unauthenticated one must never have it.
+//
+// playback_state is left alone. Those rows are the library's watch history, not
+// account data, and the first admin created afterwards takes LocalUserID — the
+// id they already carry — so the history reconnects to the new account instead
+// of being orphaned. DeleteUser drops one user's history because deleting a
+// person means deleting their data; wiping the account table to get back in
+// does not.
+//
+// The instance is unconfigured afterwards, which is the same state a fresh
+// install is in: loopback-only until an account exists.
+func (s *Store) DeleteAllUsers(ctx context.Context) (users, sessions int64, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("reset auth: %w", err)
+	}
+	defer tx.Rollback()
+
+	sres, err := tx.ExecContext(ctx, `DELETE FROM session`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("reset auth: delete sessions: %w", err)
+	}
+	ures, err := tx.ExecContext(ctx, `DELETE FROM user`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("reset auth: delete users: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("reset auth: %w", err)
+	}
+
+	sessions, _ = sres.RowsAffected()
+	users, _ = ures.RowsAffected()
+	return users, sessions, nil
+}
+
 // CountAdmins reports how many admins exist, so the last one cannot be deleted
 // or demoted into a lockout.
 func (s *Store) CountAdmins(ctx context.Context) (int, error) {

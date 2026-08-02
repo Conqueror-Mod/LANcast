@@ -66,6 +66,25 @@ server binds `127.0.0.1` only** — reachable from the machine itself and nowher
 else; restart after creating the account to reach it from other devices. See
 [security.md](security.md).
 
+### Locked out
+
+There is no password reset over the network, by design. Recover locally: stop
+the server, then run `reset-auth` from the directory the binary is in.
+
+```
+Stop-Service lancastd
+LANcast-Server.exe reset-auth          # shows what it would remove
+LANcast-Server.exe reset-auth -yes     # does it
+Start-Service lancastd
+```
+
+On Windows this needs an **Administrator** shell — the data directory belongs
+to the service account. On Linux, `sudo`.
+
+Accounts and sessions go; watch history, libraries, and settings stay, and the
+new admin inherits the old one's resume points. Then create an account as
+above. See [security.md](security.md#losing-the-password).
+
 ## ffmpeg (optional)
 
 LANcast plays most files directly with no dependency. **Transcoding and

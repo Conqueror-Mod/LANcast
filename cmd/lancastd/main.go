@@ -52,6 +52,18 @@ func main() {
 		return
 	}
 
+	// `lancastd reset-auth` is the lockout recovery path. Console output only,
+	// so it attaches to the caller's terminal first — a windowsgui build has no
+	// console of its own and would otherwise print nothing at all.
+	if len(os.Args) > 1 && os.Args[1] == "reset-auth" {
+		attachConsole()
+		if err := runResetAuth(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd reset-auth:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// `lancastd tray` is the windowless desktop mode: the server plus a
 	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
 	if len(os.Args) > 1 && os.Args[1] == "tray" {
@@ -82,6 +94,9 @@ func main() {
 	// -version answers "which build is this?" without starting anything — the
 	// same string GET /api/health reports, injected at release build (ADR 0016).
 	if *version {
+		// Same console problem as reset-auth: a windowsgui build printing to a
+		// stdout nobody attached looks like -version does nothing.
+		attachConsole()
 		fmt.Println(api.Version)
 		return
 	}
