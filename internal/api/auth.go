@@ -206,8 +206,8 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"configured":       true,
-		"authenticated":    true,
+		"configured":    true,
+		"authenticated": true,
 		// Not !lanBound: a server the operator deliberately bound to loopback is
 		// not LAN-bound either, and a restart would not change that. Promising
 		// otherwise sends them to do something that cannot work.
