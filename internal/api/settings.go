@@ -26,6 +26,15 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"rate_per_sec": cur.RatePerSec,
 		"write_nfo":    cur.WriteNFO,
 		"auto_enrich":  cur.AutoEnrich,
+		// Whether the server can actually inspect and convert media. Reported so
+		// the UI can say so plainly: without these, every file is direct-played
+		// and anything the browser cannot decode fails with no explanation — the
+		// failure that went unnoticed across a whole library (ADR 0016).
+		"media_tools": map[string]any{
+			"probe_available":     s.probes.Available(),
+			"transcode_available": s.trans.Available(),
+			"directory":           cur.FFmpegDir,
+		},
 		"encoder": map[string]any{
 			"preference": firstNonEmptyStr(cur.HardwareEncoder, "auto"),
 			"active":     s.trans.Encoder(),
@@ -41,6 +50,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		TMDBKey          *string  `json:"tmdb_key"`
 		OpenSubtitlesKey *string  `json:"opensubtitles_key"`
 		OMDbKey          *string  `json:"omdb_key"`
+		FFmpegDir        *string  `json:"ffmpeg_dir"`
 		RatePerSec       *float64 `json:"rate_per_sec"`
 		WriteNFO         *bool    `json:"write_nfo"`
 		AutoEnrich       *bool    `json:"auto_enrich"`
@@ -60,6 +70,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.OMDbKey != nil {
 		next.OMDbKey = strings.TrimSpace(*req.OMDbKey)
+	}
+	if req.FFmpegDir != nil {
+		next.FFmpegDir = strings.TrimSpace(*req.FFmpegDir)
 	}
 	if req.RatePerSec != nil {
 		if *req.RatePerSec <= 0 || *req.RatePerSec > 50 {

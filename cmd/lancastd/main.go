@@ -24,6 +24,7 @@ import (
 	"lancast/internal/artwork"
 	"lancast/internal/config"
 	"lancast/internal/enrich"
+	"lancast/internal/mediatools"
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
@@ -126,6 +127,26 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	settings, err := config.LoadSettings(cfg.DataDir)
 	if err != nil {
 		return err
+	}
+
+	// Put ffmpeg/ffprobe on this process's PATH before anything looks for them.
+	// Under a service the account's PATH does not include a per-user install, and
+	// the failure is silent: nothing probes, every playback decision falls back to
+	// direct play, and undecodable files reach the browser (ADR 0016).
+	toolDir, toolsOK := mediatools.Resolve(settings.Get().FFmpegDir)
+	if toolsOK {
+		log.Info("media tools found", "location", mediatools.Describe(toolDir, true))
+		// Remember where they were so the next start does not have to search,
+		// which matters most for a service that cannot see the user's PATH.
+		if cur := settings.Get(); cur.FFmpegDir != toolDir && toolDir != "" {
+			cur.FFmpegDir = toolDir
+			if err := settings.Set(cur); err != nil {
+				log.Warn("could not record the media tools location", "error", err)
+			}
+		}
+	} else {
+		log.Warn("ffmpeg/ffprobe not found — files will be direct-played only",
+			"hint", "install ffmpeg, or set its directory in Settings; without it LANcast cannot inspect or convert media")
 	}
 
 	st, err := store.Open(cfg.DBPath())
