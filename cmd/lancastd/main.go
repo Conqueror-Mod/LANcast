@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -316,9 +317,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		return err
 	}
 	listenAddr, lanBound := bindAddr(cfg.Addr, userCount > 0)
-	if !lanBound {
+	switch {
+	case userCount == 0:
 		log.Warn("no account set — listening on loopback only",
 			"addr", listenAddr, "hint", "create an account in the browser, then restart to reach LANcast from other devices")
+	case !lanBound:
+		// Secured, but the operator asked for a loopback address. Not a
+		// warning — it is a deliberate configuration, and the only surprise
+		// worth pre-empting is why there is no HTTPS.
+		log.Info("listening on loopback only",
+			"addr", listenAddr, "hint", "TLS stays off because nothing leaves this machine; bind to a LAN address to enable it")
 	}
 
 	srv := &http.Server{
@@ -441,7 +449,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 // port. It reports whether the result is reachable from the network.
 func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 	if secured {
-		return requested, true
+		// The operator's address is honoured. Whether it reaches anyone else is
+		// a separate question from whether a password is set, and conflating
+		// the two is what made a server bound to 127.0.0.1 announce itself as
+		// LAN-reachable and serve a certificate warning on localhost — the
+		// exact friction ADR 0014 set out to avoid.
+		return requested, !loopbackOnly(requested)
 	}
 
 	_, port, err := net.SplitHostPort(requested)
@@ -451,6 +464,25 @@ func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 		return "127.0.0.1:8080", false
 	}
 	return net.JoinHostPort("127.0.0.1", port), false
+}
+
+// loopbackOnly reports whether a listen address reaches only this machine.
+//
+// An empty host — ":8080" — means every interface, which is the opposite of
+// loopback-only, so it is the case most worth getting right. Anything that
+// cannot be parsed is treated as reachable: guessing "local" wrongly puts
+// credentials on the wire in plaintext, while guessing "reachable" wrongly
+// costs one certificate warning. Those are not the same mistake.
+func loopbackOnly(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // loadTLSCert returns the certificate to serve and a human-readable description
