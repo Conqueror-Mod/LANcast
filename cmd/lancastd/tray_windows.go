@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"fyne.io/systray"
 
@@ -56,6 +57,28 @@ func trayRun(addr, dataDir string) error {
 				systray.Quit()
 			}
 			errc <- err
+		}()
+
+		// Open the UI on the launch that starts the server, not just on the
+		// next one. Someone who double-clicks LANcast asked for LANcast, not
+		// for a tray icon: without this the first click appears to do nothing
+		// at all — a process starts in the background, no window opens — and
+		// they click the executable a second time, which lands on the
+		// already-running path above and is what finally shows them the app.
+		//
+		// Waits for the server to answer first. Opening a browser at a port
+		// nothing is listening on yet produces a connection error, which reads
+		// as a worse failure than the silence it replaced.
+		go func() {
+			if !desktop.WaitForServer(addr, 30*time.Second) {
+				// run() reports its own failure through alert(), so staying
+				// quiet here avoids a second dialog about the same problem.
+				log.Warn("server did not come up in time; not opening the browser")
+				return
+			}
+			if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
+				log.Warn("could not open browser", "error", err)
+			}
 		}()
 
 		go func() {
