@@ -1,0 +1,58 @@
+# Release build for LANcast (ADR 0016 / ADR 0022). A pushed vX.Y.Z tag builds
+# both executables for the matrix and publishes a GitHub release. No CGO, so
+# every target cross-compiles on one Linux runner; the committed internal/web/dist
+# is what the server embeds, so no npm at release time.
+version: 2
+
+builds:
+  - id: lancastd
+    main: ./cmd/lancastd
+    binary: lancastd
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      # Windows is amd64-only for now (ADR 0016); no windows/arm64 target.
+      - goos: windows
+        goarch: arm64
+    # The version is injected so the binary, /api/health, and the tag agree.
+    # Windows binaries link the GUI subsystem so a double-click shows no console;
+    # the icon comes from the committed cmd/lancastd/lancastd_windows.syso.
+    ldflags:
+      - -s -w -X lancast/internal/api.Version={{ .Version }}{{ if eq .Os "windows" }} -H=windowsgui{{ end }}
+
+  - id: lancast
+    main: ./cmd/lancast
+    binary: lancast
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w{{ if eq .Os "windows" }} -H=windowsgui{{ end }}
+
+archives:
+  - id: default
+    ids: [lancastd, lancast]
+    name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+# Draft so the maintainer eyeballs the notes and artifacts before publishing.
+release:
+  draft: true
+
+changelog:
+  disable: true
