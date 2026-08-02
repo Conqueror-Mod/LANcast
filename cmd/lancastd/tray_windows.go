@@ -8,6 +8,7 @@ import (
 	"fyne.io/systray"
 
 	"lancast/internal/branding"
+	"lancast/internal/desktop"
 )
 
 // trayRun hosts the server and a system-tray presence — the windowless desktop
@@ -38,7 +39,7 @@ func trayRun(addr, dataDir string) error {
 			for {
 				select {
 				case <-mOpen.ClickedCh:
-					if err := openBrowser(uiURL(addr)); err != nil {
+					if err := desktop.OpenBrowser(desktop.UIURL(addr)); err != nil {
 						log.Warn("could not open browser", "error", err)
 					}
 				case <-mQuit.ClickedCh:
