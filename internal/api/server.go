@@ -24,8 +24,11 @@ import (
 	"lancast/internal/transcode"
 )
 
-// Version is reported by GET /api/health.
-const Version = "0.2.0"
+// Version is reported by GET /api/health. It is a var, not a const, so a release
+// build can stamp the tag into it with `-ldflags -X lancast/internal/api.Version=vX.Y.Z`
+// (ADR 0016). An unstamped build reports "dev", which is the honest label for a
+// binary built straight from source.
+var Version = "dev"
 
 // APIVersion is the HTTP contract revision. It changes only when a new
 // /api/vN prefix ships, independently of the application Version (ADR 0018).
@@ -52,32 +55,45 @@ type Deps struct {
 	// Rebuild reconfigures providers after a settings change, so a newly
 	// entered API key takes effect without a restart.
 	Rebuild func(config.Settings)
+	// ReloadPlugins re-reads installed plugins and rebuilds the registry, so an
+	// install, grant, enable/disable, or remove takes effect without a restart.
+	ReloadPlugins func() error
 	// Enrich triggers a background enrichment pass.
 	Enrich func()
-	// LANBound reports whether the server is listening beyond loopback. An
-	// unsecured server is loopback-only, so the client can explain why a
-	// restart is needed after setting a password.
+	// Probe triggers a background probe pass, so a re-probe an operator asked
+	// for starts now rather than at the next scan.
+	Probe func()
+	// LANBound reports whether the server is actually listening beyond
+	// loopback — the resolved address, not whether a password is set.
 	LANBound bool
+	// RestartWidens reports whether restarting would bind wider than the
+	// server is bound right now. False when the operator configured a loopback
+	// address deliberately: there, a restart changes nothing and telling them
+	// otherwise sends them to do something that cannot work.
+	RestartWidens bool
 }
 
 // Server holds the API dependencies.
 type Server struct {
-	st       *store.Store
-	scanner  *scan.Scanner
-	reg      *meta.Registry
-	art      *artwork.Cache
-	worker   *enrich.Worker
-	probes   *probe.Worker
-	trans    *transcode.Manager
-	subs     *subtitle.Extractor
-	settings *config.SettingsStore
-	dataDir  string
-	log      *slog.Logger
-	web      http.Handler
-	rebuild  func(config.Settings)
-	enrich   func()
-	lanBound bool
-	throttle *auth.Throttle
+	st            *store.Store
+	scanner       *scan.Scanner
+	reg           *meta.Registry
+	art           *artwork.Cache
+	worker        *enrich.Worker
+	probes        *probe.Worker
+	trans         *transcode.Manager
+	subs          *subtitle.Extractor
+	settings      *config.SettingsStore
+	dataDir       string
+	log           *slog.Logger
+	web           http.Handler
+	rebuild       func(config.Settings)
+	reloadPlugins func() error
+	enrich        func()
+	probe         func()
+	lanBound      bool
+	restartWidens bool
+	throttle      *auth.Throttle
 }
 
 func New(d Deps) *Server {
@@ -89,7 +105,8 @@ func New(d Deps) *Server {
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
-		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
+		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
+		probe: d.Probe, lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 	}
 }
@@ -150,10 +167,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
+	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
+
+	// Plugins (ADR 0021). Install is two steps — upload/inspect, then grant — so
+	// the capability approval is an explicit act. All admin-only.
+	mux.HandleFunc("GET /api/plugins", s.adminOnly(s.listPlugins))
+	mux.HandleFunc("POST /api/plugins", s.adminOnly(s.uploadPlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/grant", s.adminOnly(s.grantPlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/enable", s.adminOnly(s.enablePlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/disable", s.adminOnly(s.disablePlugin))
+	mux.HandleFunc("DELETE /api/plugins/{name}", s.adminOnly(s.removePlugin))
 
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))

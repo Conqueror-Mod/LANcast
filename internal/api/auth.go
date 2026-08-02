@@ -148,6 +148,10 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		"configured":    configured,
 		"authenticated": !configured,
 		"lan_enabled":   s.lanBound,
+		// Reported here too, not only from setup: the first-run screen needs it
+		// before an account exists, and inferring it from lan_enabled gets the
+		// deliberately-loopback case wrong in the opposite direction.
+		"restart_required": s.restartWidens,
 	}
 	if sess, ok := s.session(r); ok {
 		resp["authenticated"] = true
@@ -202,9 +206,12 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"configured":       true,
-		"authenticated":    true,
-		"restart_required": !s.lanBound,
+		"configured":    true,
+		"authenticated": true,
+		// Not !lanBound: a server the operator deliberately bound to loopback is
+		// not LAN-bound either, and a restart would not change that. Promising
+		// otherwise sends them to do something that cannot work.
+		"restart_required": s.restartWidens,
 		"user":             userJSON(u.ID, u.Name, u.Role),
 	})
 }

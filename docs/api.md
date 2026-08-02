@@ -46,17 +46,30 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, user?}` |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}` |
 | `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
 | `POST /api/auth/logout` | Ends this session |
 | `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
 
 When a session is active, `status`, `setup`, and `login` include
-`user: {id, name, role}`. `setup` returns `restart_required: true` when the
-server is still loopback-bound, so the client can explain why other devices
-cannot connect yet. A wrong username and a wrong password are reported
+`user: {id, name, role}`. A wrong username and a wrong password are reported
 identically as `401 unauthorized`.
+
+`restart_required` is returned by both `status` and `setup`, and is true only
+when restarting would actually bind wider than the server is bound right now —
+the loopback restriction is what is holding it back, *and* the configured
+address reaches further once lifted. A server the operator deliberately bound
+to a loopback address reports `false`: a restart would change nothing there,
+and a client that promises otherwise sends them to do something that cannot
+work. It is not the inverse of `lan_enabled`.
+
+`lan_enabled` reports whether the socket actually reaches beyond this machine —
+not whether a password is set. An unsecured server is always `false`, because
+it is forced onto `127.0.0.1`. A secured server the operator deliberately bound
+to a loopback address is also `false`, and stays plain HTTP: TLS turns on when
+the server becomes reachable by someone else, which is the same boundary that
+gates LAN binding ([ADR 0014](adr/0014-transport-security.md)).
 
 ### Roles
 
@@ -105,10 +118,11 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "version": "0.2.0", "api_version": 1 }
+{ "status": "ok", "version": "0.3.0", "api_version": 1 }
 ```
 
-`version` is the application release (semver); `api_version` is the HTTP
+`version` is the application release (semver), stamped from the release tag at
+build time — a build from source reports `dev`. `api_version` is the HTTP
 contract revision and changes only when a new `/api/vN` prefix ships.
 
 ---
@@ -278,6 +292,11 @@ uniformly.
   "added_at": 1753142400, "missing": false,
   "progress": { "position_ms": 1284000, "watched": false } } ] }
 ```
+
+The item **detail** response carries `file_name` — the base name of the file,
+never the directory. A title whose metadata is wrong cannot be corrected if there
+is no way to tell which file it is (`01 Magnetic Rose` against its siblings), and
+the name alone gives that without disclosing where anything lives.
 
 `path` is deliberately **not** exposed. Clients have no use for server
 filesystem paths, and withholding them keeps the layout private when the server
@@ -479,10 +498,10 @@ item returns `404`, since the lookup is scoped to `{id}`.
 
 ### `GET /api/items/{id}/playback`
 
-How this file would be delivered to a browser, and why.
+How this file would be delivered to a client, and why.
 
 ```json
-{ "item_id": 87, "probed": true,
+{ "item_id": 87, "probed": true, "profile": "browser",
   "decision": { "method": "transcode",
                 "reason": "audio codec eac3 is not supported",
                 "video_action": "copy", "audio_action": "encode",
@@ -497,9 +516,44 @@ third of a typical library.
 `reason` is always populated. "Why is this transcoding" should not require
 reading server logs.
 
+Takes the same `?profile=` and `?audio=` parameters as the stream endpoints,
+and echoes the resolved profile back. Call it with the parameters you intend to
+stream with: an explanation of a decision the server would not actually make
+sends you looking in the wrong place. `?audio=` naming a track that does not
+exist returns `400 bad_request`.
+
 An unprobed item returns `direct` — the same behavior LANcast had before
 probing existed, rather than guessing at a transcode for a file nothing has
 inspected.
+
+#### Client profiles
+
+`?profile=` names what the client can play. Unknown or absent falls back to
+`browser`; guessing generously for a client the server cannot identify is how
+black rectangles happen.
+
+| Profile | Video | Audio | Containers |
+| --- | --- | --- | --- |
+| `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac | mp4, webm, mov |
+| `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus | mp4, mov |
+| `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, flac, ac3, eac3, dts, truehd | mp4, matroska, webm, mov, mpegts |
+
+`browser` excludes HEVC deliberately: Chrome's support is conditional on
+hardware and Firefox has none, so claiming it for an unidentified client trades
+a cheap remux for an unexplained failure. Clients that know better say so.
+
+Two rules apply on top of the profile, and both are about what happens *after*
+the decision rather than what the client can decode:
+
+- **10-bit H.264 is never direct-played.** The codec name matches and browsers
+  advertise H.264 support, but High 10 is outside every browser's baseline.
+  Detected from `pix_fmt` where the probe reports one. HEVC, VP9 and AV1 carry
+  10-bit fine and are not penalised.
+- **A stream is only copied if MP4 can carry it.** Every non-direct path
+  rewraps into fragmented MP4, and "the client decodes this codec" is not the
+  same claim as "MP4 holds it". VP8, Vorbis, FLAC and Opus are re-encoded
+  rather than copied even when the profile allows them — ffmpeg refuses to
+  start on an impossible mux, which surfaces as a dead player with no reason.
 
 ### `GET /api/probe`
 
@@ -513,10 +567,44 @@ Background probing progress.
 `available` is false when ffprobe is not installed. That is a supported
 configuration, not an error: playback decisions fall back to direct play.
 
+### `POST /api/probe/refresh`
+
+Queues already-probed items to be probed again, and starts a pass. Admin only.
+
+```json
+{ "scope": "incomplete", "queued": 412 }
+```
+
+Needed because a probe is only as good as the build that made it. The pending
+queue is "never probed", so when the prober learns to record a field the
+decision engine depends on, every item probed by an older build keeps a
+decision made without it and nothing revisits them.
+
+`?scope=` is `incomplete` (the default) or `all`:
+
+- `incomplete` re-probes only items a current build would learn something
+  from — today, video streams stored without `pix_fmt`. This is the narrow,
+  cheap option and the one to reach for.
+- `all` re-probes everything, optionally narrowed with `?library=`. Re-probing
+  a large library is hours of ffprobe, which is why it has to be asked for by
+  name and is never something the server decides to do on its own.
+
+Stream rows are kept while an item is queued. Deleting them would widen the
+window in which an item has no codec information at all and every playback
+decision for it falls back to direct play.
+
+Returns `503` if ffprobe is not installed and `400` for an unknown scope.
+
 Item responses gain `duration_ms`, `width`, `height`, `video_codec`,
 `video_profile`, `video_bitrate`, `audio_codec`, `audio_channels`, and
 `probed_at`. The detail response also carries `streams` — the full track list,
-including subtitle and alternate audio tracks.
+including subtitle and alternate audio tracks. Each stream's `index` is the
+absolute index `?audio=` takes.
+
+Streams carry `pix_fmt` where the probe reported one. It is the reliable signal
+for bit depth, which is what decides whether an H.264 file direct-plays. Items
+probed before this field existed have it empty and fall back to matching the
+profile name; re-probing fills it in.
 
 ---
 
@@ -536,7 +624,15 @@ after consulting `/playback`.
 
 Streams a progressive fragmented MP4 produced by ffmpeg on demand. Plays in any
 browser with no client library. `?t=` seconds sets a start offset; `?audio=`
-selects a specific track by absolute index.
+selects a specific track by absolute index; `?profile=` names the client
+profile (see above).
+
+`?audio=` participates in the delivery decision rather than only in stream
+mapping. Selecting a track means the decision is made about *that* track — a
+file whose default track is TrueHD and whose second track is AAC direct-plays
+when you ask for the second, and re-encodes when you do not. An index naming a
+track that does not exist returns `400 bad_request` rather than silently
+playing a different one.
 
 `Accept-Ranges: none` — a live transcode has no length and cannot be
 range-served, since bytes do not exist until ffmpeg produces them. Seeking
@@ -549,8 +645,8 @@ concurrent-transcode limit.
 ### `GET /api/stream/{id}/hls/index.m3u8`
 
 The same transcode as an HLS playlist with fMP4 segments, for clients that
-speak HLS. Segment URLs point back at
-`GET /api/stream/{id}/hls/{session}/{name}`.
+speak HLS. Takes the same `?t=`, `?audio=` and `?profile=` parameters. Segment
+URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
 
 ### `GET /api/transcode`
 
@@ -653,6 +749,65 @@ value itself. Keys are stored in the config file at `0600`, never in the
 database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
 empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
+
+---
+
+## Plugins
+
+> M4. Trust model: [ADR 0021](adr/0021-plugin-distribution-and-trust.md).
+> **Admin only.** Every endpoint requires an admin session.
+
+A plugin is distributed as a signed `.lcplugin` bundle. Two trust layers apply
+independently: **provenance** (the `signer` — `first_party`, `pinned`, or
+`unsigned`) and **authority** (the capability *grant*, which the manifest can
+only *request*). Install is deliberately **two steps** — upload to inspect, then
+grant to activate — so the capability approval is an explicit act.
+
+### `GET /api/plugins`
+
+Installed plugins, each showing requested vs granted capabilities.
+
+```json
+{ "plugins": [ {
+  "name": "omdb", "version": "0.1.0", "kind": "rating_source",
+  "signer": "first_party", "enabled": true, "digest": "101e40cd…",
+  "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "granted":   { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "installed_at": 1754064000 } ] }
+```
+
+### `POST /api/plugins`
+
+Upload a `.lcplugin` (raw bytes, up to 32 MiB). The bundle is **verified before
+anything is compiled**; a tampered or unknown-key bundle is `400`. On success the
+plugin is **staged disabled with an empty grant**, and the response reports what
+it *requests* so the client can present the approval dialog.
+
+```json
+{ "name": "omdb", "version": "0.1.0", "kind": "rating_source",
+  "signer": "unsigned", "enabled": false, "digest": "101e40cd…",
+  "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "granted":   { "http": [], "secrets": [] } }
+```
+
+### `POST /api/plugins/{name}/grant`
+
+Approve capabilities and activate. The grant **must be a subset of what the
+manifest requests** (`400` otherwise) — the API cannot hand a plugin more than it
+asked for. The recorded grant, not the manifest, is the effective authority, and
+it takes effect immediately (the registry reloads).
+
+```json
+{ "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] }
+```
+
+### `POST /api/plugins/{name}/enable` · `/disable`
+
+Flip a plugin on or off. `204`; the registry reloads. `404` if unknown.
+
+### `DELETE /api/plugins/{name}`
+
+Forget a plugin and delete its unpacked files. `204`, `404` if unknown.
 
 ---
 

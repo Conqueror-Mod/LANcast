@@ -168,6 +168,16 @@ export function Detail() {
               <div className="detail__genres">{item.genres.join(" · ")}</div>
             )}
 
+            {/* The file this row came from. Shown because a wrongly matched
+                title is impossible to correct if you cannot tell which file it
+                is — the numbered pieces of an anthology look identical
+                otherwise. */}
+            {item.file_name && (
+              <div className="detail__file" title={item.file_name}>
+                {item.file_name}
+              </div>
+            )}
+
             {item.ratings && item.ratings.length > 0 && (
               <div className="detail__ratings">
                 {item.ratings.map((r) => (

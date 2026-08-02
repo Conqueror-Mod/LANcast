@@ -82,6 +82,9 @@ func TestMemberIsDeniedAdminPowers(t *testing.T) {
 		{"PUT", "/api/settings", map[string]any{"auto_enrich": true}},
 		{"GET", "/api/users", nil},
 		{"POST", "/api/users", map[string]any{"username": "z", "password": "xxxxxxxxxx"}},
+		// Re-probing a library is hours of ffprobe. A member must not be able
+		// to start it.
+		{"POST", "/api/probe/refresh", nil},
 	}
 	for _, tc := range adminOnly {
 		resp := h.doAs(t, member, tc.method, tc.path, tc.body)

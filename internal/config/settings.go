@@ -31,6 +31,13 @@ type Settings struct {
 	// Auto takes the fastest encoder that passed a real test encode.
 	HardwareEncoder string `json:"hardware_encoder,omitempty"`
 
+	// FFmpegDir is the directory holding ffmpeg and ffprobe. It exists because a
+	// service account's PATH does not include a per-user ffmpeg install, which
+	// otherwise leaves every item unprobed and every file direct-played (ADR
+	// 0016). `service install` records what it can see; empty means "find them on
+	// PATH", which is the normal interactive case.
+	FFmpegDir string `json:"ffmpeg_dir,omitempty"`
+
 	// PasswordHash is the bcrypt hash guarding the instance. Empty means the
 	// server is unconfigured and will bind to loopback only.
 	PasswordHash string `json:"password_hash,omitempty"`

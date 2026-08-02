@@ -76,10 +76,36 @@ func (s *Store) CreateLibrary(ctx context.Context, name, kind, path string) (*Li
 	return &Library{ID: id, Name: name, Kind: kind, Path: path, CreatedAt: now}, nil
 }
 
+// topLevelPredicate selects the rows the browse grid shows as tiles: no
+// parent, and a collection only when it groups at least two present members. A
+// provider hands us a franchise even when the library holds a single film from
+// it, and a collection of one is just a duplicate tile of that film
+// (ADR 0010, ADR 0017).
+//
+// It is a shared constant because a library's item count and the grid must
+// answer the same question. When they were written separately, the count
+// included season and episode rows: a shows library with three series read
+// "21 items" beside a grid holding three tiles. Any second copy of this rule
+// drifts from the first the same way.
+//
+// References `media_item` unqualified, so a query using it must not alias the
+// table.
+const topLevelPredicate = `parent_id IS NULL
+	AND (kind != 'collection' OR (
+		SELECT COUNT(*) FROM item_collection ic
+		JOIN media_item m2 ON m2.id = ic.item_id
+		WHERE ic.collection_id = media_item.id AND m2.missing = 0
+	) >= 2)`
+
+// libraryItemCount counts what the grid would show for one library, as a
+// correlated subquery against the `library l` row.
+const libraryItemCount = `(SELECT COUNT(*) FROM media_item
+	WHERE library_id = l.id AND missing = 0 AND ` + topLevelPredicate + `)`
+
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.id, l.name, l.kind, l.path, l.created_at, l.scanned_at,
-		       (SELECT COUNT(*) FROM media_item m WHERE m.library_id = l.id AND m.missing = 0)
+		       `+libraryItemCount+`
 		FROM library l ORDER BY l.name`)
 	if err != nil {
 		return nil, fmt.Errorf("list libraries: %w", err)
@@ -101,7 +127,7 @@ func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	var l Library
 	err := s.db.QueryRowContext(ctx, `
 		SELECT l.id, l.name, l.kind, l.path, l.created_at, l.scanned_at,
-		       (SELECT COUNT(*) FROM media_item m WHERE m.library_id = l.id AND m.missing = 0)
+		       `+libraryItemCount+`
 		FROM library l WHERE l.id = ?`, id).
 		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -201,6 +227,13 @@ type Item struct {
 
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
+
+	// FileName is the base name of the file, detail-only. The full path stays
+	// private — it would disclose the server's filesystem layout — but the name
+	// alone is what identifies a title whose metadata is wrong, and without it a
+	// mis-scanned file ("01 Magnetic Rose") cannot be told apart from its
+	// siblings well enough to correct it.
+	FileName string `json:"file_name,omitempty"`
 
 	// Detail-only; nil on list responses.
 	Genres       []string     `json:"genres,omitempty"`
@@ -468,16 +501,7 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND parent_id = ?`
 		args = append(args, *f.ParentID)
 	case f.TopLevel:
-		// Top-level: no parent, and a collection is shown only when it groups at
-		// least two present members. A provider hands us a franchise even when
-		// the library holds a single film from it, and a collection of one is
-		// just a duplicate tile of that film (ADR 0017).
-		where += ` AND parent_id IS NULL
-			AND (kind != 'collection' OR (
-				SELECT COUNT(*) FROM item_collection ic
-				JOIN media_item m2 ON m2.id = ic.item_id
-				WHERE ic.collection_id = media_item.id AND m2.missing = 0
-			) >= 2)`
+		where += ` AND ` + topLevelPredicate
 	}
 	if f.Query != "" {
 		where += ` AND (title LIKE ? OR series LIKE ?)`

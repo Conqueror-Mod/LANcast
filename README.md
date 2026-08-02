@@ -4,10 +4,14 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: M2 works.** Scan a folder, browse it with posters and metadata,
-> click a title, and it plays with working seek and resume. Corrections you
-> make are locked and survive rescans. Transcoding is M3.
-> See [docs/roadmap.md](docs/roadmap.md) for what exists and what does not.
+> **Status: M0–M4 built.** Scan a folder, browse it in a media-type-aware,
+> filterable React client, click a title, and it plays anywhere — direct play,
+> remux, or transcode, with working seek and resume. Real metadata, artwork,
+> ratings (TMDB plus Rotten Tomatoes / Metacritic / IMDb via OMDb), subtitles,
+> multi-user accounts, and HTTPS. Corrections you make are locked and survive
+> rescans. **Plugins (M4) are built** — a sandboxed WebAssembly runtime with
+> signed, capability-gated add-ons. See [docs/roadmap.md](docs/roadmap.md) for
+> what exists and what does not.
 
 ## Why
 
@@ -43,7 +47,9 @@ internet for the server to work. Remote access is opt-in and self-owned
 ## Requirements
 
 - **Go 1.22+** — required to build
-- **ffmpeg** — not needed yet; required from M3 (transcoding) onward
+- **ffmpeg** — required for transcoding and probing; without it, files that
+  cannot be played directly are not converted (LANcast still runs and serves
+  direct-play files)
 
 ```bash
 winget install --id GoLang.Go -e && winget install --id Gyan.FFmpeg -e
@@ -87,16 +93,40 @@ Token beside it is a v4 bearer JWT and will be rejected.
 > [TMDB](https://www.themoviedb.org). Attribution is a condition of their free
 > tier and is also shown in the app's settings screen.
 
+### Ratings
+
+Optional. Add a free [OMDb](https://www.omdbapi.com/apikey.aspx) key under
+Settings to show **Rotten Tomatoes, Metacritic, and IMDb** scores on the detail
+page, alongside the TMDB rating.
+
+The key is **your own OMDb account**, not something LANcast supplies: nothing is
+fetched until you enter one, the key is stored `0600` outside the database and is
+never readable back through the API, and clearing it turns the feature off again.
+LANcast is a client pointed at your OMDb subscription — it does not redistribute
+ratings data. Use of the key is subject to
+[OMDb's terms](https://www.omdbapi.com/legal.htm); the free tier is intended for
+personal, non-commercial use, and each score is shown labelled with its source.
+
 Build a distributable binary:
 
 ```bash
-go build -o lancastd ./cmd/lancastd
+go build -o LANcast-Server ./cmd/lancastd
 ```
+
+## Install a release
+
+Releases ship two executables — `LANcast-Server` (the daemon) and
+`LANcast-Client` (the launcher you open) — with no runtime to install. On
+Windows the installer
+registers the server as a service and adds a shortcut; on Linux/NAS it runs as a
+systemd service. Full steps, including the one data-directory rule that matters
+most, are in **[docs/install.md](docs/install.md)**.
 
 ## Documentation
 
 | Document | What it covers |
 |---|---|
+| [docs/install.md](docs/install.md) | Installing a release, the service, and the data-dir rule |
 | [docs/architecture.md](docs/architecture.md) | Package map, request and scan lifecycles |
 | [docs/api.md](docs/api.md) | HTTP contract — the promise clients depend on |
 | [docs/design.md](docs/design.md) | Visual design system, the gold rule, keyboard model |

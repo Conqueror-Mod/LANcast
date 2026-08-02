@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   useLibraries,
   useSettings,
@@ -8,6 +8,8 @@ import {
   useStartScan,
   useRefreshLibrary,
   useScanStatus,
+  useProbeStatus,
+  useReprobe,
   useCurrentUser,
   useIsAdmin,
   useUsers,
@@ -15,10 +17,21 @@ import {
   useDeleteUser,
   useResetUserPassword,
   useChangePassword,
+  usePlugins,
+  useUploadPlugin,
+  useGrantPlugin,
+  useSetPluginEnabled,
+  useRemovePlugin,
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { ApiFailure } from "@/api/client";
-import type { AuthUser, Library } from "@/api/types";
+import type {
+  AuthUser,
+  Library,
+  Plugin,
+  Settings as SettingsType,
+  SettingsUpdate,
+} from "@/api/types";
 import "./Settings.css";
 
 const KEYS: [string, string][] = [
@@ -28,6 +41,7 @@ const KEYS: [string, string][] = [
   ["Space · K", "Play / pause (player)"],
   ["← · →", "Seek ∓10s (player)"],
   ["[ · ]", "Cycle subtitle track (player)"],
+  ["↑ · ↓", "Volume up · down (player)"],
   ["F · M", "Fullscreen · mute (player)"],
 ];
 
@@ -516,6 +530,8 @@ function AdminSections() {
               pending={update.isPending}
               onSave={(v) => update.mutate({ omdb_key: v })}
             />
+            <MediaToolsRow settings={settings} update={update} />
+            <ReprobeRow available={!!settings.media_tools?.probe_available} />
             <label className="set-toggle">
               <input
                 type="checkbox"
@@ -589,6 +605,334 @@ function KeyboardSection() {
   );
 }
 
+// ffmpeg/ffprobe status. This is a row rather than a hidden detail because its
+// absence is otherwise invisible: nothing gets probed, every file is
+// direct-played, and whatever the browser cannot decode fails with no
+// explanation — which is exactly how a whole library went unplayable unnoticed.
+function MediaToolsRow({
+  settings,
+  update,
+}: {
+  settings: SettingsType;
+  update: { mutate: (u: SettingsUpdate) => void; isPending: boolean };
+}) {
+  const tools = settings.media_tools;
+  const ok = tools?.probe_available;
+  const [value, setValue] = useState("");
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">
+          Media tools{" "}
+          <span className={"addon-signer addon-signer--" + (ok ? "first_party" : "unsigned")}>
+            {ok ? "found" : "missing"}
+          </span>
+        </div>
+        <div className="set-row__sub">
+          {ok
+            ? `ffmpeg and ffprobe available${tools.directory ? " · " + tools.directory : " on PATH"}`
+            : "Without ffmpeg, LANcast cannot inspect or convert media — files play only if your browser already supports them. Install ffmpeg, or set the folder containing it here."}
+        </div>
+      </div>
+      <div className="set-row__actions">
+        <input
+          className="set-input set-input--wide"
+          type="text"
+          placeholder={tools?.directory || "Folder containing ffmpeg"}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <button
+          className="set-btn"
+          disabled={update.isPending || !value.trim()}
+          onClick={() => {
+            update.mutate({ ffmpeg_dir: value.trim() });
+            setValue("");
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Re-probing. Sits under the media-tools row because it is the same subject:
+// what the server knows about your files, and what to do when that knowledge
+// is out of date.
+//
+// Exists because a probe is only as good as the build that made it. Nothing
+// revisits an already-probed file on its own, so when the prober learns to read
+// something new — bit depth being the case that prompted this — every older
+// file keeps a playback decision made without it, permanently.
+//
+// The full re-probe asks for confirmation inline rather than in a dialog. It is
+// not destructive — nothing is deleted, and playback keeps working throughout —
+// so a modal would overstate it, but it is still real work across every file
+// and more than a single stray click should start.
+//
+// Measured: 225 files on local storage took ~15s. The cost scales with file
+// count and storage speed, not library size in bytes, so the warning says "a
+// few minutes" rather than naming a number this component cannot know.
+function ReprobeRow({ available }: { available: boolean }) {
+  const status = useProbeStatus(available);
+  const reprobe = useReprobe();
+  const [confirming, setConfirming] = useState(false);
+  const [queued, setQueued] = useState<number | null>(null);
+
+  const running = status.data?.running ?? false;
+  const busy = reprobe.isPending || running;
+
+  function run(scope: "incomplete" | "all") {
+    setConfirming(false);
+    reprobe.mutate(scope, {
+      onSuccess: (r) => setQueued(r.queued),
+    });
+  }
+
+  let sub: string;
+  if (!available) {
+    sub = "Install ffmpeg to inspect your files.";
+  } else if (running) {
+    const { probed = 0, total = 0 } = status.data ?? {};
+    sub = total > 0 ? `Reading files — ${probed} of ${total}.` : "Reading files…";
+  } else if (reprobe.isError) {
+    sub = (reprobe.error as Error).message;
+  } else if (queued === 0) {
+    sub = "Nothing to re-read — every file is already up to date.";
+  } else if (queued !== null) {
+    sub = `Queued ${queued} file${queued === 1 ? "" : "s"}.`;
+  } else {
+    // .set-row__sub is a single ellipsised line (nowrap), so this has to stay
+    // short enough to read in full. The title carries the "what"; this carries
+    // the only thing not obvious from it — when you would want to.
+    sub = "Worth doing after an upgrade.";
+  }
+
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">Re-read media files</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        {confirming ? (
+          <>
+            <span className="set-confirm">
+              Runs on every file — a few minutes for most libraries.
+            </span>
+            <button className="set-btn" onClick={() => run("all")}>
+              Re-read everything
+            </button>
+            <button className="set-btn" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              className="set-btn"
+              disabled={!available || busy}
+              onClick={() => run("incomplete")}
+            >
+              Only what's missing
+            </button>
+            <button
+              className="set-btn"
+              disabled={!available || busy}
+              onClick={() => setConfirming(true)}
+            >
+              Everything
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SIGNER_LABEL: Record<string, string> = {
+  first_party: "First-party",
+  pinned: "Pinned",
+  unsigned: "Unsigned",
+};
+
+// A short, human list of a capability set for the approval dialog and rows.
+function capSummary(caps: { http: string[]; secrets: string[] }): string[] {
+  const lines: string[] = [];
+  for (const h of caps.http) lines.push(`Reach ${h}`);
+  for (const s of caps.secrets) lines.push(`Read your ${s.replace(/_/g, " ")}`);
+  return lines;
+}
+
+// The capability-approval dialog: the whole point of the two-step install. It
+// states plainly what a staged plugin wants before the operator grants it.
+function GrantDialog({
+  plugin,
+  onClose,
+}: {
+  plugin: Plugin;
+  onClose: () => void;
+}) {
+  const grant = useGrantPlugin();
+  const wants = capSummary(plugin.requested);
+  return (
+    <div className="addon-dialog__scrim" role="dialog" aria-modal="true">
+      <div className="addon-dialog">
+        <div className="addon-dialog__title">
+          Grant <strong>{plugin.name}</strong>?
+        </div>
+        <div className="addon-dialog__signer">
+          {SIGNER_LABEL[plugin.signer] ?? plugin.signer}
+          {plugin.signer === "unsigned" && " — you accept the risk"}
+        </div>
+        <p className="addon-dialog__lead">This add-on is asking to:</p>
+        {wants.length > 0 ? (
+          <ul className="addon-dialog__caps">
+            {wants.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="addon-dialog__caps">Nothing beyond running — no network, no secrets.</p>
+        )}
+        <div className="addon-dialog__actions">
+          <button
+            className="set-btn"
+            onClick={onClose}
+            disabled={grant.isPending}
+          >
+            Cancel
+          </button>
+          <button
+            className="set-btn set-btn--primary"
+            disabled={grant.isPending}
+            onClick={() =>
+              grant.mutate(
+                { name: plugin.name, caps: plugin.requested },
+                { onSuccess: onClose },
+              )
+            }
+          >
+            Grant &amp; enable
+          </button>
+        </div>
+        {grant.isError && (
+          <span className="set-error">{(grant.error as Error).message}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddonRow({ plugin }: { plugin: Plugin }) {
+  const setEnabled = useSetPluginEnabled();
+  const remove = useRemovePlugin();
+  const [confirming, setConfirming] = useState(false);
+  const granted = capSummary(plugin.granted);
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">
+          {plugin.name}{" "}
+          <span className="addon-version">v{plugin.version}</span>{" "}
+          <span className={"addon-signer addon-signer--" + plugin.signer}>
+            {SIGNER_LABEL[plugin.signer] ?? plugin.signer}
+          </span>
+        </div>
+        <div className="set-row__sub">
+          {plugin.enabled ? "Enabled" : "Disabled"}
+          {granted.length > 0 ? " · " + granted.join(" · ") : " · no capabilities"}
+        </div>
+      </div>
+      <div className="set-row__actions">
+        <button
+          className="set-btn"
+          onClick={() =>
+            setEnabled.mutate({ name: plugin.name, enabled: !plugin.enabled })
+          }
+          disabled={setEnabled.isPending}
+        >
+          {plugin.enabled ? "Disable" : "Enable"}
+        </button>
+        {confirming ? (
+          <>
+            <span className="set-confirm">Remove?</span>
+            <button
+              className="set-btn set-btn--danger"
+              onClick={() => remove.mutate(plugin.name)}
+              disabled={remove.isPending}
+            >
+              Yes
+            </button>
+            <button className="set-btn" onClick={() => setConfirming(false)}>
+              No
+            </button>
+          </>
+        ) : (
+          <button
+            className="set-btn set-btn--danger"
+            onClick={() => setConfirming(true)}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddonsSection() {
+  const { data: plugins } = usePlugins();
+  const upload = useUploadPlugin();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [staged, setStaged] = useState<Plugin | null>(null);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    upload.mutate(buf, { onSuccess: (p) => setStaged(p) });
+  };
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Add-ons</span>
+
+      {plugins && plugins.length > 0 ? (
+        <div className="set-lib">
+          {plugins.map((p) => (
+            <AddonRow key={p.name} plugin={p} />
+          ))}
+        </div>
+      ) : (
+        <p className="set-row__sub">No add-ons installed.</p>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".lcplugin"
+        onChange={onFile}
+        style={{ display: "none" }}
+      />
+      <button
+        className="set-btn"
+        onClick={() => fileRef.current?.click()}
+        disabled={upload.isPending}
+      >
+        {upload.isPending ? "Verifying…" : "Install add-on…"}
+      </button>
+      {upload.isError && (
+        <span className="set-error">{(upload.error as Error).message}</span>
+      )}
+
+      {staged && <GrantDialog plugin={staged} onClose={() => setStaged(null)} />}
+    </section>
+  );
+}
+
 export function Settings() {
   const isAdmin = useIsAdmin();
 
@@ -598,6 +942,7 @@ export function Settings() {
       {isAdmin && (
         <>
           <AdminSections />
+          <AddonsSection />
           <UsersSection />
         </>
       )}

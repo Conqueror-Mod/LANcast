@@ -1,0 +1,64 @@
+name: Release
+
+# A pushed version tag cuts a release: goreleaser cross-builds both executables
+# for the matrix and publishes a (draft) GitHub release. The ship-release skill
+# owns cutting the tag and the notes; goreleaser owns everything after it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser needs full history and tags to compute the version.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # A cross-compiled binary that does not boot is a failed release, not a
+      # shipped one. Start the Linux server, confirm /api/health, stop it. The
+      # server binds loopback until an account exists, so this needs no auth.
+      - name: smoke-test the linux server
+        run: |
+          go build -o /tmp/lancastd ./cmd/lancastd
+          /tmp/lancastd -addr :18080 -data /tmp/lancast-smoke &
+          srv=$!
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:18080/api/health >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          kill "$srv" 2>/dev/null || true
+          if [ "$ok" != 1 ]; then echo "server never answered /api/health"; exit 1; fi
+          echo "health check passed"
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The Windows installer is built after the archives so a failure here still
+      # leaves a draft release with the archives + checksums. makensis runs on the
+      # Linux runner (no Windows toolchain needed); the setup.exe is uploaded to
+      # the same draft. First validated on the initial real tag.
+      - name: build and upload the Windows installer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y nsis
+          cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
+          cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
+          version="${GITHUB_REF_NAME#v}"
+          makensis -DVERSION="${version}" installer/lancast.nsi
+          gh release upload "${GITHUB_REF_NAME}" installer/LANcast-Setup-*.exe --clobber

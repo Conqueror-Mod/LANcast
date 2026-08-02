@@ -111,6 +111,7 @@ export interface Item {
   match_state?: MatchState;
   match_score?: number | null;
   metadata_updated_at?: number | null;
+  file_name?: string;
   locked_fields?: string[] | null;
   ratings?: Rating[];
   artwork?: Artwork;
@@ -167,6 +168,13 @@ export interface Settings {
   tmdb: { configured: boolean };
   opensubtitles: { configured: boolean };
   omdb: { configured: boolean };
+  // Whether the server can inspect and convert media. Without these every file
+  // is direct-played, and anything the browser cannot decode fails silently.
+  media_tools: {
+    probe_available: boolean;
+    transcode_available: boolean;
+    directory: string;
+  };
   rate_per_sec: number;
   write_nfo: boolean;
   auto_enrich: boolean;
@@ -177,6 +185,7 @@ export interface SettingsUpdate {
   tmdb_key?: string;
   opensubtitles_key?: string;
   omdb_key?: string;
+  ffmpeg_dir?: string;
   rate_per_sec?: number;
   write_nfo?: boolean;
   auto_enrich?: boolean;
@@ -216,6 +225,28 @@ export interface ApiError {
   error: { code: string; message: string };
 }
 
+// A plugin's capability set — the hosts it may reach and the secrets it may
+// read (ADR 0021). Shown as "requested" (what the manifest asks) vs "granted"
+// (what the operator approved).
+export interface PluginCaps {
+  http: string[];
+  secrets: string[];
+}
+
+export type PluginSigner = "first_party" | "pinned" | "unsigned";
+
+export interface Plugin {
+  name: string;
+  version: string;
+  kind: string;
+  signer: PluginSigner;
+  enabled: boolean;
+  digest: string;
+  requested: PluginCaps;
+  granted: PluginCaps;
+  installed_at?: number;
+}
+
 export type Role = "admin" | "member";
 
 export interface AuthUser {
@@ -229,5 +260,27 @@ export interface AuthStatus {
   configured: boolean;
   authenticated: boolean;
   lan_enabled: boolean;
+  // Whether restarting would let other devices reach the server. False when a
+  // loopback address was configured deliberately — there a restart changes
+  // nothing, so promising otherwise sends the operator on a dead end.
+  restart_required: boolean;
   user?: AuthUser;
+}
+
+// Background probing progress. `available` is false when ffprobe is not
+// installed, which is a supported configuration rather than an error.
+export interface ProbeStatus {
+  available: boolean;
+  running: boolean;
+  probed: number;
+  failed: number;
+  remaining: number;
+  total: number;
+}
+
+// What a re-probe queued. `scope` echoes back which one ran, since the default
+// is the narrow one and the caller should be able to tell them apart.
+export interface ReprobeResult {
+  scope: "incomplete" | "all";
+  queued: number;
 }

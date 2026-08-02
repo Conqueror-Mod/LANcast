@@ -1,9 +1,20 @@
 # Roadmap
 
-Last updated: 2026-08-01 · **M0–M3 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.3.2 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
+
+**Plugin architecture (M4) is built** — the last milestone. A WebAssembly runtime
+([ADR 0020](adr/0020-plugin-isolation-boundary.md)) sandboxes third-party code
+behind a deny-by-default capability model, plugins register into the same
+interfaces the native sources use ([ADR 0007](adr/0007-provider-and-localsource-split.md)),
+and a signed-bundle install flow with a two-layer trust model — provenance
+(Ed25519 signing) and authority (an explicit capability grant) — surfaces on a
+Settings → Add-ons page ([ADR 0021](adr/0021-plugin-distribution-and-trust.md),
+[plan](plugin-distribution-plan.md)). The contract is validated by OMDb
+reimplemented as a first-party plugin that produces ratings byte-identical to the
+native source. All four founding principles now hold in shipped code.
 
 The **browse-experience backlog shipped** in three PRs
 ([plan](browse-experience-plan.md)): media-type-aware library views, Plex-style
@@ -15,7 +26,7 @@ architecture (M4) as the last milestone.
 
 The two early-lock Foundation decisions are now **built, not just decided**: the
 data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
-schema at **revision 9**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
+schema at **revision 11**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
 On top of them, **media organisation shipped end to end** — collections, the
 show → season → episode hierarchy, multi-part works and serials/miniseries, a
 library-kind that drives movie-vs-TV matching, Fix match that reaches TV,
@@ -24,8 +35,23 @@ with a sidecar sweep). Theme music (blocked on OST identification) is the
 remaining M3 depth. Packaging & distribution is specced but deferred
 ([ADR 0016](adr/0016-packaging-and-distribution.md)).
 
-A **feature backlog is captured below**; **plugin architecture (M4)** remains
-the last milestone.
+A **feature backlog is captured below.** With M4 built, what remains is breadth
+(more plugin kinds, more client surfaces, the deferred packaging build) rather
+than foundational milestones.
+
+## Releases
+
+| Version | Date | What shipped |
+|---|---|---|
+| **v0.3.2** | 2026-08-02 | First published release. M0–M4 plus packaging: two executables, Windows installer, service install. Fixes from the first real-library test — ffprobe unreachable under a service (which had left every file direct-played), a grid that stopped at 120 of 1,226, volume, filenames for Fix match, and two upgrade-path bugs. |
+
+**What real-library testing taught, worth remembering:** every serious bug in
+this release was invisible rather than loud. Nothing was probed and playback
+silently degraded; the grid truncated under a count claiming the full total; the
+launcher read a TLS error as "server down"; an old process survived an upgrade
+and held a lock. The fixes each added a way to *see* the failure — a media-tools
+row in Settings, an honest "120 of 1,226", a message box instead of a silent
+exit. Prefer that to a quiet fallback.
 
 ## Ordering principle
 
@@ -47,7 +73,7 @@ before multi-user exists, and `media_item` does not hardcode a media taxonomy.
 | M1 | **Watch something** | Browse in a browser, click, play, seek, resume | **done** |
 | M2 | Metadata | Real titles, artwork, seasons, OST identification | **done** |
 | M3 | Transcoding + real client | Plays anywhere; React client executes the design | **done** |
-| M4 | Extensibility | Plugin runtime with first-party plugins proving the contract | |
+| M4 | Extensibility | Plugin runtime with first-party plugins proving the contract | **done** |
 
 M1 is the milestone that matters. Everything before it is scaffolding and
 everything after it is depth.
@@ -94,9 +120,9 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Plugin runtime and sandbox | *unplanned* | WASM or subprocess RPC |
-| Extension point catalog | *unplanned* | What is extensible — and what never will be |
-| Plugin distribution and trust | *unplanned* | Install, update, trust; Kodi's failure mode |
+| Plugin runtime and sandbox | **built** | WebAssembly via wazero, deny-by-default capabilities ([ADR 0020](adr/0020-plugin-isolation-boundary.md)); validated by OMDb-as-plugin |
+| Extension point catalog | **built** | `rating_source` first; new source for an existing capability. Widening to new kinds waits for a plugin that needs it |
+| Plugin distribution and trust | **built** | Signed `.lcplugin` bundles, two-layer trust (Ed25519 + capability grant), two-step install, Add-ons page ([ADR 0021](adr/0021-plugin-distribution-and-trust.md)) |
 | Client surfaces: TV, mobile | *unplanned* | A restyle, if the focus model held |
 
 ### Cross-cutting
@@ -108,7 +134,7 @@ Status: **planned** · **next** · *unplanned*
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
 | Transport security (TLS) | **built** | HTTPS beyond loopback; bring-your-own or self-signed cert, http→https redirect (ADR 0014) |
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
-| Packaging and distribution | specced · deferred | One binary per platform, goreleaser matrix, in-binary service install ([ADR 0016](adr/0016-packaging-and-distribution.md)); build deferred |
+| Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
@@ -181,6 +207,12 @@ group is not priority.
 
 ### System, operations and diagnostics
 
+- **Activity status in the UI** — what the server is doing right now, shown in
+  the interface rather than a separate window or log: items being added to a
+  library, metadata being scanned, artwork fetched, files probed. The Plex
+  model. The pieces already exist behind `/api/libraries/{id}/scan`,
+  `/api/enrich`, and `/api/probe`; what is missing is one place in the UI that
+  surfaces them continuously.
 - **Crash reporting.**
 - **Debug logging** and an **internal log viewer.**
 - **Clear cache and data** and **reset settings** actions.
@@ -244,8 +276,16 @@ where that openness gets exercised.
 6. ~~External ratings (RT/Metacritic/IMDb)~~ — **built**
    ([ADR 0019](adr/0019-external-ratings.md)): OMDb `RatingSource`, `item_rating`
    side table, `imdb_id` from TMDB, enrichment pass, detail display.
-7. **Next: plugin architecture (M4)** — the last milestone, planned right before
-   it is built and validated by a first-party plugin.
+7. ~~Plugin architecture (M4)~~ — **built** across a runtime and a distribution
+   flow ([ADR 0020](adr/0020-plugin-isolation-boundary.md), [ADR 0021](adr/0021-plugin-distribution-and-trust.md);
+   [runtime plan](plugin-runtime-plan.md), [distribution plan](plugin-distribution-plan.md)):
+   WASM sandbox, capability model, signed-bundle install with a two-layer trust
+   model, Add-ons page, validated by OMDb-as-plugin.
+8. **Nothing foundational remains.** What's next is breadth, from the feature
+   backlog: more client surfaces (TV/mobile), more plugin kinds as real plugins
+   need them, the deferred packaging build ([ADR 0016](adr/0016-packaging-and-distribution.md)),
+   and theme music if OST identification lands. Each is planned immediately before
+   it is built.
 
 ## Amendments to schema revision 1
 

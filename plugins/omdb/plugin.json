@@ -1,0 +1,10 @@
+{
+  "name": "omdb",
+  "version": "0.1.0",
+  "abi": 1,
+  "kind": "rating_source",
+  "capabilities": {
+    "http": ["www.omdbapi.com"],
+    "secrets": ["omdb_key"]
+  }
+}

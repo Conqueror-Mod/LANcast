@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -24,12 +25,15 @@ import (
 	"lancast/internal/artwork"
 	"lancast/internal/config"
 	"lancast/internal/enrich"
+	"lancast/internal/mediatools"
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
+	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
+	"lancast/internal/singleton"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 	"lancast/internal/tlscert"
@@ -38,24 +42,99 @@ import (
 )
 
 func main() {
+	// Subcommands come before flags: `lancastd service install -data …`. Routed
+	// here so flag.Parse never sees the subcommand token.
+	if len(os.Args) > 1 && os.Args[1] == "service" {
+		if err := runService(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd service:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// `lancastd reset-auth` is the lockout recovery path. Console output only,
+	// so it attaches to the caller's terminal first — a windowsgui build has no
+	// console of its own and would otherwise print nothing at all.
+	if len(os.Args) > 1 && os.Args[1] == "reset-auth" {
+		attachConsole()
+		if err := runResetAuth(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd reset-auth:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// `lancastd tray` is the windowless desktop mode: the server plus a
+	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
+	if len(os.Args) > 1 && os.Args[1] == "tray" {
+		if err := runTray(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd tray:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// A bare launch — a double-click, no arguments — has no console on Windows.
+	// Running the server foreground there would start an invisible process the
+	// user can neither see nor stop, so show the tray instead (ADR 0022).
+	if len(os.Args) == 1 && bareLaunchUsesTray {
+		if err := runTray(nil); err != nil {
+			alert("LANcast", err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")
+	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
-	level := slog.LevelInfo
-	if *verbose {
-		level = slog.LevelDebug
+	// -version answers "which build is this?" without starting anything — the
+	// same string GET /api/health reports, injected at release build (ADR 0016).
+	if *version {
+		// Same console problem as reset-auth: a windowsgui build printing to a
+		// stdout nobody attached looks like -version does nothing.
+		attachConsole()
+		fmt.Println(api.Version)
+		return
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if err := run(*addr, *dataDir, log); err != nil {
+	log := newLogger(*verbose)
+
+	// One server at a time. A second instance says so and exits rather than
+	// racing the first for the port and the database.
+	release, held, err := singleton.Acquire(singleton.Server)
+	if err == nil && !held {
+		log.Error("another LANcast server is already running")
+		os.Exit(1)
+	}
+	defer release()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, *addr, *dataDir, log); err != nil {
 		log.Error("fatal", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(addr, dataDir string, log *slog.Logger) error {
+// newLogger builds the stderr logger used foreground and by the service run mode.
+func newLogger(verbose bool) *slog.Logger {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+// run boots and serves until ctx is cancelled. The caller owns the shutdown
+// signal: interactive mode passes a Ctrl-C/SIGTERM context, and the Windows
+// service handler passes one it cancels when the SCM asks it to stop — so the
+// same server runs identically foreground or as a service (ADR 0016).
+func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	cfg, err := config.Resolve(addr, dataDir)
 	if err != nil {
 		return err
@@ -64,6 +143,26 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	settings, err := config.LoadSettings(cfg.DataDir)
 	if err != nil {
 		return err
+	}
+
+	// Put ffmpeg/ffprobe on this process's PATH before anything looks for them.
+	// Under a service the account's PATH does not include a per-user install, and
+	// the failure is silent: nothing probes, every playback decision falls back to
+	// direct play, and undecodable files reach the browser (ADR 0016).
+	toolDir, toolsOK := mediatools.Resolve(settings.Get().FFmpegDir)
+	if toolsOK {
+		log.Info("media tools found", "location", mediatools.Describe(toolDir, true))
+		// Remember where they were so the next start does not have to search,
+		// which matters most for a service that cannot see the user's PATH.
+		if cur := settings.Get(); cur.FFmpegDir != toolDir && toolDir != "" {
+			cur.FFmpegDir = toolDir
+			if err := settings.Set(cur); err != nil {
+				log.Warn("could not record the media tools location", "error", err)
+			}
+		}
+	} else {
+		log.Warn("ffmpeg/ffprobe not found — files will be direct-played only",
+			"hint", "install ffmpeg, or set its directory in Settings; without it LANcast cannot inspect or convert media")
 	}
 
 	st, err := store.Open(cfg.DBPath())
@@ -90,10 +189,36 @@ func run(addr, dataDir string, log *slog.Logger) error {
 	scanner := scan.New(st, log)
 	art := artwork.New(filepath.Join(cfg.DataDir, "artwork"))
 
-	// The registry is rebuilt whenever settings change so a newly entered API
-	// key takes effect without a restart.
+	// Plugins (ADR 0020) are loaded once from the data dir and registered into
+	// each rebuilt registry. The runtime hands them a secret resolver scoped to
+	// what each plugin's manifest grants — a plugin never reads config directly.
+	pluginRT, err := plugin.NewRuntime(context.Background(), log,
+		plugin.WithSecretResolver(func(name string) string {
+			s := settings.Get()
+			switch name {
+			case "omdb_key":
+				return s.OMDbKey
+			case "tmdb_key":
+				return s.TMDBKey
+			case "opensubtitles_key":
+				return s.OpenSubtitlesKey
+			default:
+				return ""
+			}
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("plugin runtime: %w", err)
+	}
+	defer pluginRT.Close(context.Background())
+	pluginsRoot := filepath.Join(cfg.DataDir, "plugins")
+
+	// The registry is rebuilt whenever settings change (a newly entered key) or
+	// plugins change (install/grant/enable/remove). `plugins` is captured by both
+	// closures, so reassigning it and rebuilding picks up the new set.
 	reg := meta.NewRegistry()
 	var regMu sync.Mutex
+	var plugins []*plugin.Plugin
 	rebuild := func(s config.Settings) {
 		regMu.Lock()
 		defer regMu.Unlock()
@@ -111,9 +236,34 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		if s.OMDbKey != "" {
 			next.AddRatingSource(omdb.New(s.OMDbKey, omdb.WithCache(st)))
 		}
+		// Plugin-provided sources register the same way — indistinguishable
+		// downstream from the native ones (ADR 0007).
+		plugin.RegisterInto(next, plugins, log)
 		*reg = *next
 	}
-	rebuild(settings.Get())
+
+	reloadPlugins := func() error {
+		installed, err := st.ListInstalledPlugins(context.Background())
+		if err != nil {
+			return err
+		}
+		records := make([]plugin.InstalledRecord, 0, len(installed))
+		for _, ip := range installed {
+			records = append(records, plugin.InstalledRecord{
+				Name: ip.Name, Digest: ip.Digest, Enabled: ip.Enabled,
+				GrantedHTTP: ip.GrantedHTTP, GrantedSecrets: ip.GrantedSecrets,
+			})
+		}
+		loaded := pluginRT.LoadInstalled(context.Background(), pluginsRoot, records, plugin.KnownBadDigests)
+		regMu.Lock()
+		plugins = loaded
+		regMu.Unlock()
+		rebuild(settings.Get())
+		return nil
+	}
+	if err := reloadPlugins(); err != nil {
+		return fmt.Errorf("load plugins: %w", err)
+	}
 
 	if settings.Get().TMDBKey == "" {
 		// Not a warning: running without a key is a supported configuration,
@@ -182,23 +332,38 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		return err
 	}
 	listenAddr, lanBound := bindAddr(cfg.Addr, userCount > 0)
-	if !lanBound {
+
+	restartWidens := restartWidensBind(cfg.Addr, lanBound)
+
+	switch {
+	case userCount == 0 && restartWidens:
 		log.Warn("no account set — listening on loopback only",
 			"addr", listenAddr, "hint", "create an account in the browser, then restart to reach LANcast from other devices")
+	case userCount == 0:
+		log.Warn("no account set — listening on loopback only",
+			"addr", listenAddr, "hint", "create an account in the browser to unlock the rest of the API")
+	case !lanBound:
+		// Secured, but the operator asked for a loopback address. Not a
+		// warning — it is a deliberate configuration, and the only surprise
+		// worth pre-empting is why there is no HTTPS.
+		log.Info("listening on loopback only",
+			"addr", listenAddr, "hint", "TLS stays off because nothing leaves this machine; bind to a LAN address to enable it")
 	}
 
 	srv := &http.Server{
 		Addr: listenAddr,
 		Handler: api.New(api.Deps{
-			LANBound: lanBound,
-			Store:    st, Scanner: scanner, Registry: reg, Artwork: art,
+			LANBound: lanBound, RestartWidens: restartWidens,
+			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Probes: probes, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))
 			},
-			Enrich: enrichSoon,
+			ReloadPlugins: reloadPlugins,
+			Enrich:        enrichSoon,
+			Probe:         probeSoon,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.
@@ -210,9 +375,6 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		probeSoon()
 		enrichSoon()
 	})
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
@@ -308,7 +470,12 @@ func run(addr, dataDir string, log *slog.Logger) error {
 // port. It reports whether the result is reachable from the network.
 func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 	if secured {
-		return requested, true
+		// The operator's address is honoured. Whether it reaches anyone else is
+		// a separate question from whether a password is set, and conflating
+		// the two is what made a server bound to 127.0.0.1 announce itself as
+		// LAN-reachable and serve a certificate warning on localhost — the
+		// exact friction ADR 0014 set out to avoid.
+		return requested, !loopbackOnly(requested)
 	}
 
 	_, port, err := net.SplitHostPort(requested)
@@ -318,6 +485,42 @@ func bindAddr(requested string, secured bool) (addr string, lanBound bool) {
 		return "127.0.0.1:8080", false
 	}
 	return net.JoinHostPort("127.0.0.1", port), false
+}
+
+// restartWidensBind reports whether restarting would bind wider than the
+// server is bound right now.
+//
+// Two conditions, and both matter. The loopback restriction has to be what is
+// holding it back — a server already reaching the network gains nothing from a
+// restart — and the configured address has to actually reach further once that
+// restriction lifts. An operator who set `-addr 127.0.0.1:8080` and is told
+// "restart to reach LANcast from other devices" will restart, see no change,
+// and have no way to tell whether the advice or their setup is wrong.
+//
+// requested is the *configured* address, not the resolved one: the resolved
+// address of an unsecured server is always loopback, which is precisely the
+// state this question is asked from.
+func restartWidensBind(requested string, lanBound bool) bool {
+	return !lanBound && !loopbackOnly(requested)
+}
+
+// loopbackOnly reports whether a listen address reaches only this machine.
+//
+// An empty host — ":8080" — means every interface, which is the opposite of
+// loopback-only, so it is the case most worth getting right. Anything that
+// cannot be parsed is treated as reachable: guessing "local" wrongly puts
+// credentials on the wire in plaintext, while guessing "reachable" wrongly
+// costs one certificate warning. Those are not the same mistake.
+func loopbackOnly(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // loadTLSCert returns the certificate to serve and a human-readable description

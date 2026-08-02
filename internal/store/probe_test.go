@@ -211,3 +211,154 @@ func TestStreamsCascadeOnDelete(t *testing.T) {
 		t.Errorf("%d orphaned stream rows remain", n)
 	}
 }
+
+// pix_fmt is what decides whether a 10-bit H.264 file direct-plays, so it must
+// survive storage rather than being dropped on the way in.
+func TestPixFmtRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\tenbit.mkv`)
+
+	p := sampleProbe()
+	p.Streams[0].PixFmt = "yuv420p10le"
+	if err := st.SaveProbe(ctx, id, p); err != nil {
+		t.Fatalf("SaveProbe: %v", err)
+	}
+
+	streams, err := st.Streams(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streams[0].PixFmt != "yuv420p10le" {
+		t.Errorf("PixFmt = %q, want yuv420p10le", streams[0].PixFmt)
+	}
+}
+
+// ClearProbe puts items back in the pending queue. The stream rows stay: the
+// window where an item has no codec information at all is the one where every
+// playback decision for it silently falls back to direct play.
+func TestClearProbeRequeuesWithoutLosingStreams(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\a.mkv`)
+
+	if err := st.SaveProbe(ctx, id, sampleProbe()); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _ := st.PendingProbe(ctx, 10); len(pending) != 0 {
+		t.Fatalf("pending = %d before clearing, want 0", len(pending))
+	}
+
+	n, err := st.ClearProbe(ctx, 0)
+	if err != nil {
+		t.Fatalf("ClearProbe: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("ClearProbe queued %d, want 1", n)
+	}
+
+	pending, err := st.PendingProbe(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].ID != id {
+		t.Errorf("pending = %+v, want the cleared item", pending)
+	}
+	if streams, _ := st.Streams(ctx, id); len(streams) != 4 {
+		t.Errorf("streams = %d after clearing, want the 4 still there", len(streams))
+	}
+
+	// Nothing left to clear on a second pass.
+	if n, _ := st.ClearProbe(ctx, 0); n != 0 {
+		t.Errorf("second ClearProbe queued %d, want 0", n)
+	}
+}
+
+func TestClearProbeScopedToOneLibrary(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	other, err := st.CreateLibrary(ctx, "Other", "movie", `C:\other`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := seedItem(t, st, lib, `C:\m\a.mkv`)
+	b := seedItem(t, st, other, `C:\other\b.mkv`)
+	for _, id := range []int64{a, b} {
+		if err := st.SaveProbe(ctx, id, sampleProbe()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := st.ClearProbe(ctx, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("ClearProbe queued %d, want only the other library's item", n)
+	}
+	pending, _ := st.PendingProbe(ctx, 10)
+	if len(pending) != 1 || pending[0].ID != b {
+		t.Errorf("pending = %+v, want only the item from the named library", pending)
+	}
+}
+
+// The targeted case: re-probe only what a current build would learn something
+// from. Re-probing a whole library is hours of ffprobe.
+func TestClearIncompleteProbeOnlyTouchesItemsMissingPixFmt(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	old := seedItem(t, st, lib, `C:\m\old.mkv`) // probed before pix_fmt existed
+	fresh := seedItem(t, st, lib, `C:\m\fresh.mkv`)
+
+	if err := st.SaveProbe(ctx, old, sampleProbe()); err != nil {
+		t.Fatal(err)
+	}
+	p := sampleProbe()
+	p.Streams[0].PixFmt = "yuv420p"
+	if err := st.SaveProbe(ctx, fresh, p); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := st.ClearIncompleteProbe(ctx)
+	if err != nil {
+		t.Fatalf("ClearIncompleteProbe: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("queued %d, want only the item missing pix_fmt", n)
+	}
+
+	pending, _ := st.PendingProbe(ctx, 10)
+	if len(pending) != 1 || pending[0].ID != old {
+		t.Errorf("pending = %+v, want only the pre-pix_fmt item", pending)
+	}
+}
+
+// An audio-only file has no video stream, so it has no pix_fmt to be missing
+// and must not be re-probed forever.
+func TestClearIncompleteProbeIgnoresFilesWithNoVideo(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\audio.m4a`)
+
+	err := st.SaveProbe(ctx, id, ProbeResult{
+		DurationMS: 200_000, Container: "mov",
+		AudioCodec: "aac", AudioChannels: 2,
+		Streams: []MediaStream{
+			{Index: 0, Kind: "audio", Codec: "aac", Channels: 2, Default: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n, _ := st.ClearIncompleteProbe(ctx); n != 0 {
+		t.Errorf("queued %d, want 0 — there is no video stream to learn about", n)
+	}
+}

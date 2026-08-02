@@ -301,3 +301,28 @@ func TestHealthStaysPublic(t *testing.T) {
 		t.Errorf("status = %d, want health reachable without credentials", resp.StatusCode)
 	}
 }
+
+// restart_required is reported from status as well as setup: the first-run
+// screen needs it before an account exists, and inferring it from lan_enabled
+// gets the deliberately-loopback case wrong in the opposite direction.
+func TestAuthStatusReportsRestartRequired(t *testing.T) {
+	h := newHarness(t)
+
+	resp := h.do(t, "GET", "/api/auth/status", nil)
+	defer resp.Body.Close()
+
+	var body map[string]any
+	decode(t, resp, &body)
+
+	if _, ok := body["restart_required"]; !ok {
+		t.Fatal("status omitted restart_required; the first-run screen has nothing to read")
+	}
+	// The harness wires neither LANBound nor RestartWidens, so both are false —
+	// and a server that cannot widen must not promise that it will.
+	if body["restart_required"] != false {
+		t.Errorf("restart_required = %v, want false", body["restart_required"])
+	}
+	if body["lan_enabled"] != false {
+		t.Errorf("lan_enabled = %v, want false", body["lan_enabled"])
+	}
+}

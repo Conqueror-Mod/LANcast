@@ -236,3 +236,14 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* The source filename, so the row being corrected is identifiable. Selectable:
+   copying it into the search box is the obvious next move. */
+.fixmatch__file {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  user-select: text;
+  overflow-wrap: anywhere;
+}

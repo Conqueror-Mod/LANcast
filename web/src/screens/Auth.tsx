@@ -32,7 +32,12 @@ function errorMessage(err: unknown): string {
 }
 
 // Setup: the first run. Creates the first account, which is always an admin.
-export function Setup({ lanEnabled }: { lanEnabled: boolean }) {
+//
+// restartRequired, not "is the LAN reachable": the note below promises that a
+// restart will make other devices work, and that is only true when a restart
+// would actually bind wider. An operator who configured a loopback address
+// deliberately gets no promise we cannot keep.
+export function Setup({ restartRequired }: { restartRequired: boolean }) {
   const setup = useSetup();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -71,7 +76,7 @@ export function Setup({ lanEnabled }: { lanEnabled: boolean }) {
             {errorMessage(setup.error)}
           </p>
         )}
-        {!lanEnabled && (
+        {restartRequired && (
           <p className="auth__note">
             After creating your account, restart LANcast to reach it from other
             devices on your network.

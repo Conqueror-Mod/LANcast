@@ -12,6 +12,7 @@ type MediaStream struct {
 	Kind     string `json:"kind"`
 	Codec    string `json:"codec"`
 	Profile  string `json:"profile,omitempty"`
+	PixFmt   string `json:"pix_fmt,omitempty"`
 	Language string `json:"language,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Default  bool   `json:"default"`
@@ -69,9 +70,9 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO media_stream
-			(item_id, idx, kind, codec, profile, language, title, is_default, forced,
+			(item_id, idx, kind, codec, profile, pix_fmt, language, title, is_default, forced,
 			 width, height, channels, bit_rate)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}
@@ -79,7 +80,7 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 
 	for _, st := range r.Streams {
 		if _, err := stmt.ExecContext(ctx, itemID, st.Index, st.Kind, st.Codec,
-			nullEmpty(st.Profile), nullEmpty(st.Language), nullEmpty(st.Title),
+			nullEmpty(st.Profile), nullEmpty(st.PixFmt), nullEmpty(st.Language), nullEmpty(st.Title),
 			boolInt(st.Default), boolInt(st.Forced),
 			nullZero(st.Width), nullZero(st.Height), nullZero(st.Channels),
 			nullZero64(st.BitRate)); err != nil {
@@ -126,6 +127,72 @@ func (s *Store) PendingProbeCount(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// ClearProbe queues probed items to be probed again by clearing probed_at, and
+// reports how many were queued.
+//
+// The stored probe rows are left alone: SaveProbe replaces an item's streams
+// wholesale, so deleting them here would only widen the window in which an
+// item has no codec information at all and every playback decision for it
+// falls back to direct play. Missing items are skipped — re-probing a file
+// that is not on disk just marks it failed.
+//
+// libraryID of 0 means every library.
+func (s *Store) ClearProbe(ctx context.Context, libraryID int64) (int64, error) {
+	q := `UPDATE media_item SET probed_at = NULL
+	      WHERE probed_at IS NOT NULL AND missing = 0 AND path IS NOT NULL`
+	args := []any{}
+	if libraryID != 0 {
+		q += ` AND library_id = ?`
+		args = append(args, libraryID)
+	}
+
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, fmt.Errorf("clear probe: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear probe: %w", err)
+	}
+	return n, nil
+}
+
+// ClearIncompleteProbe queues only the items whose stored probe is missing
+// information a current build needs, and reports how many were queued.
+//
+// Today that means a video stream with no pix_fmt: it was added in schema
+// revision 12, and it is what decides whether a 10-bit H.264 file direct-plays
+// into a black rectangle. Everything probed before that revision has it empty
+// and silently falls back to matching profile names.
+//
+// This is the targeted alternative to ClearProbe. Re-probing a large library
+// is hours of ffprobe, and most of those items would learn nothing.
+//
+// Some files genuinely have no pix_fmt to report, so they match this query on
+// every call and are re-probed each time. That is a bounded, manually
+// triggered cost rather than a loop — nothing calls this on a timer — and the
+// alternative is a "probe attempted" flag that would have to be invalidated by
+// the next added field anyway.
+func (s *Store) ClearIncompleteProbe(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE media_item SET probed_at = NULL
+		WHERE probed_at IS NOT NULL AND missing = 0 AND path IS NOT NULL
+		  AND EXISTS (
+		      SELECT 1 FROM media_stream
+		      WHERE media_stream.item_id = media_item.id
+		        AND media_stream.kind = 'video'
+		        AND (media_stream.pix_fmt IS NULL OR media_stream.pix_fmt = '')
+		  )`)
+	if err != nil {
+		return 0, fmt.Errorf("clear incomplete probe: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear incomplete probe: %w", err)
+	}
+	return n, nil
+}
+
 // MarkProbeFailed stamps an item so a file ffprobe cannot read is not retried
 // forever. Without this a single corrupt file blocks the queue every pass.
 func (s *Store) MarkProbeFailed(ctx context.Context, itemID int64) error {
@@ -137,7 +204,8 @@ func (s *Store) MarkProbeFailed(ctx context.Context, itemID int64) error {
 // Streams returns an item's tracks in file order.
 func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT idx, kind, codec, COALESCE(profile,''), COALESCE(language,''), COALESCE(title,''),
+		SELECT idx, kind, codec, COALESCE(profile,''), COALESCE(pix_fmt,''),
+		       COALESCE(language,''), COALESCE(title,''),
 		       is_default, forced, COALESCE(width,0), COALESCE(height,0),
 		       COALESCE(channels,0), COALESCE(bit_rate,0)
 		FROM media_stream WHERE item_id = ? ORDER BY idx`, itemID)
@@ -150,7 +218,7 @@ func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error
 	for rows.Next() {
 		var st MediaStream
 		var def, forced int
-		if err := rows.Scan(&st.Index, &st.Kind, &st.Codec, &st.Profile, &st.Language,
+		if err := rows.Scan(&st.Index, &st.Kind, &st.Codec, &st.Profile, &st.PixFmt, &st.Language,
 			&st.Title, &def, &forced, &st.Width, &st.Height, &st.Channels, &st.BitRate); err != nil {
 			return nil, fmt.Errorf("streams: %w", err)
 		}

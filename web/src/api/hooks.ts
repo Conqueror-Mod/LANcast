@@ -1,10 +1,11 @@
 import {
   useQuery,
+  useInfiniteQuery,
   useMutation,
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
-import { apiGet, apiPost, apiSend } from "./client";
+import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type {
   AuthStatus,
   AuthUser,
@@ -14,6 +15,10 @@ import type {
   ItemsPage,
   Library,
   MatchCandidate,
+  Plugin,
+  PluginCaps,
+  ProbeStatus,
+  ReprobeResult,
   ScanStatus,
   Settings,
   SettingsUpdate,
@@ -160,6 +165,30 @@ export function useUpdateSettings() {
     mutationFn: (update: SettingsUpdate) =>
       apiSend("/api/settings", "PUT", update),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
+// Background probing progress. Polled only while a pass is running: probing is
+// a background chore, and a settings page that polls forever is a settings page
+// that never lets the machine idle.
+export function useProbeStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["probe"],
+    queryFn: () => apiGet<ProbeStatus>("/api/probe"),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.running ? 2000 : false),
+  });
+}
+
+// Re-probes already-probed files. "incomplete" re-reads only what a current
+// build would learn something from; "all" re-reads everything, which on a large
+// library is hours of ffprobe.
+export function useReprobe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (scope: "incomplete" | "all") =>
+      apiPost<ReprobeResult>(`/api/probe/refresh?scope=${scope}`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["probe"] }),
   });
 }
 
@@ -468,7 +497,9 @@ export interface ItemQuery {
   offset?: number;
 }
 
-export function useItems({
+// itemsParams builds the grid query string. Shared by the single-page and
+// paging hooks so the two can never disagree about how a filter is encoded.
+function itemsParams({
   libraryID,
   q,
   sort,
@@ -478,7 +509,7 @@ export function useItems({
   unwatched = false,
   limit = 120,
   offset = 0,
-}: ItemQuery) {
+}: ItemQuery): URLSearchParams {
   const params = new URLSearchParams({
     library_id: String(libraryID),
     limit: String(limit),
@@ -491,6 +522,12 @@ export function useItems({
   for (const d of decades) params.append("decade", String(d));
   for (const c of contentRatings) params.append("content_rating", c);
   if (unwatched) params.set("watched", "false");
+  return params;
+}
+
+export function useItems(query: ItemQuery) {
+  const { libraryID } = query;
+  const params = itemsParams(query);
 
   return useQuery({
     // The query string fully identifies the request, so it is the cache key —
@@ -515,5 +552,89 @@ export function useFacets(libraryID: number) {
       apiGet<Facets>(`/api/libraries/${libraryID}/facets`, signal),
     enabled: libraryID > 0,
     staleTime: 30_000,
+  });
+}
+
+// ------------------------------------------------------------------ plugins (admin)
+
+// Installed plugins with their signer, enabled state, and requested vs granted
+// capabilities (ADR 0021). Admin-only; callers pass their admin status as
+// `enabled` so a member never fires the 403.
+export function usePlugins(enabled = true) {
+  return useQuery({
+    queryKey: ["plugins"],
+    queryFn: ({ signal }) =>
+      apiGet<{ plugins: Plugin[] }>("/api/plugins", signal).then((r) => r.plugins),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+// Step one of install: upload a .lcplugin, which is verified and staged disabled.
+// Returns what it requests so the UI can present the capability-approval dialog.
+export function useUploadPlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ArrayBuffer) => apiUpload<Plugin>("/api/plugins", data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+// Step two: approve a subset of the requested capabilities and activate.
+export function useGrantPlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; caps: PluginCaps }) =>
+      apiPost<Plugin>(`/api/plugins/${encodeURIComponent(args.name)}/grant`, args.caps),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+export function useSetPluginEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; enabled: boolean }) =>
+      apiSend(
+        `/api/plugins/${encodeURIComponent(args.name)}/${args.enabled ? "enable" : "disable"}`,
+        "POST",
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+export function useRemovePlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiSend(`/api/plugins/${encodeURIComponent(name)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+// The browse grid pages through the library rather than fetching it all: a real
+// library is thousands of items, and a single capped request silently truncated
+// it — the grid stopped dead partway through the alphabet with no indication
+// there was more. Pages are appended as the user scrolls.
+const BROWSE_PAGE_SIZE = 120;
+
+export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
+  const base = itemsParams({ ...query, limit: BROWSE_PAGE_SIZE, offset: 0 });
+  return useInfiniteQuery({
+    queryKey: ["items-infinite", base.toString()],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const params = itemsParams({
+        ...query,
+        limit: BROWSE_PAGE_SIZE,
+        offset: pageParam as number,
+      });
+      return apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal);
+    },
+    // Stop when the pages so far account for everything the server reported.
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.items.length, 0);
+      return loaded < last.total ? loaded : undefined;
+    },
+    enabled: (query.libraryID ?? 0) > 0,
   });
 }

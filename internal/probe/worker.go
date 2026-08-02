@@ -213,11 +213,39 @@ func toStoreResult(r *Result) store.ProbeResult {
 	for _, s := range r.Streams {
 		out.Streams = append(out.Streams, store.MediaStream{
 			Index: s.Index, Kind: string(s.Kind), Codec: s.Codec, Profile: s.Profile,
+			PixFmt:   s.PixFmt,
 			Language: s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
 			Width: s.Width, Height: s.Height, Channels: s.Channels, BitRate: s.BitRate,
 		})
 	}
 	return out
+}
+
+// ResultWithStreams rebuilds a Result from the item's summary columns and its
+// real track list.
+//
+// Prefer this over ResultFromItem wherever a decision is actually made. The
+// summary columns describe one video and one audio stream — the default track
+// — so a decision built from them alone is blind to alternate audio. On a file
+// whose default track is TrueHD and whose second track is AAC, that is the
+// difference between an unnecessary re-encode and direct play, and it makes
+// selecting a track impossible: the engine cannot decide about a stream it
+// cannot see. An item with no stored streams falls back to the summary.
+func ResultWithStreams(it *store.Item, streams []store.MediaStream) *Result {
+	r := ResultFromItem(it)
+	if r == nil || len(streams) == 0 {
+		return r
+	}
+	r.Streams = make([]Stream, 0, len(streams))
+	for _, s := range streams {
+		r.Streams = append(r.Streams, Stream{
+			Index: s.Index, Kind: StreamKind(s.Kind), Codec: s.Codec,
+			Profile: s.Profile, PixFmt: s.PixFmt,
+			Language: s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
+			Width: s.Width, Height: s.Height, Channels: s.Channels, BitRate: s.BitRate,
+		})
+	}
+	return r
 }
 
 // ResultFromItem rebuilds enough of a Result from stored columns to make a

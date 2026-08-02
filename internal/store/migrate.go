@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 10
+const CurrentSchemaVersion = 12
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -28,6 +28,8 @@ var migrations = []migration{
 	{version: 8, sql: schemaRevision8},
 	{version: 9, sql: schemaRevision9},
 	{version: 10, sql: schemaRevision10},
+	{version: 11, sql: schemaRevision11},
+	{version: 12, sql: schemaRevision12},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -355,4 +357,39 @@ CREATE TABLE IF NOT EXISTS item_rating (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (item_id, source)
 );
+`
+
+// Revision 11 — installed plugins and their capability grants (ADR 0021).
+//
+// The row is the record of consent: granted_http and granted_secrets are what
+// the operator approved at install, stored as JSON so the effective authority is
+// the grant, never re-read from the (possibly changed) manifest. digest is the
+// bundle's content identity; the unpacked module lives under a dir keyed by it,
+// and re-computing it at load detects on-disk tampering. A re-install with a
+// changed manifest is a new digest and replaces the row, which is what forces a
+// fresh grant — authority never escalates silently.
+const schemaRevision11 = `
+CREATE TABLE IF NOT EXISTS installed_plugin (
+    name            TEXT    PRIMARY KEY,
+    version         TEXT    NOT NULL,
+    kind            TEXT    NOT NULL,
+    digest          TEXT    NOT NULL,
+    signer          TEXT    NOT NULL,          -- first_party | pinned | unsigned
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    granted_http    TEXT    NOT NULL DEFAULT '[]',
+    granted_secrets TEXT    NOT NULL DEFAULT '[]',
+    installed_at    INTEGER NOT NULL
+);
+`
+
+// Revision 12 — pix_fmt on media_stream.
+//
+// Bit depth is the signal that decides whether an H.264 file direct-plays, and
+// pix_fmt is the only reliable place to read it: profile names are inconsistent
+// across encoders and a probe often reports none. Without this the 10-bit check
+// falls back to matching profile strings, which misses files that then play as
+// a black rectangle. A nullable column, so existing rows stay valid and
+// re-probing fills them in.
+const schemaRevision12 = `
+ALTER TABLE media_stream ADD COLUMN pix_fmt TEXT;
 `

@@ -119,3 +119,14 @@
   color: var(--text-primary);
   border-color: var(--gold);
 }
+
+/* The paging sentinel. It must have real height — a zero-area element never
+   reports as intersecting, so an unsized marker never triggers the next page. */
+.browse__more {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

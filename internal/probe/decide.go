@@ -55,7 +55,11 @@ type Profile struct {
 // BrowserProfile is what a modern desktop browser reliably plays.
 //
 // Conservative on codecs, because claiming support that fails produces a black
-// rectangle with no explanation — far worse than an unnecessary remux.
+// rectangle with no explanation — far worse than an unnecessary remux. This is
+// the default for an unidentified client, so it claims only what every current
+// browser can do: HEVC is excluded because Chrome's support is conditional on
+// hardware and Firefox has none. Clients that can do better ask for a profile
+// by name.
 //
 // Deliberately *not* conservative on channel count. Browsers decode
 // multichannel AAC fine; the limit exists to force a downmix, not to describe
@@ -72,8 +76,66 @@ func BrowserProfile() Profile {
 	}
 }
 
-// Decide works out how to deliver a file to a client.
+// SafariProfile is Safari on macOS, iOS and tvOS.
+//
+// The two things it does that the conservative default cannot: HEVC decodes
+// natively (hardware, on every supported device rather than conditionally),
+// and AC-3/E-AC-3 play in MP4. Both are large slices of a real library —
+// excluding them costs a full video re-encode and an audio re-encode
+// respectively, on files this client could have direct-played.
+func SafariProfile() Profile {
+	return Profile{
+		Name:        "safari",
+		Containers:  []string{"mp4", "mov"},
+		VideoCodecs: []string{"h264", "hevc", "av1"},
+		AudioCodecs: []string{"aac", "mp3", "ac3", "eac3", "flac", "opus"},
+	}
+}
+
+// TVProfile is a set-top or smart-TV client with a hardware decoder and a
+// real container parser.
+//
+// Permissive on purpose: this class of device is the one that can direct-play
+// the files a browser cannot, and the whole point of probing is to not burn
+// CPU on a client that never needed help. DTS and TrueHD are included because
+// devices in this class pass them through to a receiver.
+func TVProfile() Profile {
+	return Profile{
+		Name:        "tv",
+		Containers:  []string{"mp4", "matroska", "webm", "mov", "mpegts"},
+		VideoCodecs: []string{"h264", "hevc", "vp9", "av1", "mpeg2video"},
+		AudioCodecs: []string{"aac", "mp3", "opus", "flac", "ac3", "eac3", "dts", "truehd"},
+	}
+}
+
+// ProfileByName resolves a client profile. An unknown or empty name falls back
+// to the conservative browser profile: guessing generously on behalf of a
+// client we cannot identify is how black rectangles happen.
+func ProfileByName(name string) Profile {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "safari":
+		return SafariProfile()
+	case "tv":
+		return TVProfile()
+	default:
+		return BrowserProfile()
+	}
+}
+
+// Decide works out how to deliver a file to a client, using the file's default
+// audio track.
 func Decide(r *Result, p Profile) Decision {
+	return DecideTrack(r, p, -1)
+}
+
+// DecideTrack is Decide for a caller that has chosen a specific audio track.
+//
+// audioIndex is an absolute stream index, or -1 for the file's default track.
+// This exists because the decision and the ffmpeg `-map` must be about the
+// *same* stream: deciding against the default AAC track and then mapping a
+// DTS track produces `-c:a copy` on undecodable audio, and the failure shows
+// up as silent playback rather than an error.
+func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 	if r == nil {
 		// Nothing probed yet. Direct play is the honest answer: it is what
 		// LANcast did before probing existed, and guessing at a transcode for
@@ -86,19 +148,41 @@ func Decide(r *Result, p Profile) Decision {
 
 	video := r.Video()
 	audio := r.Audio()
+	if audioIndex >= 0 {
+		if s := r.AudioByIndex(audioIndex); s != nil {
+			audio = s
+		}
+	}
 
 	videoOK, videoWhy := videoCompatible(video, p)
 	audioOK, audioWhy := audioCompatible(audio, p)
-	containerOK := contains(p.Containers, r.Container)
 
-	switch {
-	case videoOK && audioOK && containerOK:
+	if videoOK && audioOK && contains(p.Containers, r.Container) {
 		return Decision{
 			Method: DirectPlay, Reason: "container and codecs are supported",
 			VideoAction: "copy", AudioAction: "copy",
 		}
+	}
 
-	case videoOK && audioOK:
+	// Every path from here rewraps into MP4, and "the client can decode this
+	// codec" is not the same claim as "MP4 can carry it". Copying a stream
+	// into a container that cannot hold it is not a degraded stream — ffmpeg
+	// refuses to start, and the user gets a dead player with no reason. VP8
+	// and Vorbis are the common cases; FLAC in fragmented MP4 is the subtle
+	// one, because it is spec'd and still widely unplayable.
+	videoCopyable, videoMuxWhy := videoOK, videoWhy
+	if videoOK && !mp4CarriesVideo(video) {
+		videoCopyable = false
+		videoMuxWhy = fmt.Sprintf("video codec %s cannot be carried in MP4", video.Codec)
+	}
+	audioCopyable, audioMuxWhy := audioOK, audioWhy
+	if audioOK && !mp4CarriesAudio(audio) {
+		audioCopyable = false
+		audioMuxWhy = fmt.Sprintf("audio codec %s cannot be carried in MP4", audio.Codec)
+	}
+
+	switch {
+	case videoCopyable && audioCopyable:
 		// The expensive part — the pixels — is already fine. Only the wrapper
 		// is wrong, and rewrapping is close to free.
 		return Decision{
@@ -107,23 +191,59 @@ func Decide(r *Result, p Profile) Decision {
 			VideoAction: "copy", AudioAction: "copy", TargetFormat: "mp4",
 		}
 
-	case videoOK && !audioOK:
+	case videoCopyable:
 		// Re-encoding audio alone is a fraction of the cost of video.
 		return Decision{
-			Method: Transcode, Reason: audioWhy,
+			Method: Transcode, Reason: audioMuxWhy,
 			VideoAction: "copy", AudioAction: "encode", TargetFormat: "mp4",
 		}
 
 	default:
-		reason := videoWhy
-		if !audioOK && audioWhy != "" {
-			reason += "; " + audioWhy
+		// The video needs re-encoding. That is no reason to touch the audio as
+		// well: copying a compatible track alongside a video encode costs
+		// nothing and avoids a second generation of lossy audio.
+		reason := videoMuxWhy
+		audioAction := "copy"
+		if !audioCopyable {
+			audioAction = "encode"
+			if audioMuxWhy != "" {
+				reason += "; " + audioMuxWhy
+			}
 		}
 		return Decision{
 			Method: Transcode, Reason: reason,
-			VideoAction: "encode", AudioAction: "encode", TargetFormat: "mp4",
+			VideoAction: "encode", AudioAction: audioAction, TargetFormat: "mp4",
 		}
 	}
+}
+
+// mp4CarriesVideo reports whether a video codec can be muxed into fragmented
+// MP4. Listing what works rather than what does not: an unrecognised codec
+// re-encodes, which is slow but plays.
+func mp4CarriesVideo(s *Stream) bool {
+	if s == nil {
+		return true
+	}
+	switch strings.ToLower(s.Codec) {
+	case "h264", "hevc", "av1", "vp9", "mpeg4", "mpeg2video":
+		return true
+	}
+	return false
+}
+
+// mp4CarriesAudio reports whether an audio codec can be muxed into fragmented
+// MP4 and actually played back. FLAC and Opus are deliberately excluded: both
+// are legal in MP4 by spec and both fail in enough browsers that copying them
+// is a coin toss, where re-encoding to AAC costs almost nothing.
+func mp4CarriesAudio(s *Stream) bool {
+	if s == nil {
+		return true
+	}
+	switch strings.ToLower(s.Codec) {
+	case "aac", "mp3", "ac3", "eac3":
+		return true
+	}
+	return false
 }
 
 func videoCompatible(s *Stream, p Profile) (bool, string) {
@@ -142,11 +262,31 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	}
 	// 10-bit H.264 is a real trap: the codec name matches, browsers advertise
 	// H.264 support, and playback still fails. High 10 is not in any browser's
-	// baseline. HEVC and AV1 carry 10-bit fine.
-	if s.Codec == "h264" && strings.Contains(strings.ToLower(s.Profile), "10") {
+	// baseline. HEVC, VP9 and AV1 carry 10-bit fine, so the rule is H.264 only.
+	if strings.EqualFold(s.Codec, "h264") && isTenBit(s) {
 		return false, "10-bit H.264 is not supported by browsers"
 	}
 	return true, ""
+}
+
+// isTenBit reports whether a stream carries more than 8 bits per component.
+//
+// pix_fmt is the reliable signal (yuv420p10le and friends); the profile name
+// is the fallback for a probe that did not report one. Matched exactly rather
+// than by substring — "10" appears in profile strings that have nothing to do
+// with bit depth, and a false positive here is a needless full re-encode.
+func isTenBit(s *Stream) bool {
+	pix := strings.ToLower(s.PixFmt)
+	if strings.Contains(pix, "p10") || strings.Contains(pix, "p12") ||
+		strings.Contains(pix, "p016") || strings.Contains(pix, "p010") {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(s.Profile)) {
+	case "high 10", "high 10 intra", "high 4:2:2", "high 4:2:2 intra",
+		"high 4:4:4 predictive", "high 4:4:4 intra":
+		return true
+	}
+	return false
 }
 
 func audioCompatible(s *Stream, p Profile) (bool, string) {
