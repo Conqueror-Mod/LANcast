@@ -78,6 +78,33 @@ will see the proxy as one client** — the proxy should rate-limit instead.
 There is deliberately no lockout: an attacker who could lock the owner out of
 their own server has achieved denial of service for free.
 
+## Losing the password
+
+There is no password reset over HTTP, and there will not be one. A recovery
+endpoint reachable by an unauthenticated caller *is* the authentication bypass
+— it does not matter what it asks for first.
+
+Recovery is local instead. Stop the server and run:
+
+```
+lancastd reset-auth            # reports what it would remove
+lancastd reset-auth -yes       # removes every account and session
+```
+
+The authority this requires is "can run a program on the server", which is the
+same authority that could read the database file directly — so it grants an
+attacker nothing they did not already have, and grants the owner a way back in.
+
+Watch history survives: those rows are the library's data, not the account's,
+and the replacement admin takes the same user id, so resume points reconnect.
+Libraries, artwork, and settings are untouched. Afterwards the instance is in
+the state a fresh install is in — unconfigured, and loopback-only until an
+account exists.
+
+On Windows the data directory is owned by the service account, so this needs an
+elevated shell; the command says so rather than reporting a bare SQLite
+`readonly database` error.
+
 ## Transport security
 
 **A server reachable beyond loopback serves HTTPS**
