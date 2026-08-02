@@ -166,3 +166,63 @@ func TestLoopbackOnly(t *testing.T) {
 		}
 	}
 }
+
+// restart_required promises the operator that restarting will let other
+// devices connect. It must only be made when a restart would actually bind
+// wider — otherwise they restart, see no change, and cannot tell whether the
+// advice or their configuration is wrong.
+func TestRestartWidensBind(t *testing.T) {
+	cases := []struct {
+		name      string
+		requested string
+		lanBound  bool
+		want      bool
+	}{
+		// Unsecured and forced onto loopback, with a configured address that
+		// does reach further. This is the case the promise exists for.
+		{"unsecured, wildcard configured", ":8080", false, true},
+		{"unsecured, all interfaces", "0.0.0.0:8080", false, true},
+		{"unsecured, LAN ip configured", "192.168.1.50:8080", false, true},
+
+		// The bug: loopback configured deliberately. A restart changes nothing,
+		// so no promise may be made.
+		{"unsecured, loopback configured", "127.0.0.1:8080", false, false},
+		{"unsecured, localhost configured", "localhost:8080", false, false},
+		{"unsecured, ipv6 loopback configured", "[::1]:8080", false, false},
+
+		// Already reaching the network — nothing left for a restart to widen.
+		{"already LAN-bound", ":8080", true, false},
+		{"already LAN-bound, LAN ip", "192.168.1.50:8080", true, false},
+	}
+	for _, tc := range cases {
+		if got := restartWidensBind(tc.requested, tc.lanBound); got != tc.want {
+			t.Errorf("%s: restartWidensBind(%q, lanBound=%v) = %v, want %v",
+				tc.name, tc.requested, tc.lanBound, got, tc.want)
+		}
+	}
+}
+
+// The pairing that matters: a server started unsecured with a loopback address
+// is loopback-bound, stays loopback-bound after a restart, and must never
+// claim otherwise.
+func TestLoopbackConfigMakesNoRestartPromise(t *testing.T) {
+	const configured = "127.0.0.1:8099"
+
+	addr, lanBound := bindAddr(configured, false)
+	if lanBound {
+		t.Fatalf("unsecured bindAddr reported lanBound")
+	}
+	if restartWidensBind(configured, lanBound) {
+		t.Error("promised a restart would widen the bind; the configured address is loopback")
+	}
+
+	// After the restart the operator was not promised: same address, still not
+	// LAN-bound, still no promise.
+	addr2, lanBound2 := bindAddr(configured, true)
+	if addr2 != addr || lanBound2 {
+		t.Errorf("after restart: addr=%q lanBound=%v, want %q and loopback-only", addr2, lanBound2, addr)
+	}
+	if restartWidensBind(configured, lanBound2) {
+		t.Error("still promising a widening restart after the restart happened")
+	}
+}

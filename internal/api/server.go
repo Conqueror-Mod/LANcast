@@ -63,10 +63,14 @@ type Deps struct {
 	// Probe triggers a background probe pass, so a re-probe an operator asked
 	// for starts now rather than at the next scan.
 	Probe func()
-	// LANBound reports whether the server is listening beyond loopback. An
-	// unsecured server is loopback-only, so the client can explain why a
-	// restart is needed after setting a password.
+	// LANBound reports whether the server is actually listening beyond
+	// loopback — the resolved address, not whether a password is set.
 	LANBound bool
+	// RestartWidens reports whether restarting would bind wider than the
+	// server is bound right now. False when the operator configured a loopback
+	// address deliberately: there, a restart changes nothing and telling them
+	// otherwise sends them to do something that cannot work.
+	RestartWidens bool
 }
 
 // Server holds the API dependencies.
@@ -88,6 +92,7 @@ type Server struct {
 	enrich        func()
 	probe         func()
 	lanBound      bool
+	restartWidens bool
 	throttle      *auth.Throttle
 }
 
@@ -101,7 +106,7 @@ func New(d Deps) *Server {
 		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
-		probe: d.Probe, lanBound: d.LANBound,
+		probe: d.Probe, lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 	}
 }
