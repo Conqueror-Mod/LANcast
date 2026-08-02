@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-02 · **v0.3.2 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.4.0 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
@@ -43,6 +43,7 @@ than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.4.0** | 2026-08-02 | Playback decisions rewritten after a second real-library test: the chosen audio track now drives the decision (picking one produced `-c:a copy` on undecodable audio and silent playback), named client profiles so HEVC stops forcing a re-encode, copy gated on what MP4 can actually carry, `pix_fmt`-based 10-bit detection (schema 12), and audio no longer re-encoded alongside video for free. Adds **Re-read media files** for libraries probed by an older build, and `lancastd reset-auth` for lockout recovery. Fixes: the app opening to a tray icon and no window, NFO sidecars growing on every write, shows libraries counting seasons and episodes as items, a certificate warning on a loopback-only server, and a restart prompt that could not deliver. |
 | **v0.3.2** | 2026-08-02 | First published release. M0–M4 plus packaging: two executables, Windows installer, service install. Fixes from the first real-library test — ffprobe unreachable under a service (which had left every file direct-played), a grid that stopped at 120 of 1,226, volume, filenames for Fix match, and two upgrade-path bugs. |
 
 **What real-library testing taught, worth remembering:** every serious bug in
@@ -52,6 +53,19 @@ launcher read a TLS error as "server down"; an old process survived an upgrade
 and held a lock. The fixes each added a way to *see* the failure — a media-tools
 row in Settings, an honest "120 of 1,226", a message box instead of a silent
 exit. Prefer that to a quiet fallback.
+
+**v0.4.0 repeated it, and added one.** The audio-track bug played films with no
+sound and logged nothing; an impossible mux made ffmpeg refuse to start and the
+player just died; NFO sidecars grew on every write and nobody would ever have
+noticed. Same shape: the failure had no voice.
+
+The addition is about *how the bugs were found*. Two claims made from reading
+the code were wrong — a re-probe described as taking "hours" turned out to take
+15 seconds per 225 files, and a shows library's item count was explained as
+correct arithmetic when it was plainly wrong on screen. Both were caught by
+running the thing and looking at the output. Four of the release's fixes were
+found while verifying something else. **Reasoning about the code predicts; only
+running it against real files reports.**
 
 ## Ordering principle
 
