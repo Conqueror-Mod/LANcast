@@ -49,6 +49,16 @@ func main() {
 		return
 	}
 
+	// `lancastd tray` is the windowless desktop mode: the server plus a
+	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
+	if len(os.Args) > 1 && os.Args[1] == "tray" {
+		if err := runTray(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd tray:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "listen address")
 	dataDir := flag.String("data", "", "data directory (default: per-user config dir)")
 	verbose := flag.Bool("v", false, "verbose logging")

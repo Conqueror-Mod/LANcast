@@ -13,5 +13,13 @@ version="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 out="lancastd"
 [ "${OS:-}" = "Windows_NT" ] && out="lancastd.exe"
 
-go build -ldflags "-X lancast/internal/api.Version=${version}" -o "${out}" ./cmd/lancastd
+ldflags="-X lancast/internal/api.Version=${version}"
+# WINDOWLESS=1 links the Windows GUI subsystem so a double-click shows no console
+# (the tray/desktop mode, ADR 0022). Default keeps the console so `-version` and
+# logs are visible during development; goreleaser applies windowsgui for releases.
+if [ "${WINDOWLESS:-}" = "1" ] && [ "${OS:-}" = "Windows_NT" ]; then
+	ldflags="${ldflags} -H=windowsgui"
+fi
+
+go build -ldflags "${ldflags}" -o "${out}" ./cmd/lancastd
 echo "built ${out} (version ${version})"
