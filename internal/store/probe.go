@@ -127,6 +127,72 @@ func (s *Store) PendingProbeCount(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// ClearProbe queues probed items to be probed again by clearing probed_at, and
+// reports how many were queued.
+//
+// The stored probe rows are left alone: SaveProbe replaces an item's streams
+// wholesale, so deleting them here would only widen the window in which an
+// item has no codec information at all and every playback decision for it
+// falls back to direct play. Missing items are skipped — re-probing a file
+// that is not on disk just marks it failed.
+//
+// libraryID of 0 means every library.
+func (s *Store) ClearProbe(ctx context.Context, libraryID int64) (int64, error) {
+	q := `UPDATE media_item SET probed_at = NULL
+	      WHERE probed_at IS NOT NULL AND missing = 0 AND path IS NOT NULL`
+	args := []any{}
+	if libraryID != 0 {
+		q += ` AND library_id = ?`
+		args = append(args, libraryID)
+	}
+
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, fmt.Errorf("clear probe: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear probe: %w", err)
+	}
+	return n, nil
+}
+
+// ClearIncompleteProbe queues only the items whose stored probe is missing
+// information a current build needs, and reports how many were queued.
+//
+// Today that means a video stream with no pix_fmt: it was added in schema
+// revision 12, and it is what decides whether a 10-bit H.264 file direct-plays
+// into a black rectangle. Everything probed before that revision has it empty
+// and silently falls back to matching profile names.
+//
+// This is the targeted alternative to ClearProbe. Re-probing a large library
+// is hours of ffprobe, and most of those items would learn nothing.
+//
+// Some files genuinely have no pix_fmt to report, so they match this query on
+// every call and are re-probed each time. That is a bounded, manually
+// triggered cost rather than a loop — nothing calls this on a timer — and the
+// alternative is a "probe attempted" flag that would have to be invalidated by
+// the next added field anyway.
+func (s *Store) ClearIncompleteProbe(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE media_item SET probed_at = NULL
+		WHERE probed_at IS NOT NULL AND missing = 0 AND path IS NOT NULL
+		  AND EXISTS (
+		      SELECT 1 FROM media_stream
+		      WHERE media_stream.item_id = media_item.id
+		        AND media_stream.kind = 'video'
+		        AND (media_stream.pix_fmt IS NULL OR media_stream.pix_fmt = '')
+		  )`)
+	if err != nil {
+		return 0, fmt.Errorf("clear incomplete probe: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear incomplete probe: %w", err)
+	}
+	return n, nil
+}
+
 // MarkProbeFailed stamps an item so a file ffprobe cannot read is not retried
 // forever. Without this a single corrupt file blocks the queue every pass.
 func (s *Store) MarkProbeFailed(ctx context.Context, itemID int64) error {

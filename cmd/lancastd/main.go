@@ -334,6 +334,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			},
 			ReloadPlugins: reloadPlugins,
 			Enrich:        enrichSoon,
+			Probe:         probeSoon,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.

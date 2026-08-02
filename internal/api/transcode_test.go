@@ -224,3 +224,101 @@ func TestPlaybackProfileChangesTheDecision(t *testing.T) {
 		t.Errorf("unknown profile resolved to %q, want the browser fallback", name)
 	}
 }
+
+// requireProber skips a test that needs ffprobe on a machine without it.
+// LANcast runs fine without ffprobe, so this is a supported configuration
+// rather than a broken one.
+func (h *harness) requireProber(t *testing.T) {
+	t.Helper()
+	resp := h.do(t, "GET", "/api/probe", nil)
+	defer resp.Body.Close()
+	var body struct {
+		Available bool `json:"available"`
+	}
+	decode(t, resp, &body)
+	if !body.Available {
+		t.Skip("ffprobe is not installed")
+	}
+}
+
+// A probe is only as good as the build that made it. Nothing in the normal
+// queue revisits an already-probed item — the pending query is
+// "probed_at IS NULL" — so a field the prober learned to record later needs an
+// explicit re-probe.
+func TestReprobeRequeuesItems(t *testing.T) {
+	h := newHarness(t)
+	h.requireProber(t)
+	id := h.addFile(t, "movie.mkv", []byte("data"))
+	h.probeAsHEVCWithTwoAudioTracks(t, id) // stored without pix_fmt
+
+	queued := func(query string) int64 {
+		resp := h.do(t, "POST", "/api/probe/refresh"+query, nil)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		var body struct {
+			Scope  string `json:"scope"`
+			Queued int64  `json:"queued"`
+		}
+		decode(t, resp, &body)
+		return body.Queued
+	}
+
+	// The default is the narrow scope: only what a current build would learn
+	// something from.
+	if n := queued(""); n != 1 {
+		t.Errorf("default scope queued %d, want 1", n)
+	}
+	// Already queued, so nothing further to do.
+	if n := queued("?scope=incomplete"); n != 0 {
+		t.Errorf("second pass queued %d, want 0", n)
+	}
+}
+
+func TestReprobeAllScopeIsExplicit(t *testing.T) {
+	h := newHarness(t)
+	h.requireProber(t)
+	id := h.addFile(t, "movie.mkv", []byte("data"))
+
+	// Probed complete: the narrow scope has nothing to do, but "all" still
+	// requeues it. That difference is the whole point of the parameter.
+	err := h.st.SaveProbe(context.Background(), id, store.ProbeResult{
+		DurationMS: 100, Container: "matroska",
+		VideoCodec: "h264", Width: 1920, Height: 1080,
+		AudioCodec: "aac", AudioChannels: 2,
+		Streams: []store.MediaStream{
+			{Index: 0, Kind: "video", Codec: "h264", PixFmt: "yuv420p", Default: true},
+			{Index: 1, Kind: "audio", Codec: "aac", Channels: 2, Default: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(query string) int64 {
+		resp := h.do(t, "POST", "/api/probe/refresh"+query, nil)
+		defer resp.Body.Close()
+		var body struct {
+			Queued int64 `json:"queued"`
+		}
+		decode(t, resp, &body)
+		return body.Queued
+	}
+
+	if n := get("?scope=incomplete"); n != 0 {
+		t.Errorf("incomplete scope queued %d, want 0 — pix_fmt is already stored", n)
+	}
+	if n := get("?scope=all"); n != 1 {
+		t.Errorf("all scope queued %d, want 1", n)
+	}
+}
+
+func TestReprobeRejectsBadInput(t *testing.T) {
+	h := newHarness(t)
+	h.requireProber(t)
+
+	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=nonsense", nil), 400, "bad_request")
+	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=all&library=abc", nil), 400, "bad_request")
+	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=all&library=9999", nil), 404, "not_found")
+}
