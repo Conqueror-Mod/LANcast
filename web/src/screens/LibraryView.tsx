@@ -1,5 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useItems, useFacets } from "@/api/hooks";
+import { useInfiniteItems, useFacets } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { FilterChips } from "@/components/FilterChips";
 import type { Library } from "@/api/types";
@@ -31,7 +32,15 @@ export function LibraryView({
   const unwatched = params.get("watched") === "false";
 
   const { data: facets } = useFacets(libraryID);
-  const { data, isLoading, isError, error } = useItems({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteItems({
     libraryID,
     q,
     sort,
@@ -81,7 +90,47 @@ export function LibraryView({
     );
   };
 
-  const items = data?.items ?? [];
+  // A sentinel below the grid pulls the next page into view as the user reaches
+  // it, so a large library scrolls continuously instead of stopping at the first
+  // page with no sign there is more.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const el = sentinel.current;
+    if (!el) return;
+
+    // Near enough to the viewport that the next page should already be loading.
+    const near = () => el.getBoundingClientRect().top < window.innerHeight + 600;
+    const maybeFetch = () => {
+      if (near()) fetchNextPage();
+    };
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) fetchNextPage();
+      },
+      { rootMargin: "600px" },
+    );
+    io.observe(el);
+
+    // Scroll and resize back the observer up. Observer callbacks are suppressed
+    // in a hidden or throttled tab, and if they never arrive the grid just stops
+    // — a silent truncation with no sign there is more, which is the failure
+    // this paging exists to remove. The immediate call also covers a first page
+    // too short to fill the viewport.
+    window.addEventListener("scroll", maybeFetch, { passive: true });
+    window.addEventListener("resize", maybeFetch);
+    maybeFetch();
+
+    return () => {
+      io.disconnect();
+      window.removeEventListener("scroll", maybeFetch);
+      window.removeEventListener("resize", maybeFetch);
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const items = data?.pages.flatMap((p) => p.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
   const filtered =
     !!q ||
     genres.length > 0 ||
@@ -96,7 +145,11 @@ export function LibraryView({
           <span className="section-label">{library.name}</span>
           <span className="browse__rule" />
           {data && (
-            <span className="browse__count">{data.total.toLocaleString()}</span>
+            <span className="browse__count">
+              {items.length < total
+                ? `${items.length.toLocaleString()} of ${total.toLocaleString()}`
+                : total.toLocaleString()}
+            </span>
           )}
         </div>
         <input
@@ -188,6 +241,15 @@ export function LibraryView({
           <PosterTile key={item.id} item={item} />
         ))}
       </div>
+
+      {/* The sentinel needs real height: a zero-area element never reports as
+          intersecting, so an unsized marker silently never triggers the next
+          page. It doubles as the "loading more" strip. */}
+      {hasNextPage && (
+        <div ref={sentinel} className="browse__more">
+          {isFetchingNextPage ? "Loading more…" : ""}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import {
   useQuery,
+  useInfiniteQuery,
   useMutation,
   useQueryClient,
   keepPreviousData,
@@ -470,7 +471,9 @@ export interface ItemQuery {
   offset?: number;
 }
 
-export function useItems({
+// itemsParams builds the grid query string. Shared by the single-page and
+// paging hooks so the two can never disagree about how a filter is encoded.
+function itemsParams({
   libraryID,
   q,
   sort,
@@ -480,7 +483,7 @@ export function useItems({
   unwatched = false,
   limit = 120,
   offset = 0,
-}: ItemQuery) {
+}: ItemQuery): URLSearchParams {
   const params = new URLSearchParams({
     library_id: String(libraryID),
     limit: String(limit),
@@ -493,6 +496,12 @@ export function useItems({
   for (const d of decades) params.append("decade", String(d));
   for (const c of contentRatings) params.append("content_rating", c);
   if (unwatched) params.set("watched", "false");
+  return params;
+}
+
+export function useItems(query: ItemQuery) {
+  const { libraryID } = query;
+  const params = itemsParams(query);
 
   return useQuery({
     // The query string fully identifies the request, so it is the cache key —
@@ -573,5 +582,33 @@ export function useRemovePlugin() {
     mutationFn: (name: string) =>
       apiSend(`/api/plugins/${encodeURIComponent(name)}`, "DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+// The browse grid pages through the library rather than fetching it all: a real
+// library is thousands of items, and a single capped request silently truncated
+// it — the grid stopped dead partway through the alphabet with no indication
+// there was more. Pages are appended as the user scrolls.
+const BROWSE_PAGE_SIZE = 120;
+
+export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
+  const base = itemsParams({ ...query, limit: BROWSE_PAGE_SIZE, offset: 0 });
+  return useInfiniteQuery({
+    queryKey: ["items-infinite", base.toString()],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const params = itemsParams({
+        ...query,
+        limit: BROWSE_PAGE_SIZE,
+        offset: pageParam as number,
+      });
+      return apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal);
+    },
+    // Stop when the pages so far account for everything the server reported.
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.items.length, 0);
+      return loaded < last.total ? loaded : undefined;
+    },
+    enabled: (query.libraryID ?? 0) > 0,
   });
 }
