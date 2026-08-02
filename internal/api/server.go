@@ -52,6 +52,9 @@ type Deps struct {
 	// Rebuild reconfigures providers after a settings change, so a newly
 	// entered API key takes effect without a restart.
 	Rebuild func(config.Settings)
+	// ReloadPlugins re-reads installed plugins and rebuilds the registry, so an
+	// install, grant, enable/disable, or remove takes effect without a restart.
+	ReloadPlugins func() error
 	// Enrich triggers a background enrichment pass.
 	Enrich func()
 	// LANBound reports whether the server is listening beyond loopback. An
@@ -62,22 +65,23 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
-	st       *store.Store
-	scanner  *scan.Scanner
-	reg      *meta.Registry
-	art      *artwork.Cache
-	worker   *enrich.Worker
-	probes   *probe.Worker
-	trans    *transcode.Manager
-	subs     *subtitle.Extractor
-	settings *config.SettingsStore
-	dataDir  string
-	log      *slog.Logger
-	web      http.Handler
-	rebuild  func(config.Settings)
-	enrich   func()
-	lanBound bool
-	throttle *auth.Throttle
+	st            *store.Store
+	scanner       *scan.Scanner
+	reg           *meta.Registry
+	art           *artwork.Cache
+	worker        *enrich.Worker
+	probes        *probe.Worker
+	trans         *transcode.Manager
+	subs          *subtitle.Extractor
+	settings      *config.SettingsStore
+	dataDir       string
+	log           *slog.Logger
+	web           http.Handler
+	rebuild       func(config.Settings)
+	reloadPlugins func() error
+	enrich        func()
+	lanBound      bool
+	throttle      *auth.Throttle
 }
 
 func New(d Deps) *Server {
@@ -89,7 +93,7 @@ func New(d Deps) *Server {
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
-		rebuild: d.Rebuild, enrich: d.Enrich, lanBound: d.LANBound,
+		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich, lanBound: d.LANBound,
 		throttle: auth.NewThrottle(),
 	}
 }
@@ -154,6 +158,15 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
+
+	// Plugins (ADR 0021). Install is two steps — upload/inspect, then grant — so
+	// the capability approval is an explicit act. All admin-only.
+	mux.HandleFunc("GET /api/plugins", s.adminOnly(s.listPlugins))
+	mux.HandleFunc("POST /api/plugins", s.adminOnly(s.uploadPlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/grant", s.adminOnly(s.grantPlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/enable", s.adminOnly(s.enablePlugin))
+	mux.HandleFunc("POST /api/plugins/{name}/disable", s.adminOnly(s.disablePlugin))
+	mux.HandleFunc("DELETE /api/plugins/{name}", s.adminOnly(s.removePlugin))
 
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))
