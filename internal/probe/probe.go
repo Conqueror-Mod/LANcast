@@ -96,6 +96,24 @@ func (r *Result) Audio() *Stream {
 	return first
 }
 
+// AudioByIndex returns the audio stream at an absolute stream index, or nil if
+// there is no audio stream there.
+//
+// The index is the one ffmpeg's `-map 0:N` uses, so a caller that selects a
+// track and a caller that decides how to deliver it are talking about the same
+// stream. Returning nil rather than falling back is deliberate: a request for
+// a track that does not exist is a bad request, not a reason to silently play
+// a different one.
+func (r *Result) AudioByIndex(index int) *Stream {
+	for i := range r.Streams {
+		s := &r.Streams[i]
+		if s.Kind == KindAudio && s.Index == index {
+			return s
+		}
+	}
+	return nil
+}
+
 // Subtitles returns every subtitle track.
 func (r *Result) Subtitles() []Stream {
 	var out []Stream

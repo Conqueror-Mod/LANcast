@@ -485,10 +485,10 @@ item returns `404`, since the lookup is scoped to `{id}`.
 
 ### `GET /api/items/{id}/playback`
 
-How this file would be delivered to a browser, and why.
+How this file would be delivered to a client, and why.
 
 ```json
-{ "item_id": 87, "probed": true,
+{ "item_id": 87, "probed": true, "profile": "browser",
   "decision": { "method": "transcode",
                 "reason": "audio codec eac3 is not supported",
                 "video_action": "copy", "audio_action": "encode",
@@ -503,9 +503,44 @@ third of a typical library.
 `reason` is always populated. "Why is this transcoding" should not require
 reading server logs.
 
+Takes the same `?profile=` and `?audio=` parameters as the stream endpoints,
+and echoes the resolved profile back. Call it with the parameters you intend to
+stream with: an explanation of a decision the server would not actually make
+sends you looking in the wrong place. `?audio=` naming a track that does not
+exist returns `400 bad_request`.
+
 An unprobed item returns `direct` — the same behavior LANcast had before
 probing existed, rather than guessing at a transcode for a file nothing has
 inspected.
+
+#### Client profiles
+
+`?profile=` names what the client can play. Unknown or absent falls back to
+`browser`; guessing generously for a client the server cannot identify is how
+black rectangles happen.
+
+| Profile | Video | Audio | Containers |
+| --- | --- | --- | --- |
+| `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac | mp4, webm, mov |
+| `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus | mp4, mov |
+| `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, flac, ac3, eac3, dts, truehd | mp4, matroska, webm, mov, mpegts |
+
+`browser` excludes HEVC deliberately: Chrome's support is conditional on
+hardware and Firefox has none, so claiming it for an unidentified client trades
+a cheap remux for an unexplained failure. Clients that know better say so.
+
+Two rules apply on top of the profile, and both are about what happens *after*
+the decision rather than what the client can decode:
+
+- **10-bit H.264 is never direct-played.** The codec name matches and browsers
+  advertise H.264 support, but High 10 is outside every browser's baseline.
+  Detected from `pix_fmt` where the probe reports one. HEVC, VP9 and AV1 carry
+  10-bit fine and are not penalised.
+- **A stream is only copied if MP4 can carry it.** Every non-direct path
+  rewraps into fragmented MP4, and "the client decodes this codec" is not the
+  same claim as "MP4 holds it". VP8, Vorbis, FLAC and Opus are re-encoded
+  rather than copied even when the profile allows them — ffmpeg refuses to
+  start on an impossible mux, which surfaces as a dead player with no reason.
 
 ### `GET /api/probe`
 
@@ -522,7 +557,13 @@ configuration, not an error: playback decisions fall back to direct play.
 Item responses gain `duration_ms`, `width`, `height`, `video_codec`,
 `video_profile`, `video_bitrate`, `audio_codec`, `audio_channels`, and
 `probed_at`. The detail response also carries `streams` — the full track list,
-including subtitle and alternate audio tracks.
+including subtitle and alternate audio tracks. Each stream's `index` is the
+absolute index `?audio=` takes.
+
+Streams carry `pix_fmt` where the probe reported one. It is the reliable signal
+for bit depth, which is what decides whether an H.264 file direct-plays. Items
+probed before this field existed have it empty and fall back to matching the
+profile name; re-probing fills it in.
 
 ---
 
@@ -542,7 +583,15 @@ after consulting `/playback`.
 
 Streams a progressive fragmented MP4 produced by ffmpeg on demand. Plays in any
 browser with no client library. `?t=` seconds sets a start offset; `?audio=`
-selects a specific track by absolute index.
+selects a specific track by absolute index; `?profile=` names the client
+profile (see above).
+
+`?audio=` participates in the delivery decision rather than only in stream
+mapping. Selecting a track means the decision is made about *that* track — a
+file whose default track is TrueHD and whose second track is AAC direct-plays
+when you ask for the second, and re-encodes when you do not. An index naming a
+track that does not exist returns `400 bad_request` rather than silently
+playing a different one.
 
 `Accept-Ranges: none` — a live transcode has no length and cannot be
 range-served, since bytes do not exist until ffmpeg produces them. Seeking
@@ -555,8 +604,8 @@ concurrent-transcode limit.
 ### `GET /api/stream/{id}/hls/index.m3u8`
 
 The same transcode as an HLS playlist with fMP4 segments, for clients that
-speak HLS. Segment URLs point back at
-`GET /api/stream/{id}/hls/{session}/{name}`.
+speak HLS. Takes the same `?t=`, `?audio=` and `?profile=` parameters. Segment
+URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
 
 ### `GET /api/transcode`
 

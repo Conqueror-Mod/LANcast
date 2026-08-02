@@ -23,16 +23,17 @@ import (
 // to what has already been produced — which is why the HLS endpoints exist
 // alongside it for clients that can use them.
 func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
-	it, decision, ok := s.transcodeTarget(w, r)
+	t, ok := s.transcodeTarget(w, r)
 	if !ok {
 		return
 	}
+	it := t.item
 
 	opts := transcode.Options{
 		Input:      it.Path,
-		Decision:   decision,
+		Decision:   t.decision,
 		StartAt:    queryFloat(r, "t"),
-		AudioIndex: queryIntDefault(r, "audio", -1),
+		AudioIndex: t.audioIndex,
 	}
 
 	stream, err := s.trans.Progressive(r.Context(), it.ID, opts)
@@ -59,16 +60,17 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 
 // hlsPlaylist serves the HLS playlist, starting a session if needed.
 func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
-	it, decision, ok := s.transcodeTarget(w, r)
+	t, ok := s.transcodeTarget(w, r)
 	if !ok {
 		return
 	}
+	it := t.item
 
 	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, transcode.Options{
 		Input:      it.Path,
-		Decision:   decision,
+		Decision:   t.decision,
 		StartAt:    queryFloat(r, "t"),
-		AudioIndex: queryIntDefault(r, "audio", -1),
+		AudioIndex: t.audioIndex,
 	})
 	if err != nil {
 		s.writeTranscodeError(w, err)
@@ -155,27 +157,40 @@ func (s *Server) transcodeSessions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// playTarget is a resolved request: which file, how to deliver it, and which
+// audio track the decision was made about.
+//
+// The audio index travels with the decision rather than being read from the
+// query a second time at the point ffmpeg is invoked. Deciding against one
+// stream and mapping another is how `-c:a copy` ends up on a track the client
+// cannot decode.
+type playTarget struct {
+	item       *store.Item
+	decision   probe.Decision
+	audioIndex int
+}
+
 // transcodeTarget resolves the item and its playback decision, applying the
 // same containment guard as direct streaming.
-func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (*store.Item, probe.Decision, bool) {
+func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTarget, bool) {
 	id, ok := pathID(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 
 	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 	if it.Path == "" {
 		writeError(w, http.StatusNotFound, "not_found", "item has no playable file")
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 
 	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
 	if s.notFoundOr(w, err, "get library", "owning library is gone") {
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 
 	// Transcoding hands a path to a subprocess, which is if anything a
@@ -184,22 +199,36 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (*store
 	if err != nil {
 		s.log.Error("transcode containment check failed", "item", id, "error", err)
 		writeError(w, http.StatusNotFound, "not_found", "no such item")
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 	if _, err := os.Stat(path); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
 	it.Path = path
 
-	decision := probe.Decide(probe.ResultFromItem(it), probe.BrowserProfile())
+	// The full track list, not just the summary columns: the decision has to
+	// be about the same stream ffmpeg will map.
+	streams, err := s.st.Streams(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "load streams")
+		return playTarget{}, false
+	}
+	res := probe.ResultWithStreams(it, streams)
+	audioIndex := queryIntDefault(r, "audio", -1)
+	if audioIndex >= 0 && res != nil && res.AudioByIndex(audioIndex) == nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "no audio track at that index")
+		return playTarget{}, false
+	}
+
+	decision := probe.DecideTrack(res, probe.ProfileByName(r.URL.Query().Get("profile")), audioIndex)
 	if decision.Method == probe.DirectPlay {
 		// Nothing to do. Transcoding a file the client can already play is
 		// pure waste, so say so rather than quietly burning CPU.
 		writeError(w, http.StatusConflict, "conflict", "this file can be played directly")
-		return nil, probe.Decision{}, false
+		return playTarget{}, false
 	}
-	return it, decision, true
+	return playTarget{item: it, decision: decision, audioIndex: audioIndex}, true
 }
 
 func (s *Server) writeTranscodeError(w http.ResponseWriter, err error) {

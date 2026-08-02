@@ -12,6 +12,7 @@ type MediaStream struct {
 	Kind     string `json:"kind"`
 	Codec    string `json:"codec"`
 	Profile  string `json:"profile,omitempty"`
+	PixFmt   string `json:"pix_fmt,omitempty"`
 	Language string `json:"language,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Default  bool   `json:"default"`
@@ -69,9 +70,9 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO media_stream
-			(item_id, idx, kind, codec, profile, language, title, is_default, forced,
+			(item_id, idx, kind, codec, profile, pix_fmt, language, title, is_default, forced,
 			 width, height, channels, bit_rate)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}
@@ -79,7 +80,7 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 
 	for _, st := range r.Streams {
 		if _, err := stmt.ExecContext(ctx, itemID, st.Index, st.Kind, st.Codec,
-			nullEmpty(st.Profile), nullEmpty(st.Language), nullEmpty(st.Title),
+			nullEmpty(st.Profile), nullEmpty(st.PixFmt), nullEmpty(st.Language), nullEmpty(st.Title),
 			boolInt(st.Default), boolInt(st.Forced),
 			nullZero(st.Width), nullZero(st.Height), nullZero(st.Channels),
 			nullZero64(st.BitRate)); err != nil {
@@ -137,7 +138,8 @@ func (s *Store) MarkProbeFailed(ctx context.Context, itemID int64) error {
 // Streams returns an item's tracks in file order.
 func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT idx, kind, codec, COALESCE(profile,''), COALESCE(language,''), COALESCE(title,''),
+		SELECT idx, kind, codec, COALESCE(profile,''), COALESCE(pix_fmt,''),
+		       COALESCE(language,''), COALESCE(title,''),
 		       is_default, forced, COALESCE(width,0), COALESCE(height,0),
 		       COALESCE(channels,0), COALESCE(bit_rate,0)
 		FROM media_stream WHERE item_id = ? ORDER BY idx`, itemID)
@@ -150,7 +152,7 @@ func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error
 	for rows.Next() {
 		var st MediaStream
 		var def, forced int
-		if err := rows.Scan(&st.Index, &st.Kind, &st.Codec, &st.Profile, &st.Language,
+		if err := rows.Scan(&st.Index, &st.Kind, &st.Codec, &st.Profile, &st.PixFmt, &st.Language,
 			&st.Title, &def, &forced, &st.Width, &st.Height, &st.Channels, &st.BitRate); err != nil {
 			return nil, fmt.Errorf("streams: %w", err)
 		}
