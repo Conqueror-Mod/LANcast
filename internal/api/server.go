@@ -60,6 +60,9 @@ type Deps struct {
 	ReloadPlugins func() error
 	// Enrich triggers a background enrichment pass.
 	Enrich func()
+	// Probe triggers a background probe pass, so a re-probe an operator asked
+	// for starts now rather than at the next scan.
+	Probe func()
 	// LANBound reports whether the server is listening beyond loopback. An
 	// unsecured server is loopback-only, so the client can explain why a
 	// restart is needed after setting a password.
@@ -83,6 +86,7 @@ type Server struct {
 	rebuild       func(config.Settings)
 	reloadPlugins func() error
 	enrich        func()
+	probe         func()
 	lanBound      bool
 	throttle      *auth.Throttle
 }
@@ -96,7 +100,8 @@ func New(d Deps) *Server {
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
-		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich, lanBound: d.LANBound,
+		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
+		probe: d.Probe, lanBound: d.LANBound,
 		throttle: auth.NewThrottle(),
 	}
 }
@@ -157,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
+	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))

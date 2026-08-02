@@ -554,6 +554,34 @@ Background probing progress.
 `available` is false when ffprobe is not installed. That is a supported
 configuration, not an error: playback decisions fall back to direct play.
 
+### `POST /api/probe/refresh`
+
+Queues already-probed items to be probed again, and starts a pass. Admin only.
+
+```json
+{ "scope": "incomplete", "queued": 412 }
+```
+
+Needed because a probe is only as good as the build that made it. The pending
+queue is "never probed", so when the prober learns to record a field the
+decision engine depends on, every item probed by an older build keeps a
+decision made without it and nothing revisits them.
+
+`?scope=` is `incomplete` (the default) or `all`:
+
+- `incomplete` re-probes only items a current build would learn something
+  from — today, video streams stored without `pix_fmt`. This is the narrow,
+  cheap option and the one to reach for.
+- `all` re-probes everything, optionally narrowed with `?library=`. Re-probing
+  a large library is hours of ffprobe, which is why it has to be asked for by
+  name and is never something the server decides to do on its own.
+
+Stream rows are kept while an item is queued. Deleting them would widen the
+window in which an item has no codec information at all and every playback
+decision for it falls back to direct play.
+
+Returns `503` if ffprobe is not installed and `400` for an unknown scope.
+
 Item responses gain `duration_ms`, `width`, `height`, `video_codec`,
 `video_profile`, `video_bitrate`, `audio_codec`, `audio_channels`, and
 `probed_at`. The detail response also carries `streams` — the full track list,
