@@ -536,8 +536,11 @@ func TestLoadDetailExposesFileNameNotPath(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
 	lib := mustLibrary(t, st)
+	// Built with the host separator: a hardcoded Windows path is not split by
+	// filepath.Base on Linux, and a path always matches the OS that scanned it.
+	path := filepath.Join("Media", "Anthology", "01 Magnetic Rose.mkv")
 	id, err := st.UpsertItem(ctx, ScanFile{
-		LibraryID: lib.ID, Path: `C:\Media\Anthology\01 Magnetic Rose.mkv`,
+		LibraryID: lib.ID, Path: path,
 		Kind: "movie", Title: "01 Magnetic Rose", SortTitle: "01 magnetic rose",
 		Container: "mkv",
 	})
