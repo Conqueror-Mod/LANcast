@@ -23,6 +23,20 @@ func genKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 	return pub, priv
 }
 
+// The embedded project key must decode to a valid Ed25519 public key. This
+// guards against a bad paste (wrong length, non-hex) that would silently make
+// first-party verification impossible. When the constant is intentionally empty,
+// ProjectPublicKey is nil and this is skipped.
+func TestEmbeddedProjectKeyIsValid(t *testing.T) {
+	k := ProjectPublicKey()
+	if k == nil {
+		t.Skip("no project key embedded")
+	}
+	if len(k) != ed25519.PublicKeySize {
+		t.Fatalf("embedded project key is %d bytes, want %d", len(k), ed25519.PublicKeySize)
+	}
+}
+
 func TestSignVerifyRoundTrip(t *testing.T) {
 	pub, priv := genKey(t)
 	wasm := []byte("\x00asm-not-real-but-opaque-to-verify")

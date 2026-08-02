@@ -11,6 +11,12 @@
 *.db-wal
 /data/
 
+# Plugin signing key material — the private key must NEVER be committed
+# (ADR 0021). Only the public half belongs in the repo, embedded in
+# internal/plugin/projectkey.go. Built bundles are release artifacts, not source.
+*.key
+*.lcplugin
+
 # Web client build output
 /web/dist/
 /web/node_modules/
