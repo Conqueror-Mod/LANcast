@@ -24,8 +24,11 @@ import (
 	"lancast/internal/transcode"
 )
 
-// Version is reported by GET /api/health.
-const Version = "0.2.0"
+// Version is reported by GET /api/health. It is a var, not a const, so a release
+// build can stamp the tag into it with `-ldflags -X lancast/internal/api.Version=vX.Y.Z`
+// (ADR 0016). An unstamped build reports "dev", which is the honest label for a
+// binary built straight from source.
+var Version = "dev"
 
 // APIVersion is the HTTP contract revision. It changes only when a new
 // /api/vN prefix ships, independently of the application Version (ADR 0018).

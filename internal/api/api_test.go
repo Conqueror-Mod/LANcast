@@ -150,11 +150,31 @@ func TestHealth(t *testing.T) {
 	}
 	var body map[string]any
 	decode(t, resp, &body)
-	if body["status"] != "ok" || body["version"] == "" {
-		t.Errorf("body = %v, want ok status and a version", body)
+	if body["status"] != "ok" {
+		t.Errorf("status = %v, want ok", body["status"])
+	}
+	// health reports the injectable build version verbatim, so the binary,
+	// /api/health, and the release tag cannot disagree (ADR 0016).
+	if body["version"] != Version {
+		t.Errorf("version = %v, want %q", body["version"], Version)
 	}
 	if body["api_version"] != float64(1) {
 		t.Errorf("api_version = %v, want 1", body["api_version"])
+	}
+}
+
+// A build injects Version via -ldflags -X; this proves health reflects whatever
+// that var holds, so the injected value flows through.
+func TestHealthReflectsVersionVar(t *testing.T) {
+	orig := Version
+	Version = "v9.9.9-test"
+	defer func() { Version = orig }()
+
+	h := newHarness(t)
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/health", nil), &body)
+	if body["version"] != "v9.9.9-test" {
+		t.Errorf("version = %v, want the injected value", body["version"])
 	}
 }
 
