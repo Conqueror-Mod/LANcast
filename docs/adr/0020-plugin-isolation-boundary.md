@@ -1,6 +1,6 @@
 # ADR 0020 — Plugin isolation boundary: WebAssembly
 
-Date: 2026-08-01 · Status: proposed
+Date: 2026-08-01 · Status: accepted
 
 ## Context
 
