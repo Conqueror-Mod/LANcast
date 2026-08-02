@@ -105,10 +105,11 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "version": "0.2.0", "api_version": 1 }
+{ "status": "ok", "version": "0.3.0", "api_version": 1 }
 ```
 
-`version` is the application release (semver); `api_version` is the HTTP
+`version` is the application release (semver), stamped from the release tag at
+build time — a build from source reports `dev`. `api_version` is the HTTP
 contract revision and changes only when a new `/api/vN` prefix ships.
 
 ---

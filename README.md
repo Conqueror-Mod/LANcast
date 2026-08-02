@@ -4,13 +4,14 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: M0–M3 built.** Scan a folder, browse it in a media-type-aware,
+> **Status: M0–M4 built.** Scan a folder, browse it in a media-type-aware,
 > filterable React client, click a title, and it plays anywhere — direct play,
 > remux, or transcode, with working seek and resume. Real metadata, artwork,
 > ratings (TMDB plus Rotten Tomatoes / Metacritic / IMDb via OMDb), subtitles,
 > multi-user accounts, and HTTPS. Corrections you make are locked and survive
-> rescans. **Plugins (M4) are the last milestone** and not yet built.
-> See [docs/roadmap.md](docs/roadmap.md) for what exists and what does not.
+> rescans. **Plugins (M4) are built** — a sandboxed WebAssembly runtime with
+> signed, capability-gated add-ons. See [docs/roadmap.md](docs/roadmap.md) for
+> what exists and what does not.
 
 ## Why
 
