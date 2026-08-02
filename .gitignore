@@ -3,7 +3,12 @@
 # cmd/lancastd/ source directory and silently excludes the entrypoint.
 /lancastd
 /lancastd.exe
+/lancast.exe
 /dist/
+
+# Installer build artifacts: the exes copied in from the release build and the
+# generated setup.exe. The .nsi script and welcome.bmp are committed source.
+installer/*.exe
 
 # Local state — never commit a library database
 *.db

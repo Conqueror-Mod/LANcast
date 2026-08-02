@@ -47,3 +47,18 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The Windows installer is built after the archives so a failure here still
+      # leaves a draft release with the archives + checksums. makensis runs on the
+      # Linux runner (no Windows toolchain needed); the setup.exe is uploaded to
+      # the same draft. First validated on the initial real tag.
+      - name: build and upload the Windows installer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y nsis
+          cp "$(find dist -name lancastd.exe | head -1)" installer/lancastd.exe
+          cp "$(find dist -name lancast.exe | head -1)" installer/lancast.exe
+          version="${GITHUB_REF_NAME#v}"
+          makensis -DVERSION="${version}" installer/lancast.nsi
+          gh release upload "${GITHUB_REF_NAME}" installer/LANcast-Setup-*.exe --clobber

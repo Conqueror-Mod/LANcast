@@ -12,7 +12,9 @@ approach as `internal/web/dist`):
 ## Regenerate
 
 `lancast.ico` — a tiny Go program using `golang.org/x/image/draw` (CatmullRom)
-downscales `LANcast_icon.png` to the four sizes and wraps them as PNG-in-ICO.
+downscales the master app icon **`web/public/icon-512.png`** to the four sizes and
+wraps them as PNG-in-ICO. (The PWA icon set in `web/public` is the source of
+truth for the app icon; the older art in this folder is not used for the exe.)
 
 The `.syso` — from the `.ico`, with no image work:
 
