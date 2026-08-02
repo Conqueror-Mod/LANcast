@@ -112,10 +112,19 @@ Build a distributable binary:
 go build -o lancastd ./cmd/lancastd
 ```
 
+## Install a release
+
+Releases ship two executables — `lancastd` (the server) and `lancast` (the
+launcher you open) — with no runtime to install. On Windows the installer
+registers the server as a service and adds a shortcut; on Linux/NAS it runs as a
+systemd service. Full steps, including the one data-directory rule that matters
+most, are in **[docs/install.md](docs/install.md)**.
+
 ## Documentation
 
 | Document | What it covers |
 |---|---|
+| [docs/install.md](docs/install.md) | Installing a release, the service, and the data-dir rule |
 | [docs/architecture.md](docs/architecture.md) | Package map, request and scan lifecycles |
 | [docs/api.md](docs/api.md) | HTTP contract — the promise clients depend on |
 | [docs/design.md](docs/design.md) | Visual design system, the gold rule, keyboard model |
