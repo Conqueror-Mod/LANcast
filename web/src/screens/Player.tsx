@@ -63,6 +63,12 @@ export function Player() {
   // zero point moves. Stays 0 for direct play.
   const [subOffset, setSubOffset] = useState(0);
   const [muted, setMuted] = useState(false);
+  // Volume persists across titles and sessions: having to re-set it on every
+  // playback is the kind of small friction that makes a player feel unfinished.
+  const [volume, setVolume] = useState(() => {
+    const saved = Number(localStorage.getItem("lancast:volume"));
+    return Number.isFinite(saved) && saved > 0 && saved <= 1 ? saved : 1;
+  });
   const [chromeVisible, setChromeVisible] = useState(true);
   const [note, setNote] = useState("");
   const [subKey, setSubKey] = useState<string | null>(null);
@@ -211,6 +217,21 @@ export function Player() {
     setMuted(v.muted);
   }, []);
 
+  // Apply and remember the level. Setting a level unmutes, which is what a user
+  // dragging the slider up plainly means.
+  const changeVolume = useCallback((next: number) => {
+    const clamped = Math.min(1, Math.max(0, next));
+    const v = videoRef.current;
+    setVolume(clamped);
+    localStorage.setItem("lancast:volume", String(clamped));
+    if (!v) return;
+    v.volume = clamped;
+    if (clamped > 0 && v.muted) {
+      v.muted = false;
+      setMuted(false);
+    }
+  }, []);
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -249,6 +270,14 @@ export function Player() {
           e.preventDefault();
           seekBy(10);
           break;
+        case "ArrowUp":
+          e.preventDefault();
+          changeVolume((muted ? 0 : volume) + 0.05);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          changeVolume((muted ? 0 : volume) - 0.05);
+          break;
         case "[":
           cycleSub(-1);
           break;
@@ -261,7 +290,7 @@ export function Player() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [togglePlay, toggleFullscreen, toggleMute, seekBy, cycleSub]);
+  }, [togglePlay, toggleFullscreen, toggleMute, seekBy, cycleSub, changeVolume, muted, volume]);
 
   // A browser will not swap a <track> src reliably once parsed, so the active
   // track is keyed and remounted on change; here it is switched to showing.
@@ -303,6 +332,10 @@ export function Player() {
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
           if (isFinite(v.duration)) setDuration(v.duration);
+          // The element resets to full volume on every new source, so the
+          // remembered level has to be re-applied — including across a transcode
+          // seek, which reloads the source.
+          v.volume = volume;
           // Resume: for direct play the element carries the offset itself.
           if (!transcoding.current && startedFrom.current > 0) {
             v.currentTime = startedFrom.current;
@@ -370,9 +403,26 @@ export function Player() {
             >
               {playing ? "❚❚" : "▶"}
             </button>
-            <button className="player__icon" onClick={toggleMute} aria-label="Mute">
-              {muted ? "🔇" : "🔊"}
-            </button>
+            <div className="player__volume">
+              <button
+                className="player__icon"
+                onClick={toggleMute}
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
+                {muted || volume === 0 ? "🔇" : "🔊"}
+              </button>
+              <input
+                className="player__volume-slider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={muted ? 0 : volume}
+                onChange={(e) => changeVolume(Number(e.target.value))}
+                aria-label="Volume"
+                title={`Volume ${Math.round((muted ? 0 : volume) * 100)}%`}
+              />
+            </div>
             <span className="player__time">
               {clock(displayTime)} <span className="player__time-sep">/</span>{" "}
               {clock(totalDuration)}

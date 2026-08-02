@@ -81,6 +81,14 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
           {item.match_state ? ` · ${item.match_state}` : ""}
         </p>
 
+        {/* Which file this actually is. Correcting a match is guesswork without
+            it when several rows share a generic title. */}
+        {item.file_name && (
+          <p className="fixmatch__file" title={item.file_name}>
+            {item.file_name}
+          </p>
+        )}
+
         {locked.length > 0 && (
           <div className="fixmatch__locks">
             <span className="fixmatch__locks-label">Locked:</span>

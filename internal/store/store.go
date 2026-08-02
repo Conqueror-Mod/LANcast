@@ -202,6 +202,13 @@ type Item struct {
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
 
+	// FileName is the base name of the file, detail-only. The full path stays
+	// private — it would disclose the server's filesystem layout — but the name
+	// alone is what identifies a title whose metadata is wrong, and without it a
+	// mis-scanned file ("01 Magnetic Rose") cannot be told apart from its
+	// siblings well enough to correct it.
+	FileName string `json:"file_name,omitempty"`
+
 	// Detail-only; nil on list responses.
 	Genres       []string     `json:"genres,omitempty"`
 	Credits      []Credit     `json:"credits,omitempty"`

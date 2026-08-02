@@ -327,3 +327,14 @@
     font-size: 30px;
   }
 }
+
+/* The source filename. Quiet by default — it is diagnostic, not headline
+   information — but selectable so it can be copied when correcting a match. */
+.detail__file {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  user-select: text;
+  overflow-wrap: anywhere;
+}

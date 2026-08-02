@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -583,6 +584,10 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 	}
 	if it.Ratings, err = s.ItemRatings(ctx, it.ID); err != nil {
 		return err
+	}
+	// The name only — never the directory (see Item.FileName).
+	if it.Path != "" {
+		it.FileName = filepath.Base(it.Path)
 	}
 	return nil
 }
