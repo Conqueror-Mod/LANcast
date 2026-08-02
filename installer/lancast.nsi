@@ -57,6 +57,17 @@ Section "LANcast"
   ; service is absent, which is fine and ignored.
   nsExec::ExecToLog 'sc.exe stop lancastd'
   nsExec::ExecToLog 'sc.exe delete lancastd'
+
+  ; Stop anything still running, under either the old or the current names.
+  ; Deleting the files is not enough: a tray client from the previous version
+  ; keeps running, holds the single-instance lock so the new one will not start,
+  ; and leaves the user with an old build they cannot see they are using.
+  ; taskkill reports an error when nothing matches, which is fine and ignored.
+  nsExec::ExecToLog 'taskkill /F /IM lancast.exe'
+  nsExec::ExecToLog 'taskkill /F /IM lancastd.exe'
+  nsExec::ExecToLog 'taskkill /F /IM LANcast-Client.exe'
+  nsExec::ExecToLog 'taskkill /F /IM LANcast-Server.exe'
+
   Delete "$INSTDIR\lancastd.exe"
   Delete "$INSTDIR\lancast.exe"
 
@@ -85,9 +96,13 @@ Section "LANcast"
 SectionEnd
 
 Section "Uninstall"
-  ; Stop and remove the service before deleting its binary.
+  ; Stop and remove the service before deleting its binary, then stop anything
+  ; still running interactively — a tray client holds its executable open, and
+  ; Delete silently fails on a file in use.
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service stop'
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service uninstall'
+  nsExec::ExecToLog 'taskkill /F /IM LANcast-Client.exe'
+  nsExec::ExecToLog 'taskkill /F /IM LANcast-Server.exe'
 
   Delete "$INSTDIR\LANcast-Server.exe"
   Delete "$INSTDIR\LANcast-Client.exe"

@@ -193,6 +193,12 @@ group is not priority.
 
 ### System, operations and diagnostics
 
+- **Activity status in the UI** — what the server is doing right now, shown in
+  the interface rather than a separate window or log: items being added to a
+  library, metadata being scanned, artwork fetched, files probed. The Plex
+  model. The pieces already exist behind `/api/libraries/{id}/scan`,
+  `/api/enrich`, and `/api/probe`; what is missing is one place in the UI that
+  surfaces them continuously.
 - **Crash reporting.**
 - **Debug logging** and an **internal log viewer.**
 - **Clear cache and data** and **reset settings** actions.
