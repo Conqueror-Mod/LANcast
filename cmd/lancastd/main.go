@@ -113,24 +113,14 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		return fmt.Errorf("plugin runtime: %w", err)
 	}
 	defer pluginRT.Close(context.Background())
-	installed, err := st.ListInstalledPlugins(context.Background())
-	if err != nil {
-		return fmt.Errorf("list installed plugins: %w", err)
-	}
-	records := make([]plugin.InstalledRecord, 0, len(installed))
-	for _, ip := range installed {
-		records = append(records, plugin.InstalledRecord{
-			Name: ip.Name, Digest: ip.Digest, Enabled: ip.Enabled,
-			GrantedHTTP: ip.GrantedHTTP, GrantedSecrets: ip.GrantedSecrets,
-		})
-	}
-	plugins := pluginRT.LoadInstalled(context.Background(),
-		filepath.Join(cfg.DataDir, "plugins"), records, plugin.KnownBadDigests)
+	pluginsRoot := filepath.Join(cfg.DataDir, "plugins")
 
-	// The registry is rebuilt whenever settings change so a newly entered API
-	// key takes effect without a restart.
+	// The registry is rebuilt whenever settings change (a newly entered key) or
+	// plugins change (install/grant/enable/remove). `plugins` is captured by both
+	// closures, so reassigning it and rebuilding picks up the new set.
 	reg := meta.NewRegistry()
 	var regMu sync.Mutex
+	var plugins []*plugin.Plugin
 	rebuild := func(s config.Settings) {
 		regMu.Lock()
 		defer regMu.Unlock()
@@ -153,7 +143,29 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		plugin.RegisterInto(next, plugins, log)
 		*reg = *next
 	}
-	rebuild(settings.Get())
+
+	reloadPlugins := func() error {
+		installed, err := st.ListInstalledPlugins(context.Background())
+		if err != nil {
+			return err
+		}
+		records := make([]plugin.InstalledRecord, 0, len(installed))
+		for _, ip := range installed {
+			records = append(records, plugin.InstalledRecord{
+				Name: ip.Name, Digest: ip.Digest, Enabled: ip.Enabled,
+				GrantedHTTP: ip.GrantedHTTP, GrantedSecrets: ip.GrantedSecrets,
+			})
+		}
+		loaded := pluginRT.LoadInstalled(context.Background(), pluginsRoot, records, plugin.KnownBadDigests)
+		regMu.Lock()
+		plugins = loaded
+		regMu.Unlock()
+		rebuild(settings.Get())
+		return nil
+	}
+	if err := reloadPlugins(); err != nil {
+		return fmt.Errorf("load plugins: %w", err)
+	}
 
 	if settings.Get().TMDBKey == "" {
 		// Not a warning: running without a key is a supported configuration,
@@ -238,7 +250,8 @@ func run(addr, dataDir string, log *slog.Logger) error {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))
 			},
-			Enrich: enrichSoon,
+			ReloadPlugins: reloadPlugins,
+			Enrich:        enrichSoon,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.

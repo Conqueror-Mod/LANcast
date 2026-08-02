@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -80,6 +82,28 @@ func (s *Store) ListInstalledPlugins(ctx context.Context) ([]InstalledPlugin, er
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// GetInstalledPlugin returns one plugin by name, or ErrNotFound.
+func (s *Store) GetInstalledPlugin(ctx context.Context, name string) (InstalledPlugin, error) {
+	var p InstalledPlugin
+	var enabled int
+	var httpJSON, secretsJSON string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT name, version, kind, digest, signer, enabled, granted_http, granted_secrets, installed_at
+		FROM installed_plugin WHERE name = ?`, name).Scan(
+		&p.Name, &p.Version, &p.Kind, &p.Digest, &p.Signer,
+		&enabled, &httpJSON, &secretsJSON, &p.InstalledAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return p, ErrNotFound
+	}
+	if err != nil {
+		return p, fmt.Errorf("get plugin: %w", err)
+	}
+	p.Enabled = enabled != 0
+	_ = json.Unmarshal([]byte(httpJSON), &p.GrantedHTTP)
+	_ = json.Unmarshal([]byte(secretsJSON), &p.GrantedSecrets)
+	return p, nil
 }
 
 // SetPluginEnabled flips a plugin on or off. The change takes effect on the next

@@ -656,6 +656,65 @@ runs and nothing is fetched.
 
 ---
 
+## Plugins
+
+> M4. Trust model: [ADR 0021](adr/0021-plugin-distribution-and-trust.md).
+> **Admin only.** Every endpoint requires an admin session.
+
+A plugin is distributed as a signed `.lcplugin` bundle. Two trust layers apply
+independently: **provenance** (the `signer` — `first_party`, `pinned`, or
+`unsigned`) and **authority** (the capability *grant*, which the manifest can
+only *request*). Install is deliberately **two steps** — upload to inspect, then
+grant to activate — so the capability approval is an explicit act.
+
+### `GET /api/plugins`
+
+Installed plugins, each showing requested vs granted capabilities.
+
+```json
+{ "plugins": [ {
+  "name": "omdb", "version": "0.1.0", "kind": "rating_source",
+  "signer": "first_party", "enabled": true, "digest": "101e40cd…",
+  "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "granted":   { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "installed_at": 1754064000 } ] }
+```
+
+### `POST /api/plugins`
+
+Upload a `.lcplugin` (raw bytes, up to 32 MiB). The bundle is **verified before
+anything is compiled**; a tampered or unknown-key bundle is `400`. On success the
+plugin is **staged disabled with an empty grant**, and the response reports what
+it *requests* so the client can present the approval dialog.
+
+```json
+{ "name": "omdb", "version": "0.1.0", "kind": "rating_source",
+  "signer": "unsigned", "enabled": false, "digest": "101e40cd…",
+  "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "granted":   { "http": [], "secrets": [] } }
+```
+
+### `POST /api/plugins/{name}/grant`
+
+Approve capabilities and activate. The grant **must be a subset of what the
+manifest requests** (`400` otherwise) — the API cannot hand a plugin more than it
+asked for. The recorded grant, not the manifest, is the effective authority, and
+it takes effect immediately (the registry reloads).
+
+```json
+{ "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] }
+```
+
+### `POST /api/plugins/{name}/enable` · `/disable`
+
+Flip a plugin on or off. `204`; the registry reloads. `404` if unknown.
+
+### `DELETE /api/plugins/{name}`
+
+Forget a plugin and delete its unpacked files. `204`, `404` if unknown.
+
+---
+
 ## Theme audio
 
 > Requires M2 metadata. Specified here because it shapes the item detail
