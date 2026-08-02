@@ -4,7 +4,7 @@ import {
   useQueryClient,
   keepPreviousData,
 } from "@tanstack/react-query";
-import { apiGet, apiPost, apiSend } from "./client";
+import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type {
   AuthStatus,
   AuthUser,
@@ -14,6 +14,8 @@ import type {
   ItemsPage,
   Library,
   MatchCandidate,
+  Plugin,
+  PluginCaps,
   ScanStatus,
   Settings,
   SettingsUpdate,
@@ -515,5 +517,61 @@ export function useFacets(libraryID: number) {
       apiGet<Facets>(`/api/libraries/${libraryID}/facets`, signal),
     enabled: libraryID > 0,
     staleTime: 30_000,
+  });
+}
+
+// ------------------------------------------------------------------ plugins (admin)
+
+// Installed plugins with their signer, enabled state, and requested vs granted
+// capabilities (ADR 0021). Admin-only; callers pass their admin status as
+// `enabled` so a member never fires the 403.
+export function usePlugins(enabled = true) {
+  return useQuery({
+    queryKey: ["plugins"],
+    queryFn: ({ signal }) =>
+      apiGet<{ plugins: Plugin[] }>("/api/plugins", signal).then((r) => r.plugins),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+// Step one of install: upload a .lcplugin, which is verified and staged disabled.
+// Returns what it requests so the UI can present the capability-approval dialog.
+export function useUploadPlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ArrayBuffer) => apiUpload<Plugin>("/api/plugins", data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+// Step two: approve a subset of the requested capabilities and activate.
+export function useGrantPlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; caps: PluginCaps }) =>
+      apiPost<Plugin>(`/api/plugins/${encodeURIComponent(args.name)}/grant`, args.caps),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+export function useSetPluginEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; enabled: boolean }) =>
+      apiSend(
+        `/api/plugins/${encodeURIComponent(args.name)}/${args.enabled ? "enable" : "disable"}`,
+        "POST",
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
+export function useRemovePlugin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiSend(`/api/plugins/${encodeURIComponent(name)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
   });
 }
