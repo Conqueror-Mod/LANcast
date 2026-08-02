@@ -44,9 +44,13 @@ type TrustedKeys struct {
 // returned but not yet compiled — verification happens first, always.
 type VerifiedBundle struct {
 	Manifest Manifest
-	Wasm     []byte
-	Signer   Signer
-	Digest   string // hex SHA-256 of the canonical content; the bundle's identity
+	// ManifestBytes is the exact manifest as it was signed, kept so the digest can
+	// be recomputed byte-for-byte at load time (a re-marshaled manifest would not
+	// reproduce the same hash).
+	ManifestBytes []byte
+	Wasm          []byte
+	Signer        Signer
+	Digest        string // hex SHA-256 of the canonical content; the bundle's identity
 }
 
 // digest is SHA-256 over a length-prefixed manifest||wasm, so neither field can
@@ -127,10 +131,11 @@ func VerifyBundle(data []byte, keys TrustedKeys) (*VerifiedBundle, error) {
 	}
 
 	return &VerifiedBundle{
-		Manifest: m,
-		Wasm:     wasm,
-		Signer:   signer,
-		Digest:   hex.EncodeToString(sum),
+		Manifest:      m,
+		ManifestBytes: manifestBytes,
+		Wasm:          wasm,
+		Signer:        signer,
+		Digest:        hex.EncodeToString(sum),
 	}, nil
 }
 

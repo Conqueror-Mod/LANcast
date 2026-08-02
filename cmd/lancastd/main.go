@@ -113,7 +113,19 @@ func run(addr, dataDir string, log *slog.Logger) error {
 		return fmt.Errorf("plugin runtime: %w", err)
 	}
 	defer pluginRT.Close(context.Background())
-	plugins := pluginRT.LoadAll(context.Background(), filepath.Join(cfg.DataDir, "plugins"))
+	installed, err := st.ListInstalledPlugins(context.Background())
+	if err != nil {
+		return fmt.Errorf("list installed plugins: %w", err)
+	}
+	records := make([]plugin.InstalledRecord, 0, len(installed))
+	for _, ip := range installed {
+		records = append(records, plugin.InstalledRecord{
+			Name: ip.Name, Digest: ip.Digest, Enabled: ip.Enabled,
+			GrantedHTTP: ip.GrantedHTTP, GrantedSecrets: ip.GrantedSecrets,
+		})
+	}
+	plugins := pluginRT.LoadInstalled(context.Background(),
+		filepath.Join(cfg.DataDir, "plugins"), records, plugin.KnownBadDigests)
 
 	// The registry is rebuilt whenever settings change so a newly entered API
 	// key takes effect without a restart.
