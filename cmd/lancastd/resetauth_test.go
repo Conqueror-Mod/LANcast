@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -67,19 +68,30 @@ func TestExistingDatabasesDeduplicates(t *testing.T) {
 	}
 }
 
+// Paths are built with filepath so this exercises the host's real separator
+// semantics. Hardcoding Windows spellings passed on Windows and failed on
+// Linux, where a backslash is an ordinary character and Clean leaves the "."
+// element in place — the test asserted the platform rather than the behaviour.
 func TestSameDir(t *testing.T) {
+	base := filepath.Join("C:", "ProgramData", "LANcast")
+	sep := string(filepath.Separator)
+
 	same := [][2]string{
-		{`C:\ProgramData\LANcast`, `C:\ProgramData\LANcast`},
-		{`C:\ProgramData\LANcast`, `C:\programdata\lancast`},
-		{`C:\ProgramData\LANcast\`, `C:\ProgramData\LANcast`},
-		{`C:\ProgramData\.\LANcast`, `C:\ProgramData\LANcast`},
+		{base, base},
+		// Case-insensitive: Windows paths differing only in case are one
+		// directory, and naming it as an alternative would be noise.
+		{base, strings.ToLower(base)},
+		{base + sep, base},
+		{filepath.Join("C:", "ProgramData", ".", "LANcast"), base},
 	}
 	for _, p := range same {
 		if !sameDir(p[0], p[1]) {
 			t.Errorf("sameDir(%q, %q) = false, want true", p[0], p[1])
 		}
 	}
-	if sameDir(`C:\ProgramData\LANcast`, `C:\Users\Chris\AppData\Roaming\LANcast`) {
+
+	other := filepath.Join("C:", "Users", "Chris", "AppData", "Roaming", "LANcast")
+	if sameDir(base, other) {
 		t.Error("sameDir treated two different data directories as one")
 	}
 }
