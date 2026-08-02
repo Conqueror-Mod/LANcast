@@ -58,6 +58,13 @@ server is still loopback-bound, so the client can explain why other devices
 cannot connect yet. A wrong username and a wrong password are reported
 identically as `401 unauthorized`.
 
+`lan_enabled` reports whether the socket actually reaches beyond this machine —
+not whether a password is set. An unsecured server is always `false`, because
+it is forced onto `127.0.0.1`. A secured server the operator deliberately bound
+to a loopback address is also `false`, and stays plain HTTP: TLS turns on when
+the server becomes reachable by someone else, which is the same boundary that
+gates LAN binding ([ADR 0014](adr/0014-transport-security.md)).
+
 ### Roles
 
 Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).
