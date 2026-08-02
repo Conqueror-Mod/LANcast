@@ -28,8 +28,11 @@ RequestExecutionLevel admin
 !define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp"
 !define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome.bmp"
 
-!define MUI_WELCOMEPAGE_TITLE "LANcast$\r$\nYour gateway to everything on your LAN"
-!define MUI_WELCOMEPAGE_TEXT "Setup will install LANcast on your computer.$\r$\n$\r$\nLANcast runs as a background service and starts with Windows. When Setup finishes, open the LANcast shortcut to get to your library — no terminal required.$\r$\n$\r$\nClick Next to continue."
+; The title control is a fixed height and renders large and bold, so anything
+; that wraps past two lines is clipped. The name goes there alone; the tagline
+; leads the body text, which has room and a smaller font.
+!define MUI_WELCOMEPAGE_TITLE "Welcome to LANcast"
+!define MUI_WELCOMEPAGE_TEXT "Your gateway to everything on your LAN.$\r$\n$\r$\nSetup will install LANcast on your computer.$\r$\n$\r$\nLANcast runs as a background service and starts with Windows. When Setup finishes, open the LANcast shortcut to get to your library — no terminal required.$\r$\n$\r$\nClick Next to continue."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
