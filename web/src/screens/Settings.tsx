@@ -23,7 +23,13 @@ import {
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { ApiFailure } from "@/api/client";
-import type { AuthUser, Library, Plugin } from "@/api/types";
+import type {
+  AuthUser,
+  Library,
+  Plugin,
+  Settings as SettingsType,
+  SettingsUpdate,
+} from "@/api/types";
 import "./Settings.css";
 
 const KEYS: [string, string][] = [
@@ -521,6 +527,7 @@ function AdminSections() {
               pending={update.isPending}
               onSave={(v) => update.mutate({ omdb_key: v })}
             />
+            <MediaToolsRow settings={settings} update={update} />
             <label className="set-toggle">
               <input
                 type="checkbox"
@@ -591,6 +598,58 @@ function KeyboardSection() {
         ))}
       </div>
     </section>
+  );
+}
+
+// ffmpeg/ffprobe status. This is a row rather than a hidden detail because its
+// absence is otherwise invisible: nothing gets probed, every file is
+// direct-played, and whatever the browser cannot decode fails with no
+// explanation — which is exactly how a whole library went unplayable unnoticed.
+function MediaToolsRow({
+  settings,
+  update,
+}: {
+  settings: SettingsType;
+  update: { mutate: (u: SettingsUpdate) => void; isPending: boolean };
+}) {
+  const tools = settings.media_tools;
+  const ok = tools?.probe_available;
+  const [value, setValue] = useState("");
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">
+          Media tools{" "}
+          <span className={"addon-signer addon-signer--" + (ok ? "first_party" : "unsigned")}>
+            {ok ? "found" : "missing"}
+          </span>
+        </div>
+        <div className="set-row__sub">
+          {ok
+            ? `ffmpeg and ffprobe available${tools.directory ? " · " + tools.directory : " on PATH"}`
+            : "Without ffmpeg, LANcast cannot inspect or convert media — files play only if your browser already supports them. Install ffmpeg, or set the folder containing it here."}
+        </div>
+      </div>
+      <div className="set-row__actions">
+        <input
+          className="set-input set-input--wide"
+          type="text"
+          placeholder={tools?.directory || "Folder containing ffmpeg"}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <button
+          className="set-btn"
+          disabled={update.isPending || !value.trim()}
+          onClick={() => {
+            update.mutate({ ffmpeg_dir: value.trim() });
+            setValue("");
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
   );
 }
 

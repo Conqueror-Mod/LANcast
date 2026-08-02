@@ -167,6 +167,13 @@ export interface Settings {
   tmdb: { configured: boolean };
   opensubtitles: { configured: boolean };
   omdb: { configured: boolean };
+  // Whether the server can inspect and convert media. Without these every file
+  // is direct-played, and anything the browser cannot decode fails silently.
+  media_tools: {
+    probe_available: boolean;
+    transcode_available: boolean;
+    directory: string;
+  };
   rate_per_sec: number;
   write_nfo: boolean;
   auto_enrich: boolean;
@@ -177,6 +184,7 @@ export interface SettingsUpdate {
   tmdb_key?: string;
   opensubtitles_key?: string;
   omdb_key?: string;
+  ffmpeg_dir?: string;
   rate_per_sec?: number;
   write_nfo?: boolean;
   auto_enrich?: boolean;
