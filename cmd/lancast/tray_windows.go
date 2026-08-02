@@ -24,7 +24,7 @@ func runLauncherTray(l *launcher) {
 			for {
 				select {
 				case <-mOpen.ClickedCh:
-					_ = desktop.OpenBrowser(desktop.UIURL(l.addr))
+					_ = desktop.OpenBrowser(desktop.ResolvedURL(l.addr))
 				case <-mQuit.ClickedCh:
 					systray.Quit()
 					return

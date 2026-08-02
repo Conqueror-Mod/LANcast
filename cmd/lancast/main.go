@@ -25,7 +25,7 @@ func main() {
 	// second tray icon.
 	release, held, err := singleton.Acquire(singleton.Client)
 	if err == nil && !held {
-		_ = desktop.OpenBrowser(desktop.UIURL(*addr))
+		_ = desktop.OpenBrowser(desktop.ResolvedURL(*addr))
 		return
 	}
 	defer release()
@@ -35,7 +35,7 @@ func main() {
 		alert("LANcast", err.Error())
 		os.Exit(1)
 	}
-	if err := desktop.OpenBrowser(desktop.UIURL(l.addr)); err != nil {
+	if err := desktop.OpenBrowser(desktop.ResolvedURL(l.addr)); err != nil {
 		alert("LANcast", "could not open the browser: "+err.Error())
 	}
 	runLauncherTray(l)

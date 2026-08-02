@@ -56,3 +56,40 @@ func TestServerRunning(t *testing.T) {
 		t.Error("ServerRunning on a dead port = true, want false")
 	}
 }
+
+// The bug this guards: LANcast serves HTTPS with a self-signed certificate once
+// an account exists (ADR 0014). A probe that follows the http->https redirect
+// and verifies the certificate fails, and the launcher read that failure as "the
+// server is down" — then tried to start a second one and gave up.
+func TestServerRunningAcceptsSelfSignedHTTPS(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "https://")
+	if !ServerRunning(addr) {
+		t.Error("a self-signed HTTPS server was reported as not running")
+	}
+	if got := ResolvedURL(addr); !strings.HasPrefix(got, "https://") {
+		t.Errorf("ResolvedURL = %q, want the https scheme the server actually serves", got)
+	}
+}
+
+// A plain-http server still resolves to http — the probe must not upgrade a
+// server that is not serving TLS.
+func TestResolvedURLKeepsHTTPWhenThatIsWhatServes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	if got := ResolvedURL(addr); !strings.HasPrefix(got, "http://") {
+		t.Errorf("ResolvedURL = %q, want http", got)
+	}
+}
