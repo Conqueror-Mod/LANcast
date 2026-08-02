@@ -197,3 +197,227 @@ func TestProfileMatchingIsCaseInsensitive(t *testing.T) {
 		t.Errorf("Method = %q, want case-insensitive matching", d.Method)
 	}
 }
+
+// --- audio track selection ------------------------------------------------
+//
+// The decision and ffmpeg's -map must be about the same stream. Deciding
+// against the default AAC track and then mapping the DTS track produces
+// `-c:a copy` on undecodable audio: the player runs, and the film is silent.
+
+func track(index int, codec string, ch int, isDefault bool) Stream {
+	return Stream{Index: index, Kind: KindAudio, Codec: codec, Channels: ch, Default: isDefault}
+}
+
+func TestChosenAudioTrackDrivesTheDecision(t *testing.T) {
+	r := result("matroska",
+		Stream{Index: 0, Kind: KindVideo, Codec: "h264", Height: 1080, Default: true},
+		track(1, "aac", 2, true),
+		track(2, "dts", 6, false),
+	)
+
+	if d := DecideTrack(r, BrowserProfile(), 2); d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q for the DTS track, want encode (%s)", d.AudioAction, d.Reason)
+	}
+	if d := DecideTrack(r, BrowserProfile(), 1); d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q for the AAC track, want copy (%s)", d.AudioAction, d.Reason)
+	}
+}
+
+// A non-default AAC track must not inherit the default track's transcode.
+func TestChoosingACompatibleTrackAvoidsAnEncode(t *testing.T) {
+	r := result("mp4",
+		Stream{Index: 0, Kind: KindVideo, Codec: "h264", Height: 1080, Default: true},
+		track(1, "truehd", 8, true),
+		track(2, "aac", 6, false),
+	)
+
+	if d := DecideTrack(r, BrowserProfile(), 2); d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play — the chosen track is AAC", d.Method, d.Reason)
+	}
+}
+
+func TestDecideUsesTheDefaultTrack(t *testing.T) {
+	r := result("mp4",
+		Stream{Index: 0, Kind: KindVideo, Codec: "h264", Height: 1080, Default: true},
+		track(1, "dts", 6, true),
+		track(2, "aac", 2, false),
+	)
+	if d := Decide(r, BrowserProfile()); d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q, want encode — the default track is DTS", d.AudioAction)
+	}
+}
+
+func TestAudioByIndexIgnoresNonAudioStreams(t *testing.T) {
+	r := result("mp4",
+		Stream{Index: 0, Kind: KindVideo, Codec: "h264", Height: 1080},
+		track(1, "aac", 2, true),
+	)
+	if s := r.AudioByIndex(0); s != nil {
+		t.Errorf("AudioByIndex(0) returned the video stream: %+v", s)
+	}
+	if s := r.AudioByIndex(9); s != nil {
+		t.Errorf("AudioByIndex(9) = %+v, want nil for a track that does not exist", s)
+	}
+	if s := r.AudioByIndex(1); s == nil || s.Codec != "aac" {
+		t.Errorf("AudioByIndex(1) = %+v, want the AAC track", s)
+	}
+}
+
+// --- container muxability -------------------------------------------------
+//
+// "The client can decode this codec" is not "MP4 can carry it". Copying a
+// stream into a container that cannot hold it does not degrade playback —
+// ffmpeg refuses to start and the player dies with no reason given.
+
+func TestVorbisIsNotCopiedIntoMP4(t *testing.T) {
+	// Vorbis is in the browser profile and genuinely plays — in WebM.
+	d := Decide(result("matroska", video("h264", 1080), audio("vorbis", 2)), BrowserProfile())
+	if d.Method == Remux || d.AudioAction != "encode" {
+		t.Errorf("decision = %+v, want an audio encode — Vorbis cannot be muxed into MP4", d)
+	}
+	if d.VideoAction != "copy" {
+		t.Errorf("VideoAction = %q, want copy — only the audio needs work", d.VideoAction)
+	}
+}
+
+func TestVP8IsNotCopiedIntoMP4(t *testing.T) {
+	d := Decide(result("matroska", video("vp8", 720), audio("aac", 2)), BrowserProfile())
+	if d.Method == Remux || d.VideoAction != "encode" {
+		t.Errorf("decision = %+v, want a video encode — VP8 cannot be muxed into MP4", d)
+	}
+}
+
+// The subtle one: FLAC in fragmented MP4 is legal by spec and unplayable in
+// enough browsers that copying it is a coin toss. Re-encoding costs nothing.
+func TestFLACIsNotCopiedIntoMP4(t *testing.T) {
+	d := Decide(result("matroska", video("h264", 1080), audio("flac", 2)), BrowserProfile())
+	if d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q (%s), want encode", d.AudioAction, d.Reason)
+	}
+	if d.VideoAction != "copy" {
+		t.Errorf("VideoAction = %q, want copy", d.VideoAction)
+	}
+}
+
+// A WebM the browser can already play must still direct-play: the mux rules
+// apply to the rewrap target, not to a file nobody is rewrapping.
+func TestWebMWithVorbisStillDirectPlays(t *testing.T) {
+	d := Decide(result("webm", video("vp8", 720), audio("vorbis", 2)), BrowserProfile())
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+func TestMuxBlockedDecisionsStillExplainThemselves(t *testing.T) {
+	cases := []*Result{
+		result("matroska", video("h264", 1080), audio("vorbis", 2)),
+		result("matroska", video("vp8", 720), audio("aac", 2)),
+		result("matroska", video("h264", 1080), audio("flac", 2)),
+	}
+	for _, r := range cases {
+		if d := Decide(r, BrowserProfile()); d.Reason == "" {
+			t.Errorf("no reason given for %s", r.Container)
+		}
+	}
+}
+
+// --- bit depth ------------------------------------------------------------
+
+// pix_fmt is the reliable signal; a probe that reports it must be believed
+// even when the profile name says nothing.
+func TestTenBitDetectedFromPixFmt(t *testing.T) {
+	s := video("h264", 1080)
+	s.PixFmt = "yuv420p10le"
+
+	if d := Decide(result("mp4", s, audio("aac", 2)), BrowserProfile()); d.VideoAction != "encode" {
+		t.Errorf("VideoAction = %q, want encode for 10-bit H.264 (%s)", d.VideoAction, d.Reason)
+	}
+}
+
+// The old substring test matched any profile containing "10". A false
+// positive here is a needless full re-encode on every file that has one.
+func TestProfileNamesContainingTenAreNotAllTenBit(t *testing.T) {
+	s := video("h264", 1080)
+	s.Profile = "High"
+	s.PixFmt = "yuv420p"
+
+	if d := Decide(result("mp4", s, audio("aac", 2)), BrowserProfile()); d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play for 8-bit High", d.Method, d.Reason)
+	}
+}
+
+// 10-bit is an H.264 problem specifically. HEVC, VP9 and AV1 carry it fine,
+// and applying the rule to them would re-encode most modern 4K files.
+func TestTenBitAV1IsNotPenalised(t *testing.T) {
+	s := video("av1", 2160)
+	s.PixFmt = "yuv420p10le"
+
+	if d := Decide(result("mp4", s, audio("aac", 2)), BrowserProfile()); d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play — 10-bit AV1 is fine", d.Method, d.Reason)
+	}
+}
+
+// A video encode is no reason to re-encode good audio alongside it. Copying
+// costs nothing and avoids a second lossy generation.
+func TestCompatibleAudioIsCopiedThroughAVideoEncode(t *testing.T) {
+	d := Decide(result("matroska", video("hevc", 2160), audio("aac", 6)), BrowserProfile())
+	if d.VideoAction != "encode" {
+		t.Fatalf("VideoAction = %q, want encode", d.VideoAction)
+	}
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q, want copy — the AAC track is fine", d.AudioAction)
+	}
+}
+
+// --- named client profiles ------------------------------------------------
+
+func TestProfileByNameFallsBackToBrowser(t *testing.T) {
+	for _, name := range []string{"", "nonsense", "  "} {
+		if got := ProfileByName(name).Name; got != "browser" {
+			t.Errorf("ProfileByName(%q) = %q, want the conservative default", name, got)
+		}
+	}
+	if got := ProfileByName("SAFARI").Name; got != "safari" {
+		t.Errorf("ProfileByName is case-sensitive: got %q", got)
+	}
+}
+
+// The gap that costs the most: HEVC against the default profile is a full
+// video re-encode, and Safari decodes it in hardware.
+func TestHEVCDirectPlaysOnSafariAndTranscodesOnTheDefault(t *testing.T) {
+	r := result("mp4", video("hevc", 2160), audio("aac", 6))
+
+	if d := Decide(r, SafariProfile()); d.Method != DirectPlay {
+		t.Errorf("safari: Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+	if d := Decide(r, BrowserProfile()); d.VideoAction != "encode" {
+		t.Errorf("browser: VideoAction = %q, want encode — HEVC is not universally decodable", d.VideoAction)
+	}
+}
+
+// AC-3 in MP4 plays on Safari, and is muxable, so a rewrap must not become an
+// audio encode.
+func TestAC3RemuxesRatherThanEncodesOnSafari(t *testing.T) {
+	d := Decide(result("matroska", video("h264", 1080), audio("ac3", 6)), SafariProfile())
+	if d.Method != Remux {
+		t.Fatalf("Method = %q (%s), want remux", d.Method, d.Reason)
+	}
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q, want copy — AC-3 plays on Safari and muxes into MP4", d.AudioAction)
+	}
+}
+
+// A TV client with a hardware decoder is the case where transcoding is pure
+// waste, which is the entire reason probing exists.
+func TestTVProfileDirectPlaysTheHardCases(t *testing.T) {
+	cases := []*Result{
+		result("matroska", video("hevc", 2160), audio("truehd", 8)),
+		result("matroska", video("h264", 1080), audio("dts", 6)),
+		result("mp4", video("av1", 2160), audio("eac3", 6)),
+	}
+	for _, r := range cases {
+		if d := Decide(r, TVProfile()); d.Method != DirectPlay {
+			t.Errorf("%s: Method = %q (%s), want direct play", r.Container, d.Method, d.Reason)
+		}
+	}
+}

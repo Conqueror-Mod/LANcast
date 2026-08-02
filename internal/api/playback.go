@@ -23,11 +23,29 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decision := probe.Decide(probe.ResultFromItem(it), probe.BrowserProfile())
+	// Takes the same profile and audio parameters as the stream endpoints, and
+	// must: an explanation of a decision the server would not actually make is
+	// worse than no explanation, because it sends the reader looking in the
+	// wrong place.
+	prof := probe.ProfileByName(r.URL.Query().Get("profile"))
+	audioIndex := queryIntDefault(r, "audio", -1)
+
+	streams, err := s.st.Streams(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "load streams")
+		return
+	}
+	res := probe.ResultWithStreams(it, streams)
+	if audioIndex >= 0 && res != nil && res.AudioByIndex(audioIndex) == nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "no audio track at that index")
+		return
+	}
+	decision := probe.DecideTrack(res, prof, audioIndex)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"item_id":  id,
 		"probed":   it.ProbedAt != nil,
+		"profile":  prof.Name,
 		"decision": decision,
 	})
 }

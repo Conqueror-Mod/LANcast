@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 11
+const CurrentSchemaVersion = 12
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -29,6 +29,7 @@ var migrations = []migration{
 	{version: 9, sql: schemaRevision9},
 	{version: 10, sql: schemaRevision10},
 	{version: 11, sql: schemaRevision11},
+	{version: 12, sql: schemaRevision12},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -379,4 +380,16 @@ CREATE TABLE IF NOT EXISTS installed_plugin (
     granted_secrets TEXT    NOT NULL DEFAULT '[]',
     installed_at    INTEGER NOT NULL
 );
+`
+
+// Revision 12 — pix_fmt on media_stream.
+//
+// Bit depth is the signal that decides whether an H.264 file direct-plays, and
+// pix_fmt is the only reliable place to read it: profile names are inconsistent
+// across encoders and a probe often reports none. Without this the 10-bit check
+// falls back to matching profile strings, which misses files that then play as
+// a black rectangle. A nullable column, so existing rows stay valid and
+// re-probing fills them in.
+const schemaRevision12 = `
+ALTER TABLE media_stream ADD COLUMN pix_fmt TEXT;
 `
