@@ -667,9 +667,13 @@ function MediaToolsRow({
 // file keeps a playback decision made without it, permanently.
 //
 // The full re-probe asks for confirmation inline rather than in a dialog. It is
-// not destructive (nothing is deleted, and playback keeps working throughout),
-// so a modal would overstate it — but it is hours of work on a large library,
-// which is more than a single click should start.
+// not destructive — nothing is deleted, and playback keeps working throughout —
+// so a modal would overstate it, but it is still real work across every file
+// and more than a single stray click should start.
+//
+// Measured: 225 files on local storage took ~15s. The cost scales with file
+// count and storage speed, not library size in bytes, so the warning says "a
+// few minutes" rather than naming a number this component cannot know.
 function ReprobeRow({ available }: { available: boolean }) {
   const status = useProbeStatus(available);
   const reprobe = useReprobe();
@@ -699,8 +703,10 @@ function ReprobeRow({ available }: { available: boolean }) {
   } else if (queued !== null) {
     sub = `Queued ${queued} file${queued === 1 ? "" : "s"}.`;
   } else {
-    sub =
-      "Re-read your files with the current version of LANcast. Worth doing after an upgrade: files inspected by an older version can be missing detail that playback decisions depend on.";
+    // .set-row__sub is a single ellipsised line (nowrap), so this has to stay
+    // short enough to read in full. The title carries the "what"; this carries
+    // the only thing not obvious from it — when you would want to.
+    sub = "Worth doing after an upgrade.";
   }
 
   return (
@@ -713,7 +719,7 @@ function ReprobeRow({ available }: { available: boolean }) {
         {confirming ? (
           <>
             <span className="set-confirm">
-              Runs on every file — this can take hours.
+              Runs on every file — a few minutes for most libraries.
             </span>
             <button className="set-btn" onClick={() => run("all")}>
               Re-read everything
