@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-01 · **M0–M4 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.3.2 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
@@ -38,6 +38,20 @@ remaining M3 depth. Packaging & distribution is specced but deferred
 A **feature backlog is captured below.** With M4 built, what remains is breadth
 (more plugin kinds, more client surfaces, the deferred packaging build) rather
 than foundational milestones.
+
+## Releases
+
+| Version | Date | What shipped |
+|---|---|---|
+| **v0.3.2** | 2026-08-02 | First published release. M0–M4 plus packaging: two executables, Windows installer, service install. Fixes from the first real-library test — ffprobe unreachable under a service (which had left every file direct-played), a grid that stopped at 120 of 1,226, volume, filenames for Fix match, and two upgrade-path bugs. |
+
+**What real-library testing taught, worth remembering:** every serious bug in
+this release was invisible rather than loud. Nothing was probed and playback
+silently degraded; the grid truncated under a count claiming the full total; the
+launcher read a TLS error as "server down"; an old process survived an upgrade
+and held a lock. The fixes each added a way to *see* the failure — a media-tools
+row in Settings, an honest "120 of 1,226", a message box instead of a silent
+exit. Prefer that to a quiet fallback.
 
 ## Ordering principle
 
@@ -120,7 +134,7 @@ Status: **planned** · **next** · *unplanned*
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
 | Transport security (TLS) | **built** | HTTPS beyond loopback; bring-your-own or self-signed cert, http→https redirect (ADR 0014) |
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
-| Packaging and distribution | specced · deferred | One binary per platform, goreleaser matrix, in-binary service install ([ADR 0016](adr/0016-packaging-and-distribution.md)); build deferred |
+| Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
