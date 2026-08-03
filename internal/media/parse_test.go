@@ -224,3 +224,153 @@ func TestIsVideo(t *testing.T) {
 		}
 	}
 }
+
+// The gate asks what the library is for, not what the file is. Both mistakes
+// are real: a movie library absorbing the MP3s in a soundtrack folder, and a
+// music library indexing the MKV a band shipped with an album (ADR 0024).
+func TestIsScannableFollowsTheLibraryKind(t *testing.T) {
+	cases := []struct {
+		path    string
+		libKind string
+		want    bool
+	}{
+		{"Aladdin (1992).mkv", LibraryMovie, true},
+		{"Aladdin (1992).mkv", LibraryShow, true},
+		{"soundtrack/01 A Whole New World.mp3", LibraryMovie, false},
+		{"soundtrack/01 A Whole New World.mp3", LibraryShow, false},
+
+		{"Artist/Album/01 Track.mp3", LibraryMusic, true},
+		{"Artist/Album/01 Track.flac", LibraryMusic, true},
+		{"Artist/Album/live at wembley.mkv", LibraryMusic, false},
+
+		// An unrecognised kind behaves as every library did before music.
+		{"Aladdin (1992).mkv", LibraryOther, true},
+		{"01 Track.mp3", LibraryOther, false},
+		{"Aladdin (1992).mkv", "", true},
+	}
+	for _, tc := range cases {
+		if got := IsScannable(tc.path, tc.libKind); got != tc.want {
+			t.Errorf("IsScannable(%q, %q) = %v, want %v", tc.path, tc.libKind, got, tc.want)
+		}
+	}
+}
+
+func TestIsAudio(t *testing.T) {
+	for _, p := range []string{
+		"a.mp3", "a.flac", "a.m4a", "a.aac", "a.ogg", "a.oga", "a.opus",
+		"a.wav", "a.aiff", "a.aif", "a.wma", "a.alac",
+		"A.MP3", "Track 01.FLAC",
+	} {
+		if !IsAudio(p) {
+			t.Errorf("IsAudio(%q) = false, want true", p)
+		}
+	}
+	for _, p := range []string{
+		"a.mkv", "a.mp4", "a.jpg", "a.nfo", "a.txt", "a", "cover.jpg",
+		// .ogv is video-in-Ogg and belongs to the video set, not this one.
+		"a.ogv",
+	} {
+		if IsAudio(p) {
+			t.Errorf("IsAudio(%q) = true, want false", p)
+		}
+	}
+}
+
+// The two sets must not overlap, or a file's classification depends on which
+// question is asked first.
+func TestVideoAndAudioExtensionsAreDisjoint(t *testing.T) {
+	for ext := range audioExts {
+		if videoExts[ext] {
+			t.Errorf("%s is in both the video and audio extension sets", ext)
+		}
+	}
+}
+
+// ParseTrack is the *fallback* for music — tags outrank it (ADR 0024) — but it
+// has to produce something sane when a rip carries none.
+func TestParseTrack(t *testing.T) {
+	const root = `/music`
+	cases := []struct {
+		path  string
+		title string
+		disc  int
+		track int
+		album string
+	}{
+		{`/music/Nine Inch Nails/The Downward Spiral/01 Mr Self Destruct.mp3`,
+			"Mr Self Destruct", 0, 1, "The Downward Spiral"},
+		{`/music/Portishead/Dummy/03. Strangers.flac`,
+			"Strangers", 0, 3, "Dummy"},
+		{`/music/Portishead/Dummy/04 - Roads.flac`,
+			"Roads", 0, 4, "Dummy"},
+		// Multi-disc: "1-02" is disc 1, track 2 — not a title beginning "1-".
+		{`/music/The Beatles/White Album/2-04 Blackbird.flac`,
+			"Blackbird", 2, 4, "White Album"},
+		// Three-digit track numbers appear on long compilations.
+		{`/music/Various/Big Box/112 Something.mp3`,
+			"Something", 0, 112, "Big Box"},
+		// No number at all: the whole stem is the title.
+		{`/music/Aphex Twin/Selected Ambient Works/Xtal.flac`,
+			"Xtal", 0, 0, "Selected Ambient Works"},
+		// A track loose at the library root has no album to name.
+		{`/music/Stray Song.mp3`, "Stray Song", 0, 0, ""},
+	}
+
+	for _, tc := range cases {
+		got := ParseTrack(root, filepath.FromSlash(tc.path))
+		if got.Kind != KindTrack {
+			t.Errorf("%s: Kind = %q, want track", tc.path, got.Kind)
+		}
+		if got.Title != tc.title {
+			t.Errorf("%s: Title = %q, want %q", tc.path, got.Title, tc.title)
+		}
+		if got.Episode != tc.track {
+			t.Errorf("%s: track = %d, want %d", tc.path, got.Episode, tc.track)
+		}
+		if got.Season != tc.disc {
+			t.Errorf("%s: disc = %d, want %d", tc.path, got.Season, tc.disc)
+		}
+		if got.Series != tc.album {
+			t.Errorf("%s: album = %q, want %q", tc.path, got.Series, tc.album)
+		}
+	}
+}
+
+// A file named only by its number still has to show something.
+func TestParseTrackNumberOnlyFilename(t *testing.T) {
+	got := ParseTrack(`/music`, filepath.FromSlash(`/music/Artist/Album/07.mp3`))
+	if got.Title != "Track 7" {
+		t.Errorf("Title = %q, want %q", got.Title, "Track 7")
+	}
+}
+
+// Parse routes to ParseTrack for a music library and must not apply any of the
+// video heuristics — a year in an album name is not a release year to strip,
+// and "S01E02" in a song title is not an episode.
+func TestParseInMusicLibraryUsesTrackRules(t *testing.T) {
+	got := Parse(`/music`, filepath.FromSlash(`/music/Artist/1999/02 Party.mp3`), LibraryMusic)
+	if got.Kind != KindTrack {
+		t.Fatalf("Kind = %q, want track", got.Kind)
+	}
+	if got.Series != "1999" {
+		t.Errorf("album = %q, want %q — a numeric album name is not a year", got.Series, "1999")
+	}
+	if got.Year != 0 {
+		t.Errorf("Year = %d, want 0 — music does not carry a release year from the path", got.Year)
+	}
+	if got.Episode != 2 {
+		t.Errorf("track = %d, want 2", got.Episode)
+	}
+}
+
+// A 4-digit stem is a title, not a track number — "1984" is an album or a
+// song, and the 1-to-3 digit cap is what keeps it one.
+func TestParseTrackLeavesFourDigitTitlesAlone(t *testing.T) {
+	got := ParseTrack(`/music`, filepath.FromSlash(`/music/Artist/Album/1984.mp3`))
+	if got.Title != "1984" {
+		t.Errorf("Title = %q, want %q", got.Title, "1984")
+	}
+	if got.Episode != 0 {
+		t.Errorf("track = %d, want 0 — a four-digit stem is not a track number", got.Episode)
+	}
+}

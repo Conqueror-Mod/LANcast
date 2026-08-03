@@ -749,3 +749,82 @@ func keys(m map[string]store.Item) []string {
 	}
 	return out
 }
+
+// musicFixture is fixture() for a music library (ADR 0024).
+func musicFixture(t *testing.T, st *store.Store) (store.Library, string) {
+	t.Helper()
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "Music", "music", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return *lib, root
+}
+
+// A music library indexes audio and nothing else. Before ADR 0024 the API
+// accepted kind "music" and the scanner gated on IsVideo, so the library
+// scanned successfully and stayed permanently empty.
+func TestScanMusicLibraryFindsAudio(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/01 Mr Self Destruct.mp3", 10)
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/02 Piggy.flac", 10)
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/03 Heresy.m4a", 10)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.opus", 10)
+
+	// Not music: artwork, notes, and the concert video a band ships with an
+	// album. The video is the interesting one — it is a file the *movie*
+	// scanner would happily index.
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/cover.jpg", 5)
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/notes.txt", 5)
+	writeFile(t, root, "Nine Inch Nails/The Downward Spiral/live at wembley.mkv", 10)
+
+	p := scanAndWait(t, sc, lib)
+	if p.FilesSeen != 4 {
+		t.Errorf("FilesSeen = %d, want 4 — only the audio files", p.FilesSeen)
+	}
+
+	items, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byTitle := map[string]bool{}
+	for _, it := range items {
+		byTitle[it.Title] = true
+	}
+	for _, want := range []string{"Mr Self Destruct", "Piggy", "Heresy", "Mysterons"} {
+		if !byTitle[want] {
+			t.Errorf("track %q missing from the library; got %v", want, titles(items))
+		}
+	}
+	for _, unwanted := range []string{"live at wembley", "cover", "notes"} {
+		if byTitle[unwanted] {
+			t.Errorf("%q was indexed into a music library", unwanted)
+		}
+	}
+}
+
+// The mirror image: a movie library must not absorb the soundtrack sitting
+// beside the film.
+func TestScanMovieLibrarySkipsAudio(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+
+	writeFile(t, root, "Aladdin (1992)/Aladdin (1992).mkv", 10)
+	writeFile(t, root, "Aladdin (1992)/soundtrack/01 A Whole New World.mp3", 10)
+	writeFile(t, root, "Aladdin (1992)/soundtrack/02 Friend Like Me.flac", 10)
+
+	p := scanAndWait(t, sc, lib)
+	if p.FilesSeen != 1 {
+		t.Errorf("FilesSeen = %d, want 1 — the soundtrack is not part of a movie library", p.FilesSeen)
+	}
+}
+
+func titles(items []store.Item) []string {
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Title)
+	}
+	return out
+}

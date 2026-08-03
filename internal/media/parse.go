@@ -23,7 +23,17 @@ type Kind string
 const (
 	KindMovie   Kind = "movie"
 	KindEpisode Kind = "episode"
+	KindTrack   Kind = "track"
 	KindOther   Kind = "other"
+)
+
+// Library kinds, as stored on a library row and accepted by the API. Spelled
+// once here so the scanner and the gate below cannot disagree about them.
+const (
+	LibraryMovie = "movie"
+	LibraryShow  = "show"
+	LibraryMusic = "music"
+	LibraryOther = "other"
 )
 
 // Info is what we could infer from a path alone.
@@ -42,9 +52,44 @@ var videoExts = map[string]bool{
 	".webm": true, ".flv": true, ".ogv": true, ".divx": true, ".vob": true,
 }
 
+// audioExts are the music containers a library scans (ADR 0024).
+//
+// Listed by what ffprobe reads, not by what a browser plays: MP3, AAC, FLAC,
+// Opus, Vorbis and WAV direct-play, while WMA and AIFF are transcoded — that is
+// the playback decision's business, not the scanner's. A file the server cannot
+// deliver at all is still better indexed and reported than silently skipped.
+//
+// `.m4a` covers both AAC and ALAC; they are distinguished by codec at probe
+// time, which matters because ALAC plays only on Safari.
+var audioExts = map[string]bool{
+	".mp3": true, ".flac": true, ".m4a": true, ".aac": true, ".ogg": true,
+	".oga": true, ".opus": true, ".wav": true, ".aiff": true, ".aif": true,
+	".wma": true, ".alac": true,
+}
+
 // IsVideo reports whether a path looks like a playable video file.
 func IsVideo(path string) bool {
 	return videoExts[strings.ToLower(filepath.Ext(path))]
+}
+
+// IsAudio reports whether a path looks like a music file.
+func IsAudio(path string) bool {
+	return audioExts[strings.ToLower(filepath.Ext(path))]
+}
+
+// IsScannable reports whether a library of this kind should index the file.
+//
+// The gate asks what the library is *for* rather than what the file *is*,
+// because both mistakes are real: a movie library that absorbs the MP3s in a
+// soundtrack folder fills the grid with tracks, and a music library that
+// indexes the MKV a band shipped with an album produces an item nothing can
+// group. An unknown library kind takes video, which is what every library did
+// before music existed.
+func IsScannable(path, libKind string) bool {
+	if libKind == LibraryMusic {
+		return IsAudio(path)
+	}
+	return IsVideo(path)
 }
 
 var (
@@ -145,6 +190,13 @@ func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 func Parse(root, path, libKind string) Info {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	info := Info{Kind: KindOther}
+
+	// A music library reads its files by a different set of conventions
+	// entirely, and none of the season/episode/year heuristics below apply to
+	// them (ADR 0024).
+	if libKind == LibraryMusic {
+		return ParseTrack(root, path)
+	}
 
 	if m := reSeasonEp.FindStringSubmatch(base); m != nil {
 		info.Kind = KindEpisode
@@ -294,4 +346,64 @@ func SortTitle(title string) string {
 		}
 	}
 	return t
+}
+
+// reTrackNo matches a leading track number: "01 Title", "1-02 Title",
+// "03. Title", "04 - Title", and a bare "07". The disc-number form ("1-02") is
+// common on multi-disc rips and would otherwise be read as part of the title.
+//
+// The trailing separator is optional only at end of input, so a file named just
+// "07.mp3" yields track 7 rather than a title of "07". That ordering matters:
+// without a number, "01" through "10" sort as strings and an album plays in the
+// wrong order. The cost is that a song genuinely titled "22" reads as track 22
+// until its tags are read — an acceptable trade for a fallback that tags
+// outrank, and only for one to three digits, so an album called "1984" is
+// untouched.
+var reTrackNo = regexp.MustCompile(`^\s*(?:(\d{1,2})\s*[-.]\s*)?(\d{1,3})(?:\s*(?:[-.)\]]|\s)\s*|$)`)
+
+// ParseTrack reads what a music file's path alone can tell us: a track number,
+// a disc number, and a title, with the album and artist taken from the folders
+// above it.
+//
+// This is the *fallback*. Per ADR 0024 the authority for music is the embedded
+// tag — ID3v2, Vorbis comment, MP4 atom — because unlike a film's filename it
+// is written by the tagger rather than guessed by a ripper. This runs when the
+// tags are missing, and everything it produces is expected to be overwritten by
+// them.
+//
+// The layout assumed is the near-universal one: Artist/Album/NN Title.ext.
+func ParseTrack(root, path string) Info {
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	info := Info{Kind: KindTrack}
+
+	if m := reTrackNo.FindStringSubmatch(base); m != nil {
+		if m[1] != "" {
+			info.Season, _ = strconv.Atoi(m[1]) // disc
+		}
+		info.Episode, _ = strconv.Atoi(m[2]) // track
+		base = base[len(m[0]):]
+	}
+
+	info.Title = clean(base)
+	if info.Title == "" {
+		// A file named only by its number still needs something to show.
+		info.Title = "Track " + strconv.Itoa(info.Episode)
+	}
+
+	// Album from the containing folder, artist from the one above it. Series
+	// carries the album so it groups exactly as a show's episodes do.
+	info.Series = albumFromDirs(root, path)
+	return info
+}
+
+// albumFromDirs returns the folder immediately containing the track, which by
+// convention is the album. Empty when the track sits at the library root, where
+// there is no album to name.
+func albumFromDirs(root, path string) string {
+	rel, err := filepath.Rel(root, filepath.Dir(path))
+	if err != nil || rel == "." || rel == "" {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	return clean(parts[len(parts)-1])
 }
