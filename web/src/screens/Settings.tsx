@@ -177,9 +177,17 @@ function AddLibrary() {
         );
       }}
     >
+      {/*
+        autoFocus because opening this form unmounts the button that opened it,
+        and focus falls to the document body — the caret lands beside the first
+        field rather than in it, and a keyboard user is left with focus nowhere
+        (ADR 0004: focus is never invisible). Same pattern as the inline
+        password reset below.
+      */}
       <input
         className="set-input"
-        placeholder="Name"
+        placeholder="Library name"
+        autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         required
