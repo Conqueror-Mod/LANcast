@@ -1,6 +1,6 @@
 # ADR 0025 — Artist images from TheAudioDB
 
-Date: 2026-08-03 · Status: proposed
+Date: 2026-08-03 · Status: accepted
 
 ## Context
 
