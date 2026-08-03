@@ -98,3 +98,33 @@ sudo apt install ffmpeg          # Debian/Ubuntu
 
 Without ffmpeg, LANcast still runs and serves direct-play files; it says so
 plainly at startup rather than failing.
+
+## When the server will not stay up
+
+A LANcast running as a Windows service writes to **`lancastd.log` in its data
+directory** — `%ProgramData%\LANcast\lancastd.log` for the default install. One
+previous generation is kept as `lancastd.log.1`; nothing older, so it cannot
+fill a disk.
+
+That file is where the reason lives. A service has no console, so anything it
+would have printed is otherwise discarded, and Windows' own event log only says
+*that* it stopped, never why.
+
+Two entries in the event log are worth telling apart if you look there:
+
+- **7023** "terminated with the following error" — the server reported a
+  failure. It decided to stop, and the log file says why.
+- **7034** "terminated unexpectedly" — the process disappeared without telling
+  Windows anything, which is what an external kill looks like.
+
+The service restarts itself after an unexpected exit — three attempts with
+increasing delays, then it stays down rather than looping. A server that cannot
+start at all (a database written by a newer build is the usual cause) fails
+those three and stops, leaving a clean record instead of a restart storm.
+
+To watch it live, stop the service and run the server in a terminal:
+
+```
+Stop-Service lancastd
+& "C:\Program Files\LANcast\LANcast-Server.exe" -addr :8080 -data "C:\ProgramData\LANcast"
+```

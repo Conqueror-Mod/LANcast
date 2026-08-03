@@ -5,12 +5,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 
 	"golang.org/x/sys/windows/svc"
 
+	"lancast/internal/applog"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
@@ -21,6 +23,41 @@ import (
 func serviceRun(dataDir, addr string) error {
 	log := newLogger(false)
 
+	// Under the SCM there is no console and no inherited stderr, so everything
+	// this process logs is discarded — including whatever it would say on the
+	// way down. Send it to a file in the data directory instead, and keep
+	// stderr too so `lancastd service run` by hand still prints.
+	//
+	// A logging failure is reported and then ignored: not being able to write a
+	// log is not a reason to refuse to serve media.
+	if lf, err := applog.Open(dataDir); err != nil {
+		log.Warn("could not open the log file; logging to stderr only", "error", err)
+	} else {
+		defer lf.Close()
+		log = slog.New(slog.NewTextHandler(io.MultiWriter(os.Stderr, lf), nil))
+		log.Info("logging to file", "path", lf.Path())
+	}
+
+	// Every exit goes through the log on its way out.
+	//
+	// Returning the reason as an error alone is not enough: main prints it to a
+	// stderr the SCM discards, so the single most valuable line — why the
+	// service refused to start, or what stopped it — never reaches the file
+	// that exists to hold exactly that. Caught by running this and watching
+	// "another LANcast server is already running" appear on the terminal and
+	// not in the log.
+	err := serviceServe(dataDir, addr, log)
+	if err != nil {
+		log.Error("service stopped", "error", err)
+	} else {
+		log.Info("service stopped")
+	}
+	return err
+}
+
+// serviceServe is serviceRun's body, split out so every one of its exits is
+// logged by the caller rather than each return having to remember.
+func serviceServe(dataDir, addr string, log *slog.Logger) error {
 	// One server at a time — the service holds the name so an interactive launch
 	// finds it and opens the UI instead of starting a duplicate.
 	release, held, err := singleton.Acquire(singleton.Server)
