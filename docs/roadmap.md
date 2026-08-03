@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-02 · **v0.4.0 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.4.1 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
@@ -43,6 +43,7 @@ than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.4.1** | 2026-08-02 | Windows run environment, all of it found by installing v0.4.0 and using it. Child processes no longer open console windows — the app flashed three or four on launch and one per file on a scan, because a windowsgui parent gives every ffmpeg child a visible console. The HTTPS redirect is temporary rather than permanent: browsers cached the 301 forever, so a server that later dropped back to plain HTTP was unreachable with `ERR_SSL_PROTOCOL_ERROR`. The client no longer starts a server on a second, per-user database while the service uses the machine-wide one. Separate **LANcast Client** and **LANcast Server** Start menu entries. Add-library focuses its first field. |
 | **v0.4.0** | 2026-08-02 | Playback decisions rewritten after a second real-library test: the chosen audio track now drives the decision (picking one produced `-c:a copy` on undecodable audio and silent playback), named client profiles so HEVC stops forcing a re-encode, copy gated on what MP4 can actually carry, `pix_fmt`-based 10-bit detection (schema 12), and audio no longer re-encoded alongside video for free. Adds **Re-read media files** for libraries probed by an older build, and `lancastd reset-auth` for lockout recovery. Fixes: the app opening to a tray icon and no window, NFO sidecars growing on every write, shows libraries counting seasons and episodes as items, a certificate warning on a loopback-only server, and a restart prompt that could not deliver. |
 | **v0.3.2** | 2026-08-02 | First published release. M0–M4 plus packaging: two executables, Windows installer, service install. Fixes from the first real-library test — ffprobe unreachable under a service (which had left every file direct-played), a grid that stopped at 120 of 1,226, volume, filenames for Fix match, and two upgrade-path bugs. |
 
@@ -66,6 +67,15 @@ correct arithmetic when it was plainly wrong on screen. Both were caught by
 running the thing and looking at the output. Four of the release's fixes were
 found while verifying something else. **Reasoning about the code predicts; only
 running it against real files reports.**
+
+**v0.4.1 is the same lesson at the next layer down.** Every bug in it was found
+by installing v0.4.0 and using it as a user would — not by reading code, not by
+tests, all of which passed. Console windows flashing on launch, a browser that
+would not connect, an empty second database, a Start menu entry that hid which
+program it ran: none of these are visible from inside the repository, and none
+of them would ever fail a test. The unit of verification that catches this
+class is *the installed artifact on a real desktop*, and it deserves a pass of
+its own before a release is called good.
 
 ## Ordering principle
 
