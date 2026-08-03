@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-02 · **v0.4.2 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.4.3 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
@@ -43,6 +43,7 @@ than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.4.3** | 2026-08-02 | The two guards that keep the server honest, both broken in ways only a real install showed. The cross-session single-instance check failed open: Windows returns the same "access denied" whether an object exists and may not be opened or the caller cannot create it, so a desktop launch never saw a server running as a service and started a second one — the mechanism behind the two-servers and, before v0.4.1, two-databases problems. And v0.4.2's service log wrote nothing, because it was paired with a console that does not exist under the service manager using a writer that gives up on the first failure. |
 | **v0.4.2** | 2026-08-02 | Makes a service-run server diagnosable. It had no console and no inherited stderr, so everything it logged was discarded by the operating system — when it exited, the only record anywhere was Windows' own "terminated unexpectedly", which cannot tell a crash apart from a kill. It now writes `lancastd.log` beside the database, one rolled generation capped at 4 MB, and every exit goes through it including a refusal to start. New installs also restart three times after an unexpected exit and then stop, rather than staying down unnoticed or looping on a server that genuinely cannot start. |
 | **v0.4.1** | 2026-08-02 | Windows run environment, all of it found by installing v0.4.0 and using it. Child processes no longer open console windows — the app flashed three or four on launch and one per file on a scan, because a windowsgui parent gives every ffmpeg child a visible console. The HTTPS redirect is temporary rather than permanent: browsers cached the 301 forever, so a server that later dropped back to plain HTTP was unreachable with `ERR_SSL_PROTOCOL_ERROR`. The client no longer starts a server on a second, per-user database while the service uses the machine-wide one. Separate **LANcast Client** and **LANcast Server** Start menu entries. Add-library focuses its first field. |
 | **v0.4.0** | 2026-08-02 | Playback decisions rewritten after a second real-library test: the chosen audio track now drives the decision (picking one produced `-c:a copy` on undecodable audio and silent playback), named client profiles so HEVC stops forcing a re-encode, copy gated on what MP4 can actually carry, `pix_fmt`-based 10-bit detection (schema 12), and audio no longer re-encoded alongside video for free. Adds **Re-read media files** for libraries probed by an older build, and `lancastd reset-auth` for lockout recovery. Fixes: the app opening to a tray icon and no window, NFO sidecars growing on every write, shows libraries counting seasons and episodes as items, a certificate warning on a loopback-only server, and a restart prompt that could not deliver. |
@@ -77,6 +78,15 @@ program it ran: none of these are visible from inside the repository, and none
 of them would ever fail a test. The unit of verification that catches this
 class is *the installed artifact on a real desktop*, and it deserves a pass of
 its own before a release is called good.
+
+**v0.4.2 and v0.4.3 close the loop by turning it on the diagnostics.** The
+service log added in v0.4.2 wrote nothing under the service manager — it was
+tested in a terminal, which is the one environment it is not for. The
+single-instance guard had been failing open since it was written, and was found
+only because a real service happened to be running during an unrelated test.
+Both are the same mistake in a new place: **the environment a check runs in is
+part of the check.** A guard verified somewhere easier than production has not
+been verified.
 
 ## Ordering principle
 
