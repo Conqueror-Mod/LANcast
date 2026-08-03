@@ -164,7 +164,8 @@ Status: **planned** · **next** · *unplanned*
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
 | Library types beyond video | **partly built** | **Music built** server-side ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. Photos still *unplanned* and need their own ADR |
 | Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
-| Music artwork | **next** | Unbuilt: `internal/artwork` only downloads from URLs, so album tiles are blank. Embedded cover art is already *detected* (`probe.isCoverArt`, so audio is not mistaken for film) and needs turning into a source, with `cover.jpg`/`folder.jpg` beside the album as fallback |
+| Album artwork | **built** | `internal/coverart`: embedded picture first, then `cover.jpg`/`folder.jpg` beside the tracks, in its own worker. Measured on the real library — 369 of 398 albums, 10.7s, no network. A directory's image is refused when the directory also holds audio that is not the album's, which is what stops a letter-bucket `folder.jpg` being worn by five unrelated records |
+| Artist images | **next** | Artists have no file and no directory to source from, and the images in an artist folder are a media player's per-album cache, not a photograph. They **borrow** their most-substantial album's cover for now, flagged `inherited` and superseded automatically. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md)) |
 
 ### Playback and client · M3
 
@@ -360,12 +361,20 @@ where that openness gets exercised.
    kind-aware scan gate, embedded tags as an authoritative local source, the
    artist → album → track hierarchy, untagged-track scan diagnostics, and audio
    containers in the playback profile.
-9. **Finish music.** Two pieces of ADR 0024 remain, and artwork comes first —
-   it is far smaller, it is server-side, and building the client grid against
-   blank tiles means designing it twice.
-   1. **Album artwork.** Embedded cover art and `cover.jpg`/`folder.jpg` into
-      the existing content-addressed cache.
-   2. **Music client UI.** Album view and a track list that plays.
+9. **Finish music.** Artwork came first — it was far smaller, it was
+   server-side, and building the client grid against blank tiles would have
+   meant designing it twice.
+   1. ~~Album artwork~~ — **built.** Embedded cover art and
+      `cover.jpg`/`folder.jpg` into the existing content-addressed cache.
+   2. ~~Artist tiles~~ — **placeholder built.** Artists borrow their
+      most-substantial album's cover, flagged `inherited`, until a real image
+      supersedes it.
+   3. **Music client UI.** Album view and a track list that plays. The
+      remaining gap, and the larger one: artist images improve a grid the
+      browser does not have yet.
+   4. **Artist images from TheAudioDB** ([ADR 0025](adr/0025-artist-images.md),
+      accepted, unbuilt). Deliberately after the client UI, for the reason just
+      given.
 10. **Nothing foundational remains.** After music, what's next is breadth, from
     the feature backlog: a Pictures library (its own ADR — ADR 0024 deferred
     photos deliberately), more client surfaces (TV/mobile), more plugin kinds as
