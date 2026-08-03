@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-02 · **v0.4.1 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-02 · **v0.4.2 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
@@ -26,7 +26,7 @@ architecture (M4) as the last milestone.
 
 The two early-lock Foundation decisions are now **built, not just decided**: the
 data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
-schema at **revision 11**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
+schema at **revision 12**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
 On top of them, **media organisation shipped end to end** — collections, the
 show → season → episode hierarchy, multi-part works and serials/miniseries, a
 library-kind that drives movie-vs-TV matching, Fix match that reaches TV,
@@ -43,6 +43,7 @@ than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.4.2** | 2026-08-02 | Makes a service-run server diagnosable. It had no console and no inherited stderr, so everything it logged was discarded by the operating system — when it exited, the only record anywhere was Windows' own "terminated unexpectedly", which cannot tell a crash apart from a kill. It now writes `lancastd.log` beside the database, one rolled generation capped at 4 MB, and every exit goes through it including a refusal to start. New installs also restart three times after an unexpected exit and then stop, rather than staying down unnoticed or looping on a server that genuinely cannot start. |
 | **v0.4.1** | 2026-08-02 | Windows run environment, all of it found by installing v0.4.0 and using it. Child processes no longer open console windows — the app flashed three or four on launch and one per file on a scan, because a windowsgui parent gives every ffmpeg child a visible console. The HTTPS redirect is temporary rather than permanent: browsers cached the 301 forever, so a server that later dropped back to plain HTTP was unreachable with `ERR_SSL_PROTOCOL_ERROR`. The client no longer starts a server on a second, per-user database while the service uses the machine-wide one. Separate **LANcast Client** and **LANcast Server** Start menu entries. Add-library focuses its first field. |
 | **v0.4.0** | 2026-08-02 | Playback decisions rewritten after a second real-library test: the chosen audio track now drives the decision (picking one produced `-c:a copy` on undecodable audio and silent playback), named client profiles so HEVC stops forcing a re-encode, copy gated on what MP4 can actually carry, `pix_fmt`-based 10-bit detection (schema 12), and audio no longer re-encoded alongside video for free. Adds **Re-read media files** for libraries probed by an older build, and `lancastd reset-auth` for lockout recovery. Fixes: the app opening to a tray icon and no window, NFO sidecars growing on every write, shows libraries counting seasons and episodes as items, a certificate warning on a loopback-only server, and a restart prompt that could not deliver. |
 | **v0.3.2** | 2026-08-02 | First published release. M0–M4 plus packaging: two executables, Windows installer, service install. Fixes from the first real-library test — ffprobe unreachable under a service (which had left every file direct-played), a grid that stopped at 120 of 1,226, volume, filenames for Fix match, and two upgrade-path bugs. |
@@ -237,8 +238,18 @@ group is not priority.
   model. The pieces already exist behind `/api/libraries/{id}/scan`,
   `/api/enrich`, and `/api/probe`; what is missing is one place in the UI that
   surfaces them continuously.
+- **Audit log — who changed what, and when.** Title removed, library added,
+  match overridden, account created: recorded server-side with the user and the
+  time. Server-side is the whole point — an audit trail a client writes is
+  forgeable by the client it is auditing, so this stays where the mutation is
+  authorised, not where it is requested. The absence of one is why "what
+  emptied this library" was unanswerable during v0.4.x testing. Pairs with the
+  question of whether identity should live in its own store rather than beside
+  the library, so losing a password never opens the file holding the media.
 - **Crash reporting.**
-- **Debug logging** and an **internal log viewer.**
+- **Debug logging** and an **internal log viewer** — the service now writes
+  `lancastd.log` beside the database (v0.4.2); what is missing is reading it
+  from the UI.
 - **Clear cache and data** and **reset settings** actions.
 - **Check for updates** with an **auto-update** toggle.
 
