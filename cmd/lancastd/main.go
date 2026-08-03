@@ -101,6 +101,13 @@ func main() {
 		return
 	}
 
+	// Explicit foreground run. Attach to the caller's terminal before the first
+	// log line: a windowsgui build has no console of its own, so every message
+	// — including the one explaining a refusal to start — goes nowhere, and the
+	// server looks like it exited silently. Running it by hand is the way to
+	// find out why a service died, and that only works if it can speak.
+	attachConsole()
+
 	log := newLogger(*verbose)
 
 	// One server at a time. A second instance says so and exits rather than
