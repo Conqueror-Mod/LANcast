@@ -188,7 +188,10 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		if d.IsDir() {
 			return nil
 		}
-		if !media.IsVideo(path) {
+		// What the library is for decides what counts as media in it — a movie
+		// library ignores the MP3s beside a film, a music library ignores the
+		// MKV in an album folder (ADR 0024).
+		if !media.IsScannable(path, lib.Kind) {
 			return nil
 		}
 		if ignored[path] {
