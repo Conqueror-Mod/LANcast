@@ -12,7 +12,9 @@ import (
 	"runtime"
 	"time"
 
+	"lancast/internal/childproc"
 	"lancast/internal/desktop"
+	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
 
@@ -61,7 +63,19 @@ func (l *launcher) ensureServer() error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(exe, "-addr", l.addr)
+	args := []string{"-addr", l.addr}
+	// Pin the data directory when a machine-wide one already exists.
+	//
+	// Without this the spawned server takes the per-user default while the
+	// installed service uses the machine-wide one — two servers, two databases,
+	// same port. Whichever won the port decided which library you saw, and
+	// launching the app after the service failed to start silently created an
+	// empty second database rather than showing the real one.
+	if dir, ok := sharedDataDir(); ok {
+		args = append(args, "-data", dir)
+	}
+	cmd := exec.Command(exe, args...)
+	childproc.Hide(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start server %s: %w", exe, err)
 	}
@@ -90,6 +104,23 @@ func serverExePath() (string, error) {
 		return "", fmt.Errorf("lancastd not found next to the launcher (%s)", exe)
 	}
 	return exe, nil
+}
+
+// sharedDataDir reports the machine-wide data directory when one is already in
+// use, so a client-started server opens the same database the service does.
+//
+// Only when it already holds a database: on a machine with no service install
+// the per-user default is right, and creating a machine-wide directory here
+// would need privileges the client does not have and should not want.
+func sharedDataDir() (string, bool) {
+	dir := service.DefaultDataDir(runtime.GOOS)
+	if dir == "" {
+		return "", false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "lancast.db")); err != nil {
+		return "", false
+	}
+	return dir, true
 }
 
 func serverExeName() string {
