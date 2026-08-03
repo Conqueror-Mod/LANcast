@@ -2,7 +2,10 @@ package scan
 
 import (
 	"context"
+	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"sync"
 
 	"lancast/internal/media"
@@ -63,13 +66,17 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		return err
 	}
 	if len(tracks) == 0 {
-		return nil
+		// No present tracks, but reconciliation still runs: a container emptied
+		// by an earlier pass is an empty shelf whether or not there is anything
+		// left to read tags from.
+		return s.reconcileMusic(ctx, lib, nil)
 	}
 
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
 		untagged int
+		groups   []trackGroup
 	)
 	work := make(chan store.Item)
 
@@ -86,12 +93,21 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 					// the failure mode this project keeps rediscovering.
 					mu.Lock()
 					untagged++
+					groups = append(groups, groupFromPath(lib.Path, it))
 					mu.Unlock()
 					continue
 				}
 				if err := s.st.ApplyTrackTags(ctx, it.ID, trackTagsFrom(tags)); err != nil {
 					s.log.Warn("apply tags", "item", it.ID, "error", err)
 				}
+				// The grouping key is collected here, while the album artist is
+				// still in hand. It is not stored on the track — it belongs to
+				// the album, and persisting it per row to read it back one step
+				// later would be a column that exists only to survive a function
+				// boundary.
+				mu.Lock()
+				groups = append(groups, groupFromTags(lib.Path, it, tags))
+				mu.Unlock()
 			}
 		}()
 	}
@@ -115,7 +131,63 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		p.Skipped += untagged
 		s.mu.Unlock()
 	}
-	return nil
+
+	return s.reconcileMusic(ctx, lib, groups)
+}
+
+// trackGroup is one track and the artist and album it belongs under.
+type trackGroup struct {
+	itemID int64
+	artist string
+	album  string
+}
+
+// groupFromTags takes the grouping key from a track's tags.
+//
+// Album artist, not artist. A compilation carries one album artist and a
+// different performer per track; grouping on the performer shatters the record
+// into one album per guest, which looks like a scanner bug rather than the
+// tag-precedence choice it is (ADR 0024).
+func groupFromTags(root string, it store.Item, t probe.Tags) trackGroup {
+	artist := t.AlbumArtist
+	if artist == "" {
+		artist = t.Artist
+	}
+	album := t.Album
+
+	// A tagged file missing one of the two still has to go somewhere; the
+	// folders are the only other evidence.
+	if artist == "" || album == "" {
+		fallback := groupFromPath(root, it)
+		if artist == "" {
+			artist = fallback.artist
+		}
+		if album == "" {
+			album = fallback.album
+		}
+	}
+	return trackGroup{itemID: it.ID, artist: artist, album: album}
+}
+
+// groupFromPath is the untagged fallback: the containing folder is the album
+// and the one above it is the artist.
+//
+// This is a guess, and a weak one — a real library was laid out as
+// `A's/Artist/track.mp3`, where the folder above the track is the artist and
+// there is no album folder at all. It is what there is when the file says
+// nothing, and it is why tags lead.
+func groupFromPath(root string, it store.Item) trackGroup {
+	g := trackGroup{itemID: it.ID}
+	rel, err := filepath.Rel(root, filepath.Dir(it.Path))
+	if err != nil || rel == "." || rel == "" {
+		return g
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	g.album = parts[len(parts)-1]
+	if len(parts) >= 2 {
+		g.artist = parts[len(parts)-2]
+	}
+	return g
 }
 
 // trackTagsFrom converts probe tags into the store's write shape, preferring
@@ -139,4 +211,83 @@ func trackTagsFrom(t probe.Tags) store.TrackTags {
 		Track:     t.Track,
 		Year:      t.Year,
 	}
+}
+
+// reconcileMusic builds the artist → album → track hierarchy.
+//
+// The same shape as show → season → episode (ADR 0010, ADR 0024): containers
+// are rows in media_item related by parent_id, identified by a synthetic path
+// because they have no file of their own.
+//
+// A track with neither an artist nor an album is left top-level rather than
+// filed under an invented container — the same choice reconcileHierarchy makes
+// for an episode sitting loose in a library root.
+func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups []trackGroup) error {
+	artists := map[string]int64{}
+	albums := map[string]int64{}
+
+	// Sorted so containers are created in a stable order across runs, which
+	// keeps ids predictable and diffs of a rescan boring.
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].artist != groups[j].artist {
+			return groups[i].artist < groups[j].artist
+		}
+		if groups[i].album != groups[j].album {
+			return groups[i].album < groups[j].album
+		}
+		return groups[i].itemID < groups[j].itemID
+	})
+
+	for _, g := range groups {
+		if g.artist == "" && g.album == "" {
+			continue
+		}
+
+		var parent *int64
+		if g.artist != "" {
+			key := lib.Path + "::artist=" + g.artist
+			id, ok := artists[key]
+			if !ok {
+				var err error
+				id, err = s.st.EnsureMusicContainer(ctx, lib.ID, "artist", key,
+					g.artist, media.SortTitle(g.artist), nil)
+				if err != nil {
+					return err
+				}
+				artists[key] = id
+			}
+			parent = &id
+		}
+
+		target := parent
+		if g.album != "" {
+			// Scoped by artist: "Greatest Hits" is not one album shared by every
+			// band that made one.
+			key := lib.Path + "::artist=" + g.artist + "::album=" + g.album
+			id, ok := albums[key]
+			if !ok {
+				var err error
+				id, err = s.st.EnsureMusicContainer(ctx, lib.ID, "album", key,
+					g.album, media.SortTitle(g.album), parent)
+				if err != nil {
+					return err
+				}
+				albums[key] = id
+			}
+			target = &id
+		}
+
+		if err := s.st.SetParent(ctx, g.itemID, target); err != nil {
+			return err
+		}
+	}
+
+	// An album whose files moved away, or an artist whose last album did, is a
+	// row LANcast invented with nothing under it — an empty shelf in the grid.
+	if n, err := s.st.DeleteEmptyMusicContainers(ctx, lib.ID); err != nil {
+		s.log.Warn("cleaning empty music containers", "library", lib.ID, "error", err)
+	} else if n > 0 {
+		s.log.Info("removed empty music containers", "library", lib.ID, "count", n)
+	}
+	return nil
 }

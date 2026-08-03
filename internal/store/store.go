@@ -1345,3 +1345,63 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 	}
 	return nil
 }
+
+// EnsureMusicContainer find-or-creates an artist or album row.
+//
+// Music containers have no file, so their identity is a synthetic path — the
+// same device seasons already use when a show has no "Season N" folder. The
+// path is what makes this idempotent across rescans, and it is scoped by the
+// parent so two artists can both have a "Greatest Hits" without colliding.
+//
+// Marked matched with a full score for the same reason shows and seasons are:
+// a container assembled from its children's tags is not waiting to be
+// identified, and leaving it unmatched would park it in the review queue
+// forever.
+func (s *Store) EnsureMusicContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string, parentID *int64) (int64, error) {
+	if kind != "artist" && kind != "album" {
+		return 0, fmt.Errorf("ensure music container: unexpected kind %q", kind)
+	}
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO media_item
+			(library_id, kind, path, title, sort_title, parent_id,
+			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
+		VALUES (?, ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+		ON CONFLICT(path) DO NOTHING`,
+		libraryID, kind, path, title, sortTitle, parentID, now, now, now)
+	if err != nil {
+		return 0, fmt.Errorf("ensure %s %q: %w", kind, path, err)
+	}
+
+	var id int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+		return 0, fmt.Errorf("ensure %s %q: read id: %w", kind, path, err)
+	}
+	return id, nil
+}
+
+// DeleteEmptyMusicContainers removes artist and album rows left with no
+// children — an album whose files moved, an artist whose last album went.
+//
+// Scanning marks missing and never deletes *files*; these are not files. They
+// are grouping rows LANcast invented, and an invented row with nothing under it
+// is an empty shelf in the browse grid.
+func (s *Store) DeleteEmptyMusicContainers(ctx context.Context, libraryID int64) (int64, error) {
+	var total int64
+	// Albums first, then artists: emptying an album can empty its artist, and
+	// doing it in the other order would leave that artist behind for a scan.
+	for _, kind := range []string{"album", "artist"} {
+		res, err := s.db.ExecContext(ctx, `
+			DELETE FROM media_item
+			WHERE library_id = ? AND kind = ?
+			  AND NOT EXISTS (SELECT 1 FROM media_item c WHERE c.parent_id = media_item.id)`,
+			libraryID, kind)
+		if err != nil {
+			return total, fmt.Errorf("delete empty %ss: %w", kind, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
