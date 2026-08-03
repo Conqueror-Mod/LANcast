@@ -52,6 +52,17 @@ func main() {
 		return
 	}
 
+	// `lancastd devseed` points a development instance at the test libraries.
+	// Present only in builds made with -tags devseed.
+	if len(os.Args) > 1 && os.Args[1] == "devseed" {
+		attachConsole()
+		if err := runDevSeed(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd devseed:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// `lancastd reset-auth` is the lockout recovery path. Console output only,
 	// so it attaches to the caller's terminal first — a windowsgui build has no
 	// console of its own and would otherwise print nothing at all.
