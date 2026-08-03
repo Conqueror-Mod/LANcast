@@ -71,8 +71,15 @@ func TestSplitTLSRoutesBothSchemes(t *testing.T) {
 		t.Fatalf("http get: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusMovedPermanently {
-		t.Fatalf("http status = %d, want 301", resp.StatusCode)
+	// Temporary, never permanent. A 301 is cached by browsers indefinitely, so
+	// one visit while TLS was on would leave the browser refusing plain HTTP at
+	// this host and port forever — and the scheme is not permanent: clearing
+	// the accounts puts the same address back on plaintext.
+	if resp.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("http status = %d, want 307", resp.StatusCode)
+	}
+	if resp.StatusCode == http.StatusMovedPermanently {
+		t.Fatal("permanent redirect: a browser will cache this and never retry HTTP")
 	}
 	if loc := resp.Header.Get("Location"); loc != "https://"+addr+"/home?x=1" {
 		t.Errorf("redirect Location = %q, want https://%s/home?x=1", loc, addr)

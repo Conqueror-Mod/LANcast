@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"lancast/internal/childproc"
 	"os"
 	"os/exec"
 	"strings"
@@ -122,6 +123,7 @@ func startProgressive(ctx context.Context, bin string, o Options) (*Session, io.
 	ctx, cancel := context.WithCancel(ctx)
 
 	cmd := exec.CommandContext(ctx, bin, Args(o)...)
+	childproc.Hide(cmd)
 	stderr := newRingBuffer(8 << 10)
 	cmd.Stderr = stderr
 
@@ -152,6 +154,7 @@ func startHLS(ctx context.Context, bin string, o Options) (*Session, error) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(ctx, bin, Args(o)...)
+	childproc.Hide(cmd)
 	stderr := newRingBuffer(8 << 10)
 	cmd.Stderr = stderr
 	cmd.Stdout = io.Discard

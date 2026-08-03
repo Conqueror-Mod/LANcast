@@ -62,11 +62,24 @@ func dispatch(c net.Conn, tlsLn, plainLn *chanListener, log *slog.Logger) {
 	}
 }
 
-// httpsRedirect answers a plaintext request with a permanent redirect to the
-// same host and path over HTTPS. Host already carries the port, so only the
-// scheme changes.
+// httpsRedirect answers a plaintext request with a redirect to the same host
+// and path over HTTPS. Host already carries the port, so only the scheme
+// changes.
+//
+// Temporary, not permanent, because the scheme this server speaks is not a
+// permanent fact about it. TLS is on only while the server is both secured and
+// bound beyond loopback (ADR 0014), and either can stop being true — clearing
+// the accounts with `reset-auth` puts it back on plain HTTP at the same
+// address.
+//
+// A 301 is cached by browsers indefinitely, so one visit while TLS was on left
+// the browser refusing to try HTTP at that host and port ever again. After a
+// reset it then spoke TLS to a plaintext listener and showed
+// ERR_SSL_PROTOCOL_ERROR, with no obvious way back short of clearing browsing
+// data. 307 also preserves the method, so a redirected API call is not silently
+// turned into a GET.
 func httpsRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusMovedPermanently)
+	http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusTemporaryRedirect)
 }
 
 // peekedConn re-yields bytes consumed during classification before reading from

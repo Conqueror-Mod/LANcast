@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lancast/internal/childproc"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -187,6 +188,7 @@ func (p *Prober) Probe(ctx context.Context, path string) (*Result, error) {
 		// and worse.
 		path,
 	)
+	childproc.Hide(cmd)
 
 	out, err := cmd.Output()
 	if err != nil {

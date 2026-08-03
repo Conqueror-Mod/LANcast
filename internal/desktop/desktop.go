@@ -5,6 +5,7 @@ package desktop
 
 import (
 	"crypto/tls"
+	"lancast/internal/childproc"
 	"net"
 	"net/http"
 	"os/exec"
@@ -104,7 +105,9 @@ func BrowserCommand(goos, url string) []string {
 // OpenBrowser opens url in the default browser, fire-and-forget.
 func OpenBrowser(url string) error {
 	c := BrowserCommand(runtime.GOOS, url)
-	return exec.Command(c[0], c[1:]...).Start()
+	cmd := exec.Command(c[0], c[1:]...)
+	childproc.Hide(cmd)
+	return cmd.Start()
 }
 
 // ServerRunning reports whether a LANcast server is answering at addr, on
