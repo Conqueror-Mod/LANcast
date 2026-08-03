@@ -261,6 +261,17 @@ type Artwork struct {
 	Poster string `json:"poster,omitempty"`
 	Fanart string `json:"fanart,omitempty"`
 	Thumb  string `json:"thumb,omitempty"`
+
+	// Inherited marks a poster borrowed from a child rather than owned. Today
+	// that is an artist wearing one of its albums' covers, because nothing on
+	// disk is an artist photograph — the images sitting in an artist folder are
+	// a media player's per-album cache, not a picture of the band.
+	//
+	// Reported rather than hidden so a client can treat it as the placeholder
+	// it is, and so "why is this artist showing that album's sleeve" has an
+	// answer. It is never stored: the fallback stops applying by itself the
+	// moment a real artist image exists.
+	Inherited bool `json:"inherited,omitempty"`
 }
 
 // Progress is a user's playback position for an item.

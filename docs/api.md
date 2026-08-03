@@ -345,6 +345,21 @@ From M2 the response also carries:
                { "source": "imdb", "score": 8.0, "display": "8.0", "votes": 634000 } ] }
 ```
 
+`artwork` may carry `"inherited": true`, which means the poster is **borrowed
+rather than owned**. Today that is only an artist wearing one of its albums'
+covers: an album has a picture embedded in its tracks or a `cover.jpg` beside
+them, and an artist has neither — the images that do sit in an artist folder
+turn out to be a media player's per-album art cache rather than a photograph of
+anyone. The borrowed album is the one with the most tracks, so a record is
+chosen over a stray single, with sort title and id as tie-breakers so a tile
+does not change its face between two reads.
+
+The flag is reported rather than hidden so a client can treat it as the
+placeholder it is. Nothing is stored: the fallback stops applying by itself the
+moment an artist has a real image, so a future provider needs nothing cleaned
+up. An artist whose albums all lack art has no `artwork` at all, which is the
+honest state rather than an invented one.
+
 `ratings` is the external scores from third-party sources ([ADR 0019](adr/0019-external-ratings.md)),
 highest normalized `score` (0–10) first, each with a source-native `display`
 string (`"88%"`, `"81"`, `"8.0"`) and an optional `votes` count. `source` is an
