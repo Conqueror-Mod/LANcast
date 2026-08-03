@@ -1,6 +1,7 @@
 package applog
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,5 +151,73 @@ func TestWriteAfterCloseDoesNotPanic(t *testing.T) {
 	}
 	if err := w.Close(); err != nil {
 		t.Errorf("second Close returned %v, want nil", err)
+	}
+}
+
+// failingWriter is what os.Stderr is under the Windows service control
+// manager: a destination whose every write fails.
+type failingWriter struct{ writes int }
+
+func (f *failingWriter) Write(p []byte) (int, error) {
+	f.writes++
+	return 0, errors.New("the handle is invalid")
+}
+
+// The bug this replaced: io.MultiWriter writes sequentially and returns on the
+// first error, so pairing the log file with a stderr that always fails meant
+// the file received nothing. v0.4.2 shipped an empty log in exactly the
+// situation the log exists for.
+func TestTeeKeepsWritingWhenTheOtherDestinationFails(t *testing.T) {
+	dir := t.TempDir()
+	lf, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+
+	dead := &failingWriter{}
+	w := Tee(lf, dead)
+
+	if _, err := w.Write([]byte("the reason it stopped\n")); err != nil {
+		t.Errorf("Tee.Write returned %v; a logger must never see an error", err)
+	}
+	lf.Close()
+
+	body, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "the reason it stopped") {
+		t.Fatalf("the log is %q — a failing stderr swallowed the file write", body)
+	}
+	if dead.writes == 0 {
+		t.Error("the second destination was never attempted")
+	}
+}
+
+// The reverse: a broken log file must not stop the console output either.
+func TestTeeKeepsWritingWhenThePrimaryFails(t *testing.T) {
+	dead := &failingWriter{}
+	var good strings.Builder
+
+	if _, err := Tee(dead, &good).Write([]byte("still visible\n")); err != nil {
+		t.Errorf("Tee.Write returned %v", err)
+	}
+	if good.String() != "still visible\n" {
+		t.Errorf("second destination got %q", good.String())
+	}
+}
+
+// A nil destination is the "no file could be opened" case and must be inert.
+func TestTeeToleratesNilDestinations(t *testing.T) {
+	var good strings.Builder
+	if _, err := Tee(nil, &good).Write([]byte("a\n")); err != nil {
+		t.Errorf("Tee with a nil primary returned %v", err)
+	}
+	if _, err := Tee(&good, nil).Write([]byte("b\n")); err != nil {
+		t.Errorf("Tee with a nil secondary returned %v", err)
+	}
+	if good.String() != "a\nb\n" {
+		t.Errorf("got %q, want both lines", good.String())
 	}
 }
