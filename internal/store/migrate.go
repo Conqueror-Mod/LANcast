@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 12
+const CurrentSchemaVersion = 13
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -30,6 +30,7 @@ var migrations = []migration{
 	{version: 10, sql: schemaRevision10},
 	{version: 11, sql: schemaRevision11},
 	{version: 12, sql: schemaRevision12},
+	{version: 13, sql: schemaRevision13},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -392,4 +393,18 @@ CREATE TABLE IF NOT EXISTS installed_plugin (
 // re-probing fills them in.
 const schemaRevision12 = `
 ALTER TABLE media_stream ADD COLUMN pix_fmt TEXT;
+`
+
+// Revision 13 — artist on media_item.
+//
+// A track's performer is not the album's: a compilation has one album artist
+// and a different artist per track, which is exactly the case that made ADR
+// 0024 group on album_artist. The album artist lives on the container row; this
+// column is the track's own, so a compilation can show who actually played
+// without the grouping fracturing.
+//
+// Nullable, and empty for every video item, which is why this is a column
+// addition rather than a shape change.
+const schemaRevision13 = `
+ALTER TABLE media_item ADD COLUMN artist TEXT;
 `

@@ -63,6 +63,7 @@ type Scanner struct {
 	running  map[int64]bool
 	last     map[int64]*Progress
 	onFinish func()
+	tags     TagReader
 }
 
 func New(st *store.Store, log *slog.Logger) *Scanner {
@@ -274,6 +275,15 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	s.mu.Lock()
 	p.ItemsMissing = len(gone)
 	s.mu.Unlock()
+
+	// Music reads its metadata from the files themselves before anything is
+	// grouped, because for music the tags are the authority and the folder is
+	// the guess — the reverse of video (ADR 0024).
+	if lib.Kind == media.LibraryMusic {
+		if err := s.applyTrackTags(ctx, lib, p); err != nil {
+			s.log.Warn("reading tags failed", "library", lib.ID, "error", err)
+		}
+	}
 
 	if err := s.reconcileHierarchy(ctx, lib); err != nil {
 		// Hierarchy is a grouping convenience layered over episodes that already
@@ -512,10 +522,17 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, in
 	if nfo.Series != "" {
 		sr := nfo.Series
 		f.Series = &sr
-		// Episodes sort under their series, not their own episode title.
-		f.SortTitle = media.SortTitle(sr)
+		// Episodes sort under their series, not their own episode title. A
+		// track is the opposite: it sorts within its album by number, so it
+		// keeps its own sort title.
+		if nfo.Kind != media.KindTrack {
+			f.SortTitle = media.SortTitle(sr)
+		}
 	}
-	if nfo.Kind == media.KindEpisode {
+	// Season and episode carry disc and track for music, which is the whole
+	// reason ParseTrack extracts them — without this they were computed and
+	// then dropped, and an album played in filename order.
+	if nfo.Kind == media.KindEpisode || nfo.Kind == media.KindTrack {
 		se, ep := nfo.Season, nfo.Episode
 		f.Season, f.Episode = &se, &ep
 	}

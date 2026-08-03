@@ -595,6 +595,24 @@ decision for it falls back to direct play.
 
 Returns `503` if ffprobe is not installed and `400` for an unknown scope.
 
+### Music items
+
+A `track` carries the same fields as any other item, with three read in the
+music sense (ADR 0024):
+
+| Field | On a track |
+|---|---|
+| `series` | The album |
+| `season` | The disc number, absent on a single-disc release |
+| `episode` | The track number |
+| `artist` | The track's own performer, present only on music |
+
+`artist` is the track's, not the album's. A compilation has one album artist and
+a different performer per track; the album artist groups the record, and this
+says who actually played. Both come from the file's embedded tags, which for
+music outrank the filename — the tagger wrote them, where a filename was guessed
+by whoever ripped the disc.
+
 Item responses gain `duration_ms`, `width`, `height`, `video_codec`,
 `video_profile`, `video_bitrate`, `audio_codec`, `audio_channels`, and
 `probed_at`. The detail response also carries `streams` — the full track list,

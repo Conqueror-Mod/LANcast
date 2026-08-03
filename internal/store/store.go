@@ -176,6 +176,9 @@ type Item struct {
 	Year      *int   `json:"year"`
 
 	Series  *string `json:"series"`
+	// Artist is a music track's own performer, which on a compilation differs
+	// from the album artist carried by the container above it (ADR 0024).
+	Artist  *string `json:"artist,omitempty"`
 	Season  *int    `json:"season"`
 	Episode *int    `json:"episode"`
 
@@ -430,7 +433,7 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
-	audio_codec, audio_channels, video_frame_rate, imdb_id`
+	audio_codec, audio_channels, video_frame_rate, imdb_id, artist`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -462,7 +465,8 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
-		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID)
+		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID,
+		&it.Artist)
 	if err != nil {
 		return nil, err
 	}
@@ -1259,6 +1263,85 @@ func (s *Store) SaveProgress(ctx context.Context, itemID int64, userID string, p
 		itemID, userID, positionMS, w, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("save progress: %w", err)
+	}
+	return nil
+}
+
+// LibraryTracks returns a music library's track rows.
+func (s *Store) LibraryTracks(ctx context.Context, libraryID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+itemCols+` FROM media_item WHERE library_id = ? AND kind = 'track' AND missing = 0`,
+		libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("library tracks: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+// TrackTags is what an embedded tag set contributes to a track row.
+//
+// SortTitle is supplied by the caller rather than derived here: title
+// normalization has exactly one implementation, `media.SortTitle`, and a second
+// one inside the store would be the bug factory CLAUDE.md warns about.
+type TrackTags struct {
+	Title     string
+	SortTitle string
+	Artist    string
+	Album     string
+	Disc      int
+	Track     int
+	Year      int
+}
+
+// ApplyTrackTags writes tag-derived metadata onto a track.
+//
+// Locked fields are left alone, which is the same promise every other write
+// path makes (ADR 0008): editing a field pins it, and re-reading the file must
+// not undo that. A rescan reconciles files; it does not re-litigate identity.
+//
+// Empty values do not overwrite. A tagger that filled in a title but left the
+// album blank should not erase an album that a folder name supplied.
+func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) error {
+	lockedList, err := s.LockedFields(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	locked := make(map[string]bool, len(lockedList))
+	for _, f := range lockedList {
+		locked[f] = true
+	}
+
+	set := []string{}
+	args := []any{}
+	add := func(field string, value any, skip bool) {
+		if skip || locked[field] {
+			return
+		}
+		set = append(set, field+" = ?")
+		args = append(args, value)
+	}
+
+	add("title", t.Title, t.Title == "")
+	// sort_title follows title's lock, not one of its own — they are one field
+	// as far as an operator is concerned.
+	add("sort_title", t.SortTitle, t.Title == "" || locked["title"])
+	add("artist", t.Artist, t.Artist == "")
+	add("series", t.Album, t.Album == "")
+	add("season", t.Disc, t.Disc == 0)
+	add("episode", t.Track, t.Track == 0)
+	add("year", t.Year, t.Year == 0)
+
+	if len(set) == 0 {
+		return nil
+	}
+	set = append(set, "updated_at = ?")
+	args = append(args, time.Now().Unix(), itemID)
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE media_item SET `+strings.Join(set, ", ")+` WHERE id = ?`, args...)
+	if err != nil {
+		return fmt.Errorf("apply track tags: %w", err)
 	}
 	return nil
 }

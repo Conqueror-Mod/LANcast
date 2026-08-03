@@ -293,6 +293,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	prober := probe.New()
 	probes := probe.NewWorker(st, prober, log)
+	// Music takes its metadata from the file's own tags during the scan, not
+	// from the filename (ADR 0024). Without a prober the scan still works and
+	// tracks keep what their folders gave them.
+	scanner.SetTagReader(prober)
 
 	subs := subtitle.NewExtractor(filepath.Join(cfg.DataDir, "subtitles"))
 	trans := transcode.NewManager(filepath.Join(cfg.DataDir, "transcode"), log)
