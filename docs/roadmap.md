@@ -1,9 +1,19 @@
 # Roadmap
 
-Last updated: 2026-08-02 · **v0.4.3 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-03 · **v0.5.0 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
+
+**Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
+which is the first media type past video and therefore the first real test of
+the claim ADR 0002 made: that a new kind needs no new tables. It holds — music
+is three new `kind` values on `media_item` related by `parent_id`, exactly as
+show → season → episode already was. Metadata inverts the video rule: for a film
+the filename is a guess and a provider corrects it, but a music file already
+carries the answer in its tags, so tags win and the filename is the fallback.
+The release is **server-side only** — the browser client has no music player yet,
+and album artwork is not extracted. Both are the remaining ADR 0024 scope.
 
 **Plugin architecture (M4) is built** — the last milestone. A WebAssembly runtime
 ([ADR 0020](adr/0020-plugin-isolation-boundary.md)) sandboxes third-party code
@@ -26,23 +36,26 @@ architecture (M4) as the last milestone.
 
 The two early-lock Foundation decisions are now **built, not just decided**: the
 data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
-schema at **revision 12**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
+schema at **revision 13**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
 On top of them, **media organisation shipped end to end** — collections, the
 show → season → episode hierarchy, multi-part works and serials/miniseries, a
 library-kind that drives movie-vs-TV matching, Fix match that reaches TV,
 retroactive re-parse on rescan, Play-all queues, and Remove (ignore or delete,
 with a sidecar sweep). Theme music (blocked on OST identification) is the
-remaining M3 depth. Packaging & distribution is specced but deferred
-([ADR 0016](adr/0016-packaging-and-distribution.md)).
+remaining M3 depth. Packaging & distribution is **built** — two branded
+executables, a goreleaser matrix and a Windows installer
+([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) —
+and has been since v0.3.2.
 
 A **feature backlog is captured below.** With M4 built, what remains is breadth
-(more plugin kinds, more client surfaces, the deferred packaging build) rather
-than foundational milestones.
+(finishing music, a Pictures library, more plugin kinds, more client surfaces)
+rather than foundational milestones.
 
 ## Releases
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.5.0** | 2026-08-03 | Music libraries — the first media type past video, and the first test of ADR 0002's claim that a new kind needs no new tables (it holds: three `kind` values on `media_item`, schema 13). Scans eleven audio formats, reads embedded tags as the authority rather than guessing from filenames, and groups tracks into artists and albums by *album artist* so compilations stay whole. Playback profiles gained audio containers, which is what stopped a `.flac` being re-encoded to AAC to deliver a format every browser plays natively. Server-side only: no music player in the client, no album artwork yet. |
 | **v0.4.3** | 2026-08-02 | The two guards that keep the server honest, both broken in ways only a real install showed. The cross-session single-instance check failed open: Windows returns the same "access denied" whether an object exists and may not be opened or the caller cannot create it, so a desktop launch never saw a server running as a service and started a second one — the mechanism behind the two-servers and, before v0.4.1, two-databases problems. And v0.4.2's service log wrote nothing, because it was paired with a console that does not exist under the service manager using a writer that gives up on the first failure. |
 | **v0.4.2** | 2026-08-02 | Makes a service-run server diagnosable. It had no console and no inherited stderr, so everything it logged was discarded by the operating system — when it exited, the only record anywhere was Windows' own "terminated unexpectedly", which cannot tell a crash apart from a kill. It now writes `lancastd.log` beside the database, one rolled generation capped at 4 MB, and every exit goes through it including a refusal to start. New installs also restart three times after an unexpected exit and then stop, rather than staying down unnoticed or looping on a server that genuinely cannot start. |
 | **v0.4.1** | 2026-08-02 | Windows run environment, all of it found by installing v0.4.0 and using it. Child processes no longer open console windows — the app flashed three or four on launch and one per file on a scan, because a windowsgui parent gives every ffmpeg child a visible console. The HTTPS redirect is temporary rather than permanent: browsers cached the 301 forever, so a server that later dropped back to plain HTTP was unreachable with `ERR_SSL_PROTOCOL_ERROR`. The client no longer starts a server on a second, per-user database while the service uses the machine-wide one. Separate **LANcast Client** and **LANcast Server** Start menu entries. Add-library focuses its first field. |
@@ -88,6 +101,19 @@ Both are the same mistake in a new place: **the environment a check runs in is
 part of the check.** A guard verified somewhere easier than production has not
 been verified.
 
+**v0.5.0 adds a different shape: a fix with two halves, one of them invisible.**
+ADR 0024 named the audio-container problem precisely and pointed at
+`probe.Profile`. Adding the containers there was correct and, on its own, would
+have done nothing for `.m4a` or `.opus` — because decisions are made from the
+*stored* extension mapped into ffprobe's vocabulary by `containerFromExtension`,
+and that mapping knew only video. Profiles would have listed `ogg` while every
+`.opus` file still arrived as `opus` and matched nothing. The tests would have
+passed, the ADR would have been satisfied, and those files would have transcoded
+forever with no stated reason. **An ADR names the decision, not the full set of
+places the decision touches.** The second half was found by asking what actually
+produces the value being compared, rather than trusting that the obvious place
+was the only place.
+
 ## Ordering principle
 
 **Plan an area immediately before building it, not long before.** Specifying the
@@ -123,7 +149,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→9); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→13); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
@@ -136,7 +162,9 @@ Status: **planned** · **next** · *unplanned*
 | Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
 | External ratings | **built** | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
-| Library types beyond video | *unplanned* | Music, photos — proves the taxonomy is open |
+| Library types beyond video | **partly built** | **Music built** server-side ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. Photos still *unplanned* and need their own ADR |
+| Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
+| Music artwork | **next** | Unbuilt: `internal/artwork` only downloads from URLs, so album tiles are blank. Embedded cover art is already *detected* (`probe.isCoverArt`, so audio is not mistaken for film) and needs turning into a source, with `cover.jpg`/`folder.jpg` beside the album as fallback |
 
 ### Playback and client · M3
 
@@ -149,6 +177,7 @@ Status: **planned** · **next** · *unplanned*
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
+| Music player UI | **next** | Unbuilt: `Player.tsx` is video-only and nothing routes a track to it, so v0.5.0's music is API-only. ADR 0024 scopes the minimum as album view plus a track list that plays; the cost is a third container depth in the browse grid, same as show → season → episode |
 | Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
 
 ### Extensibility · M4
@@ -326,11 +355,22 @@ where that openness gets exercised.
    [runtime plan](plugin-runtime-plan.md), [distribution plan](plugin-distribution-plan.md)):
    WASM sandbox, capability model, signed-bundle install with a two-layer trust
    model, Add-ons page, validated by OMDb-as-plugin.
-8. **Nothing foundational remains.** What's next is breadth, from the feature
-   backlog: more client surfaces (TV/mobile), more plugin kinds as real plugins
-   need them, the deferred packaging build ([ADR 0016](adr/0016-packaging-and-distribution.md)),
-   and theme music if OST identification lands. Each is planned immediately before
-   it is built.
+8. ~~Music libraries~~ — **built server-side** and shipped in v0.5.0
+   ([ADR 0024](adr/0024-music-libraries.md)): audio file types behind a
+   kind-aware scan gate, embedded tags as an authoritative local source, the
+   artist → album → track hierarchy, untagged-track scan diagnostics, and audio
+   containers in the playback profile.
+9. **Finish music.** Two pieces of ADR 0024 remain, and artwork comes first —
+   it is far smaller, it is server-side, and building the client grid against
+   blank tiles means designing it twice.
+   1. **Album artwork.** Embedded cover art and `cover.jpg`/`folder.jpg` into
+      the existing content-addressed cache.
+   2. **Music client UI.** Album view and a track list that plays.
+10. **Nothing foundational remains.** After music, what's next is breadth, from
+    the feature backlog: a Pictures library (its own ADR — ADR 0024 deferred
+    photos deliberately), more client surfaces (TV/mobile), more plugin kinds as
+    real plugins need them, and theme music if OST identification lands. Each is
+    planned immediately before it is built.
 
 ## Amendments to schema revision 1
 
