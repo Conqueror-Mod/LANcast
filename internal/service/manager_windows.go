@@ -4,6 +4,7 @@ package service
 
 import (
 	"fmt"
+	"time"
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -41,8 +42,35 @@ func (windowsManager) Install(c Config) error {
 	if err != nil {
 		return fmt.Errorf("create service: %w", err)
 	}
-	s.Close()
+	defer s.Close()
+
+	// Come back after an unexpected exit. Without recovery actions Windows does
+	// nothing when the process dies — killed from Task Manager, or crashed —
+	// and LANcast stays down until somebody notices it is missing. That
+	// happened twice on one machine in a day.
+	//
+	// Three attempts with increasing delays, then stop. A server that cannot
+	// start at all — the schema of a database written by a newer build is the
+	// real case — must not restart forever; it retries a few times, gives up,
+	// and leaves a clean record instead of a loop. The counter resets after a
+	// day, so an isolated failure months apart is always retried.
+	//
+	// Best-effort: a service that runs but will not auto-restart is better than
+	// refusing to install.
+	if err := setRecoveryActions(s); err != nil {
+		return fmt.Errorf("service installed, but automatic restart could not be configured: %w", err)
+	}
 	return nil
+}
+
+// setRecoveryActions asks Windows to restart the service after an unexpected
+// exit.
+func setRecoveryActions(s *mgr.Service) error {
+	return s.SetRecoveryActions([]mgr.RecoveryAction{
+		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
+		{Type: mgr.ServiceRestart, Delay: 15 * time.Second},
+		{Type: mgr.ServiceRestart, Delay: 60 * time.Second},
+	}, uint32((24 * time.Hour).Seconds()))
 }
 
 func withService(fn func(*mgr.Service) error) error {
