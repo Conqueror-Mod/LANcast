@@ -50,8 +50,17 @@ func remuxDecision() probe.Decision {
 	return probe.Decision{Method: probe.Remux, VideoAction: "copy", AudioAction: "copy"}
 }
 
-func audioOnlyDecision() probe.Decision {
+// audioEncodeDecision is a video file whose audio needs re-encoding — not to be
+// confused with audioOnlyDecision, which is content with no picture at all.
+func audioEncodeDecision() probe.Decision {
 	return probe.Decision{Method: probe.Transcode, VideoAction: "copy", AudioAction: "encode"}
+}
+
+func audioOnlyDecision() probe.Decision {
+	return probe.Decision{
+		Method: probe.Transcode, VideoAction: "copy", AudioAction: "encode",
+		AudioOnly: true,
+	}
 }
 
 func fullDecision() probe.Decision {
@@ -81,8 +90,8 @@ func TestNoSeekWhenStartIsZero(t *testing.T) {
 
 // The audio-only case is the one that matters for a real library: video is
 // copied, only audio re-encoded.
-func TestAudioOnlyCopiesVideo(t *testing.T) {
-	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: audioOnlyDecision()})
+func TestAudioEncodeCopiesVideo(t *testing.T) {
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: audioEncodeDecision()})
 	if !hasSequence(args, "-c:v", "copy") {
 		t.Error("video is not copied in an audio-only transcode")
 	}
@@ -91,6 +100,31 @@ func TestAudioOnlyCopiesVideo(t *testing.T) {
 	}
 	if argIndex(args, "libx264") >= 0 {
 		t.Error("libx264 present when the video should be copied — that is a needless full encode")
+	}
+}
+
+// A music file has no video stream. `-map 0:v:0` against one makes ffmpeg exit
+// before producing a byte, so the failure is a dead player rather than degraded
+// audio.
+func TestAudioOnlyMapsNoVideoStream(t *testing.T) {
+	args := Args(Options{Input: "track.wma", Output: Progressive, Decision: audioOnlyDecision(), AudioIndex: -1})
+	if hasArgPair(args, "-map", "0:v:0") {
+		t.Errorf("video stream mapped on audio-only content; ffmpeg would fail outright: %v", args)
+	}
+	if !hasArgPair(args, "-map", "0:a:0?") {
+		t.Errorf("audio stream is not mapped: %v", args)
+	}
+	if !hasSequence(args, "-c:a", "aac") {
+		t.Error("audio is not re-encoded to aac")
+	}
+}
+
+// -c:v with no mapped video stream is at best noise and at worst hardware
+// encoder initialisation for a job that never touches a pixel.
+func TestAudioOnlyNamesNoVideoCodec(t *testing.T) {
+	args := Args(Options{Input: "track.wma", Output: Progressive, Decision: audioOnlyDecision(), AudioIndex: -1})
+	if argIndex(args, "-c:v") >= 0 {
+		t.Errorf("-c:v present with no video stream: %v", args)
 	}
 }
 
@@ -130,7 +164,7 @@ func TestExplicitStreamMapping(t *testing.T) {
 }
 
 func TestSpecificAudioTrackMapped(t *testing.T) {
-	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: audioOnlyDecision(), AudioIndex: 3})
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: audioEncodeDecision(), AudioIndex: 3})
 	if !hasSequence(args, "-map", "0:3") {
 		t.Errorf("requested audio track 3 not mapped: %v", args)
 	}

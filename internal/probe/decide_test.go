@@ -421,3 +421,104 @@ func TestTVProfileDirectPlaysTheHardCases(t *testing.T) {
 		}
 	}
 }
+
+// --- audio containers -----------------------------------------------------
+//
+// A music library is mostly files whose container *is* the codec. Before these
+// were listed, every one of them failed the container check and was rewrapped
+// into MP4 — which for FLAC means a lossless file re-encoded to AAC to deliver
+// a format the browser plays natively.
+
+func TestMusicContainersDirectPlayInABrowser(t *testing.T) {
+	cases := []*Result{
+		result("mp3", audio("mp3", 2)),
+		result("flac", audio("flac", 2)),
+		result("ogg", audio("vorbis", 2)),
+		result("ogg", audio("opus", 2)),
+		result("wav", audio("pcm_s16le", 2)),
+		result("mov", audio("aac", 2)), // .m4a
+	}
+	for _, r := range cases {
+		d := Decide(r, BrowserProfile())
+		if d.Method != DirectPlay {
+			t.Errorf("%s/%s: Method = %q (%s), want direct play",
+				r.Container, r.Audio().Codec, d.Method, d.Reason)
+		}
+	}
+}
+
+// The one that costs the most to get wrong: a rewrap to MP4 cannot carry FLAC,
+// so the fallback is not a cheap repackage but a lossy re-encode of a lossless
+// file.
+func TestFLACIsNotReEncodedForABrowser(t *testing.T) {
+	d := Decide(result("flac", audio("flac", 2)), BrowserProfile())
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q (%s), want copy — a lossless file must not be re-encoded",
+			d.AudioAction, d.Reason)
+	}
+}
+
+// Apple ships no Ogg decoder and its own lossless codec instead. Both halves of
+// that have to be true or the profile is claiming support that produces silence.
+func TestSafariTakesALACAndConvertsOgg(t *testing.T) {
+	if d := Decide(result("mov", audio("alac", 2)), SafariProfile()); d.Method != DirectPlay {
+		t.Errorf("alac: Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+	d := Decide(result("ogg", audio("vorbis", 2)), SafariProfile())
+	if d.AudioAction != "encode" {
+		t.Errorf("ogg: AudioAction = %q (%s), want encode — Safari has no Ogg decoder",
+			d.AudioAction, d.Reason)
+	}
+}
+
+// ALAC in a browser is the inverse: the container is fine and the codec is not,
+// so the audio is re-encoded and nothing pretends otherwise.
+func TestALACIsConvertedForABrowser(t *testing.T) {
+	d := Decide(result("mov", audio("alac", 2)), BrowserProfile())
+	if d.Method != Transcode || d.AudioAction != "encode" {
+		t.Errorf("Method = %q, AudioAction = %q (%s), want a transcode that encodes audio",
+			d.Method, d.AudioAction, d.Reason)
+	}
+	if !d.AudioOnly {
+		t.Error("AudioOnly is false on a file with no video stream")
+	}
+}
+
+// AudioOnly is what keeps `-map 0:v:0` off the ffmpeg command line, so it has
+// to be set on the direct-play path too — a client may ask about a decision it
+// then never acts on.
+func TestAudioOnlyIsSetForMusicAndNotForFilm(t *testing.T) {
+	if d := Decide(result("flac", audio("flac", 2)), BrowserProfile()); !d.AudioOnly {
+		t.Error("AudioOnly is false for a music file")
+	}
+	if d := Decide(result("mp4", video("h264", 1080), audio("aac", 2)), BrowserProfile()); d.AudioOnly {
+		t.Error("AudioOnly is true for a file with a video stream")
+	}
+}
+
+// Cover art is stored as a video stream. If it were mistaken for a picture the
+// decision would map it, and ffmpeg would sit encoding one still frame for the
+// length of the track.
+func TestCoverArtDoesNotMakeATrackLookLikeVideo(t *testing.T) {
+	r := result("flac", Stream{Kind: KindVideo, Codec: "mjpeg", Width: 600, Height: 600},
+		audio("flac", 2))
+	d := Decide(r, BrowserProfile())
+	if !d.AudioOnly {
+		t.Error("AudioOnly is false on a tagged track carrying embedded cover art")
+	}
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+// 24-bit WAV is the deliberate gap: browser support is not universal, and a
+// needless encode there is cheap where a wrong claim is silence.
+func TestHighBitDepthWAVIsConvertedForABrowserAndNotForATV(t *testing.T) {
+	r := result("wav", audio("pcm_s24le", 2))
+	if d := Decide(r, BrowserProfile()); d.AudioAction != "encode" {
+		t.Errorf("browser: AudioAction = %q (%s), want encode", d.AudioAction, d.Reason)
+	}
+	if d := Decide(r, TVProfile()); d.Method != DirectPlay {
+		t.Errorf("tv: Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}

@@ -1,11 +1,39 @@
 package api
 
 import (
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// Audio types are registered explicitly because ServeContent resolves the
+// Content-Type from the file extension, and on Windows that lookup goes to the
+// registry — where .flac and .opus are frequently absent and .m4a is whatever
+// the last media player to install claimed. An unresolved extension falls back
+// to content sniffing, which labels a FLAC application/octet-stream and turns
+// a direct-play music track into a download prompt. The answer here does not
+// depend on which machine the server happens to be running on.
+func init() {
+	for ext, typ := range map[string]string{
+		".mp3":  "audio/mpeg",
+		".flac": "audio/flac",
+		".ogg":  "audio/ogg",
+		".oga":  "audio/ogg",
+		".opus": "audio/ogg",
+		".m4a":  "audio/mp4",
+		".m4b":  "audio/mp4",
+		".aac":  "audio/aac",
+		".wav":  "audio/wav",
+		".wma":  "audio/x-ms-wma",
+		".alac": "audio/mp4",
+	} {
+		// Errors here are impossible for literal types and are not worth
+		// failing startup over in any case.
+		_ = mime.AddExtensionType(ext, typ)
+	}
+}
 
 // stream serves a media file for direct play.
 //

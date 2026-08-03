@@ -516,6 +516,13 @@ third of a typical library.
 `reason` is always populated. "Why is this transcoding" should not require
 reading server logs.
 
+`audio_only` is present and `true` when the file has no video stream — a music
+track, or a video file with only audio. Embedded cover art does not count: it
+is stored as a video stream and is ignored, because treating a still frame as
+the picture would have ffmpeg encode it for the length of the track. A client
+can use this to attach the source to an `<audio>` element; a non-direct stream
+of audio-only content is served as `audio/mp4` rather than `video/mp4`.
+
 Takes the same `?profile=` and `?audio=` parameters as the stream endpoints,
 and echoes the resolved profile back. Call it with the parameters you intend to
 stream with: an explanation of a decision the server would not actually make
@@ -534,13 +541,21 @@ black rectangles happen.
 
 | Profile | Video | Audio | Containers |
 | --- | --- | --- | --- |
-| `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac | mp4, webm, mov |
-| `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus | mp4, mov |
-| `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, flac, ac3, eac3, dts, truehd | mp4, matroska, webm, mov, mpegts |
+| `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 | mp4, webm, mov, mp3, flac, ogg, wav |
+| `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus, alac, pcm_s16le, pcm_s24le, pcm_u8 | mp4, mov, mp3, flac, wav |
+| `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, vorbis, flac, alac, ac3, eac3, dts, truehd, pcm_s16le, pcm_s24le, pcm_u8 | mp4, matroska, webm, mov, mpegts, mp3, flac, ogg, wav, aac |
 
 `browser` excludes HEVC deliberately: Chrome's support is conditional on
 hardware and Firefox has none, so claiming it for an unidentified client trades
 a cheap remux for an unexplained failure. Clients that know better say so.
+
+The bare audio containers exist for music, where the container *is* the codec:
+an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`.
+Without them every track fails the container check and rewraps into MP4 — and
+because MP4 cannot carry FLAC (see below), a lossless file would be re-encoded
+to AAC to deliver a format the client already plays natively. `safari` carries
+ALAC and drops Ogg, matching what Apple ships decoders for. PCM is claimed at
+16-bit for `browser` and 24-bit only for `safari` and `tv`.
 
 Two rules apply on top of the profile, and both are about what happens *after*
 the decision rather than what the client can decode:

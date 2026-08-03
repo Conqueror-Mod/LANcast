@@ -29,6 +29,13 @@ type Decision struct {
 	VideoAction  string `json:"video_action"` // copy | encode
 	AudioAction  string `json:"audio_action"` // copy | encode
 	TargetFormat string `json:"target_format,omitempty"`
+
+	// AudioOnly marks content with no picture — a music track, or a video file
+	// stripped to its audio. It travels on the decision because the ffmpeg
+	// command line must not map or encode a video stream that does not exist:
+	// `-map 0:v:0` against a music file is a hard failure, not a degraded
+	// stream, and the caller has no other way to know.
+	AudioOnly bool `json:"audio_only,omitempty"`
 }
 
 // Profile describes what a client can play.
@@ -67,12 +74,21 @@ type Profile struct {
 // stereo needlessly transcoded 18 files whose audio the browser could already
 // play. AC-3, E-AC-3, DTS, and TrueHD are genuinely unsupported and are
 // excluded by codec, which is the honest reason.
+//
+// The bare audio containers are listed because a music library is mostly files
+// whose container *is* the codec — an .mp3 reports container "mp3", a .flac
+// reports "flac". Without them every track in the library failed the container
+// check and was rewrapped into MP4, and FLAC does not survive that: it cannot
+// be copied into fragmented MP4 (see mp4CarriesAudio), so a lossless file was
+// re-encoded to AAC to play a container the browser already handles natively.
+// PCM is listed at 16-bit and 8-bit only; 24-bit WAV support is not universal
+// and a needless encode there is cheap, where a wrong claim is silence.
 func BrowserProfile() Profile {
 	return Profile{
 		Name:        "browser",
-		Containers:  []string{"mp4", "webm", "mov"},
+		Containers:  []string{"mp4", "webm", "mov", "mp3", "flac", "ogg", "wav"},
 		VideoCodecs: []string{"h264", "vp8", "vp9", "av1"},
-		AudioCodecs: []string{"aac", "mp3", "opus", "vorbis", "flac"},
+		AudioCodecs: []string{"aac", "mp3", "opus", "vorbis", "flac", "pcm_s16le", "pcm_u8"},
 	}
 }
 
@@ -83,12 +99,17 @@ func BrowserProfile() Profile {
 // and AC-3/E-AC-3 play in MP4. Both are large slices of a real library —
 // excluding them costs a full video re-encode and an audio re-encode
 // respectively, on files this client could have direct-played.
+//
+// On the music side it gains ALAC, which is Apple's own lossless codec and the
+// format an iTunes-ripped library is in, and loses Ogg, which Apple has never
+// shipped a decoder for. Opus stays in the codec list because it plays inside
+// MP4 and CAF; an .opus file in an Ogg container still needs converting.
 func SafariProfile() Profile {
 	return Profile{
 		Name:        "safari",
-		Containers:  []string{"mp4", "mov"},
+		Containers:  []string{"mp4", "mov", "mp3", "flac", "wav"},
 		VideoCodecs: []string{"h264", "hevc", "av1"},
-		AudioCodecs: []string{"aac", "mp3", "ac3", "eac3", "flac", "opus"},
+		AudioCodecs: []string{"aac", "mp3", "ac3", "eac3", "flac", "opus", "alac", "pcm_s16le", "pcm_s24le", "pcm_u8"},
 	}
 }
 
@@ -101,10 +122,13 @@ func SafariProfile() Profile {
 // devices in this class pass them through to a receiver.
 func TVProfile() Profile {
 	return Profile{
-		Name:        "tv",
-		Containers:  []string{"mp4", "matroska", "webm", "mov", "mpegts"},
+		Name: "tv",
+		Containers: []string{"mp4", "matroska", "webm", "mov", "mpegts",
+			"mp3", "flac", "ogg", "wav", "aac"},
 		VideoCodecs: []string{"h264", "hevc", "vp9", "av1", "mpeg2video"},
-		AudioCodecs: []string{"aac", "mp3", "opus", "flac", "ac3", "eac3", "dts", "truehd"},
+		AudioCodecs: []string{"aac", "mp3", "opus", "vorbis", "flac", "alac",
+			"ac3", "eac3", "dts", "truehd",
+			"pcm_s16le", "pcm_s24le", "pcm_u8"},
 	}
 }
 
@@ -154,13 +178,15 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		}
 	}
 
+	audioOnly := video == nil && audio != nil
+
 	videoOK, videoWhy := videoCompatible(video, p)
 	audioOK, audioWhy := audioCompatible(audio, p)
 
 	if videoOK && audioOK && contains(p.Containers, r.Container) {
 		return Decision{
 			Method: DirectPlay, Reason: "container and codecs are supported",
-			VideoAction: "copy", AudioAction: "copy",
+			VideoAction: "copy", AudioAction: "copy", AudioOnly: audioOnly,
 		}
 	}
 
@@ -189,6 +215,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 			Method:      Remux,
 			Reason:      fmt.Sprintf("%s container is not supported, but both codecs are", r.Container),
 			VideoAction: "copy", AudioAction: "copy", TargetFormat: "mp4",
+			AudioOnly: audioOnly,
 		}
 
 	case videoCopyable:
@@ -196,6 +223,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		return Decision{
 			Method: Transcode, Reason: audioMuxWhy,
 			VideoAction: "copy", AudioAction: "encode", TargetFormat: "mp4",
+			AudioOnly: audioOnly,
 		}
 
 	default:

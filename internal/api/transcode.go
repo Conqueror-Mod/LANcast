@@ -43,7 +43,13 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stream.Close()
 
-	w.Header().Set("Content-Type", "video/mp4")
+	// Audio-only output is still fragmented MP4, but labelling it video/mp4
+	// makes an <audio> element reject a stream it can play perfectly well.
+	if t.decision.AudioOnly {
+		w.Header().Set("Content-Type", "audio/mp4")
+	} else {
+		w.Header().Set("Content-Type", "video/mp4")
+	}
 	// A live transcode has no known length and cannot be range-served: bytes
 	// do not exist until ffmpeg produces them. Saying so plainly stops
 	// browsers issuing range requests that could never be satisfied.
