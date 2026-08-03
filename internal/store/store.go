@@ -175,7 +175,7 @@ type Item struct {
 	SortTitle string `json:"-"`
 	Year      *int   `json:"year"`
 
-	Series  *string `json:"series"`
+	Series *string `json:"series"`
 	// Artist is a music track's own performer, which on a compilation differs
 	// from the album artist carried by the container above it (ADR 0024).
 	Artist  *string `json:"artist,omitempty"`
