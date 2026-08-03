@@ -96,6 +96,29 @@ on hover/focus/selection, and it means *where you are* and nothing else. Never
 use gold to indicate favorite, new, 4K, or any other state — the moment gold
 means two things, the focus signal is dead.
 
+## Running it against real media
+
+Test libraries live outside the repo, one folder holding `TEST MOVIE LIBRARY`,
+`TEST SHOWS LIBRARY`, `TEST MUSIC LIBRARY`, `TEST PICTURE LIBRARY`. **Never point
+a test instance at the live library** — a scan with `write_nfo` on writes
+sidecars next to the media, and the database being a copy does not make the
+media a copy.
+
+`devseed` creates those libraries in a data directory and turns NFO writing off:
+
+```bash
+go build -tags devseed -o LANcast-Server.exe ./cmd/lancastd
+./LANcast-Server.exe devseed -data <dev data dir> -root "<test libraries>" -scan
+```
+
+It is idempotent, and it is **behind a build tag so it is absent from release
+binaries** rather than merely undocumented in them.
+
+It deliberately does not create an account. A credential compiled into the
+program is a credential that ships, and the loopback rule above does not survive
+one. Create the account by hand, once, in a data directory kept between
+sessions — everything else is repeatable.
+
 ## Before claiming done
 
 ```bash
