@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -34,7 +33,11 @@ func serviceRun(dataDir, addr string) error {
 		log.Warn("could not open the log file; logging to stderr only", "error", err)
 	} else {
 		defer lf.Close()
-		log = slog.New(slog.NewTextHandler(io.MultiWriter(os.Stderr, lf), nil))
+		// applog.Tee, never io.MultiWriter: the file comes first and neither
+		// destination can stop the other. MultiWriter aborts on the first
+		// error, and under the SCM there is no stderr — so it wrote nothing to
+		// the log at all, in exactly the situation the log exists for.
+		log = slog.New(slog.NewTextHandler(applog.Tee(lf, os.Stderr), nil))
 		log.Info("logging to file", "path", lf.Path())
 	}
 

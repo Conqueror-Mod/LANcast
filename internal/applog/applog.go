@@ -10,6 +10,7 @@ package applog
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -111,4 +112,33 @@ func (w *File) Close() error {
 	err := w.f.Close()
 	w.f = nil
 	return err
+}
+
+// Tee returns a writer that sends every line to the log file and also to also,
+// where a failure on either one cannot stop the other.
+//
+// This exists because io.MultiWriter is the obvious thing and is wrong here.
+// It writes sequentially and returns on the first error, so pairing the log
+// file with os.Stderr means that under a Windows service — where there is no
+// stderr and every write to it fails — the file receives nothing at all. The
+// log shipped empty in exactly the situation it was built for, and the local
+// test missed it by running in a terminal where stderr worked.
+//
+// Failures are swallowed rather than reported: the caller is a logger, nothing
+// upstream will act on the error, and a log that cannot be written must never
+// take the server down with it.
+func Tee(primary, also io.Writer) io.Writer {
+	return tee{primary: primary, also: also}
+}
+
+type tee struct{ primary, also io.Writer }
+
+func (t tee) Write(p []byte) (int, error) {
+	if t.primary != nil {
+		_, _ = t.primary.Write(p)
+	}
+	if t.also != nil {
+		_, _ = t.also.Write(p)
+	}
+	return len(p), nil
 }
