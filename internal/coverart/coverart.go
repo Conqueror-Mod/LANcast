@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"lancast/internal/childproc"
+	"lancast/internal/media"
 	"os/exec"
 
 	// JPEG and PNG only, matching exactly what internal/artwork can store.
@@ -285,6 +286,14 @@ func (r *Resolver) ForAlbum(ctx context.Context, trackPaths []string) (*Image, e
 				names = append(names, e.Name())
 			}
 		}
+		if sharedWithOtherAlbums(names, dir, trackPaths) {
+			// The image here is not this album's. Found against a real library:
+			// loose tracks dropped into a letter-bucket folder each become
+			// their own album, and a single Folder.jpg in that bucket was
+			// handed to every one of them — five unrelated records wearing the
+			// same cover, which looks exactly like a scanner bug.
+			continue
+		}
 		name := PickSidecar(names)
 		if name == "" {
 			continue
@@ -298,6 +307,40 @@ func (r *Resolver) ForAlbum(ctx context.Context, trackPaths []string) (*Image, e
 	}
 
 	return nil, ErrNoArt
+}
+
+// sharedWithOtherAlbums reports whether a directory holds audio that does not
+// belong to this album — which makes any image in it a directory's picture
+// rather than this record's cover.
+//
+// The case that forces this is a library organised into letter buckets, or any
+// folder of loose singles: each file groups into its own album by tag, every
+// one of them names that folder as its directory, and a single `folder.jpg`
+// there would otherwise be adopted by all of them. Being wrong here is worse
+// than finding nothing — a grid of unrelated albums sharing one cover reads as
+// a broken scanner, where a missing cover reads as a missing cover.
+//
+// A multi-disc album is deliberately unaffected: its parent directory holds the
+// disc folders and no audio of its own, so the cover beside them is still
+// found.
+func sharedWithOtherAlbums(names []string, dir string, trackPaths []string) bool {
+	ours := 0
+	for _, p := range trackPaths {
+		if filepath.Dir(p) == dir {
+			ours++
+		}
+	}
+	for _, n := range names {
+		if !media.IsAudio(n) {
+			continue
+		}
+		ours--
+		if ours < 0 {
+			// An audio file in this directory that is not one of ours.
+			return true
+		}
+	}
+	return false
 }
 
 // sidecarDirs lists the directories worth searching for an album, nearest

@@ -248,3 +248,109 @@ func TestNearestSidecarWins(t *testing.T) {
 		t.Errorf("From = %q, want the disc folder's cover", img.From)
 	}
 }
+
+// --- shared directories ---------------------------------------------------
+//
+// Found by running this against a real 398-album library, not by reading the
+// code. A library organised into letter buckets drops loose singles straight
+// into a folder like "C's"; each groups into its own album by tag, all of them
+// name that folder as their directory, and one Folder.jpg there was handed to
+// five unrelated records. A grid of different albums wearing the same cover
+// reads as a broken scanner — worse than no cover at all.
+
+func TestBucketFolderImageIsNotAdoptedAsAnAlbumCover(t *testing.T) {
+	bucket := t.TempDir()
+	ours := filepath.Join(bucket, "Artist - Our Song.mp3")
+	for _, name := range []string{
+		"Artist - Our Song.mp3",
+		"Someone Else - Their Song.mp3",
+		"A Third Band - Another.mp3",
+	} {
+		if err := os.WriteFile(filepath.Join(bucket, name), []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(bucket, "Folder.jpg"), onePixelPNG, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewResolver(&Extractor{Path: filepath.Join(bucket, "no-such-ffmpeg")})
+	_, err := r.ForAlbum(context.Background(), []string{ours})
+	if !errors.Is(err, ErrNoArt) {
+		t.Errorf("err = %v, want ErrNoArt — that image belongs to the folder, not this album", err)
+	}
+}
+
+// The counterpart: a directory holding only this album's tracks is the album's
+// own, and its cover is genuinely its cover.
+func TestAlbumOwnDirectoryCoverIsStillUsed(t *testing.T) {
+	dir := t.TempDir()
+	var tracks []string
+	for _, name := range []string{"01.mp3", "02.mp3", "03.mp3"} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tracks = append(tracks, p)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "folder.jpg"), onePixelPNG, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewResolver(&Extractor{Path: filepath.Join(dir, "no-such-ffmpeg")})
+	img, err := r.ForAlbum(context.Background(), tracks)
+	if err != nil {
+		t.Fatalf("ForAlbum: %v — an album's own folder image must still be found", err)
+	}
+	if img.Source != SourceSidecar {
+		t.Errorf("Source = %q, want sidecar", img.Source)
+	}
+}
+
+// A multi-disc album must not be caught by the shared-directory rule: its
+// parent holds the disc folders and no audio of its own, so the cover beside
+// them is still this album's.
+func TestMultiDiscParentCoverSurvivesTheSharedDirectoryRule(t *testing.T) {
+	album := t.TempDir()
+	var tracks []string
+	for _, disc := range []string{"Disc 1", "Disc 2"} {
+		d := filepath.Join(album, disc)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		p := filepath.Join(d, "01.mp3")
+		if err := os.WriteFile(p, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		tracks = append(tracks, p)
+	}
+	if err := os.WriteFile(filepath.Join(album, "cover.jpg"), onePixelPNG, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewResolver(&Extractor{Path: filepath.Join(album, "no-such-ffmpeg")})
+	img, err := r.ForAlbum(context.Background(), tracks)
+	if err != nil {
+		t.Fatalf("ForAlbum: %v — a multi-disc album's cover sits one level up", err)
+	}
+	if img.From != filepath.Join(album, "cover.jpg") {
+		t.Errorf("From = %q, want the album folder's cover", img.From)
+	}
+}
+
+func TestSharedWithOtherAlbums(t *testing.T) {
+	dir := filepath.Join("Music", "Bucket")
+	ours := []string{filepath.Join(dir, "a.mp3"), filepath.Join(dir, "b.mp3")}
+
+	if sharedWithOtherAlbums([]string{"a.mp3", "b.mp3", "cover.jpg"}, dir, ours) {
+		t.Error("a directory holding exactly our tracks was called shared")
+	}
+	if !sharedWithOtherAlbums([]string{"a.mp3", "b.mp3", "stranger.mp3"}, dir, ours) {
+		t.Error("a directory holding a track that is not ours was not called shared")
+	}
+	// Non-audio files never make a directory shared — artwork, logs and
+	// playlists sit beside albums all the time.
+	if sharedWithOtherAlbums([]string{"a.mp3", "b.mp3", "notes.txt", "cover.jpg", "playlist.m3u"}, dir, ours) {
+		t.Error("non-audio files were counted as another album's tracks")
+	}
+}
