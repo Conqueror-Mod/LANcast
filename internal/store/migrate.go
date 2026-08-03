@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 13
+const CurrentSchemaVersion = 14
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -31,6 +31,7 @@ var migrations = []migration{
 	{version: 11, sql: schemaRevision11},
 	{version: 12, sql: schemaRevision12},
 	{version: 13, sql: schemaRevision13},
+	{version: 14, sql: schemaRevision14},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -407,4 +408,23 @@ ALTER TABLE media_stream ADD COLUMN pix_fmt TEXT;
 // addition rather than a shape change.
 const schemaRevision13 = `
 ALTER TABLE media_item ADD COLUMN artist TEXT;
+`
+
+// Revision 14 — cover_checked_at on media_item.
+//
+// The cover-art worker's queue is a query rather than a table, the same as
+// probing and enrichment, which makes it restart-safe by construction. That
+// only works if an attempt leaves a mark: an album with no embedded picture
+// and no cover.jpg would otherwise come back in every batch forever and the
+// queue would never drain.
+//
+// So this records that an album was *looked at*, which is not the same as it
+// having artwork. "Has a row in item_artwork" cannot answer the question,
+// because the honest answer for a great many albums is that there was nothing
+// to find.
+//
+// Nullable, and empty for everything that is not an album, which is why this is
+// a column addition rather than a shape change.
+const schemaRevision14 = `
+ALTER TABLE media_item ADD COLUMN cover_checked_at INTEGER;
 `

@@ -24,6 +24,7 @@ import (
 	"lancast/internal/api"
 	"lancast/internal/artwork"
 	"lancast/internal/config"
+	"lancast/internal/coverart"
 	"lancast/internal/enrich"
 	"lancast/internal/mediatools"
 	"lancast/internal/meta"
@@ -293,6 +294,14 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	prober := probe.New()
 	probes := probe.NewWorker(st, prober, log)
+
+	// Album art comes off the disk, not from a provider: the picture embedded
+	// in a track, or a cover.jpg beside it (ADR 0024). It gets its own worker
+	// for the reason probing does — extraction spawns a process per album, and
+	// a first scan should not wait on hundreds of them — and pointedly not a
+	// hook on enrichment, which no music item ever reaches because ADR 0024
+	// ships no music provider.
+	covers := coverart.NewWorker(st, art, coverart.NewResolver(coverart.NewExtractor()), log)
 	// Music takes its metadata from the file's own tags during the scan, not
 	// from the filename (ADR 0024). Without a prober the scan still works and
 	// tracks keep what their folders gave them.
@@ -344,6 +353,17 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	var coverMu sync.Mutex
+	coverSoon := func() {
+		go func() {
+			coverMu.Lock()
+			defer coverMu.Unlock()
+			if err := covers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("album art pass failed", "error", err)
+			}
+		}()
+	}
+
 	// Safe by default: an unsecured server does not listen beyond loopback.
 	//
 	// Rejecting LAN requests after accepting them would still mean the port is
@@ -377,7 +397,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound, RestartWidens: restartWidens,
 			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Trans: trans, Subs: subs,
+			Worker: worker, Probes: probes, Covers: covers, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
@@ -386,6 +406,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			ReloadPlugins: reloadPlugins,
 			Enrich:        enrichSoon,
 			Probe:         probeSoon,
+			Cover:         coverSoon,
 		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.
@@ -396,6 +417,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	scanner.OnFinish(func() {
 		probeSoon()
 		enrichSoon()
+		coverSoon()
 	})
 
 	// Clears leftover scratch from a previous run and starts reaping idle
