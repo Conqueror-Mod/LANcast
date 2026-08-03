@@ -15,6 +15,7 @@ import (
 	"lancast/internal/artwork"
 	"lancast/internal/auth"
 	"lancast/internal/config"
+	"lancast/internal/coverart"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
 	"lancast/internal/probe"
@@ -43,6 +44,7 @@ type Deps struct {
 	Artwork  *artwork.Cache
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
+	Covers   *coverart.Worker
 	Trans    *transcode.Manager
 	Subs     *subtitle.Extractor
 	Settings *config.SettingsStore
@@ -63,6 +65,8 @@ type Deps struct {
 	// Probe triggers a background probe pass, so a re-probe an operator asked
 	// for starts now rather than at the next scan.
 	Probe func()
+	// Cover triggers a background album-art pass, for the same reason.
+	Cover func()
 	// LANBound reports whether the server is actually listening beyond
 	// loopback — the resolved address, not whether a password is set.
 	LANBound bool
@@ -81,6 +85,7 @@ type Server struct {
 	art           *artwork.Cache
 	worker        *enrich.Worker
 	probes        *probe.Worker
+	covers        *coverart.Worker
 	trans         *transcode.Manager
 	subs          *subtitle.Extractor
 	settings      *config.SettingsStore
@@ -91,6 +96,7 @@ type Server struct {
 	reloadPlugins func() error
 	enrich        func()
 	probe         func()
+	coversSoon    func()
 	lanBound      bool
 	restartWidens bool
 	throttle      *auth.Throttle
@@ -103,10 +109,11 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, covers: d.Covers, trans: d.Trans, subs: d.Subs,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
-		probe: d.Probe, lanBound: d.LANBound, restartWidens: d.RestartWidens,
+		probe: d.Probe, coversSoon: d.Cover,
+		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 	}
 }
@@ -168,6 +175,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
+	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
+	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))

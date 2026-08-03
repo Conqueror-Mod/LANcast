@@ -610,6 +610,56 @@ decision for it falls back to direct play.
 
 Returns `503` if ffprobe is not installed and `400` for an unknown scope.
 
+### `GET /api/coverart`
+
+Background album-art progress.
+
+```json
+{ "available": true, "running": false, "found": 341,
+  "none": 57, "failed": 0, "remaining": 0, "total": 398 }
+```
+
+Album covers come off the disk rather than from a provider (ADR 0024): the
+picture embedded in a track first, then a `cover.jpg` or `folder.jpg` beside
+it. Embedded wins because it travels with the record — it was attached by
+whoever tagged the files and cannot be about a different album, where a loose
+image in a directory can be anything.
+
+`found` and `none` are reported separately on purpose. **An album with no cover
+has not failed**, and a status that merged the two would make a library of
+untagged rips look broken. `failed` means something went wrong — an unreadable
+file, an image the cache could not store.
+
+`available` reports whether *embedded* extraction can run, which needs ffmpeg.
+It being false does not mean no artwork: sidecar files are read regardless, so a
+library that keeps `cover.jpg` beside the music is fully covered without ffmpeg
+installed.
+
+Covers are recorded as `poster` artwork, so an album tile renders through the
+same path a film poster does and clients need no new artwork kind. The
+`source_url` is empty, because there is no URL — the image came off the disk.
+
+Only albums are searched. An artist row has no directory of its own and no file
+to extract from; artist images, if they ever arrive, will come from a provider.
+
+### `POST /api/coverart/refresh`
+
+Queues albums to be looked at again, and starts a pass. Admin only.
+Optionally narrowed with `?library=`.
+
+```json
+{ "queued": 398 }
+```
+
+The counterpart to `POST /api/probe/refresh`, and needed for the same reason.
+The pending queue is "not yet looked at", and an album is stamped whether or not
+anything was found — otherwise an artless album would be re-examined on every
+pass forever and the queue would never drain. That stamp is also what makes an
+album invisible to the queue afterwards, so someone who has just added
+`cover.jpg` files to a library has no other way to ask LANcast to look again.
+
+Returns `400` for an invalid library id and `404` if no such library exists.
+
 ### Music items
 
 A `track` carries the same fields as any other item, with three read in the
