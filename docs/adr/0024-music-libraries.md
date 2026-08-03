@@ -1,6 +1,6 @@
 # ADR 0024 — Music libraries
 
-Date: 2026-08-02 · Status: proposed
+Date: 2026-08-02 · Status: accepted
 
 ## Context
 
