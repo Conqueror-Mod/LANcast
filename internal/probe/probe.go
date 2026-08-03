@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"lancast/internal/childproc"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,33 @@ type Stream struct {
 	BitRate int64 `json:"bit_rate,omitempty"`
 }
 
+// Tags is the embedded metadata a music file carries — ID3v2 on MP3, Vorbis
+// comments on FLAC and Ogg, atoms on MP4.
+//
+// For music these are the authority, not a guess (ADR 0024): they are written
+// by the tagger rather than inferred from a filename by whoever ripped the
+// disc.
+//
+// Only these fields are read. A real FLAC in the test library carries a
+// multi-kilobyte LYRICS tag, and pulling every tag into memory and then into
+// the database to find four of them is not a trade worth making.
+type Tags struct {
+	Title       string
+	Artist      string
+	Album       string
+	AlbumArtist string
+	Genre       string
+	Track       int
+	Disc        int
+	Year        int
+}
+
+// Empty reports whether nothing useful was tagged, which is what sends the
+// scanner back to folder and filename guessing.
+func (t Tags) Empty() bool {
+	return t.Title == "" && t.Artist == "" && t.Album == "" && t.AlbumArtist == ""
+}
+
 // Result is everything probing learned about one file.
 type Result struct {
 	Container  string   `json:"container"`
@@ -64,6 +92,7 @@ type Result struct {
 	BitRate    int64    `json:"bit_rate"`
 	SizeBytes  int64    `json:"size_bytes"`
 	Streams    []Stream `json:"streams"`
+	Tags       Tags     `json:"tags"`
 }
 
 // Video returns the first video stream, which is the one that matters for
@@ -206,6 +235,48 @@ func (p *Prober) Probe(ctx context.Context, path string) (*Result, error) {
 	return ParseJSON(out)
 }
 
+// ReadTags reads only a file's embedded tags.
+//
+// Separate from Probe because the scanner needs tags for every music file to
+// group it (ADR 0024), and it needs them *during* the walk — long before the
+// probe worker gets to codecs. Asking only for the container skips decoding
+// every stream header, which is the expensive half.
+//
+// An untagged file is not an error: it returns empty tags, and the caller falls
+// back to folder and filename.
+func (p *Prober) ReadTags(ctx context.Context, path string) (Tags, error) {
+	bin, err := p.binary()
+	if err != nil {
+		return Tags{}, err
+	}
+
+	timeout := p.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, bin,
+		"-v", "error",
+		"-print_format", "json",
+		"-show_format",
+		path,
+	)
+	childproc.Hide(cmd)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return Tags{}, fmt.Errorf("read tags %s: %w", path, err)
+	}
+
+	var doc ffprobeDoc
+	if err := json.Unmarshal(out, &doc); err != nil {
+		return Tags{}, fmt.Errorf("parse tags %s: %w", path, err)
+	}
+	return parseTags(doc.Format.Tags), nil
+}
+
 // ParseJSON converts ffprobe output into a Result. Kept separate from process
 // execution so the parsing — where the real complexity lives — is testable
 // against fixtures without ffmpeg installed.
@@ -220,6 +291,7 @@ func ParseJSON(raw []byte) (*Result, error) {
 		DurationMS: secondsToMS(doc.Format.Duration),
 		BitRate:    atoi64(doc.Format.BitRate),
 		SizeBytes:  atoi64(doc.Format.Size),
+		Tags:       parseTags(doc.Format.Tags),
 	}
 
 	for _, s := range doc.Streams {
@@ -278,6 +350,11 @@ type ffprobeDoc struct {
 		Duration   string `json:"duration"`
 		Size       string `json:"size"`
 		BitRate    string `json:"bit_rate"`
+		// Tags are container-level: for music, the ID3v2 / Vorbis / MP4 fields.
+		// Read as raw strings because every value here needs interpreting —
+		// "11/15" is a track number, "/0" is a malformed disc, and "2016-04-29"
+		// is a year with extra.
+		Tags map[string]string `json:"tags"`
 	} `json:"format"`
 	Streams []struct {
 		Index        int    `json:"index"`
@@ -349,6 +426,111 @@ func atoi(s string) int {
 func atoi64(s string) int64 {
 	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// ---------------------------------------------------------------------- tags
+
+// parseTags pulls the music fields out of ffprobe's container tags.
+//
+// The shapes here are all taken from real files rather than a specification,
+// because taggers do not agree with each other and the specification does not
+// bind them:
+//
+//   - Case varies by container. MP3 reports "artist", FLAC reports "ARTIST".
+//   - Separators vary. A FLAC carried both "ALBUM ARTIST" (with a space) and
+//     "album_artist", so keys are matched with spaces, underscores and hyphens
+//     removed rather than by exact name.
+//   - Numbers arrive as fractions. "11/15" is track 11 of 15; "1" is track 1.
+//   - Fractions arrive malformed. A real file reported disc "/0", which has no
+//     numerator at all and means "not set".
+//   - Dates are not years. "1989" and "2016-04-29" both appear; only the
+//     leading year is wanted.
+func parseTags(raw map[string]string) Tags {
+	if len(raw) == 0 {
+		return Tags{}
+	}
+
+	// Normalise once, and iterate in sorted order so two spellings of the same
+	// field resolve the same way on every run rather than however the map
+	// happened to be walked.
+	norm := make(map[string]string, len(raw))
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := strings.TrimSpace(raw[k])
+		if v == "" {
+			continue
+		}
+		n := normalizeTagKey(k)
+		if _, seen := norm[n]; !seen {
+			norm[n] = v
+		}
+	}
+
+	first := func(names ...string) string {
+		for _, n := range names {
+			if v := norm[n]; v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+
+	t := Tags{
+		Title:       first("title"),
+		Artist:      first("artist", "performer"),
+		Album:       first("album"),
+		AlbumArtist: first("albumartist", "ensemble", "band"),
+		Genre:       first("genre"),
+	}
+	t.Track = leadingNumber(first("track", "tracknumber"))
+	t.Disc = leadingNumber(first("disc", "discnumber", "disk"))
+	t.Year = leadingYear(first("date", "year", "originaldate", "originalyear"))
+	return t
+}
+
+// normalizeTagKey lowercases and drops the separators taggers disagree about,
+// so "ALBUM ARTIST", "album_artist" and "Album-Artist" are one field.
+func normalizeTagKey(k string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(k) {
+		switch r {
+		case ' ', '_', '-':
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// leadingNumber reads the numerator of a "N/M" tag, or a bare number. A value
+// with no leading digits — the observed "/0" — is not set, and returns 0.
+func leadingNumber(v string) int {
+	if i := strings.IndexByte(v, '/'); i >= 0 {
+		v = v[:i]
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// leadingYear takes the year off a date tag, which may be a bare "1989" or a
+// full "2016-04-29".
+func leadingYear(v string) int {
+	v = strings.TrimSpace(v)
+	if len(v) < 4 {
+		return 0
+	}
+	n, err := strconv.Atoi(v[:4])
+	if err != nil || n < 1000 || n > 9999 {
 		return 0
 	}
 	return n
