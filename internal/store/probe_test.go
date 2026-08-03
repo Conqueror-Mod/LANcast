@@ -362,3 +362,79 @@ func TestClearIncompleteProbeIgnoresFilesWithNoVideo(t *testing.T) {
 		t.Errorf("queued %d, want 0 — there is no video stream to learn about", n)
 	}
 }
+
+// A locked field is never overwritten, by any write path (ADR 0008). Editing a
+// track's title and then rescanning must not undo the edit — a rescan
+// reconciles files, it does not re-litigate identity.
+func TestApplyTrackTagsRespectsLocks(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\01 track.mp3`)
+
+	// An operator edited the title, which locks it.
+	title := "My Own Title"
+	if err := st.UpdateItemMetadata(ctx, id, ItemMetadata{Title: &title}); err != nil {
+		t.Fatalf("UpdateItemMetadata: %v", err)
+	}
+	if err := st.LockField(ctx, id, "title"); err != nil {
+		t.Fatalf("LockField: %v", err)
+	}
+
+	err := st.ApplyTrackTags(ctx, id, TrackTags{
+		Title: "Tagged Title", SortTitle: "tagged title",
+		Album: "An Album", Track: 4,
+	})
+	if err != nil {
+		t.Fatalf("ApplyTrackTags: %v", err)
+	}
+
+	it, err := st.GetItem(ctx, id, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Title != "My Own Title" {
+		t.Errorf("Title = %q — a locked field was overwritten by a rescan", it.Title)
+	}
+	// Unlocked fields still take the tag.
+	if it.Series == nil || *it.Series != "An Album" {
+		t.Errorf("album = %v, want the tag to apply to unlocked fields", it.Series)
+	}
+	if it.Episode == nil || *it.Episode != 4 {
+		t.Errorf("track = %v, want 4", it.Episode)
+	}
+}
+
+// Empty values never overwrite: a tagger that filled in a title but left the
+// album blank must not erase an album a folder name supplied.
+func TestApplyTrackTagsEmptyValuesDoNotErase(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\02 track.mp3`)
+
+	if err := st.ApplyTrackTags(ctx, id, TrackTags{
+		Title: "First", SortTitle: "first", Album: "Album A", Track: 2, Year: 1999,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ApplyTrackTags(ctx, id, TrackTags{
+		Title: "Second", SortTitle: "second", // nothing else
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	it, err := st.GetItem(ctx, id, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Title != "Second" {
+		t.Errorf("Title = %q, want the newer tag", it.Title)
+	}
+	if it.Series == nil || *it.Series != "Album A" {
+		t.Errorf("album = %v — a blank tag erased a value that was already there", it.Series)
+	}
+	if it.Year == nil || *it.Year != 1999 {
+		t.Errorf("Year = %v — a blank tag erased it", it.Year)
+	}
+}

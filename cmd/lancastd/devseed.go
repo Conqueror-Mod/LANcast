@@ -12,6 +12,7 @@ import (
 
 	"lancast/internal/config"
 	"lancast/internal/media"
+	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
@@ -180,6 +181,9 @@ func libraryAt(libs []store.Library, path string) (store.Library, bool) {
 func scanAll(db *store.Store, libs []store.Library) error {
 	log := newLogger(false)
 	sc := scan.New(db, log)
+	// Same wiring the server does, so a seeded scan produces the same rows a
+	// real one would — including music titles read from tags.
+	sc.SetTagReader(probe.New())
 
 	for _, lib := range libs {
 		if _, err := sc.Start(lib); err != nil {
