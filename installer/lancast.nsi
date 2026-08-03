@@ -82,9 +82,26 @@ Section "LANcast"
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service install'
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service start'
 
-  ; Shortcuts point at the launcher, not the daemon.
+  ; Two shortcuts, because there are two programs and which one you launched
+  ; changes what happens. A single "LANcast" entry pointing at the client made
+  ; that invisible: when the service was not running the client silently
+  ; started its own server, and there was no way to launch the server on its
+  ; own or to tell from the Start menu which you had.
+  ;
+  ; The desktop shortcut stays the client — that is the one to double-click.
   CreateDirectory "$SMPROGRAMS\LANcast"
-  CreateShortcut "$SMPROGRAMS\LANcast\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
+  ; Upgrading from a single-shortcut install: remove the old entry so it does
+  ; not sit beside the two new ones pointing at the same program.
+  Delete "$SMPROGRAMS\LANcast\LANcast.lnk"
+  CreateShortcut "$SMPROGRAMS\LANcast\LANcast Client.lnk" "$INSTDIR\LANcast-Client.exe" \
+    "" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" "Open LANcast in your browser"
+  ; The server pinned to the same machine-wide data directory the service uses,
+  ; so starting it by hand cannot quietly open a second, per-user database.
+  ; $%ProgramData% is the environment variable, expanded on the target machine —
+  ; the same directory `service install` pins to. NSIS has no built-in for it.
+  CreateShortcut "$SMPROGRAMS\LANcast\LANcast Server.lnk" "$INSTDIR\LANcast-Server.exe" \
+    'tray -data "$%ProgramData%\LANcast"' "$INSTDIR\LANcast-Server.exe" 0 SW_SHOWNORMAL "" \
+    "Run the LANcast server in the system tray"
   CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -111,7 +128,11 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
 
+  ; Includes the pre-0.4.1 single shortcut, so upgrading from an older install
+  ; does not leave a stale "LANcast" entry beside the two new ones.
   Delete "$SMPROGRAMS\LANcast\LANcast.lnk"
+  Delete "$SMPROGRAMS\LANcast\LANcast Client.lnk"
+  Delete "$SMPROGRAMS\LANcast\LANcast Server.lnk"
   RMDir "$SMPROGRAMS\LANcast"
   Delete "$DESKTOP\LANcast.lnk"
 
