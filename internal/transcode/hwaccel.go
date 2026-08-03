@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"lancast/internal/childproc"
 	"log/slog"
 	"os/exec"
 	"strconv"
@@ -108,7 +109,9 @@ func listEncoders(ctx context.Context, bin string) map[string]bool {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, bin, "-hide_banner", "-encoders").Output()
+	cmd := exec.CommandContext(ctx, bin, "-hide_banner", "-encoders")
+	childproc.Hide(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
@@ -137,7 +140,9 @@ func testEncode(ctx context.Context, bin string, e Encoder) error {
 	args = append(args, e.EncoderArgs(23)...)
 	args = append(args, "-f", "null", "-")
 
-	return exec.CommandContext(ctx, bin, args...).Run()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	childproc.Hide(cmd)
+	return cmd.Run()
 }
 
 // SelectEncoder picks from the detected list according to a preference.

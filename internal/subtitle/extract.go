@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"lancast/internal/childproc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,6 +75,7 @@ func (e *Extractor) Embedded(ctx context.Context, videoPath string, streamIndex 
 			"-f", "webvtt",
 			"pipe:1",
 		)
+		childproc.Hide(cmd)
 		out, err := cmd.Output()
 		if err != nil {
 			var exitErr *exec.ExitError
@@ -133,6 +135,7 @@ func (e *Extractor) Sidecar(ctx context.Context, path, format string) ([]byte, e
 			cmd := exec.CommandContext(ctx, e.bin,
 				"-hide_banner", "-loglevel", "error", "-nostdin",
 				"-i", path, "-c:s", "webvtt", "-f", "webvtt", "pipe:1")
+			childproc.Hide(cmd)
 			out, err := cmd.Output()
 			if err != nil {
 				var exitErr *exec.ExitError
