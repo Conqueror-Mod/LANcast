@@ -521,7 +521,12 @@ func (s *Store) AttachArtwork(ctx context.Context, items []Item) error {
 			items[i].Artwork = art
 		}
 	}
-	return nil
+
+	// Artists own no image, so any that are still bare borrow one from an
+	// album. Done here rather than by the caller so every grid gets it — a
+	// tile with a poster in one list and none in another is worse than
+	// consistent blankness.
+	return s.inheritArtistPosters(ctx, items)
 }
 
 // ArtworkExists reports whether a hash is already stored, so a download can be
@@ -578,6 +583,15 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 	}
 	if it.Artwork, err = s.ItemArtwork(ctx, it.ID); err != nil {
 		return err
+	}
+	// Same fallback the grid gets. An artist whose tile has a poster and whose
+	// detail page has none reads as a bug in whichever one the user saw second.
+	if it.Kind == "artist" && (it.Artwork == nil || it.Artwork.Poster == "") {
+		one := []Item{*it}
+		if err := s.inheritArtistPosters(ctx, one); err != nil {
+			return err
+		}
+		it.Artwork = one[0].Artwork
 	}
 	if it.LockedFields, err = s.LockedFields(ctx, it.ID); err != nil {
 		return err
