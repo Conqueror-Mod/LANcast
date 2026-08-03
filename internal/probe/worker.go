@@ -289,6 +289,25 @@ func containerFromExtension(ext string) string {
 		return "avi"
 	case "ts", "m2ts":
 		return "mpegts"
+
+	// Audio. The extension and the format name agree for mp3, flac, ogg and
+	// wav, which is why those need no case — but the ones that disagree are
+	// exactly the common music formats, and getting them wrong is invisible:
+	// the container simply never matches a profile, and every .m4a and .opus in
+	// the library transcodes forever for no stated reason.
+	case "m4a", "m4b":
+		return "mov"
+	case "opus", "oga":
+		return "ogg"
+	case "mka":
+		return "matroska"
+	case "aif", "aiff":
+		// Normalised for consistency rather than for a match: no profile lists
+		// aiff, because only Safari decodes it. It transcodes, and says so.
+		return "aiff"
+	case "wma":
+		return "asf"
+
 	default:
 		return ext
 	}

@@ -185,6 +185,13 @@ func TestContainerFromExtension(t *testing.T) {
 	tests := map[string]string{
 		"mkv": "matroska", "mp4": "mov", "m4v": "mov", "mov": "mov",
 		"webm": "webm", "avi": "avi", "ts": "mpegts", "weird": "weird",
+
+		// Audio. The ones that pass through unchanged are as load-bearing as
+		// the ones that are rewritten: a music library is mostly these, and a
+		// container that never matches a profile transcodes silently forever.
+		"mp3": "mp3", "flac": "flac", "ogg": "ogg", "wav": "wav", "aac": "aac",
+		"m4a": "mov", "m4b": "mov", "opus": "ogg", "oga": "ogg",
+		"mka": "matroska", "wma": "asf",
 	}
 	for in, want := range tests {
 		if got := containerFromExtension(in); got != want {

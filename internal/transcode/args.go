@@ -95,7 +95,15 @@ func Args(o Options) []string {
 
 	// Map explicitly. Without this ffmpeg picks one stream per type by its own
 	// rules, which quietly selects the wrong audio track on files with several.
-	a = append(a, "-map", "0:v:0")
+	//
+	// A music file has no video stream to map, and `-map 0:v:0` against one is
+	// not a warning — ffmpeg exits before producing a byte. The cover art an
+	// audio file often carries makes this worse rather than better: it *is* a
+	// video stream, so the map would succeed and then hang trying to encode a
+	// single still frame for the length of the track.
+	if !o.Decision.AudioOnly {
+		a = append(a, "-map", "0:v:0")
+	}
 	if o.AudioIndex >= 0 {
 		a = append(a, "-map", fmt.Sprintf("0:%d", o.AudioIndex))
 	} else {
@@ -107,9 +115,15 @@ func Args(o Options) []string {
 	// conversion — both belong with the subtitle work, not here.
 	a = append(a, "-sn")
 
-	if o.Decision.VideoAction == "copy" {
+	switch {
+	case o.Decision.AudioOnly:
+		// No video stream was mapped, so there is nothing for -c:v to describe.
+		// Naming an encoder here would also pull hardware init into a job that
+		// never touches a pixel.
+	case o.Decision.VideoAction == "copy":
 		a = append(a, "-c:v", "copy")
-	} else {
+
+	default:
 		// The encoder supplies its own codec, quality and profile flags:
 		// x264 wants -crf, NVENC -cq, QSV -global_quality, AMF -qp_i. Same
 		// intent, four spellings, and each hardware encoder needs profile and
