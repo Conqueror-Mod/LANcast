@@ -369,9 +369,9 @@ where that openness gets exercised.
    2. ~~Artist tiles~~ — **placeholder built.** Artists borrow their
       most-substantial album's cover, flagged `inherited`, until a real image
       supersedes it.
-   3. **Music client UI.** Album view and a track list that plays. The
-      remaining gap, and the larger one: artist images improve a grid the
-      browser does not have yet.
+   3. **Music client UI.** Album view and a track list that plays
+      ([plan](music-client-plan.md)). The remaining gap, and the larger one:
+      artist images improve a grid the browser does not have yet.
    4. **Artist images from TheAudioDB** ([ADR 0025](adr/0025-artist-images.md),
       accepted, unbuilt). Deliberately after the client UI, for the reason just
       given.
