@@ -408,7 +408,7 @@ type ItemFilter struct {
 	LibraryID int64
 	Kind      string
 	Query     string
-	Sort      string // title | year | added | rating
+	Sort      string // title | year | added | rating | track
 
 	// Facet filters. Each is OR within itself and AND across facets — the Plex
 	// semantics: pick two genres to widen, add a decade to narrow. Empty slices
@@ -431,8 +431,12 @@ type ItemFilter struct {
 	// were features. Ignored when ParentID is set.
 	TopLevel bool
 
-	// ParentID, when non-nil, returns exactly the children of that item —
-	// ordered as a hierarchy (season, then episode/part). Overrides TopLevel.
+	// ParentID, when non-nil, returns exactly the children of that item.
+	// Overrides TopLevel.
+	//
+	// Ordering is whatever Sort says, and the default is *not* hierarchy order
+	// in general: it works for episodes only because they share their series'
+	// sort title and tie. An album's tracks need Sort "track".
 	ParentID *int64
 
 	Limit  int
@@ -573,6 +577,18 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// Highest rated first; unrated rows sink to the bottom rather than
 		// sorting as if they were zero-rated.
 		order = ` ORDER BY rating IS NULL, rating DESC, sort_title`
+	case "track":
+		// Disc, then track number — an album in the order the record plays.
+		//
+		// This has to be asked for explicitly, because the default cannot
+		// deliver it. A track keeps its own title as its sort title (unlike an
+		// episode, which inherits its series' and therefore ties with every
+		// other episode, letting the default fall through to season/episode).
+		// Tracks never tie, so under the default an album comes back in
+		// alphabetical order. Making the default lead with season/episode would
+		// fix music by interleaving every show's season 1 ahead of any
+		// season 2 in a cross-show listing, so it stays a separate sort.
+		order = ` ORDER BY season, episode, sort_title`
 	}
 
 	limit := f.Limit

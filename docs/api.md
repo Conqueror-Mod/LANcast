@@ -244,7 +244,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
-| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last) |
+| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `track` (disc then track number — see Music items) |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
 
 Repeatable filters are **OR within a facet and AND across facets**: two genres
@@ -259,8 +259,13 @@ parent and are reached through `parent_id`, never returned loose in the grid, so
 a container's pieces do not appear as if they were features ([ADR 0010](adr/0010-shows-as-media-items.md),
 [ADR 0017](adr/0017-collections-and-multi-part-works.md)). Passing an explicit
 `kind` lifts that default, for a deliberate cross-cutting query (every episode,
-say). Passing `parent_id` returns exactly that item's children in hierarchy
-order.
+say). Passing `parent_id` returns exactly that item's children.
+
+**A container's children are not automatically in hierarchy order.** The default
+sort leads with title, and episodes come back in season order only because they
+share their series' sort title and therefore tie, letting the order fall through
+to season and episode. Tracks keep their own titles, so an album asked for
+without a sort comes back **alphabetically**. Use `?sort=track` for an album.
 
 `kind` is an **open set** — new media types (`collection`, `part`, `serial`, …)
 appear without an API version bump, so a client must tolerate a `kind` it does
@@ -683,9 +688,17 @@ music sense (ADR 0024):
 | Field | On a track |
 |---|---|
 | `series` | The album |
-| `season` | The disc number, absent on a single-disc release |
+| `season` | The disc number; `0` when the file carries no disc tag |
 | `episode` | The track number |
 | `artist` | The track's own performer, present only on music |
+
+Fetch an album's tracks with `?parent_id=<album>&sort=track`, which orders by
+disc and then track number. **The sort is not optional**: without it the listing
+is ordered by title, so a record arrives alphabetically — see the note under
+`sort` above for why episodes do not have this problem and tracks do. A
+track from a release with no disc tag carries `season: 0`, which sorts ahead of
+any numbered disc, so an album mixing tagged and untagged discs is still
+well-defined.
 
 `artist` is the track's, not the album's. A compilation has one album artist and
 a different performer per track; the album artist groups the record, and this
