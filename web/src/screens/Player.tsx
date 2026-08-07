@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useItem, useSubtitles } from "@/api/hooks";
-import { apiGet, apiSend } from "@/api/client";
+import { apiGet, apiSend, artworkURL } from "@/api/client";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
@@ -43,7 +43,25 @@ export function Player() {
     navigate(`/watch/${ids[idx + 1]}?queue=${queue}`, { replace: true });
     return true;
   }, [queue, itemID, navigate]);
-  const { data: subtitles } = useSubtitles(itemID);
+  // A track plays through the same element a film does — see the render below
+  // for why there is one media element and not two — but it has nothing to
+  // show, so the surface becomes its cover instead of a black rectangle.
+  const isAudio = item?.kind === "track";
+
+  // Cover art lives on the album row, not the track: the extraction worker
+  // records one image per record rather than the same bytes once per song. So
+  // the player reads the parent. A track whose album has no art falls back to
+  // whatever the track itself carries, which is usually nothing — and the
+  // placeholder below is then the honest answer.
+  const { data: album } = useItem(isAudio ? (item?.parent_id ?? 0) : 0);
+  const cover = artworkURL(
+    album?.artwork?.poster ?? item?.artwork?.poster,
+    "poster2x",
+  );
+
+  // Subtitles are a video affordance. Asking for a song's subtitle tracks is a
+  // request that can only ever answer "none".
+  const { data: subtitles } = useSubtitles(itemID, !isAudio);
   const tracks = subtitles ?? [];
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -309,25 +327,56 @@ export function Player() {
   const wakeChrome = useCallback(() => {
     setChromeVisible(true);
     window.clearTimeout(idleTimer.current);
+    // Audio keeps its controls. Chrome hides to get out of the way of the
+    // picture; over a still cover there is nothing to get out of the way of,
+    // and hiding the transport would leave a motionless screen that looks
+    // frozen rather than playing.
+    if (isAudio) return;
     idleTimer.current = window.setTimeout(() => {
       if (!videoRef.current?.paused) setChromeVisible(false);
     }, 2500);
-  }, []);
+  }, [isAudio]);
 
   useEffect(() => () => window.clearTimeout(idleTimer.current), []);
 
   return (
     <div
       ref={containerRef}
-      className={"player" + (chromeVisible ? "" : " player--idle")}
+      className={
+        "player" +
+        (chromeVisible ? "" : " player--idle") +
+        (isAudio ? " player--audio" : "")
+      }
       onMouseMove={wakeChrome}
       onClick={(e) => {
         if (e.target === videoRef.current) togglePlay();
       }}
     >
+      {/* The record, standing in for the picture. Rendered behind the same
+          media element rather than instead of it: an <audio> tag would mean a
+          second element with its own copy of the decision fetch, resume,
+          progress writes, queue advance and transcode seeking — all of which
+          are format-agnostic. One element, one set of handlers; the difference
+          between audio and video is presentational and stays here. */}
+      {isAudio && (
+        <div className="player__cover" aria-hidden="true">
+          {cover ? (
+            <>
+              <div
+                className="player__cover-wash"
+                style={{ backgroundImage: `url(${cover})` }}
+              />
+              <img className="player__cover-art" src={cover} alt="" />
+            </>
+          ) : (
+            <div className="player__cover-none">{item?.title}</div>
+          )}
+        </div>
+      )}
+
       <video
         ref={videoRef}
-        className="player__video"
+        className={"player__video" + (isAudio ? " player__video--audio" : "")}
         playsInline
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
@@ -389,7 +438,17 @@ export function Player() {
           <button className="player__icon" onClick={close} aria-label="Close">
             ←
           </button>
-          <span className="player__title">{item?.title}</span>
+          {/* A song is identified by three things, not one. `series` is the
+              album on a track (ADR 0024), and `artist` the performer — which on
+              a compilation is not the album artist, so it is worth showing. */}
+          <span className="player__title">
+            {item?.title}
+            {isAudio && (item?.artist || item?.series) && (
+              <span className="player__subtitle">
+                {[item?.artist, item?.series].filter(Boolean).join(" — ")}
+              </span>
+            )}
+          </span>
           {note && <span className="player__note">{note}</span>}
         </div>
 
@@ -428,36 +487,44 @@ export function Player() {
               {clock(totalDuration)}
             </span>
 
-            <div className="player__subs player__icon--right">
+            {/* Subtitles and fullscreen are video affordances. A subtitle menu
+                that can only ever say "none", and a fullscreen button for a
+                still image, are both controls that promise something the
+                content cannot give. */}
+            {!isAudio && (
+              <div className="player__subs player__icon--right">
+                <button
+                  className={"player__icon" + (activeSub ? " is-on" : "")}
+                  onClick={() => setSubMenuOpen((o) => !o)}
+                  aria-label="Subtitles"
+                  aria-expanded={subMenuOpen}
+                >
+                  CC
+                </button>
+                {subMenuOpen && (
+                  <SubtitleMenu
+                    itemID={itemID}
+                    itemTitle={item?.title ?? ""}
+                    language="en"
+                    tracks={tracks}
+                    activeKey={subKey}
+                    onSelect={(key) => {
+                      setSubKey(key);
+                      setSubMenuOpen(false);
+                    }}
+                  />
+                )}
+              </div>
+            )}
+            {!isAudio && (
               <button
-                className={"player__icon" + (activeSub ? " is-on" : "")}
-                onClick={() => setSubMenuOpen((o) => !o)}
-                aria-label="Subtitles"
-                aria-expanded={subMenuOpen}
+                className="player__icon"
+                onClick={toggleFullscreen}
+                aria-label="Fullscreen"
               >
-                CC
+                ⛶
               </button>
-              {subMenuOpen && (
-                <SubtitleMenu
-                  itemID={itemID}
-                  itemTitle={item?.title ?? ""}
-                  language="en"
-                  tracks={tracks}
-                  activeKey={subKey}
-                  onSelect={(key) => {
-                    setSubKey(key);
-                    setSubMenuOpen(false);
-                  }}
-                />
-              )}
-            </div>
-            <button
-              className="player__icon"
-              onClick={toggleFullscreen}
-              aria-label="Fullscreen"
-            >
-              ⛶
-            </button>
+            )}
           </div>
         </div>
       </div>

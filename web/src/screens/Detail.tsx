@@ -290,22 +290,22 @@ export function Detail() {
             {isAlbum ? (
               <TrackList tracks={children} albumArtist={item.series ?? undefined} />
             ) : (
-            <div className="detail__children-grid">
-              {children.map((child) => (
-                <PosterTile
-                  key={child.id}
-                  // A part or chapter often has no artwork of its own (a
-                  // miniseries's pieces are not separately matched), which would
-                  // leave a blank tile. Fall back to the parent's poster so the
-                  // grid reads as one work rather than a row of empty cards.
-                  item={
-                    child.artwork?.poster
-                      ? child
-                      : { ...child, artwork: item.artwork }
-                  }
-                />
-              ))}
-            </div>
+              <div className="detail__children-grid">
+                {children.map((child) => (
+                  <PosterTile
+                    key={child.id}
+                    // A part or chapter often has no artwork of its own (a
+                    // miniseries's pieces are not separately matched), which
+                    // would leave a blank tile. Fall back to the parent's poster
+                    // so the grid reads as one work rather than empty cards.
+                    item={
+                      child.artwork?.poster
+                        ? child
+                        : { ...child, artwork: item.artwork }
+                    }
+                  />
+                ))}
+              </div>
             )}
           </section>
         )}
