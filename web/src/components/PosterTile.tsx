@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
-import { containerCountLabel } from "@/lib/kind";
+import { containerCountLabel, isSquareArt } from "@/lib/kind";
 import { rating } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
@@ -32,7 +32,12 @@ export function PosterTile({ item }: { item: Item }) {
       title={item.title}
       aria-label={item.title}
     >
-      <div className="poster-tile__art">
+      <div
+        className={
+          "poster-tile__art" +
+          (isSquareArt(item) ? " poster-tile__art--square" : "")
+        }
+      >
         {poster ? (
           <img src={poster} alt="" loading="lazy" draggable={false} />
         ) : (

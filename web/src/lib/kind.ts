@@ -7,7 +7,19 @@ import type { Item } from "@/api/types";
 // The set is closed on purpose: `kind` is an open set (ADR 0018), and an
 // unfamiliar kind falls through to the child-count check below rather than
 // vanishing.
-const CONTAINER_KINDS = new Set(["show", "season", "collection", "serial"]);
+const CONTAINER_KINDS = new Set([
+  "show",
+  "season",
+  "collection",
+  "serial",
+  // Music (ADR 0024): an artist holds albums, an album holds tracks. Named
+  // rather than left to the child-count fallback, so an album mid-scan — rows
+  // created, tracks not yet parented — reads as a container with nothing in it
+  // rather than as a playable leaf offering a Play button for a file it has no
+  // path to.
+  "artist",
+  "album",
+]);
 
 // isContainer decides whether an item should present its children rather than a
 // Play button. A multi-part work is a `movie` whose parent-ness shows only in
@@ -31,6 +43,10 @@ export function childLabel(childKind: string | undefined): string {
       return "Chapters";
     case "movie":
       return "Films";
+    case "album":
+      return "Albums";
+    case "track":
+      return "Tracks";
     default:
       return "Contents";
   }
@@ -49,9 +65,29 @@ function containerNoun(kind: string): string {
     case "serial":
     case "movie":
       return "part";
+    case "artist":
+      return "album";
+    case "album":
+      return "track";
     default:
       return "item";
   }
+}
+
+// Kinds whose artwork is square rather than a 2:3 poster. A record sleeve is
+// square, and an artist wearing a borrowed album cover (ADR 0025) is square by
+// inheritance — so both frame square until artist images arrive from a provider,
+// and that ADR revisits this line when they do.
+const SQUARE_ART_KINDS = new Set(["artist", "album", "track"]);
+
+// isSquareArt picks the tile's aspect ratio from what the art actually is.
+//
+// This is not cosmetic. A square cover in a 2:3 frame is cropped by
+// object-fit: cover, which quietly removes a third of every sleeve — and the
+// result still looks like a working grid, which is why it needs deciding here
+// rather than being noticed later.
+export function isSquareArt(item: Item): boolean {
+  return SQUARE_ART_KINDS.has(item.kind);
 }
 
 // containerCountLabel renders a container's child count as a short noun phrase —
