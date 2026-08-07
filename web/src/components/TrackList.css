@@ -1,0 +1,94 @@
+.track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 760px;
+}
+
+.track-list__disc {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-list__disc-head {
+  padding: 6px 12px 8px;
+}
+
+.track-row {
+  display: grid;
+  /* Number, title, duration. The number column is fixed and tabular so the
+     titles form one left edge instead of stepping right at track 10. */
+  grid-template-columns: 34px 1fr auto;
+  align-items: baseline;
+  gap: 14px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-tile);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  /* Rows sit in a scrollable column; without this they compress instead of
+     overflowing, collapsing to unreadable slivers. */
+  flex-shrink: 0;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+/* Gold means where you are, and nothing else — the focus signal is the whole
+   reason a row is legible as the current one. The raised background is what
+   carries hover; gold carries focus. */
+.track-row:hover {
+  background: var(--space-raised);
+  color: var(--text-primary);
+}
+
+.track-row:focus {
+  outline: none;
+  background: var(--space-raised);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.track-row__num {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.track-row:hover .track-row__num,
+.track-row:focus .track-row__num {
+  color: var(--text-muted);
+}
+
+.track-row__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* The performer, shown only when it differs from the album artist — a
+   compilation. Quieter than the title so a normal album does not look like it
+   is missing something. */
+.track-row__artist {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.track-row__time {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A finished track. Dimmed rather than badged: a checkmark per row on a
+   fifteen-track album is noise, and this is the same "already seen" signal the
+   grid gives with its progress bar. */
+.track-row--played .track-row__title {
+  color: var(--text-muted);
+}
