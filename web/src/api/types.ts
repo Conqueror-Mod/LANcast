@@ -92,9 +92,15 @@ export interface Item {
   kind: string;
   title: string;
   year: number | null;
+  // On a track these three are read in the music sense (ADR 0024): `series` is
+  // the album, `season` the disc, `episode` the track number.
   series: string | null;
   season: number | null;
   episode: number | null;
+  // The track's own performer, present only on music. Distinct from the album
+  // artist that groups the record — on a compilation they differ, which is the
+  // whole reason both exist.
+  artist?: string | null;
   duration_ms: number | null;
   added_at: number;
   missing: boolean;

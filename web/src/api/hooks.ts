@@ -276,13 +276,20 @@ export function useItem(id: number) {
 // episodes, a work's parts — in hierarchy order. Enabled only for containers, so
 // a plain leaf detail never fires it. A collection is the exception: its members
 // live in a join table, so it uses useCollectionMembers instead.
-export function useChildren(parentID: number, enabled: boolean) {
+// `sort` is passed through when the default order is not the one the container
+// plays in. An album needs "track": the default leads with title, and a track —
+// unlike an episode, which inherits its series' sort title and therefore ties —
+// keeps its own, so an album asked for without it arrives alphabetically. It is
+// part of the query key, or two callers wanting different orders would share one
+// cached answer.
+export function useChildren(parentID: number, enabled: boolean, sort?: string) {
   return useQuery({
-    queryKey: ["children", parentID],
+    queryKey: ["children", parentID, sort ?? ""],
     queryFn: ({ signal }) =>
-      apiGet<ItemsPage>(`/api/items?parent_id=${parentID}`, signal).then(
-        (r) => r.items,
-      ),
+      apiGet<ItemsPage>(
+        `/api/items?parent_id=${parentID}` + (sort ? `&sort=${sort}` : ""),
+        signal,
+      ).then((r) => r.items),
     enabled: enabled && parentID > 0,
   });
 }

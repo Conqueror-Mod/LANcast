@@ -14,6 +14,7 @@ import { isContainer, childLabel } from "@/lib/kind";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { PosterTile } from "@/components/PosterTile";
+import { TrackList } from "@/components/TrackList";
 import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
@@ -90,7 +91,14 @@ export function Detail() {
   // through parent_id, so exactly one of these fires.
   const container = item ? isContainer(item) : false;
   const isCollection = item?.kind === "collection";
-  const { data: parentChildren } = useChildren(itemID, container && !isCollection);
+  // An album is asked for in the order it plays; everything else takes the
+  // default. Without this a record arrives alphabetically (see useChildren).
+  const isAlbum = item?.kind === "album";
+  const { data: parentChildren } = useChildren(
+    itemID,
+    container && !isCollection,
+    isAlbum ? "track" : undefined,
+  );
   const { data: members } = useCollectionMembers(itemID, container && isCollection);
   const children = isCollection ? members : parentChildren;
 
@@ -121,7 +129,22 @@ export function Detail() {
   const fanart = artworkURL(item.artwork?.fanart, "fanart");
   const poster = artworkURL(item.artwork?.poster, "poster2x");
   const cast = castOf(item.credits);
-  const canFixMatch = item.kind !== "collection" && item.kind !== "season";
+  // Fix match corrects a provider's identification. A season and a collection
+  // have none to correct — one is structural, the other provider-derived — and
+  // neither does music: ADR 0024 ships no music provider, so the only thing to
+  // search would be TMDB, which would answer a record with films. An artist and
+  // an album are assembled from the tags of the files beneath them.
+  const isMusic =
+    item.kind === "artist" || item.kind === "album" || item.kind === "track";
+  const canFixMatch =
+    item.kind !== "collection" && item.kind !== "season" && !isMusic;
+  // Removing something removes files. An artist and an album have none — they
+  // are rows the scanner invented and sweeps when they empty — so, like a
+  // collection, they are not offered. A track is a real file and keeps it.
+  const canRemove =
+    item.kind !== "collection" &&
+    item.kind !== "artist" &&
+    item.kind !== "album";
   // Children that can be played directly (not themselves containers), in order —
   // the queue behind Play all. A show's children are seasons, so it gets none;
   // a season's episodes, a work's parts, and a collection's films all qualify.
@@ -231,10 +254,7 @@ export function Detail() {
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
-              {/* A collection is a provider-derived grouping with no file of its
-                  own, so removing it is not offered; its member films are removed
-                  individually. */}
-              {isAdmin && item.kind !== "collection" && (
+              {isAdmin && canRemove && (
                 <RemoveButton onOpen={() => setRemoveOpen(true)} />
               )}
             </div>
@@ -262,6 +282,14 @@ export function Detail() {
         {container && children && children.length > 0 && (
           <section className="detail__children">
             <span className="section-label">{childLabel(children[0]?.kind)}</span>
+            {/* A record is a numbered list, not a grid: twelve copies of one
+                cover say nothing, and a track is identified by its number and
+                its length. The album's `series` is the album artist, so a
+                per-track performer shows only where it differs — the
+                compilation case (ADR 0024). */}
+            {isAlbum ? (
+              <TrackList tracks={children} albumArtist={item.series ?? undefined} />
+            ) : (
             <div className="detail__children-grid">
               {children.map((child) => (
                 <PosterTile
@@ -278,6 +306,7 @@ export function Detail() {
                 />
               ))}
             </div>
+            )}
           </section>
         )}
       </div>
