@@ -141,9 +141,39 @@ over the nebula field, the title line becomes title / artist / album, and the
 fullscreen and subtitle controls are dropped. Scrubber, transport, volume and
 the queue stay exactly as they are.
 
-Deliberately **not** in this pass, per ADR 0024: a persistent mini-player,
-shuffle, repeat, gapless, playlists, lyrics. The player is a screen you are on,
-the same as video, until there is a reason to make it otherwise.
+### The mini-player is in scope after all
+
+Originally this plan deferred a persistent mini-player, citing ADR 0024's "a
+music player UI beyond the minimum". **Chris has asked for it as part of the
+player work**, and the reason is sound enough to overrule the deferral: leaving
+the player screen currently *stops the music*. That is fine for a film, which
+you watch and finish, and wrong for a record, which you put on and then go and
+do something else — browsing the library while listening is the ordinary case,
+not an advanced one.
+
+So: **going back from the player leaves a mini-player docked bottom-right**,
+Plex's behaviour. Cover art, title and artist, play/pause, and a way back into
+the full screen. Playback continues across the navigation.
+
+This is the one part of the music work that pushes on the existing
+architecture rather than following it, and it is worth naming before it is
+built. The player owns a `<video>` element inside a route. A mini-player that
+survives leaving that route means the element can no longer live there — it
+has to be hoisted above the router, or the media element unmounts and the audio
+stops. That is a real change to where playback state lives, and it will touch
+video as much as music.
+
+Two consequences to decide when building it, not now:
+
+- **Does a film get one too?** The mechanism is identical and the answer is
+  probably yes eventually, but a docked video thumbnail is a different design
+  question from a docked record sleeve.
+- **Does this deserve an ADR?** Hoisting the media element out of the route is
+  a structural decision of the kind [ADR 0004](adr/0004-spatial-focus-model.md)
+  covers for focus. If it turns out to reshape how the client holds playback
+  state, it should be written down rather than discovered later in a diff.
+
+Still **not** in scope: shuffle, repeat, gapless, playlists, lyrics.
 
 ## Browse configuration
 
@@ -164,7 +194,7 @@ Four PRs, each independently reviewable and each leaving the tree working.
 | 1 | `sort=track` + `docs/api.md` + store test | A confirmed bug, server-side, no client dependency. Everything after it would otherwise be built against wrong data. |
 | 2 | `kind.ts` nouns, square tiles, `libraryConfig` | Makes the artist and album grids read correctly using screens that already exist. Visible on its own. |
 | 3 | `TrackList` + album detail + action gating | The album view proper. Depends on 1 for order and 2 for the tiles above it. |
-| 4 | Player audio mode | Last because a track already plays; this is presentation, and it is the easiest to judge once there is a track list to reach it from. |
+| 4 | Player audio mode + docked mini-player | Last because a track already plays. The audio chrome is presentation and easy to judge once there is a track list to reach it from; the mini-player is not — it moves the media element out of the route, so it is the one piece here that changes shared structure. Worth splitting into two commits, and possibly two PRs. |
 
 ## Before claiming done
 
