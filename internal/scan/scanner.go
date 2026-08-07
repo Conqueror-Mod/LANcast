@@ -522,9 +522,14 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, in
 	if nfo.Series != "" {
 		sr := nfo.Series
 		f.Series = &sr
-		// Episodes sort under their series, not their own episode title. A
-		// track is the opposite: it sorts within its album by number, so it
-		// keeps its own sort title.
+		// Episodes sort under their series, not their own episode title —
+		// which is also what makes them tie, so the default order falls
+		// through to season/episode and a season plays in order.
+		//
+		// A track keeps its own title, because a music library is browsed and
+		// searched by track title. That means tracks never tie, so an album
+		// played in order needs the explicit "track" sort rather than the
+		// default (store.ItemFilter).
 		if nfo.Kind != media.KindTrack {
 			f.SortTitle = media.SortTitle(sr)
 		}
