@@ -24,6 +24,13 @@
     transform var(--dur-fast) ease;
 }
 
+/* A record sleeve is square. Left at 2:3 it is cropped by object-fit: cover
+   below, losing a third of the artwork while still looking like a working
+   tile. */
+.poster-tile__art--square {
+  aspect-ratio: 1 / 1;
+}
+
 .poster-tile__art img {
   width: 100%;
   height: 100%;

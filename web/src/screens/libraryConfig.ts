@@ -34,6 +34,30 @@ const SHOW: LibraryKindConfig = {
   ],
 };
 
+// A music library's top level is artists (ADR 0024). Rating is deliberately
+// absent: there is no music rating source — ADR 0024 defers MusicBrainz and
+// every rating LANcast holds comes from TMDB or OMDb — so offering the sort
+// would promise an ordering the data cannot produce.
+//
+// The facet row needs no configuration. Facets return only values actually
+// present, so a tag-only music library yields no genres and no content ratings
+// and those chips simply do not render.
+const MUSIC: LibraryKindConfig = {
+  searchPlaceholder: "Search artists",
+  sorts: [
+    { value: "title", label: "Title" },
+    { value: "year", label: "Year" },
+    { value: "added", label: "Recently added" },
+  ],
+};
+
 export function configForKind(kind: string | undefined): LibraryKindConfig {
-  return kind === "show" ? SHOW : MOVIE;
+  switch (kind) {
+    case "show":
+      return SHOW;
+    case "music":
+      return MUSIC;
+    default:
+      return MOVIE;
+  }
 }
