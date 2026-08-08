@@ -120,6 +120,25 @@ pipeline currently builds both executables for every target from one runner
 client and the pipeline has to grow per-OS runners or drop non-Windows client
 builds. **The server keeps cross-compiling normally.**
 
+> **Amendment, 2026-08-07 — this cost does not apply to stage 1 on Windows.**
+> It was asserted from reasoning and turned out to be wrong when tested. A
+> pure-Go WebView2 binding (`github.com/jchv/go-webview2`, driving the COM
+> interfaces through `syscall`) builds with `CGO_ENABLED=0` and opens a real
+> window against a running server. So stage 1 keeps
+> [ADR 0001](0001-go-and-pure-go-sqlite.md)'s no-CGO posture *in the client*,
+> and the existing single-runner release matrix keeps working.
+>
+> The cost that replaces it is a **third-party dependency in a shipped binary**,
+> which is the same argument this ADR already has with
+> [ADR 0013](0013-transcode-pipeline.md) below — and the binding is untagged, so
+> pinning it means pinning a commit. Binding WebView2 directly here is a real
+> alternative, since the spike proves the capability is reachable without the
+> dependency. That choice is open and is step 1 of the
+> [stage 1 plan](../native-client-plan.md).
+>
+> **Stage 2 is unaffected.** libmpv is still CGO, and the per-platform build cost
+> above still lands the moment stage 2 starts.
+
 **Cost — a runtime dependency on Windows.** WebView2 is present on Windows 11
 and on updated Windows 10, and needs the evergreen bootstrapper otherwise. That
 is a real install-time consideration for a project whose current answer is "one
