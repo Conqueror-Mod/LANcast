@@ -314,9 +314,14 @@ group is not priority.
   question of whether identity should live in its own store rather than beside
   the library, so losing a password never opens the file holding the media.
 - **Crash reporting.**
-- **Debug logging** and an **internal log viewer** — the service now writes
-  `lancastd.log` beside the database (v0.4.2); what is missing is reading it
-  from the UI.
+- ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
+  `lancastd.log` and Settings shows it, collapsed by default and never polled.
+  The log had been written beside the database since v0.4.2 and could only be
+  read by opening a file manager — the wrong ask for the case it serves, since
+  it matters most when the server runs as a service and something is wrong. It
+  says when the view is partial rather than letting a reader believe they have
+  the whole file. **Debug logging** — raising the level from the UI — is still
+  open.
 - **Clear cache and data** and **reset settings** actions.
 - **Check for updates** with an **auto-update** toggle.
 - **Desktop lifecycle — "Open on Windows start" and "Close to tray"**

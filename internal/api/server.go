@@ -48,8 +48,9 @@ type Deps struct {
 	Trans    *transcode.Manager
 	Subs     *subtitle.Extractor
 	Settings *config.SettingsStore
-	// DataDir is where downloaded subtitles are written — never beside the
-	// media, which is the same rule NFO writing follows.
+	// DataDir is the server data directory: where downloaded subtitles are
+	// written — never beside the media, which is the same rule NFO writing
+	// follows — and where lancastd.log is read from for GET /api/logs.
 	DataDir string
 	Log     *slog.Logger
 	Web     http.Handler
@@ -175,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)
+	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))

@@ -21,6 +21,7 @@ import type {
   ProbeStatus,
   ReprobeResult,
   ScanStatus,
+  ServerLog,
   Settings,
   SettingsUpdate,
   SubtitleCandidate,
@@ -673,5 +674,19 @@ export function useActivity() {
       return s;
     },
     refetchInterval: (q) => (q.state.data?.active ? 1500 : 8000),
+  });
+}
+
+// The tail of lancastd.log. Not polled: a log is what already happened, and the
+// button that opens it is the refresh. Enabled only when the viewer opens the
+// panel, so an admin who never looks never reads a file off disk.
+export function useServerLog(enabled: boolean, lines = 300) {
+  return useQuery({
+    queryKey: ["logs", lines],
+    queryFn: ({ signal }) =>
+      apiGet<ServerLog>(`/api/logs?lines=${lines}`, signal),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
   });
 }

@@ -708,6 +708,35 @@ truth: the workers are in-process and a restart ended their work.
 Reading progress needs no special role. The endpoints that *start* work
 (`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
 
+### `GET /api/logs`
+
+The tail of `lancastd.log`. **Admin only.**
+
+```json
+{ "lines": ["time=... level=INFO msg=listening addr=..."],
+  "complete": false, "path": "lancastd.log" }
+```
+
+`?lines=` defaults to 300 and is clamped to 2000; a value that is not a positive
+whole number is `400`. Lines are oldest first.
+
+`complete` is `false` when older entries exist that this response does not
+carry — the difference between "this is the log" and "this is the end of the
+log". A client that assumes the first sends its reader looking for a startup
+line that was never withheld from them.
+
+Admin only because the log names filesystem paths, library roots and provider
+errors: that is server-operator information, not viewer information.
+
+A server that has never opened a log — one that has only ever run in a terminal,
+where the log goes to the terminal — returns an empty `lines` array and
+`complete: true`. That is a supported configuration, not an error.
+
+This exists because the log has been written beside the database since v0.4.2
+and could only be read by finding the data directory in a file manager, which is
+the wrong ask for the case it serves: the log matters most when the server is
+running as a service and something is wrong.
+
 ### `GET /api/coverart`
 
 Background album-art progress.

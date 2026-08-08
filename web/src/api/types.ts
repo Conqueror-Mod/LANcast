@@ -312,3 +312,12 @@ export interface ActivityStatus {
   active: boolean;
   tasks: Activity[];
 }
+
+// GET /api/logs. `complete` is false when older lines exist that this response
+// does not carry — the difference between "this is the log" and "this is the
+// end of the log".
+export interface ServerLog {
+  lines: string[];
+  complete: boolean;
+  path: string;
+}

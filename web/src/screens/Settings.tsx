@@ -22,6 +22,7 @@ import {
   useGrantPlugin,
   useSetPluginEnabled,
   useRemovePlugin,
+  useServerLog,
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { ApiFailure } from "@/api/client";
@@ -941,6 +942,73 @@ function AddonsSection() {
   );
 }
 
+// The server log, read from the UI. It has been written beside the database
+// since v0.4.2 and until now could only be read by finding the data directory
+// in a file manager — which is the wrong ask for the case it exists to serve,
+// because the log matters most when the server runs as a service and something
+// is wrong.
+//
+// Collapsed by default and never polled: this is what already happened, and the
+// button that opens it is the refresh.
+function ServerLogSection() {
+  const [open, setOpen] = useState(false);
+  const { data, isFetching, error, refetch } = useServerLog(open);
+  const lines = data?.lines ?? [];
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Server log</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">{data?.path ?? "lancastd.log"}</div>
+          <div className="set-row__sub">
+            Written beside the database. A server running as a service has no
+            console, so this is the only record of why it stopped.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          {open && (
+            <button
+              className="set-btn"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? "Reading…" : "Refresh"}
+            </button>
+          )}
+          <button className="set-btn" onClick={() => setOpen((v) => !v)}>
+            {open ? "Hide" : "Show log"}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="set-log">
+          {error && <p className="set-log__note">Could not read the log.</p>}
+          {!error && !isFetching && lines.length === 0 && (
+            <p className="set-log__note">
+              The log is empty. A server that has only ever run in a terminal
+              writes to the terminal instead.
+            </p>
+          )}
+          {lines.length > 0 && (
+            <>
+              {/* Saying the view is partial is the difference between "this is
+                  the log" and "this is the end of the log". */}
+              {data && !data.complete && (
+                <p className="set-log__note">
+                  Showing the last {lines.length.toLocaleString()} lines. Older
+                  entries are in the file.
+                </p>
+              )}
+              <pre className="set-log__body">{lines.join("\n")}</pre>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Settings() {
   const isAdmin = useIsAdmin();
 
@@ -952,6 +1020,7 @@ export function Settings() {
           <AdminSections />
           <AddonsSection />
           <UsersSection />
+          <ServerLogSection />
         </>
       )}
       <AccountSection />

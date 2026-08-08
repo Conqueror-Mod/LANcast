@@ -333,3 +333,31 @@
   border-color: var(--nebula-blue);
   box-shadow: 0 0 0 3px rgba(38, 88, 168, 0.4);
 }
+
+/* The server log. Monospace because it is machine output, and scrolled in its
+   own box so a long log cannot make the settings page itself scroll sideways. */
+.set-log {
+  margin-top: 10px;
+}
+
+.set-log__note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.set-log__body {
+  margin: 0;
+  max-height: 380px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: var(--radius-tile);
+  background: var(--space-void);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre;
+  tab-size: 2;
+}
