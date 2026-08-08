@@ -218,6 +218,72 @@ lifecycle stays confusing in the meantime, the next cheap step is the same kind
 — making the tray tooltip and the Settings page say whether this server is the
 service or this process, rather than leaving it to be inferred.
 
+## Close to tray — the mechanism, investigated 2026-08-08
+
+Steps 1-5 shipped without this one. The preference is stored and readable and
+nothing consumes it, because "the web view and the tray both want the main
+thread's message loop" had been taken as a blocker. Investigated properly, it is
+not one, and the three facts that decide it are worth writing down before anyone
+tries again.
+
+**Windows message queues are per thread, not per process.** Two message loops
+can coexist. `fyne.io/systray` calls `runtime.LockOSThread()` in its `init()`,
+which pins the *main* goroutine — but a second goroutine that calls
+`runtime.LockOSThread()` itself gets its own thread and its own queue, and
+`systray.Run` creates its window inside `nativeLoop` on whatever thread it runs
+on. So the tray can live on a locked secondary goroutine while the web view
+keeps the main thread. The conflict is real only if both are run from the same
+goroutine, which is what the current code does.
+
+**The close button is interceptable, and currently is not intercepted.** The
+vendored binding's window procedure already handles `WM_CLOSE`
+(`internal/webview2/webview.go`), and destroys the window:
+
+```go
+case w32.WMClose:
+    _, _, _ = w32.User32DestroyWindow.Call(hwnd)
+```
+
+Close-to-tray is exactly this branch calling `ShowWindow(SW_HIDE)` instead when
+the preference is on. That needs a hook on the binding — an option the caller
+sets, defaulting to today's behaviour — and a note in
+`internal/webview2/PROVENANCE.md`, because that package is a trimmed vendored
+copy and every local change to it has to stay visible.
+
+**Restoring is `ShowWindow` plus `SetForegroundWindow`**, from the tray's Open
+item, on the window's own thread.
+
+### What this means for the ruling
+
+A tray icon is what makes close-to-tray legitimate rather than an invisible
+process: something stays on screen, and Quit stops what the tray owns. Without
+it, the option would be "keep a server running with nothing to show for it",
+which is the case the ruling forbids — which is why the toggle currently ships
+disabled with that exact reason rather than hidden.
+
+### Why it was not built in this pass
+
+It is a Windows threading change plus a modification to a vendored binding, and
+neither can be honestly verified by reading. The check is behavioural: a tray
+icon appears beside a window, closing the window leaves both the icon and the
+server, reopening from the tray restores the same window, and Quit stops the
+server this client started and nothing else. That wants someone watching the
+screen, and preferably an installed artifact rather than a terminal-launched
+build — the same unit of verification the native-client plan already insists on.
+
+Scoped for whoever picks it up:
+
+1. `OnClose func() bool` on the webview options, defaulting to destroy. Record
+   it in PROVENANCE.md.
+2. Tray on a goroutine that locks its own OS thread; window stays on main.
+3. `runWindow` consults the preference on close: hide when on, otherwise today's
+   behaviour unchanged.
+4. Tray Quit keeps the ownership rule — it stops the server this client started
+   and never one it merely attached to.
+5. Verify by watching it, then remove the "not yet available" reason from the
+   Settings option in the same change. A toggle that works and still says it does
+   not is worse than either.
+
 ## Build order
 
 1. **Client-local preferences file** in `%APPDATA%\LANcast\client`, with the
