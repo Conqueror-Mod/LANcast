@@ -321,3 +321,27 @@ export interface ServerLog {
   complete: boolean;
   path: string;
 }
+
+// GET /api/audit — one recorded act (ADR 0026). `summary` and `actor_name` are
+// resolved server-side at write time, so an event stays readable after the
+// account and the row it names are both gone. The client renders them, never
+// reconstructs them.
+export interface AuditEvent {
+  id: number;
+  at: number;
+  actor_id: string;
+  actor_name: string;
+  action: string;
+  target_kind?: string;
+  target_id?: string;
+  summary: string;
+  detail?: string;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+  // The distinct actions actually present, so the filter is built from what
+  // happened rather than from a list that drifts from the server.
+  actions: string[];
+}

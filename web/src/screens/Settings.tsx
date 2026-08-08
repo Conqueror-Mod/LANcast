@@ -25,6 +25,7 @@ import {
   useServerLog,
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
+import { AuditLog } from "@/components/AuditLog";
 import { ApiFailure } from "@/api/client";
 import type {
   AuthUser,
@@ -1020,6 +1021,7 @@ export function Settings() {
           <AdminSections />
           <AddonsSection />
           <UsersSection />
+          <AuditLog />
           <ServerLogSection />
         </>
       )}

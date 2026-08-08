@@ -1,0 +1,157 @@
+/* The audit log. Nothing here is gold: this is a record of what happened, not
+   a statement about where you are. Selection among the filter chips is carried
+   by weight and surface, and gold appears only as the focus ring every control
+   in this app earns. */
+
+.audit {
+  margin-top: 12px;
+}
+
+.audit__total {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.audit__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.audit__chip {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease;
+}
+
+.audit__chip:hover {
+  color: var(--text-secondary);
+}
+
+.audit__chip.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.audit__chip:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.audit__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.audit__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+/* Rows in a scrollable column must not shrink to fit. */
+.audit__row {
+  flex-shrink: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.audit__row:last-child {
+  border-bottom: none;
+}
+
+.audit__row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.audit__when {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.audit__actor {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* The action id, shown as machine text because that is what it is — it matches
+   the API exactly, so what you read here is what you would filter on. */
+.audit__action {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.audit__summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+
+.audit__detail-toggle {
+  margin-top: 5px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.audit__detail-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.audit__detail-toggle:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.audit__detail {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-tile);
+  background: var(--space-void);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.audit__more {
+  margin-top: 12px;
+}
