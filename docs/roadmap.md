@@ -178,7 +178,7 @@ Status: **planned** · **next** · *unplanned*
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
-| Music player UI | **next** | Unbuilt: `Player.tsx` is video-only and nothing routes a track to it, so v0.5.0's music is API-only. ADR 0024 scopes the minimum as album view plus a track list that plays; the cost is a third container depth in the browse grid, same as show → season → episode |
+| Music player UI | **built** | Album view with a numbered track list, square sleeves, an audio mode in the player, and a docked mini-player so leaving the player no longer stops the record ([plan](music-client-plan.md)). Playback moved above the router to make that possible — the media element used to be a child of the `/watch` route, and a route owns its DOM |
 | Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
 
 ### Extensibility · M4
@@ -376,9 +376,10 @@ where that openness gets exercised.
    2. ~~Artist tiles~~ — **placeholder built.** Artists borrow their
       most-substantial album's cover, flagged `inherited`, until a real image
       supersedes it.
-   3. **Music client UI.** Album view and a track list that plays
-      ([plan](music-client-plan.md)). The remaining gap, and the larger one:
-      artist images improve a grid the browser does not have yet.
+   3. ~~Music client UI.~~ **Built** ([plan](music-client-plan.md)): album view
+      with a numbered track list, square sleeves, an audio mode in the player,
+      and a docked mini-player. The grid artist images were waiting for now
+      exists.
    4. **Artist images from TheAudioDB** ([ADR 0025](adr/0025-artist-images.md),
       accepted, unbuilt). Deliberately after the client UI, for the reason just
       given.
