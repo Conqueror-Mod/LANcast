@@ -125,21 +125,29 @@ nothing else.
 1. ~~Amend ADR 0023, and decide the dependency question.~~ **Done** — the
    amendment is in the ADR, and the decision is to vendor a trimmed copy
    (above).
-2. **A `clientwindow` package** behind a build tag, Windows-only, with a
-   no-op/error implementation elsewhere — the same shape `tray_windows.go` and
-   `tray_other.go` already use. One function: open a window at a URL, block
-   until closed.
-3. **Wire it into the launcher behind a flag**, defaulting to the browser.
-   `lancast -window` opts in. This is what makes the whole thing revertible and
-   lets both paths be compared on the same machine on the same day.
-4. **Flip the default** once it has survived real use, keeping `-browser` as the
-   escape hatch. A separate commit, so flipping back is one revert.
-5. **Certificate trust**, which is the point of the exercise: the client talks
-   to its own server and can trust that certificate deliberately.
+2. ~~A `clientwindow` package behind a build tag.~~ **Done** —
+   `internal/clientwindow`, Windows-only with an unsupported stub elsewhere.
+   `Open` shows a window and blocks; `Check` says why it cannot, which is a
+   separate question from whether it can (see below).
+3. ~~Wire it into the launcher behind a flag.~~ **Done** — `lancast -window`,
+   with the browser still the default.
+4. **Flip the default** once it has survived real use, keeping a `-browser`
+   escape hatch. A separate commit, so flipping back is one revert. **Not yet:**
+   the window has run for an evening on one machine, which is not "survived
+   real use", and the list of unproven environments below has not shortened.
+5. ~~Certificate trust.~~ **Done, and the situation was worse than the ADR
+   assumed.** Against a LAN-bound server the web view does not warn — it fails
+   the handshake outright and retries, so the app never loads at all. A browser
+   at least offers a way through, which made the window *strictly worse* than
+   the thing it replaces until this landed. The client now pins the server's
+   public key, read from its own `cert.pem` on local disk; every other
+   certificate is still validated normally.
    [ADR 0014](adr/0014-transport-security.md) is unchanged for every other
    device — see the trap below.
-6. **Installer and Start-menu entries** get revisited only after the default
-   flips.
+6. ~~The installer ships `WebView2Loader.dll`.~~ **Done** — NSIS places it
+   beside the client and removes it on uninstall, and the Windows zip carries it
+   too, so a portable unpack is not a quietly worse install. **Start-menu
+   entries** still get revisited only after the default flips.
 
 ### What stage 1 does *not* include
 

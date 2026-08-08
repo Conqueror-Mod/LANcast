@@ -59,6 +59,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y nsis
           cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
           cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
+          # The WebView2 loader is read straight from third_party/ by the .nsi —
+          # it is committed rather than built, so there is nothing to stage. Fail
+          # loudly if it has moved: makensis would otherwise error late, and a
+          # release that quietly shipped without it would leave every installed
+          # client falling back to the browser with no obvious cause.
+          test -f third_party/webview2/x64/WebView2Loader.dll \
+            || { echo "WebView2Loader.dll is missing from third_party/"; exit 1; }
           version="${GITHUB_REF_NAME#v}"
           makensis -DVERSION="${version}" installer/lancast.nsi
           gh release upload "${GITHUB_REF_NAME}" installer/LANcast-Setup-*.exe --clobber

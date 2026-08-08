@@ -4,45 +4,78 @@
 # is what the server embeds, so no npm at release time.
 version: 2
 
+# Builds are split by OS rather than filtered with `ignore`, because the archives
+# below have to differ: only the Windows one carries WebView2Loader.dll, and a
+# goreleaser archive can select builds but cannot pick files per-OS. Four small
+# blocks that each say one thing beat two blocks plus a file rule that silently
+# does the wrong thing — the first attempt used a glob expected to match nothing
+# off Windows, and goreleaser treats a glob with no matches as a hard error.
 builds:
-  - id: lancastd
+  - id: lancastd-windows
     main: ./cmd/lancastd
     binary: LANcast-Server
-    env:
-      - CGO_ENABLED=0
-    goos: [linux, windows]
-    goarch: [amd64, arm64]
-    ignore:
-      # Windows is amd64-only for now (ADR 0016); no windows/arm64 target.
-      - goos: windows
-        goarch: arm64
+    env: [CGO_ENABLED=0]
+    goos: [windows]
+    # Windows is amd64-only for now (ADR 0016).
+    goarch: [amd64]
     # The version is injected so the binary, /api/health, and the tag agree.
-    # Windows binaries link the GUI subsystem so a double-click shows no console;
-    # the icon comes from the committed cmd/lancastd/lancastd_windows.syso.
+    # The GUI subsystem is what stops a double-click showing a console; the icon
+    # comes from the committed cmd/lancastd/lancastd_windows.syso.
     ldflags:
-      - -s -w -X lancast/internal/api.Version={{ .Version }}{{ if eq .Os "windows" }} -H=windowsgui{{ end }}
+      - -s -w -X lancast/internal/api.Version={{ .Version }} -H=windowsgui
 
-  - id: lancast
+  - id: lancastd-unix
+    main: ./cmd/lancastd
+    binary: LANcast-Server
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X lancast/internal/api.Version={{ .Version }}
+
+  - id: lancast-windows
     main: ./cmd/lancast
     binary: LANcast-Client
-    env:
-      - CGO_ENABLED=0
-    goos: [linux, windows]
-    goarch: [amd64, arm64]
-    ignore:
-      - goos: windows
-        goarch: arm64
+    env: [CGO_ENABLED=0]
+    goos: [windows]
+    goarch: [amd64]
     ldflags:
-      - -s -w{{ if eq .Os "windows" }} -H=windowsgui{{ end }}
+      - -s -w -H=windowsgui
 
+  - id: lancast-unix
+    main: ./cmd/lancast
+    binary: LANcast-Client
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+# The archive names are unchanged from the single-archive version: same
+# template, same formats per OS. Splitting the block is about what goes *in*
+# them, not what they are called.
 archives:
-  - id: default
-    ids: [lancastd, lancast]
+  - id: windows
+    ids: [lancastd-windows, lancast-windows]
+    name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      # Microsoft's WebView2 loader shim, which the client's window mode calls
+      # into (ADR 0023 stage 1). It has to sit beside LANcast-Client.exe.
+      #
+      # The installer places it too. It is here as well so unpacking the
+      # portable zip is not a quietly worse install than running the setup —
+      # the client would fall back to the browser and report an incomplete
+      # install, which would be true and confusing.
+      - src: third_party/webview2/x64/WebView2Loader.dll
+        dst: WebView2Loader.dll
+
+  - id: unix
+    ids: [lancastd-unix, lancast-unix]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
     files:
       - README.md
       - LICENSE
