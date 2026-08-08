@@ -151,6 +151,9 @@ export function Detail() {
   const playableChildren = (children ?? []).filter((c) => !isContainer(c));
 
   const meta = [
+    // An album's artist belongs on the line that says what this is, ahead of
+    // the year — "Between the Buried and Me · 2021", the way a record is named.
+    isAlbum ? (item.artist ?? "") : "",
     item.year ? String(item.year) : "",
     runtime(item.duration_ms),
     item.content_rating ?? "",
@@ -284,11 +287,14 @@ export function Detail() {
             <span className="section-label">{childLabel(children[0]?.kind)}</span>
             {/* A record is a numbered list, not a grid: twelve copies of one
                 cover say nothing, and a track is identified by its number and
-                its length. The album's `series` is the album artist, so a
+                its length. The album's `artist` is the album artist, so a
                 per-track performer shows only where it differs — the
                 compilation case (ADR 0024). */}
             {isAlbum ? (
-              <TrackList tracks={children} albumArtist={item.series ?? undefined} />
+              <TrackList
+                tracks={children}
+                albumArtist={item.artist ?? undefined}
+              />
             ) : (
               <div className="detail__children-grid">
                 {children.map((child) => (

@@ -1408,6 +1408,51 @@ func (s *Store) EnsureMusicContainer(ctx context.Context, libraryID int64, kind,
 	return id, nil
 }
 
+// FillAlbumMetadata gives album rows the two facts their tracks already carry:
+// who made the record, and when.
+//
+// EnsureMusicContainer creates an album with a title and nothing else, because
+// at creation time it knows only the grouping key. The result is an album detail
+// page showing a cover and a title over an empty space, a Year sort with no year
+// to sort by, and a track list that cannot tell whether a performer differs from
+// the album artist — because it has no album artist to compare against. Every
+// one of those reads as missing metadata; the metadata was there the whole time,
+// one row down.
+//
+// Derived rather than stored at creation, and re-derived on every scan, so an
+// album that gains a correctly tagged track picks it up without a special case.
+//
+//   - artist is the album artist, which is the parent artist row's title. That
+//     row was created *from* the album-artist tag (ADR 0024), so this is not a
+//     guess — it is the same value, denormalized one level down.
+//   - year is the earliest year among the tracks. A record has one year; its
+//     files sometimes disagree by a year when a single was tagged with its own
+//     release date, and the earliest is the closer answer for a sort.
+//
+// Locked fields are never overwritten (CLAUDE.md), so an operator who fixed
+// either by hand keeps their answer.
+func (s *Store) FillAlbumMetadata(ctx context.Context, libraryID int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE media_item AS a
+		SET artist = COALESCE(
+		        (SELECT p.title FROM media_item p WHERE p.id = a.parent_id),
+		        a.artist),
+		    year = COALESCE(
+		        (SELECT MIN(t.year) FROM media_item t
+		          WHERE t.parent_id = a.id AND t.year IS NOT NULL AND t.year > 0),
+		        a.year)
+		WHERE a.library_id = ? AND a.kind = 'album'
+		  AND NOT EXISTS (
+		        SELECT 1 FROM item_lock l
+		         WHERE l.item_id = a.id AND l.field IN ('artist', 'year'))`,
+		libraryID)
+	if err != nil {
+		return 0, fmt.Errorf("fill album metadata: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // DeleteEmptyMusicContainers removes artist and album rows left with no
 // children — an album whose files moved, an artist whose last album went.
 //

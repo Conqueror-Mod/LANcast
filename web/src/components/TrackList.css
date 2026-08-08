@@ -19,6 +19,8 @@
   /* Number, title, duration. The number column is fixed and tabular so the
      titles form one left edge instead of stepping right at track 10. */
   grid-template-columns: 34px 1fr auto;
+  /* Same row, minus the number column, when nothing on the record is numbered. */
+
   align-items: baseline;
   gap: 14px;
   width: 100%;
@@ -51,6 +53,10 @@
   background: var(--space-raised);
   color: var(--text-primary);
   box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.track-row--unnumbered {
+  grid-template-columns: 1fr auto;
 }
 
 .track-row__num {

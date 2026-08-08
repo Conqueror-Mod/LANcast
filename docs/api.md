@@ -700,6 +700,21 @@ track from a release with no disc tag carries `season: 0`, which sorts ahead of
 any numbered disc, so an album mixing tagged and untagged discs is still
 well-defined.
 
+An **album** row carries two fields of its own, derived from its tracks on every
+scan rather than written once:
+
+| Field | On an album |
+|---|---|
+| `artist` | The **album artist** — the name of the artist row above it |
+| `year` | The earliest year among its tracks, absent when none carries one |
+
+Both are derived because an album is created from a grouping key and knows only
+its title at that moment. A client reading `artist` on an album gets the album
+artist; reading it on a track gets that track's performer. The two differing is
+the compilation case, and comparing them is how a client knows whether a track's
+performer is worth showing. Locked fields are never overwritten, so a corrected
+year survives a rescan.
+
 `artist` is the track's, not the album's. A compilation has one album artist and
 a different performer per track; the album artist groups the record, and this
 says who actually played. Both come from the file's embedded tags, which for

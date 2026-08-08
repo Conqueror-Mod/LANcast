@@ -284,6 +284,13 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 
 	// An album whose files moved away, or an artist whose last album did, is a
 	// row LANcast invented with nothing under it — an empty shelf in the grid.
+	// An album's own artist and year come from the rows around it, and are
+	// re-derived here rather than written once at creation: a rescan that adds a
+	// properly tagged track should fix an album that had nothing.
+	if _, err := s.st.FillAlbumMetadata(ctx, lib.ID); err != nil {
+		s.log.Warn("filling album metadata", "library", lib.ID, "error", err)
+	}
+
 	if n, err := s.st.DeleteEmptyMusicContainers(ctx, lib.ID); err != nil {
 		s.log.Warn("cleaning empty music containers", "library", lib.ID, "error", err)
 	} else if n > 0 {
