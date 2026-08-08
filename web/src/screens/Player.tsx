@@ -158,6 +158,19 @@ export function Player() {
         if (e.target === e.currentTarget) pb.togglePlay();
       }}
     >
+      {/* A black rectangle with a running clock is what a failed playback looks
+          like too. A transcode takes seconds to produce its first frame, and on
+          a resumed film the clock starts at the resume point, so without this
+          the wait reads as "broken" rather than "starting". The decision's own
+          reason is the most useful thing to show while waiting — it says why
+          this file is taking longer than the last one. */}
+      {pb.loading && (
+        <div className="player__loading">
+          <span className="player__loading-mark" aria-hidden="true" />
+          <span>{pb.note || "Starting…"}</span>
+        </div>
+      )}
+
       <div className="player__chrome">
         <div className="player__top">
           <button className="player__icon" onClick={close} aria-label="Close">

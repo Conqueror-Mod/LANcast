@@ -52,6 +52,7 @@ interface PlaybackState {
   surface: Surface;
 
   playing: boolean;
+  loading: boolean;
   displayTime: number;
   totalDuration: number;
   muted: boolean;
@@ -147,11 +148,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   });
   const [note, setNote] = useState("");
   const [subKey, setSubKey] = useState<string | null>(null);
+  // True from the moment a source is chosen until the element has a frame to
+  // show. A transcode takes seconds to produce its first bytes, and without
+  // this the screen is black with a running clock — indistinguishable from a
+  // playback that failed, which is the failure shape this project keeps
+  // rediscovering.
+  const [loading, setLoading] = useState(false);
 
   const activeSub =
     subtitles.find((t) => t.key === subKey && t.available) ?? null;
 
-  const surface: Surface = itemID === 0 ? "idle" : fullClaimed ? "full" : "mini";
+  // The player screen wins as soon as it is mounted, before anything is loaded.
+  // Ordering it the other way round — item first, claim second — left the
+  // surface at its 1px idle size for the first paints, so the screen above it
+  // was transparent onto whatever page it had just covered: the detail page's
+  // Play button showing through a "playing" player.
+  const surface: Surface = fullClaimed ? "full" : itemID === 0 ? "idle" : "mini";
 
   // Total runtime. A transcode or remux streams a fragmented MP4 whose element
   // duration is whatever has been produced so far — a few seconds — so for those
@@ -217,6 +229,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setItemID(0);
     setQueue([]);
     setPlaying(false);
+    setLoading(false);
     setCurrent(0);
     setDuration(0);
   }, []);
@@ -265,6 +278,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         offset.current = 0;
         setSubOffset(0);
       }
+      setLoading(true);
       v.src = sourceURL(item.id, decision.current.method, startedFrom.current);
       v.load();
       void v.play().catch(() => {});
@@ -292,6 +306,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         offset.current = t;
         setSubOffset(t);
         setCurrent(0);
+        setLoading(true);
         v.src = sourceURL(itemID, decision.current.method, t);
         v.load();
         void v.play().catch(() => {});
@@ -384,6 +399,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     cover,
     surface,
     playing,
+    loading,
     displayTime,
     totalDuration,
     muted,
@@ -456,6 +472,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               tt.mode = activeSub ? "showing" : "disabled";
             }
           }}
+          onLoadedData={() => setLoading(false)}
+          onPlaying={() => setLoading(false)}
+          onWaiting={() => setLoading(true)}
           onTimeUpdate={(e) => {
             setCurrent(e.currentTarget.currentTime);
             saveProgress();

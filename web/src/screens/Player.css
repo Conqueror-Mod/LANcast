@@ -166,3 +166,45 @@
   width: 84px;
   opacity: 1;
 }
+
+/* Starting up. Centred over the surface, below the chrome so the transport
+   stays usable — you can still hit Back on a film that is taking too long,
+   which is the whole difference between waiting and being stuck. */
+.player__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  pointer-events: none;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 0 40px;
+}
+
+/* A slow gold sweep. Gold is earned — here it marks the one thing happening on
+   screen, and it leaves as soon as there is a picture. */
+.player__loading-mark {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--gold-dormant);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: player-spin 900ms linear infinite;
+}
+
+@keyframes player-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Reduced motion: the spinner is decoration, the text is the message. */
+@media (prefers-reduced-motion: reduce) {
+  .player__loading-mark {
+    animation: none;
+  }
+}
