@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -122,6 +123,12 @@ func (s *Server) uploadPlugin(w http.ResponseWriter, r *http.Request) {
 	}
 	view := s.viewOf(rec)
 	view.Requested = caps(vb.Manifest.Capabilities)
+	// Staged, not yet trusted: the capability grant is a separate act and gets
+	// its own event. Recording the signer is the point — provenance is half of
+	// the two-layer trust model (ADR 0021).
+	s.audit(r, "plugin.install", "plugin", rec.Name,
+		fmt.Sprintf("Staged plugin %q (%s), signed by %s", rec.Name, rec.Version, rec.Signer),
+		map[string]any{"digest": rec.Digest, "signer": rec.Signer, "version": rec.Version})
 	writeJSON(w, http.StatusOK, view)
 }
 
@@ -159,6 +166,12 @@ func (s *Server) grantPlugin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.reloadPluginsSoon()
+	// The authority half of the trust model, and the event most worth being
+	// able to review later: this is where third-party code was given reach.
+	s.audit(r, "plugin.grant", "plugin", p.Name,
+		fmt.Sprintf("Granted %q http=%v secrets=%v and enabled it",
+			p.Name, p.GrantedHTTP, p.GrantedSecrets),
+		map[string]any{"http": p.GrantedHTTP, "secrets": p.GrantedSecrets, "digest": p.Digest})
 	writeJSON(w, http.StatusOK, s.viewOf(p))
 }
 
@@ -176,6 +189,11 @@ func (s *Server) setPluginEnabled(w http.ResponseWriter, r *http.Request, enable
 		return
 	}
 	s.reloadPluginsSoon()
+	action, verb := "plugin.disable", "Disabled"
+	if enabled {
+		action, verb = "plugin.enable", "Enabled"
+	}
+	s.audit(r, action, "plugin", name, fmt.Sprintf("%s plugin %q", verb, name), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -196,6 +214,9 @@ func (s *Server) removePlugin(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("plugin files not fully removed", "name", name, "error", err)
 	}
 	s.reloadPluginsSoon()
+	s.audit(r, "plugin.remove", "plugin", name,
+		fmt.Sprintf("Removed plugin %q (%s) and its files", name, p.Version),
+		map[string]any{"digest": p.Digest, "signer": p.Signer})
 	w.WriteHeader(http.StatusNoContent)
 }
 

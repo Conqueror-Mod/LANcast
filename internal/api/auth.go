@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -318,6 +319,9 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "revoke sessions")
 		return
 	}
+
+	s.audit(r, "auth.password_change", "user", u.ID,
+		fmt.Sprintf("%q changed their own password; all their sessions were revoked", u.Name), nil)
 
 	http.SetCookie(w, auth.ClearCookie())
 	w.WriteHeader(http.StatusNoContent)

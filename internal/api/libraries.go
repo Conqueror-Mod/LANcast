@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,6 +70,9 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "create library")
 		return
 	}
+	s.audit(r, "library.create", "library", auditID(lib.ID),
+		fmt.Sprintf("Added %s library %q at %s", lib.Kind, lib.Name, lib.Path),
+		map[string]any{"path": lib.Path, "kind": lib.Kind})
 	writeJSON(w, http.StatusCreated, lib)
 }
 
@@ -116,7 +120,8 @@ func (s *Server) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
 		return
 	}
-	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+	lib, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
 	// A scan mid-write against this library must not have it deleted out from
@@ -129,5 +134,10 @@ func (s *Server) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteLibrary(r.Context(), id); s.notFoundOr(w, err, "delete library", "no such library") {
 		return
 	}
+	// The event this whole log exists for. Read before the delete so the
+	// summary still names what is now gone (ADR 0026).
+	s.audit(r, "library.delete", "library", auditID(id),
+		fmt.Sprintf("Removed library %q (%d items) — files left on disk", lib.Name, lib.ItemCount),
+		map[string]any{"path": lib.Path, "kind": lib.Kind, "item_count": lib.ItemCount})
 	w.WriteHeader(http.StatusNoContent)
 }

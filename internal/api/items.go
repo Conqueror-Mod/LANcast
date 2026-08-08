@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -145,6 +146,17 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "delete items")
 		return
 	}
+	// "Ignore" and "delete" are very different acts and the log must not blur
+	// them: one is reversible by clearing the ignore list, the other destroyed
+	// files. Row count is included because removing a container takes its
+	// children with it, which is the surprising part after the fact.
+	verb := "Stopped tracking"
+	if mode == "delete" {
+		verb = "Deleted from disk"
+	}
+	s.audit(r, "item.delete", "item", auditID(id),
+		fmt.Sprintf("%s %q (%d row(s), %d file(s))", verb, it.Title, len(rowIDs), len(files)),
+		map[string]any{"mode": mode, "kind": it.Kind, "rows": len(rowIDs), "files": len(files)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

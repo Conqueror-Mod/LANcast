@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -71,6 +72,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "create user")
 		return
 	}
+	s.audit(r, "user.create", "user", u.ID,
+		fmt.Sprintf("Created %s account %q", u.Role, u.Name),
+		map[string]any{"role": u.Role})
 	writeJSON(w, http.StatusCreated, userJSON(u.ID, u.Name, u.Role))
 }
 
@@ -99,6 +103,11 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteUser(r.Context(), id); s.notFoundOr(w, err, "delete user", "no such user") {
 		return
 	}
+	// The deleted account's own audit events keep its name, because actor_name
+	// was frozen at write time — which is the reason it is stored that way.
+	s.audit(r, "user.delete", "user", id,
+		fmt.Sprintf("Deleted %s account %q", target.Role, target.Name),
+		map[string]any{"role": target.Role})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -133,5 +142,13 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "revoke sessions")
 		return
 	}
+	// An admin setting someone else's password is the single most
+	// impersonation-shaped act the API allows, so it is recorded whoever does it.
+	name := id
+	if u, err := s.st.UserByID(r.Context(), id); err == nil {
+		name = u.Name
+	}
+	s.audit(r, "user.password_reset", "user", id,
+		fmt.Sprintf("Reset the password for %q and signed them out everywhere", name), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
