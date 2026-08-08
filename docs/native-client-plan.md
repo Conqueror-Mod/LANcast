@@ -221,6 +221,32 @@ environmental:
 - Nothing was played that **transcodes**. Direct play through a webview is the
   easy case; the fragmented-MP4 path is the one with a history.
 
+
+### What a full day of use added — 2026-08-08
+
+The window was opened and driven repeatedly through a working day: browsing,
+music playback with the mini-player, Settings, Fix match, and two new surfaces
+built against it (the audit log, and the desktop lifecycle section that only
+exists inside this window). It behaved.
+
+That shortens the list by less than it feels like it should, and the difference
+is worth being exact about:
+
+- **Proven since:** the host binding round-trips (`Bind` reaches the page, the
+  page feature-detects it), certificate pinning against a TLS server, and the
+  window as a place real UI work gets done rather than a spike.
+- **Still unproven, unchanged:** it ran from terminal-launched dev builds, not
+  the installed artifact. No fresh user profile. No machine without the
+  evergreen runtime. No DPI or multi-monitor observation. Nothing that
+  transcodes — the music played was direct play, and the fragmented-MP4 path is
+  the one with a history.
+
+So **the default does not flip yet**, and the reason is the same one written
+below rather than a new one. Four of the five conditions are untouched, and a
+day of the author using it on the machine it was built on is exactly the
+evidence this project has learned to distrust. The cheapest way to shorten the
+list is one install of a release artifact and one film that transcodes.
+
 The lesson this project keeps relearning is that the unit of verification is the
 installed artifact on a real desktop. A window driven from a terminal-launched
 spike is evidence the approach is viable, not that it ships.
