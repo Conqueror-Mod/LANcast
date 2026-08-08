@@ -429,7 +429,9 @@ export function useRecentlyAdded(limit = 20) {
   });
 }
 
-export function useSubtitles(id: number) {
+// `enabled` lets the caller skip the request where it cannot have an answer —
+// a music track, whose subtitle list is always empty.
+export function useSubtitles(id: number, enabled = true) {
   return useQuery({
     queryKey: ["subtitles", id],
     queryFn: ({ signal }) =>
@@ -437,7 +439,7 @@ export function useSubtitles(id: number) {
         `/api/items/${id}/subtitles`,
         signal,
       ).then((r) => r.tracks),
-    enabled: id > 0,
+    enabled: enabled && id > 0,
   });
 }
 
