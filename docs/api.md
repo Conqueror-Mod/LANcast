@@ -666,6 +666,48 @@ decision for it falls back to direct play.
 
 Returns `503` if ffprobe is not installed and `400` for an unknown scope.
 
+### `GET /api/activity`
+
+What the server is doing right now, in one request.
+
+```json
+{
+  "active": true,
+  "tasks": [
+    { "kind": "scan", "id": "scan:3", "title": "Scanning Films",
+      "state": "running", "done": 812, "total": 0, "detail": "40 changed",
+      "library_id": 3, "started_at": 1754630000 },
+    { "kind": "enrich", "id": "enrich", "title": "Fetching metadata",
+      "state": "running", "done": 120, "total": 400 }
+  ]
+}
+```
+
+The per-worker endpoints above each answer for one worker, which means a client
+that wants to show "what is happening" has to know the whole list of workers and
+poll each one — including `/api/libraries/{id}/scan` once per library. This
+answers the question without that knowledge, in one shape:
+
+- `kind` is `scan`, `enrich`, `probe`, `coverart`, or `transcode`. New workers
+  add new values; a client that does not recognise one still has a title and a
+  progress pair, which is the point of normalizing.
+- `id` is stable for the task's lifetime, so a list can be keyed by it.
+- `title` is resolved server-side — a scan names its library, because a client
+  showing the row should not have to join an id back to a name.
+- `state` is `running` or `failed`. Only those appear: a finished task is not
+  activity. A failed scan stays listed, because a failure with nowhere to appear
+  is the failure shape this project keeps being bitten by.
+- `total` of `0` means indeterminate. A scan knows how many files it has seen
+  and never how many it will see, so `done` is a count and there is no
+  percentage to render.
+- `library_id` is set for scans only.
+
+Nothing here is persisted. A restarted server reports an idle one, which is the
+truth: the workers are in-process and a restart ended their work.
+
+Reading progress needs no special role. The endpoints that *start* work
+(`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
+
 ### `GET /api/coverart`
 
 Background album-art progress.

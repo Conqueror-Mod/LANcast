@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
 import type { ReactNode } from "react";
+import { ActivityPanel } from "./ActivityPanel";
 import "./AppShell.css";
 
 // The top nav. Library names go straight to the full grid — hubs are a
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Review<span className="app-shell__badge">{reviewCount}</span>
           </NavLink>
         )}
+        <ActivityPanel />
         <NavLink
           to="/settings"
           className={
