@@ -224,7 +224,7 @@ Status: **planned** · **next** · *unplanned*
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
 | Desktop lifecycle | **planned** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things today — a browser tab, tray Quit, and the service — and all three behave correctly, which is why it confuses. Both options are client-local; gated on the `-window` flip, because close-to-tray has no referent while the UI is a browser tab |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
-| Licensing and open-sourcing | *unplanned* | Decided before the repo goes public |
+| Licensing and open-sourcing | *unplanned* | Decided before the repo goes public. **Do the history cleanup in the same pass** — three `lancastd.exe~` blobs sit in history from the M3 era (~25 MB packed, about a third of `.git`). Removing them rewrites 352 commits and re-points all six release tags, v0.3.2 through v0.5.0, which is why it waits: that cost is only worth paying once, immediately before the first public clone. `*.exe~` is gitignored now, so the problem is capped and cannot grow |
 
 ## Client UX backlog
 
