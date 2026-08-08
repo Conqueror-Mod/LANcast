@@ -413,7 +413,17 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 	w.ingestCollection(ctx, item, remotes)
 	w.fetchRatings(ctx, item.ID, imdbID)
 
-	if write := w.nfoWriter(); write != nil {
+	// A sidecar is written into the user's media folder with LANcast's own
+	// provenance stamp on it, and it outlives the database that produced it —
+	// rebuild the library and the file is still there, speaking. So it is only
+	// written for an identity LANcast actually established.
+	//
+	// An unmatched item has a title from the filename and whatever a local
+	// source offered, at a confidence the matcher itself declined to accept.
+	// Committing that to disk turns a guess into a durable local fact, and the
+	// next fresh database inherits it as one. This is the half of "a wrong
+	// title outlived three databases" that was ours to stop.
+	if write := w.nfoWriter(); write != nil && writableIdentity(state) {
 		if err := write(item.Path, kind, &merged); err != nil {
 			// Failing to write a sidecar must not fail enrichment; the
 			// database is still the working record.
@@ -421,6 +431,17 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		}
 	}
 	return nil
+}
+
+// writableIdentity reports whether a match state is settled enough to write to
+// the user's media folder.
+//
+// matched and local qualify: one is the matcher's own verdict, the other is a
+// user or a sidecar that already said what this is. review and unmatched do
+// not — review means the matcher wants a human to look, and writing the
+// candidate it was unsure about would pre-empt that answer with a file.
+func writableIdentity(state string) bool {
+	return state == meta.StateMatched || state == meta.StateLocal
 }
 
 // fetchRemote searches providers, scores the candidates, and fetches the best

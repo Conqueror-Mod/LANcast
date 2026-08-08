@@ -32,15 +32,20 @@ Every NFO LANcast writes carries a provenance marker containing a SHA-256 hash
 of the field values written:
 
 ```xml
-<lancast generated="2026-07-22T14:02:11Z" hash="sha256:9f2c…"/>
+<lancast generated="2026-07-22T14:02:11Z" hash="sha256:v1:9f2c…"/>
 ```
+
+The `v1` names the hashing scheme. See the 2026-08-08 amendment for why it is
+there — briefly, the set of hashed fields is not fixed forever, and a digest
+whose scheme this build cannot compute is not evidence of anything.
 
 On read, LANcast recomputes the hash over the file's current field values:
 
 | Condition | Interpretation | Treatment |
 |---|---|---|
 | Marker present, hash matches | LANcast's own unmodified output | **Mirror** — a cache, not a source. Ignored for precedence. |
-| Marker present, hash differs | Someone edited it after we wrote it | **Authoritative** local source |
+| Marker present, hash differs **under a scheme this build can compute** | Someone edited it after we wrote it | **Authoritative** local source |
+| Marker present, scheme unknown or unparseable | We cannot tell — but it is ours | **Mirror**, conservatively |
 | No marker | Written by Kodi, another tool, or by hand | **Authoritative** local source |
 
 ## Consequences
@@ -76,8 +81,63 @@ LANcast did not already say.
   untouched. LANcast is a guest in a file format it did not invent, and other
   tools' data is not ours to discard.
 
+
+## Amendment — 2026-08-08
+
+Two changes, both from watching a wrong title outlive three databases.
+
+### An edit must be proven, not assumed
+
+The original rule read "hash differs ⇒ a human edited it". That is only sound
+while every LANcast build computes the same digest over the same fields, and
+nothing was keeping that true. `FieldsHash` covers a fixed list; adding one
+field to it — which is an ordinary thing to do when a new piece of metadata gets
+stored — would make **every sidecar LANcast has ever written** stop matching its
+own hash. Each one would then be read as a file a human edited, and its contents
+promoted to authority over every provider. Silently, on every machine, in one
+release.
+
+That is the same shape as `?profile=` and `containerFromExtension`: a mechanism
+that keeps running while quietly ceasing to apply.
+
+So the digest now carries its scheme, and the read side asks whether an edit can
+be **proven** rather than whether the hash matched. A digest this build cannot
+compute is treated as ours.
+
+The asymmetry is deliberate. Wrongly ignoring an edit costs the user a change
+they can make again in the UI — where it locks the field, which is the stronger
+mechanism anyway. Wrongly treating our own stale output as authority re-pins an
+identity to a file, which is exactly what this ADR exists to prevent and what
+took a morning to diagnose.
+
+Files written before this carry `sha256:<hex>` with no version. They are read as
+v1, because v1 *is* the scheme that produced them — a statement of fact, not a
+compatibility guess.
+
+### No sidecar for an identity we never established
+
+LANcast wrote a sidecar for every enriched item, including ones the matcher had
+declined to match. An `unmatched` item has a title from its filename at a
+confidence the scorer itself rejected, and writing that into the user's media
+folder under LANcast's own provenance stamp turns a guess into a durable local
+fact — one that survives the database and is inherited by the next.
+
+Sidecars are now written only for `matched` and `local` identities. `review` is
+excluded for its own reason: it means the matcher wants a human to look, and
+writing the candidate it was unsure about would pre-empt that answer with a file
+on disk.
+
+**Not decided here:** whether an edit should make the *whole* file authoritative
+or only the fields that actually changed. Today one corrected title promotes the
+entire sidecar — plot, cast, rating — including parts LANcast got wrong that
+nobody touched. Per-field provenance would fix it and needs its own decision;
+it changes what this ADR promises rather than tightening it.
+
 ## Verification
 
 - Write an NFO, rescan, confirm provider updates still apply (mirror detected).
 - Hand-edit that NFO, rescan, confirm the edit now wins.
 - Confirm unknown elements survive a rewrite untouched.
+- Confirm a marker whose scheme is from a newer build is treated as a mirror,
+  not as an edit.
+- Confirm an unmatched item produces no sidecar at all.
