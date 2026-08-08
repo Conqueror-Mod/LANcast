@@ -1,7 +1,11 @@
 LANcast — autonomous session log
 Date:    2026-08-08 (overnight, unattended)
 Branch:  feat/activity-view  (branched from main @ 3d3aa60)
-Commit:  0c45715  feat(activity): one endpoint and one indicator for what the server is doing
+Commits: 0c45715  feat(activity): one endpoint and one indicator for what the server is doing
+         b96f4f8  feat(logs): read lancastd.log from the UI
+
+Two gaps closed, not one. The second is written up at the bottom under
+"SECOND PIECE".
 
 ====================================================================
 WHAT I PICKED AND WHY
@@ -190,3 +194,93 @@ WHAT I WOULD DO NEXT
   2. The audit log is the bigger and more valuable one, but it needs a schema
      migration and an ADR, and it touches every mutating handler. That is not
      an unattended-session task — it wants your eyes on the ADR first.
+
+
+====================================================================
+SECOND PIECE — THE LOG VIEWER  (commit b96f4f8)
+====================================================================
+WHY
+  The backlog entry read: "the service now writes lancastd.log beside the
+  database (v0.4.2); what is missing is reading it from the UI." Reading it
+  meant opening a file manager and finding the data directory — the wrong ask
+  for the case the log exists to serve, because it matters most when the server
+  is running as a service with no console and something is wrong, which is
+  exactly when the person needing it is least equipped to go hunting.
+
+  It also pairs with the activity view: the activity panel is what the server
+  is doing, the log is what it already did.
+
+WHAT
+  internal/applog/applog.go     +Tail(dir, n) (lines, complete, error)
+  internal/applog/tail_test.go  (new, 5 tests)
+  internal/api/logs.go          (new)  GET /api/logs   ADMIN ONLY
+  internal/api/logs_test.go     (new, 4 tests)
+  internal/api/server.go        (+1 route, DataDir doc comment updated)
+  web/: ServerLog type, useServerLog hook, ServerLogSection in Settings, CSS
+  docs/api.md, docs/roadmap.md
+
+  Decisions worth reviewing:
+  * ADMIN ONLY. The log names filesystem paths, library roots and provider
+    errors. That is server-operator information, not viewer information, and it
+    is the same reasoning that already makes /api/browse admin-only.
+  * `complete: false` when older lines exist. This is the "120 of 1,226" lesson
+    from v0.3.2 applied again — a reader who believes a partial view is the
+    whole file goes looking for a startup line nobody withheld from them.
+  * Tail reads a 512 KB window from the end, not the whole file, and DROPS THE
+    FIRST LINE when it does, because a window into a file starts mid-record and
+    half a record is worse than one fewer record.
+  * A missing log is empty, not an error. A server that has only ever run in a
+    terminal writes to the terminal; that is supported, not broken.
+  * ?lines= defaults to 300, clamps at 2000, and rejects a non-positive value
+    with 400. Clamping rather than refusing an oversized ask: the caller meant
+    "all of it", and the honest answer is as much as one response carries.
+  * The panel is collapsed by default and NEVER POLLS — a log is what already
+    happened, and the button that opens it is the refresh. Deliberately unlike
+    the activity indicator, which does poll, and for the opposite reason.
+
+VERIFIED
+  go test ./...   PASS (whole tree)   go build ./...   PASS   npm run build PASS
+  Live against the dev instance with a real log file on disk:
+    GET /api/logs             unauthenticated -> 401
+    GET /api/logs?lines=2     -> the last two lines, complete:false
+    GET /api/logs?lines=0     -> 400 bad_request
+    Settings -> "Show log"    -> 3 lines rendered in the monospace box, the
+                                 page did not gain a horizontal scrollbar
+  Same limitation as above: measured in the DOM, NOT looked at as pixels.
+
+====================================================================
+SECOND FALSE ALARM — SAME MISTAKE, WORTH RECORDING
+====================================================================
+I hit the "-data is being ignored" false alarm a SECOND time, harder: an
+unauthenticated caller appeared to get 200 from an admin-only endpoint, and the
+log read as empty when the file plainly had three lines. Two alarming symptoms,
+one cause, and the cause was mine again — PowerShell's Start-Process
+-ArgumentList does not quote array elements, so a data path containing spaces
+was split and the server came up on a fresh empty database where no account
+existed and therefore nothing was secured yet.
+
+The lesson is the repo's own: the environment a check runs in is part of the
+check. I had verified /api/logs against an instance that was not the instance I
+thought I was verifying. Re-running it against the right one gave 401, the
+correct tail, and 400 — all as designed. Nothing in the product was wrong
+either time. It cost roughly a third of the session.
+
+D:\My was created twice by this and deleted twice. It is gone; D:\My Projects
+was never touched.
+
+====================================================================
+FINAL STATE
+====================================================================
+  branch feat/activity-view, TWO commits, not pushed, no PR opened.
+  Worth opening one — it is two complete, self-contained, additive features
+  with docs and tests, and no schema change or migration in either.
+
+  Note: this log file itself is committed on the branch. If you would rather
+  the AUTO-AGENT TEST LOG folder stayed out of git, say so and it is one
+  .gitignore line plus a rewrite of the second commit.
+
+  Left running: LANcast-Server.exe on 127.0.0.1:8099 against
+  D:\My Projects\LANcast\data. Stop it with:
+      Get-Process LANcast-Server | Stop-Process -Force
+  data\lancastd.log holds three fake lines I wrote to exercise the viewer.
+  Delete it if you want a clean one; the server will make a new one.
