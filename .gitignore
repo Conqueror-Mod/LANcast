@@ -9,6 +9,10 @@
 /LANcast-Client
 /LANcast-Client.exe
 /dist/
+# Editor and build backups of the above. The anchored names miss these,
+# and a 30 MB LANcast-Server.exe~ once reached main because of it.
+*.exe~
+*.exe.bak
 
 # Installer build artifacts: the exes copied in from the release build and the
 # generated setup.exe. The .nsi script and welcome.bmp are committed source.
