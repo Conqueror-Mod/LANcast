@@ -125,15 +125,16 @@ nothing else.
 1. ~~Amend ADR 0023, and decide the dependency question.~~ **Done** — the
    amendment is in the ADR, and the decision is to vendor a trimmed copy
    (above).
-2. **A `clientwindow` package** behind a build tag, Windows-only, with a
-   no-op/error implementation elsewhere — the same shape `tray_windows.go` and
-   `tray_other.go` already use. One function: open a window at a URL, block
-   until closed.
-3. **Wire it into the launcher behind a flag**, defaulting to the browser.
-   `lancast -window` opts in. This is what makes the whole thing revertible and
-   lets both paths be compared on the same machine on the same day.
-4. **Flip the default** once it has survived real use, keeping `-browser` as the
-   escape hatch. A separate commit, so flipping back is one revert.
+2. ~~A `clientwindow` package behind a build tag.~~ **Done** —
+   `internal/clientwindow`, Windows-only with an unsupported stub elsewhere.
+   `Open` shows a window and blocks; `Check` says why it cannot, which is a
+   separate question from whether it can (see below).
+3. ~~Wire it into the launcher behind a flag.~~ **Done** — `lancast -window`,
+   with the browser still the default.
+4. **Flip the default** once it has survived real use, keeping a `-browser`
+   escape hatch. A separate commit, so flipping back is one revert. **Not yet:**
+   the window has run for an evening on one machine, which is not "survived
+   real use", and the list of unproven environments below has not shortened.
 5. **Certificate trust**, which is the point of the exercise: the client talks
    to its own server and can trust that certificate deliberately.
    [ADR 0014](adr/0014-transport-security.md) is unchanged for every other
