@@ -40,3 +40,6 @@ Thumbs.db
 
 # Test fixtures may contain real media; keep generated ones out
 /testdata/generated/
+
+# Autonomous-session work logs. Kept on disk, not in the repo.
+/AUTO-AGENT TEST LOG/
