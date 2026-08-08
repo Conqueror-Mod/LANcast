@@ -146,6 +146,102 @@ func ProfileByName(name string) Profile {
 	}
 }
 
+// knownCapabilities is what a client may claim, and the container each claim
+// implies.
+//
+// A closed set on purpose. The parameter arrives from a client, and an open one
+// would mean the server's idea of what it can mux is decided by whoever is
+// asking; an unrecognised claim is ignored rather than trusted, so a typo or a
+// future codec name degrades to today's behaviour instead of to a broken
+// stream.
+//
+// Containers ride along because claiming a codec without the box it comes in is
+// useless: an HEVC file is almost always in MP4 or Matroska, and allowing the
+// codec while still failing the container check would swap a full re-encode for
+// a remux rather than for direct play.
+var knownCapabilities = map[string]struct {
+	video      []string
+	audio      []string
+	containers []string
+}{
+	// Chromium on Windows decodes HEVC in hardware where the GPU supports it,
+	// and Safari always has. Left out of the browser floor because it is
+	// conditional (docs/api.md), which is exactly the sort of thing the client
+	// can check and the server cannot.
+	"hevc": {video: []string{"hevc"}, containers: []string{"matroska"}},
+	// AC-3 and E-AC-3 in MP4: a large slice of a real library, and an audio
+	// re-encode on every file that has it.
+	"ac3":  {audio: []string{"ac3"}},
+	"eac3": {audio: []string{"eac3"}},
+	"dts":  {audio: []string{"dts"}},
+	// A container claim on its own — a client with a real demuxer rather than a
+	// browser's narrow one.
+	"matroska": {containers: []string{"matroska"}},
+}
+
+// WithCapabilities returns p widened by what a client says it can also play.
+//
+// **Only ever widens.** The profile is the floor and a claim can add to it; a
+// claim can never take something away, so a client that reports nonsense, or
+// detects badly, is no worse off than one that says nothing. That asymmetry is
+// what makes trusting the parameter safe: the worst case of a wrong claim is
+// the failure the client itself will see and can retry around
+// (docs/client-capabilities-plan.md), never a worse decision for anyone else.
+//
+// Unknown claims are dropped silently. They are not an error worth failing a
+// playback over — an older server meeting a newer client should serve the file,
+// not refuse it.
+func WithCapabilities(p Profile, claims []string) Profile {
+	out := p
+	out.VideoCodecs = append([]string(nil), p.VideoCodecs...)
+	out.AudioCodecs = append([]string(nil), p.AudioCodecs...)
+	out.Containers = append([]string(nil), p.Containers...)
+
+	for _, raw := range claims {
+		cap, ok := knownCapabilities[strings.ToLower(strings.TrimSpace(raw))]
+		if !ok {
+			continue
+		}
+		out.VideoCodecs = appendMissing(out.VideoCodecs, cap.video...)
+		out.AudioCodecs = appendMissing(out.AudioCodecs, cap.audio...)
+		out.Containers = appendMissing(out.Containers, cap.containers...)
+	}
+	return out
+}
+
+// appendMissing adds values not already present, so a claim that duplicates the
+// floor changes nothing.
+func appendMissing(list []string, add ...string) []string {
+	for _, a := range add {
+		found := false
+		for _, existing := range list {
+			if existing == a {
+				found = true
+				break
+			}
+		}
+		if !found {
+			list = append(list, a)
+		}
+	}
+	return list
+}
+
+// ParseCapabilities splits the `can=` parameter. Empty in, nothing out.
+func ParseCapabilities(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // Decide works out how to deliver a file to a client, using the file's default
 // audio track.
 func Decide(r *Result, p Profile) Decision {

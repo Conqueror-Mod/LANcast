@@ -227,7 +227,7 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 		return playTarget{}, false
 	}
 
-	decision := probe.DecideTrack(res, probe.ProfileByName(r.URL.Query().Get("profile")), audioIndex)
+	decision := probe.DecideTrack(res, clientProfile(r), audioIndex)
 	if decision.Method == probe.DirectPlay {
 		// Nothing to do. Transcoding a file the client can already play is
 		// pure waste, so say so rather than quietly burning CPU.
