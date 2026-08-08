@@ -173,6 +173,14 @@ func newLogger(verbose bool) *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 }
 
+// shutdownGrace is how long in-flight requests get to finish once a stop has
+// been asked for. It is deliberately short: the service control manager judges
+// a service by whether it stops when told, and a media server always has a
+// long-lived connection somewhere — a stream, or the keep-alive every browser
+// tab leaves behind. Anything still running when it expires is closed rather
+// than waited on.
+const shutdownGrace = 5 * time.Second
+
 // run boots and serves until ctx is cancelled. The caller owns the shutdown
 // signal: interactive mode passes a Ctrl-C/SIGTERM context, and the Windows
 // service handler passes one it cancels when the SCM asks it to stop — so the
@@ -526,12 +534,38 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 
 	cancelEnrich()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	// Stop accepting, and stop keeping connections alive, before asking for a
+	// graceful close. Without this an idle keep-alive — every browser tab leaves
+	// one — is a connection Shutdown politely waits on.
+	srv.SetKeepAlivesEnabled(false)
+	if redirectSrv != nil {
+		redirectSrv.SetKeepAlivesEnabled(false)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	if redirectSrv != nil {
 		_ = redirectSrv.Shutdown(shutdownCtx)
 	}
-	return srv.Shutdown(shutdownCtx)
+
+	// Graceful first, then forced. A stop that waits on an in-flight stream for
+	// as long as the stream feels like taking is a stop that never completes,
+	// and a service that does not complete its stop is killed and restarted —
+	// which is worse than cutting one playback short. Closing is what makes
+	// "closed" mean closed.
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Warn("graceful shutdown did not finish; closing connections",
+			"grace", shutdownGrace, "error", err)
+		if err := srv.Close(); err != nil {
+			return err
+		}
+	}
+	if redirectSrv != nil {
+		_ = redirectSrv.Close()
+	}
+	log.Info("stopped")
+	return nil
 }
 
 // bindAddr forces an unsecured server onto loopback, preserving the requested

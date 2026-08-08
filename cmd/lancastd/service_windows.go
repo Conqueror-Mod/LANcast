@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"time"
 
 	"golang.org/x/sys/windows/svc"
 
@@ -111,7 +112,23 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 			case svc.Interrogate:
 				changes <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
-				changes <- svc.Status{State: svc.StopPending}
+				// WaitHint is the contract with the service control manager: it
+				// is how long this stop expects to take. Reported as zero — the
+				// zero value, which is what a bare svc.Status{State: StopPending}
+				// sends — the SCM expects the service to be gone essentially
+				// immediately, and a stop that takes seconds is judged a hang.
+				// It then logs event 7031, "the service terminated
+				// unexpectedly", and the recovery policy restarts it. The
+				// visible symptom is that Stop-Service does not keep LANcast
+				// stopped: it goes away and comes back five seconds later.
+				//
+				// The hint is the server's own shutdown grace plus room to
+				// finish, so the two cannot drift apart.
+				changes <- svc.Status{
+					State:      svc.StopPending,
+					CheckPoint: 1,
+					WaitHint:   uint32((shutdownGrace + 3*time.Second) / time.Millisecond),
+				}
 				cancel()
 				<-errc
 				return false, 0
