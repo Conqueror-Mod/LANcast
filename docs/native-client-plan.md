@@ -194,11 +194,16 @@ it works.** Driving `LANcast-Client.exe -window` to a track:
 - the album detail reads "AC/DC · 1980", so the derived album artist and year
   arrive here too.
 
-**Sound leaving the speakers is the one part a screenshot cannot show.** Decode
-and progress are evidence of a working pipeline, not of audible output; that
-last inch needs a person in the room. It is a cheap check and worth doing once
-rather than assuming, because "plays silently" is a failure this project has
-already shipped before (v0.4.0).
+**Sound and the queue were confirmed by the person in the room**, which is the
+part a screenshot cannot carry. Audio came out of the selected output device — a
+headset, not the default endpoint, which is worth noting because picking the
+wrong endpoint is a way for "plays silently" to be true only for the listener.
+No lag, and **the queue advanced to the next track** unattended.
+
+That last one matters more than it looks: queue advance moved out of the route
+and into the provider during the mini-player work, and until this it had only
+been reasoned about. It is now the one behaviour in that refactor confirmed by
+watching it happen rather than by reading the diff.
 
 ## What the spike still did not prove
 
