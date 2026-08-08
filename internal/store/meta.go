@@ -191,6 +191,24 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 	return out, rows.Err()
 }
 
+// enrichableKinds excludes the rows no provider can ever match.
+//
+// Music is built from the file's own tags and LANcast ships no music provider
+// (ADR 0024): a track, album or artist will never be identified by TMDB, and
+// asking is not merely wasted work — it is *blocking* work. The queue is
+// ordered oldest-first, so a music library puts thousands of permanently
+// unmatchable rows at its head. Measured on the real library: 1,592 tracks,
+// 394 albums and 206 artists ahead of 21 films, and the worker's
+// no-progress guard stopped it long before it reached a single film. The
+// symptom was posters that never appeared, which looks nothing like "the queue
+// is full of songs".
+//
+// A filter rather than a stamp on the rows themselves. Stamping music as
+// "enrichment has run" would be a lie about what happened, and the day a music
+// provider exists this line changes and those rows become eligible with no
+// migration to undo the lie.
+const enrichableKinds = `kind NOT IN ('track', 'album', 'artist')`
+
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.
 func (s *Store) PendingEnrichment(ctx context.Context, limit int) ([]Item, error) {
@@ -199,6 +217,7 @@ func (s *Store) PendingEnrichment(ctx context.Context, limit int) ([]Item, error
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item
 		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'
+		  AND `+enrichableKinds+`
 		ORDER BY added_at LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("pending enrichment: %w", err)
@@ -225,7 +244,8 @@ func (s *Store) PendingCount(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM media_item
-		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'`).Scan(&n)
+		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'
+		  AND `+enrichableKinds).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("pending count: %w", err)
 	}

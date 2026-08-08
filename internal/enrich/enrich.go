@@ -175,8 +175,21 @@ func (w *Worker) Run(ctx context.Context) error {
 		// returns the identical rows forever. This happens legitimately —
 		// no provider configured, or every item failing — and without this
 		// guard the worker spins at full tilt instead of stopping.
+		//
+		// Stopping is right; being quiet about it was not. A stall here is
+		// indistinguishable from "finished" to anyone looking at the app: the
+		// symptom is posters that never appear, and the explanation was one
+		// DEBUG line nobody was reading. It cost a real investigation once —
+		// music rows crowding the head of the queue meant films were never
+		// reached at all, and nothing said so.
+		//
+		// Warn rather than Info because a batch where *nothing* advanced is
+		// either a missing key or a fault, and both are worth a look.
 		if progressed == 0 {
-			w.log.Debug("enrichment made no progress; stopping", "pending", len(items))
+			w.log.Warn("enrichment stalled: nothing in this batch could be advanced",
+				"batch", len(items),
+				"first", firstTitle(items),
+				"hint", "no provider configured, or every item in the batch failed")
 			return nil
 		}
 
@@ -581,3 +594,13 @@ func max(a, b int) int {
 
 // ErrBusy is reserved for callers that want to distinguish a no-op Run.
 var ErrBusy = errors.New("enrichment already running")
+
+// firstTitle names one item from a stalled batch, because "50 items could not
+// be advanced" does not tell anyone where to look and "…starting with I Want to
+// Marry a Lighthouse Keeper" immediately says the queue is full of songs.
+func firstTitle(items []store.Item) string {
+	if len(items) == 0 {
+		return ""
+	}
+	return items[0].Title
+}
