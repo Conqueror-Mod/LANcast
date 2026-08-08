@@ -1,0 +1,52 @@
+/* The desktop lifecycle section. Nothing here is gold: it describes what this
+   machine does, not where you are. */
+
+.desktop-owner {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* A server this window started is the case where closing has consequences, so
+   it reads slightly warmer — still not gold, which means focus and only focus. */
+.desktop-owner.is-owned {
+  background: rgba(38, 88, 168, 0.22);
+  color: var(--text-secondary);
+}
+
+.desktop-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.desktop-note--warn {
+  color: var(--danger, #ff6b6b);
+  margin: 8px 0 0;
+}
+
+.desktop-opt__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+/* Disabled rather than hidden: the answer to "can LANcast do this yet" is worth
+   showing, and it should look unavailable rather than broken. */
+.desktop-opt input[type="checkbox"] {
+  accent-color: var(--nebula-blue);
+}
+
+.desktop-opt input[type="checkbox"]:disabled {
+  opacity: 0.45;
+}
+
+.desktop-opt .set-row__title,
+.desktop-opt .set-row__sub {
+  opacity: 0.7;
+}
