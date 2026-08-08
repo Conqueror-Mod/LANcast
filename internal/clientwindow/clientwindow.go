@@ -48,6 +48,20 @@ type Options struct {
 	// Empty means no pin: correct for a loopback-only server, which is plain
 	// HTTP and has no certificate to trust.
 	CertPin string
+
+	// Bindings are Go functions exposed to the page as global JavaScript
+	// functions, each returning a promise.
+	//
+	// This is how a client-local setting reaches a Settings page that is served
+	// by the server. The preference belongs to this window on this machine, so
+	// it cannot travel through /api/settings without becoming a server setting
+	// — which would put one person's tray preference into everyone's server
+	// (docs/desktop-lifecycle-plan.md).
+	//
+	// The page feature-detects these: present means "you are in the LANcast
+	// window and these options mean something here", absent means a browser
+	// tab, which has no tray to reduce to and no close button LANcast owns.
+	Bindings map[string]any
 }
 
 // Open shows the window and blocks until it is closed.

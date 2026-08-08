@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"lancast/internal/clientwindow"
 	"lancast/internal/config"
 	"lancast/internal/desktop"
+	"lancast/internal/desktopprefs"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
@@ -100,11 +102,54 @@ func runWindow(l *launcher) {
 		// Beside the client's own config, not the server's data directory: this
 		// is one person's session and cache on one machine, and the server's
 		// directory is machine-wide and may belong to a service account.
-		DataDir: clientDataDir(),
-		CertPin: l.serverCertPin(),
+		DataDir:  clientDataDir(),
+		CertPin:  l.serverCertPin(),
+		Bindings: l.desktopBindings(),
 	})
 	if err != nil {
 		alert("LANcast", err.Error())
+	}
+}
+
+// desktopBindings exposes the lifecycle preferences to the page.
+//
+// Two functions and one fact. The fact is the important one: only this process
+// knows whether it started the server or attached to one that was already
+// running, and that is what decides whether closing the window may stop
+// anything at all. The server cannot answer it — from its side both look
+// identical — and the page cannot infer it.
+func (l *launcher) desktopBindings() map[string]any {
+	dir := clientDataDir()
+	return map[string]any{
+		// lancastDesktopState reports the current preferences and how this
+		// window relates to its server.
+		"lancastDesktopState": func() map[string]any {
+			prefs, err := desktopprefs.Load(dir)
+			state := map[string]any{
+				"close_to_tray": prefs.CloseToTray,
+				"open_at_login": prefs.OpenAtLogin,
+				// True when this launcher started the server, so closing the
+				// window ends it. False when a service or an earlier launch
+				// owns it, in which case closing this window stops nothing —
+				// and the page should say so rather than let the user assume.
+				"owns_server": l.started != nil,
+			}
+			if err != nil {
+				// Surfaced rather than swallowed: the user is looking at
+				// controls that will not reflect their file.
+				state["error"] = err.Error()
+			}
+			return state
+		},
+		// lancastDesktopSet writes both preferences. Whole-value rather than
+		// per-field so the page cannot half-apply a change.
+		"lancastDesktopSet": func(closeToTray, openAtLogin bool) map[string]any {
+			p := desktopprefs.Prefs{CloseToTray: closeToTray, OpenAtLogin: openAtLogin}
+			if err := desktopprefs.Save(dir, p); err != nil {
+				return map[string]any{"ok": false, "error": err.Error()}
+			}
+			return map[string]any{"ok": true}
+		},
 	}
 }
 
@@ -205,12 +250,55 @@ func (l *launcher) ensureServer() error {
 	return nil
 }
 
-// stopStartedServer stops the server only if this launcher started it.
+// stopStartedServer stops the server only if this launcher started it, and does
+// not return until it is actually gone.
+//
+// The ownership rule (docs/desktop-lifecycle-plan.md): closing a window never
+// stops a server the window does not own. A service, or a server an earlier
+// launch started, keeps running — someone else may be streaming from it, and a
+// media server does not stop because one person shut a window.
+//
+// Waiting matters as much as killing. Returning while the process is still
+// exiting is how a launcher reports "closed" over a server that is still holding
+// the port and the database, which is the invisible-hanging-process case this
+// exists to prevent. The wait is bounded so a process that will not die cannot
+// hang the close either.
 func (l *launcher) stopStartedServer() {
-	if l.started != nil && l.started.Process != nil {
-		_ = l.started.Process.Kill()
+	if l.started == nil || l.started.Process == nil {
+		return
+	}
+	if err := l.started.Process.Kill(); err != nil {
+		// Already gone is the common case and not a failure.
+		if !errors.Is(err, os.ErrProcessDone) {
+			alert("LANcast", "The LANcast server could not be stopped: "+err.Error()+
+				"\n\nIt may still be running in the background.")
+			return
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		// Cmd.Wait rather than Process.Wait: it reaps the child *and* records
+		// its ProcessState, so "has it actually exited" is answerable
+		// afterwards instead of assumed. The error is the kill showing up as a
+		// non-zero exit, which is expected.
+		_ = l.started.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(stopWait):
+		// Said out loud rather than left for the user to discover through a
+		// port that is still in use. Silence here is exactly the failure the
+		// lifecycle rule forbids.
+		alert("LANcast", "The LANcast server did not exit within "+stopWait.String()+
+			".\n\nIt may still be running in the background.")
 	}
 }
+
+// stopWait bounds how long closing the window waits for the server it started to
+// exit. Long enough for a normal exit, short enough that closing the app never
+// feels like it hung.
+const stopWait = 5 * time.Second
 
 // serverExePath is the lancastd binary next to the launcher — they ship together.
 func serverExePath() (string, error) {

@@ -54,6 +54,15 @@ func open(o Options) error {
 	}
 	defer w.Destroy()
 
+	// Bound before Navigate: the binding is injected at document creation, and a
+	// page that has already started loading would miss it and conclude it is
+	// running in a browser.
+	for name, fn := range o.Bindings {
+		if err := w.Bind(name, fn); err != nil {
+			return fmt.Errorf("client window: binding %s: %w", name, err)
+		}
+	}
+
 	w.Navigate(o.URL)
 	w.Run()
 	return nil
