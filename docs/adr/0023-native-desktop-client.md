@@ -87,6 +87,23 @@ decodes direct-plays HEVC, 10-bit, AC-3, DTS, TrueHD, MKV — the cases that tod
 force a transcode or a remux. Transcoding remains for clients that need it, which
 is what it was always for.
 
+> **Amendment, 2026-08-08 — the codec tax is smaller than this paragraph says.**
+> HEVC is the largest item on that list, and it turned out not to need a native
+> player at all. Chromium on Windows decodes it in hardware; the server was
+> re-encoding it only because the conservative `browser` profile could not know
+> that and no client had ever said otherwise. Clients now report what they can
+> decode (`?can=`, [plan](../client-capabilities-plan.md)), and an HEVC file
+> that used to be re-encoded is direct-played.
+>
+> What remains for stage 2 is real but narrower: **AC-3 and E-AC-3** (measured
+> `no` in the same browser), **DTS**, **TrueHD**, and **MKV** as a container.
+> Those are worth having and they are not the sentence above.
+>
+> **Stage 1 is unaffected.** Owning the window was never mostly about codecs —
+> the cached redirect, the certificate wall, and the handoff with no good
+> failure mode all stand, and the certificate wall turned out to be worse than
+> this ADR assumed rather than better.
+
 Staged rather than at once because stage 1 delivers the daily relief and
 validates the direction, and stage 2 is where the weight is. Stage 1 is worth
 shipping even if stage 2 never happens.

@@ -1,9 +1,14 @@
 # Roadmap
 
-Last updated: 2026-08-03 · **v0.5.0 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-08 · **v0.5.0 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics) and CI are in place. Transport security (TLS) and multi-user
 accounts (admin/member roles) are built, and branding & splash shipped.
+
+**Since v0.5.0, unreleased on `main`:** the music client UI is finished, LANcast
+has a native window on Windows, and clients now tell the server what they can
+decode. Details in the areas below; the three things worth carrying forward are
+in "What the last pass taught" at the end.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -12,8 +17,11 @@ is three new `kind` values on `media_item` related by `parent_id`, exactly as
 show → season → episode already was. Metadata inverts the video rule: for a film
 the filename is a guess and a provider corrects it, but a music file already
 carries the answer in its tags, so tags win and the filename is the fallback.
-The release is **server-side only** — the browser client has no music player yet,
-and album artwork is not extracted. Both are the remaining ADR 0024 scope.
+The release was **server-side only**. Both gaps are now closed on `main`: album
+artwork is extracted, and the client has an album view, a track list, an audio
+mode and a docked mini-player. What ADR 0024 scoped is done; **artist images
+from a provider are on the back burner** (see below), not because they are hard
+but because music has had a long run and the rest of the map has waited.
 
 **Plugin architecture (M4) is built** — the last milestone. A WebAssembly runtime
 ([ADR 0020](adr/0020-plugin-isolation-boundary.md)) sandboxes third-party code
@@ -165,20 +173,22 @@ Status: **planned** · **next** · *unplanned*
 | Library types beyond video | **partly built** | **Music built** server-side ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. Photos still *unplanned* and need their own ADR |
 | Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
 | Album artwork | **built** | `internal/coverart`: embedded picture first, then `cover.jpg`/`folder.jpg` beside the tracks, in its own worker. Measured on the real library — 369 of 398 albums, 10.7s, no network. A directory's image is refused when the directory also holds audio that is not the album's, which is what stops a letter-bucket `folder.jpg` being worn by five unrelated records |
-| Artist images | **next** | Artists have no file and no directory to source from, and the images in an artist folder are a media player's per-album cache, not a photograph. They **borrow** their most-substantial album's cover for now, flagged `inherited` and superseded automatically. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md)) |
+| Artist images | **back burner** | The placeholder is good enough to wait behind: artists **borrow** their most-substantial album's cover, flagged `inherited`, and a real image supersedes it automatically with nothing to clean up. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md), accepted, unbuilt) — it was sequenced after the client UI, which is now built, so nothing blocks it except priority. Deferred deliberately: music has had a long run and this is the first item where the gap is cosmetic rather than functional |
+| Album artist and year | **built** | Album rows carried a title and nothing else — 398 albums with no artist and no year, which read as three separate faults: a bare detail page, a Year sort with nothing to sort, and a track list that showed every performer because it had no album artist to compare against. Both are now derived from the tracks on every scan, and locks are respected |
 
 ### Playback and client · M3
 
 | Area | Status | Note |
 |---|---|---|
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
-| Transcode decision tree | **built** | Direct play / remux / transcode, with reasons. **Next: let the client say what it can play** ([plan](client-capabilities-plan.md)) — the `?profile=` mechanism exists and no client has ever used it, so a browser that decodes HEVC natively is still served a full re-encode |
+| Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
+| Client capability negotiation | **built** | Clients report what they decode (`?can=`) and the server widens the profile ([plan](client-capabilities-plan.md)). `?profile=` had existed for a release and no client ever used it, so a browser that decodes HEVC in hardware was still served a full re-encode of every HEVC file — the whole of the "slow between films" complaint. Additive and widen-only, resolved once for both decision endpoints so they cannot disagree, and a claim that proves false is dropped, remembered, and retried as a conversion |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
 | Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
-| Music player UI | **next** | Unbuilt: `Player.tsx` is video-only and nothing routes a track to it, so v0.5.0's music is API-only. ADR 0024 scopes the minimum as album view plus a track list that plays; the cost is a third container depth in the browse grid, same as show → season → episode |
+| Music player UI | **built** | Album view with a numbered track list, square sleeves, an audio mode in the player, and a docked mini-player so leaving the player no longer stops the record ([plan](music-client-plan.md)). Playback moved above the router to make that possible — the media element used to be a child of the `/watch` route, and a route owns its DOM |
 | Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
 
 ### Extensibility · M4
@@ -189,6 +199,15 @@ Status: **planned** · **next** · *unplanned*
 | Extension point catalog | **built** | `rating_source` first; new source for an existing capability. Widening to new kinds waits for a plugin that needs it |
 | Plugin distribution and trust | **built** | Signed `.lcplugin` bundles, two-layer trust (Ed25519 + capability grant), two-step install, Add-ons page ([ADR 0021](adr/0021-plugin-distribution-and-trust.md)) |
 | Client surfaces: TV, mobile | *unplanned* | A restyle, if the focus model held |
+
+### Native desktop client · ADR 0023
+
+| Area | Status | Note |
+|---|---|---|
+| Stage 1 — own the window | **built, opt-in** | `LANcast-Client.exe -window` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
+| Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
+| Flip `-window` to default | **next** | Gated on living with it rather than on code. One evening on one machine is not "survived real use" — the unproven list is in the plan: no installed artifact, no fresh profile, no machine without the evergreen runtime, no DPI or multi-monitor check |
+| Stage 2 — own playback (libmpv) | *unplanned* | Deliberately not started. Its case is narrower than the ADR first made it — see the 2026-08-08 amendment: HEVC left the list |
 
 ### Cross-cutting
 
@@ -201,7 +220,8 @@ Status: **planned** · **next** · *unplanned*
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
 | Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
-| Observability | **built** | Match score breakdown, review queue, scan skip diagnostics |
+| Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
+| Desktop lifecycle | **planned** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things today — a browser tab, tray Quit, and the service — and all three behave correctly, which is why it confuses. Both options are client-local; gated on the `-window` flip, because close-to-tray has no referent while the UI is a browser tab |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
 | Licensing and open-sourcing | *unplanned* | Decided before the repo goes public |
 
@@ -248,8 +268,11 @@ group is not priority.
 
 ### Libraries and media types
 
-- **Wide-scope audio codec support** — MP3, FLAC, WAV.
-- **Music library.**
+- ~~**Wide-scope audio codec support** — MP3, FLAC, WAV.~~ — **done**: eleven
+  audio formats scanned, and audio containers are first class in the playback
+  profile so a FLAC is not re-encoded to deliver a format every browser plays.
+- ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
+  UI and mini-player on `main`.
 - **Photo library** with a built-in **image viewer**.
 - **Live TV** — a tuner page and function.
 
@@ -376,17 +399,51 @@ where that openness gets exercised.
    2. ~~Artist tiles~~ — **placeholder built.** Artists borrow their
       most-substantial album's cover, flagged `inherited`, until a real image
       supersedes it.
-   3. **Music client UI.** Album view and a track list that plays
-      ([plan](music-client-plan.md)). The remaining gap, and the larger one:
-      artist images improve a grid the browser does not have yet.
-   4. **Artist images from TheAudioDB** ([ADR 0025](adr/0025-artist-images.md),
-      accepted, unbuilt). Deliberately after the client UI, for the reason just
-      given.
-10. **Nothing foundational remains.** After music, what's next is breadth, from
-    the feature backlog: a Pictures library (its own ADR — ADR 0024 deferred
-    photos deliberately), more client surfaces (TV/mobile), more plugin kinds as
-    real plugins need them, and theme music if OST identification lands. Each is
-    planned immediately before it is built.
+   3. ~~Music client UI.~~ **Built** ([plan](music-client-plan.md)): album view
+      with a numbered track list, square sleeves, an audio mode in the player,
+      and a docked mini-player. The grid artist images were waiting for now
+      exists.
+   4. **Artist images from TheAudioDB** — **back burner.** Unblocked and not
+      next. The borrowed album cover is a placeholder good enough to wait
+      behind, and it supersedes itself with nothing to clean up
+      ([ADR 0025](adr/0025-artist-images.md)). This is the first music item
+      whose absence is cosmetic rather than functional, which makes it the right
+      place to stop.
+10. **Native desktop client (ADR 0023 stage 1)** — **built, opt-in**
+    ([plan](native-client-plan.md)). What remains is not code: living with
+    `-window` long enough to make it the default, which then unblocks the
+    desktop lifecycle options.
+11. **Nothing foundational remains.** What's next is breadth, from the feature
+    backlog: a Pictures library (its own ADR — ADR 0024 deferred photos
+    deliberately), more client surfaces (TV/mobile), more plugin kinds as real
+    plugins need them, theme music if OST identification lands, and the
+    system/operations items — an activity view, an audit log, a log viewer. Each
+    is planned immediately before it is built.
+
+## What the last pass taught
+
+Three, and they are the same shape as the ones above: the failure was invisible,
+or the belief was untested.
+
+**A stated cost went unchecked for a release.** ADR 0023 priced a webview as
+"CGO in the client, and per-platform client builds", and both were wrong on
+Windows — a pure-Go binding builds with `CGO_ENABLED=0`. Ten minutes of trying
+it deleted two of the three reasons the decision looked expensive. The same
+pass found the reverse: the certificate problem the ADR expected to *soften* was
+worse than described, because a web view does not warn, it refuses. **A cost
+written down and never measured decays in both directions.**
+
+**A capability nobody exercised was the same as a capability that did not
+exist.** `?profile=` shipped, `docs/api.md` said "clients that know better say
+so", and no client ever said so — so every browser in the house was served the
+floor, and HEVC files were re-encoded for a release. The feature was not
+missing; the caller was.
+
+**Two things owning one fact is a bug waiting for a witness.** The mini-player
+regression — clicking one film and getting the previous one — was a URL sync and
+a router both deciding what was playing. It presented as lag, because each
+bounce started another hardware encode. The fix was deleting one of them, not
+arbitrating between them.
 
 ## Amendments to schema revision 1
 

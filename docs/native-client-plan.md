@@ -181,8 +181,29 @@ Step 0 ran against the dev server with a real library. **The gate passes.**
 That is the whole of the step-0 question answered: the approach is viable and
 the vendoring work is worth doing.
 
-**Audio was not tested.** It goes through the same element, so the expectation
-is that it works, but the music player is new and expectation is not evidence.
+**Audio was tested afterwards, in the shipped client rather than the spike, and
+it works.** Driving `LANcast-Client.exe -window` to a track:
+
+- the player enters **audio mode** — the sleeve as the surface, artist and album
+  under the title, no CC and no fullscreen;
+- the clock advances (0:04 → 0:38 over the same wall-clock), so the element is
+  decoding rather than sitting on a stalled source;
+- **Back docks the mini-player** with the square sleeve and its controls, and
+  playback continues across the navigation — the thing the whole refactor
+  exists for, working in the window as well as the browser;
+- the album detail reads "AC/DC · 1980", so the derived album artist and year
+  arrive here too.
+
+**Sound and the queue were confirmed by the person in the room**, which is the
+part a screenshot cannot carry. Audio came out of the selected output device — a
+headset, not the default endpoint, which is worth noting because picking the
+wrong endpoint is a way for "plays silently" to be true only for the listener.
+No lag, and **the queue advanced to the next track** unattended.
+
+That last one matters more than it looks: queue advance moved out of the route
+and into the provider during the mini-player work, and until this it had only
+been reasoned about. It is now the one behaviour in that refactor confirmed by
+watching it happen rather than by reading the diff.
 
 ## What the spike still did not prove
 
@@ -192,8 +213,10 @@ environmental:
 - It ran **from a terminal, as the developer, with the WebView2 runtime already
   present** on Windows 11. It has not run from an installed artifact, under a
   fresh user profile, or on a machine without the evergreen runtime.
-- It talked to a **plain-HTTP loopback server**, so the certificate question —
-  one of the reasons for doing this at all — was never exercised.
+- ~~It talked to a plain-HTTP loopback server, so the certificate question was
+  never exercised.~~ **Exercised since**, against a LAN-bound server with TLS:
+  unpinned served 0 requests and failed the handshake, pinned served 38 with no
+  failures (step 5 above).
 - No **DPI / multi-monitor** behaviour was observed.
 - Nothing was played that **transcodes**. Direct play through a webview is the
   easy case; the fragmented-MP4 path is the one with a history.
