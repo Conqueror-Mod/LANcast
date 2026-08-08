@@ -132,6 +132,11 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		s.mu.Unlock()
 	}
 
+	// The folder-derived albums are re-examined once every track has been seen:
+	// whether a folder is a record or an alphabetical bucket is only visible
+	// across the whole folder, never from one file inside it.
+	dropBucketAlbums(groups)
+
 	return s.reconcileMusic(ctx, lib, groups)
 }
 
@@ -140,6 +145,16 @@ type trackGroup struct {
 	itemID int64
 	artist string
 	album  string
+
+	// dir is the folder the file sits in, and albumFromFolder records that the
+	// album name above was taken from that folder rather than from a tag. Both
+	// exist only so dropBucketAlbums can second-guess the guess — a folder is
+	// evidence of an album only if it behaves like one.
+	dir             string
+	albumFromFolder bool
+	// albumAtRoot records that the folder the album name came from sits
+	// directly in the library root, with no artist folder above it.
+	albumAtRoot bool
 }
 
 // groupFromTags takes the grouping key from a track's tags.
@@ -157,16 +172,82 @@ func groupFromTags(root string, it store.Item, t probe.Tags) trackGroup {
 
 	// A tagged file missing one of the two still has to go somewhere; the
 	// folders are the only other evidence.
+	fromFolder := false
 	if artist == "" || album == "" {
 		fallback := groupFromPath(root, it)
 		if artist == "" {
 			artist = fallback.artist
 		}
+		atRoot := false
 		if album == "" {
 			album = fallback.album
+			fromFolder = album != ""
+			atRoot = fallback.albumAtRoot
+		}
+		return trackGroup{
+			itemID:          it.ID,
+			artist:          artist,
+			album:           album,
+			dir:             filepath.Dir(it.Path),
+			albumFromFolder: fromFolder,
+			albumAtRoot:     atRoot,
 		}
 	}
-	return trackGroup{itemID: it.ID, artist: artist, album: album}
+	return trackGroup{
+		itemID: it.ID,
+		artist: artist,
+		album:  album,
+		dir:    filepath.Dir(it.Path),
+	}
+}
+
+// dropBucketAlbums removes album names invented from a folder that is not an
+// album.
+//
+// The fallback assumes the containing folder is a record. On a real library
+// that assumption produced albums called "B's" and "C's": a library organised
+// into alphabetical buckets, with loose singles sitting directly in them. Every
+// one of those became an album named after a letter, holding one track by an
+// artist who never made it.
+//
+// Two tells, and both are needed.
+//
+// **Cohesion.** A record is by one album artist; a bucket holds whatever starts
+// with that letter. A folder-derived album survives only when every track in
+// that folder agrees on the artist.
+//
+// **Depth.** Cohesion alone cannot see a bucket holding a single loose track —
+// one track never disagrees with itself, which left an album called "C's" with
+// one song in it on the real library. But a record does not sit loose at the
+// top of a library: real albums live under an artist folder. A folder-derived
+// album taken from a direct child of the library root is a category, not a
+// record.
+//
+// A dropped album is not a lost track: the hierarchy already allows a track to
+// hang directly off its artist (reconcileMusic parents it there when it has no
+// album), which is the honest shape for a single with no record.
+//
+// Deliberately does not touch an album that came from a *tag*. A tagged album
+// is a statement about the record; this only re-examines a guess.
+func dropBucketAlbums(groups []trackGroup) {
+	artistsPerDir := map[string]map[string]bool{}
+	for _, g := range groups {
+		if !g.albumFromFolder {
+			continue
+		}
+		if artistsPerDir[g.dir] == nil {
+			artistsPerDir[g.dir] = map[string]bool{}
+		}
+		artistsPerDir[g.dir][g.artist] = true
+	}
+	for i, g := range groups {
+		if !g.albumFromFolder {
+			continue
+		}
+		if len(artistsPerDir[g.dir]) > 1 || g.albumAtRoot {
+			groups[i].album = ""
+		}
+	}
 }
 
 // groupFromPath is the untagged fallback: the containing folder is the album
@@ -177,13 +258,15 @@ func groupFromTags(root string, it store.Item, t probe.Tags) trackGroup {
 // there is no album folder at all. It is what there is when the file says
 // nothing, and it is why tags lead.
 func groupFromPath(root string, it store.Item) trackGroup {
-	g := trackGroup{itemID: it.ID}
+	g := trackGroup{itemID: it.ID, dir: filepath.Dir(it.Path)}
 	rel, err := filepath.Rel(root, filepath.Dir(it.Path))
 	if err != nil || rel == "." || rel == "" {
 		return g
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	g.album = parts[len(parts)-1]
+	g.albumFromFolder = g.album != ""
+	g.albumAtRoot = len(parts) == 1
 	if len(parts) >= 2 {
 		g.artist = parts[len(parts)-2]
 	}
