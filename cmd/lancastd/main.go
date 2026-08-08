@@ -356,11 +356,19 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	enrichCtx, cancelEnrich := context.WithCancel(context.Background())
 	defer cancelEnrich()
 
+	// Background passes are tracked so shutdown can wait for them to stop
+	// touching the database before it is closed. Cancelling only asks; a worker
+	// mid-query keeps the file open until that query returns, and closing the
+	// store underneath one is how a clean exit leaves a locked database behind.
+	var workers sync.WaitGroup
+
 	enrichSoon := func() {
 		if !settings.Get().AutoEnrich {
 			return
 		}
+		workers.Add(1)
 		go func() {
+			defer workers.Done()
 			// Worker.Run already no-ops if a pass is in flight; this mutex
 			// just keeps the goroutine count down.
 			enrichMu.Lock()
@@ -376,7 +384,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// would mean a library with no TMDB key never gets probed.
 	var probeMu sync.Mutex
 	probeSoon := func() {
+		workers.Add(1)
 		go func() {
+			defer workers.Done()
 			probeMu.Lock()
 			defer probeMu.Unlock()
 			if err := probes.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
@@ -387,7 +397,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	var coverMu sync.Mutex
 	coverSoon := func() {
+		workers.Add(1)
 		go func() {
+			defer workers.Done()
 			coverMu.Lock()
 			defer coverMu.Unlock()
 			if err := covers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
@@ -534,6 +546,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 
 	cancelEnrich()
+	waitForWorkers(&workers, log)
 
 	// Stop accepting, and stop keeping connections alive, before asking for a
 	// graceful close. Without this an idle keep-alive — every browser tab leaves
@@ -697,3 +710,28 @@ func nfoWriterFor(s config.Settings) func(string, meta.Kind, *meta.Record) error
 	src := nfo.New()
 	return src.Write
 }
+
+// waitForWorkers lets the background passes finish their current query.
+//
+// Cancelling a context only asks; a worker in the middle of a statement keeps
+// the database open until it returns, and closing the store underneath one
+// leaves the file locked after a shutdown that reported success. Bounded,
+// because a worker that will not stop must not hold the whole exit — the point
+// of this is that closing means closed, not that it means eventually.
+func waitForWorkers(wg *sync.WaitGroup, log *slog.Logger) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(workerStopGrace):
+		log.Warn("background workers did not stop in time; closing anyway",
+			"grace", workerStopGrace)
+	}
+}
+
+// workerStopGrace bounds the wait for background passes. Short: they check for
+// cancellation between items, so anything longer means one is genuinely stuck.
+const workerStopGrace = 3 * time.Second
