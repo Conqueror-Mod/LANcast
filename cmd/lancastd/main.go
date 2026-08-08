@@ -34,6 +34,7 @@ import (
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
+	"lancast/internal/service"
 	"lancast/internal/singleton"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
@@ -126,7 +127,7 @@ func main() {
 	// racing the first for the port and the database.
 	release, held, err := singleton.Acquire(singleton.Server)
 	if err == nil && !held {
-		log.Error("another LANcast server is already running")
+		logAlreadyRunning(log)
 		os.Exit(1)
 	}
 	defer release()
@@ -138,6 +139,29 @@ func main() {
 		log.Error("fatal", "error", err)
 		os.Exit(1)
 	}
+}
+
+// logAlreadyRunning reports the refusal to start with the identity of whatever
+// is already holding the machine.
+//
+// "another LANcast server is already running" was true and unactionable: it is
+// the same sentence whether the holder is the installed service (which comes
+// back by itself after a reboot, since it is delayed-auto-start), a stray
+// desktop launch, or a build being tested from a terminal — and those want
+// three different responses. Finding out which took a Get-CimInstance and an
+// sc.exe query. The guard knows how to ask; it just was not asking.
+//
+// Every failure to identify the holder degrades to the old message rather than
+// printing half a sentence: the point is to say more when more is known, never
+// to assert something unverified about the operator's machine.
+func logAlreadyRunning(log *slog.Logger) {
+	const msg = "another LANcast server is already running"
+	running, ok := service.RunningServer()
+	if !ok {
+		log.Error(msg, "hint", service.Running{}.Hint())
+		return
+	}
+	log.Error(msg, "holder", running.Describe(), "hint", running.Hint())
 }
 
 // newLogger builds the stderr logger used foreground and by the service run mode.
