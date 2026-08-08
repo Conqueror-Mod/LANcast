@@ -1,9 +1,15 @@
 # Desktop lifecycle — start, close, and what stays running
 
-**Status: planned, deliberately not built yet.** Gated on
-[ADR 0023](adr/0023-native-desktop-client.md) stage 1 — a native window. The
-reasoning for the gate is in "Why not now" at the end, and it is the most
-important part of this document.
+**Status: ready to build. The gate is met.** This document was written while
+LANcast had no window of its own and said so: *close to tray* has no referent
+while the UI is a browser tab. [ADR 0023](adr/0023-native-desktop-client.md)
+stage 1 is now built — `LANcast-Client.exe -window` opens a window LANcast owns
+— so the reason to wait is gone.
+
+Revised 2026-08-08 with three changes: the gate is recorded as met, the
+half-stop that made "closed" dishonest is now fixed, and the one question this
+plan had not answered — *where a client-local setting is ticked, when the
+Settings page is served by the server* — is answered below.
 
 The deliverable is two tickable options:
 
@@ -100,9 +106,98 @@ beats a window that looks identical whether it owns a server or not. That is
 another instance of the project's recurring rule — the state exists, it just has
 no voice.
 
-## Why not now
+## The ruling this must satisfy
 
-Because *close to tray* has no referent while the UI is a browser tab.
+Stated during v0.6.0 testing, and it is the acceptance test for the whole
+change:
+
+> If the server is closed, it needs to fully close. The process must not hang.
+> There should be no invisible hanging services after this implementation.
+
+Two halves, and they are not the same work.
+
+**A stop must complete.** This half is now **built** — `Stop-Service lancastd`
+did not keep LANcast stopped: the server waited open-endedly on in-flight
+connections, the service handler told the Service Control Manager the stop would
+be instantaneous, and Windows judged the resulting delay a hang, logged event
+7031, and let the recovery policy restart it. Shutdown is now bounded and forced
+at the end, and the SCM is told how long to wait. A stop that is asked for now
+happens.
+
+**A close must mean something the user chose.** This half is what remains, and
+it is the rest of this document. Note what the ruling does *not* say: it does
+not say the server should always stop. It says there must be nothing running
+that the user did not knowingly leave running. Those are different, and the
+difference is the whole design — a service the user installed on purpose is not
+an invisible hanging process, it is a media server doing its job. An invisible
+hanging process is one nobody chose and nothing names.
+
+So the rule at the top of this section stands, unchanged and now enforceable:
+
+> **Closing a window never stops a server the window does not own** — and
+> whatever keeps running says so, by name, where the user is looking.
+
+## Where the tickboxes live
+
+This plan asserted "client-local config, no API change" and left a hole: the
+Settings page is HTML served by the *server*, and a client-local setting cannot
+be read or written through `/api/settings` without becoming a server setting —
+which is exactly what must not happen.
+
+Resolved: **the window binds a host object, and the page feature-detects it.**
+
+`internal/webview2` already exposes `Bind(name string, f interface{})`, and the
+client already owns a per-user directory at `%APPDATA%\LANcast\client` where
+the window's profile and session cookie live. Those two facts are the whole
+mechanism:
+
+- The client binds a small surface — read the lifecycle preferences, write them
+  — backed by a JSON file in its own directory. Per user, per machine, never on
+  the network, never in the server's database.
+- The Settings page checks whether that binding exists. **In the LANcast window
+  it renders a Desktop section; in a browser tab it renders nothing at all.**
+
+Feature detection rather than a capability flag from the server, because the
+server genuinely does not know: the same server serves the window, a browser on
+the same machine, and a phone in the kitchen, and only one of those has a tray.
+A setting that appears in a browser tab and silently governs a different process
+is worse than a setting that is absent.
+
+This keeps the original promise exactly — no API change, no schema change, the
+server never learns about it — while giving the options somewhere real to be
+ticked.
+
+**The consequence to accept:** these options are invisible unless you are using
+the native window. That is correct rather than a limitation. A browser tab has
+no tray to reduce to and no ✕ that LANcast owns, so there is nothing for the
+setting to govern, and offering it there would be a promise the client cannot
+keep.
+
+## What "no invisible hanging services" means concretely
+
+Three checks, all of which must hold when this is done:
+
+1. **Nothing survives a close that the user did not choose.** If this client
+   started the server and *Close to tray* is off, closing the window stops the
+   server, and the process is gone — verified by process list, not by the window
+   disappearing.
+2. **Anything that does survive is named.** If the service owns the server, the
+   window says so before it closes rather than leaving a mystery: "the LANcast
+   service keeps running" is the difference between a background service and a
+   hanging one. The single-instance guard already names the holder
+   (`internal/service/running.go`); this is the same sentence, moved to where
+   the decision is made.
+3. **Quitting from the tray stops what the tray owns, and only that.** Today's
+   tray Quit cancels the shutdown context regardless of who started the server.
+   That was defensible while the tray *was* the app; with a window it is not,
+   because quitting becomes something people do casually.
+
+## Why it waited (kept for the record)
+
+The gate has been met; this section is why it existed, and it is worth keeping
+because the reasoning was right.
+
+Because *close to tray* had no referent while the UI was a browser tab.
 
 Closing a browser tab is not closing LANcast, and no setting inside the page can
 change what the browser's ✕ does. Shipping the tickbox today would mean either a
@@ -114,7 +209,7 @@ stop; the accumulated cost of *not owning the window* is exactly what ADR 0023
 catalogues, and this is one more item on that list rather than a separate
 problem.
 
-So this waits for stage 1, and then it is small — a window that exists can be
+So this waited for stage 1, and now it is small — a window that exists can be
 hidden, and an app that owns its window can honestly describe what its close
 button does.
 
@@ -122,6 +217,21 @@ button does.
 lifecycle stays confusing in the meantime, the next cheap step is the same kind
 — making the tray tooltip and the Settings page say whether this server is the
 service or this process, rather than leaving it to be inferred.
+
+## Build order
+
+1. **Client-local preferences file** in `%APPDATA%\LANcast\client`, with the
+   two options defaulting to off. Read on launch, written on change.
+2. **Host binding** exposing read and write to the page, plus one honest fact
+   the page cannot otherwise know: whether this client started the server or
+   attached to something already running.
+3. **Close behaviour** — the ownership rule, and the named survivor when the
+   window closes over a server it does not own.
+4. **Settings section**, rendered only when the binding is present.
+5. **Open on Windows start** — the run key, and the uninstaller clearing it.
+
+Steps 1–3 are the substance; 4 is surface and 5 is independent of the rest. If
+step 3 turns out to need anything from the server, stop: the design has drifted.
 
 ## When it is built
 
