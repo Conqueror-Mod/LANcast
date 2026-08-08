@@ -599,8 +599,27 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 	if it.Ratings, err = s.ItemRatings(ctx, it.ID); err != nil {
 		return err
 	}
-	// The name only — never the directory (see Item.FileName).
-	if it.Path != "" {
+	// The name only — never the directory (see Item.FileName), and only for rows
+	// that are actually files.
+	//
+	// A container's `path` is not a path. Artists and albums are keyed by a
+	// synthetic string (`<library>::artist=ABBA`), and so is a season with no
+	// "Season N" folder (`<show dir>::season=2`) — that is how ADR 0010 and
+	// ADR 0024 give a fileless row a stable identity. Running filepath.Base over
+	// one produced a "file name" of `TEST MUSIC LIBRARY::artist=ABBA` on the
+	// artist page, and — because Base splits on the separator — a bare `DC` for
+	// AC/DC, which looks like nothing so much as corrupted metadata.
+	//
+	// It also quietly defeated the rule above. `path` is deliberately never
+	// serialized so the server's filesystem layout stays private, and this was
+	// putting a fragment of it on screen through the back door.
+	//
+	// Container is the file's extension and the scanner sets it only for real
+	// files: ADR 0010 made it nullable precisely so directory rows could exist
+	// without one. It is therefore the honest test for "does this row have a
+	// file", rather than a list of container kinds that would need updating
+	// every time a new one is added.
+	if it.Path != "" && it.Container != nil && *it.Container != "" {
 		it.FileName = filepath.Base(it.Path)
 	}
 	return nil
