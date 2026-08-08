@@ -1,22 +1,16 @@
-/* The player is a modal surface: it fills the viewport, above the app shell,
-   and the video is the only content. Chrome recedes entirely. */
+/* The player screen is chrome over the media surface, which PlaybackProvider
+   draws underneath at a lower z-index (playback.css). Transparent on purpose:
+   the picture showing through *is* the surface, and this screen is only what
+   sits on top of it. */
 .player {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #000;
   overflow: hidden;
 }
 
 .player--idle {
   cursor: none;
-}
-
-.player__video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
 }
 
 /* Controls fade in on movement, out after idle. Everything here is neutral —
@@ -65,59 +59,10 @@
 }
 
 /* ---- audio mode ---------------------------------------------------------
-   A song has no picture, so the record becomes the surface. The element that
-   plays it is the same <video> a film uses (see Player.tsx); it is simply not
-   worth looking at, so it is taken out of the layout rather than unmounted —
-   removing it would stop the audio. */
-
-.player__video--audio {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.player__cover {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: var(--space-void);
-}
-
-/* The cover, blown up and blurred, as the field behind itself. Cheaper than
-   sampling a colour and it never disagrees with the artwork. */
-.player__cover-wash {
-  position: absolute;
-  inset: -10%;
-  background-size: cover;
-  background-position: center;
-  filter: blur(64px) saturate(1.2);
-  opacity: 0.5;
-  transform: scale(1.1);
-}
-
-.player__cover-art {
-  position: relative;
-  width: min(46vh, 46vw);
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: var(--radius-panel);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-}
-
-/* No art. Says which song is playing rather than showing a black rectangle,
-   which is indistinguishable from a player that failed to start. */
-.player__cover-none {
-  position: relative;
-  max-width: 60%;
-  text-align: center;
-  font-size: 20px;
-  color: var(--text-muted);
-}
+   The cover that stands in for the picture is drawn by the media surface
+   (playback.css), because it has to dock into the corner with the element it
+   belongs to. What is left here is how the *chrome* differs over a still
+   image. */
 
 /* Chrome does not fade over a still cover, so the gradient scrims would sit
    there permanently. The cover's own wash already separates the controls. */
