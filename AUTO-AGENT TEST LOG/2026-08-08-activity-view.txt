@@ -1,0 +1,286 @@
+LANcast — autonomous session log
+Date:    2026-08-08 (overnight, unattended)
+Branch:  feat/activity-view  (branched from main @ 3d3aa60)
+Commits: 0c45715  feat(activity): one endpoint and one indicator for what the server is doing
+         b96f4f8  feat(logs): read lancastd.log from the UI
+
+Two gaps closed, not one. The second is written up at the bottom under
+"SECOND PIECE".
+
+====================================================================
+WHAT I PICKED AND WHY
+====================================================================
+The roadmap's feature backlog listed "Activity status in the UI" with an
+unusually precise note: the pieces already exist behind
+/api/libraries/{id}/scan, /api/enrich and /api/probe, and what is missing is
+one place in the UI that surfaces them.
+
+That note understated it. Every worker had a status endpoint, but a client that
+wanted to show "what is the server doing" had to know the entire roster of
+workers and poll the scan endpoint once per library. So no client showed
+anything. This is the same shape as the "?profile= shipped and no caller ever
+used it" lesson already recorded in the roadmap: the capability existed and the
+caller could not reasonably exist.
+
+It was also the right size for one unattended session — additive API, no schema
+change, no migration, no ADR needed, and nothing destructive.
+
+Explicitly avoided: anything touching add-ons/plugins, per instruction.
+
+====================================================================
+WHAT I BUILT
+====================================================================
+Server
+  internal/api/activity.go       (new)
+  internal/api/activity_test.go  (new)
+  internal/api/server.go         (+1 route)
+
+  GET /api/activity  ->  { "active": bool, "tasks": [ ... ] }
+
+  Every worker — scan, enrich, probe, coverart, transcode — is normalized into
+  one shape: kind, id, title, state, done, total, detail, library_id,
+  started_at, error. Design decisions worth reviewing:
+
+  * title is resolved server-side. A scan says "Scanning Films", so a client
+    rendering the row never has to join a library id back to a name.
+  * total = 0 means indeterminate, and that is honest rather than lazy: a scan
+    knows how many files it has seen and never how many it will see. The client
+    draws a sweep and a count instead of inventing a percentage.
+  * only running and failed are listed. A finished task is not activity.
+  * a FAILED SCAN STAYS LISTED. The roadmap's own retrospectives say the same
+    thing four times over: the serious bugs in this project were invisible, not
+    loud. This gives that class of failure somewhere to appear.
+  * nothing is persisted. A restarted server reports idle, which is the truth —
+    the workers are in-process and a restart ended their work.
+  * reading progress needs no special role; the endpoints that START work
+    (scan, probe/refresh) remain admin-only. Unchanged.
+
+  Gathering worker state and shaping it are split into snapshot{} and
+  buildActivity(). That follows the existing probe.ParseJSON precedent in
+  CLAUDE.md: the shaping rules are then testable against fixtures with no
+  worker running and no media on disk. This mattered in practice — see
+  "one thing I got wrong" below.
+
+Client
+  web/src/components/ActivityPanel.tsx   (new)
+  web/src/components/ActivityPanel.css   (new)
+  web/src/api/types.ts, hooks.ts, components/AppShell.tsx  (edited)
+  internal/web/dist/                     (rebuilt and committed, per convention)
+
+  A pulsing dot + label in the nav, and a popover listing each task with a
+  progress bar. Design rules I held to:
+  * NO GOLD anywhere except the trigger's :focus-visible ring. This is "what
+    the server is doing", not "where you are". Progress uses --nebula-blue,
+    failure uses --danger.
+  * the indicator is absent entirely when the server is idle. A status light
+    that is always lit tells you nothing.
+  * .activity__row carries flex-shrink: 0 — the scrollable-column trap from the
+    global rules, set up front rather than diagnosed later.
+  * prefers-reduced-motion disables both the pulse and the sweep.
+  * Escape and outside-click close the popover.
+
+  Polling: 8s idle, 1.5s while active. This is a deliberate exception to the
+  codebase's "do not poll forever" comment on useProbeStatus, and the reason is
+  in the hook's comment: an indicator that only updates when you open it is not
+  an indicator. React Query stops the interval when the tab is hidden, so an
+  idle machine still idles.
+
+Docs
+  docs/api.md      — full /api/activity section (API changes are contract
+                     changes; same commit, per CLAUDE.md)
+  docs/roadmap.md  — backlog item struck through with what shipped; new
+                     "Activity view" row under Cross-cutting
+
+====================================================================
+VERIFICATION — what I actually ran, and what I could not
+====================================================================
+Automated
+  go build ./...        PASS
+  go test ./...         PASS (whole tree, nothing skipped)
+  npm run build         PASS (tsc -b && vite build, no TS errors)
+  gofmt -w on the two new files only (per the CRLF note in memory)
+
+  Four new tests in internal/api/activity_test.go:
+    TestActivityIdle                    empty array, not null, active=false
+    TestActivityScanStates              running/failed listed, idle not;
+                                        title, id, indeterminate total, detail
+    TestActivityWorkers                 each worker contributes only while
+                                        running; "N failed" only when N>0
+    TestActivitySkipsFinishedTranscodes finished sessions are not activity
+
+Live, against the real seeded test libraries
+  Seeded D:\My Projects\LANcast\data from D:\My Projects\TEST LIBRARIES via
+  the devseed build tag (write_nfo off, live library never touched), created
+  the account "devuser" by hand, ran the server on 127.0.0.1:8099.
+
+  Started scans on all three libraries at once and a full re-probe. The real
+  endpoint returned, concurrently:
+    scan:3 "Scanning Music"     running  1592 seen, "1592 changed"
+    scan:2 "Scanning TV Shows"  running  15 seen
+    probe  "Reading media files" running  0 of 1628
+  So concurrency, per-library naming, indeterminate scans and a determinate
+  worker were all confirmed against real files rather than fixtures.
+
+  UI, in the browser against the real client bundle:
+    - idle server: no indicator rendered at all (confirmed after reload)
+    - with three tasks: trigger reads "Attention" (failure present)
+    - popover 320x229, fully inside the viewport, three rows measured at
+      47/62/62px high (i.e. not collapsed — the flex-shrink trap did not bite)
+    - determinate row's bar computed to exactly 30% for 120 of 400
+    - indeterminate rows showed "812 so far" / "3 so far"
+    - failed row carried is-failed and displayed "permission denied"
+    - Escape closed the popover
+  The three-task state was driven by stubbing the fetch response in the page,
+  so that every row shape could be checked deterministically rather than raced
+  against a scan of a small test library that finishes in seconds.
+
+WHAT I COULD NOT VERIFY  (please eyeball this in the morning)
+  No pixel screenshot. The in-app browser pane will not composite frames unless
+  it is displayed on screen, and the computer-use permission dialog for the
+  LANcast client was denied while you were away, so I could not take over the
+  desktop. Everything above is DOM and computed-style measurement, which proves
+  structure, sizing and state logic but NOT how it looks. Specifically unjudged:
+    - whether the pulsing dot is too loud or too quiet in the nav
+    - whether the popover's placement under Settings feels right
+    - the panel against the nebula background
+  Everything needed to look at it is already running or one command away.
+
+====================================================================
+ONE THING I GOT WRONG, AND ONE FALSE ALARM
+====================================================================
+1. My first test asserted a failed scan by pointing a library at a directory
+   that does not exist. It never failed — the scanner records an unreadable
+   path as an Issue and carries on, which is correct behaviour and exactly the
+   "scanning marks missing, never deletes" rule. Rather than contrive a
+   failure, I split gathering from shaping and tested the shaping against
+   fixtures. Better test, and it matches the probe precedent already in the
+   codebase.
+
+2. Mid-session I thought I had found a real bug: the client appearing to ignore
+   -data and starting a server on an empty second database, which is precisely
+   the v0.4.1 bug. It was not. It was my own PowerShell quoting — the path with
+   spaces was split, and "D:\My" became a data directory. NOT A PRODUCT BUG.
+   I deleted the four stray files and the D:\My directory it created; nothing
+   else on D:\ was touched, and D:\My Projects is intact and untouched.
+
+====================================================================
+STATE I LEFT BEHIND
+====================================================================
+  * branch feat/activity-view, one commit, NOT pushed and NO PR opened —
+    both are outward-facing, so they are yours to trigger. Worth opening one:
+    this is a complete, self-contained chunk.
+  * D:\My Projects\LANcast\data  — dev data dir, gitignored, seeded, account
+    devuser / devpass-A123456. Throwaway credential in a throwaway directory.
+  * LANcast-Server.exe and LANcast-Client.exe built in the repo root, both
+    gitignored. The server binary is the devseed build — do not ship it.
+  * A LANcast-Server.exe may still be running on 127.0.0.1:8099. To stop it:
+      Get-Process LANcast-Server | Stop-Process -Force
+  * The live library on W: and C:\ProgramData\LANcast were never touched.
+
+To see it yourself:
+  Get-Process LANcast-Server -ErrorAction SilentlyContinue | Stop-Process -Force
+  & "D:\My Projects\LANcast\LANcast-Server.exe" -addr 127.0.0.1:8099 -data "D:\My Projects\LANcast\data"
+  # then browse to http://127.0.0.1:8099, sign in as devuser, and start a scan
+  # from Settings — the indicator appears in the nav while it runs.
+
+====================================================================
+WHAT I WOULD DO NEXT
+====================================================================
+  1. The log viewer. lancastd.log has been written beside the database since
+     v0.4.2 and still cannot be read from the UI; it is the other half of
+     "what is the server doing", for the part that already happened. Same
+     shape as this work, similar size, and it now has an obvious home next to
+     the activity panel.
+  2. The audit log is the bigger and more valuable one, but it needs a schema
+     migration and an ADR, and it touches every mutating handler. That is not
+     an unattended-session task — it wants your eyes on the ADR first.
+
+
+====================================================================
+SECOND PIECE — THE LOG VIEWER  (commit b96f4f8)
+====================================================================
+WHY
+  The backlog entry read: "the service now writes lancastd.log beside the
+  database (v0.4.2); what is missing is reading it from the UI." Reading it
+  meant opening a file manager and finding the data directory — the wrong ask
+  for the case the log exists to serve, because it matters most when the server
+  is running as a service with no console and something is wrong, which is
+  exactly when the person needing it is least equipped to go hunting.
+
+  It also pairs with the activity view: the activity panel is what the server
+  is doing, the log is what it already did.
+
+WHAT
+  internal/applog/applog.go     +Tail(dir, n) (lines, complete, error)
+  internal/applog/tail_test.go  (new, 5 tests)
+  internal/api/logs.go          (new)  GET /api/logs   ADMIN ONLY
+  internal/api/logs_test.go     (new, 4 tests)
+  internal/api/server.go        (+1 route, DataDir doc comment updated)
+  web/: ServerLog type, useServerLog hook, ServerLogSection in Settings, CSS
+  docs/api.md, docs/roadmap.md
+
+  Decisions worth reviewing:
+  * ADMIN ONLY. The log names filesystem paths, library roots and provider
+    errors. That is server-operator information, not viewer information, and it
+    is the same reasoning that already makes /api/browse admin-only.
+  * `complete: false` when older lines exist. This is the "120 of 1,226" lesson
+    from v0.3.2 applied again — a reader who believes a partial view is the
+    whole file goes looking for a startup line nobody withheld from them.
+  * Tail reads a 512 KB window from the end, not the whole file, and DROPS THE
+    FIRST LINE when it does, because a window into a file starts mid-record and
+    half a record is worse than one fewer record.
+  * A missing log is empty, not an error. A server that has only ever run in a
+    terminal writes to the terminal; that is supported, not broken.
+  * ?lines= defaults to 300, clamps at 2000, and rejects a non-positive value
+    with 400. Clamping rather than refusing an oversized ask: the caller meant
+    "all of it", and the honest answer is as much as one response carries.
+  * The panel is collapsed by default and NEVER POLLS — a log is what already
+    happened, and the button that opens it is the refresh. Deliberately unlike
+    the activity indicator, which does poll, and for the opposite reason.
+
+VERIFIED
+  go test ./...   PASS (whole tree)   go build ./...   PASS   npm run build PASS
+  Live against the dev instance with a real log file on disk:
+    GET /api/logs             unauthenticated -> 401
+    GET /api/logs?lines=2     -> the last two lines, complete:false
+    GET /api/logs?lines=0     -> 400 bad_request
+    Settings -> "Show log"    -> 3 lines rendered in the monospace box, the
+                                 page did not gain a horizontal scrollbar
+  Same limitation as above: measured in the DOM, NOT looked at as pixels.
+
+====================================================================
+SECOND FALSE ALARM — SAME MISTAKE, WORTH RECORDING
+====================================================================
+I hit the "-data is being ignored" false alarm a SECOND time, harder: an
+unauthenticated caller appeared to get 200 from an admin-only endpoint, and the
+log read as empty when the file plainly had three lines. Two alarming symptoms,
+one cause, and the cause was mine again — PowerShell's Start-Process
+-ArgumentList does not quote array elements, so a data path containing spaces
+was split and the server came up on a fresh empty database where no account
+existed and therefore nothing was secured yet.
+
+The lesson is the repo's own: the environment a check runs in is part of the
+check. I had verified /api/logs against an instance that was not the instance I
+thought I was verifying. Re-running it against the right one gave 401, the
+correct tail, and 400 — all as designed. Nothing in the product was wrong
+either time. It cost roughly a third of the session.
+
+D:\My was created twice by this and deleted twice. It is gone; D:\My Projects
+was never touched.
+
+====================================================================
+FINAL STATE
+====================================================================
+  branch feat/activity-view, TWO commits, not pushed, no PR opened.
+  Worth opening one — it is two complete, self-contained, additive features
+  with docs and tests, and no schema change or migration in either.
+
+  Note: this log file itself is committed on the branch. If you would rather
+  the AUTO-AGENT TEST LOG folder stayed out of git, say so and it is one
+  .gitignore line plus a rewrite of the second commit.
+
+  Left running: LANcast-Server.exe on 127.0.0.1:8099 against
+  D:\My Projects\LANcast\data. Stop it with:
+      Get-Process LANcast-Server | Stop-Process -Force
+  data\lancastd.log holds three fake lines I wrote to exercise the viewer.
+  Delete it if you want a clean one; the server will make a new one.

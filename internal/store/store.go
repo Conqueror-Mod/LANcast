@@ -26,7 +26,22 @@ type Store struct{ db *sql.DB }
 // Open connects to the database at path and applies the schema. Schema
 // application is idempotent, so this is safe on every start.
 func Open(path string) (*Store, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)", path)
+	// _txlock=immediate takes the write lock when a transaction begins rather
+	// than when it first writes.
+	//
+	// Without it, a transaction starts as a reader, and any read it performs —
+	// including the schema read a PREPARE does — fixes a snapshot. If another
+	// connection commits before the transaction's first write, SQLite cannot
+	// upgrade the stale snapshot and fails with SQLITE_BUSY_SNAPSHOT (517).
+	// busy_timeout does not cover 517: it defers plain SQLITE_BUSY (5), while
+	// 517 returns immediately, so the transaction does not wait and retry, it
+	// dies. That is how a TV Shows scan aborted at 15 files with "database is
+	// locked" while enrichment was writing beside it.
+	//
+	// Every transaction in this package writes, so taking the lock up front
+	// costs no read concurrency — it converts an instant failure into the wait
+	// busy_timeout was always meant to provide.
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_txlock=immediate", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
