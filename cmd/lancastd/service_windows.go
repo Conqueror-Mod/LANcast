@@ -65,6 +65,12 @@ func serviceServe(dataDir, addr string, log *slog.Logger) error {
 	// finds it and opens the UI instead of starting a duplicate.
 	release, held, err := singleton.Acquire(singleton.Server)
 	if err == nil && !held {
+		// Names the holder for the same reason main does — and it matters more
+		// here, because this line goes to lancastd.log, which is the only record
+		// anyone gets of a service that refused to start (v0.4.2).
+		if running, ok := service.RunningServer(); ok {
+			return fmt.Errorf("another LANcast server is already running: %s", running.Describe())
+		}
 		return fmt.Errorf("another LANcast server is already running")
 	}
 	defer release()
