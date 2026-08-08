@@ -737,6 +737,59 @@ and could only be read by finding the data directory in a file manager, which is
 the wrong ask for the case it serves: the log matters most when the server is
 running as a service and something is wrong.
 
+### `GET /api/audit`
+
+The audit log: who changed what, and when. **Admin only** (ADR 0026).
+
+```json
+{
+  "events": [
+    { "id": 42, "at": 1786220000,
+      "actor_id": "local", "actor_name": "chris",
+      "action": "library.delete", "target_kind": "library", "target_id": "3",
+      "summary": "Removed library \"Films\" (1226 items) — files left on disk",
+      "detail": "{\"path\":\"D:\\Media\",\"kind\":\"movie\",\"item_count\":1226}" }
+  ],
+  "total": 1,
+  "actions": ["library.delete"]
+}
+```
+
+Newest first. `?limit=` defaults to 100 and is capped at 500; `?offset=` pages.
+`?action=` and `?actor=` filter. A non-numeric or negative value for either
+paging parameter is `400`.
+
+`actions` lists the distinct actions actually present, so a client can build a
+filter from what happened rather than from a hardcoded list that drifts from the
+handlers.
+
+**What is recorded** — deliberate acts only:
+
+| Action | Recorded when |
+|---|---|
+| `library.create`, `library.delete` | A library is added or forgotten |
+| `item.delete` | A title is removed, whether ignored or deleted from disk |
+| `item.match` | An identity is overridden via Fix match |
+| `item.edit`, `item.unlock` | Fields are edited (and locked), or a lock is released |
+| `user.create`, `user.delete`, `user.password_reset` | Account changes |
+| `auth.password_change` | Someone changes their own password |
+| `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.disable`, `plugin.remove` | The trust decisions of ADR 0021 |
+| `settings.update` | Settings change — **field names only, never values** |
+
+**Reads are never recorded.** Browsing, playback and progress are the normal
+operation of a media server; auditing them would bury the events that matter.
+Scans are not recorded either — the activity view already reports them, and a
+scan is not a decision anyone needs attributed.
+
+**`summary` is resolved at write time**, so an event stays readable after the
+row it names is gone. `actor_name` is frozen for the same reason: "who deleted
+this library" must survive the deletion of the account that did it.
+
+**A failed audit write does not fail the request.** The mutation has already
+happened; refusing it after the fact would turn a full disk into a denial of the
+user's own deletions. Failures are logged at `ERROR` server-side. This is a
+stated trade, not an oversight.
+
 ### `GET /api/coverart`
 
 Background album-art progress.

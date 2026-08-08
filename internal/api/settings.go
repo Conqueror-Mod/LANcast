@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"lancast/internal/config"
 )
 
 // getSettings returns the current configuration.
@@ -61,7 +63,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	next := s.settings.Get()
+	prev := s.settings.Get()
+	next := prev
 	if req.TMDBKey != nil {
 		next.TMDBKey = strings.TrimSpace(*req.TMDBKey)
 	}
@@ -97,6 +100,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "save settings")
 		return
 	}
+	// Names only, never values. Recording that the TMDB key changed is the
+	// audit fact; recording the key itself would turn the audit log into a
+	// place secrets live.
+	if changed := changedSettings(prev, next); len(changed) > 0 {
+		s.audit(r, "settings.update", "settings", "",
+			"Changed settings: "+strings.Join(changed, ", "),
+			map[string]any{"fields": changed})
+	}
 	// Providers are rebuilt so a newly entered key takes effect immediately
 	// rather than after a restart.
 	if s.rebuild != nil {
@@ -109,4 +120,26 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.getSettings(w, r)
+}
+
+// changedSettings names the fields that actually differ, so the audit summary
+// says what changed rather than that a save happened. Secret values are
+// compared but never recorded: the fact of a key rotation is auditable, the key
+// is not.
+func changedSettings(prev, next config.Settings) []string {
+	var out []string
+	add := func(name string, differs bool) {
+		if differs {
+			out = append(out, name)
+		}
+	}
+	add("tmdb_key", prev.TMDBKey != next.TMDBKey)
+	add("opensubtitles_key", prev.OpenSubtitlesKey != next.OpenSubtitlesKey)
+	add("omdb_key", prev.OMDbKey != next.OMDbKey)
+	add("ffmpeg_dir", prev.FFmpegDir != next.FFmpegDir)
+	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
+	add("write_nfo", prev.WriteNFO != next.WriteNFO)
+	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
+	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
+	return out
 }

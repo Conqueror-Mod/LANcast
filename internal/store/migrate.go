@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 14
+const CurrentSchemaVersion = 15
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -32,6 +32,7 @@ var migrations = []migration{
 	{version: 12, sql: schemaRevision12},
 	{version: 13, sql: schemaRevision13},
 	{version: 14, sql: schemaRevision14},
+	{version: 15, sql: schemaRevision15},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -427,4 +428,39 @@ ALTER TABLE media_item ADD COLUMN artist TEXT;
 // a column addition rather than a shape change.
 const schemaRevision14 = `
 ALTER TABLE media_item ADD COLUMN cover_checked_at INTEGER;
+`
+
+// Revision 15 — the audit log (ADR 0026).
+//
+// "What emptied this library" was unanswerable during v0.4.x testing: current
+// state is in the database, but nothing recorded how it got there. Multi-user
+// accounts (ADR 0015) made attribution ambiguous, and plugin capability grants
+// (ADR 0021) made trust decisions worth recording.
+//
+// actor_name is denormalised on purpose. A foreign key to users would either
+// cascade-delete the evidence when an account is removed or block the removal,
+// and "who deleted this library" has to survive the deletion of the account
+// that did it — that is the case this table exists for. The id is kept beside
+// it for joining while the account still exists.
+//
+// target_id is TEXT because targets are not uniformly integers: plugins are
+// named, users have string ids, items and libraries are numbers. One column
+// that holds all of them beats four nullable typed ones.
+//
+// summary is written already resolved, so a deleted library still reads
+// "Removed library Films (14 items)" rather than an id that no longer resolves.
+const schemaRevision15 = `
+CREATE TABLE IF NOT EXISTS audit_event (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          INTEGER NOT NULL,
+    actor_id    TEXT    NOT NULL,
+    actor_name  TEXT    NOT NULL,
+    action      TEXT    NOT NULL,
+    target_kind TEXT,
+    target_id   TEXT,
+    summary     TEXT    NOT NULL,
+    detail      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_event(at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_event(action, at DESC);
 `

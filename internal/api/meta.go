@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -117,6 +118,13 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// An edit locks every field it touches, so this is not just a value change
+	// — it is a standing instruction that no provider may overwrite it. The
+	// field list is what makes that reviewable later.
+	s.audit(r, "item.edit", "item", auditID(id),
+		fmt.Sprintf("Edited and locked %s on %q", strings.Join(touched, ", "), itemTitle(r, s, id)),
+		map[string]any{"fields": touched})
+
 	s.respondItem(w, r, id)
 }
 
@@ -139,6 +147,12 @@ func (s *Server) deleteLock(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "unlock field")
 		return
 	}
+	// Unlocking hands a field back to providers, so a value a user chose can
+	// now change on its own. That is the surprising half of ADR 0008 and it
+	// deserves a record.
+	s.audit(r, "item.unlock", "item", auditID(id),
+		fmt.Sprintf("Unlocked %s on %q — providers may overwrite it again", field, itemTitle(r, s, id)),
+		map[string]any{"field": field})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -284,6 +298,19 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 	}
 	s.enrichSoon()
 
+	// An identity override outranks every provider from here on, so it is
+	// exactly the kind of decision that should be attributable later. The
+	// previous identity is recorded because "what was it before" is the first
+	// question asked when a match turns out wrong.
+	s.audit(r, "item.match", "item", auditID(id),
+		fmt.Sprintf("Set %q to %s:%s (was %s)", it.Title, req.Provider, req.ExternalID,
+			formerIdentity(it)),
+		map[string]any{
+			"provider": req.Provider, "external_id": req.ExternalID, "kind": req.Kind,
+			"previous_provider": it.Provider, "previous_external_id": it.ExternalID,
+			"previous_state": it.MatchState,
+		})
+
 	s.respondItem(w, r, id)
 }
 
@@ -409,4 +436,24 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 	}
 	it.ChildCount = counted[0].ChildCount
 	writeJSON(w, http.StatusOK, it)
+}
+
+// formerIdentity renders what an item was matched to before an override, for
+// the audit summary. "Unmatched" is the honest answer for most first
+// corrections and reads better than an empty provider pair.
+func formerIdentity(it *store.Item) string {
+	if it.Provider == nil || it.ExternalID == nil || *it.Provider == "" || *it.ExternalID == "" {
+		return "unmatched"
+	}
+	return *it.Provider + ":" + *it.ExternalID
+}
+
+// itemTitle reads an item's title for an audit summary, falling back to the id
+// rather than failing the summary. An audit line that says "item 42" is worse
+// than one that names the title, and both beat no line at all.
+func itemTitle(r *http.Request, s *Server, id int64) string {
+	if it, err := s.st.GetItem(r.Context(), id, s.userID(r)); err == nil {
+		return it.Title
+	}
+	return "item " + auditID(id)
 }
