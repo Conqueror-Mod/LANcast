@@ -22,6 +22,7 @@ import (
 // Store is the persistence surface the worker needs.
 type Store interface {
 	PendingEnrichment(ctx context.Context, limit int) ([]store.Item, error)
+	PendingEnrichmentFrom(ctx context.Context, limit, offset int) ([]store.Item, error)
 	PendingCount(ctx context.Context) (int, error)
 	GetLibrary(ctx context.Context, id int64) (*store.Library, error)
 	LockedFields(ctx context.Context, itemID int64) ([]string, error)
@@ -153,15 +154,23 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.mu.Unlock()
 	}()
 
+	// offset walks past items this run cannot stamp. The queue is a query, not a
+	// cursor: enriched rows leave it, but rows nothing can enrich stay at the
+	// front forever. Stopping at the first unproductive batch — which is what
+	// this loop used to do — strands everything behind it, so a music backlog no
+	// provider handles meant no film added afterwards was ever enriched.
+	offset := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		items, err := w.st.PendingEnrichment(ctx, w.BatchSize)
+		items, err := w.st.PendingEnrichmentFrom(ctx, w.BatchSize, offset)
 		if err != nil {
 			return err
 		}
+		// Nothing left to look at. With a non-zero offset this is the real
+		// terminating condition: the run has walked the whole queue.
 		if len(items) == 0 {
 			return nil
 		}
@@ -171,14 +180,20 @@ func (w *Worker) Run(ctx context.Context) error {
 			return err
 		}
 
-		// The queue is a query, not a cursor, so a batch that stamps nothing
-		// returns the identical rows forever. This happens legitimately —
-		// no provider configured, or every item failing — and without this
-		// guard the worker spins at full tilt instead of stopping.
 		if progressed == 0 {
-			w.log.Debug("enrichment made no progress; stopping", "pending", len(items))
-			return nil
+			// Skip this batch rather than the run. The offset is what stops the
+			// worker re-reading the identical unproductive rows at full tilt,
+			// which is the spin the old guard was protecting against.
+			offset += len(items)
+			w.log.Debug("enrichment batch made no progress; looking past it",
+				"skipped", len(items), "offset", offset)
+			continue
 		}
+
+		// Stamped rows have left the queue, so the rows this run already skipped
+		// have shifted forward by however many were enriched. Restarting from
+		// zero re-reads them, which is cheap and cannot miss anything.
+		offset = 0
 
 		if remaining, err := w.st.PendingCount(ctx); err == nil {
 			w.mu.Lock()

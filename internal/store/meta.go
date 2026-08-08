@@ -194,12 +194,27 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.
 func (s *Store) PendingEnrichment(ctx context.Context, limit int) ([]Item, error) {
+	return s.PendingEnrichmentFrom(ctx, limit, 0)
+}
+
+// PendingEnrichmentFrom is PendingEnrichment with a starting offset, so a caller
+// can look past a run of items it could not stamp.
+//
+// The queue is a query, not a cursor: rows that get enriched leave it, and rows
+// nothing can enrich stay at the front forever. Without an offset, a worker that
+// stops at the first unproductive batch never sees anything behind that batch —
+// which is how a music backlog no provider handles stranded every film added
+// after it.
+func (s *Store) PendingEnrichmentFrom(ctx context.Context, limit, offset int) ([]Item, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	if offset < 0 {
+		offset = 0
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item
 		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'
-		ORDER BY added_at LIMIT ?`, limit)
+		ORDER BY added_at LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pending enrichment: %w", err)
 	}
