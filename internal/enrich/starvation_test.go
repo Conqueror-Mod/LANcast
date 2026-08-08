@@ -111,3 +111,30 @@ func addKind(t *testing.T, st *store.Store, lib *store.Library, path, kind strin
 	}
 	return id
 }
+
+// A sidecar is written into the user's media folder with LANcast's own
+// provenance stamp, and it outlives the database that produced it. So it is
+// written only for an identity LANcast actually established.
+//
+// The failure this prevents: an unmatched item has a title from the filename at
+// a confidence the matcher itself declined, and committing that to disk turns a
+// guess into a durable local fact that the next fresh database inherits.
+func TestWritableIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		state string
+		want  bool
+	}{
+		{meta.StateMatched, true},
+		// A user or a sidecar already said what this is.
+		{meta.StateLocal, true},
+		// The matcher wants a human to look; writing the candidate it was
+		// unsure about would pre-empt that answer with a file.
+		{meta.StateReview, false},
+		{meta.StateUnmatched, false},
+		{"", false},
+	} {
+		if got := writableIdentity(tc.state); got != tc.want {
+			t.Errorf("writableIdentity(%q) = %v, want %v", tc.state, got, tc.want)
+		}
+	}
+}

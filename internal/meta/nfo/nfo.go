@@ -75,10 +75,14 @@ func (s *Source) Read(ctx context.Context, path string, kind meta.Kind) (*meta.R
 		return nil, nil
 	}
 
-	// Mirror detection: if the marker hash still matches the file's own
-	// content, this is LANcast's unmodified output and says nothing new.
+	// Mirror detection: our own output says nothing new.
+	//
+	// A user edit is only *proven* when the digest is one this build can
+	// compute and it differs. Anything else — a version we do not know, a
+	// malformed value — means we cannot tell, and an unverifiable file carrying
+	// our own marker is treated as ours.
 	if marker, found := root.child(MarkerElement); found {
-		if marker.attr("hash") == FieldsHash(rec) {
+		if !provesUserEdit(marker.attr("hash"), rec) {
 			return nil, nil
 		}
 	}
@@ -161,6 +165,22 @@ func writeAtomic(target string, body []byte) error {
 	return nil
 }
 
+// hashVersion identifies the scheme FieldsHash uses.
+//
+// It is written into the marker and checked on the way back in, because the set
+// of fields hashed here is not fixed forever. Add one field to the list below
+// and every sidecar LANcast has ever written stops matching its own hash — at
+// which point each one looks like a file a human edited, and its contents are
+// promoted to authority over every provider. Silently, on every machine, all at
+// once.
+//
+// So the version travels with the digest. A digest this build cannot verify is
+// treated as *ours* rather than as a user's edit: being wrong that way means
+// ignoring an edit, which the user can redo and which locks the field when they
+// do. Being wrong the other way re-pins identities to stale files and is the
+// failure this whole mechanism exists to prevent.
+const hashVersion = 1
+
 // FieldsHash is the canonical digest of the fields LANcast writes.
 //
 // Read and Write MUST both use this one function. If the two paths ever
@@ -204,7 +224,7 @@ func FieldsHash(rec *meta.Record) string {
 	write("credits", strings.Join(credits, "|"))
 
 	sum := sha256.Sum256([]byte(b.String()))
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return fmt.Sprintf("sha256:v%d:%s", hashVersion, hex.EncodeToString(sum[:]))
 }
 
 // ------------------------------------------------------------ file locations
@@ -536,4 +556,46 @@ func parseDate(s string) (int64, bool) {
 		return 0, false
 	}
 	return t.Unix(), true
+}
+
+// provesUserEdit reports whether a marker hash demonstrates that someone changed
+// the file after LANcast wrote it.
+//
+// It answers "can we prove an edit", not "did the hash match", and the
+// difference is the whole point: an unrecognised scheme is not evidence of a
+// human, it is evidence that this build cannot check.
+func provesUserEdit(marker string, rec *meta.Record) bool {
+	version, ok := hashSchemeOf(marker)
+	if !ok || version != hashVersion {
+		// Either not one of ours to parse, or written by a build whose scheme
+		// this one does not implement. Not proof of anything.
+		return false
+	}
+	return marker != FieldsHash(rec)
+}
+
+// hashSchemeOf extracts the scheme version from a marker hash.
+//
+// "sha256:v1:<hex>" is the current form. "sha256:<hex>" is what builds before
+// versioning wrote, and it is version 1 — those files were produced by exactly
+// the scheme this constant now names, so reading them as v1 is a statement of
+// fact rather than an assumption.
+func hashSchemeOf(marker string) (int, bool) {
+	rest, ok := strings.CutPrefix(marker, "sha256:")
+	if !ok {
+		return 0, false
+	}
+	verPart, digest, hasVersion := strings.Cut(rest, ":")
+	if !hasVersion {
+		// Unversioned: the pre-versioning form.
+		return 1, rest != ""
+	}
+	if digest == "" || !strings.HasPrefix(verPart, "v") {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimPrefix(verPart, "v"))
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
 }
