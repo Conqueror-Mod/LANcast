@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type {
+  Activity,
   AuthStatus,
   AuthUser,
   BrowseResult,
@@ -221,16 +222,24 @@ export function useDeleteLibrary() {
 // A scan (and a metadata refresh) run in the background; the caller then polls
 // useScanStatus to show progress.
 export function useStartScan() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (libraryID: number) =>
       apiSend(`/api/libraries/${libraryID}/scan`, "POST"),
+    // Tell the activity strip immediately rather than letting it find out on
+    // its own. Idle polling is deliberately slow, and a scan of a real library
+    // can begin and end inside one idle interval — measured: an 18-second scan
+    // fell entirely between two 30-second polls and was never shown at all.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["activity"] }),
   });
 }
 
 export function useRefreshLibrary() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (libraryID: number) =>
       apiSend(`/api/libraries/${libraryID}/refresh`, "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["activity"] }),
   });
 }
 
@@ -645,5 +654,25 @@ export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
       return loaded < last.total ? loaded : undefined;
     },
     enabled: (query.libraryID ?? 0) > 0,
+  });
+}
+
+// What the server is doing right now, for the activity strip.
+//
+// One request rather than four: the four workers each have their own status
+// endpoint, and polling all of them on a timer to answer "is anything
+// happening" is three requests too many.
+//
+// The interval is the interesting part. Polling hard forever is how a settings
+// page stops a machine idling (see useProbeStatus), so this asks every two
+// seconds while something is running and every thirty when nothing is — often
+// enough to notice a scan someone else started, rare enough to be free. It also
+// stops entirely when the tab is hidden, which react-query does by default.
+export function useActivity() {
+  return useQuery({
+    queryKey: ["activity"],
+    queryFn: ({ signal }) => apiGet<Activity>("/api/activity", signal),
+    refetchInterval: (q) => (q.state.data?.busy ? 2000 : 30000),
+    staleTime: 1000,
   });
 }

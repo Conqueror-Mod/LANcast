@@ -1,0 +1,55 @@
+/* Present only while the server is working — see ActivityStrip.tsx for why it
+   is not a permanent widget. */
+.activity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* The nav is a flex row whose library list has flex: 1, so it takes the slack
+     and everything else is a candidate for shrinking. Without this the strip
+     collapses to nothing — present in the DOM, every style applied, zero pixels
+     wide — which is exactly how it first "did not render" while the server was
+     reporting itself busy. The text ellipsis below bounds the width instead. */
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--space-raised);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.activity__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+}
+
+/* A quiet pulse, deliberately NOT gold: gold means where you are, and a dot
+   that lights up whenever the server is busy would teach the eye a second
+   meaning for it. Neutral, and slow enough to read as "working" rather than
+   "alarm". */
+.activity__mark {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: activity-pulse 1600ms ease-in-out infinite;
+}
+
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity__mark {
+    animation: none;
+    opacity: 0.8;
+  }
+}

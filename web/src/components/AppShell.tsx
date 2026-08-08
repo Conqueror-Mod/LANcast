@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
 import type { ReactNode } from "react";
+import { ActivityStrip } from "./ActivityStrip";
 import "./AppShell.css";
 
 // The top nav. Library names go straight to the full grid — hubs are a
@@ -43,6 +44,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             Review<span className="app-shell__badge">{reviewCount}</span>
           </NavLink>
         )}
+        {/* Left of Settings, so background work reads as a property of the
+            server rather than of the account. Renders nothing when idle. */}
+        <ActivityStrip />
         <NavLink
           to="/settings"
           className={

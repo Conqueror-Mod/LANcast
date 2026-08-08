@@ -176,6 +176,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
+	// One answer for "what is the server doing", polled by the activity strip.
+	mux.HandleFunc("GET /api/activity", s.activityStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 

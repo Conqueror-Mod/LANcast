@@ -626,6 +626,34 @@ the decision rather than what the client can decode:
   rather than copied even when the profile allows them — ffmpeg refuses to
   start on an impossible mux, which surfaces as a dead player with no reason.
 
+### `GET /api/activity`
+
+Everything the server is working on, in one answer — the four background
+workers together rather than four polls.
+
+```json
+{ "busy": true,
+  "scans": [ { "library_id": 3, "name": "Music", "state": "running",
+               "files_seen": 1592, "items_changed": 1592, "skipped": 0 } ],
+  "enrich":   { "running": false, "remaining": 0, "total": 0 },
+  "probe":    { "available": true, "running": true, "remaining": 412, "total": 1628 },
+  "coverart": { "running": false, "remaining": 0, "total": 0 } }
+```
+
+`busy` is derived here rather than by the caller, so "is LANcast doing
+something" has one definition and every client agrees on it. `scans` holds only
+libraries scanning **right now** — a finished scan is history, and a status that
+lists every scan since boot is a log.
+
+Readable by any signed-in user, not only an admin: this is the explanation for
+what someone is looking at, and it discloses nothing they cannot already see —
+counts, and the library names in their own nav.
+
+Poll it as slowly as the answer allows. The shipped client asks every two
+seconds while `busy` and every thirty when idle, and refreshes it immediately
+after starting a scan rather than waiting for the next tick — a scan of a real
+library can begin and end inside one idle interval and never be shown at all.
+
 ### `GET /api/probe`
 
 Background probing progress.

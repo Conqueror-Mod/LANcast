@@ -290,3 +290,30 @@ export interface ReprobeResult {
   scope: "incomplete" | "all";
   queued: number;
 }
+
+// What the server is doing right now, in one answer (GET /api/activity).
+// `busy` is derived server-side so "is LANcast doing something" has exactly one
+// definition, and it is what the client polls on.
+export interface LibraryScan {
+  library_id: number;
+  name: string;
+  state: string;
+  files_seen: number;
+  items_changed: number;
+  skipped: number;
+}
+
+export interface WorkerProgress {
+  running: boolean;
+  remaining: number;
+  total: number;
+  failed?: number;
+}
+
+export interface Activity {
+  busy: boolean;
+  scans: LibraryScan[];
+  enrich: WorkerProgress & { enriched?: number };
+  probe: WorkerProgress & { available: boolean; probed?: number };
+  coverart: WorkerProgress & { found?: number; none?: number };
+}
