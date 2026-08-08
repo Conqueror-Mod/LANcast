@@ -26,6 +26,7 @@ import {
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { AuditLog } from "@/components/AuditLog";
+import { DesktopSettings } from "@/components/DesktopSettings";
 import { ApiFailure } from "@/api/client";
 import type {
   AuthUser,
@@ -1025,6 +1026,7 @@ export function Settings() {
           <ServerLogSection />
         </>
       )}
+      <DesktopSettings />
       <AccountSection />
       <KeyboardSection />
     </div>

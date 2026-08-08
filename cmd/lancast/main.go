@@ -133,6 +133,12 @@ func (l *launcher) desktopBindings() map[string]any {
 				// owns it, in which case closing this window stops nothing —
 				// and the page should say so rather than let the user assume.
 				"owns_server": l.started != nil,
+				// Who holds it when this window does not. Asserting "the
+				// service" for anything this client did not start would be a
+				// claim about the user's machine that nothing checked — and it
+				// is wrong for a server run from a terminal, which is exactly
+				// how this got caught.
+				"holder": l.serverHolder(),
 			}
 			if err != nil {
 				// Surfaced rather than swallowed: the user is looking at
@@ -335,4 +341,21 @@ func serverExeName() string {
 		return "LANcast-Server.exe"
 	}
 	return "LANcast-Server"
+}
+
+// serverHolder names what is serving when this client did not start it.
+//
+// "self" when this window started it, "service" when the installed OS service
+// holds it, and "other" for anything else — another launch, or a build someone
+// is running from a terminal. The distinction matters because the advice
+// differs: a service is stopped from Windows Services, and everything else is
+// stopped wherever it was started.
+func (l *launcher) serverHolder() string {
+	if l.started != nil {
+		return "self"
+	}
+	if running, ok := service.RunningServer(); ok && running.Service {
+		return "service"
+	}
+	return "other"
 }
