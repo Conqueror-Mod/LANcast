@@ -139,8 +139,10 @@ nothing else.
    to its own server and can trust that certificate deliberately.
    [ADR 0014](adr/0014-transport-security.md) is unchanged for every other
    device — see the trap below.
-6. **Installer and Start-menu entries** get revisited only after the default
-   flips.
+6. ~~The installer ships `WebView2Loader.dll`.~~ **Done** — NSIS places it
+   beside the client and removes it on uninstall, and the Windows zip carries it
+   too, so a portable unpack is not a quietly worse install. **Start-menu
+   entries** still get revisited only after the default flips.
 
 ### What stage 1 does *not* include
 
