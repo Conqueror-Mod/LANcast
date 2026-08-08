@@ -8,7 +8,10 @@ import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
+import { MiniPlayer } from "@/components/MiniPlayer";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { useAuthStatus } from "@/api/hooks";
+import "@/playback/playback.css";
 
 export function App() {
   const { data: auth, isLoading } = useAuthStatus();
@@ -24,17 +27,27 @@ export function App() {
   // Configured but not signed in.
   if (!auth.authenticated) return <Login />;
 
+  // Playback wraps the router, not a route: the media element has to outlive
+  // any single screen or leaving the player would stop the sound (ADR 0024's
+  // client scope, docs/music-client-plan.md).
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/library/:id" element={<Browse />} />
-        <Route path="/item/:id" element={<Detail />} />
-        <Route path="/watch/:id" element={<Player />} />
-        <Route path="/review" element={<Review />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Stub name="Not found" note="No such page." />} />
-      </Routes>
-    </AppShell>
+    <PlaybackProvider>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/library/:id" element={<Browse />} />
+          <Route path="/item/:id" element={<Detail />} />
+          <Route path="/watch/:id" element={<Player />} />
+          <Route path="/review" element={<Review />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route
+            path="*"
+            element={<Stub name="Not found" note="No such page." />}
+          />
+        </Routes>
+        {/* Outside Routes: it is what you see *instead of* the player screen. */}
+        <MiniPlayer />
+      </AppShell>
+    </PlaybackProvider>
   );
 }

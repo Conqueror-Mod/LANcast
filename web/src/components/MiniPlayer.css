@@ -1,0 +1,102 @@
+/* The docked control strip. The picture or cover beside it is the provider's
+   surface (playback.css); this is only the controls, so that one media element
+   can serve both surfaces. */
+
+.mini {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 121;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 180px;
+  padding: 8px 10px;
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+/* Under a 16:9 video the strip sits below the picture rather than beside it —
+   a 300px-wide video with a control strip alongside would run off the screen. */
+.mini {
+  bottom: 18px;
+}
+
+.mini__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mini__title,
+.mini__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini__title {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mini__sub {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.mini__open:hover .mini__title,
+.mini__open:focus .mini__title {
+  color: var(--text-primary);
+}
+
+/* Gold means where you are. On a docked widget that is the focus ring and
+   nothing else — it must not become an "is playing" colour. */
+.mini__open:focus,
+.mini__icon:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-radius: var(--radius-tile);
+}
+
+.mini__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mini__icon {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 6px;
+  border-radius: var(--radius-tile);
+  cursor: pointer;
+  transition: color var(--dur-fast) ease;
+}
+
+.mini__icon:hover {
+  color: var(--text-primary);
+}
+
+/* Position, not decoration: a hairline along the bottom edge, the same language
+   the poster tiles use for continue-watching. */
+.mini__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--gold);
+}
