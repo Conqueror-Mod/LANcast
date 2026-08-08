@@ -172,7 +172,7 @@ Status: **planned** · **next** · *unplanned*
 | Area | Status | Note |
 |---|---|---|
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
-| Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
+| Transcode decision tree | **built** | Direct play / remux / transcode, with reasons. **Next: let the client say what it can play** ([plan](client-capabilities-plan.md)) — the `?profile=` mechanism exists and no client has ever used it, so a browser that decodes HEVC natively is still served a full re-encode |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
