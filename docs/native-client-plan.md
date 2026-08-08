@@ -60,11 +60,51 @@ the same mitigation the plugin trust model already relies on
 ([ADR 0021](adr/0021-plugin-distribution-and-trust.md)). It should be a
 deliberate, recorded choice — not something that arrives with a `go get`.
 
-**The alternative worth pricing before committing:** binding WebView2 directly.
-The spike proves the COM interfaces are reachable from pure Go with no CGO; the
-dependency is convenience, not capability. That is more code owned here and less
-code trusted from elsewhere, and this project has historically chosen the former.
-It is a real option, not a straw man.
+And it is more than source. Inspecting what the spike actually pulled in:
+
+| | |
+|---|---|
+| `go-webview2` | 3,563 lines of Go across 40 files |
+| `go-winloader` | 2,086 lines — a **from-memory PE loader** |
+| Embedded binary | Microsoft's prebuilt `WebView2Loader.dll`, 137 KB, `//go:embed`-ed per architecture |
+| Load order | `WebView2Loader.dll` **from disk first**, falling back to the embedded copy **loaded from memory** |
+
+Two consequences, both specific to this project:
+
+- **A prebuilt DLL compiled into the shipped client is the hard version of the
+  ADR 0013 argument**, not the easy one. That ADR refused *readable JavaScript
+  source* on audit grounds. An opaque binary blob is a bigger ask, and the
+  "it was about the browser bundle" reading has to be asserted knowingly rather
+  than assumed.
+- **Loading a DLL from memory is a technique AV and EDR products flag.** For a
+  signed installer that lands on someone else's desktop, that is an operational
+  risk of exactly the shape this project keeps getting caught by — invisible
+  here, visible only there.
+
+### Decision: vendor a trimmed copy
+
+**Chosen 2026-08-07.** The COM plumbing is copied in-tree; the embedded DLL and
+the from-memory loader are deleted; Microsoft's own signed `WebView2Loader.dll`
+ships beside the executable and the installer places it there.
+
+The disk-first load order is what makes this work — with the loader on disk the
+memory path never runs, so removing it costs nothing at runtime.
+
+What this buys: the tested COM code, no binary blob inside the LANcast binary,
+no memory-loading technique in a distributed installer, and everything in-tree
+and reviewable at the commit that adds it. What it costs: ~2–3k lines that were
+written elsewhere are now maintained here, and an upstream fix is a manual port
+rather than a version bump. That trade matches how this codebase already treats
+Windows internals — the singleton mutex DACL and the low-privilege SCM query are
+both hand-held rather than delegated.
+
+Rejected: **taking the dependency as-is** (fastest, but ships the blob and
+contradicts ADR 0013 at its strongest point) and **binding WebView2 from
+scratch** (cleanest, but weeks of COM lifetime management for a capability the
+spike already proved reachable).
+
+**This decision does not survive a failed playback test.** If a webview cannot
+play what the browser plays, none of the above matters — see below.
 
 ## Scope of stage 1
 
@@ -81,9 +121,14 @@ nothing else.
 
 ### Steps, in order
 
-1. **Amend ADR 0023** with the CGO finding, and decide the dependency question
-   (vendor-a-binding vs bind-it-here) explicitly. Nothing else starts until this
-   is settled, because it determines what the window is built on.
+0. **Play something in the spike.** Free — the scratch binary already exists,
+   outside the repo — and it can invalidate everything above. A webview that
+   renders the grid and chokes on `<video>` ends stage 1 as designed. Do this
+   before any vendoring work, because vendoring is the first step that costs
+   real time.
+1. ~~Amend ADR 0023, and decide the dependency question.~~ **Done** — the
+   amendment is in the ADR, and the decision is to vendor a trimmed copy
+   (above).
 2. **A `clientwindow` package** behind a build tag, Windows-only, with a
    no-op/error implementation elsewhere — the same shape `tray_windows.go` and
    `tray_other.go` already use. One function: open a window at a URL, block
