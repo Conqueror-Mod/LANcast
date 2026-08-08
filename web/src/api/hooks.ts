@@ -8,6 +8,7 @@ import {
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type {
   ActivityStatus,
+  AuditPage,
   AuthStatus,
   AuthUser,
   BrowseResult,
@@ -685,6 +686,29 @@ export function useServerLog(enabled: boolean, lines = 300) {
     queryKey: ["logs", lines],
     queryFn: ({ signal }) =>
       apiGet<ServerLog>(`/api/logs?lines=${lines}`, signal),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+// ------------------------------------------------------------------ audit
+
+// The audit log (ADR 0026). Not polled: it records deliberate acts, which do
+// not happen while you are staring at the page. Opening the panel and the
+// Refresh button are the two things that should fetch it.
+//
+// Paging is by offset with a growing limit rather than an infinite query,
+// because the useful reading of an audit log is "the most recent N", and N
+// grows only when someone asks for more.
+export function useAuditLog(enabled: boolean, action: string, limit: number) {
+  return useQuery({
+    queryKey: ["audit", action, limit],
+    queryFn: ({ signal }) => {
+      const q = new URLSearchParams({ limit: String(limit) });
+      if (action) q.set("action", action);
+      return apiGet<AuditPage>(`/api/audit?${q}`, signal);
+    },
     enabled,
     staleTime: 0,
     gcTime: 0,
