@@ -74,6 +74,17 @@ Section "LANcast"
   SetOutPath "$INSTDIR"
   File "LANcast-Server.exe"
   File "LANcast-Client.exe"
+  ; Microsoft's WebView2 loader shim, which the client's window mode calls into
+  ; (ADR 0023 stage 1). It has to sit beside LANcast-Client.exe: the client
+  ; resolves it by name, and the alternative — the upstream binding's habit of
+  ; embedding a copy and mapping it from memory — is a blob in our binary and a
+  ; technique that trips AV, so LANcast ships Microsoft's signed file instead
+  ; (internal/webview2/PROVENANCE.md).
+  ;
+  ; Its absence is survivable: the client says the install is incomplete and
+  ; opens the browser. That is a worse app, not a broken one — which is why
+  ; this is a File line and not an abort.
+  File "..\third_party\webview2\x64\WebView2Loader.dll"
   File "..\README.md"
   File "..\LICENSE"
 
@@ -123,9 +134,15 @@ Section "Uninstall"
 
   Delete "$INSTDIR\LANcast-Server.exe"
   Delete "$INSTDIR\LANcast-Client.exe"
+  Delete "$INSTDIR\WebView2Loader.dll"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\uninstall.exe"
+  ; The window mode keeps a browser profile — cookies, cache, local storage —
+  ; under the user's config directory, not here. Left in place on uninstall,
+  ; the same way a browser's profile survives: it holds the session and any
+  ; local settings, and removing it is a "clear my data" action rather than
+  ; something an uninstaller should decide (see docs/desktop-lifecycle-plan.md).
   RMDir "$INSTDIR"
 
   ; Includes the pre-0.4.1 single shortcut, so upgrading from an older install
