@@ -292,6 +292,13 @@ group is not priority.
   from the UI.
 - **Clear cache and data** and **reset settings** actions.
 - **Check for updates** with an **auto-update** toggle.
+- **Desktop lifecycle — "Open on Windows start" and "Close to tray"**
+  ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things
+  today — a browser tab, tray Quit, and the service — and all three behave
+  correctly, which is why it confuses. Both options are client-local, no API and
+  no schema change, and both are **gated on [ADR 0023](adr/0023-native-desktop-client.md)
+  stage 1**: close-to-tray has no referent while the UI is a browser tab whose
+  ✕ LANcast does not own.
 
 ### Input and control
 
