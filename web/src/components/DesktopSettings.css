@@ -50,3 +50,14 @@
 .desktop-opt .set-row__sub {
   opacity: 0.7;
 }
+
+/* A live option reads at full strength — the dimming above says "not offered",
+   and an option that works must not wear it. */
+.desktop-opt.is-live .set-row__title,
+.desktop-opt.is-live .set-row__sub {
+  opacity: 1;
+}
+
+.desktop-opt.is-live .desktop-opt__label {
+  cursor: pointer;
+}

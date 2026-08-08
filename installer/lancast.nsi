@@ -153,6 +153,18 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\LANcast"
   Delete "$DESKTOP\LANcast.lnk"
 
+  ; "Open when Windows starts" is a per-user run key the client writes for
+  ; itself. Left behind, it points at an executable this uninstaller just
+  ; deleted — which is a login-time error dialog every morning, forever, with
+  ; nothing obvious to blame (docs/desktop-lifecycle-plan.md).
+  ;
+  ; HKCU here is the *uninstalling* user's hive, so this clears it for whoever
+  ; ran the uninstall. An elevated uninstall started from another account, and
+  ; other accounts on a shared machine, are not reached — the entry is per user
+  ; and there is no machine-wide place to sweep. Those users' clients rewrite or
+  ; clear their own key the next time they touch the setting.
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast"
+
   DeleteRegKey HKLM "${UNINST_KEY}"
 
   ; The library data in %ProgramData%\LANcast is deliberately left in place — an

@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"time"
 
+	"lancast/internal/autostart"
 	"lancast/internal/certpin"
 	"lancast/internal/childproc"
 	"lancast/internal/clientwindow"
@@ -22,6 +23,10 @@ import (
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
+
+// windowMode records whether this client was launched with -window, so the
+// autostart entry can reproduce the same mode.
+var windowMode bool
 
 func main() {
 	addr := flag.String("addr", ":8080", "server listen address")
@@ -39,6 +44,9 @@ func main() {
 	dataDir := flag.String("data", "",
 		"server data directory (default: the machine-wide one if present, else per-user)")
 	flag.Parse()
+	// Remembered because "open at login" has to reproduce this launch: a window
+	// user who enables it should get a window at login, not a browser.
+	windowMode = *window
 
 	// One client at a time. Launching again — a second double-click of the
 	// shortcut — reopens the UI rather than adding a duplicate process and a
@@ -125,9 +133,15 @@ func (l *launcher) desktopBindings() map[string]any {
 		// window relates to its server.
 		"lancastDesktopState": func() map[string]any {
 			prefs, err := desktopprefs.Load(dir)
+			// Read from the registry rather than the preferences file. They can
+			// disagree — an uninstall clears the run key, another tool removes
+			// it, a profile is copied between machines — and the registry is the
+			// one that decides what actually happens at login. Showing the file
+			// would be showing an intention rather than a fact.
+			atLogin, autoErr := autostart.Enabled()
 			state := map[string]any{
 				"close_to_tray": prefs.CloseToTray,
-				"open_at_login": prefs.OpenAtLogin,
+				"open_at_login": atLogin,
 				// True when this launcher started the server, so closing the
 				// window ends it. False when a service or an earlier launch
 				// owns it, in which case closing this window stops nothing —
@@ -140,9 +154,12 @@ func (l *launcher) desktopBindings() map[string]any {
 				// how this got caught.
 				"holder": l.serverHolder(),
 			}
+			if err == nil {
+				err = autoErr
+			}
 			if err != nil {
 				// Surfaced rather than swallowed: the user is looking at
-				// controls that will not reflect their file.
+				// controls that will not reflect their machine.
 				state["error"] = err.Error()
 			}
 			return state
@@ -150,6 +167,13 @@ func (l *launcher) desktopBindings() map[string]any {
 		// lancastDesktopSet writes both preferences. Whole-value rather than
 		// per-field so the page cannot half-apply a change.
 		"lancastDesktopSet": func(closeToTray, openAtLogin bool) map[string]any {
+			// The registry is the thing that actually starts LANcast at login,
+			// so it goes first: a preference file saying "on" over a run key
+			// that was never written is a setting that lies. If this fails the
+			// preference is not saved either, and the two stay in agreement.
+			if err := applyAutostart(openAtLogin); err != nil {
+				return map[string]any{"ok": false, "error": err.Error()}
+			}
 			p := desktopprefs.Prefs{CloseToTray: closeToTray, OpenAtLogin: openAtLogin}
 			if err := desktopprefs.Save(dir, p); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
@@ -358,4 +382,20 @@ func (l *launcher) serverHolder() string {
 		return "service"
 	}
 	return "other"
+}
+
+// applyAutostart makes the run key match the preference.
+//
+// It passes the flags this client was launched with, so a window user who turns
+// this on gets a window at login rather than a browser — a login that opened the
+// wrong interface would look like a different bug entirely.
+func applyAutostart(on bool) error {
+	if !on {
+		return autostart.Disable()
+	}
+	var args []string
+	if windowMode {
+		args = append(args, "-window")
+	}
+	return autostart.Enable(args...)
 }
