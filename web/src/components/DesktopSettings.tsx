@@ -42,7 +42,29 @@ interface DesktopState {
 
 export function DesktopSettings() {
   const [state, setState] = useState<DesktopState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const supported = typeof window.lancastDesktopState === "function";
+
+  // Writes both preferences, then re-reads the state rather than assuming the
+  // write landed. "Open at login" is backed by a registry key, and reporting a
+  // tick the machine did not accept is the failure this whole section exists to
+  // avoid.
+  const save = async (closeToTray: boolean, openAtLogin: boolean) => {
+    if (!window.lancastDesktopSet) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const res = await window.lancastDesktopSet(closeToTray, openAtLogin);
+      if (!res.ok) setSaveError(res.error ?? "could not be saved");
+    } catch (e) {
+      setSaveError(String(e));
+    } finally {
+      setSaving(false);
+      const fresh = await window.lancastDesktopState!().catch(() => null);
+      if (fresh) setState(fresh);
+    }
+  };
 
   useEffect(() => {
     if (!supported) return;
@@ -99,7 +121,9 @@ export function DesktopSettings() {
         title="Open when Windows starts"
         sub="Start LANcast automatically when you sign in."
         checked={state.open_at_login}
-        reason="Not yet available."
+        onChange={(next) => save(state.close_to_tray, next)}
+        busy={saving}
+        error={saveError}
       />
     </section>
   );
@@ -110,21 +134,37 @@ function LifecycleOption({
   sub,
   checked,
   reason,
+  onChange,
+  busy,
+  error,
 }: {
   title: string;
   sub: string;
   checked: boolean;
-  reason: string;
+  // reason is set for an option that cannot be offered yet, and it is shown
+  // instead of the control being silently absent: "not yet" is an answer.
+  reason?: string;
+  onChange?: (next: boolean) => void;
+  busy?: boolean;
+  error?: string;
 }) {
+  const disabled = !onChange || busy;
   return (
-    <div className="set-row desktop-opt">
+    <div className={"set-row desktop-opt" + (onChange ? " is-live" : "")}>
       <div className="set-row__main">
         <label className="desktop-opt__label">
-          <input type="checkbox" checked={checked} disabled readOnly />
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(e) => onChange?.(e.target.checked)}
+            readOnly={!onChange}
+          />
           <span className="set-row__title">{title}</span>
         </label>
         <div className="set-row__sub">{sub}</div>
-        <p className="desktop-note">{reason}</p>
+        {reason && <p className="desktop-note">{reason}</p>}
+        {error && <p className="desktop-note desktop-note--warn">{error}</p>}
       </div>
     </div>
   );
