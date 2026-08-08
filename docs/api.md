@@ -567,7 +567,43 @@ black rectangles happen.
 
 `browser` excludes HEVC deliberately: Chrome's support is conditional on
 hardware and Firefox has none, so claiming it for an unidentified client trades
-a cheap remux for an unexplained failure. Clients that know better say so.
+a cheap remux for an unexplained failure. Clients that know better say so — with
+`?can=`.
+
+#### `?can=` — what this client can also play
+
+A comma-separated list of extra capabilities, applied **on top of** the named
+profile:
+
+```
+GET /api/items/87/playback?can=hevc,ac3
+```
+
+| Claim | Adds |
+| --- | --- |
+| `hevc` | HEVC video, and the `matroska` container it usually arrives in |
+| `ac3`, `eac3`, `dts` | that audio codec |
+| `matroska` | the container alone, for a client with a real demuxer |
+
+**It only ever widens.** A claim cannot remove anything the profile already
+allows, an unrecognised claim is ignored rather than refused, and an absent
+parameter behaves exactly as before — so this is additive under
+[ADR 0018](adr/0018-api-contract-and-versioning.md) and a client that never
+learns about it is unaffected. An older server meeting a newer client serves the
+file rather than rejecting the request.
+
+**Send it to every endpoint that decides, or none.** `/api/items/{id}/playback`
+decides how a file will be delivered and `/api/stream/{id}/transcode` decides
+again when it is asked for. Claiming HEVC on the first and not the second means
+being told "direct play" and then handed a re-encode, or getting `409` for a
+transcode the server no longer thinks is needed.
+
+**A claim is a claim.** `canPlayType` answers "probably", and HEVC support
+depends on the GPU and sometimes on an OS codec extension. A client that claims
+something it cannot decode gets a failure only it sees — nothing else on the
+LAN is affected — and is expected to stop claiming it and ask again. The
+shipped client does exactly that: it drops the capability, remembers the
+refusal, and re-requests the file as a conversion.
 
 The bare audio containers exist for music, where the container *is* the codec:
 an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`.

@@ -11,6 +11,7 @@ import {
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack } from "@/api/types";
+import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
 
 // Playback lives above the router.
 //
@@ -37,7 +38,11 @@ interface Decision {
 function sourceURL(id: number, method: Decision["method"], offset: number): string {
   if (method === "direct") return `/api/stream/${id}`;
   const t = offset > 0 ? `?t=${Math.floor(offset)}` : "";
-  return `/api/stream/${id}/transcode${t}`;
+  // Carries the same capabilities the decision was made with. The transcode
+  // endpoint decides again from its own parameters, so a request claiming less
+  // than the one before it gets a different answer — the file the server just
+  // called direct-playable is re-encoded, or refused with a 409.
+  return withCapabilities(`/api/stream/${id}/transcode${t}`);
 }
 
 // Surface is where the media element is drawn. "full" is the player screen,
@@ -258,7 +263,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const pb = await apiGet<{ decision: Decision }>(
-          `/api/items/${item.id}/playback`,
+          withCapabilities(`/api/items/${item.id}/playback`),
         );
         if (cancelled) return;
         decision.current = pb.decision;
@@ -295,6 +300,43 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Re-run only when the item identity changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
+
+  // A direct-played file that fails is a capability this browser claimed and
+  // does not have.
+  //
+  // `canPlayType` answers "probably" — HEVC in particular depends on the GPU
+  // and, on Windows, on a codec extension that may not be installed. The claim
+  // is dropped for this machine, remembered, and the file is asked for again;
+  // the server, no longer told the client can decode it, converts it instead.
+  //
+  // Only for a *direct* source, and only for a claim not already withdrawn.
+  // A transcode that fails is a server-side problem and retrying it under a
+  // narrower profile would be the same request again — which is how a failing
+  // file becomes an infinite loop rather than an error.
+  const retryWithoutClaims = useCallback(() => {
+    if (transcoding.current) return;
+    const claimed = capabilities();
+    if (!claimed) return;
+
+    let news = false;
+    for (const c of claimed.split(",")) {
+      if (deny(c)) news = true;
+    }
+    if (!news) return;
+    resetCapabilities();
+
+    setNote("That file would not play directly — converting instead");
+    const v = videoRef.current;
+    if (!v || !item) return;
+    decision.current = { method: "transcode", reason: "direct playback failed" };
+    transcoding.current = true;
+    offset.current = startedFrom.current;
+    setSubOffset(startedFrom.current);
+    setLoading(true);
+    v.src = sourceURL(item.id, "transcode", startedFrom.current);
+    v.load();
+    void v.play().catch(() => {});
+  }, [item]);
 
   // ---- seeking --------------------------------------------------------------
   const seekTo = useCallback(
@@ -475,6 +517,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           onLoadedData={() => setLoading(false)}
           onPlaying={() => setLoading(false)}
           onWaiting={() => setLoading(true)}
+          onError={() => retryWithoutClaims()}
           onTimeUpdate={(e) => {
             setCurrent(e.currentTarget.currentTime);
             saveProgress();
