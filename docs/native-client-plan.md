@@ -121,11 +121,7 @@ nothing else.
 
 ### Steps, in order
 
-0. **Play something in the spike.** Free — the scratch binary already exists,
-   outside the repo — and it can invalidate everything above. A webview that
-   renders the grid and chokes on `<video>` ends stage 1 as designed. Do this
-   before any vendoring work, because vendoring is the first step that costs
-   real time.
+0. ~~Play something in the spike.~~ **Done, and it passes** — see below.
 1. ~~Amend ADR 0023, and decide the dependency question.~~ **Done** — the
    amendment is in the ADR, and the decision is to vendor a trimmed copy
    (above).
@@ -158,7 +154,29 @@ nothing else.
   path exists. A browser fallback elsewhere is the acceptable retreat ADR 0023
   already named.
 
-## What tonight's spike did not prove
+## What the spike proved
+
+Step 0 ran against the dev server with a real library. **The gate passes.**
+
+- **`<video>` plays.** A film started, and six seconds later the frame had moved
+  on — the studio card to a scene, not a stuck first frame. The transport's
+  auto-hide fired, which only happens while the element is not paused, so two
+  independent signals agree.
+- **Keyboard reaches the page.** Space paused it and the chrome came back at
+  `0:37 / 1:26:42`. This was the quiet risk: a host that swallows keys would take
+  the spatial focus model ([ADR 0004](adr/0004-keyboard-focus-model.md)) with it.
+- **The design system renders**, gold focus ring included, and the browse grid,
+  detail page and album view are indistinguishable from the browser.
+- **Progress writes persist.** The film reappeared under Continue Watching with
+  a bar, and the session survived a server restart.
+
+That is the whole of the step-0 question answered: the approach is viable and
+the vendoring work is worth doing.
+
+**Audio was not tested.** It goes through the same element, so the expectation
+is that it works, but the music player is new and expectation is not evidence.
+
+## What the spike still did not prove
 
 Worth being precise, because the failure modes in this area have all been
 environmental:
@@ -166,17 +184,27 @@ environmental:
 - It ran **from a terminal, as the developer, with the WebView2 runtime already
   present** on Windows 11. It has not run from an installed artifact, under a
   fresh user profile, or on a machine without the evergreen runtime.
-- It has not been asked to **play anything**. A webview that renders a grid and
-  chokes on a video element would invalidate the whole approach, and that is the
-  single highest-value next experiment.
-- Nothing was checked about **focus behaviour** — the spatial focus model
-  ([ADR 0004](adr/0004-keyboard-focus-model.md)) assumes browser keyboard
-  semantics, and a webview host can intercept keys differently.
+- It talked to a **plain-HTTP loopback server**, so the certificate question —
+  one of the reasons for doing this at all — was never exercised.
 - No **DPI / multi-monitor** behaviour was observed.
+- Nothing was played that **transcodes**. Direct play through a webview is the
+  easy case; the fragmented-MP4 path is the one with a history.
 
 The lesson this project keeps relearning is that the unit of verification is the
-installed artifact on a real desktop. A window opening in a terminal-launched
-spike is evidence the approach is viable, not that it works.
+installed artifact on a real desktop. A window driven from a terminal-launched
+spike is evidence the approach is viable, not that it ships.
+
+### It also found a bug the browser had been hiding
+
+The artist page displayed `TEST MUSIC LIBRARY::artist=ABBA` where a filename
+belongs, and a bare `DC` for AC/DC. A container's synthetic key was being run
+through `filepath.Base` and rendered as a file name — on every artist, album,
+and folderless season, in the browser client too, for as long as those rows have
+existed. Fixed separately.
+
+Nobody had noticed it in the browser. Something about looking at the same client
+in an unfamiliar frame made it obvious, which is worth remembering the next time
+a surface is described as "just a hosting change".
 
 ## The trap to keep in view
 
