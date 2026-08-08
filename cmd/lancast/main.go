@@ -12,8 +12,10 @@ import (
 	"runtime"
 	"time"
 
+	"lancast/internal/certpin"
 	"lancast/internal/childproc"
 	"lancast/internal/clientwindow"
+	"lancast/internal/config"
 	"lancast/internal/desktop"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
@@ -26,6 +28,14 @@ func main() {
 	// one day and switching back is a flag rather than a rebuild.
 	window := flag.Bool("window", false,
 		"show the UI in a LANcast window instead of the default browser (Windows)")
+	// Mirrors lancastd's own flag. Without it the client guesses — machine-wide
+	// if a database is already there, per-user otherwise — which is right for
+	// every normal install and wrong for one run with a custom directory. It
+	// matters more than it used to: the window reads the server's certificate
+	// from this directory to know what to trust, so guessing wrong now means a
+	// window that will not load rather than merely a second database.
+	dataDir := flag.String("data", "",
+		"server data directory (default: the machine-wide one if present, else per-user)")
 	flag.Parse()
 
 	// One client at a time. Launching again — a second double-click of the
@@ -38,7 +48,7 @@ func main() {
 	}
 	defer release()
 
-	l := &launcher{addr: *addr}
+	l := &launcher{addr: *addr, dataDir: *dataDir}
 	if err := l.ensureServer(); err != nil {
 		alert("LANcast", err.Error())
 		os.Exit(1)
@@ -91,10 +101,38 @@ func runWindow(l *launcher) {
 		// is one person's session and cache on one machine, and the server's
 		// directory is machine-wide and may belong to a service account.
 		DataDir: clientDataDir(),
+		CertPin: l.serverCertPin(),
 	})
 	if err != nil {
 		alert("LANcast", err.Error())
 	}
+}
+
+// serverCertPin is the public key of the server's own certificate, or empty
+// when there is nothing to pin.
+//
+// Beyond loopback the server serves a self-signed certificate (ADR 0014), and
+// the web view refuses it outright — no warning, no way through, just a window
+// that never loads. Reading the key off local disk is what lets the client
+// trust that one server and still reject everything else.
+//
+// Empty on any doubt, and deliberately quiet about it: a loopback-only server
+// has no certificate and needs none, so the common case would otherwise warn
+// about nothing. The cost of being wrong is the window failing to load, which
+// is loud on its own.
+func (l *launcher) serverCertPin() string {
+	dir, ok := l.serverDataDir()
+	if !ok {
+		var err error
+		if dir, err = config.DefaultDataDir(); err != nil {
+			return ""
+		}
+	}
+	pin, err := certpin.SPKI(dir)
+	if err != nil {
+		return ""
+	}
+	return pin
 }
 
 // clientDataDir is where the window keeps its profile — the session cookie
@@ -117,8 +155,21 @@ func clientDataDir() string {
 // started it. A server already running (a service, or a prior launch) is left
 // alone.
 type launcher struct {
-	addr    string
+	addr string
+	// dataDir is the operator's explicit choice, empty when they made none.
+	dataDir string
 	started *exec.Cmd
+}
+
+// serverDataDir is the directory the server uses: what was asked for, or the
+// machine-wide one when a database already lives there, or nothing — in which
+// case the server applies its own per-user default and the client must not
+// pretend to know better.
+func (l *launcher) serverDataDir() (string, bool) {
+	if l.dataDir != "" {
+		return l.dataDir, true
+	}
+	return sharedDataDir()
 }
 
 // ensureServer opens the app to a running server, starting the sibling lancastd
@@ -139,7 +190,7 @@ func (l *launcher) ensureServer() error {
 	// same port. Whichever won the port decided which library you saw, and
 	// launching the app after the service failed to start silently created an
 	// empty second database rather than showing the real one.
-	if dir, ok := sharedDataDir(); ok {
+	if dir, ok := l.serverDataDir(); ok {
 		args = append(args, "-data", dir)
 	}
 	cmd := exec.Command(exe, args...)

@@ -32,6 +32,22 @@ type Options struct {
 	// launch, and one shared with another application would be a surprise in
 	// both directions.
 	DataDir string
+
+	// CertPin is the base64 SHA-256 of the server's public key
+	// (internal/certpin), and it is what makes the window usable against a
+	// LAN-bound server at all.
+	//
+	// Beyond loopback LANcast serves a self-signed certificate. A browser warns
+	// and offers a way through; the web view refuses the handshake outright and
+	// retries, so the app never appears. Pinning tells it to accept this one
+	// public key — and only this one. Every other certificate is validated
+	// normally, so a machine on the LAN presenting its own certificate for the
+	// server's address is still rejected, which is the whole point of not
+	// simply turning verification off.
+	//
+	// Empty means no pin: correct for a loopback-only server, which is plain
+	// HTTP and has no certificate to trust.
+	CertPin string
 }
 
 // Open shows the window and blocks until it is closed.

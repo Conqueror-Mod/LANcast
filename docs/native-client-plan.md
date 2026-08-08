@@ -135,8 +135,13 @@ nothing else.
    escape hatch. A separate commit, so flipping back is one revert. **Not yet:**
    the window has run for an evening on one machine, which is not "survived
    real use", and the list of unproven environments below has not shortened.
-5. **Certificate trust**, which is the point of the exercise: the client talks
-   to its own server and can trust that certificate deliberately.
+5. ~~Certificate trust.~~ **Done, and the situation was worse than the ADR
+   assumed.** Against a LAN-bound server the web view does not warn — it fails
+   the handshake outright and retries, so the app never loads at all. A browser
+   at least offers a way through, which made the window *strictly worse* than
+   the thing it replaces until this landed. The client now pins the server's
+   public key, read from its own `cert.pem` on local disk; every other
+   certificate is still validated normally.
    [ADR 0014](adr/0014-transport-security.md) is unchanged for every other
    device — see the trap below.
 6. ~~The installer ships `WebView2Loader.dll`.~~ **Done** — NSIS places it
