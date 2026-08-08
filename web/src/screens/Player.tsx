@@ -28,6 +28,7 @@ export function Player() {
   // The route says what to play. play() is a no-op when it is already playing
   // that item, which is what makes returning from the mini-player continuous
   // rather than a restart.
+  //
   const queueParam = searchParams.get("queue");
   const { play } = pb;
   useEffect(() => {
@@ -36,15 +37,21 @@ export function Player() {
     play(itemID, queue);
   }, [itemID, queueParam, play]);
 
-  // The queue advances inside the provider, so the URL can fall behind what is
-  // actually playing. Keep it honest — Back should return to the container, not
-  // to a stale /watch of a track that finished two songs ago.
-  useEffect(() => {
-    if (pb.itemID && pb.itemID !== itemID) {
-      const q = queueParam ? `?queue=${queueParam}` : "";
-      navigate(`/watch/${pb.itemID}${q}`, { replace: true });
-    }
-  }, [pb.itemID, itemID, queueParam, navigate]);
+  // **The URL is not kept in step with the queue, deliberately.**
+  //
+  // The first version of this screen wrote the advancing id back into the route,
+  // so the address would follow the record. It could not tell that apart from a
+  // *navigation*: clicking a second film set the route to the new id while the
+  // provider still held the old one, and the sync dragged the route back — the
+  // previous film played instead of the one that was clicked, and every bounce
+  // started another transcode. That is the lag and the wrong-film bug.
+  //
+  // Nothing needs the URL to move. This screen renders from the provider, so it
+  // already shows the right track; Back goes to the container because history
+  // was never touched; and the docked player expands to whatever is actually
+  // playing. The one cost is that reloading the page mid-queue restarts at the
+  // track the address still names, which is a fair price for not having two
+  // things race to own what is playing.
 
   const [chromeVisible, setChromeVisible] = useState(true);
   const [subMenuOpen, setSubMenuOpen] = useState(false);
