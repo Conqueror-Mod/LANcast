@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -141,4 +142,63 @@ func (t tee) Write(p []byte) (int, error) {
 		_, _ = t.also.Write(p)
 	}
 	return len(p), nil
+}
+
+// tailWindow is the most of the log Tail will read. The log is capped at 4 MB
+// and the question it answers is always near the end, so reading the whole file
+// to return the last few hundred lines is work with no reader.
+const tailWindow = 512 << 10
+
+// Tail returns the last n lines of the log in dir, oldest first, and reports
+// whether the returned lines start at the beginning of the file. A false there
+// is what lets a reader be told the view is partial rather than assume it is
+// the whole log — the same reason the grid says "120 of 1,226".
+//
+// A missing log is not an error: a server that has only ever run in a terminal
+// may never have opened one, and that is a supported configuration.
+func Tail(dir string, n int) (lines []string, complete bool, err error) {
+	if n <= 0 {
+		return nil, true, nil
+	}
+	f, err := os.Open(filepath.Join(dir, FileName))
+	if os.IsNotExist(err) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	size := st.Size()
+	start := int64(0)
+	whole := true
+	if size > tailWindow {
+		start = size - tailWindow
+		whole = false
+	}
+	buf := make([]byte, size-start)
+	if _, err := f.ReadAt(buf, start); err != nil && err != io.EOF {
+		return nil, false, err
+	}
+
+	split := strings.Split(strings.ReplaceAll(string(buf), "\r\n", "\n"), "\n")
+	// A window that starts mid-file almost certainly starts mid-line; a
+	// half-record is worse than one fewer record.
+	if !whole && len(split) > 0 {
+		split = split[1:]
+	}
+	out := make([]string, 0, len(split))
+	for _, s := range split {
+		if strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) > n {
+		return out[len(out)-n:], false, nil
+	}
+	return out, whole, nil
 }

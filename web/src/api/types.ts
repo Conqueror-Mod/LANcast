@@ -290,3 +290,34 @@ export interface ReprobeResult {
   scope: "incomplete" | "all";
   queued: number;
 }
+
+// One thing the server is doing right now (GET /api/activity). Every worker —
+// scan, enrich, probe, coverart, transcode — reports this one shape, so the
+// activity panel renders a list rather than five special cases.
+export interface Activity {
+  kind: "scan" | "enrich" | "probe" | "coverart" | "transcode";
+  id: string;
+  title: string;
+  state: "running" | "failed";
+  done: number;
+  // 0 means indeterminate: a scan knows what it has seen, never what is left.
+  total: number;
+  detail?: string;
+  library_id?: number;
+  started_at?: number;
+  error?: string;
+}
+
+export interface ActivityStatus {
+  active: boolean;
+  tasks: Activity[];
+}
+
+// GET /api/logs. `complete` is false when older lines exist that this response
+// does not carry — the difference between "this is the log" and "this is the
+// end of the log".
+export interface ServerLog {
+  lines: string[];
+  complete: boolean;
+  path: string;
+}

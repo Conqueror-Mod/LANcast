@@ -220,6 +220,7 @@ Status: **planned** · **next** · *unplanned*
 | Performance targets | *unplanned* | Budgets for a 40k-item library |
 | Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
+| Activity view | **built** | `GET /api/activity` in one shape for every worker; a nav indicator and task popover. Indeterminate where the worker genuinely cannot know its total — a scan discovers its own size, so it shows a count rather than a lying percentage |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
 | Desktop lifecycle | **planned** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things today — a browser tab, tray Quit, and the service — and all three behave correctly, which is why it confuses. Both options are client-local; gated on the `-window` flip, because close-to-tray has no referent while the UI is a browser tab |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
@@ -295,12 +296,15 @@ group is not priority.
 
 ### System, operations and diagnostics
 
-- **Activity status in the UI** — what the server is doing right now, shown in
-  the interface rather than a separate window or log: items being added to a
-  library, metadata being scanned, artwork fetched, files probed. The Plex
-  model. The pieces already exist behind `/api/libraries/{id}/scan`,
-  `/api/enrich`, and `/api/probe`; what is missing is one place in the UI that
-  surfaces them continuously.
+- ~~**Activity status in the UI**~~ — **built.** `GET /api/activity` answers
+  "what is the server doing right now?" in one request, normalizing scan,
+  enrich, probe, coverart and transcode into one shape, and the shell shows a
+  pulsing indicator with a popover listing each task. The per-worker endpoints
+  each answered for one worker, which meant a client wanting to show *anything*
+  had to know the whole roster and poll `/api/libraries/{id}/scan` once per
+  library — the capability existed and no caller could reasonably use it. A
+  failed scan stays listed, because the recurring bug shape in this project is a
+  failure with nowhere to appear.
 - **Audit log — who changed what, and when.** Title removed, library added,
   match overridden, account created: recorded server-side with the user and the
   time. Server-side is the whole point — an audit trail a client writes is
@@ -310,9 +314,14 @@ group is not priority.
   question of whether identity should live in its own store rather than beside
   the library, so losing a password never opens the file holding the media.
 - **Crash reporting.**
-- **Debug logging** and an **internal log viewer** — the service now writes
-  `lancastd.log` beside the database (v0.4.2); what is missing is reading it
-  from the UI.
+- ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
+  `lancastd.log` and Settings shows it, collapsed by default and never polled.
+  The log had been written beside the database since v0.4.2 and could only be
+  read by opening a file manager — the wrong ask for the case it serves, since
+  it matters most when the server runs as a service and something is wrong. It
+  says when the view is partial rather than letting a reader believe they have
+  the whole file. **Debug logging** — raising the level from the UI — is still
+  open.
 - **Clear cache and data** and **reset settings** actions.
 - **Check for updates** with an **auto-update** toggle.
 - **Desktop lifecycle — "Open on Windows start" and "Close to tray"**

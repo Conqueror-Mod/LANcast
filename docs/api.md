@@ -666,6 +666,77 @@ decision for it falls back to direct play.
 
 Returns `503` if ffprobe is not installed and `400` for an unknown scope.
 
+### `GET /api/activity`
+
+What the server is doing right now, in one request.
+
+```json
+{
+  "active": true,
+  "tasks": [
+    { "kind": "scan", "id": "scan:3", "title": "Scanning Films",
+      "state": "running", "done": 812, "total": 0, "detail": "40 changed",
+      "library_id": 3, "started_at": 1754630000 },
+    { "kind": "enrich", "id": "enrich", "title": "Fetching metadata",
+      "state": "running", "done": 120, "total": 400 }
+  ]
+}
+```
+
+The per-worker endpoints above each answer for one worker, which means a client
+that wants to show "what is happening" has to know the whole list of workers and
+poll each one — including `/api/libraries/{id}/scan` once per library. This
+answers the question without that knowledge, in one shape:
+
+- `kind` is `scan`, `enrich`, `probe`, `coverart`, or `transcode`. New workers
+  add new values; a client that does not recognise one still has a title and a
+  progress pair, which is the point of normalizing.
+- `id` is stable for the task's lifetime, so a list can be keyed by it.
+- `title` is resolved server-side — a scan names its library, because a client
+  showing the row should not have to join an id back to a name.
+- `state` is `running` or `failed`. Only those appear: a finished task is not
+  activity. A failed scan stays listed, because a failure with nowhere to appear
+  is the failure shape this project keeps being bitten by.
+- `total` of `0` means indeterminate. A scan knows how many files it has seen
+  and never how many it will see, so `done` is a count and there is no
+  percentage to render.
+- `library_id` is set for scans only.
+
+Nothing here is persisted. A restarted server reports an idle one, which is the
+truth: the workers are in-process and a restart ended their work.
+
+Reading progress needs no special role. The endpoints that *start* work
+(`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
+
+### `GET /api/logs`
+
+The tail of `lancastd.log`. **Admin only.**
+
+```json
+{ "lines": ["time=... level=INFO msg=listening addr=..."],
+  "complete": false, "path": "lancastd.log" }
+```
+
+`?lines=` defaults to 300 and is clamped to 2000; a value that is not a positive
+whole number is `400`. Lines are oldest first.
+
+`complete` is `false` when older entries exist that this response does not
+carry — the difference between "this is the log" and "this is the end of the
+log". A client that assumes the first sends its reader looking for a startup
+line that was never withheld from them.
+
+Admin only because the log names filesystem paths, library roots and provider
+errors: that is server-operator information, not viewer information.
+
+A server that has never opened a log — one that has only ever run in a terminal,
+where the log goes to the terminal — returns an empty `lines` array and
+`complete: true`. That is a supported configuration, not an error.
+
+This exists because the log has been written beside the database since v0.4.2
+and could only be read by finding the data directory in a file manager, which is
+the wrong ask for the case it serves: the log matters most when the server is
+running as a service and something is wrong.
+
 ### `GET /api/coverart`
 
 Background album-art progress.

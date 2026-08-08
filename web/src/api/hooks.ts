@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type {
+  ActivityStatus,
   AuthStatus,
   AuthUser,
   BrowseResult,
@@ -20,6 +21,7 @@ import type {
   ProbeStatus,
   ReprobeResult,
   ScanStatus,
+  ServerLog,
   Settings,
   SettingsUpdate,
   SubtitleCandidate,
@@ -645,5 +647,46 @@ export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
       return loaded < last.total ? loaded : undefined;
     },
     enabled: (query.libraryID ?? 0) > 0,
+  });
+}
+
+// ------------------------------------------------------------------ activity
+
+// What the server is doing right now, in one request. The pieces already
+// existed per-worker; this is the one caller that does not need to know which
+// worker to ask, which is what lets the shell show a single indicator.
+//
+// It polls whenever the app is visible, faster while something is running. That
+// is a deliberate exception to the "do not poll a settings page forever" rule:
+// an indicator that only updates when you open it is not an indicator. React
+// Query stops the interval when the tab is hidden, so an idle machine idles.
+export function useActivity() {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["activity"],
+    queryFn: async ({ signal }) => {
+      const s = await apiGet<ActivityStatus>("/api/activity", signal);
+      // Work finishing changes item counts, so the nav is refreshed once here
+      // rather than every poll.
+      if (!s.active && qc.getQueryData<ActivityStatus>(["activity"])?.active) {
+        qc.invalidateQueries({ queryKey: ["libraries"] });
+      }
+      return s;
+    },
+    refetchInterval: (q) => (q.state.data?.active ? 1500 : 8000),
+  });
+}
+
+// The tail of lancastd.log. Not polled: a log is what already happened, and the
+// button that opens it is the refresh. Enabled only when the viewer opens the
+// panel, so an admin who never looks never reads a file off disk.
+export function useServerLog(enabled: boolean, lines = 300) {
+  return useQuery({
+    queryKey: ["logs", lines],
+    queryFn: ({ signal }) =>
+      apiGet<ServerLog>(`/api/logs?lines=${lines}`, signal),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
