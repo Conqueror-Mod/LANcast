@@ -51,6 +51,10 @@ func TestOnlyAVerifiableMismatchProvesAnEdit(t *testing.T) {
 		// touched the file; treating it as one would re-pin every identity to a
 		// stale sidecar.
 		{"a scheme from a newer build", "sha256:v99:0000", false},
+		// A v1 marker is still verifiable: the digest did not change when the
+		// marker gained per-field information, and treating every older sidecar
+		// as unverifiable would stop honouring edits on files already on disk.
+		{"an older scheme we still implement", "sha256:v1:0000", true},
 		{"malformed", "sha256:", false},
 		{"not ours at all", "kodi-generated", false},
 		{"absent", "", false},
@@ -104,5 +108,103 @@ func TestReadHonoursEditsAndIgnoresOurOwnOutput(t *testing.T) {
 	}
 	if got := deref(rec.Fields.Title); got != "Arrival (Director's Cut)" {
 		t.Errorf("title = %q, want the edited one", got)
+	}
+}
+
+// The case this whole change exists for, and the one that actually bit Chris.
+//
+// A sidecar LANcast wrote is corrected by hand — one field, the title. Before
+// per-field digests the entire file became authoritative, so the plot, cast and
+// rating beside it were promoted too, including anything LANcast had got wrong
+// that nobody touched. Now the correction costs only the field corrected.
+func TestOnlyTheEditedFieldIsAuthored(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	if err := New().Write(media, meta.KindMovie, movieRecord()); err != nil {
+		t.Fatal(err)
+	}
+	sidecar := filepath.Join(dir, "Arrival.nfo")
+
+	raw, err := os.ReadFile(sidecar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(raw), "<title>Arrival</title>",
+		"<title>Arrival (1998)</title>", 1)
+	if edited == string(raw) {
+		t.Fatal("the test did not change the file")
+	}
+	if err := os.WriteFile(sidecar, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec, err := New().Read(context.Background(), media, meta.KindMovie)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec == nil {
+		t.Fatal("the edit was ignored; a hand-edited field must win")
+	}
+
+	if got := deref(rec.Fields.Title); got != "Arrival (1998)" {
+		t.Errorf("title = %q, want the edited value", got)
+	}
+	// Everything else must be absent, so providers keep filling it. Present
+	// here would mean LANcast's own output had been promoted to authority by
+	// somebody fixing a typo.
+	if rec.Fields.Overview != nil {
+		t.Errorf("overview came back as authored (%q); only the title was edited",
+			deref(rec.Fields.Overview))
+	}
+	if rec.Fields.Rating != nil {
+		t.Error("rating came back as authored; only the title was edited")
+	}
+	if len(rec.Credits) != 0 {
+		t.Errorf("%d credits came back as authored; only the title was edited", len(rec.Credits))
+	}
+	if len(rec.Genres) != 0 {
+		t.Errorf("%d genres came back as authored; only the title was edited", len(rec.Genres))
+	}
+}
+
+// A file nobody touched still says nothing at all, per-field digests or not.
+func TestUneditedFileStillSaysNothing(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	if err := New().Write(media, meta.KindMovie, movieRecord()); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := New().Read(context.Background(), media, meta.KindMovie)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec != nil {
+		t.Errorf("our own untouched output was treated as authored: %+v", rec.Fields)
+	}
+}
+
+// A sidecar from another tool has no marker and no digests, so all of it is
+// authoritative — unchanged, and the reason LANcast can be a guest in a format
+// it did not invent.
+func TestForeignSidecarIsWhollyAuthoritative(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Arrival.mkv")
+	foreign := `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Arrival</title>
+  <plot>Written by another tool entirely.</plot>
+</movie>`
+	if err := os.WriteFile(filepath.Join(dir, "Arrival.nfo"), []byte(foreign), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := New().Read(context.Background(), media, meta.KindMovie)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec == nil {
+		t.Fatal("a foreign sidecar was ignored")
+	}
+	if deref(rec.Fields.Overview) != "Written by another tool entirely." {
+		t.Errorf("overview = %q, want the foreign file's", deref(rec.Fields.Overview))
 	}
 }

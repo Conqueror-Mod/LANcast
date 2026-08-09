@@ -85,6 +85,20 @@ func (s *Source) Read(ctx context.Context, path string, kind meta.Kind) (*meta.R
 		if !provesUserEdit(marker.attr("hash"), rec) {
 			return nil, nil
 		}
+		// Something changed. With per-field digests we can say what, and return
+		// only that — so correcting a title does not also promote the plot and
+		// cast sitting beside it, which is how one fix became four.
+		if written := decodeDigests(marker.attr("fields")); len(written) > 0 {
+			edited := editedFields(rec, written)
+			if edited == nil {
+				return nil, nil
+			}
+			edited.Source = ID
+			return edited, nil
+		}
+		// No per-field information: a marker written before this existed. The
+		// whole file is authoritative, which is the older behaviour and stays
+		// correct — just blunter.
 	}
 
 	rec.Source = ID
@@ -115,6 +129,9 @@ func (s *Source) Write(path string, kind meta.Kind, rec *meta.Record) error {
 		Attrs: []xml.Attr{
 			{Name: xml.Name{Local: "generated"}, Value: time.Now().UTC().Format(time.RFC3339)},
 			{Name: xml.Name{Local: "hash"}, Value: FieldsHash(rec)},
+			// Per-field, so a later read can tell which value a person changed
+			// rather than only that the file differs.
+			{Name: xml.Name{Local: "fields"}, Value: encodeDigests(FieldDigests(rec))},
 		},
 	})
 
@@ -179,7 +196,7 @@ func writeAtomic(target string, body []byte) error {
 // ignoring an edit, which the user can redo and which locks the field when they
 // do. Being wrong the other way re-pins identities to stale files and is the
 // failure this whole mechanism exists to prevent.
-const hashVersion = 1
+const hashVersion = 2
 
 // FieldsHash is the canonical digest of the fields LANcast writes.
 //
@@ -192,39 +209,205 @@ func FieldsHash(rec *meta.Record) string {
 		return ""
 	}
 	var b strings.Builder
-	f := rec.Fields
-
-	write := func(k, v string) {
-		b.WriteString(k)
+	for _, name := range hashedFields {
+		b.WriteString(name)
 		b.WriteByte('=')
-		b.WriteString(v)
+		b.WriteString(canonicalField(rec, name))
 		b.WriteByte('\n')
 	}
-
-	write("title", deref(f.Title))
-	write("year", intStr(f.Year))
-	write("overview", deref(f.Overview))
-	write("rating", floatStr(f.Rating))
-	write("content_rating", deref(f.ContentRating))
-	write("released_at", int64Str(f.ReleasedAt))
-	write("duration_ms", int64Str(f.DurationMS))
-	write("series", deref(f.Series))
-	write("season", intStr(f.Season))
-	write("episode", intStr(f.Episode))
-
-	genres := append([]string(nil), rec.Genres...)
-	sort.Strings(genres)
-	write("genres", strings.Join(genres, "|"))
-
-	credits := make([]string, 0, len(rec.Credits))
-	for _, c := range rec.Credits {
-		credits = append(credits, c.Role+":"+c.Name+":"+c.Character)
-	}
-	sort.Strings(credits)
-	write("credits", strings.Join(credits, "|"))
-
 	sum := sha256.Sum256([]byte(b.String()))
 	return fmt.Sprintf("sha256:v%d:%s", hashVersion, hex.EncodeToString(sum[:]))
+}
+
+// recordDigest is the bare whole-record digest, without the scheme label.
+//
+// Split out because the label changes when the marker gains information — v2
+// added per-field digests — while the digest itself did not. Verifying a v1
+// marker with a v2 build has to still work: treating every older sidecar as
+// unverifiable would silently stop honouring edits on every file already on
+// disk, which is a worse bug than the one versioning was added to prevent.
+func recordDigest(rec *meta.Record) string {
+	full := FieldsHash(rec)
+	_, digest, _ := strings.Cut(strings.TrimPrefix(full, "sha256:"), ":")
+	return digest
+}
+
+// hashedFields is the set covered by the marker, in a fixed order because the
+// whole-record digest is built by concatenation.
+var hashedFields = []string{
+	"title", "year", "overview", "rating", "content_rating",
+	"released_at", "duration_ms", "series", "season", "episode",
+	"genres", "credits",
+}
+
+// canonicalField renders one field to the exact string both digests are
+// computed from. One function so the per-field and whole-record hashes cannot
+// disagree about what a value is — the failure ADR 0009 names, one level down.
+func canonicalField(rec *meta.Record, name string) string {
+	f := rec.Fields
+	switch name {
+	case "title":
+		return deref(f.Title)
+	case "year":
+		return intStr(f.Year)
+	case "overview":
+		return deref(f.Overview)
+	case "rating":
+		return floatStr(f.Rating)
+	case "content_rating":
+		return deref(f.ContentRating)
+	case "released_at":
+		return int64Str(f.ReleasedAt)
+	case "duration_ms":
+		return int64Str(f.DurationMS)
+	case "series":
+		return deref(f.Series)
+	case "season":
+		return intStr(f.Season)
+	case "episode":
+		return intStr(f.Episode)
+	case "genres":
+		genres := append([]string(nil), rec.Genres...)
+		sort.Strings(genres)
+		return strings.Join(genres, "|")
+	case "credits":
+		credits := make([]string, 0, len(rec.Credits))
+		for _, c := range rec.Credits {
+			credits = append(credits, c.Role+":"+c.Name+":"+c.Character)
+		}
+		sort.Strings(credits)
+		return strings.Join(credits, "|")
+	}
+	return ""
+}
+
+// FieldDigests is the per-field half of the marker: what LANcast wrote for each
+// field, individually.
+//
+// The whole-record hash answers "did anything change". This answers "what
+// changed", which is the difference between honouring a title correction and
+// promoting the plot, cast and rating that happened to sit beside it.
+//
+// Sixty-four bits per field. A collision would mean reading an edited field as
+// unchanged, so a provider could overwrite it — mild, and vanishingly unlikely
+// against values a person typed.
+func FieldDigests(rec *meta.Record) map[string]string {
+	if rec == nil {
+		return nil
+	}
+	out := make(map[string]string, len(hashedFields))
+	for _, name := range hashedFields {
+		sum := sha256.Sum256([]byte(name + "=" + canonicalField(rec, name)))
+		out[name] = hex.EncodeToString(sum[:8])
+	}
+	return out
+}
+
+// encodeDigests renders the per-field digests for the marker attribute, sorted
+// so the file is stable between writes that change nothing.
+func encodeDigests(d map[string]string) string {
+	names := make([]string, 0, len(d))
+	for k := range d {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, k := range names {
+		parts = append(parts, k+":"+d[k])
+	}
+	return strings.Join(parts, ",")
+}
+
+// decodeDigests parses the attribute back. A malformed entry is skipped rather
+// than failing the read: an unreadable digest means that field cannot be proven
+// unchanged, which lands on the safe side — it is treated as ours.
+func decodeDigests(attr string) map[string]string {
+	if attr == "" {
+		return nil
+	}
+	out := map[string]string{}
+	for _, part := range strings.Split(attr, ",") {
+		name, digest, ok := strings.Cut(part, ":")
+		if !ok || name == "" || digest == "" {
+			continue
+		}
+		out[name] = digest
+	}
+	return out
+}
+
+// editedFields returns a record holding only the fields a person changed since
+// LANcast wrote the file, or nil when nothing was.
+//
+// This is what makes a title correction cost only the title. Everything whose
+// digest still matches what we wrote is our own output being read back, and is
+// left absent so providers keep filling it.
+func editedFields(file *meta.Record, written map[string]string) *meta.Record {
+	edited := &meta.Record{Kind: file.Kind}
+	var any bool
+
+	for _, name := range hashedFields {
+		was, known := written[name]
+		now := FieldDigests(file)[name]
+		if known && was == now {
+			continue // ours, unchanged
+		}
+		if !known {
+			// A field the marker does not mention. Older marker, or a field
+			// added since it was written — either way we cannot claim we wrote
+			// this value, so it is not ours to ignore.
+			if canonicalField(file, name) == "" {
+				continue
+			}
+		}
+		if canonicalField(file, name) == "" {
+			// Cleared rather than changed. Treated as no opinion rather than as
+			// an instruction to blank the field, because a provider filling an
+			// empty title is better than a title deliberately emptied by a
+			// parser disagreement.
+			continue
+		}
+		copyField(edited, file, name)
+		any = true
+	}
+	if !any {
+		return nil
+	}
+	return edited
+}
+
+// copyField moves one field from the parsed file into the edited record.
+func copyField(dst, src *meta.Record, name string) {
+	s, d := &src.Fields, &dst.Fields
+	switch name {
+	case "title":
+		d.Title = s.Title
+		// Sort title follows the title it is derived from, or a corrected title
+		// sorts under its old letter.
+		d.SortTitle = s.SortTitle
+	case "year":
+		d.Year = s.Year
+	case "overview":
+		d.Overview = s.Overview
+	case "rating":
+		d.Rating = s.Rating
+	case "content_rating":
+		d.ContentRating = s.ContentRating
+	case "released_at":
+		d.ReleasedAt = s.ReleasedAt
+	case "duration_ms":
+		d.DurationMS = s.DurationMS
+	case "series":
+		d.Series = s.Series
+	case "season":
+		d.Season = s.Season
+	case "episode":
+		d.Episode = s.Episode
+	case "genres":
+		dst.Genres = src.Genres
+	case "credits":
+		dst.Credits = src.Credits
+	}
 }
 
 // ------------------------------------------------------------ file locations
@@ -566,12 +749,19 @@ func parseDate(s string) (int64, bool) {
 // human, it is evidence that this build cannot check.
 func provesUserEdit(marker string, rec *meta.Record) bool {
 	version, ok := hashSchemeOf(marker)
-	if !ok || version != hashVersion {
-		// Either not one of ours to parse, or written by a build whose scheme
-		// this one does not implement. Not proof of anything.
+	if !ok || version > hashVersion {
+		// Either not one of ours to parse, or written by a build newer than
+		// this one. Not proof of anything.
 		return false
 	}
-	return marker != FieldsHash(rec)
+	// Every scheme so far digests the record identically; only the marker's
+	// shape has grown. So a v1 marker is still verifiable here, and edits made
+	// to files written before per-field digests existed keep being honoured.
+	_, digest, hasVer := strings.Cut(strings.TrimPrefix(marker, "sha256:"), ":")
+	if !hasVer {
+		digest = strings.TrimPrefix(marker, "sha256:")
+	}
+	return digest != recordDigest(rec)
 }
 
 // hashSchemeOf extracts the scheme version from a marker hash.
