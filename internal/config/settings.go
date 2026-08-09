@@ -26,6 +26,11 @@ type Settings struct {
 	RatePerSec float64 `json:"rate_per_sec,omitempty"`
 	WriteNFO   bool    `json:"write_nfo"`
 	AutoEnrich bool    `json:"auto_enrich"`
+	// UpdateCheck asks the project's releases endpoint whether a newer version
+	// exists. On by default: an update nobody hears about is one nobody
+	// installs, and the check is a plain GET carrying no identifier. Off stops
+	// it entirely — nothing else changes.
+	UpdateCheck bool `json:"update_check"`
 
 	// HardwareEncoder is "auto", "off", or a specific ffmpeg encoder name.
 	// Auto takes the fastest encoder that passed a real test encode.
@@ -62,7 +67,8 @@ func (s Settings) Secured() bool { return s.PasswordHash != "" }
 // behavior; it is a no-op without a key. WriteNFO is off because writing into
 // someone's media folders is not something to do unasked.
 func Defaults() Settings {
-	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true, HardwareEncoder: "auto"}
+	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true,
+		UpdateCheck: true, HardwareEncoder: "auto"}
 }
 
 // SettingsStore reads and writes the settings file.

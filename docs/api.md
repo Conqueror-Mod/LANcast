@@ -790,6 +790,42 @@ happened; refusing it after the fact would turn a full disk into a denial of the
 user's own deletions. Failures are logged at `ERROR` server-side. This is a
 stated trade, not an oversight.
 
+### `GET /api/update` · `POST /api/update/check`
+
+Whether a newer release exists. **Admin only.**
+
+```json
+{ "supported": true, "current": "0.6.1", "latest": "v0.7.0", "available": true,
+  "url": "https://github.com/…/releases/tag/v0.7.0", "checked_at": 1786254604,
+  "checking": false, "error": "", "can_verify": false, "enabled": true }
+```
+
+`GET` reads the last known result; the server checks on its own timer, so this
+costs nothing. `POST /api/update/check` asks now, and **works whether or not the
+automatic check is enabled** — someone who does not want a timer may still want
+to ask once, deliberately.
+
+- `available` is true only when `latest` is genuinely newer. A `dev` build
+  cannot compare itself and never reports an update.
+- `can_verify` is whether this build can check a release signature at all. False
+  means automatic installation is unavailable regardless of the setting
+  ([ADR 0016 amendment](adr/0016-packaging-and-distribution.md)).
+- `enabled` is the `update_check` setting, so a client can tell "nothing to
+  report" from "not looking".
+- `error` is the last failure and is cleared by a success. It is reported rather
+  than swallowed: a check that has been failing for months is otherwise
+  indistinguishable from one with nothing to say.
+
+An available update also appears in `GET /api/activity` as a task with
+`kind: "update"` and `state: "available"` — not work in progress, but something
+the server is waiting for someone to act on.
+
+**What is sent:** a plain GET to the project's releases endpoint. No install
+identifier, no library statistics, no version history. This is consistent with
+the no-phone-home principle rather than an exception to it — the principle is
+that nothing is *required* to reach the internet for the server to work, and
+this is neither required nor load-bearing.
+
 ### `GET /api/coverart`
 
 Background album-art progress.

@@ -9,6 +9,7 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/transcode"
+	"lancast/internal/update"
 )
 
 // Activity is one thing the server is doing right now, normalized so the client
@@ -49,6 +50,7 @@ type snapshot struct {
 	probe    probe.Stats
 	covers   coverart.Stats
 	sessions []transcode.SessionInfo
+	update   update.State
 }
 
 // scanSnapshot pairs a scan's progress with the library name, resolved here so
@@ -82,6 +84,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.trans != nil {
 		snap.sessions = s.trans.Sessions()
+	}
+	if s.updates != nil {
+		snap.update = s.updates.State()
 	}
 
 	tasks := buildActivity(snap)
@@ -141,6 +146,13 @@ func buildActivity(snap snapshot) []Activity {
 			Detail: failedDetail(st.Failed),
 		})
 	}
+	// Listed before live work: it is the one row that asks something of the
+	// reader rather than reporting progress, and burying it under three
+	// scanning rows would make it the thing nobody sees.
+	if a, ok := updateActivity(snap.update); ok {
+		tasks = append(tasks, a)
+	}
+
 	for _, sess := range snap.sessions {
 		if sess.Finished {
 			continue
