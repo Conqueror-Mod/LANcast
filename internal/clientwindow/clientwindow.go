@@ -62,6 +62,31 @@ type Options struct {
 	// window and these options mean something here", absent means a browser
 	// tab, which has no tray to reduce to and no close button LANcast owns.
 	Bindings map[string]any
+
+	// OnClose is consulted when the user closes the window. Returning false
+	// keeps it alive, which is how close-to-tray hides instead of quitting.
+	// Nil closes, which is the behaviour without the option.
+	OnClose func() bool
+
+	// OnReady receives a controller once the window exists, so a tray running on
+	// another thread can show it again. It is called before the message loop
+	// starts and must not block.
+	OnReady func(Controller)
+}
+
+// Controller manipulates a window that is already open, from any goroutine.
+//
+// Every method marshals onto the window's own thread. That is not politeness:
+// the window and the tray live on different OS threads by necessity — each
+// needs its own message queue — and touching a window from the wrong one is how
+// this becomes an intermittent hang rather than an error.
+type Controller interface {
+	// Show makes the window visible and brings it forward.
+	Show()
+	// Hide removes it from the screen without destroying it.
+	Hide()
+	// Close ends the window and its message loop.
+	Close()
 }
 
 // Open shows the window and blocks until it is closed.
