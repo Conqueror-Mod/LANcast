@@ -367,4 +367,9 @@ export interface UpdateStatus {
   error?: string;
   can_verify?: boolean;
   enabled?: boolean;
+  // Set once an update is downloaded and verified. Distinct from `available`:
+  // available means decide, staged means restart.
+  staged?: string;
+  staged_at?: number;
+  downloading?: { active: boolean; done: number; total: number; stage?: string };
 }

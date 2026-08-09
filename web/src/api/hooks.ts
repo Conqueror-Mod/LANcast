@@ -740,3 +740,17 @@ export function useCheckForUpdate() {
     },
   });
 }
+
+// Downloads and stages an update. Returns immediately — the work runs on the
+// server and its progress shows in the activity panel, which is why this polls
+// the status for a while afterwards rather than waiting.
+export function useDownloadUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/update/download", "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["update"] });
+    },
+  });
+}

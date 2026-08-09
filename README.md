@@ -157,8 +157,8 @@ TLS with a real certificate. See [docs/security.md](docs/security.md).
 
 ## License
 
-Proprietary — all rights reserved. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
-LANcast is still a personal project and the repository is private. Open-sourcing
-remains the intent; the permissive license gets chosen before the repo goes
-public, and this one is replaced at that point.
+Vendored third-party code keeps its own license and notices; see
+[internal/webview2/LICENSE](internal/webview2/LICENSE) and
+[internal/webview2/PROVENANCE.md](internal/webview2/PROVENANCE.md).

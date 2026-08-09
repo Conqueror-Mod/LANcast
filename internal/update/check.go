@@ -61,8 +61,9 @@ type Checker struct {
 	current string
 	client  *http.Client
 
-	mu    sync.Mutex
-	state State
+	mu       sync.Mutex
+	state    State
+	progress Progress
 }
 
 func New(currentVersion string) *Checker {

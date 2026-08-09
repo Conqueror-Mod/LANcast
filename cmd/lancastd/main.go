@@ -34,6 +34,7 @@ import (
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
+	"lancast/internal/selfupdate"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 	"lancast/internal/store"
@@ -441,6 +442,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// setting gates whether it runs on a timer; the manual check in Settings
 	// works either way, because someone who does not want a timer may still
 	// want to ask once.
+	// The previous executable, renamed aside by the last shutdown's swap. It
+	// could not be deleted then because it was the running image; it can be
+	// now, because this process is the new one.
+	if exe, err := os.Executable(); err == nil {
+		if n := selfupdate.CleanupOld(filepath.Dir(exe)); n > 0 {
+			log.Info("removed the previous version", "files", n)
+		}
+	}
+
 	updates := update.New(api.Version)
 	if settings.Get().UpdateCheck {
 		workers.Add(1)
@@ -608,6 +618,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	if redirectSrv != nil {
 		_ = redirectSrv.Close()
 	}
+	// Last thing, once nothing is serving and the workers are done. The files
+	// being replaced may include this process's own executable, which is why
+	// the swap is a rename rather than an overwrite and why it happens here
+	// rather than at startup — the next start runs the new version.
+	applyStagedUpdate(cfg.DataDir, log)
+
 	log.Info("stopped")
 	return nil
 }
@@ -766,3 +782,26 @@ func waitForWorkers(wg *sync.WaitGroup, log *slog.Logger) {
 // workerStopGrace bounds the wait for background passes. Short: they check for
 // cancellation between items, so anything longer means one is genuinely stuck.
 const workerStopGrace = 3 * time.Second
+
+// applyStagedUpdate swaps in a verified update on the way down.
+//
+// Failure is logged and otherwise ignored: the server is already stopping, and
+// an update that did not apply is a disappointment rather than a fault. The
+// staged copy stays where it is and the next shutdown tries again.
+func applyStagedUpdate(dataDir string, log *slog.Logger) {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	m, err := selfupdate.Apply(dataDir, filepath.Dir(exe))
+	if errors.Is(err, os.ErrNotExist) {
+		return // nothing staged, which is every ordinary shutdown
+	}
+	if err != nil {
+		log.Error("could not apply the staged update; the install is unchanged",
+			"version", m.Version, "error", err)
+		return
+	}
+	log.Info("staged update applied; it takes effect on the next start",
+		"version", m.Version, "files", len(m.Files))
+}

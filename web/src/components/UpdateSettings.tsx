@@ -1,6 +1,7 @@
 import {
   useUpdateStatus,
   useCheckForUpdate,
+  useDownloadUpdate,
   useSettings,
   useUpdateSettings,
 } from "@/api/hooks";
@@ -13,6 +14,7 @@ export function UpdateSettings() {
   const { data: status } = useUpdateStatus();
   const { data: settings } = useSettings();
   const check = useCheckForUpdate();
+  const download = useDownloadUpdate();
   const save = useUpdateSettings();
 
   if (!status?.supported) return null;
@@ -26,7 +28,12 @@ export function UpdateSettings() {
       <div className="set-row">
         <div className="set-row__main">
           <div className="set-row__title">
-            {status.available ? (
+            {status.staged ? (
+              <>
+                LANcast {status.staged} is ready
+                <span className="upd-badge">restart</span>
+              </>
+            ) : status.available ? (
               <>
                 LANcast {status.latest} is available
                 <span className="upd-badge">new</span>
@@ -35,7 +42,11 @@ export function UpdateSettings() {
               <>You are up to date</>
             )}
           </div>
-          <div className="set-row__sub">{describe(status)}</div>
+          <div className="set-row__sub">
+            {status.staged
+              ? "Downloaded and verified. It takes effect the next time the server starts."
+              : describe(status)}
+          </div>
           {status.error && (
             <p className="upd-note upd-note--warn">
               The last check failed: {status.error}
@@ -52,6 +63,15 @@ export function UpdateSettings() {
             >
               Release notes
             </a>
+          )}
+          {status.available && !status.staged && status.can_verify && (
+            <button
+              className="set-btn"
+              disabled={download.isPending || status.downloading?.active}
+              onClick={() => download.mutate()}
+            >
+              {status.downloading?.active ? "Downloading…" : "Download and install"}
+            </button>
           )}
           <button
             className="set-btn"
@@ -83,6 +103,11 @@ export function UpdateSettings() {
               signed, an update can be installed by hand and never
               automatically — and a button that cannot work should not be
               offered as though it can. */}
+          {download.isError && (
+            <p className="upd-note upd-note--warn">
+              The download failed: {(download.error as Error).message}
+            </p>
+          )}
           {status.can_verify === false && (
             <p className="upd-note">
               Automatic installation is unavailable in this build: it can only
