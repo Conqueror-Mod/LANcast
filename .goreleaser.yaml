@@ -93,18 +93,25 @@ checksum:
 # from the plugin project key (ADR 0021) so a compromise of one is not a
 # compromise of both.
 #
-# A build without the secret still succeeds and simply publishes no signature.
-# That is the honest outcome — the updater treats an unsigned release as
-# installable by hand and never automatically, so a release cut without the key
-# degrades to the old behaviour rather than failing at the last step.
+# The paths are substituted into the script itself rather than passed as
+# positional arguments. A standalone "${artifact}" argument arrives at the shell
+# as an empty string — the placeholder is expanded where it appears inside an
+# argument, not when it is the whole of one — so `-in "$0"` signed nothing and
+# the first tag carrying this block failed at the signing step. Verified by
+# printing the real argv from a snapshot run rather than by reading the docs.
+#
+# Missing key is a hard failure, not a quiet downgrade. The secret is set, and a
+# signature is what makes an update installable rather than merely offered; a
+# release that silently published unsigned would be discovered by users whose
+# updater declines to install it. Verification still accepts unsigned releases —
+# that is about the ones already published, not about producing new ones.
 signs:
   - id: checksums
     artifacts: checksum
     cmd: sh
     args:
       - "-c"
-      - 'if [ -n "$RELEASE_SIGNING_KEY" ]; then go run ./cmd/lcsign sign -in "$0" -out "$0.sig"; else echo "RELEASE_SIGNING_KEY not set; publishing unsigned"; fi'
-      - "${artifact}"
+      - 'test -n "$RELEASE_SIGNING_KEY" || { echo "RELEASE_SIGNING_KEY is not set; refusing to publish an unsigned release" >&2; exit 1; }; go run ./cmd/lcsign sign -in "${artifact}" -out "${signature}"'
     signature: "${artifact}.sig"
 
 # Draft so the maintainer eyeballs the notes and artifacts before publishing.
