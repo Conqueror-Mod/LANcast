@@ -19,6 +19,9 @@ export function ActivityPanel() {
   const tasks = data?.tasks ?? [];
   const active = data?.active ?? false;
   const failed = tasks.some((t) => t.state === "failed");
+  // An update waiting is not work in progress, so the dot should not pulse as
+  // though something is happening.
+  const onlyWaiting = tasks.length > 0 && tasks.every((t) => t.state === "available");
 
   // Close on an outside click or Escape. A popover that traps you is worse than
   // no popover.
@@ -51,7 +54,10 @@ export function ActivityPanel() {
         aria-label={`Server activity: ${tasks.length} running`}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="activity__dot" aria-hidden="true" />
+        <span
+          className={"activity__dot" + (onlyWaiting ? " is-waiting" : "")}
+          aria-hidden="true"
+        />
         <span className="activity__label">
           {failed ? "Attention" : summary(tasks)}
         </span>
@@ -71,6 +77,22 @@ export function ActivityPanel() {
 }
 
 function ActivityRow({ task }: { task: Activity }) {
+  // An available update is the one row that asks something of the reader rather
+  // than reporting progress. A bar would be a lie — there is nothing running.
+  if (task.state === "available") {
+    return (
+      <div className="activity__row activity__row--action">
+        <div className="activity__row-head">
+          <span className="activity__title">{task.title}</span>
+        </div>
+        {task.detail && <p className="activity__detail">{task.detail}</p>}
+        <a className="activity__action" href="/settings">
+          Open Settings →
+        </a>
+      </div>
+    );
+  }
+
   // Total 0 means the worker cannot know how much is left — a scan discovers
   // its own size. Showing a bar at 0% would be a lie, so it shows a count.
   const determinate = task.total > 0;

@@ -20,6 +20,7 @@ import (
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/transcode"
+	"lancast/internal/update"
 )
 
 type harness struct {
@@ -60,6 +61,7 @@ func newHarness(t *testing.T) *harness {
 		Worker:   enrich.New(st, reg, art, log),
 		Probes:   probe.NewWorker(st, probe.New(), log),
 		Trans:    transcode.NewManager(filepath.Join(dataDir, "transcode"), log),
+		Updates:  update.New(Version),
 		Settings: settings, Log: log, DataDir: dataDir,
 		Enrich: func() { h.enriched++ },
 	})

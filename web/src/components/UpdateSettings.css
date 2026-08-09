@@ -1,0 +1,36 @@
+/* Updates. The "new" badge is the one place a colour means "act on this", and
+   it is not gold — gold means where you are, and this is not that. */
+
+.upd-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(38, 88, 168, 0.35);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.upd-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.upd-note--warn {
+  color: var(--danger, #ff6b6b);
+}
+
+.upd-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.upd-toggle input[type="checkbox"] {
+  accent-color: var(--nebula-blue);
+}

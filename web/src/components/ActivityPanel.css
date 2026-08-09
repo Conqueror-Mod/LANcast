@@ -176,3 +176,26 @@
 .activity__row.is-failed .activity__bar-sweep {
   background: var(--danger, #ff6b6b);
 }
+
+/* A row that asks for something rather than reporting progress. */
+.activity__row--action .activity__title {
+  color: var(--text-primary);
+}
+
+.activity__action {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.activity__action:hover {
+  color: var(--text-primary);
+}
+
+/* Waiting is not working: the dot holds steady rather than pulsing, so the
+   nav does not imply the server is busy when it is only asking. */
+.activity__dot.is-waiting {
+  animation: none;
+  background: var(--text-muted);
+}

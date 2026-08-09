@@ -26,6 +26,7 @@ import {
 } from "@/api/hooks";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { AuditLog } from "@/components/AuditLog";
+import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -1022,6 +1023,7 @@ export function Settings() {
           <AdminSections />
           <AddonsSection />
           <UsersSection />
+          <UpdateSettings />
           <AuditLog />
           <ServerLogSection />
         </>

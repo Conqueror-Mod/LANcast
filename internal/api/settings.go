@@ -28,6 +28,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"rate_per_sec": cur.RatePerSec,
 		"write_nfo":    cur.WriteNFO,
 		"auto_enrich":  cur.AutoEnrich,
+		"update_check": cur.UpdateCheck,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -56,6 +57,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		RatePerSec       *float64 `json:"rate_per_sec"`
 		WriteNFO         *bool    `json:"write_nfo"`
 		AutoEnrich       *bool    `json:"auto_enrich"`
+		UpdateCheck      *bool    `json:"update_check"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -86,6 +88,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.WriteNFO != nil {
 		next.WriteNFO = *req.WriteNFO
+	}
+	if req.UpdateCheck != nil {
+		next.UpdateCheck = *req.UpdateCheck
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
@@ -140,6 +145,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
+	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
 	return out
 }

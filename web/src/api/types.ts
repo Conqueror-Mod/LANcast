@@ -184,6 +184,7 @@ export interface Settings {
   rate_per_sec: number;
   write_nfo: boolean;
   auto_enrich: boolean;
+  update_check: boolean;
   encoder: { preference: string; active: Encoder; available: Encoder[] };
 }
 
@@ -195,6 +196,7 @@ export interface SettingsUpdate {
   rate_per_sec?: number;
   write_nfo?: boolean;
   auto_enrich?: boolean;
+  update_check?: boolean;
   hardware_encoder?: string;
 }
 
@@ -295,10 +297,13 @@ export interface ReprobeResult {
 // scan, enrich, probe, coverart, transcode — reports this one shape, so the
 // activity panel renders a list rather than five special cases.
 export interface Activity {
-  kind: "scan" | "enrich" | "probe" | "coverart" | "transcode";
+  kind: "scan" | "enrich" | "probe" | "coverart" | "transcode" | "update";
   id: string;
   title: string;
-  state: "running" | "failed";
+  // "available" is the odd one: it is not work in progress but something the
+  // server is waiting for the reader to do, and it renders as an action rather
+  // than a progress bar.
+  state: "running" | "failed" | "available";
   done: number;
   // 0 means indeterminate: a scan knows what it has seen, never what is left.
   total: number;
@@ -344,4 +349,22 @@ export interface AuditPage {
   // The distinct actions actually present, so the filter is built from what
   // happened rather than from a list that drifts from the server.
   actions: string[];
+}
+
+
+// GET /api/update. `can_verify` is whether this build can check a release's
+// signature at all — false means automatic installation is unavailable no
+// matter what the setting says, and the UI must say so rather than offering a
+// button that cannot work.
+export interface UpdateStatus {
+  supported: boolean;
+  current?: string;
+  latest?: string;
+  available?: boolean;
+  url?: string;
+  checked_at?: number;
+  checking?: boolean;
+  error?: string;
+  can_verify?: boolean;
+  enabled?: boolean;
 }

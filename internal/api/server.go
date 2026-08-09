@@ -23,6 +23,7 @@ import (
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 	"lancast/internal/transcode"
+	"lancast/internal/update"
 )
 
 // Version is reported by GET /api/health. It is a var, not a const, so a release
@@ -46,6 +47,7 @@ type Deps struct {
 	Probes   *probe.Worker
 	Covers   *coverart.Worker
 	Trans    *transcode.Manager
+	Updates  *update.Checker
 	Subs     *subtitle.Extractor
 	Settings *config.SettingsStore
 	// DataDir is the server data directory: where downloaded subtitles are
@@ -88,6 +90,7 @@ type Server struct {
 	probes        *probe.Worker
 	covers        *coverart.Worker
 	trans         *transcode.Manager
+	updates       *update.Checker
 	subs          *subtitle.Extractor
 	settings      *config.SettingsStore
 	dataDir       string
@@ -111,6 +114,7 @@ func New(d Deps) *Server {
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, covers: d.Covers, trans: d.Trans, subs: d.Subs,
+		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, coversSoon: d.Cover,
@@ -178,6 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/activity", s.activity)
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
 	mux.HandleFunc("GET /api/audit", s.adminOnly(s.listAudit))
+	mux.HandleFunc("GET /api/update", s.adminOnly(s.updateStatus))
+	mux.HandleFunc("POST /api/update/check", s.adminOnly(s.checkForUpdate))
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))

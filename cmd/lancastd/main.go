@@ -40,6 +40,7 @@ import (
 	"lancast/internal/subtitle"
 	"lancast/internal/tlscert"
 	"lancast/internal/transcode"
+	"lancast/internal/update"
 	"lancast/internal/web"
 )
 
@@ -436,6 +437,35 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			"addr", listenAddr, "hint", "TLS stays off because nothing leaves this machine; bind to a LAN address to enable it")
 	}
 
+	// Asks the project's releases endpoint whether a newer version exists. The
+	// setting gates whether it runs on a timer; the manual check in Settings
+	// works either way, because someone who does not want a timer may still
+	// want to ask once.
+	updates := update.New(api.Version)
+	if settings.Get().UpdateCheck {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			// Not on the first tick: a server starting up has more useful things
+			// to do than talk to the internet, and nothing here is urgent.
+			select {
+			case <-time.After(2 * time.Minute):
+			case <-enrichCtx.Done():
+				return
+			}
+			for {
+				if settings.Get().UpdateCheck && updates.Due() {
+					updates.Check(enrichCtx)
+				}
+				select {
+				case <-time.After(6 * time.Hour):
+				case <-enrichCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
 	srv := &http.Server{
 		Addr: listenAddr,
 		Handler: api.New(api.Deps{
@@ -443,6 +473,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Probes: probes, Covers: covers, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
+			Updates: updates,
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))

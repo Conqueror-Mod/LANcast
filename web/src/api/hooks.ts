@@ -23,6 +23,7 @@ import type {
   ReprobeResult,
   ScanStatus,
   ServerLog,
+  UpdateStatus,
   Settings,
   SettingsUpdate,
   SubtitleCandidate,
@@ -712,5 +713,30 @@ export function useAuditLog(enabled: boolean, action: string, limit: number) {
     enabled,
     staleTime: 0,
     gcTime: 0,
+  });
+}
+
+// ------------------------------------------------------------------ updates
+
+// The update status. Cheap and static — the server checks on its own timer, so
+// this only reads what it already knows.
+export function useUpdateStatus() {
+  return useQuery({
+    queryKey: ["update"],
+    queryFn: ({ signal }) => apiGet<UpdateStatus>("/api/update", signal),
+    staleTime: 60_000,
+  });
+}
+
+// Asks now. Works whether or not the automatic check is enabled: someone who
+// does not want a timer may still want to ask once, deliberately.
+export function useCheckForUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<UpdateStatus>("/api/update/check", {}),
+    onSuccess: (s) => {
+      qc.setQueryData(["update"], s);
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
   });
 }
