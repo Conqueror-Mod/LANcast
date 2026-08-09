@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"lancast/internal/release"
+	"lancast/internal/selfupdate"
 	"lancast/internal/update"
 )
 
@@ -40,7 +41,7 @@ func (s *Server) updateView() map[string]any {
 		return map[string]any{"supported": false}
 	}
 	st := s.updates.State()
-	return map[string]any{
+	out := map[string]any{
 		"supported":  true,
 		"current":    st.Current,
 		"latest":     st.Latest,
@@ -58,6 +59,15 @@ func (s *Server) updateView() map[string]any {
 		// report" from "not looking".
 		"enabled": s.settings.Get().UpdateCheck,
 	}
+	// A staged update is a different state from an available one, and the
+	// difference is what the reader has to do about it: available means decide,
+	// staged means restart. Reporting only "available" after staging would ask
+	// someone to do something already done.
+	if m, ok := selfupdate.Pending(s.dataDir); ok {
+		out["staged"] = m.Version
+		out["staged_at"] = m.StagedAt
+	}
+	return out
 }
 
 // updateActivity turns an available update into an activity row.
@@ -67,7 +77,18 @@ func (s *Server) updateView() map[string]any {
 // person already looks to find out what their server wants from them, and an
 // update waiting is exactly that — state:available rather than running, so a
 // client renders it as something to act on rather than something in progress.
-func updateActivity(st update.State) (Activity, bool) {
+func updateActivity(st update.State, staged string) (Activity, bool) {
+	// Staged outranks available: the decision has been made and what remains is
+	// a restart, so saying "available" here would be asking again.
+	if staged != "" {
+		return Activity{
+			Kind:   "update",
+			ID:     "update:staged:" + staged,
+			Title:  "LANcast " + staged + " is ready",
+			State:  "available",
+			Detail: "restart the server to finish updating",
+		}, true
+	}
 	if !st.Available || st.Latest == "" {
 		return Activity{}, false
 	}

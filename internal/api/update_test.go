@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"lancast/internal/release"
+	"lancast/internal/selfupdate"
 	"lancast/internal/update"
 )
 
@@ -67,5 +68,40 @@ func TestUpdateStatusBeforeAnyCheck(t *testing.T) {
 	if body["can_verify"] != release.Signable() {
 		t.Errorf("can_verify = %v, want %v to match this build",
 			body["can_verify"], release.Signable())
+	}
+}
+
+// Staged outranks available. Once an update is downloaded and verified, the
+// decision is made and what remains is a restart — telling someone an update is
+// "available" at that point asks them to do something they already did.
+func TestStagedUpdateOutranksAvailable(t *testing.T) {
+	tasks := buildActivity(snapshot{
+		update: update.State{Current: "0.6.1", Latest: "v0.7.0", Available: true},
+		staged: "v0.7.0",
+	})
+	if len(tasks) != 1 {
+		t.Fatalf("got %d tasks, want 1", len(tasks))
+	}
+	a := tasks[0]
+	if a.Title != "LANcast v0.7.0 is ready" {
+		t.Errorf("title = %q, want the staged wording", a.Title)
+	}
+	if a.Detail != "restart the server to finish updating" {
+		t.Errorf("detail = %q; it must say what is left to do", a.Detail)
+	}
+}
+
+// The status endpoint reports a staged update, so Settings can say "restart to
+// finish" rather than offering a download that already happened.
+func TestUpdateStatusReportsStaged(t *testing.T) {
+	h := newHarness(t)
+	if err := selfupdate.Stage(h.dataDir, "v0.7.0",
+		map[string][]byte{"LANcast-Server.exe": []byte("new")}, 1234); err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/update", nil), &body)
+	if body["staged"] != "v0.7.0" {
+		t.Errorf("staged = %v, want v0.7.0", body["staged"])
 	}
 }
