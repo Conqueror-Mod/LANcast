@@ -83,6 +83,30 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# One signature over the checksum list covers the whole release: match an
+# artifact against its digest in a signed list and the artifact is as good as
+# signed. This is what makes automatic installation defensible — a checksum
+# alone proves the bytes arrived intact, not that the project produced them,
+# because it is served from the same place as the download.
+#
+# The key is Ed25519, held only as the RELEASE_SIGNING_KEY secret, and separate
+# from the plugin project key (ADR 0021) so a compromise of one is not a
+# compromise of both.
+#
+# A build without the secret still succeeds and simply publishes no signature.
+# That is the honest outcome — the updater treats an unsigned release as
+# installable by hand and never automatically, so a release cut without the key
+# degrades to the old behaviour rather than failing at the last step.
+signs:
+  - id: checksums
+    artifacts: checksum
+    cmd: sh
+    args:
+      - "-c"
+      - 'if [ -n "$RELEASE_SIGNING_KEY" ]; then go run ./cmd/lcsign sign -in "$0" -out "$0.sig"; else echo "RELEASE_SIGNING_KEY not set; publishing unsigned"; fi'
+      - "${artifact}"
+    signature: "${artifact}.sig"
+
 # Draft so the maintainer eyeballs the notes and artifacts before publishing.
 release:
   draft: true

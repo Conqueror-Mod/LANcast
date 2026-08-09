@@ -47,6 +47,10 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Absent until the maintainer generates a keypair. Without it the
+          # release is published unsigned and the updater will offer it for a
+          # manual install but never install it automatically.
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
 
       # The Windows installer is built after the archives so a failure here still
       # leaves a draft release with the archives + checksums. makensis runs on the
