@@ -1,14 +1,15 @@
 # Roadmap
 
-Last updated: 2026-08-08 · **v0.5.0 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-09 · **v0.6.1 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
-diagnostics) and CI are in place. Transport security (TLS) and multi-user
-accounts (admin/member roles) are built, and branding & splash shipped.
+diagnostics), an audit log and CI are in place. Transport security (TLS) and
+multi-user accounts (admin/member roles) are built, and branding & splash shipped.
 
-**Since v0.5.0, unreleased on `main`:** the music client UI is finished, LANcast
-has a native window on Windows, and clients now tell the server what they can
-decode. Details in the areas below; the three things worth carrying forward are
-in "What the last pass taught" at the end.
+**Since v0.6.1, unreleased on `main`:** the repository is **public under MIT**,
+releases are **signed**, the client **opens its own window by default**, and the
+server can **check for, download, verify and stage an update** that swaps itself
+in on the way down. Details in the areas below; what the pass taught is at the
+end.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -17,7 +18,7 @@ is three new `kind` values on `media_item` related by `parent_id`, exactly as
 show → season → episode already was. Metadata inverts the video rule: for a film
 the filename is a guess and a provider corrects it, but a music file already
 carries the answer in its tags, so tags win and the filename is the fallback.
-The release was **server-side only**. Both gaps are now closed on `main`: album
+The release was **server-side only**. Both gaps closed in v0.6.0: album
 artwork is extracted, and the client has an album view, a track list, an audio
 mode and a docked mini-player. What ADR 0024 scoped is done; **artist images
 from a provider are on the back burner** (see below), not because they are hard
@@ -63,6 +64,7 @@ rather than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.6.1** | 2026-08-09 | A day of fixes, an audit log, and desktop lifecycle controls — two of the fixes for problems that never produced an error. Scans stopped dying with `database is locked` when enrichment committed mid-scan; new films and shows are enriched again on any server with a music library, where un-enrichable rows had blocked the queue permanently (a "remaining" count of 2,198 that never moved became 7); the service stops when told rather than being judged a hang and restarted by its own recovery policy; and a sidecar is written only for an identity actually established, so a wrong title can no longer outlive the database that produced it. The **audit log** ([ADR 0026](adr/0026-audit-log.md)) records who changed what where the mutation is authorised — libraries, titles, matches, accounts, add-on trust — readable from Settings, with browsing and playback deliberately excluded. **Desktop lifecycle** shipped: close to tray and open when Windows starts, both off by default, both shown only in the LANcast window. Close-to-tray had shipped disabled on the belief that the tray and the web view fight over the message loop; they do not — Windows message queues are per thread, and the conflict existed only because both were run from one goroutine |
 | **v0.6.0** | 2026-08-08 | Music becomes a client experience, LANcast gets its own window, and the server says what it is doing. The music UI v0.5.0 left unbuilt — artist and album tiles, a numbered track list in playing order, an audio mode, a docked mini-player — plus album artwork off the disk (369 of 398 albums, 10.7s, no network) and album artist/year derived from tracks. `-window` opens a WebView2 window that pins the server's own certificate, which matters because a web view does not warn on a bad certificate, it refuses to load. Clients now declare what they can decode, ending the full re-encode of every HEVC file. An activity indicator and a log viewer make background work visible. Two fixes found by using it: scans aborting with `database is locked` when enrichment committed mid-scan (SQLITE_BUSY_SNAPSHOT, which `busy_timeout` does not cover), and new items never being enriched at all on any server with a music library, because un-enrichable rows sat at the head of the queue and the worker stopped at the first unproductive batch |
 | **v0.5.0** | 2026-08-03 | Music libraries — the first media type past video, and the first test of ADR 0002's claim that a new kind needs no new tables (it holds: three `kind` values on `media_item`, schema 13). Scans eleven audio formats, reads embedded tags as the authority rather than guessing from filenames, and groups tracks into artists and albums by *album artist* so compilations stay whole. Playback profiles gained audio containers, which is what stopped a `.flac` being re-encoded to AAC to deliver a format every browser plays natively. Server-side only: no music player in the client, no album artwork yet. |
 | **v0.4.3** | 2026-08-02 | The two guards that keep the server honest, both broken in ways only a real install showed. The cross-session single-instance check failed open: Windows returns the same "access denied" whether an object exists and may not be opened or the caller cannot create it, so a desktop launch never saw a server running as a service and started a second one — the mechanism behind the two-servers and, before v0.4.1, two-databases problems. And v0.4.2's service log wrote nothing, because it was paired with a console that does not exist under the service manager using a writer that gives up on the first failure. |
@@ -175,6 +177,7 @@ Status: **planned** · **next** · *unplanned*
 | Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
 | Album artwork | **built** | `internal/coverart`: embedded picture first, then `cover.jpg`/`folder.jpg` beside the tracks, in its own worker. Measured on the real library — 369 of 398 albums, 10.7s, no network. A directory's image is refused when the directory also holds audio that is not the album's, which is what stops a letter-bucket `folder.jpg` being worn by five unrelated records |
 | Artist images | **back burner** | The placeholder is good enough to wait behind: artists **borrow** their most-substantial album's cover, flagged `inherited`, and a real image supersedes it automatically with nothing to clean up. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md), accepted, unbuilt) — it was sequenced after the client UI, which is now built, so nothing blocks it except priority. Deferred deliberately: music has had a long run and this is the first item where the gap is cosmetic rather than functional |
+| NFO sidecar authority | **built** | A sidecar is written only for an identity actually established — writing one for a failed match committed a guess to disk under LANcast's own name, where it outlived the database and was inherited by the next one. The marker that recognises LANcast's own sidecars is version-tagged, so a future release hashing a different field set cannot silently reclassify every sidecar as hand-edited and start trusting stale contents over live metadata. On `main`, an edit authors only the field that changed, per field, rather than claiming the whole file |
 | Album artist and year | **built** | Album rows carried a title and nothing else — 398 albums with no artist and no year, which read as three separate faults: a bare detail page, a Year sort with nothing to sort, and a track list that showed every performer because it had no album artist to compare against. Both are now derived from the tracks on every scan, and locks are respected |
 
 ### Playback and client · M3
@@ -205,9 +208,9 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Stage 1 — own the window | **built, opt-in** | `LANcast-Client.exe -window` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
+| Stage 1 — own the window | **built, default** | `LANcast-Client.exe` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
 | Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
-| Flip `-window` to default | **next** | Gated on living with it rather than on code. One evening on one machine is not "survived real use" — the unproven list is in the plan: no installed artifact, no fresh profile, no machine without the evergreen runtime, no DPI or multi-monitor check |
+| Flip `-window` to default | **built** | Done after living with it, not after arguing about it. The browser lost on three things a tab cannot fix: LANcast cannot say what its close button means, cannot pin the server's certificate, and gets a warning against a LAN-bound self-signed server that the window does not need. `-browser` is the opt-out, `-window` is kept as a no-op alias so existing shortcuts and the autostart run key keep working, a machine with no WebView2 runtime falls back on its own, and the installer's finish page offers both |
 | Stage 2 — own playback (libmpv) | *unplanned* | Deliberately not started. Its case is narrower than the ADR first made it — see the 2026-08-08 amendment: HEVC left the list |
 
 ### Cross-cutting
@@ -223,9 +226,11 @@ Status: **planned** · **next** · *unplanned*
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Activity view | **built** | `GET /api/activity` in one shape for every worker; a nav indicator and task popover. Indeterminate where the worker genuinely cannot know its total — a scan discovers its own size, so it shows a count rather than a lying percentage |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
-| Desktop lifecycle | **planned** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things today — a browser tab, tray Quit, and the service — and all three behave correctly, which is why it confuses. Both options are client-local; gated on the `-window` flip, because close-to-tray has no referent while the UI is a browser tab |
+| Desktop lifecycle | **built** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)), both off by default and both shown only in the LANcast window, because a tab has no tray to reduce to and no close button LANcast owns. The Settings section states which of the three meanings of "closed" you are looking at — stop the server, or leave it running because the service owns it. Autostart records the mode you chose, so picking the browser does not silently become the window at login |
+| Update checking and self-update | **built, unreleased** | Check, download, verify, stage, and swap on the way down. Signed releases first, because auto-install is a LocalSystem process executing a downloaded binary and without authenticity that is remote code execution as SYSTEM — an Ed25519 signature over `checksums.txt`, offline verification against a key compiled into the binary, and a **separate key from the plugin project key** so one compromise is not both. Three distinct states: unsigned is installable by hand only, a wrong signature is refused outright, and a build with no key refuses everything. The swap works because a running process on Windows can rename *itself*: the binary moves aside to `.old`, the staged one takes its place, and the next start is the new version — one restart, no UAC prompt, no second process. Nothing is written into the install directory before the swap; staging lives in the data directory. The check is on by default and is not a phone-home exception — a plain GET with no install identifier, no statistics, no history, and switchable off entirely |
+| Audit log | **built** | Who changed what, and when, recorded server-side where the mutation is authorised ([ADR 0026](adr/0026-audit-log.md)) — libraries, deleted titles, overridden matches, accounts, add-on trust. An audit trail a client writes is forgeable by the client it is auditing. Readable from Settings, newest first, filterable by action. Browsing and playback are deliberately excluded: burying a handful of deliberate acts under a million routine ones is how a log becomes unreadable. Each entry freezes the actor's name and a sentence at the time it happened, so "who deleted this library" still answers after both the library and the account are gone |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
-| Licensing and open-sourcing | **decided** | **MIT** (`LICENSE`), chosen ahead of the repo going public; vendored code keeps its own notices. **The history cleanup is still outstanding and belongs in the same pass** — three `lancastd.exe~` blobs sit in history from the M3 era (~25 MB packed, about a third of `.git`). Removing them rewrites 352 commits and re-points all six release tags, v0.3.2 through v0.5.0, which is why it waits: that cost is only worth paying once, immediately before the first public clone. `*.exe~` is gitignored now, so the problem is capped and cannot grow |
+| Licensing and open-sourcing | **done** | **MIT** (`LICENSE`) and **the repository is public**, which is what the update check needed: the releases API returns 404 for a private repo and cannot distinguish "no such repository" from "not yours to see", so the checker was correct and inert until the switch was flipped. Vendored code keeps its own notices and the README points at them. **The history cleanup did not happen before the repo went public and is now a judgement call rather than a scheduled one** — three `lancastd.exe~` blobs from the M3 era still sit in history (~25 MB packed, about a third of `.git`). Rewriting 352 commits and re-pointing every release tag was worth doing *once, before* the first public clone; after it, a rewrite also breaks every clone and every commit link that already exists. The honest options are to accept the weight or to pay it deliberately and announce it; `*.exe~` is gitignored, so it cannot grow either way |
 
 ## Client UX backlog
 
@@ -274,7 +279,7 @@ group is not priority.
   audio formats scanned, and audio containers are first class in the playback
   profile so a FLAC is not re-encoded to deliver a format every browser plays.
 - ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
-  UI and mini-player on `main`.
+  UI and mini-player in v0.6.0.
 - **Photo library** with a built-in **image viewer**.
 - **Live TV** — a tuner page and function.
 
@@ -306,14 +311,12 @@ group is not priority.
   library — the capability existed and no caller could reasonably use it. A
   failed scan stays listed, because the recurring bug shape in this project is a
   failure with nowhere to appear.
-- **Audit log — who changed what, and when.** Title removed, library added,
-  match overridden, account created: recorded server-side with the user and the
-  time. Server-side is the whole point — an audit trail a client writes is
-  forgeable by the client it is auditing, so this stays where the mutation is
-  authorised, not where it is requested. The absence of one is why "what
-  emptied this library" was unanswerable during v0.4.x testing. Pairs with the
-  question of whether identity should live in its own store rather than beside
-  the library, so losing a password never opens the file holding the media.
+- ~~**Audit log — who changed what, and when.**~~ — **built** in v0.6.1
+  ([ADR 0026](adr/0026-audit-log.md)), server-side where the mutation is
+  authorised, readable from Settings. The absence of one is why "what emptied
+  this library" was unanswerable during v0.4.x testing. Still open beside it:
+  whether identity should live in its own store rather than beside the library,
+  so losing a password never opens the file holding the media.
 - **Crash reporting.**
 - ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
   `lancastd.log` and Settings shows it, collapsed by default and never polled.
@@ -324,14 +327,13 @@ group is not priority.
   the whole file. **Debug logging** — raising the level from the UI — is still
   open.
 - **Clear cache and data** and **reset settings** actions.
-- **Check for updates** with an **auto-update** toggle.
-- **Desktop lifecycle — "Open on Windows start" and "Close to tray"**
-  ([plan](desktop-lifecycle-plan.md)). "Closed" means three different things
-  today — a browser tab, tray Quit, and the service — and all three behave
-  correctly, which is why it confuses. Both options are client-local, no API and
-  no schema change, and both are **gated on [ADR 0023](adr/0023-native-desktop-client.md)
-  stage 1**: close-to-tray has no referent while the UI is a browser tab whose
-  ✕ LANcast does not own.
+- ~~**Check for updates** with an **auto-update** toggle.~~ — **built,
+  unreleased on `main`.** Signed releases, an update check on by default, and a
+  download-verify-stage path that swaps the binary in on shutdown. What remains
+  is the first release cut *with* the signing key in place, which is the only
+  thing that can prove the published half end to end.
+- ~~**Desktop lifecycle — "Open on Windows start" and "Close to tray"**~~ —
+  **built** in v0.6.1 ([plan](desktop-lifecycle-plan.md)).
 
 ### Input and control
 
@@ -419,21 +421,55 @@ where that openness gets exercised.
       ([ADR 0025](adr/0025-artist-images.md)). This is the first music item
       whose absence is cosmetic rather than functional, which makes it the right
       place to stop.
-10. **Native desktop client (ADR 0023 stage 1)** — **built, opt-in**
-    ([plan](native-client-plan.md)). What remains is not code: living with
-    `-window` long enough to make it the default, which then unblocks the
-    desktop lifecycle options.
-11. **Nothing foundational remains.** What's next is breadth, from the feature
+10. ~~**Native desktop client (ADR 0023 stage 1)**~~ — **built and now the
+    default** ([plan](native-client-plan.md)). Living with it settled it, which
+    also unblocked and delivered the desktop lifecycle options.
+11. ~~**Audit log**~~ — **built** in v0.6.1 ([ADR 0026](adr/0026-audit-log.md)).
+12. **Distribution trust and self-update** — **built, unreleased.** Signed
+    releases, the update check, and download → verify → stage → swap. The
+    remaining step is a release cut with the signing key set, since only that
+    exercises the published half.
+13. **Nothing foundational remains.** What's next is breadth, from the feature
     backlog: a Pictures library (its own ADR — ADR 0024 deferred photos
     deliberately), more client surfaces (TV/mobile), more plugin kinds as real
-    plugins need them, theme music if OST identification lands, and the
-    system/operations items — an activity view, an audit log, a log viewer. Each
-    is planned immediately before it is built.
+    plugins need them, theme music if OST identification lands, crash reporting,
+    and debug-level logging from the UI. Each is planned immediately before it
+    is built.
 
 ## What the last pass taught
 
-Three, and they are the same shape as the ones above: the failure was invisible,
-or the belief was untested.
+**A blocker that was never tested blocked a feature for a release.**
+Close-to-tray shipped as a disabled toggle on the belief that the tray and the
+web view both need the main thread's message loop. They do not: Windows message
+queues are per *thread*, and the conflict existed only because both were being
+run from one goroutine. The belief was plausible, written down, and wrong, and
+it cost a shipped option that said "not yet available" while being one goroutine
+away. Then the build of it repeated the lesson one layer down — `PostQuitMessage`
+posts to the *calling* thread's queue, so Quit from the tray quit the tray and
+left the window open, and the interface comment claiming it is safe from a
+background thread is wrong for this backend. Neither fact was reachable by
+reading; both took someone watching the screen.
+
+**A guard written against one platform is a guard against one platform.** The
+self-update staging check used `filepath.Base` to insist on a flat filename, and
+`filepath.Base` is platform-dependent by design: on Linux `..\evil.exe` is one
+legal filename, so it was admitted — and it becomes a path traversal the moment
+that data directory is carried to Windows, into a directory the service writes
+to as LocalSystem. CI found what a Windows-only suite structurally could not.
+The test was right and the code was wrong, which is the good version of this.
+
+**A failure with no voice can be under the floor as easily as in our code.** The
+service-stop test failed one run in five on cleanup, always on a still-locked
+`lancast.db`. Everything observable through `database/sql` was provably clean —
+Opens and Closes 24 to 24, `db.Stats()` all zeros, no server goroutine alive —
+and identical on passing and failing runs, which is precisely what ruled our
+code out. The handle was leaked below us, in the SQLite driver; the fix was a
+dependency bump, measured (5 failures in 24 before, 0 in 48 after) rather than
+asserted. It also is not only a test annoyance: the installer stops a running
+instance before replacing its files, and a stop is likeliest to race startup
+exactly when something is restarting it.
+
+### Carried forward from the pass before
 
 **A stated cost went unchecked for a release.** ADR 0023 priced a webview as
 "CGO in the client, and per-platform client builds", and both were wrong on
