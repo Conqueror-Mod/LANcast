@@ -46,8 +46,15 @@
     0 4px 8px rgba(5, 7, 15, 0.6),
     0 22px 60px rgba(5, 7, 15, 0.55);
 
-  /* The hero's own geometry, referenced by both the art and the scrims. */
-  --hero-height: clamp(420px, 62vh, 640px);
+  /*
+   * The hero's own geometry, referenced by both the art and the scrims.
+   *
+   * Sized so the two hub rows below it clear the fold on a full-height window
+   * rather than to look as large as possible. A hero that pushes Recently Added
+   * off-screen makes the home page a landing page, and the shelves are the part
+   * people actually use. Raising this is one edit; the rows are what pay for it.
+   */
+  --hero-height: clamp(280px, 31vh, 380px);
 
   /* Motion. */
   --dur-fast: 120ms; /* hover / focus */

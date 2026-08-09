@@ -74,10 +74,23 @@ function containerNoun(kind: string): string {
   }
 }
 
+// The music kinds (ADR 0024). Listening is not watching, and a hub that mixes
+// the two is the one place that difference becomes obvious: a row of tracks
+// sitting among films reads as a fault in the films.
+const MUSIC_KINDS = new Set(["artist", "album", "track"]);
+
+export function isMusic(item: Item): boolean {
+  return MUSIC_KINDS.has(item.kind);
+}
+
 // Kinds whose artwork is square rather than a 2:3 poster. A record sleeve is
 // square, and an artist wearing a borrowed album cover (ADR 0025) is square by
 // inheritance — so both frame square until artist images arrive from a provider,
 // and that ADR revisits this line when they do.
+//
+// Today this is exactly the music set, and it is still written separately: they
+// agree by coincidence of the current media types, not by definition. A square
+// non-music kind would otherwise silently become music.
 const SQUARE_ART_KINDS = new Set(["artist", "album", "track"]);
 
 // isSquareArt picks the tile's aspect ratio from what the art actually is.
