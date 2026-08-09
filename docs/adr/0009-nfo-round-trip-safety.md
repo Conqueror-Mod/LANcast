@@ -127,11 +127,46 @@ excluded for its own reason: it means the matcher wants a human to look, and
 writing the candidate it was unsure about would pre-empt that answer with a file
 on disk.
 
-**Not decided here:** whether an edit should make the *whole* file authoritative
-or only the fields that actually changed. Today one corrected title promotes the
-entire sidecar — plot, cast, rating — including parts LANcast got wrong that
-nobody touched. Per-field provenance would fix it and needs its own decision;
-it changes what this ADR promises rather than tightening it.
+### Per-field provenance — decided, and built
+
+The question left open above is now answered: **an edit authors only the field
+that changed.**
+
+The marker gained a second attribute, and the scheme became v2:
+
+```xml
+<lancast generated="…" hash="sha256:v2:9f2c…" fields="title:ab12…,year:cd34…,…"/>
+```
+
+The whole-record hash still answers *did anything change*. The per-field digests
+answer *what changed*, and that is the difference between honouring a title
+correction and promoting the plot, cast and rating that happened to sit beside
+it. On read, a file whose marker carries per-field digests yields a record
+containing only the fields whose digests no longer match — everything else is
+absent, so providers keep filling it exactly as before.
+
+This falls out of the existing precedence rather than complicating it: locals
+already outrank providers per field, so returning fewer fields is all that was
+needed.
+
+Three cases kept deliberately:
+
+- **A cleared field is not an instruction.** A title emptied in the file reads
+  as no opinion, not as "blank this". A provider filling an empty title is a
+  better failure than a parser disagreement silently erasing one.
+- **A marker with no per-field digests keeps the old behaviour.** Files written
+  before v2 make the whole file authoritative, which is blunter and still
+  correct.
+- **A foreign sidecar is wholly authoritative**, unchanged. No marker means
+  another tool wrote it and none of it is ours to second-guess.
+
+**An older scheme stays verifiable.** v1 and v2 digest the record identically —
+only the marker's shape grew — so a v2 build still checks a v1 marker properly.
+Getting this wrong was caught by a test: an early version treated any
+non-current scheme as unverifiable, which would have silently stopped honouring
+edits on every sidecar already on disk. That is a worse bug than the one
+versioning was introduced to prevent, and it is the reason the rule is "a
+version we do not implement", not "a version that is not current".
 
 ## Verification
 
@@ -141,3 +176,6 @@ it changes what this ADR promises rather than tightening it.
 - Confirm a marker whose scheme is from a newer build is treated as a mirror,
   not as an edit.
 - Confirm an unmatched item produces no sidecar at all.
+- Edit one field of a LANcast sidecar by hand; confirm that field wins and the
+  others stay open to providers.
+- Confirm a v1 marker with a hand edit is still honoured by a v2 build.
