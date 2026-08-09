@@ -24,17 +24,25 @@ import (
 	"lancast/internal/singleton"
 )
 
-// windowMode records whether this client was launched with -window, so the
-// autostart entry can reproduce the same mode.
-var windowMode bool
+// browserMode records whether this client was launched with -browser, so the
+// autostart entry reproduces the same mode rather than quietly changing it.
+var browserMode bool
 
 func main() {
 	addr := flag.String("addr", ":8080", "server listen address")
-	// Opt-in for now (ADR 0023 stage 1). The browser stays the default until the
-	// window has been lived with, so the two can be compared on one machine on
-	// one day and switching back is a flag rather than a rebuild.
+	// LANcast's own window is the front door (ADR 0023). The browser is the
+	// fallback, not the destination: it cannot be told what its close button
+	// means, it cannot pin a certificate, and against a LAN-bound server with a
+	// self-signed certificate it shows a warning the window does not need.
+	//
+	// -browser forces it anyway, and a machine with no WebView2 runtime falls
+	// back on its own — so the browser stays reachable without being the
+	// default. -window is kept as a no-op alias so existing shortcuts, the run
+	// key written by "open at login", and anything in a script keep working.
+	browser := flag.Bool("browser", false,
+		"show the UI in your default browser instead of the LANcast window")
 	window := flag.Bool("window", false,
-		"show the UI in a LANcast window instead of the default browser (Windows)")
+		"deprecated: the LANcast window is the default; kept so existing shortcuts still work")
 	// Mirrors lancastd's own flag. Without it the client guesses — machine-wide
 	// if a database is already there, per-user otherwise — which is right for
 	// every normal install and wrong for one run with a custom directory. It
@@ -44,9 +52,10 @@ func main() {
 	dataDir := flag.String("data", "",
 		"server data directory (default: the machine-wide one if present, else per-user)")
 	flag.Parse()
-	// Remembered because "open at login" has to reproduce this launch: a window
-	// user who enables it should get a window at login, not a browser.
-	windowMode = *window
+	// Remembered because "open at login" has to reproduce this launch: someone
+	// who runs in the browser should get the browser at login, not a window.
+	_ = *window // accepted and ignored; the window is the default now
+	browserMode = *browser
 
 	// One client at a time. Launching again — a second double-click of the
 	// shortcut — reopens the UI rather than adding a duplicate process and a
@@ -64,7 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *window {
+	if !*browser {
 		runWindow(l)
 		return
 	}
@@ -427,8 +436,8 @@ func applyAutostart(on bool) error {
 		return autostart.Disable()
 	}
 	var args []string
-	if windowMode {
-		args = append(args, "-window")
+	if browserMode {
+		args = append(args, "-browser")
 	}
 	return autostart.Enable(args...)
 }

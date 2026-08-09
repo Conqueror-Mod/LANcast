@@ -38,9 +38,30 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+; Two ways to finish, because the two are genuinely different applications of
+; the same client and the installer is the one place a person picks.
+;
+; The first checkbox opens LANcast's own window, which is the default and the
+; better experience: it owns its close button, it pins the server's certificate,
+; and against a LAN-bound server it does not show the warning a browser must.
+;
+; The second is the browser, offered rather than hidden. It is the right answer
+; on a machine without the WebView2 runtime, and it is what someone used to the
+; old behaviour will look for. SHOWREADME is repurposed to carry it — NSIS gives
+; the finish page exactly two checkboxes and no way to add a third.
 !define MUI_FINISHPAGE_RUN "$INSTDIR\LANcast-Client.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Open LANcast in my browser"
+!define MUI_FINISHPAGE_RUN_TEXT "Open LANcast"
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Open LANcast in my browser instead"
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenInBrowser
 !insertmacro MUI_PAGE_FINISH
+
+Function OpenInBrowser
+  ; -browser is the documented opt-out. Launched detached so the installer can
+  ; finish rather than waiting on a client the user is about to use.
+  Exec '"$INSTDIR\LANcast-Client.exe" -browser'
+FunctionEnd
 
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -105,7 +126,7 @@ Section "LANcast"
   ; not sit beside the two new ones pointing at the same program.
   Delete "$SMPROGRAMS\LANcast\LANcast.lnk"
   CreateShortcut "$SMPROGRAMS\LANcast\LANcast Client.lnk" "$INSTDIR\LANcast-Client.exe" \
-    "" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" "Open LANcast in your browser"
+    "" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" "Open LANcast"
   ; The server pinned to the same machine-wide data directory the service uses,
   ; so starting it by hand cannot quietly open a second, per-user database.
   ; $%ProgramData% is the environment variable, expanded on the target machine —
