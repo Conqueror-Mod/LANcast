@@ -51,3 +51,15 @@ func PublicKey() ed25519.PublicKey {
 // uses it to explain why automatic installation is unavailable rather than
 // silently never offering it.
 func Signable() bool { return PublicKey() != nil }
+
+// SetKeyForTest swaps the embedded key and returns a function that puts it
+// back. It exists because the packages that consume verification live
+// elsewhere, so an in-package export_test.go cannot reach them.
+//
+// Deliberately not taking a *testing.T: that would pull the testing package
+// into the server binary for the sake of a helper.
+func SetKeyForTest(hexKey string) (restore func()) {
+	prev := activeKeyHex
+	activeKeyHex = hexKey
+	return func() { activeKeyHex = prev }
+}

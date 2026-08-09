@@ -34,6 +34,37 @@ func (s *Server) checkForUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.updateView())
 }
 
+// downloadUpdate fetches, verifies and stages the newest release.
+//
+// Runs detached and returns immediately: a 15 MB download is not something to
+// hold an HTTP request open for, and the activity panel is where its progress
+// belongs anyway.
+func (s *Server) downloadUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.updates == nil {
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "updates are not available in this build")
+		return
+	}
+	if !release.Signable() {
+		// Said as a refusal rather than a failure. This build cannot prove a
+		// release is the project's, so it will not install one.
+		writeError(w, http.StatusPreconditionFailed, "unverifiable",
+			"this build cannot verify a release signature, so it will not install one")
+		return
+	}
+	if p := s.updates.Progress(); p.Active {
+		writeError(w, http.StatusConflict, "conflict", "an update is already downloading")
+		return
+	}
+
+	s.audit(r, "update.download", "", "", "Started downloading an update", nil)
+	go func() {
+		if err := s.updates.DownloadAndStage(context.Background(), s.dataDir); err != nil {
+			s.log.Error("update download failed", "error", err)
+		}
+	}()
+	w.WriteHeader(http.StatusAccepted)
+}
+
 // updateView is the shape both endpoints return, and the one the activity
 // surface reads.
 func (s *Server) updateView() map[string]any {
@@ -63,6 +94,9 @@ func (s *Server) updateView() map[string]any {
 	// difference is what the reader has to do about it: available means decide,
 	// staged means restart. Reporting only "available" after staging would ask
 	// someone to do something already done.
+	if p := s.updates.Progress(); p.Active {
+		out["downloading"] = p
+	}
 	if m, ok := selfupdate.Pending(s.dataDir); ok {
 		out["staged"] = m.Version
 		out["staged_at"] = m.StagedAt
@@ -77,7 +111,15 @@ func (s *Server) updateView() map[string]any {
 // person already looks to find out what their server wants from them, and an
 // update waiting is exactly that — state:available rather than running, so a
 // client renders it as something to act on rather than something in progress.
-func updateActivity(st update.State, staged string) (Activity, bool) {
+func updateActivity(st update.State, staged string, p update.Progress) (Activity, bool) {
+	// A download in flight is genuinely work in progress, unlike the other two
+	// states, so it reports as running with a progress pair the panel can draw.
+	if p.Active {
+		return Activity{
+			Kind: "update", ID: "update:download", Title: p.Stage,
+			State: "running", Done: int(p.Done), Total: int(p.Total),
+		}, true
+	}
 	// Staged outranks available: the decision has been made and what remains is
 	// a restart, so saying "available" here would be asking again.
 	if staged != "" {

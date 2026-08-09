@@ -53,6 +53,7 @@ type snapshot struct {
 	sessions []transcode.SessionInfo
 	update   update.State
 	staged   string
+	download update.Progress
 }
 
 // scanSnapshot pairs a scan's progress with the library name, resolved here so
@@ -92,6 +93,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if m, ok := selfupdate.Pending(s.dataDir); ok {
 		snap.staged = m.Version
+	}
+	if s.updates != nil {
+		snap.download = s.updates.Progress()
 	}
 
 	tasks := buildActivity(snap)
@@ -154,7 +158,7 @@ func buildActivity(snap snapshot) []Activity {
 	// Listed before live work: it is the one row that asks something of the
 	// reader rather than reporting progress, and burying it under three
 	// scanning rows would make it the thing nobody sees.
-	if a, ok := updateActivity(snap.update, snap.staged); ok {
+	if a, ok := updateActivity(snap.update, snap.staged, snap.download); ok {
 		tasks = append(tasks, a)
 	}
 
