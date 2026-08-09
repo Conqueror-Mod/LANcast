@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"lancast/internal/release"
 	"lancast/internal/update"
 )
 
@@ -59,9 +60,12 @@ func TestUpdateStatusBeforeAnyCheck(t *testing.T) {
 	if body["available"] != false {
 		t.Errorf("available = %v before any check, want false", body["available"])
 	}
-	// This build has no release key, so it must say automatic installation
-	// cannot happen rather than implying it can.
-	if body["can_verify"] != false {
-		t.Errorf("can_verify = %v with no key compiled in, want false", body["can_verify"])
+	// Tracks the build rather than restating a constant. What matters is that
+	// the API tells the UI the truth about whether this build can verify a
+	// release at all — a build without a key must not offer an install button
+	// that cannot work, and a build with one must not hide it.
+	if body["can_verify"] != release.Signable() {
+		t.Errorf("can_verify = %v, want %v to match this build",
+			body["can_verify"], release.Signable())
 	}
 }
