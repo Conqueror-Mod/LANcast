@@ -11,7 +11,6 @@
   min-height: var(--hero-height);
   display: flex;
   align-items: flex-end;
-  isolation: isolate;
 }
 
 .hero__backdrop {
@@ -35,25 +34,27 @@
      photograph pinned to the front of the screen. */
   opacity: 0.56;
   transform: translate3d(0, var(--parallax, 0px), 0);
-  will-change: transform;
 }
 
 /*
  * The backdrop is tinted into the field rather than laid on top of it. Without
  * this the hero is a photograph with an app around it — the artwork keeps its
  * own colour temperature and the deep-space identity stops at the hero's edge.
- * The tint is the existing nebula pair at low alpha, so nothing new enters the
- * palette; screen keeps the artwork's highlights alive instead of muddying them
- * the way a flat overlay would.
+ * The tint is the existing nebula pair, so nothing new enters the palette.
+ *
+ * Plain alpha, deliberately, where `mix-blend-mode: screen` would be the
+ * textbook choice. A blend mode forces its whole stacking context to composite,
+ * and on a long scrolling page over a fixed background that is how you get a
+ * ghost: a stale, magnified tile of a row painted somewhere else. The colours
+ * are lifted toward the bright end to buy back the luminosity screen was
+ * giving. See the session log — this cost a real bug report.
  */
 .hero__tint {
   position: absolute;
   inset: 0;
-  mix-blend-mode: screen;
-  opacity: 0.5;
   background:
-    radial-gradient(ellipse 80% 70% at 12% 8%, rgba(90, 74, 158, 0.5), transparent 62%),
-    radial-gradient(ellipse 70% 60% at 88% 92%, rgba(38, 88, 168, 0.42), transparent 60%);
+    radial-gradient(ellipse 80% 70% at 12% 8%, rgba(126, 108, 200, 0.3), transparent 62%),
+    radial-gradient(ellipse 70% 60% at 88% 92%, rgba(60, 118, 208, 0.26), transparent 60%);
 }
 
 /*
