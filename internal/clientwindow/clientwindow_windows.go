@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 
+	"golang.org/x/sys/windows"
+
 	"lancast/internal/webview2"
 	"lancast/internal/webview2/loader"
 )
@@ -38,6 +40,7 @@ func open(o Options) error {
 	}
 
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		OnClose: o.OnClose,
 		WindowOptions: webview2.WindowOptions{
 			Title:  o.Title,
 			Width:  uint(o.Width),
@@ -61,6 +64,10 @@ func open(o Options) error {
 		if err := w.Bind(name, fn); err != nil {
 			return fmt.Errorf("client window: binding %s: %w", name, err)
 		}
+	}
+
+	if o.OnReady != nil {
+		o.OnReady(&controller{w: w})
 	}
 
 	w.Navigate(o.URL)
@@ -130,4 +137,59 @@ func check() error {
 		return errors.New("client window: the Microsoft Edge WebView2 runtime is not installed on this machine")
 	}
 	return nil
+}
+
+// controller drives an open window from another thread.
+//
+// Every call goes through Dispatch, which posts onto the window's own message
+// loop. The tray runs on a different OS thread out of necessity — two message
+// queues, one per thread — and calling ShowWindow across that boundary is the
+// kind of thing that works until it deadlocks.
+//
+// The two procs are declared here rather than added to internal/webview2/w32,
+// which is vendored: a local need does not belong in a copy of someone else's
+// package when four lines here will do.
+var (
+	user32                  = windows.NewLazySystemDLL("user32")
+	procShowWindow          = user32.NewProc("ShowWindow")
+	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+)
+
+const (
+	swHide    = 0
+	swShow    = 5
+	swRestore = 9
+)
+
+type controller struct{ w webview2.WebView }
+
+func (c *controller) Show() {
+	c.w.Dispatch(func() {
+		hwnd := uintptr(c.w.Window())
+		// Restore before showing: a window hidden while minimised comes back
+		// minimised, which reads as the tray having done nothing.
+		_, _, _ = procShowWindow.Call(hwnd, swRestore)
+		_, _, _ = procShowWindow.Call(hwnd, swShow)
+		_, _, _ = procSetForegroundWindow.Call(hwnd)
+	})
+}
+
+func (c *controller) Hide() {
+	c.w.Dispatch(func() {
+		_, _, _ = procShowWindow.Call(uintptr(c.w.Window()), swHide)
+	})
+}
+
+// Close ends the message loop, which returns from Open and lets the caller run
+// its normal shutdown — including stopping a server it started.
+//
+// Dispatched, despite Terminate being documented as safe from a background
+// thread. It is not, on this backend: Terminate calls PostQuitMessage, and
+// PostQuitMessage posts WM_QUIT to the *calling* thread's queue. Called from the
+// tray's thread it quits the tray and leaves the window open — which is exactly
+// what happened the first time, a tray icon that vanished while the app stayed
+// on screen. Going through Dispatch puts it on the window's own thread, where
+// the quit belongs.
+func (c *controller) Close() {
+	c.w.Dispatch(func() { c.w.Terminate() })
 }

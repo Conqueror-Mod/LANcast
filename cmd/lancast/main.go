@@ -102,11 +102,44 @@ func runWindow(l *launcher) {
 		return
 	}
 
-	err := clientwindow.Open(clientwindow.Options{
+	// Read once, at open. Changing the preference mid-session and expecting the
+	// current window's close button to change under you is a worse surprise
+	// than the setting taking effect next launch.
+	prefs, err := desktopprefs.Load(clientDataDir())
+	if err != nil {
+		// Not fatal: the default is off, which is the safe behaviour.
+		prefs = desktopprefs.Prefs{}
+	}
+
+	// quitting distinguishes "the user chose Quit" from "the user clicked the
+	// window's X". Without it, Quit would be intercepted by close-to-tray and
+	// the app could never be closed at all — a tray whose Quit hides the window
+	// is the worst version of this feature.
+	var quitting bool
+	var tray clientwindow.Controller
+
+	err = clientwindow.Open(clientwindow.Options{
 		URL:    desktop.ResolvedURL(l.addr),
 		Title:  "LANcast",
 		Width:  1280,
 		Height: 800,
+		OnClose: func() bool {
+			if quitting || !prefs.CloseToTray || tray == nil {
+				return true
+			}
+			tray.Hide()
+			return false
+		},
+		OnReady: func(c clientwindow.Controller) {
+			if !prefs.CloseToTray {
+				return
+			}
+			// The tray exists only when close-to-tray is on. An icon that
+			// appears for everyone would be a second thing to explain, and
+			// without the preference there is nothing for it to do.
+			tray = c
+			runWindowTray(c, &quitting)
+		},
 		// Beside the client's own config, not the server's data directory: this
 		// is one person's session and cache on one machine, and the server's
 		// directory is machine-wide and may belong to a service account.

@@ -74,3 +74,15 @@ An upstream fix is a manual port, which is the cost of this choice. Diff
 upstream at the new commit against the vendored commit above, apply what
 matters to `edge/` and `w32/`, and leave `loader/` alone unless the upstream
 loader itself changed — it is the file this copy deliberately disagrees with.
+
+## Local addition — `WebViewOptions.OnClose` (2026-08-08)
+
+A hook consulted in the window procedure's `WM_CLOSE` branch. Returning false
+keeps the window alive; nil or true destroys it, which is the upstream
+behaviour unchanged.
+
+It exists because close-to-tray has to hide the window instead of ending the
+process, and `WM_CLOSE` is handled inside this package — there is no hook from
+outside. Recorded here because every local change to a vendored copy has to stay
+visible; the alternative was forking the window procedure into the caller, which
+is more code in a worse place.

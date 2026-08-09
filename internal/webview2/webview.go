@@ -51,6 +51,7 @@ type webview struct {
 	mainthread uintptr
 	browser    browser
 	autofocus  bool
+	onClose    func() bool
 	maxsz      w32.Point
 	minsz      w32.Point
 	m          sync.Mutex
@@ -81,6 +82,16 @@ type WebViewOptions struct {
 	// WindowOptions customizes the window that is created to embed the
 	// WebView2 widget.
 	WindowOptions WindowOptions
+
+	// OnClose is consulted when the user closes the window. Returning false
+	// keeps the window alive — the caller has handled the close itself, by
+	// hiding it — and true destroys it, which is the behaviour when this is nil.
+	//
+	// LOCAL ADDITION, not present upstream. See PROVENANCE.md. It exists so
+	// close-to-tray can hide the window instead of ending the process, which
+	// cannot be done from outside: WM_CLOSE is handled in this package's window
+	// procedure and there is no other hook.
+	OnClose func() bool
 }
 
 // New creates a new webview in a new window.
@@ -98,6 +109,7 @@ func NewWithOptions(options WebViewOptions) WebView {
 	w := &webview{}
 	w.bindings = map[string]interface{}{}
 	w.autofocus = options.AutoFocus
+	w.onClose = options.OnClose
 
 	chromium := edge.NewChromium()
 	chromium.MessageCallback = w.msgcb
@@ -238,6 +250,12 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 				w.browser.Focus()
 			}
 		case w32.WMClose:
+			// A caller that handles the close itself keeps the window: this is
+			// what lets close-to-tray hide rather than quit. Default and nil
+			// case is the original behaviour, destroy.
+			if w.onClose != nil && !w.onClose() {
+				return 0
+			}
 			_, _, _ = w32.User32DestroyWindow.Call(hwnd)
 		case w32.WMDestroy:
 			w.Terminate()

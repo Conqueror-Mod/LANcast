@@ -113,9 +113,12 @@ export function DesktopSettings() {
           a reason beats a tickbox that quietly does nothing. */}
       <LifecycleOption
         title="Close to tray"
-        sub="Keep LANcast running in the notification area when you close the window."
+        sub="Keep LANcast running in the notification area when you close the window. Quit from the tray to stop it."
         checked={state.close_to_tray}
-        reason="Not yet available. Without a tray icon this would leave a server running with nothing on screen to show for it — the background process this is meant to prevent."
+        onChange={(next) => save(next, state.open_at_login)}
+        busy={saving}
+        error={saveError}
+        reason="Takes effect the next time you open LANcast."
       />
       <LifecycleOption
         title="Open when Windows starts"
