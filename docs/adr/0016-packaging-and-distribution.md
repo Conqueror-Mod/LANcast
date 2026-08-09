@@ -131,3 +131,44 @@ Homebrew, a `.deb`, a Docker image) becomes worth the maintenance — each is
 additive on top of the archives decided here. Or if bundling ffmpeg for a
 "batteries-included" build is worth the size and licensing once there is demand
 for a zero-configuration transcoding install.
+
+## Amendment — signed releases, 2026-08-09
+
+Automatic updates are being built, and they change what a release has to prove.
+Auto-install means a process running as LocalSystem downloading a binary and
+executing it: if the distribution channel is ever untrustworthy, that is remote
+code execution as SYSTEM. The `checksums.txt` this pipeline already publishes
+does not help, because it is served from the same place as the download — it
+proves the bytes arrived intact, not that the project produced them.
+
+So a release now carries **`checksums.txt.sig`**, an Ed25519 signature over the
+checksum list. One signature covers every artifact: match a download against its
+digest in a signed list and the download is as good as signed. Verification is
+offline, against a public key compiled into the binary, and depends on nothing
+that was downloaded alongside it.
+
+**A separate key from the plugin project key** ([ADR 0021](0021-plugin-distribution-and-trust.md)).
+Plugin provenance and release provenance are different trust domains; one key
+for both means a compromise of either is a compromise of everything. They share
+an algorithm and nothing else.
+
+**An unsigned release is a distinct answer, not a failure.** A build cut without
+the key publishes no signature, and the updater treats that as installable by
+hand but never automatically. Releases made before this existed keep working on
+those terms. A signature that is *present and wrong* is refused outright.
+
+**A build with no key compiled in refuses everything.** A verifier that waves
+downloads through when it cannot check is worse than no verifier, and that is
+the case the tests pin hardest.
+
+### Setting it up
+
+```
+go run ./cmd/lcsign keygen -out release.key
+```
+
+The public half goes in `internal/release/publickey.go`; the private half goes
+in the `RELEASE_SIGNING_KEY` repository secret and nowhere else. `*.key` is
+already gitignored. Until both are set, releases publish unsigned and automatic
+installation stays unavailable — which is the intended failure mode rather than
+an outage.
