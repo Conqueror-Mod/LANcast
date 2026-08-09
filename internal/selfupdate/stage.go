@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // DirName is the staging directory, kept inside the data directory rather than
@@ -81,7 +82,13 @@ func Stage(dataDir, version string, files map[string][]byte, now int64) error {
 		// Flat names only. A staged path containing a separator could be
 		// written outside the staging directory, and later moved anywhere the
 		// service can write — which is everywhere.
-		if name != filepath.Base(name) || name == "" || name == "." || name == ".." {
+		//
+		// Checked against both separators explicitly rather than through
+		// filepath.Base, which is platform-dependent by design: on Linux
+		// `..\evil.exe` is a legal single filename and passes Base unchanged,
+		// so the guard would admit a name that escapes the moment the same data
+		// directory is used on Windows. Caught by CI, which runs on Linux.
+		if !safeStagedName(name) {
 			return fmt.Errorf("selfupdate: refusing a staged path %q", name)
 		}
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
@@ -200,4 +207,25 @@ func CleanupOld(installDir string) int {
 		}
 	}
 	return removed
+}
+
+// safeStagedName reports whether a name may be written into staging and later
+// moved into the install directory.
+//
+// Deliberately strict and deliberately platform-independent: a staged file may
+// be produced on one operating system and applied on another, so a name is
+// judged by the same rules everywhere rather than by whatever the running
+// platform happens to treat as a separator.
+func safeStagedName(name string) bool {
+	switch name {
+	case "", ".", "..":
+		return false
+	}
+	if strings.ContainsAny(name, `/\:`) {
+		return false
+	}
+	// A leading dot is not a separator problem, but nothing LANcast installs
+	// starts with one, and allowing it invites confusion with the .old files
+	// Apply creates.
+	return !strings.HasPrefix(name, ".")
 }
