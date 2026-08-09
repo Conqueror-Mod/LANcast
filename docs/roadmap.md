@@ -1,15 +1,15 @@
 # Roadmap
 
-Last updated: 2026-08-09 · **v0.6.1 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-09 · **v0.6.2 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
 
-**Since v0.6.1, unreleased on `main`:** the repository is **public under MIT**,
-releases are **signed**, the client **opens its own window by default**, and the
-server can **check for, download, verify and stage an update** that swaps itself
-in on the way down. Details in the areas below; what the pass taught is at the
-end.
+All of it is released: the repository is **public under MIT**, releases are
+**signed**, the client **opens its own window by default**, and the server can
+**check for, download, verify and stage an update** that swaps itself in on the
+way down. Nothing sits unreleased on `main`. Details in the areas below; what
+the pass taught is at the end.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -64,6 +64,7 @@ rather than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.6.2** | 2026-08-09 | LANcast updates itself, opens in its own window by default, and the source is public under MIT. **The first signed release** — a signature over the checksum list, verified against a key compiled into the binary, which is what makes automatic installation defensible rather than merely convenient: installing an update is a system-level process executing a downloaded binary, and without proof of origin that is a hole. Three outcomes stay distinct — signed installs automatically, unsigned is offered for a manual install, present-and-wrong is refused before anything is downloaded. The install is staged and swapped on the way down, so it is one restart with no elevation prompt and no second process. The check is on by default and is not a phone-home exception: a plain GET with no install identifier, statistics or history, switchable off, with a manual check that still works. The `-window` flip landed here too, with `-browser` as the opt-out and the installer offering both. Fixes: a database handle held open after a stop that raced startup (which is what makes an installer's file replacement fail), and an NFO edit that claimed the whole file rather than the field that changed |
 | **v0.6.1** | 2026-08-09 | A day of fixes, an audit log, and desktop lifecycle controls — two of the fixes for problems that never produced an error. Scans stopped dying with `database is locked` when enrichment committed mid-scan; new films and shows are enriched again on any server with a music library, where un-enrichable rows had blocked the queue permanently (a "remaining" count of 2,198 that never moved became 7); the service stops when told rather than being judged a hang and restarted by its own recovery policy; and a sidecar is written only for an identity actually established, so a wrong title can no longer outlive the database that produced it. The **audit log** ([ADR 0026](adr/0026-audit-log.md)) records who changed what where the mutation is authorised — libraries, titles, matches, accounts, add-on trust — readable from Settings, with browsing and playback deliberately excluded. **Desktop lifecycle** shipped: close to tray and open when Windows starts, both off by default, both shown only in the LANcast window. Close-to-tray had shipped disabled on the belief that the tray and the web view fight over the message loop; they do not — Windows message queues are per thread, and the conflict existed only because both were run from one goroutine |
 | **v0.6.0** | 2026-08-08 | Music becomes a client experience, LANcast gets its own window, and the server says what it is doing. The music UI v0.5.0 left unbuilt — artist and album tiles, a numbered track list in playing order, an audio mode, a docked mini-player — plus album artwork off the disk (369 of 398 albums, 10.7s, no network) and album artist/year derived from tracks. `-window` opens a WebView2 window that pins the server's own certificate, which matters because a web view does not warn on a bad certificate, it refuses to load. Clients now declare what they can decode, ending the full re-encode of every HEVC file. An activity indicator and a log viewer make background work visible. Two fixes found by using it: scans aborting with `database is locked` when enrichment committed mid-scan (SQLITE_BUSY_SNAPSHOT, which `busy_timeout` does not cover), and new items never being enriched at all on any server with a music library, because un-enrichable rows sat at the head of the queue and the worker stopped at the first unproductive batch |
 | **v0.5.0** | 2026-08-03 | Music libraries — the first media type past video, and the first test of ADR 0002's claim that a new kind needs no new tables (it holds: three `kind` values on `media_item`, schema 13). Scans eleven audio formats, reads embedded tags as the authority rather than guessing from filenames, and groups tracks into artists and albums by *album artist* so compilations stay whole. Playback profiles gained audio containers, which is what stopped a `.flac` being re-encoded to AAC to deliver a format every browser plays natively. Server-side only: no music player in the client, no album artwork yet. |
@@ -227,7 +228,7 @@ Status: **planned** · **next** · *unplanned*
 | Activity view | **built** | `GET /api/activity` in one shape for every worker; a nav indicator and task popover. Indeterminate where the worker genuinely cannot know its total — a scan discovers its own size, so it shows a count rather than a lying percentage |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
 | Desktop lifecycle | **built** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)), both off by default and both shown only in the LANcast window, because a tab has no tray to reduce to and no close button LANcast owns. The Settings section states which of the three meanings of "closed" you are looking at — stop the server, or leave it running because the service owns it. Autostart records the mode you chose, so picking the browser does not silently become the window at login |
-| Update checking and self-update | **built, unreleased** | Check, download, verify, stage, and swap on the way down. Signed releases first, because auto-install is a LocalSystem process executing a downloaded binary and without authenticity that is remote code execution as SYSTEM — an Ed25519 signature over `checksums.txt`, offline verification against a key compiled into the binary, and a **separate key from the plugin project key** so one compromise is not both. Three distinct states: unsigned is installable by hand only, a wrong signature is refused outright, and a build with no key refuses everything. The swap works because a running process on Windows can rename *itself*: the binary moves aside to `.old`, the staged one takes its place, and the next start is the new version — one restart, no UAC prompt, no second process. Nothing is written into the install directory before the swap; staging lives in the data directory. The check is on by default and is not a phone-home exception — a plain GET with no install identifier, no statistics, no history, and switchable off entirely |
+| Update checking and self-update | **built, shipped in v0.6.2** | Check, download, verify, stage, and swap on the way down. **Proven end to end on the published release**: the signature verifies against the key compiled into the shipping binaries, and the Windows archive's digest matches the one in the signed list — signature → checksums → bytes, all three links checked rather than assumed. Signed releases first, because auto-install is a LocalSystem process executing a downloaded binary and without authenticity that is remote code execution as SYSTEM — an Ed25519 signature over `checksums.txt`, offline verification against a key compiled into the binary, and a **separate key from the plugin project key** so one compromise is not both. Three distinct states: unsigned is installable by hand only, a wrong signature is refused outright, and a build with no key refuses everything. The swap works because a running process on Windows can rename *itself*: the binary moves aside to `.old`, the staged one takes its place, and the next start is the new version — one restart, no UAC prompt, no second process. Nothing is written into the install directory before the swap; staging lives in the data directory. The check is on by default and is not a phone-home exception — a plain GET with no install identifier, no statistics, no history, and switchable off entirely |
 | Audit log | **built** | Who changed what, and when, recorded server-side where the mutation is authorised ([ADR 0026](adr/0026-audit-log.md)) — libraries, deleted titles, overridden matches, accounts, add-on trust. An audit trail a client writes is forgeable by the client it is auditing. Readable from Settings, newest first, filterable by action. Browsing and playback are deliberately excluded: burying a handful of deliberate acts under a million routine ones is how a log becomes unreadable. Each entry freezes the actor's name and a sentence at the time it happened, so "who deleted this library" still answers after both the library and the account are gone |
 | Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
 | Licensing and open-sourcing | **done** | **MIT** (`LICENSE`) and **the repository is public**, which is what the update check needed: the releases API returns 404 for a private repo and cannot distinguish "no such repository" from "not yours to see", so the checker was correct and inert until the switch was flipped. Vendored code keeps its own notices and the README points at them. **The history cleanup did not happen before the repo went public and is now a judgement call rather than a scheduled one** — three `lancastd.exe~` blobs from the M3 era still sit in history (~25 MB packed, about a third of `.git`). Rewriting 352 commits and re-pointing every release tag was worth doing *once, before* the first public clone; after it, a rewrite also breaks every clone and every commit link that already exists. The honest options are to accept the weight or to pay it deliberately and announce it; `*.exe~` is gitignored, so it cannot grow either way |
@@ -425,10 +426,11 @@ where that openness gets exercised.
     default** ([plan](native-client-plan.md)). Living with it settled it, which
     also unblocked and delivered the desktop lifecycle options.
 11. ~~**Audit log**~~ — **built** in v0.6.1 ([ADR 0026](adr/0026-audit-log.md)).
-12. **Distribution trust and self-update** — **built, unreleased.** Signed
-    releases, the update check, and download → verify → stage → swap. The
-    remaining step is a release cut with the signing key set, since only that
-    exercises the published half.
+12. ~~**Distribution trust and self-update**~~ — **shipped in v0.6.2**, which is
+    the first signed release and therefore the first one that exercised the
+    published half. It failed on the first attempt for a reason worth keeping:
+    the release pipeline had never signed anything, so the signing step had
+    never run.
 13. **Nothing foundational remains.** What's next is breadth, from the feature
     backlog: a Pictures library (its own ADR — ADR 0024 deferred photos
     deliberately), more client surfaces (TV/mobile), more plugin kinds as real
@@ -437,6 +439,22 @@ where that openness gets exercised.
     is built.
 
 ## What the last pass taught
+
+**A release step that has never run has never been tested, and cutting the tag
+is the test.** v0.6.2 failed at signing: the artifact path was passed
+positionally as `"${artifact}"` and arrived at the shell empty, because the
+placeholder is substituted where it appears *inside* an argument, not when it is
+the whole of one. `lcsign` refused the empty `-in` and said so, which is the
+behaviour worth having — the alternative is a release that publishes unsigned
+and is discovered by a user whose updater declines to install it. Two things
+made the fix quick rather than a guessing game. It was reproduced locally with a
+snapshot build before anything was changed, and the argv was *printed* rather
+than reasoned about: `0=[] 1=[] 2=[]` ruled out quoting and ruled out a shell
+difference between the runner and this machine in one line, which is where
+reading the config would have sent someone first. The same pass found a second
+branch that had never run — the unsigned fallback, which could not have worked
+either, since goreleaser expects the signature file the block declares. **Every
+branch of a release pipeline is untested until a real tag takes it.**
 
 **A blocker that was never tested blocked a feature for a release.**
 Close-to-tray shipped as a disabled toggle on the belief that the tray and the
