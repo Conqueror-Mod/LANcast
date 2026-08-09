@@ -33,9 +33,10 @@
   gap: 18px;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding-bottom: 8px;
-  /* Room so a focused tile's lift and ring are not clipped by the scroll box. */
-  padding-top: 6px;
+  /* Room so a focused tile's lift, ring and cast shadow are not clipped by the
+     scroll box. The shadow needs more room below than the lift needs above. */
+  padding-bottom: 18px;
+  padding-top: 8px;
   scrollbar-width: thin;
 }
 
