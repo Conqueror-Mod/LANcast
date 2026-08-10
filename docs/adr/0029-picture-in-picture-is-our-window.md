@@ -1,6 +1,6 @@
 # ADR 0029 — Picture-in-picture is our window, not the browser's
 
-Date: 2026-08-10 · Status: proposed
+Date: 2026-08-10 · Status: accepted
 
 ## Context
 
