@@ -1,11 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
+	"lancast/internal/photo"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/selfupdate"
@@ -50,6 +52,7 @@ type snapshot struct {
 	enrich   enrich.Stats
 	probe    probe.Stats
 	covers   coverart.Stats
+	photos   photo.Stats
 	sessions []transcode.SessionInfo
 	update   update.State
 	staged   string
@@ -81,6 +84,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.probes != nil {
 		snap.probe = s.probes.Stats()
+	}
+	if s.photos != nil {
+		snap.photos = s.photos.Stats()
 	}
 	if s.covers != nil {
 		snap.covers = s.covers.Stats()
@@ -155,6 +161,17 @@ func buildActivity(snap snapshot) []Activity {
 			Detail: failedDetail(st.Failed),
 		})
 	}
+	if st := snap.photos; st.Running {
+		// Unsupported is reported beside failures rather than folded into them:
+		// a HEIC on a machine with no ffmpeg is not a broken file, and telling
+		// someone their photos failed when the install is what is incomplete
+		// sends them to look in the wrong place.
+		tasks = append(tasks, Activity{
+			Kind: "photos", ID: "photos", Title: "Making photo thumbnails",
+			State: "running", Done: st.Done, Total: st.Total,
+			Detail: photoDetail(st),
+		})
+	}
 	// Listed before live work: it is the one row that asks something of the
 	// reader rather than reporting progress, and burying it under three
 	// scanning rows would make it the thing nobody sees.
@@ -180,4 +197,19 @@ func failedDetail(failed int) string {
 		return ""
 	}
 	return strconv.Itoa(failed) + " failed"
+}
+
+// photoDetail names what could not be turned into a thumbnail, keeping the two
+// reasons apart. "3 failed" and "3 in a format this build cannot read" send a
+// reader to different places, and the second is fixed by installing ffmpeg
+// rather than by suspecting the files.
+func photoDetail(st photo.Stats) string {
+	switch {
+	case st.Failed > 0 && st.Unsupported > 0:
+		return fmt.Sprintf("%d failed, %d unsupported", st.Failed, st.Unsupported)
+	case st.Unsupported > 0:
+		return fmt.Sprintf("%d in an unsupported format", st.Unsupported)
+	default:
+		return failedDetail(st.Failed)
+	}
 }

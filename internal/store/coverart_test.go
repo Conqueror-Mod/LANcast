@@ -92,8 +92,8 @@ func TestCheckedAlbumsLeaveTheQueue(t *testing.T) {
 	lib := musicLibrary(t, st)
 	albumID := seedAlbum(t, st, lib, "An Artist", "A Record")
 
-	if err := st.MarkCoverArtChecked(ctx, albumID); err != nil {
-		t.Fatalf("MarkCoverArtChecked: %v", err)
+	if err := st.MarkArtworkChecked(ctx, albumID); err != nil {
+		t.Fatalf("MarkArtworkChecked: %v", err)
 	}
 
 	pending, err := st.PendingCoverArt(ctx, 10)
@@ -144,7 +144,7 @@ func TestClearCoverArtChecksRequeues(t *testing.T) {
 	lib := musicLibrary(t, st)
 	albumID := seedAlbum(t, st, lib, "An Artist", "A Record")
 
-	if err := st.MarkCoverArtChecked(ctx, albumID); err != nil {
+	if err := st.MarkArtworkChecked(ctx, albumID); err != nil {
 		t.Fatal(err)
 	}
 	queued, err := st.ClearCoverArtChecks(ctx, 0)
@@ -168,7 +168,7 @@ func TestClearCoverArtChecksCanScopeToOneLibrary(t *testing.T) {
 	b := seedAlbum(t, st, two, "Artist Two", "Record Two")
 
 	for _, id := range []int64{a, b} {
-		if err := st.MarkCoverArtChecked(ctx, id); err != nil {
+		if err := st.MarkArtworkChecked(ctx, id); err != nil {
 			t.Fatal(err)
 		}
 	}

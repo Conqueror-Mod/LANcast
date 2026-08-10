@@ -84,15 +84,20 @@ func (s *Store) AlbumTrackPaths(ctx context.Context, albumID int64) ([]string, e
 	return out, rows.Err()
 }
 
-// MarkCoverArtChecked records that an album was looked at, whether or not
+// MarkArtworkChecked records that an album was looked at, whether or not
 // anything was found. Called on the failure path too — an album whose art
 // cannot be read must not be retried on every pass forever.
-func (s *Store) MarkCoverArtChecked(ctx context.Context, itemID int64) error {
+
+// MarkArtworkChecked records that this row's artwork has been looked for, so
+// the queue does not hand it back forever. Shared by album covers and photo
+// thumbnails: both answer the same question about the same column, and a photo's
+// artwork is the photo (ADR 0028).
+func (s *Store) MarkArtworkChecked(ctx context.Context, itemID int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE media_item SET cover_checked_at = ? WHERE id = ?`,
 		time.Now().Unix(), itemID)
 	if err != nil {
-		return fmt.Errorf("mark cover art checked: %w", err)
+		return fmt.Errorf("mark artwork checked: %w", err)
 	}
 	return nil
 }

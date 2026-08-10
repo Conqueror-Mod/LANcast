@@ -17,7 +17,7 @@ type Store interface {
 	PendingCoverArt(ctx context.Context, limit int) ([]store.Item, error)
 	PendingCoverArtCount(ctx context.Context) (int, error)
 	AlbumTrackPaths(ctx context.Context, albumID int64) ([]string, error)
-	MarkCoverArtChecked(ctx context.Context, itemID int64) error
+	MarkArtworkChecked(ctx context.Context, itemID int64) error
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
 }
 
@@ -250,7 +250,7 @@ func (w *Worker) processAlbum(ctx context.Context, album store.Item) bool {
 }
 
 func (w *Worker) markChecked(ctx context.Context, id int64) bool {
-	if err := w.st.MarkCoverArtChecked(ctx, id); err != nil {
+	if err := w.st.MarkArtworkChecked(ctx, id); err != nil {
 		w.log.Warn("marking album checked failed", "album", id, "error", err)
 		return false
 	}
