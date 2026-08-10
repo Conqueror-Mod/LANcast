@@ -1,12 +1,59 @@
 .app-shell {
   min-height: 100%;
   display: flex;
+}
+
+/*
+ * The rail: destinations, vertically, because that is the axis with room.
+ * Sticky and full-height rather than scrolling away, so where-you-can-go is
+ * always answerable without going back to the top of a 2,600-photo grid.
+ */
+.app-shell__rail {
+  flex: none;
+  width: 208px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px 12px 24px;
+  /* A hairline, not a panel. The rail is part of the same field as the content
+     — giving it its own surface would make the app look like two applications
+     sharing a window. */
+  border-right: 1px solid rgba(242, 245, 251, 0.06);
+  scrollbar-width: thin;
+}
+
+.app-shell__brand {
+  font-size: 13px;
+  letter-spacing: 0.28em;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 4px 10px;
+}
+
+.app-shell__body {
+  flex: 1;
+  /* Without this a wide grid pushes the rail off-screen instead of scrolling
+     inside its own column — the default min-width of a flex item is its
+     content, which for a photo grid is very wide indeed. */
+  min-width: 0;
+  display: flex;
   flex-direction: column;
 }
 
-.app-shell__nav {
+/*
+ * The top bar: what is true now, rather than where you can go. It keeps the
+ * gradient the old nav had, because it still floats over content that scrolls
+ * beneath it.
+ */
+.app-shell__top {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 24px;
   padding: 16px 28px;
   position: sticky;
@@ -20,22 +67,18 @@
   backdrop-filter: blur(6px);
 }
 
-.app-shell__brand {
-  font-size: 13px;
-  letter-spacing: 0.28em;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .app-shell__libs {
   display: flex;
-  align-items: center;
-  gap: 20px;
-  flex: 1;
-  overflow-x: auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-.app-shell__lib,
+/* Sits above the list rather than beside it, and only when there is a list. */
+.app-shell__rail-label {
+  padding: 0 10px 6px;
+}
+
 .app-shell__settings,
 .app-shell__review {
   font-size: 13px;
@@ -46,37 +89,79 @@
   transition: color var(--dur-fast) ease;
 }
 
+/*
+ * A rail entry is a row, not a word: the name takes the space it needs and the
+ * count sits at the far end, so "Test TV Shows 3" and "Music 206" line up
+ * instead of each pushing the next one along.
+ */
+.app-shell__lib {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 7px 10px;
+  /* Single-sided border, so no radius — a rounded corner on one edge reads as
+     a rendering fault. */
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.app-shell__lib-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-shell__lib:hover,
 .app-shell__settings:hover,
 .app-shell__review:hover {
   color: var(--text-secondary);
 }
 
-/* Gold marks where you are — nothing else. */
-.app-shell__lib.is-active,
+.app-shell__lib:hover {
+  background: rgba(242, 245, 251, 0.04);
+}
+
+/* Gold marks where you are — nothing else. Vertically that is the left edge,
+   which is the same statement the underline used to make horizontally. */
+.app-shell__lib.is-active {
+  color: var(--text-primary);
+  border-left-color: var(--gold);
+  background: rgba(242, 245, 251, 0.05);
+}
+
+.app-shell__lib:focus {
+  outline: none;
+  color: var(--text-primary);
+  border-left-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-ring) inset;
+}
+
 .app-shell__settings.is-active,
 .app-shell__review.is-active {
   color: var(--text-primary);
   border-bottom-color: var(--gold);
 }
 
-/* Item count trailing a library name — a quiet, tabular figure, never gold. */
+/* Item count at the end of a library row — a quiet, tabular figure, never gold. */
 .app-shell__lib-count {
-  margin-left: 6px;
+  flex: none;
   font-size: 11px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
-/* The review link and settings form the right-aligned group. */
 .app-shell__review {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-.app-shell__settings {
-  margin-left: auto;
 }
 
 /* A neutral count, not gold — this is a quantity, not focus. */
@@ -138,4 +223,55 @@
 .app-shell__signout:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/*
+ * Narrow: the rail lies down. Below this width a 208px column is a third of the
+ * screen spent on navigation, so it becomes a scrolling strip above the content
+ * — which is what it was before, and still the right answer when there is no
+ * horizontal room to give away.
+ */
+@media (max-width: 860px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .app-shell__rail {
+    width: auto;
+    height: auto;
+    position: static;
+    align-self: stretch;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px 0;
+    border-right: none;
+    overflow-x: auto;
+  }
+
+  .app-shell__libs {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* The heading has no room to sit above a row, and the row is self-evident. */
+  .app-shell__rail-label {
+    display: none;
+  }
+
+  .app-shell__lib {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    padding: 6px 8px;
+  }
+
+  .app-shell__lib.is-active {
+    border-left-color: transparent;
+    border-bottom-color: var(--gold);
+  }
+
+  .app-shell__top {
+    padding: 8px 20px 12px;
+  }
 }
