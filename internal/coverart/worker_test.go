@@ -73,7 +73,7 @@ func (f *fakeStore) AlbumTrackPaths(ctx context.Context, albumID int64) ([]strin
 	return f.tracks[albumID], nil
 }
 
-func (f *fakeStore) MarkCoverArtChecked(ctx context.Context, itemID int64) error {
+func (f *fakeStore) MarkArtworkChecked(ctx context.Context, itemID int64) error {
 	if f.markErr != nil {
 		return f.markErr
 	}

@@ -31,6 +31,7 @@ import (
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
+	"lancast/internal/photo"
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
@@ -336,6 +337,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// hook on enrichment, which no music item ever reaches because ADR 0024
 	// ships no music provider.
 	covers := coverart.NewWorker(st, art, coverart.NewResolver(coverart.NewExtractor()), log)
+	// A photo is its own artwork (ADR 0028), so a picture library's thumbnails
+	// are generated rather than found. Its own worker for the reason the two
+	// above are: decoding and resizing a library of photographs is minutes of
+	// CPU, and a scan that did it inline would look like a hang on its first
+	// run. ffmpeg is handed over for HEIC, which nothing in the standard
+	// library can read and which a phone backup is mostly made of.
+	photos := photo.NewWorker(st, art, &photo.Decoder{FFmpeg: photo.NewFFmpeg()}, log)
 	// Music takes its metadata from the file's own tags during the scan, not
 	// from the filename (ADR 0024). Without a prober the scan still works and
 	// tracks keep what their folders gave them.
@@ -393,6 +401,19 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer probeMu.Unlock()
 			if err := probes.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("probe pass failed", "error", err)
+			}
+		}()
+	}
+
+	var photoMu sync.Mutex
+	photoSoon := func() {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			photoMu.Lock()
+			defer photoMu.Unlock()
+			if err := photos.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("photo thumbnail pass failed", "error", err)
 			}
 		}()
 	}
@@ -481,7 +502,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound, RestartWidens: restartWidens,
 			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Covers: covers, Trans: trans, Subs: subs,
+			Worker: worker, Probes: probes, Covers: covers, Photos: photos, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Updates: updates,
 			Rebuild: func(s config.Settings) {
@@ -503,6 +524,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		probeSoon()
 		enrichSoon()
 		coverSoon()
+		photoSoon()
 	})
 
 	// Clears leftover scratch from a previous run and starts reaping idle

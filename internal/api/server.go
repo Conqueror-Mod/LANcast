@@ -18,6 +18,7 @@ import (
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
+	"lancast/internal/photo"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -46,6 +47,7 @@ type Deps struct {
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
 	Covers   *coverart.Worker
+	Photos   *photo.Worker
 	Trans    *transcode.Manager
 	Updates  *update.Checker
 	Subs     *subtitle.Extractor
@@ -89,6 +91,7 @@ type Server struct {
 	worker        *enrich.Worker
 	probes        *probe.Worker
 	covers        *coverart.Worker
+	photos        *photo.Worker
 	trans         *transcode.Manager
 	updates       *update.Checker
 	subs          *subtitle.Extractor
@@ -113,7 +116,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, covers: d.Covers, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
