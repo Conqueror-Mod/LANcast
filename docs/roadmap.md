@@ -388,6 +388,15 @@ group is not priority.
 
 - **Keyboard-control shortcut map and customizer** — building on the existing
   spatial focus model (ADR 0004).
+- **Pop-out player** in our own window rather than the browser's
+  ([ADR 0029](adr/0029-picture-in-picture-is-our-window.md), proposed).
+  Picture-in-picture hands the element to Chrome, so the window arrives with
+  Chrome's chrome: our subtitles keep rendering in the parent tab while the
+  picture is in the corner, a Live Caption button offers guessed transcription
+  in place of the real tracks, and speed, audio track and queue disappear.
+  Document PiP renders our own player instead. The clock — the fault that
+  started it — was fixed without the rework, by reporting the true timeline
+  through MediaSession (`72619a6`, unreleased).
 
 ### Resolved modeling question — multi-part and serial works
 
