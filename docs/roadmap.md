@@ -226,7 +226,7 @@ Status: **planned** · **next** · *unplanned*
 | Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | *unplanned* | Rebuild a library without a full rescan |
 | Activity view | **built** | `GET /api/activity` in one shape for every worker; a nav indicator and task popover. Indeterminate where the worker genuinely cannot know its total — a scan discovers its own size, so it shows a count rather than a lying percentage |
-| Observability | **built** | Match score breakdown, review queue, scan skip diagnostics, and a single-instance guard that names what is holding it — the service, its pid and its data directory, read at a privilege an unelevated caller actually has |
+| Observability | **built, one known gap** | Match score breakdown, review queue, scan skip diagnostics — including `skipped_kind`, the count of media a library's own kind discards — and a single-instance guard that names what is holding it: the service, its pid and its data directory, read at a privilege an unelevated caller actually has. **The gap:** a show library created as a movie library still scans silently, because both kinds take the same files. See the feature backlog |
 | Desktop lifecycle | **built** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)), both off by default and both shown only in the LANcast window, because a tab has no tray to reduce to and no close button LANcast owns. The Settings section states which of the three meanings of "closed" you are looking at — stop the server, or leave it running because the service owns it. Autostart records the mode you chose, so picking the browser does not silently become the window at login |
 | Update checking and self-update | **built, shipped in v0.6.2** | Check, download, verify, stage, and swap on the way down. **Proven end to end on the published release**: the signature verifies against the key compiled into the shipping binaries, and the Windows archive's digest matches the one in the signed list — signature → checksums → bytes, all three links checked rather than assumed. Signed releases first, because auto-install is a LocalSystem process executing a downloaded binary and without authenticity that is remote code execution as SYSTEM — an Ed25519 signature over `checksums.txt`, offline verification against a key compiled into the binary, and a **separate key from the plugin project key** so one compromise is not both. Three distinct states: unsigned is installable by hand only, a wrong signature is refused outright, and a build with no key refuses everything. The swap works because a running process on Windows can rename *itself*: the binary moves aside to `.old`, the staged one takes its place, and the next start is the new version — one restart, no UAC prompt, no second process. Nothing is written into the install directory before the swap; staging lives in the data directory. The check is on by default and is not a phone-home exception — a plain GET with no install identifier, no statistics, no history, and switchable off entirely |
 | Audit log | **built** | Who changed what, and when, recorded server-side where the mutation is authorised ([ADR 0026](adr/0026-audit-log.md)) — libraries, deleted titles, overridden matches, accounts, add-on trust. An audit trail a client writes is forgeable by the client it is auditing. Readable from Settings, newest first, filterable by action. Browsing and playback are deliberately excluded: burying a handful of deliberate acts under a million routine ones is how a log becomes unreadable. Each entry freezes the actor's name and a sentence at the time it happened, so "who deleted this library" still answers after both the library and the account are gone |
@@ -318,6 +318,41 @@ group is not priority.
   this library" was unanswerable during v0.4.x testing. Still open beside it:
   whether identity should live in its own store rather than beside the library,
   so losing a password never opens the file holding the media.
+- **A wrong library kind is only half-visible.** Kind is chosen once and is
+  immutable by design — it decides which files are scanned at all and biases
+  movie-vs-TV matching, so changing it later would mean a rescan re-litigating
+  identity for a whole library, which is the thing the locked-fields rule exists
+  to forbid. Plex takes the same position. The consequence is that choosing
+  wrongly is unrecoverable except by removing and re-adding, so the mistake has
+  to be **loud at the moment it happens**, and today only one of the two cases
+  is. A music library created as a movie library now reports how many audio
+  files its own kind discarded (`skipped_kind`), because the audio-vs-video gate
+  makes that case obvious: zero items imported. **The show-vs-movie case has no
+  signal at all**, because both kinds scan exactly the same files. Nothing is
+  skipped, the count stays zero, the scan succeeds, and the library is quietly
+  wrong in its *shape* rather than its size. Measured on the test library, the
+  same folder scanned as `movie` instead of `show`:
+
+  | | `kind=show` | `kind=movie` |
+  |---|---|---|
+  | shows | 3 | 2 |
+  | seasons | 3 | 2 |
+  | episodes | 15 | 12 |
+  | stray movie / parts | — | 1 movie + 3 parts |
+
+  One show stopped being a show: its episodes were read as a film in three
+  parts — almost certainly the miniseries [ADR 0017](adr/0017-collections-and-multi-part-works.md)
+  exists for. That is worse than the music case, not better. Music fails loudly
+  enough to be reported within minutes; this produces a library that looks
+  finished and is wrong, and would be found weeks later by someone wondering why
+  a miniseries is a film. The fix is a different signal from a skip count —
+  candidates are a post-scan sanity check (a `show`-kind library that produced no
+  shows, or a `movie`-kind library where most files parsed as episodes) surfaced
+  the same way the review queue surfaces uncertain matches.
+- **Library editing, deferred to the settings redesign.** With kind immutable,
+  what an Edit control would actually govern is the name — worth having, not
+  worth bolting onto the current page. The settings page is due a planned
+  rebuild, and this belongs to it.
 - **Crash reporting.**
 - ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
   `lancastd.log` and Settings shows it, collapsed by default and never polled.
@@ -455,6 +490,15 @@ reading the config would have sent someone first. The same pass found a second
 branch that had never run — the unsigned fallback, which could not have worked
 either, since goreleaser expects the signature file the block declares. **Every
 branch of a release pipeline is untested until a real tag takes it.**
+
+**A default on an irreversible choice is a bug with a delay on it.** The
+add-library form pre-selected "Movies" in a dropdown beside a name field, and
+library kind cannot be changed afterwards. A library named "Music", pointed at a
+music folder, was created as a movie library — and then discarded 1,592 tracks
+and reported "0 items · scanned", which reads as an empty folder. Two fixes came
+out of it, and the second is the general one: the skip now has a voice, and the
+field no longer has a default. **Where a choice is permanent, the interface has
+to make it deliberate**; anything selectable by inattention eventually will be.
 
 **A blocker that was never tested blocked a feature for a release.**
 Close-to-tray shipped as a disabled toggle on the belief that the tray and the
