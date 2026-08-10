@@ -13,9 +13,19 @@ function progressPct(item: Item): number {
   return Math.min(100, (pos / dur) * 100);
 }
 
-export function PosterTile({ item }: { item: Item }) {
+// onOpen overrides what pressing the tile does. A photo in a gallery selects
+// itself into the banner above rather than navigating: a photograph has no
+// detail page worth visiting — no synopsis, no cast, no year — and sending
+// someone to one would be a worse answer than showing them the picture.
+export function PosterTile({
+  item,
+  onOpen,
+}: {
+  item: Item;
+  onOpen?: () => void;
+}) {
   const navigate = useNavigate();
-  const open = () => navigate(`/item/${item.id}`);
+  const open = onOpen ?? (() => navigate(`/item/${item.id}`));
   const focusable = useFocusable(open);
 
   const poster = artworkURL(item.artwork?.poster, "poster");

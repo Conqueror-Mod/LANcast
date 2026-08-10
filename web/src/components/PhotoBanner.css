@@ -1,0 +1,108 @@
+/*
+ * The picture banner. Depth comes from the same vocabulary the home hero uses
+ * (ADR 0027) — a cast shadow in the void colour, a scrim that lands on the page
+ * floor — and no accent, because gold means focus and a photograph brings its
+ * own colour.
+ */
+.pbanner {
+  position: relative;
+  height: clamp(240px, 34vh, 420px);
+  margin: 0 0 22px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  background: var(--space-raised);
+  box-shadow: var(--elev-2);
+  isolation: isolate;
+}
+
+.pbanner__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Fades in as it arrives. The outgoing image is removed by React rather than
+     cross-faded against: two full-size photographs composited every seven
+     seconds is real work for a transition nobody asked to watch. */
+  animation: pbanner-in 600ms ease both;
+}
+
+@keyframes pbanner-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Bottom-weighted only. The picture is the content, so the scrim earns its
+   place by making one line of text legible and stops there. */
+.pbanner__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(5, 7, 15, 0.72) 0%,
+    rgba(5, 7, 15, 0.28) 24%,
+    transparent 55%
+  );
+}
+
+.pbanner__foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.pbanner__title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-shadow: 0 1px 8px rgba(5, 7, 15, 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The expand control sits at the lower right of the picture, which is where the
+ * brief asked for it and also where it covers least. Gold hairline at rest,
+ * full strength with the ring on hover or focus — the same contract every other
+ * control keeps.
+ */
+.pbanner__expand {
+  flex: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.72);
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.pbanner__expand:hover,
+.pbanner__expand:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+  color: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pbanner__img {
+    animation: none;
+  }
+}

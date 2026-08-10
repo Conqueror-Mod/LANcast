@@ -1,0 +1,161 @@
+/*
+ * The viewer is the one screen in LANcast that is not the deep-space field: it
+ * is nearly black, because a photograph judged against a blue-violet gradient is
+ * a photograph judged against a colour cast. The room lights go all the way down
+ * here, which is the same instinct design.md states for the player.
+ */
+.pview {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Opaque, not nearly-opaque. At 0.97 the page underneath showed through as
+     ghost text beside the picture, which is exactly the kind of half-committed
+     overlay that reads as a rendering fault. If the room lights are going down,
+     they go all the way down. */
+  background: #030409;
+}
+
+.pview__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  /* The browser must not hijack drag-to-pan as a scroll gesture. */
+  touch-action: none;
+}
+
+.pview__img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  /* No transition on transform: a drag must track the pointer exactly, and an
+     eased transform turns panning into swimming. */
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/*
+ * Chevrons, as large invisible targets rather than small visible buttons. The
+ * glyph is quiet until hovered or focused, so it never competes with the
+ * picture — but the hit area is a third of the screen height, which is what
+ * makes it usable without aiming.
+ */
+.pview__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 34%;
+  width: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background: none;
+  color: var(--text-muted);
+  font-size: 40px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.pview__nav--prev {
+  left: 8px;
+}
+.pview__nav--next {
+  right: 8px;
+}
+
+.pview__nav:hover {
+  color: var(--text-primary);
+  background: rgba(10, 15, 34, 0.5);
+}
+
+/* Focus is gold, here as everywhere. The viewer takes the keyboard, so this is
+   the only thing telling a keyboard user where they are. */
+.pview__nav:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.pview__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(to top, rgba(3, 4, 9, 0.9), transparent);
+}
+
+.pview__count {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The filename, shown here and nowhere else. In a grid it is 2,600 UUIDs and
+   pure noise; looking at one picture, it is the only identity it has. */
+.pview__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pview__tools {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.pview__btn {
+  padding: 7px 14px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.pview__btn:hover,
+.pview__btn:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+  color: var(--text-primary);
+}
+
+@media (max-width: 700px) {
+  .pview__nav {
+    width: 44px;
+    font-size: 30px;
+  }
+  .pview__name {
+    display: none;
+  }
+}
