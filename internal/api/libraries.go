@@ -21,7 +21,9 @@ func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, libs)
 }
 
-var validKinds = map[string]bool{"movie": true, "show": true, "music": true, "other": true}
+var validKinds = map[string]bool{
+	"movie": true, "show": true, "music": true, "picture": true, "other": true,
+}
 
 func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -41,7 +43,7 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeError(w, http.StatusBadRequest, "bad_request", "kind must be one of movie, show, music, other")
+		writeError(w, http.StatusBadRequest, "bad_request", "kind must be one of movie, show, music, picture, other")
 		return
 	}
 

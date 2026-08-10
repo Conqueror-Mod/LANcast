@@ -72,6 +72,7 @@ export const LIBRARY_KINDS: { value: string; label: string }[] = [
   { value: "movie", label: "Movies" },
   { value: "show", label: "Shows" },
   { value: "music", label: "Music" },
+  { value: "picture", label: "Pictures" },
   { value: "other", label: "Other" },
 ];
 

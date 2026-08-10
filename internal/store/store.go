@@ -876,6 +876,25 @@ func (s *Store) LibraryMovieFiles(ctx context.Context, libraryID int64) ([]Item,
 	return scanItems(rows)
 }
 
+// LibraryPhotoFiles returns every photo *file* in a picture library (ADR 0028),
+// unpaged, for the gallery reconciler.
+//
+// container IS NOT NULL is what distinguishes a file from a directory row, the
+// same test LibraryMovieFiles uses. Unpaged because reconciliation has to see
+// the whole library at once — a gallery derived from half the photos in a
+// folder is a gallery that loses members on the next scan.
+func (s *Store) LibraryPhotoFiles(ctx context.Context, libraryID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+itemCols+` FROM media_item
+		 WHERE library_id = ? AND kind = 'photo' AND container IS NOT NULL
+		 ORDER BY path`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("library photo files: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
 // EnsureWork find-or-creates the parent media_item for a multi-part film — the
 // work "Baahubali" over its two parts (ADR 0017). Per that ADR the parent is a
 // 'movie', a container with no file of its own; its parts carry the files. It is
@@ -1388,7 +1407,8 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 	return nil
 }
 
-// EnsureMusicContainer find-or-creates an artist or album row.
+// EnsureDerivedContainer find-or-creates a container assembled from its own
+// children rather than from a provider — an artist, an album, or a gallery.
 //
 // Music containers have no file, so their identity is a synthetic path — the
 // same device seasons already use when a show has no "Season N" folder. The
@@ -1399,9 +1419,16 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 // a container assembled from its children's tags is not waiting to be
 // identified, and leaving it unmatched would park it in the review queue
 // forever.
-func (s *Store) EnsureMusicContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string, parentID *int64) (int64, error) {
-	if kind != "artist" && kind != "album" {
-		return 0, fmt.Errorf("ensure music container: unexpected kind %q", kind)
+// The kinds this may create. A closed set, because the guard's whole job is to
+// turn a typo'd or caller-invented kind into an error here rather than a row
+// nothing queries. Pictures joined it in ADR 0028: a gallery is assembled from
+// the folder its photos sit in, exactly as an album is assembled from its
+// tracks' tags.
+var derivedContainerKinds = map[string]bool{"artist": true, "album": true, "gallery": true}
+
+func (s *Store) EnsureDerivedContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string, parentID *int64) (int64, error) {
+	if !derivedContainerKinds[kind] {
+		return 0, fmt.Errorf("ensure derived container: unexpected kind %q", kind)
 	}
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx, `
@@ -1426,7 +1453,7 @@ func (s *Store) EnsureMusicContainer(ctx context.Context, libraryID int64, kind,
 // FillAlbumMetadata gives album rows the two facts their tracks already carry:
 // who made the record, and when.
 //
-// EnsureMusicContainer creates an album with a title and nothing else, because
+// EnsureDerivedContainer creates an album with a title and nothing else, because
 // at creation time it knows only the grouping key. The result is an album detail
 // page showing a cover and a title over an empty space, a Year sort with no year
 // to sort by, and a track list that cannot tell whether a performer differs from

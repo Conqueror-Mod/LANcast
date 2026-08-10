@@ -24,6 +24,11 @@ const (
 	KindMovie   Kind = "movie"
 	KindEpisode Kind = "episode"
 	KindTrack   Kind = "track"
+	// Pictures (ADR 0028): a gallery is a folder, a photo is a file. Not
+	// `album` — that kind is music's, and one string meaning two media types
+	// would collide in every helper that switches on kind.
+	KindGallery Kind = "gallery"
+	KindPhoto   Kind = "photo"
 	KindOther   Kind = "other"
 )
 
@@ -33,7 +38,11 @@ const (
 	LibraryMovie = "movie"
 	LibraryShow  = "show"
 	LibraryMusic = "music"
-	LibraryOther = "other"
+	// A library of images (ADR 0028). Spelled "picture" rather than "photo"
+	// because the leaf kind is `photo`, and a library kind that reads identically
+	// to an item kind is a bug waiting to be written by autocomplete.
+	LibraryPicture = "picture"
+	LibraryOther   = "other"
 )
 
 // Info is what we could infer from a path alone.
@@ -67,6 +76,19 @@ var audioExts = map[string]bool{
 	".wma": true, ".alac": true,
 }
 
+// imageExts are the picture formats a library scans (ADR 0028).
+//
+// Listed by what can be *indexed*, not by what this build can decode: heic and
+// heif need ffmpeg where the rest need only the standard library and
+// golang.org/x/image. A phone backup is mostly heic, and a library that omitted
+// them would be missing most of someone's photos with no explanation — the
+// decoder's limits are the thumbnail worker's problem, reported there, not a
+// reason for the scanner to pretend a file is not on disk.
+var imageExts = map[string]bool{
+	".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true,
+	".bmp": true, ".tiff": true, ".tif": true, ".heic": true, ".heif": true,
+}
+
 // IsVideo reports whether a path looks like a playable video file.
 func IsVideo(path string) bool {
 	return videoExts[strings.ToLower(filepath.Ext(path))]
@@ -75,6 +97,11 @@ func IsVideo(path string) bool {
 // IsAudio reports whether a path looks like a music file.
 func IsAudio(path string) bool {
 	return audioExts[strings.ToLower(filepath.Ext(path))]
+}
+
+// IsImage reports whether a path looks like a picture file.
+func IsImage(path string) bool {
+	return imageExts[strings.ToLower(filepath.Ext(path))]
 }
 
 // IsScannable reports whether a library of this kind should index the file.
@@ -86,10 +113,19 @@ func IsAudio(path string) bool {
 // group. An unknown library kind takes video, which is what every library did
 // before music existed.
 func IsScannable(path, libKind string) bool {
-	if libKind == LibraryMusic {
+	// A switch rather than the two-branch form this had: "music takes audio,
+	// everything else takes video" stopped being extensible the moment a third
+	// media type existed, and the default is the part that must stay explicit —
+	// an unknown library kind takes video, which is what every library did
+	// before music or pictures existed.
+	switch libKind {
+	case LibraryMusic:
 		return IsAudio(path)
+	case LibraryPicture:
+		return IsImage(path)
+	default:
+		return IsVideo(path)
 	}
-	return IsVideo(path)
 }
 
 var (
@@ -196,6 +232,16 @@ func Parse(root, path, libKind string) Info {
 	// them (ADR 0024).
 	if libKind == LibraryMusic {
 		return ParseTrack(root, path)
+	}
+
+	// A picture is its filename, verbatim (ADR 0028). Not run through `clean`,
+	// which strips release-group noise, years and quality markers — every one of
+	// those is a video-naming convention, and applying them to
+	// "openart-f81b7650ced542cdb5b37d8916f0bc92_raw" produces a different
+	// meaningless string with less information in it. A UUID is a poor title; a
+	// tidied UUID is a poor title that has been lied about.
+	if libKind == LibraryPicture {
+		return Info{Kind: KindPhoto, Title: base}
 	}
 
 	if m := reSeasonEp.FindStringSubmatch(base); m != nil {

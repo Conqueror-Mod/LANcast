@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 15
+const CurrentSchemaVersion = 16
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -33,6 +33,7 @@ var migrations = []migration{
 	{version: 13, sql: schemaRevision13},
 	{version: 14, sql: schemaRevision14},
 	{version: 15, sql: schemaRevision15},
+	{version: 16, sql: schemaRevision16},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -463,4 +464,25 @@ CREATE TABLE IF NOT EXISTS audit_event (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_event(at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_event(action, at DESC);
+`
+
+// Revision 16 — pictures (ADR 0028).
+//
+// One column. width and height were already added in revision 4 for video
+// resolution, and a picture's pixel dimensions are the same fact about a
+// different medium — a second pair would be two columns meaning one thing,
+// which is how a schema starts disagreeing with itself. The thumbnail worker
+// fills the existing ones.
+//
+// taken_at is not added_at: one is when the picture was made, the other when it
+// reached this disk. A photo library sorted by the second is sorted by when you
+// copied things, which is almost never the question being asked. Null where
+// absent — which is every file in the reference library — and callers fall back
+// to mtime.
+//
+// Deliberately no gps column. It is location data about the user, nothing here
+// needs it, and the surest way never to leak it is never to load it.
+const schemaRevision16 = `
+ALTER TABLE media_item ADD COLUMN taken_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_item_taken ON media_item(library_id, taken_at DESC);
 `
