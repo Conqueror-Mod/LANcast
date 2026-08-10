@@ -176,7 +176,7 @@ Status: **planned** · **next** · *unplanned*
 | Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
 | External ratings | **built** | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
-| Library types beyond video | **partly built** | **Music built** server-side ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. Photos still *unplanned* and need their own ADR |
+| Library types beyond video | **partly built** | **Music built** ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. **Pictures now planned** ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)): gallery → photo, the second test of that claim, and the first media type where the file *is* its own artwork |
 | Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
 | Album artwork | **built** | `internal/coverart`: embedded picture first, then `cover.jpg`/`folder.jpg` beside the tracks, in its own worker. Measured on the real library — 369 of 398 albums, 10.7s, no network. A directory's image is refused when the directory also holds audio that is not the album's, which is what stops a letter-bucket `folder.jpg` being worn by five unrelated records |
 | Artist images | **back burner** | The placeholder is good enough to wait behind: artists **borrow** their most-substantial album's cover, flagged `inherited`, and a real image supersedes it automatically with nothing to clean up. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md), accepted, unbuilt) — it was sequenced after the client UI, which is now built, so nothing blocks it except priority. Deferred deliberately: music has had a long run and this is the first item where the gap is cosmetic rather than functional |
@@ -283,7 +283,7 @@ group is not priority.
   profile so a FLAC is not re-encoded to deliver a format every browser plays.
 - ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
   UI and mini-player in v0.6.0.
-- **Photo library** with a built-in **image viewer**.
+- **Photo library** with a built-in **image viewer** — **planned, not built** ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)). Folders become galleries, because a filename like `openart-f81b76…_raw.jpg` says nothing and there is no provider to ask. Thumbnails run in their own worker through the existing content-addressed cache; HEIC decodes through the ffmpeg already required, because a phone backup is mostly HEIC and a wall of placeholders would be a feature that looks finished and is useless. EXIF orientation and date-taken only — **GPS deliberately unread**, since the safest way never to leak location data is never to load it.
 - **Live TV** — a tuner page and function.
 
 ### Metadata, ratings and discovery
