@@ -759,87 +759,111 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <video
-          ref={videoRef}
-          className={`playback__video${isAudio ? " playback__video--audio" : ""}`}
-          playsInline
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget;
-            if (isFinite(v.duration)) setDuration(v.duration);
-            // The element resets to full volume on every new source, so the
-            // remembered level has to be re-applied — including across a
-            // transcode seek, which reloads the source.
-            v.volume = volume;
-            // Same reason as volume: a fresh source resets playbackRate to 1,
-            // so a chosen speed has to be re-applied or it silently reverts on
-            // the next episode.
-            v.playbackRate = speed;
-            // Resume: for direct play the element carries the offset itself.
-            if (!transcoding.current && startedFrom.current > 0) {
-              v.currentTime = startedFrom.current;
-            }
-            // A transcode seek reloads the source, which re-parses the <track>
-            // at its default mode. Re-assert the selection so subtitles survive
-            // a seek rather than silently switching off.
-            for (const tt of v.textTracks) {
-              tt.mode = activeSub ? "showing" : "disabled";
-            }
-          }}
-          onLoadedData={() => setLoading(false)}
-          // The note explains a wait ("Converting — audio codec ac3 is not
-          // supported"). Once frames are arriving there is no wait left to
-          // explain, and a permanent banner over the picture reads as a warning
-          // about the thing you are currently watching happily. A later stall
-          // shows the spinner on its own, which is the honest signal for it.
-          onPlaying={() => {
-            setLoading(false);
-            setNote("");
-          }}
-          onWaiting={() => setLoading(true)}
-          onError={() => retryWithoutClaims()}
-          onTimeUpdate={(e) => {
-            setCurrent(e.currentTarget.currentTime);
-            saveProgress();
-          }}
-          onPlay={() => setPlaying(true)}
-          onPause={() => {
-            setPlaying(false);
-            saveProgress(true);
-          }}
-          onEnded={() => {
-            saveProgress(true);
-            // Repeat one reseeks rather than reloading: the source is already
-            // the right file, and re-requesting it would restart a transcode
-            // that is already running.
-            if (repeat === "one") {
-              const v = e2(videoRef);
-              if (v) {
-                v.currentTime = 0;
-                void v.play().catch(() => {});
-                return;
+        {/* The slot. The media element is its only child, and React never
+            varies what is in here — everything conditional (the cover above,
+            and whatever is added later) is a sibling of the slot rather than of
+            the element.
+
+            That is a hard requirement of the pop-out window in ADR 0029, not a
+            tidying preference. Document picture-in-picture moves the element
+            into another document imperatively, and while it is gone React must
+            still be free to mount and unmount things around the player. Mount a
+            conditional sibling *directly before* the element and React calls
+            container.insertBefore(sibling, video) on a container the video has
+            left: the DOM throws NotFoundError, in the commit phase, taking down
+            the render pass. The cover was exactly that sibling.
+
+            Inside a slot, the only insert that could use the element as an
+            anchor is one inside the slot, and nothing else is ever in there.
+            crossDocumentMove.test.tsx holds both shapes — this one proved safe,
+            the old one kept as a characterisation test asserting it throws.
+
+            display: contents, so the wrapper generates no box: the element's
+            percentage sizing still resolves against .playback and no other rule
+            in playback.css has to know this div exists. */}
+        <div className="playback__slot">
+          <video
+            ref={videoRef}
+            className={`playback__video${isAudio ? " playback__video--audio" : ""}`}
+            playsInline
+            onLoadedMetadata={(e) => {
+              const v = e.currentTarget;
+              if (isFinite(v.duration)) setDuration(v.duration);
+              // The element resets to full volume on every new source, so the
+              // remembered level has to be re-applied — including across a
+              // transcode seek, which reloads the source.
+              v.volume = volume;
+              // Same reason as volume: a fresh source resets playbackRate to 1,
+              // so a chosen speed has to be re-applied or it silently reverts on
+              // the next episode.
+              v.playbackRate = speed;
+              // Resume: for direct play the element carries the offset itself.
+              if (!transcoding.current && startedFrom.current > 0) {
+                v.currentTime = startedFrom.current;
               }
-            }
-            // Roll on to the next queued item; if there is none, it ends here.
-            if (!advanceQueue()) setPlaying(false);
-          }}
-        >
-          {activeSub && (
-            <track
-              // Keyed by offset too: a transcode seek changes the media
-              // timeline's zero point, so the cues must be re-fetched shifted to
-              // match, or a resumed film shows no subtitles at all.
-              key={`${activeSub.key}@${subOffset}`}
-              kind="subtitles"
-              default
-              src={
-                `/api/items/${itemID}/subtitles/${encodeURIComponent(activeSub.key)}.vtt` +
-                (subOffset > 0 ? `?t=${subOffset}` : "")
+              // A transcode seek reloads the source, which re-parses the <track>
+              // at its default mode. Re-assert the selection so subtitles survive
+              // a seek rather than silently switching off.
+              for (const tt of v.textTracks) {
+                tt.mode = activeSub ? "showing" : "disabled";
               }
-              srcLang={activeSub.language || undefined}
-              label={activeSub.label}
-            />
-          )}
-        </video>
+            }}
+            onLoadedData={() => setLoading(false)}
+            // The note explains a wait ("Converting — audio codec ac3 is not
+            // supported"). Once frames are arriving there is no wait left to
+            // explain, and a permanent banner over the picture reads as a warning
+            // about the thing you are currently watching happily. A later stall
+            // shows the spinner on its own, which is the honest signal for it.
+            onPlaying={() => {
+              setLoading(false);
+              setNote("");
+            }}
+            onWaiting={() => setLoading(true)}
+            onError={() => retryWithoutClaims()}
+            onTimeUpdate={(e) => {
+              setCurrent(e.currentTarget.currentTime);
+              saveProgress();
+            }}
+            onPlay={() => setPlaying(true)}
+            onPause={() => {
+              setPlaying(false);
+              saveProgress(true);
+            }}
+            onEnded={() => {
+              saveProgress(true);
+              // Repeat one reseeks rather than reloading: the source is already
+              // the right file, and re-requesting it would restart a transcode
+              // that is already running.
+              if (repeat === "one") {
+                const v = e2(videoRef);
+                if (v) {
+                  v.currentTime = 0;
+                  void v.play().catch(() => {});
+                  return;
+                }
+              }
+              // Roll on to the next queued item; if there is none, it ends here.
+              if (!advanceQueue()) setPlaying(false);
+            }}
+          >
+            {activeSub && (
+              <track
+                // Keyed by offset too: a transcode seek changes the media
+                // timeline's zero point, so the cues must be re-fetched shifted to
+                // match, or a resumed film shows no subtitles at all.
+                key={`${activeSub.key}@${subOffset}`}
+                kind="subtitles"
+                default
+                src={
+                  `/api/items/${itemID}/subtitles/${encodeURIComponent(activeSub.key)}.vtt` +
+                  (subOffset > 0 ? `?t=${subOffset}` : "")
+                }
+                srcLang={activeSub.language || undefined}
+                label={activeSub.label}
+              />
+            )}
+          </video>
+        </div>
       </div>
     </Ctx.Provider>
   );

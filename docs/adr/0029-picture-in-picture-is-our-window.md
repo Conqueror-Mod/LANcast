@@ -118,12 +118,12 @@ document. Bringing it home leaves it under React's control.
 conditional *sibling* mounts immediately before the media element while the
 element is away, React calls `container.insertBefore(cover, video)` on a
 container the video has left. The DOM throws `NotFoundError`, in the commit
-phase, taking down the render pass that did it. `PlaybackProvider` renders
-exactly that: the cover block is a conditional sibling immediately before the
+phase, taking down the render pass that did it. `PlaybackProvider` rendered
+exactly that: the cover block was a conditional sibling immediately before the
 `<video>`.
 
-So the pop-out cannot be built on the current markup, and the fix is structural
-rather than defensive:
+So the pop-out could not have been built on that markup, and the fix is
+structural rather than defensive:
 
 > **The media element must be the only child of a slot whose children React
 > never varies.** Everything conditional — the cover, the loading overlay,
@@ -138,6 +138,15 @@ the other.
 This is a constraint on the implementation, not a reason to abandon the
 decision. The "keep the fallback" clause below is for the move proving unstable
 in ways structure cannot fix; this one it can.
+
+**The provider has since been restructured to the slot shape**, ahead of any
+pop-out code, because it is a prerequisite rather than a part of the feature —
+and because leaving the hazard in place while the reason for it was fresh would
+be the worst of both. The media element is now the only child of
+`.playback__slot`, which is `display: contents` so it generates no box and no
+other rule has to know it exists. A test asserts against the real provider that
+the element is alone in there, so the models above cannot quietly stop
+describing their subject.
 
 ## Consequences
 

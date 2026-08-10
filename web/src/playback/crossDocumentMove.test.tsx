@@ -11,8 +11,10 @@
  * changes, so the move has to be imperative and outside reconciliation.
  *
  * That is safe only for as long as React never needs to touch the node's
- * position among its siblings. These tests find out whether that holds, using
- * the sibling structure PlaybackProvider actually renders.
+ * position among its siblings. These tests found out whether that holds — and
+ * it did not, for the shape the provider rendered at the time. The constraint
+ * that discovery produced (the element alone in a slot) is now what
+ * PlaybackProvider renders, and the last test in this file holds it there.
  *
  * What this can prove: whether React survives, and whether the element is
  * still the same node in the other document afterwards. What it cannot prove:
@@ -23,6 +25,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PlaybackProvider } from "./PlaybackProvider";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -31,8 +35,8 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 /*
- * A faithful reduction of what PlaybackProvider renders around the media
- * element (see PlaybackProvider.tsx, the return at the bottom of the file):
+ * The shape PlaybackProvider rendered BEFORE the slot restructure — kept
+ * because it is the hazard, and a hazard with no test is one that comes back:
  *
  *   <div ref={containerRef}>
  *     {isAudio && <div className="playback__cover">…</div>}   <- conditional SIBLING, before
@@ -41,10 +45,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
  *     </video>
  *   </div>
  *
- * Both conditionals are the hazard. The cover mounts and unmounts as the player
- * moves between a film and a track; the track remounts on every subtitle change
- * and on every transcode seek. Either one makes React operate on the video's
- * parent while the video is somewhere else entirely.
+ * Both conditionals looked equally dangerous going in. The cover mounts and
+ * unmounts as the player moves between a film and a track; the track remounts
+ * on every subtitle change and every transcode seek. Only one of them turned
+ * out to matter, and the tests below are what separated them.
  */
 function Surface({
   showCover,
@@ -151,9 +155,10 @@ describe("moving the media element into another document", () => {
    * commit phase, so it takes down the render pass that did it rather than
    * failing quietly in a corner.
    *
-   * PlaybackProvider renders exactly this shape today: the cover block is a
-   * conditional sibling immediately before the media element. So the pop-out
-   * cannot be built on the current markup, and this test is what says so.
+   * PlaybackProvider rendered exactly this shape when the test was written —
+   * the cover block a conditional sibling immediately before the media element
+   * — which is why the pop-out could not have been built on it. The provider
+   * has since been restructured; this stays as the reason why.
    */
   it("CANNOT survive a conditional sibling mounting before it — the constraint", () => {
     render({ showCover: false, showTrack: false, label: "a" });
@@ -185,7 +190,7 @@ describe("moving the media element into another document", () => {
 
 /*
  * The shape that satisfies the constraint above, and therefore the shape the
- * implementation has to adopt: the media element is the only child of a slot
+ * implementation now uses: the media element is the only child of a slot
  * whose children React never varies. Everything conditional — the cover, and in
  * the real provider the loading overlay and anything else that comes later —
  * lives outside the slot, as a sibling of the slot rather than of the element.
@@ -215,7 +220,7 @@ function SlottedSurface({
   );
 }
 
-describe("the slot shape ADR 0029's implementation must use", () => {
+describe("the slot shape the provider now renders", () => {
   function renderSlotted(props: Parameters<typeof SlottedSurface>[0]) {
     act(() => {
       root.render(<SlottedSurface {...props} />);
@@ -274,5 +279,45 @@ describe("the slot shape ADR 0029's implementation must use", () => {
     renderSlotted({ showCover: false, showTrack: false, label: "d" });
     expect(moved.dataset.label).toBe("d");
     expect(moved.isConnected).toBe(true);
+  });
+});
+
+/*
+ * The tests above are models. They are only worth anything for as long as they
+ * describe the shape PlaybackProvider actually renders — and a model that has
+ * quietly stopped matching its subject is worse than no model, because it still
+ * passes.
+ *
+ * So this one asserts against the real provider: the media element is alone in
+ * a slot, and nothing conditional shares that parent with it. If someone adds a
+ * sibling inside the slot later, this fails and points at the reason, rather
+ * than the pop-out failing at runtime in front of a user.
+ */
+describe("PlaybackProvider renders the shape the tests above assume", () => {
+  it("keeps the media element alone in its slot", () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    act(() => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <PlaybackProvider>{null}</PlaybackProvider>
+        </QueryClientProvider>,
+      );
+    });
+
+    const media = host.querySelector("video");
+    expect(media).not.toBeNull();
+
+    const slot = media?.parentElement;
+    expect(slot?.className).toBe("playback__slot");
+    // The whole constraint, in one assertion: no siblings, ever. A conditional
+    // sibling here is what makes React call insertBefore against an element
+    // that has moved to another document.
+    expect(slot?.childElementCount).toBe(1);
+
+    // And the cover — the sibling that caused the failure — is outside the
+    // slot, one level up, where React can mount and unmount it freely.
+    expect(slot?.parentElement?.className).toContain("playback");
   });
 });
