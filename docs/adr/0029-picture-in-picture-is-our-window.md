@@ -107,6 +107,38 @@ work, and it should be written before the feature is.
 Stylesheets do not follow the window either; they must be copied into the new
 document, or the pop-out opens unstyled.
 
+### Result: the test was written first, and it found the constraint
+
+`web/src/playback/crossDocumentMove.test.tsx`. The move itself is fine — the
+element is adopted rather than copied, keeps its identity, and React goes on
+updating its attributes and its `<track>` child while it sits in the other
+document. Bringing it home leaves it under React's control.
+
+**One case fails, and it is the shape the provider renders today.** When a
+conditional *sibling* mounts immediately before the media element while the
+element is away, React calls `container.insertBefore(cover, video)` on a
+container the video has left. The DOM throws `NotFoundError`, in the commit
+phase, taking down the render pass that did it. `PlaybackProvider` renders
+exactly that: the cover block is a conditional sibling immediately before the
+`<video>`.
+
+So the pop-out cannot be built on the current markup, and the fix is structural
+rather than defensive:
+
+> **The media element must be the only child of a slot whose children React
+> never varies.** Everything conditional — the cover, the loading overlay,
+> anything added later — is a sibling of the slot, not of the element.
+
+Then the only insert that could use the element as an anchor is one inside the
+slot, and nothing else is ever in there. Both shapes are in the test file: the
+failing one is kept as a characterisation test so the hazard cannot quietly
+return, and the slot shape is proved against the identical toggle that breaks
+the other.
+
+This is a constraint on the implementation, not a reason to abandon the
+decision. The "keep the fallback" clause below is for the move proving unstable
+in ways structure cannot fix; this one it can.
+
 ## Consequences
 
 **Good — the captions problem is solved rather than worked around.** Subtitles
