@@ -10,7 +10,7 @@ import {
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating, ratingLabel } from "@/lib/format";
-import { isContainer, childLabel } from "@/lib/kind";
+import { isContainer, childLabel, isPicture } from "@/lib/kind";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { PosterTile } from "@/components/PosterTile";
@@ -99,7 +99,10 @@ export function Detail() {
     container && !isCollection,
     isAlbum ? "track" : undefined,
   );
-  const { data: members } = useCollectionMembers(itemID, container && isCollection);
+  const { data: members } = useCollectionMembers(
+    itemID,
+    container && isCollection,
+  );
   const children = isCollection ? members : parentChildren;
 
   const [fixOpen, setFixOpen] = useState(false);
@@ -148,7 +151,14 @@ export function Detail() {
   // Children that can be played directly (not themselves containers), in order —
   // the queue behind Play all. A show's children are seasons, so it gets none;
   // a season's episodes, a work's parts, and a collection's films all qualify.
-  const playableChildren = (children ?? []).filter((c) => !isContainer(c));
+  // Pictures are not playable. Without this a gallery offers "Play all" over
+  // its photos and hands the player a JPEG — the kind of nonsense that only
+  // appears when a new media type arrives and every screen still assumes a leaf
+  // is something you press play on. The viewer replaces this in the next phase
+  // (ADR 0028).
+  const playableChildren = (children ?? []).filter(
+    (c) => !isContainer(c) && !isPicture(c),
+  );
 
   const meta = [
     // An album's artist belongs on the line that says what this is, ahead of
@@ -176,7 +186,12 @@ export function Detail() {
 
         <div className="detail__hero">
           {poster && (
-            <img className="detail__poster" src={poster} alt="" draggable={false} />
+            <img
+              className="detail__poster"
+              src={poster}
+              alt=""
+              draggable={false}
+            />
           )}
 
           <div className="detail__info">
@@ -208,7 +223,9 @@ export function Detail() {
               <div className="detail__ratings">
                 {item.ratings.map((r) => (
                   <span className="detail__rating" key={r.source}>
-                    <span className="detail__rating-src">{ratingLabel(r.source)}</span>
+                    <span className="detail__rating-src">
+                      {ratingLabel(r.source)}
+                    </span>
                     <span className="detail__rating-val">{r.display}</span>
                   </span>
                 ))}
@@ -241,7 +258,7 @@ export function Detail() {
                 them in order. A show, whose children are seasons, gets neither —
                 you drill into a season first. */}
             <div className="detail__actions">
-              {!container && (
+              {!container && !isPicture(item) && (
                 <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
               )}
               {container && playableChildren.length > 0 && (
@@ -262,7 +279,9 @@ export function Detail() {
               )}
             </div>
 
-            {item.overview && <p className="detail__overview">{item.overview}</p>}
+            {item.overview && (
+              <p className="detail__overview">{item.overview}</p>
+            )}
 
             {cast.length > 0 && (
               <div className="detail__cast">
@@ -272,7 +291,9 @@ export function Detail() {
                     <div className="detail__cast-member" key={i}>
                       <span className="detail__cast-name">{c.name}</span>
                       {c.character && (
-                        <span className="detail__cast-character">{c.character}</span>
+                        <span className="detail__cast-character">
+                          {c.character}
+                        </span>
                       )}
                     </div>
                   ))}
@@ -284,7 +305,9 @@ export function Detail() {
 
         {container && children && children.length > 0 && (
           <section className="detail__children">
-            <span className="section-label">{childLabel(children[0]?.kind)}</span>
+            <span className="section-label">
+              {childLabel(children[0]?.kind)}
+            </span>
             {/* A record is a numbered list, not a grid: twelve copies of one
                 cover say nothing, and a track is identified by its number and
                 its length. The album's `artist` is the album artist, so a

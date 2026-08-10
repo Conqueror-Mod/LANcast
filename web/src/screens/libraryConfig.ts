@@ -51,12 +51,27 @@ const MUSIC: LibraryKindConfig = {
   ],
 };
 
+// A picture library's top level is galleries (ADR 0028). Sorted by when the
+// picture was taken rather than by title, because the titles are filenames and
+// the filenames are UUIDs — "Title" is offered last and mostly for completeness.
+// Year and rating are absent: neither exists for a photograph here.
+const PICTURE: LibraryKindConfig = {
+  searchPlaceholder: "Search galleries",
+  sorts: [
+    { value: "taken", label: "Date taken" },
+    { value: "added", label: "Recently added" },
+    { value: "title", label: "Title" },
+  ],
+};
+
 export function configForKind(kind: string | undefined): LibraryKindConfig {
   switch (kind) {
     case "show":
       return SHOW;
     case "music":
       return MUSIC;
+    case "picture":
+      return PICTURE;
     default:
       return MOVIE;
   }

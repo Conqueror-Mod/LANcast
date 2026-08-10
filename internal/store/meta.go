@@ -558,11 +558,13 @@ func (s *Store) AttachArtwork(ctx context.Context, items []Item) error {
 		}
 	}
 
-	// Artists own no image, so any that are still bare borrow one from an
-	// album. Done here rather than by the caller so every grid gets it — a
-	// tile with a poster in one list and none in another is worse than
-	// consistent blankness.
-	return s.inheritArtistPosters(ctx, items)
+	// Containers that own no image borrow one from a child. Done here rather
+	// than by the caller so every grid gets it — a tile with a poster in one
+	// list and none in another is worse than consistent blankness.
+	if err := s.inheritArtistPosters(ctx, items); err != nil {
+		return err
+	}
+	return s.inheritGalleryPosters(ctx, items)
 }
 
 // ArtworkExists reports whether a hash is already stored, so a download can be

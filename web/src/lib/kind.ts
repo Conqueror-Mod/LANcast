@@ -12,6 +12,10 @@ const CONTAINER_KINDS = new Set([
   "season",
   "collection",
   "serial",
+  // A gallery holds photos (ADR 0028). Named rather than left to the
+  // child-count fallback, so an empty gallery mid-scan reads as a container
+  // with nothing in it rather than as something to open.
+  "gallery",
   // Music (ADR 0024): an artist holds albums, an album holds tracks. Named
   // rather than left to the child-count fallback, so an album mid-scan — rows
   // created, tracks not yet parented — reads as a container with nothing in it
@@ -47,6 +51,8 @@ export function childLabel(childKind: string | undefined): string {
       return "Albums";
     case "track":
       return "Tracks";
+    case "photo":
+      return "Photos";
     default:
       return "Contents";
   }
@@ -69,6 +75,8 @@ function containerNoun(kind: string): string {
       return "album";
     case "album":
       return "track";
+    case "gallery":
+      return "photo";
     default:
       return "item";
   }
@@ -83,6 +91,15 @@ export function isMusic(item: Item): boolean {
   return MUSIC_KINDS.has(item.kind);
 }
 
+// The picture kinds (ADR 0028). Home keeps them in their own row for the reason
+// music has one: a photograph among films is not a film that failed to load,
+// and a square crop beside a 2:3 poster is a row with no shared baseline.
+const PICTURE_KINDS = new Set(["gallery", "photo"]);
+
+export function isPicture(item: Item): boolean {
+  return PICTURE_KINDS.has(item.kind);
+}
+
 // Kinds whose artwork is square rather than a 2:3 poster. A record sleeve is
 // square, and an artist wearing a borrowed album cover (ADR 0025) is square by
 // inheritance — so both frame square until artist images arrive from a provider,
@@ -91,7 +108,17 @@ export function isMusic(item: Item): boolean {
 // Today this is exactly the music set, and it is still written separately: they
 // agree by coincidence of the current media types, not by definition. A square
 // non-music kind would otherwise silently become music.
-const SQUARE_ART_KINDS = new Set(["artist", "album", "track"]);
+const SQUARE_ART_KINDS = new Set([
+  "artist",
+  "album",
+  "track",
+  // Pictures are framed square too, for a different reason than sleeves are:
+  // a photo library is a mix of portrait and landscape, and a grid that lets
+  // every tile keep its own aspect is a ragged grid — the fault the music and
+  // film split was made to avoid. Square crops all of them equally.
+  "gallery",
+  "photo",
+]);
 
 // isSquareArt picks the tile's aspect ratio from what the art actually is.
 //
