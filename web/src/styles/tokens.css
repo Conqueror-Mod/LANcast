@@ -29,6 +29,33 @@
   --radius-tile: 6px;
   --radius-panel: 12px;
 
+  /*
+   * Elevation. Depth is cast, not painted: every shadow is the void colour at
+   * low alpha, so a raised object reads as further from the same floor rather
+   * than as a grey object on a blue one. Two layers per step — a tight contact
+   * shadow that anchors the edge, and a wide ambient one that gives the drop.
+   * Gold is not an elevation cue; nothing here glows.
+   */
+  --elev-1:
+    0 1px 2px rgba(5, 7, 15, 0.5),
+    0 4px 12px rgba(5, 7, 15, 0.38);
+  --elev-2:
+    0 2px 4px rgba(5, 7, 15, 0.55),
+    0 10px 28px rgba(5, 7, 15, 0.46);
+  --elev-3:
+    0 4px 8px rgba(5, 7, 15, 0.6),
+    0 22px 60px rgba(5, 7, 15, 0.55);
+
+  /*
+   * The hero's own geometry, referenced by both the art and the scrims.
+   *
+   * Sized so the two hub rows below it clear the fold on a full-height window
+   * rather than to look as large as possible. A hero that pushes Recently Added
+   * off-screen makes the home page a landing page, and the shelves are the part
+   * people actually use. Raising this is one edit; the rows are what pay for it.
+   */
+  --hero-height: clamp(280px, 31vh, 380px);
+
   /* Motion. */
   --dur-fast: 120ms; /* hover / focus */
   --dur-base: 280ms; /* page and panel transitions */

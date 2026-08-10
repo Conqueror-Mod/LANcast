@@ -76,6 +76,10 @@ consistency, not for user theming.
 --radius-tile:     6px
 --radius-panel:    12px
 
+--elev-1           resting tile / control
+--elev-2           hover, focus, raised panel
+--elev-3           the hero poster, and nothing else so far
+
 --dur-fast:        120ms      hover / focus
 --dur-base:        280ms      page and panel transitions
 --dur-ambient:     75s        nebula drift cycle
@@ -104,6 +108,31 @@ too fast.
 @media (prefers-reduced-motion: reduce) { /* no drift, at all */ }
 ```
 
+## Depth
+
+[ADR 0027](adr/0027-depth-in-the-canonical-look.md). The field is deep, so the
+objects on it should be too — but depth is built from elevation and layering,
+**never from colour**.
+
+**Shadows are cast in the void colour.** Every step is `rgba(5,7,15,α)`, the
+page floor, so a raised object reads as further from the same field rather than
+as a grey object on a blue one. Two layers per step: a tight contact shadow that
+anchors the edge, and a wide ambient one that gives the drop.
+
+**Gold is not an elevation cue.** Nothing glows, ever. Where a focused object
+also lifts, the lift is additional to the gold ring and never a substitute — a
+lift alone is not an accessible focus indicator, which is why the reduced-motion
+query removes the lift and leaves the ring exactly as it is.
+
+**Artwork is tinted into the field, not laid on it.** A full-bleed backdrop is
+screened with `--nebula-violet` and `--nebula-blue` at low alpha and vignetted
+at the edges, so it belongs to the same room as the chrome. Untinted, the
+identity stops at the artwork's edge and the screen becomes a photograph with an
+app around it.
+
+**Depth that moves is opt-out.** Parallax and focus lifts are motion; they go
+under `prefers-reduced-motion`.
+
 ## Typography
 
 One geometric/humanist sans throughout. **Tracking is the Trek signal**, not
@@ -117,10 +146,21 @@ in wide tracking — that reads as a control panel, not a library.
 
 ## Screens
 
-**Home.** Hub rows as horizontally scrolling shelves: continue watching →
-recently added → per-library. Section headers pair a wide-tracked label with a
-gold-to-transparent hairline rule trailing right. Continue-watching tiles carry
-a 3px `--gold` progress bar on the tile's bottom edge.
+**Home.** A hero, then hub rows as horizontally scrolling shelves: continue
+watching → recently added → per-library. Section headers pair a wide-tracked
+label with a gold-to-transparent hairline rule trailing right. Continue-watching
+tiles carry a 3px `--gold` progress bar on the tile's bottom edge.
+
+The hero is the item you are part-way through, falling back to the newest
+addition — resume is the likeliest reason someone opened LANcast, and a hero
+advertising a film you are forty minutes into is worse than no hero. Full-bleed
+fanart, tinted and vignetted into the field, parallaxing at 0.28× scroll behind
+a floating poster at `--elev-3`. Title, meta line, three-line synopsis, progress,
+then Resume and Details. **It renders only when the chosen item has fanart** —
+and picks the first candidate that has fanart, not the first candidate. The item
+in the hero is dropped from the shelf directly beneath it, because a home page
+that shows you the same poster twice in 600px reads as generated rather than
+arranged.
 
 The deliberate fix for the main Plex complaint: library names in the top nav go
 straight to the full grid. Hubs are a convenience, never a gate.

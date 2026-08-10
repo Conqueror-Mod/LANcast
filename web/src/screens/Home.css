@@ -1,0 +1,37 @@
+/*
+ * The shelves ride above the hero on their own plane. The gradient is what
+ * makes them one surface rather than a list of rows floating over a backdrop —
+ * it starts at the floor colour the hero's scrim ends on, so there is no seam
+ * between the two, and fades out entirely before the shelves finish.
+ */
+.home__shelves {
+  position: relative;
+  padding-top: 8px;
+}
+
+.home__shelves::before {
+  content: "";
+  position: absolute;
+  /* Wider than the content, to cover the app-shell padding the hero escapes. */
+  inset: -24px -28px auto;
+  height: 260px;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    var(--space-deep) 0%,
+    rgba(7, 11, 24, 0.72) 45%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.home__empty {
+  color: var(--text-muted);
+  padding: 40px 0;
+}
+
+@media (max-width: 860px) {
+  .home__shelves::before {
+    inset: -24px -20px auto;
+  }
+}

@@ -1,12 +1,14 @@
 .shelf {
-  margin-bottom: 34px;
+  /* Tight enough that a second row clears the fold below the hero; loose enough
+     that two rows still read as two rows. */
+  margin-bottom: 22px;
 }
 
 .shelf__head {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .shelf__rule {
@@ -33,13 +35,14 @@
   gap: 18px;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding-bottom: 8px;
-  /* Room so a focused tile's lift and ring are not clipped by the scroll box. */
-  padding-top: 6px;
+  /* Room so a focused tile's lift, ring and cast shadow are not clipped by the
+     scroll box. The shadow needs more room below than the lift needs above. */
+  padding-bottom: 14px;
+  padding-top: 8px;
   scrollbar-width: thin;
 }
 
 .shelf__item {
-  width: 150px;
+  width: 140px;
   flex: none;
 }

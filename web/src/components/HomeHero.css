@@ -1,0 +1,319 @@
+/*
+ * The home spotlight. Everything here is depth built from the existing palette:
+ * layered scrims, cast shadows in the void colour, and two planes that move at
+ * different rates. No new accent, and no glow — gold still means focus and
+ * nothing else (design.md, the gold discipline rule).
+ */
+.hero {
+  position: relative;
+  /* Out of the app-shell padding, so the backdrop is genuinely full-bleed. */
+  margin: -8px -28px 20px;
+  min-height: var(--hero-height);
+  display: flex;
+  align-items: flex-end;
+}
+
+.hero__backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/*
+ * The art is deliberately oversized and pushed up. It has to survive being
+ * translated down by the parallax without ever showing its own top edge, and
+ * the extra height is what pays for that.
+ */
+.hero__art {
+  position: absolute;
+  inset: -12% 0 0;
+  background-size: cover;
+  background-position: center 22%;
+  /* Held well back so it reads as the room's far wall rather than as a
+     photograph pinned to the front of the screen. */
+  opacity: 0.56;
+  transform: translate3d(0, var(--parallax, 0px), 0);
+}
+
+/*
+ * The backdrop is tinted into the field rather than laid on top of it. Without
+ * this the hero is a photograph with an app around it — the artwork keeps its
+ * own colour temperature and the deep-space identity stops at the hero's edge.
+ * The tint is the existing nebula pair, so nothing new enters the palette.
+ *
+ * Plain alpha, deliberately, where `mix-blend-mode: screen` would be the
+ * textbook choice. A blend mode forces its whole stacking context to composite,
+ * and on a long scrolling page over a fixed background that is how you get a
+ * ghost: a stale, magnified tile of a row painted somewhere else. The colours
+ * are lifted toward the bright end to buy back the luminosity screen was
+ * giving. See the session log — this cost a real bug report.
+ */
+.hero__tint {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 70% at 12% 8%, rgba(126, 108, 200, 0.3), transparent 62%),
+    radial-gradient(ellipse 70% 60% at 88% 92%, rgba(60, 118, 208, 0.26), transparent 60%);
+}
+
+/*
+ * A vignette, which is the oldest depth trick there is and still the cheapest:
+ * darkening the corners bends a flat rectangle into something with a middle.
+ */
+.hero__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 110% 90% at 50% 45%,
+    transparent 44%,
+    rgba(5, 7, 15, 0.46) 100%
+  );
+}
+
+/* The nav floats over the hero, so the hero owes it a dark bed. */
+.hero__scrim--top {
+  background: linear-gradient(
+    to bottom,
+    rgba(5, 7, 15, 0.75) 0%,
+    rgba(5, 7, 15, 0.28) 40%,
+    transparent 72%
+  );
+}
+
+/*
+ * Bottom-to-top first: this is the one carrying the legibility requirement, and
+ * it lands on the deep floor colour so the hero dissolves into the shelves
+ * below rather than ending on a seam.
+ */
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--space-deep) 0%,
+    rgba(7, 11, 24, 0.92) 22%,
+    rgba(7, 11, 24, 0.55) 55%,
+    rgba(7, 11, 24, 0.28) 100%
+  );
+}
+
+/* Then leftward, so the type column stays dark under a bright backdrop. */
+.hero__scrim--side {
+  background: linear-gradient(
+    to right,
+    rgba(5, 7, 15, 0.82) 0%,
+    rgba(5, 7, 15, 0.46) 36%,
+    transparent 70%
+  );
+}
+
+.hero__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 30px;
+  padding: 0 28px 26px;
+  width: 100%;
+}
+
+/*
+ * The poster is the one object in the room that is unmistakably in front. It
+ * gets the deepest elevation step and a hairline rim — a light edge on the top
+ * of a raised surface is what sells the lift, and it is the same trick the
+ * shadow is doing in reverse.
+ */
+.hero__poster {
+  flex: none;
+  width: 150px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  box-shadow:
+    var(--elev-3),
+    inset 0 1px 0 rgba(242, 245, 251, 0.12);
+  background: var(--space-raised);
+}
+
+.hero__poster--square {
+  aspect-ratio: 1 / 1;
+}
+
+.hero__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero__text {
+  min-width: 0;
+  max-width: 52ch;
+  padding-bottom: 4px;
+}
+
+.hero__eyebrow {
+  display: block;
+  margin-bottom: 10px;
+}
+
+/*
+ * Sentence case, normal tracking, and large. design.md is explicit that a title
+ * is never wide-tracked — the tracking is structural signal, and a title set
+ * that way reads as a control panel rather than as a library.
+ */
+.hero__title {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 2.7vw, 40px);
+  line-height: 1.05;
+  font-weight: 600;
+  color: var(--text-primary);
+  /* A cast shadow rather than a stroke: it keeps the title legible over the one
+     backdrop that defeats the scrims without thickening the letterforms. */
+  text-shadow: 0 2px 18px rgba(5, 7, 15, 0.75);
+}
+
+.hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+/* Separators are drawn, not typed, so they never end up in a screen reader's
+   reading of the line. */
+.hero__meta span + span::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+.hero__overview {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The same gold bar the continue-watching tiles carry, at hero scale. */
+.hero__progress {
+  height: 3px;
+  width: min(320px, 100%);
+  border-radius: 999px;
+  background: rgba(242, 245, 251, 0.16);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.hero__progress-fill {
+  height: 100%;
+  background: var(--gold);
+}
+
+.hero__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/*
+ * Controls sit on a raised surface with a gold hairline at rest — structural,
+ * barely noticed — and take full gold with the ring when focused or hovered.
+ * The lift on focus is 1px: enough to feel like it came forward, small enough
+ * that it never competes with the ring for the job of saying where you are.
+ */
+.hero__btn {
+  padding: 11px 22px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.72);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--elev-1);
+  color: var(--text-secondary);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease,
+    transform var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
+}
+
+.hero__btn--primary {
+  background: rgba(18, 26, 54, 0.82);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.hero__btn:hover,
+.hero__btn:focus {
+  border-color: var(--gold);
+  box-shadow: var(--elev-2), 0 0 0 4px var(--gold-ring);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+/*
+ * Under reduced motion the parallax is not merely slowed, it is removed — the
+ * property the transform reads is never written, and the transition on the
+ * controls goes with it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hero__art {
+    transform: none;
+    will-change: auto;
+  }
+
+  .hero__btn {
+    transition: none;
+  }
+
+  .hero__btn:hover,
+  .hero__btn:focus {
+    transform: none;
+  }
+}
+
+/*
+ * Narrow: the poster is the first thing to go. It is the least informative
+ * element in the block, and keeping it forces the title down to a size that
+ * stops the hero being a hero.
+ */
+@media (max-width: 860px) {
+  .hero {
+    margin: -8px -20px 22px;
+    min-height: clamp(280px, 34vh, 380px);
+  }
+
+  .hero__poster {
+    display: none;
+  }
+
+  .hero__body {
+    padding: 0 20px 32px;
+  }
+
+  .hero__scrim--side {
+    background: linear-gradient(
+      to right,
+      rgba(5, 7, 15, 0.9) 0%,
+      rgba(5, 7, 15, 0.5) 60%,
+      transparent 100%
+    );
+  }
+}
