@@ -61,3 +61,23 @@ export function configForKind(kind: string | undefined): LibraryKindConfig {
       return MOVIE;
   }
 }
+
+// The library kinds a person can choose from, in one place because two screens
+// need the same list and the same words: the add-library form offers them, and
+// a scan result names the one that ignored your files. Two lists that drift
+// would have Settings say "Movies" where the form said "Film".
+//
+// The set is open server-side (ADR 0018) — these are the ones a client offers.
+export const LIBRARY_KINDS: { value: string; label: string }[] = [
+  { value: "movie", label: "Movies" },
+  { value: "show", label: "Shows" },
+  { value: "music", label: "Music" },
+  { value: "other", label: "Other" },
+];
+
+// kindLabel names a kind for display. An unfamiliar kind returns itself rather
+// than an empty string, so a server that grows a kind this client predates
+// still reads as something rather than as a gap.
+export function kindLabel(kind: string | undefined): string {
+  return LIBRARY_KINDS.find((k) => k.value === kind)?.label ?? kind ?? "unset";
+}

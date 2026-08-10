@@ -24,6 +24,7 @@ import {
   useRemovePlugin,
   useServerLog,
 } from "@/api/hooks";
+import { LIBRARY_KINDS, kindLabel } from "./libraryConfig";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { AuditLog } from "@/components/AuditLog";
 import { UpdateSettings } from "@/components/UpdateSettings";
@@ -66,6 +67,14 @@ function LibraryRow({ library }: { library: Library }) {
   const skipped = status?.skipped ?? 0;
   const issues = status?.issues ?? [];
 
+  // Media the library's kind excludes. Stated in the row itself rather than
+  // hidden behind the issues toggle, because it is the answer to "why is this
+  // library empty" and the person asking has no reason to expand anything —
+  // the scan looked successful. The wording names both halves: what was
+  // ignored, and the setting that ignored it.
+  const skippedKind = status?.skipped_kind ?? 0;
+  const excluded = library.kind === "music" ? "video" : "audio";
+
   return (
     <div className="set-lib">
       <div className="set-row">
@@ -88,6 +97,15 @@ function LibraryRow({ library }: { library: Library }) {
               </>
             )}
           </div>
+          {!running && skippedKind > 0 && (
+            <div className="set-row__note">
+              {skippedKind.toLocaleString()} {excluded} file
+              {skippedKind === 1 ? "" : "s"} ignored — this library's type is{" "}
+              {kindLabel(library.kind)}.
+              {library.item_count === 0 && " A library's type cannot be changed;" +
+                " remove it and add it again with the right type."}
+            </div>
+          )}
         </div>
         <div className="set-row__actions">
           <button
@@ -154,7 +172,13 @@ function AddLibrary() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
-  const [kind, setKind] = useState("movie");
+  // No default. The kind cannot be changed afterwards — it decides which files
+  // are scanned at all and biases movie-vs-TV matching — so it is the one field
+  // here that must not be settable by inattention. It defaulted to "movie", sat
+  // to the right of the Browse button, and a library named "Music" pointed at a
+  // music folder was created as a movie library, which then discarded 1,592
+  // tracks and reported "0 items · scanned".
+  const [kind, setKind] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
   if (!open) {
@@ -210,13 +234,23 @@ function AddLibrary() {
         className="set-input"
         value={kind}
         onChange={(e) => setKind(e.target.value)}
+        required
+        aria-label="Library type"
       >
-        <option value="movie">Movies</option>
-        <option value="show">Shows</option>
-        <option value="music">Music</option>
-        <option value="other">Other</option>
+        <option value="" disabled>
+          Library type…
+        </option>
+        {LIBRARY_KINDS.map((k) => (
+          <option key={k.value} value={k.value}>
+            {k.label}
+          </option>
+        ))}
       </select>
-      <button className="set-btn" type="submit" disabled={create.isPending}>
+      <button
+        className="set-btn"
+        type="submit"
+        disabled={create.isPending || !kind}
+      >
         Create
       </button>
       <button className="set-btn" type="button" onClick={() => setOpen(false)}>
