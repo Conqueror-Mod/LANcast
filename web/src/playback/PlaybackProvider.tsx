@@ -178,6 +178,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // The <track> element currently mounted. Its .track is the one TextTrack
+  // allowed to be showing; see the effect that enforces that below.
+  const trackRef = useRef<HTMLTrackElement>(null);
 
   const decision = useRef<Decision>({ method: "direct", reason: "" });
   const transcoding = useRef(false);
@@ -670,13 +673,33 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     [subtitles, subKey],
   );
 
-  // A browser will not swap a <track> src reliably once parsed, so the active
-  // track is keyed and remounted on change; here it is switched to showing.
+  /*
+   * A browser will not swap a <track> src reliably once parsed, so the active
+   * track is keyed and remounted on change; here it is switched to showing.
+   *
+   * Exactly one track may be showing, and the list is not only ever one long.
+   * Removing a <track> element is supposed to drop its TextTrack from
+   * video.textTracks, and in practice the entry outlives the element — so after
+   * switching subtitles once, the list holds the old track as well as the new.
+   * This used to set *every* entry in it to `showing`, which turned the stale
+   * one back on: two tracks rendering at once, their cues stacking up the
+   * screen and never clearing, with duplicated lines wherever two files
+   * translate the same dialogue. It is at its worst with two downloads of the
+   * same language, which is the ordinary way of trying to find a good one.
+   *
+   * So: everything off, then ours on, identified by the element rather than by
+   * position or label — a second English file has the same label and cannot be
+   * told apart by one.
+   */
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     for (const tt of v.textTracks) {
-      tt.mode = activeSub ? "showing" : "disabled";
+      tt.mode = "disabled";
+    }
+    const own = trackRef.current?.track;
+    if (activeSub && own) {
+      own.mode = "showing";
     }
     // subOffset is included because a transcode seek remounts the track with a
     // new offset-shifted src; the fresh track must be switched to showing too.
@@ -803,9 +826,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               }
               // A transcode seek reloads the source, which re-parses the <track>
               // at its default mode. Re-assert the selection so subtitles survive
-              // a seek rather than silently switching off.
+              // a seek rather than silently switching off — and re-assert it the
+              // same way the effect above does, one track showing and every
+              // other one off. Setting the whole list to showing here would put
+              // a stale track back on screen at the first seek even once the
+              // effect had cleared it.
               for (const tt of v.textTracks) {
-                tt.mode = activeSub ? "showing" : "disabled";
+                tt.mode = "disabled";
+              }
+              const own = trackRef.current?.track;
+              if (activeSub && own) {
+                own.mode = "showing";
               }
             }}
             onLoadedData={() => setLoading(false)}
@@ -852,6 +883,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 // timeline's zero point, so the cues must be re-fetched shifted to
                 // match, or a resumed film shows no subtitles at all.
                 key={`${activeSub.key}@${subOffset}`}
+                ref={trackRef}
                 kind="subtitles"
                 default
                 src={
