@@ -57,6 +57,16 @@
   pointer-events: none;
 }
 
+/* The slot the media element lives alone in — see the comment at the JSX in
+   PlaybackProvider, and ADR 0029. It must generate no box: the element sizes
+   itself at 100% of .playback, and a real wrapper would make that 100% of an
+   auto-height div instead, collapsing the picture to nothing. `display:
+   contents` keeps the DOM parent without adding a layout one, so every rule
+   below is unchanged by its existence. */
+.playback__slot {
+  display: contents;
+}
+
 .playback__video {
   width: 100%;
   height: 100%;
