@@ -4,6 +4,19 @@ import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
 import { SubtitleMenu } from "@/components/SubtitleMenu";
+import { QueuePanel, audioLabel } from "@/components/QueuePanel";
+import { SkipGlyph } from "@/components/SkipGlyph";
+import {
+  ShuffleGlyph,
+  RepeatGlyph,
+  VolumeGlyph,
+  AudioTrackGlyph,
+  QueueGlyph,
+  PipGlyph,
+  FullscreenGlyph,
+  PrevGlyph,
+  NextGlyph,
+} from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import "./Player.css";
 
@@ -55,6 +68,20 @@ export function Player() {
 
   const [chromeVisible, setChromeVisible] = useState(true);
   const [subMenuOpen, setSubMenuOpen] = useState(false);
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [pipAvailable, setPipAvailable] = useState(false);
+
+  // Picture-in-picture is offered only where it exists. WebView2 is a different
+  // host from the browser and may not implement it, and a button that does
+  // nothing is worse than one that is absent — it reads as a broken feature
+  // rather than an unavailable one.
+  useEffect(() => {
+    setPipAvailable(
+      typeof document !== "undefined" && !!document.pictureInPictureEnabled,
+    );
+  }, []);
 
   // Leaving the player leaves it playing. That is the point of the change, and
   // it is why Back no longer stops anything.
@@ -80,14 +107,23 @@ export function Player() {
   useEffect(() => () => window.clearTimeout(idleTimer.current), []);
 
   // ---- keyboard (transport surface owns its keys; spatial nav is suspended) --
-  const { togglePlay, toggleFullscreen, toggleMute, seekBy, cycleSub, changeVolume } = pb;
+  const {
+    togglePlay,
+    toggleFullscreen,
+    toggleMute,
+    seekBy,
+    cycleSub,
+    changeVolume,
+  } = pb;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
       const ae = document.activeElement;
       if (
         ae instanceof HTMLElement &&
-        (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.isContentEditable)
       ) {
         return;
       }
@@ -197,6 +233,29 @@ export function Player() {
             onSeek={pb.seekTo}
           />
           <div className="player__controls">
+            {/* Transport, in the order the hand expects: back through the
+                queue, back through the file, play, forward through the file,
+                forward through the queue. Skip is inside previous/next because
+                it moves within the thing you are watching; the queue buttons
+                leave it. */}
+            {pb.hasPrev && (
+              <button
+                className="player__icon"
+                onClick={pb.playPrev}
+                aria-label="Previous"
+                title="Previous"
+              >
+                <PrevGlyph />
+              </button>
+            )}
+            <button
+              className="player__icon"
+              onClick={() => pb.seekBy(-10)}
+              aria-label="Back 10 seconds"
+              title="Back 10 seconds"
+            >
+              <SkipGlyph dir="back" />
+            </button>
             <button
               className="player__icon player__icon--play"
               onClick={pb.togglePlay}
@@ -204,13 +263,31 @@ export function Player() {
             >
               {pb.playing ? "❚❚" : "▶"}
             </button>
+            <button
+              className="player__icon"
+              onClick={() => pb.seekBy(10)}
+              aria-label="Forward 10 seconds"
+              title="Forward 10 seconds"
+            >
+              <SkipGlyph dir="forward" />
+            </button>
+            {pb.hasNext && (
+              <button
+                className="player__icon"
+                onClick={pb.playNext}
+                aria-label="Next"
+                title="Next"
+              >
+                <NextGlyph />
+              </button>
+            )}
             <div className="player__volume">
               <button
                 className="player__icon"
                 onClick={pb.toggleMute}
                 aria-label={pb.muted ? "Unmute" : "Mute"}
               >
-                {pb.muted || pb.volume === 0 ? "🔇" : "🔊"}
+                <VolumeGlyph muted={pb.muted || pb.volume === 0} />
               </button>
               <input
                 className="player__volume-slider"
@@ -225,48 +302,205 @@ export function Player() {
               />
             </div>
             <span className="player__time">
-              {clock(pb.displayTime)} <span className="player__time-sep">/</span>{" "}
+              {clock(pb.displayTime)}{" "}
+              <span className="player__time-sep">/</span>{" "}
               {clock(pb.totalDuration)}
             </span>
 
-            {/* Subtitles and fullscreen are video affordances. A subtitle menu
+            <div className="player__spacer" />
+            <div className="player__options">
+              {/* Shuffle and repeat are queue controls, so they appear wherever
+                there is a queue — which in practice is music, but a Play-all
+                over a season is the same thing and gets them too. An engaged
+                toggle reads through weight and a filled background, never gold:
+                gold means focus and nothing else. */}
+              {pb.queue.length > 1 && (
+                <>
+                  <button
+                    className={"player__icon" + (pb.shuffle ? " is-on" : "")}
+                    onClick={pb.toggleShuffle}
+                    aria-label="Shuffle"
+                    aria-pressed={pb.shuffle}
+                    title={pb.shuffle ? "Shuffle on" : "Shuffle"}
+                  >
+                    <ShuffleGlyph />
+                  </button>
+                  <button
+                    className={
+                      "player__icon" + (pb.repeat !== "off" ? " is-on" : "")
+                    }
+                    onClick={pb.cycleRepeat}
+                    aria-label={`Repeat ${pb.repeat}`}
+                    title={
+                      pb.repeat === "one"
+                        ? "Repeat this one"
+                        : pb.repeat === "all"
+                          ? "Repeat all"
+                          : "Repeat off"
+                    }
+                  >
+                    <RepeatGlyph one={pb.repeat === "one"} />
+                  </button>
+                  <div className="player__menu">
+                    <button
+                      className={"player__icon" + (queueOpen ? " is-on" : "")}
+                      onClick={() => setQueueOpen((o) => !o)}
+                      aria-label="Queue"
+                      aria-expanded={queueOpen}
+                      title="Queue"
+                    >
+                      <QueueGlyph />
+                    </button>
+                    {queueOpen && (
+                      <QueuePanel
+                        ids={pb.queue}
+                        currentID={pb.itemID}
+                        onPick={(id) => {
+                          pb.playFromQueue(id);
+                          setQueueOpen(false);
+                        }}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Speed is offered everywhere: a slow talker is as common in a
+                podcast-length album track as in a documentary. */}
+              <div className="player__menu">
+                <button
+                  className={"player__icon" + (pb.speed !== 1 ? " is-on" : "")}
+                  onClick={() => setSpeedOpen((o) => !o)}
+                  aria-label="Playback speed"
+                  aria-expanded={speedOpen}
+                  title={`Speed ${pb.speed}×`}
+                >
+                  {pb.speed}×
+                </button>
+                {speedOpen && (
+                  <div className="player__pop" role="menu">
+                    {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((r) => (
+                      <button
+                        key={r}
+                        role="menuitemradio"
+                        aria-checked={pb.speed === r}
+                        className={
+                          "player__pop-item" + (pb.speed === r ? " is-on" : "")
+                        }
+                        onClick={() => {
+                          pb.setSpeed(r);
+                          setSpeedOpen(false);
+                        }}
+                      >
+                        {r === 1 ? "Normal" : `${r}×`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Only when the file actually carries a choice. A picker listing
+                one track is a control that cannot do anything. */}
+              {pb.audioTracks.length > 1 && (
+                <div className="player__menu">
+                  <button
+                    className={
+                      "player__icon" + (pb.audioIndex != null ? " is-on" : "")
+                    }
+                    onClick={() => setAudioOpen((o) => !o)}
+                    aria-label="Audio track"
+                    aria-expanded={audioOpen}
+                    title="Audio track"
+                  >
+                    <AudioTrackGlyph />
+                  </button>
+                  {audioOpen && (
+                    <div className="player__pop" role="menu">
+                      {pb.audioTracks.map((t) => (
+                        <button
+                          key={t.index}
+                          role="menuitemradio"
+                          aria-checked={pb.audioIndex === t.index}
+                          className={
+                            "player__pop-item" +
+                            (pb.audioIndex === t.index ? " is-on" : "")
+                          }
+                          onClick={() => {
+                            pb.selectAudio(t.index);
+                            setAudioOpen(false);
+                          }}
+                        >
+                          {audioLabel(t)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Subtitles and fullscreen are video affordances. A subtitle menu
                 that can only ever say "none", and a fullscreen button for a
                 still image, are both controls that promise something the
                 content cannot give. */}
-            {!pb.isAudio && (
-              <div className="player__subs player__icon--right">
+              {!pb.isAudio && (
+                <div className="player__subs">
+                  <button
+                    className={"player__icon" + (pb.activeSub ? " is-on" : "")}
+                    onClick={() => setSubMenuOpen((o) => !o)}
+                    aria-label="Subtitles"
+                    aria-expanded={subMenuOpen}
+                  >
+                    CC
+                  </button>
+                  {subMenuOpen && (
+                    <SubtitleMenu
+                      itemID={pb.itemID}
+                      itemTitle={item?.title ?? ""}
+                      language="en"
+                      tracks={pb.subtitles}
+                      activeKey={pb.subKey}
+                      onSelect={(key) => {
+                        pb.selectSub(key);
+                        setSubMenuOpen(false);
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+              {!pb.isAudio && pipAvailable && (
                 <button
-                  className={"player__icon" + (pb.activeSub ? " is-on" : "")}
-                  onClick={() => setSubMenuOpen((o) => !o)}
-                  aria-label="Subtitles"
-                  aria-expanded={subMenuOpen}
+                  className="player__icon"
+                  onClick={async () => {
+                    const v = pb.videoRef.current;
+                    if (!v) return;
+                    try {
+                      if (document.pictureInPictureElement) {
+                        await document.exitPictureInPicture();
+                      } else {
+                        await v.requestPictureInPicture();
+                      }
+                    } catch {
+                      // Refused by the host — a policy decision, not a fault, and
+                      // nothing useful to say about it beyond leaving the picture
+                      // where it is.
+                    }
+                  }}
+                  aria-label="Picture in picture"
+                  title="Picture in picture"
                 >
-                  CC
+                  <PipGlyph />
                 </button>
-                {subMenuOpen && (
-                  <SubtitleMenu
-                    itemID={pb.itemID}
-                    itemTitle={item?.title ?? ""}
-                    language="en"
-                    tracks={pb.subtitles}
-                    activeKey={pb.subKey}
-                    onSelect={(key) => {
-                      pb.selectSub(key);
-                      setSubMenuOpen(false);
-                    }}
-                  />
-                )}
-              </div>
-            )}
-            {!pb.isAudio && (
-              <button
-                className="player__icon"
-                onClick={pb.toggleFullscreen}
-                aria-label="Fullscreen"
-              >
-                ⛶
-              </button>
-            )}
+              )}
+              {!pb.isAudio && (
+                <button
+                  className="player__icon"
+                  onClick={pb.toggleFullscreen}
+                  aria-label="Fullscreen"
+                >
+                  <FullscreenGlyph />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

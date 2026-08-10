@@ -86,6 +86,20 @@ export interface SubtitleTrack {
   reason?: string;
 }
 
+// One track inside a media file, as the probe found it. `index` is absolute
+// within the file, which is what `?audio=` takes (docs/api.md).
+export interface MediaStream {
+  index: number;
+  kind: string; // video | audio | subtitle
+  codec: string;
+  profile?: string;
+  language?: string;
+  title?: string;
+  default: boolean;
+  forced: boolean;
+  channels?: number;
+}
+
 export interface Item {
   id: number;
   library_id: number;
@@ -121,6 +135,10 @@ export interface Item {
   locked_fields?: string[] | null;
   ratings?: Rating[];
   artwork?: Artwork;
+  // Present on a detail response: the full track list, including alternate
+  // audio. Absent from list responses, which is why the player reads it from
+  // the item it fetched rather than from the grid row that opened it.
+  streams?: MediaStream[];
   // Pictures (ADR 0028). width/height describe the photo as it will be seen —
   // a quarter-turned phone photo reports its rotated dimensions, so a layout
   // can reserve the right box before the image loads. taken_at is EXIF capture

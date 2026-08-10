@@ -100,3 +100,46 @@
   height: 2px;
   background: var(--gold);
 }
+
+/*
+ * Volume in the strip: a button that reveals a slider above it, rather than a
+ * slider that lives there. A permanent slider is the widest thing this could
+ * hold, and the strip sits over content — spending that width on a control most
+ * presses do not need is the wrong trade in a 180px widget.
+ */
+.mini__volume {
+  position: relative;
+  display: inline-flex;
+}
+
+.mini__volume-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: -6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--elev-3);
+}
+
+.mini__volume-slider {
+  width: 96px;
+}
+
+/* Five controls where there were two: they get their own line under the title
+   rather than squeezing it, since the title is the thing that identifies what
+   is playing. */
+.mini {
+  width: 236px;
+  flex-wrap: wrap;
+}
+
+.mini__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
