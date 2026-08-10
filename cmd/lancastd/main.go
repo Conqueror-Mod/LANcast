@@ -188,6 +188,11 @@ const shutdownGrace = 5 * time.Second
 // signal: interactive mode passes a Ctrl-C/SIGTERM context, and the Windows
 // service handler passes one it cancels when the SCM asks it to stop — so the
 // same server runs identically foreground or as a service (ADR 0016).
+// serviceManaged is set by the service host before it calls run, so the API can
+// tell the difference between "I can restart myself for you" and "I am a process
+// you started and only you can bring back".
+var serviceManaged bool
+
 func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	cfg, err := config.Resolve(addr, dataDir)
 	if err != nil {
@@ -502,7 +507,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Handler: api.New(api.Deps{
 			LANBound: lanBound, RestartWidens: restartWidens,
 			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Covers: covers, Photos: photos, Trans: trans, Subs: subs,
+			Worker: worker, Probes: probes, Covers: covers, Photos: photos,
+			ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Updates: updates,
 			Rebuild: func(s config.Settings) {

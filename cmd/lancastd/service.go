@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"lancast/internal/config"
 	"lancast/internal/mediatools"
@@ -97,6 +98,18 @@ func runService(args []string) error {
 		return mgr.Start()
 	case "stop":
 		return mgr.Stop()
+	case "restart":
+		// Spawned detached by the running server to finish an update: it stops
+		// the service (which applies the staged files on the way down), waits
+		// for the stop to complete, and starts it again. Run by hand it is
+		// simply a restart.
+		//
+		// The process doing this cannot be the service itself — that is the
+		// whole problem it solves — so it is a second, short-lived invocation
+		// of the same binary. Renaming that binary underneath a running process
+		// is permitted on Windows, which is what makes the swap safe while this
+		// helper is still executing.
+		return mgr.Restart(serviceRestartTimeout)
 	case "status":
 		s, err := mgr.Status()
 		if err != nil {
@@ -105,6 +118,12 @@ func runService(args []string) error {
 		fmt.Println(s)
 		return nil
 	default:
-		return fmt.Errorf("unknown action %q (want install, uninstall, start, stop, or status)", action)
+		return fmt.Errorf("unknown action %q (want install, uninstall, start, stop, restart, or status)", action)
 	}
 }
+
+// serviceRestartTimeout bounds the wait for a stop before a restart gives up.
+// Generous, because a stop that is finishing a scan or applying an update is
+// doing real work — and the failure it prevents is worse than the wait: Start
+// on a service still stopping fails, after the old version has already gone.
+const serviceRestartTimeout = 90 * time.Second

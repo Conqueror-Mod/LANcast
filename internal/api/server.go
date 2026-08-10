@@ -48,10 +48,15 @@ type Deps struct {
 	Probes   *probe.Worker
 	Covers   *coverart.Worker
 	Photos   *photo.Worker
-	Trans    *transcode.Manager
-	Updates  *update.Checker
-	Subs     *subtitle.Extractor
-	Settings *config.SettingsStore
+	// ServiceManaged reports whether this process is running under a service
+	// manager. It decides what "finish the update" can do: a service can be
+	// restarted for the user, a foreground server can only be told to close and
+	// reopen — and guessing wrong means killing a process nothing will restart.
+	ServiceManaged bool
+	Trans          *transcode.Manager
+	Updates        *update.Checker
+	Subs           *subtitle.Extractor
+	Settings       *config.SettingsStore
 	// DataDir is the server data directory: where downloaded subtitles are
 	// written — never beside the media, which is the same rule NFO writing
 	// follows — and where lancastd.log is read from for GET /api/logs.
@@ -84,29 +89,30 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
-	st            *store.Store
-	scanner       *scan.Scanner
-	reg           *meta.Registry
-	art           *artwork.Cache
-	worker        *enrich.Worker
-	probes        *probe.Worker
-	covers        *coverart.Worker
-	photos        *photo.Worker
-	trans         *transcode.Manager
-	updates       *update.Checker
-	subs          *subtitle.Extractor
-	settings      *config.SettingsStore
-	dataDir       string
-	log           *slog.Logger
-	web           http.Handler
-	rebuild       func(config.Settings)
-	reloadPlugins func() error
-	enrich        func()
-	probe         func()
-	coversSoon    func()
-	lanBound      bool
-	restartWidens bool
-	throttle      *auth.Throttle
+	st             *store.Store
+	scanner        *scan.Scanner
+	reg            *meta.Registry
+	art            *artwork.Cache
+	worker         *enrich.Worker
+	probes         *probe.Worker
+	covers         *coverart.Worker
+	photos         *photo.Worker
+	serviceManaged bool
+	trans          *transcode.Manager
+	updates        *update.Checker
+	subs           *subtitle.Extractor
+	settings       *config.SettingsStore
+	dataDir        string
+	log            *slog.Logger
+	web            http.Handler
+	rebuild        func(config.Settings)
+	reloadPlugins  func() error
+	enrich         func()
+	probe          func()
+	coversSoon     func()
+	lanBound       bool
+	restartWidens  bool
+	throttle       *auth.Throttle
 }
 
 func New(d Deps) *Server {
@@ -116,7 +122,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
@@ -188,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/update", s.adminOnly(s.updateStatus))
 	mux.HandleFunc("POST /api/update/check", s.adminOnly(s.checkForUpdate))
 	mux.HandleFunc("POST /api/update/download", s.adminOnly(s.downloadUpdate))
+	mux.HandleFunc("POST /api/update/restart", s.adminOnly(s.restartForUpdate))
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))

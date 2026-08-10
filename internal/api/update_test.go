@@ -105,3 +105,13 @@ func TestUpdateStatusReportsStaged(t *testing.T) {
 		t.Errorf("staged = %v, want v0.7.0", body["staged"])
 	}
 }
+
+// The endpoint is "finish the update", not "restart the server". Without
+// something staged there is nothing worth interrupting playback for.
+func TestRestartRefusesWithNothingStaged(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/update/restart", nil)
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		t.Errorf("status = %d, want 412", resp.StatusCode)
+	}
+}

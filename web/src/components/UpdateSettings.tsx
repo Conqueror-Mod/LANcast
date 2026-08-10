@@ -2,6 +2,7 @@ import {
   useUpdateStatus,
   useCheckForUpdate,
   useDownloadUpdate,
+  useRestartForUpdate,
   useSettings,
   useUpdateSettings,
 } from "@/api/hooks";
@@ -15,6 +16,7 @@ export function UpdateSettings() {
   const { data: settings } = useSettings();
   const check = useCheckForUpdate();
   const download = useDownloadUpdate();
+  const restart = useRestartForUpdate();
   const save = useUpdateSettings();
 
   if (!status?.supported) return null;
@@ -44,7 +46,7 @@ export function UpdateSettings() {
           </div>
           <div className="set-row__sub">
             {status.staged
-              ? "Downloaded and verified. It takes effect the next time the server starts."
+              ? "Downloaded and verified. Restart to finish."
               : describe(status)}
           </div>
           {status.error && (
@@ -76,13 +78,24 @@ export function UpdateSettings() {
               Release notes
             </a>
           )}
+          {status.staged && (
+            <button
+              className="set-btn"
+              disabled={restart.isPending}
+              onClick={() => restart.mutate()}
+            >
+              {restart.isPending ? "Restarting…" : "Restart now"}
+            </button>
+          )}
           {status.available && !status.staged && status.can_verify && (
             <button
               className="set-btn"
               disabled={download.isPending || status.downloading?.active}
               onClick={() => download.mutate()}
             >
-              {status.downloading?.active ? "Downloading…" : "Download and install"}
+              {status.downloading?.active
+                ? "Downloading…"
+                : "Download and install"}
             </button>
           )}
           <button
@@ -104,7 +117,9 @@ export function UpdateSettings() {
               disabled={save.isPending}
               onChange={(e) => save.mutate({ update_check: e.target.checked })}
             />
-            <span className="set-row__title">Check for updates automatically</span>
+            <span className="set-row__title">
+              Check for updates automatically
+            </span>
           </label>
           <div className="set-row__sub">
             Asks the project once a day whether a newer version exists. Nothing

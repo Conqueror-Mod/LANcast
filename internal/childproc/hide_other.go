@@ -6,8 +6,19 @@
 // a visible window when the parent has no console of its own.
 package childproc
 
-import "os/exec"
+import (
+	"os/exec"
+	"syscall"
+)
 
 // Hide is a no-op off Windows, where starting a child process never creates a
 // window.
 func Hide(cmd *exec.Cmd) {}
+
+// Detach starts a child in its own process group so it survives its parent.
+func Detach(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+}
