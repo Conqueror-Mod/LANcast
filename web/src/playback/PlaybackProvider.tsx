@@ -684,7 +684,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             }
           }}
           onLoadedData={() => setLoading(false)}
-          onPlaying={() => setLoading(false)}
+          // The note explains a wait ("Converting — audio codec ac3 is not
+          // supported"). Once frames are arriving there is no wait left to
+          // explain, and a permanent banner over the picture reads as a warning
+          // about the thing you are currently watching happily. A later stall
+          // shows the spinner on its own, which is the honest signal for it.
+          onPlaying={() => {
+            setLoading(false);
+            setNote("");
+          }}
           onWaiting={() => setLoading(true)}
           onError={() => retryWithoutClaims()}
           onTimeUpdate={(e) => {

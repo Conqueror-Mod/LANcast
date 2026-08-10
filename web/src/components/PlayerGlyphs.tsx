@@ -156,3 +156,13 @@ export function NextGlyph(p: Props) {
     </Svg>
   );
 }
+
+// A square. Rounded to the same corner radius the other glyphs are stroked
+// with, so it sits in the row rather than on top of it.
+export function StopGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </Svg>
+  );
+}

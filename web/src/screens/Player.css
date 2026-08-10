@@ -282,7 +282,7 @@
 /* The chosen row, marked by a check rather than by colour — the list is read
    top to bottom and a tick is faster than comparing shades. */
 .player__pop-item.is-on::after {
-  content: "¹3";
+  content: "✓";
   float: right;
   color: var(--text-primary);
 }

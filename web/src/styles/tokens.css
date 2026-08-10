@@ -66,6 +66,18 @@
   --rail-collapsed: 60px;
   --rail-expanded: 208px;
 
+  /*
+   * The docked corner. The control strip (MiniPlayer.css) and the picture it
+   * belongs to (playback.css) are two elements in two files, both fixed to the
+   * same corner — so each has to know how much room the other takes, or they
+   * overlap. They did: the strip grew from 180px to 236px when it gained three
+   * controls, and the cover's clearance stayed at the old number.
+   */
+  --mini-inset: 18px; /* gap from the window edge */
+  --mini-gap: 10px; /* gap between the strip and the picture */
+  --mini-strip-w: 236px;
+  --mini-strip-h: 46px; /* one line of title over one row of icons */
+
   /* Motion. */
   --dur-fast: 120ms; /* hover / focus */
   --dur-base: 280ms; /* page and panel transitions */
