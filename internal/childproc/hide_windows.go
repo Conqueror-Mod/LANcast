@@ -29,3 +29,21 @@ func Hide(cmd *exec.Cmd) {
 	cmd.SysProcAttr.HideWindow = true
 	cmd.SysProcAttr.CreationFlags |= createNoWindow
 }
+
+// Detach starts a child in its own process group so it survives its parent.
+//
+// The restart helper is the case this exists for: its whole job is to stop the
+// process that started it, so anything tying their lifetimes together would kill
+// the helper mid-restart and leave the service stopped — the exact failure the
+// helper was written to prevent.
+func Detach(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= createNewProcessGroup | detachedProcess
+}
+
+const (
+	createNewProcessGroup = 0x00000200
+	detachedProcess       = 0x00000008
+)

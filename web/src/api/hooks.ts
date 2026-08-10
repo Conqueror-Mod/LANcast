@@ -771,6 +771,30 @@ export function useCheckForUpdate() {
   });
 }
 
+// Finishes a staged update by restarting the server.
+//
+// The server spawns a detached helper and then goes down, so this request often
+// does not get a response at all — the connection dies with the process that was
+// answering it. A dropped connection here is success, not failure, which is why
+// the error is swallowed rather than shown: telling someone their restart failed
+// while it is working is worse than saying nothing.
+export function useRestartForUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      try {
+        return await apiSend("/api/update/restart", "POST");
+      } catch (e) {
+        if (e instanceof TypeError) return null; // connection dropped: the restart began
+        throw e;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["update"] });
+    },
+  });
+}
+
 // Downloads and stages an update. Returns immediately — the work runs on the
 // server and its progress shows in the activity panel, which is why this polls
 // the status for a while afterwards rather than waiting.

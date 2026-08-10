@@ -102,6 +102,9 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
+	// Marked before the server starts: it changes what the update endpoint is
+	// allowed to offer, and the answer must not depend on when it is asked.
+	serviceManaged = true
 	go func() { errc <- run(ctx, h.addr, h.dataDir, h.log) }()
 
 	changes <- svc.Status{State: svc.Running, Accepts: accepted}

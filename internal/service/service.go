@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -98,6 +99,14 @@ type Manager interface {
 	Start() error
 	Stop() error
 	Status() (string, error)
+	// Restart stops, waits for the stop to complete, and starts again.
+	//
+	// A service cannot restart itself, and LANcast applies a staged update on
+	// the way down — so without a way to drive a full stop-and-start from
+	// outside, an update could be staged and then had nowhere to go. The wait
+	// is the load-bearing part: Start on a service still stopping fails, and it
+	// would fail after the old version had already gone.
+	Restart(timeout time.Duration) error
 }
 
 // ErrUnsupported is returned by NewManager on a platform without service support

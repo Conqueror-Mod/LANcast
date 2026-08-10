@@ -850,6 +850,36 @@ Whether a newer release exists. **Admin only.**
   "enabled": true }
 ```
 
+### `POST /api/update/restart`
+
+Finishes a staged update by restarting the server. **Admin only.** `202` once the
+restart has been set in motion.
+
+Required because a staged update had nowhere to go. LANcast applies one on the
+way down, and when it runs as a Windows service nothing ever takes it down — so
+"it takes effect the next time the server starts" meant never, and the only
+route through was an elevated `Stop-Service`, which applied the update and left
+the machine with LANcast not running at all.
+
+A service cannot restart itself, so the server spawns a detached helper — the
+same binary, `service restart` — which stops the service, **waits for the stop
+to complete**, and starts it again. Renaming a running executable is permitted
+on Windows, which is what lets the helper keep executing while the swap replaces
+the file it was started from.
+
+Two refusals, both `412`:
+
+- `nothing_staged` — there is no update to finish. This endpoint is not a
+  general "restart the server" button; that is a bigger and more dangerous
+  control, and it would want its own thinking about sessions and playback in
+  flight.
+- `not_a_service` — this process belongs to whoever started it. Killing it and
+  hoping something brings it back is not an answer, so the caller is told to
+  close LANcast and open it again.
+
+**The request often gets no response**, because the process answering it is the
+one going down. A dropped connection here means the restart began.
+
 `error` is a failed *check*; `download_error` is a failed *download*. They are
 separate because they ask different things of the reader — "I could not ask"
 versus "I asked, and installing it failed" — and because a download is started
