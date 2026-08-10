@@ -71,13 +71,6 @@
   background: none;
 }
 
-/* The subtitle and fullscreen controls carried margin-left: auto, so without
-   them the clock would drift left against the volume slider instead of holding
-   the right edge. */
-.player--audio .player__time {
-  margin-left: auto;
-}
-
 .player__note {
   font-size: 12px;
   color: var(--text-muted);
