@@ -332,7 +332,7 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 			id, ok := artists[key]
 			if !ok {
 				var err error
-				id, err = s.st.EnsureMusicContainer(ctx, lib.ID, "artist", key,
+				id, err = s.st.EnsureDerivedContainer(ctx, lib.ID, "artist", key,
 					g.artist, media.SortTitle(g.artist), nil)
 				if err != nil {
 					return err
@@ -350,7 +350,7 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 			id, ok := albums[key]
 			if !ok {
 				var err error
-				id, err = s.st.EnsureMusicContainer(ctx, lib.ID, "album", key,
+				id, err = s.st.EnsureDerivedContainer(ctx, lib.ID, "album", key,
 					g.album, media.SortTitle(g.album), parent)
 				if err != nil {
 					return err

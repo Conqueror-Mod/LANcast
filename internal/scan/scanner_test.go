@@ -906,3 +906,202 @@ func TestVideoInAMusicLibraryIsCounted(t *testing.T) {
 		t.Errorf("SkippedKind = %d, want 1 (the video)", p.SkippedKind)
 	}
 }
+
+// pictureFixture is the reference library's shape: flat folders of images with
+// meaningless filenames, plus the junk that sits beside real photos.
+func pictureFixture(t *testing.T, st *store.Store) (store.Library, string) {
+	t.Helper()
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "Pictures", "picture", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return *lib, root
+}
+
+func TestPictureLibraryGroupsFoldersIntoGalleries(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+
+	writeFile(t, root, "AI Art/0f3be347-6bdf-4f4f-880d-93a5c24d8eda.png", 10)
+	writeFile(t, root, "AI Art/openart-f81b7650ced542cdb5b37d8916f0bc92_raw.jpg", 10)
+	writeFile(t, root, "Wallpaper/4k-mountain.webp", 10)
+	// Not an image, and not media of any other sort either: ignored silently
+	// and not counted, exactly as artwork is in a movie library.
+	writeFile(t, root, "AI Art/archive.7z", 10)
+
+	p := scanAndWait(t, sc, lib)
+	if p.FilesSeen != 3 {
+		t.Fatalf("FilesSeen = %d, want 3", p.FilesSeen)
+	}
+	if p.SkippedKind != 0 {
+		t.Errorf("SkippedKind = %d, want 0 — a .7z is not media of the other sort", p.SkippedKind)
+	}
+
+	items, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	galleries := map[string]store.Item{}
+	photos := 0
+	for _, it := range items {
+		switch it.Kind {
+		case "gallery":
+			galleries[it.Title] = it
+		case "photo":
+			photos++
+		default:
+			t.Errorf("unexpected kind %q for %q", it.Kind, it.Title)
+		}
+	}
+	if photos != 3 {
+		t.Errorf("photos = %d, want 3", photos)
+	}
+	if len(galleries) != 2 {
+		t.Fatalf("galleries = %v, want AI Art and Wallpaper", galleries)
+	}
+	if _, ok := galleries["AI Art"]; !ok {
+		t.Error(`no gallery titled "AI Art"`)
+	}
+}
+
+// The filename is the title, untouched. `clean` strips years, quality markers
+// and release-group noise — all video conventions — and running a UUID through
+// it produces a different meaningless string with less in it.
+func TestPhotoTitleIsTheFilenameVerbatim(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+
+	writeFile(t, root, "Wallpaper/openart-f81b7650ced542cdb5b37d8916f0bc92_raw.jpg", 10)
+	// Contains a year and a quality marker. In a movie library both would be
+	// stripped; here they are part of the name someone gave the file.
+	writeFile(t, root, "Wallpaper/sunset 2019 1080p.png", 10)
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(context.Background(),
+		store.ItemFilter{LibraryID: lib.ID, Kind: "photo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	titles := map[string]bool{}
+	for _, it := range items {
+		titles[it.Title] = true
+		if it.Year != nil {
+			t.Errorf("%q has year %d — a picture library does not read years from names", it.Title, *it.Year)
+		}
+	}
+	for _, want := range []string{
+		"openart-f81b7650ced542cdb5b37d8916f0bc92_raw",
+		"sunset 2019 1080p",
+	} {
+		if !titles[want] {
+			t.Errorf("missing title %q; got %v", want, titles)
+		}
+	}
+}
+
+// A photo loose in the library root is already top-level. Wrapping the root in
+// a gallery would add a level of navigation that contains everything and
+// separates nothing.
+func TestPhotosInTheLibraryRootGetNoGallery(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+
+	writeFile(t, root, "loose.jpg", 10)
+	writeFile(t, root, "Folder/inside.jpg", 10)
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Kind == "photo" && it.Title == "loose" && it.ParentID != nil {
+			t.Error("a photo in the library root was given a parent")
+		}
+		if it.Kind == "photo" && it.Title == "inside" && it.ParentID == nil {
+			t.Error("a photo inside a folder was left without a gallery")
+		}
+	}
+}
+
+// A rescan must be a no-op. Galleries are derived every pass, so a reconciler
+// that re-parented or re-created them would churn ids on every scan.
+func TestRescanOfAPictureLibraryChangesNothing(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+
+	writeFile(t, root, "AI Art/one.png", 10)
+	writeFile(t, root, "AI Art/two.png", 10)
+
+	scanAndWait(t, sc, lib)
+	before, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWait(t, sc, lib)
+	if p.ItemsChanged != 0 {
+		t.Errorf("ItemsChanged = %d on a rescan, want 0", p.ItemsChanged)
+	}
+	after, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != len(after) {
+		t.Fatalf("item count moved from %d to %d across a rescan", len(before), len(after))
+	}
+	ids := map[int64]bool{}
+	for _, it := range before {
+		ids[it.ID] = true
+	}
+	for _, it := range after {
+		if !ids[it.ID] {
+			t.Errorf("%q (%s) has a new id after a rescan", it.Title, it.Kind)
+		}
+	}
+}
+
+// The mirror of the music case: video dropped in a picture library is media of
+// the other sort, so it is counted rather than discarded in silence.
+func TestVideoInAPictureLibraryIsCounted(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+
+	writeFile(t, root, "Holiday/beach.jpg", 10)
+	writeFile(t, root, "Holiday/clip.mp4", 10)
+
+	p := scanAndWait(t, sc, lib)
+	if p.FilesSeen != 1 {
+		t.Fatalf("FilesSeen = %d, want 1 (the photo)", p.FilesSeen)
+	}
+	if p.SkippedKind != 1 {
+		t.Errorf("SkippedKind = %d, want 1 (the video)", p.SkippedKind)
+	}
+}
+
+// Found by the picture rescan test, and it was never about pictures: the
+// reinterpretation check had explicit cases for episode and movie and a default
+// that assumed anything else was "other". A track parses as KindTrack, hits the
+// default, and "track" != "other" — so every rescan re-recorded every track and
+// cleared its metadata stamp, re-queueing the whole library for enrichment.
+func TestRescanOfAMusicLibraryChangesNothing(t *testing.T) {
+	sc, st := newScanner(t)
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "Music", "music", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "ABBA/Arrival/01 Dancing Queen.flac", 10)
+	writeFile(t, root, "ABBA/Arrival/02 Money.mp3", 10)
+
+	scanAndWait(t, sc, *lib)
+	p := scanAndWait(t, sc, *lib)
+
+	if p.ItemsChanged != 0 {
+		t.Errorf("ItemsChanged = %d on a rescan, want 0 — every track was re-recorded", p.ItemsChanged)
+	}
+}

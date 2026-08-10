@@ -46,13 +46,13 @@ func seedAlbum(t *testing.T, st *Store, lib *Library, artist, album string) int6
 	artistKey := lib.Path + "::artist=" + artist
 	albumKey := artistKey + "::album=" + album
 
-	artistID, err := st.EnsureMusicContainer(ctx, lib.ID, "artist", artistKey, artist, artist, nil)
+	artistID, err := st.EnsureDerivedContainer(ctx, lib.ID, "artist", artistKey, artist, artist, nil)
 	if err != nil {
-		t.Fatalf("EnsureMusicContainer artist: %v", err)
+		t.Fatalf("EnsureDerivedContainer artist: %v", err)
 	}
-	albumID, err := st.EnsureMusicContainer(ctx, lib.ID, "album", albumKey, album, album, &artistID)
+	albumID, err := st.EnsureDerivedContainer(ctx, lib.ID, "album", albumKey, album, album, &artistID)
 	if err != nil {
-		t.Fatalf("EnsureMusicContainer album: %v", err)
+		t.Fatalf("EnsureDerivedContainer album: %v", err)
 	}
 	if albumID == artistID {
 		t.Fatalf("album and artist collapsed into one row (id %d)", albumID)

@@ -168,7 +168,7 @@ Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and
 
 ### `POST /api/libraries`
 
-`kind` is one of `movie`, `show`, `music`, `other`. The path must exist and be a
+`kind` is one of `movie`, `show`, `music`, `picture`, `other`. The path must exist and be a
 directory; both are validated before insert.
 
 ```json
@@ -193,6 +193,13 @@ if a scan is already running for that library — scans are not queued.
 ```json
 { "library_id": 1, "state": "running", "started_at": 1753228800 }
 ```
+
+**`kind` is permanent.** It decides which files are scanned at all — a `music`
+library indexes audio, a `picture` library images, everything else video — and
+it biases matching between films and TV. There is no endpoint to change it:
+altering it would mean a rescan re-litigating identity for an entire library,
+which is what field locking exists to prevent. Remove the library and add it
+again.
 
 ### `GET /api/libraries/{id}/scan`
 

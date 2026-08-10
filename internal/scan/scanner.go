@@ -303,6 +303,23 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		}
 	}
 
+	// Pictures group by folder and nothing else (ADR 0028), so they take none of
+	// the video reconciliation below — no shows, no multi-part works, no
+	// serials. Returning here rather than falling through is deliberate: those
+	// passes re-parse filenames looking for season and part markers, and a photo
+	// named "S01E02_beach.jpg" is not an episode of anything.
+	if lib.Kind == media.LibraryPicture {
+		if err := s.reconcilePictures(ctx, lib); err != nil {
+			s.log.Warn("gallery reconciliation failed", "library", lib.ID, "error", err)
+		}
+		if n, err := s.st.PruneEmptyContainers(ctx, lib.ID); err != nil {
+			s.log.Warn("pruning empty containers failed", "library", lib.ID, "error", err)
+		} else if n > 0 {
+			s.log.Info("pruned empty containers", "library", lib.ID, "count", n)
+		}
+		return s.st.TouchLibraryScanned(ctx, lib.ID)
+	}
+
 	if err := s.reconcileHierarchy(ctx, lib); err != nil {
 		// Hierarchy is a grouping convenience layered over episodes that already
 		// exist and play; a failure here must not fail the whole scan.
@@ -469,12 +486,23 @@ func (s *Scanner) reconcileGrouped(
 // family, so grouping a film into a work is not a reinterpretation and does not
 // churn every scan; a movie turning into an episode (a Part file in a library
 // now typed as shows) is.
+//
+// Every kind that can be parsed needs a case. The default is for kinds nothing
+// parses *to*, and it used to swallow the ones that do: a track parses as
+// KindTrack, fell through to `stored != "other"`, and every rescan of a music
+// library re-recorded every track and cleared its metadata stamp — re-queueing
+// the entire library for enrichment on a scan that changed nothing. Found by a
+// picture rescan test asking the same question of a new kind.
 func reinterpreted(stored string, parsed media.Kind) bool {
 	switch parsed {
 	case media.KindEpisode:
 		return stored != "episode"
 	case media.KindMovie:
 		return stored != "movie" && stored != "part" && stored != "chapter"
+	case media.KindTrack:
+		return stored != "track"
+	case media.KindPhoto:
+		return stored != "photo"
 	default:
 		return stored != "other"
 	}
