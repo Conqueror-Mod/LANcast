@@ -212,6 +212,10 @@ export interface ScanStatus {
   items_changed: number;
   items_missing: number;
   skipped: number;
+  // Media the library's kind excludes — audio in a video library, video in a
+  // music library. Not a failure, which is why it is not part of `skipped`:
+  // it answers "why is this library empty", not "what went wrong".
+  skipped_kind: number;
   issues?: ScanIssue[];
   started_at: number;
   finished_at?: number;

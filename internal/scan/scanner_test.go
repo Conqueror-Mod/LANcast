@@ -828,3 +828,81 @@ func titles(items []store.Item) []string {
 	}
 	return out
 }
+
+// The bug this exists for: a music library created with the wrong kind discards
+// every track and the scan reports zero items, indistinguishable from an empty
+// folder. The count is what makes that state explain itself.
+func TestAudioInAMovieLibraryIsCountedNotSilent(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st) // kind: movie
+
+	writeFile(t, root, "A's/ABBA/Arrival/01 Dancing Queen.flac", 10)
+	writeFile(t, root, "A's/ABBA/Arrival/02 Money.mp3", 10)
+	writeFile(t, root, "B's/Beatles/Abbey Road/01 Come Together.m4a", 10)
+
+	p := scanAndWait(t, sc, lib)
+
+	if p.FilesSeen != 0 || p.ItemsChanged != 0 {
+		t.Fatalf("FilesSeen = %d, ItemsChanged = %d, want 0 and 0 — a movie library must not index audio",
+			p.FilesSeen, p.ItemsChanged)
+	}
+	if p.SkippedKind != 3 {
+		t.Errorf("SkippedKind = %d, want 3 — the whole point is that this number is not silence", p.SkippedKind)
+	}
+	// Not a failure, so it must not inflate the diagnostic that means "something
+	// went wrong reading these".
+	if p.Skipped != 0 {
+		t.Errorf("Skipped = %d, want 0 — excluded-by-kind is not a processing failure", p.Skipped)
+	}
+	if len(p.Issues) != 0 {
+		t.Errorf("Issues = %v, want none — 1,592 of these would bury the real ones", p.Issues)
+	}
+	_ = st
+}
+
+// The counter names media of the other sort, not everything a library ignores.
+// Artwork and sidecars are ignored by every library, and counting them would
+// report a large number on a perfectly healthy library.
+func TestNonMediaFilesAreNotCountedAsExcludedByKind(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+
+	writeFile(t, root, "Films/The.Matrix.1999.mkv", 10)
+	writeFile(t, root, "Films/The.Matrix.1999.nfo", 5)
+	writeFile(t, root, "Films/poster.jpg", 5)
+	writeFile(t, root, "Films/The.Matrix.1999.en.srt", 5)
+	writeFile(t, root, "Films/notes.txt", 5)
+
+	p := scanAndWait(t, sc, lib)
+
+	if p.FilesSeen != 1 {
+		t.Fatalf("FilesSeen = %d, want 1", p.FilesSeen)
+	}
+	if p.SkippedKind != 0 {
+		t.Errorf("SkippedKind = %d, want 0 — artwork, sidecars and subtitles are not excluded media", p.SkippedKind)
+	}
+	_ = st
+}
+
+// The mirror case: a music library ignoring the video a band shipped with an
+// album. Same mechanism, and the one that proves the count is not "audio".
+func TestVideoInAMusicLibraryIsCounted(t *testing.T) {
+	sc, st := newScanner(t)
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(context.Background(), "Music", "music", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "Album/01 Track.flac", 10)
+	writeFile(t, root, "Album/making-of.mkv", 10)
+
+	p := scanAndWait(t, sc, *lib)
+
+	if p.FilesSeen != 1 {
+		t.Fatalf("FilesSeen = %d, want 1 (the track)", p.FilesSeen)
+	}
+	if p.SkippedKind != 1 {
+		t.Errorf("SkippedKind = %d, want 1 (the video)", p.SkippedKind)
+	}
+}

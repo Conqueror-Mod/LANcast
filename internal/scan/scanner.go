@@ -26,16 +26,22 @@ const (
 
 // Progress is a snapshot of a scan, safe to serialize.
 type Progress struct {
-	LibraryID    int64   `json:"library_id"`
-	State        State   `json:"state"`
-	FilesSeen    int     `json:"files_seen"`
-	ItemsChanged int     `json:"items_changed"`
-	ItemsMissing int     `json:"items_missing"`
-	Skipped      int     `json:"skipped"`
-	Issues       []Issue `json:"issues,omitempty"`
-	StartedAt    int64   `json:"started_at"`
-	FinishedAt   *int64  `json:"finished_at,omitempty"`
-	Error        string  `json:"error,omitempty"`
+	LibraryID    int64 `json:"library_id"`
+	State        State `json:"state"`
+	FilesSeen    int   `json:"files_seen"`
+	ItemsChanged int   `json:"items_changed"`
+	ItemsMissing int   `json:"items_missing"`
+	Skipped      int   `json:"skipped"`
+	// Media the library's own kind excludes: audio in a video library, video in
+	// a music library. Kept apart from Skipped because it is not a failure —
+	// nothing went wrong reading these files — but it is the one number that
+	// explains an empty library, and silence here is what let a music library
+	// created as a movie library report "0 items · scanned" over 1,592 tracks.
+	SkippedKind int     `json:"skipped_kind"`
+	Issues      []Issue `json:"issues,omitempty"`
+	StartedAt   int64   `json:"started_at"`
+	FinishedAt  *int64  `json:"finished_at,omitempty"`
+	Error       string  `json:"error,omitempty"`
 }
 
 // Issue is a file or directory the scan could not fully process. It carries a
@@ -193,6 +199,18 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		// library ignores the MP3s beside a film, a music library ignores the
 		// MKV in an album folder (ADR 0024).
 		if !media.IsScannable(path, lib.Kind) {
+			// Counted, but only when the file is media of the *other* sort. A
+			// library is full of .jpg, .nfo and .srt that are rightly ignored,
+			// and counting those would bury the signal in noise. An audio file
+			// in a movie library is the signal: either a soundtrack beside a
+			// film, or — the case this exists for — a music library created with
+			// the wrong kind, where every track is discarded and the scan
+			// otherwise reports "0 items" as though the folder were empty.
+			if media.IsAudio(path) || media.IsVideo(path) {
+				s.mu.Lock()
+				p.SkippedKind++
+				s.mu.Unlock()
+			}
 			return nil
 		}
 		if ignored[path] {

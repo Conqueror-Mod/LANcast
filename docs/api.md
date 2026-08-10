@@ -201,6 +201,7 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 ```json
 { "library_id": 1, "state": "running", "files_seen": 318,
   "items_changed": 12, "items_missing": 0, "skipped": 2,
+  "skipped_kind": 0,
   "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
   "started_at": 1753228800 }
 ```
@@ -209,6 +210,17 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 lists them (capped) with a **library-relative** path — never the absolute
 server path, held back for the same privacy reason item paths are. This is the
 diagnostic answer to "the scan finished but some files are missing — why?"
+
+`skipped_kind` counts media the library's **kind** excludes: audio files in a
+movie or show library, video files in a music library. It is deliberately not
+folded into `skipped`, because nothing failed — those files were read fine and
+correctly ignored. It answers a different question: "the scan finished and the
+library is empty — why?" A music library created as a movie library discards
+every track, and without this number the scan reports zero items as though the
+folder were empty.
+
+Only files that are media of the other sort are counted. Artwork, `.nfo`
+sidecars and subtitles are ignored by every library and would bury the signal.
 
 ### `GET /api/libraries/{id}/facets`
 

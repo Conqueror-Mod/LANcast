@@ -91,6 +91,22 @@
   white-space: nowrap;
 }
 
+/*
+ * The kind-mismatch note. Deliberately not truncated like the line above it —
+ * that one is a path and ellipsis is fine, this one is the explanation for an
+ * empty library and half of it would be useless. Neutral, not an error colour:
+ * ignoring a soundtrack beside a film is correct behaviour, and only the reader
+ * knows whether this instance is correct or a mistake.
+ */
+.set-row__note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin-top: 5px;
+  max-width: 62ch;
+  white-space: normal;
+}
+
 .set-row__actions {
   display: flex;
   align-items: center;
