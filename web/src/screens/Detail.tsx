@@ -137,17 +137,26 @@ export function Detail() {
   // neither does music: ADR 0024 ships no music provider, so the only thing to
   // search would be TMDB, which would answer a record with films. An artist and
   // an album are assembled from the tags of the files beneath them.
+  // Pictures are the same argument again, one step further: ADR 0028 ships no
+  // picture provider and never will — there is nothing to identify a family
+  // photograph against. A gallery is a folder the scanner read.
   const isMusic =
     item.kind === "artist" || item.kind === "album" || item.kind === "track";
   const canFixMatch =
-    item.kind !== "collection" && item.kind !== "season" && !isMusic;
+    item.kind !== "collection" &&
+    item.kind !== "season" &&
+    !isMusic &&
+    !isPicture(item);
   // Removing something removes files. An artist and an album have none — they
   // are rows the scanner invented and sweeps when they empty — so, like a
   // collection, they are not offered. A track is a real file and keeps it.
   const canRemove =
     item.kind !== "collection" &&
     item.kind !== "artist" &&
-    item.kind !== "album";
+    item.kind !== "album" &&
+    // A gallery is a folder the scanner invented and sweeps when it empties,
+    // exactly like an artist. A photo is a real file and keeps the option.
+    item.kind !== "gallery";
   // Children that can be played directly (not themselves containers), in order —
   // the queue behind Play all. A show's children are seasons, so it gets none;
   // a season's episodes, a work's parts, and a collection's films all qualify.

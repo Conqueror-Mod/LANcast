@@ -2,6 +2,7 @@ import {
   useLibraries,
   useContinueWatching,
   useRecentlyAdded,
+  useRecentPhotos,
   useItems,
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
@@ -60,6 +61,11 @@ export function Home() {
   // library where a scan just added 200 tracks, the top 20 by date are all
   // music and "Recently Added" would be empty while New Music overflowed.
   const { data: recentlyAdded } = useRecentlyAdded(40);
+  // Photos come from their own query rather than out of recentlyAdded: that one
+  // is top-level, so on a picture library it answers with galleries — the same
+  // 25 folders every time, which is not what "recently added" means when you
+  // are looking at photographs.
+  const { data: recentPhotos } = useRecentPhotos(20);
 
   const hero = pickHero(continueWatching, recentlyAdded);
 
@@ -85,7 +91,7 @@ export function Home() {
   const recent = withoutHero(recentlyAdded);
   const recentVideo = recent.filter((i) => !isMusic(i) && !isPicture(i));
   const recentAudio = recent.filter(isMusic);
-  const recentPictures = recent.filter(isPicture);
+  const recentPictures = (recentPhotos ?? []).filter((i) => !i.missing);
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||

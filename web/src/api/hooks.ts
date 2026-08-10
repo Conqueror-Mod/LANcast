@@ -254,8 +254,7 @@ export function useScanStatus(libraryID: number) {
       }
       return s;
     },
-    refetchInterval: (q) =>
-      q.state.data?.state === "running" ? 1000 : false,
+    refetchInterval: (q) => (q.state.data?.state === "running" ? 1000 : false),
     enabled: libraryID > 0,
   });
 }
@@ -305,9 +304,10 @@ export function useCollectionMembers(collectionID: number, enabled: boolean) {
   return useQuery({
     queryKey: ["collection-members", collectionID],
     queryFn: ({ signal }) =>
-      apiGet<ItemsPage>(`/api/items?collection_id=${collectionID}`, signal).then(
-        (r) => r.items,
-      ),
+      apiGet<ItemsPage>(
+        `/api/items?collection_id=${collectionID}`,
+        signal,
+      ).then((r) => r.items),
     enabled: enabled && collectionID > 0,
   });
 }
@@ -344,7 +344,10 @@ export function useCandidates(id: number, query: string | null) {
     queryKey: ["candidates", id, query],
     queryFn: ({ signal }) => {
       const p = query ? `?q=${encodeURIComponent(query)}` : "";
-      return apiGet<MatchCandidate[]>(`/api/items/${id}/candidates${p}`, signal);
+      return apiGet<MatchCandidate[]>(
+        `/api/items/${id}/candidates${p}`,
+        signal,
+      );
     },
     enabled: id > 0 && query !== null,
     staleTime: 60_000,
@@ -422,6 +425,25 @@ export function useContinueWatching(limit = 20) {
 
 // Recently added, across every library. Its own hook rather than useItems so a
 // home shelf is not entangled with the Browse grid's library scoping.
+// The newest photographs, rather than the galleries holding them.
+//
+// /api/items is top-level by default, so on a picture library "recently added"
+// would answer with folders — 25 galleries, the same 25 every time, which is
+// not what "recently added" means to anyone looking at a photo library. An
+// explicit kind is treated server-side as a deliberate cross-cutting query and
+// is not forced top-level (ADR 0028).
+export function useRecentPhotos(limit = 20) {
+  return useQuery({
+    queryKey: ["recent-photos", limit],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(
+        `/api/items?kind=photo&sort=added&limit=${limit}`,
+        signal,
+      ).then((r) => r.items),
+    staleTime: 30_000,
+  });
+}
+
 export function useRecentlyAdded(limit = 20) {
   return useQuery({
     queryKey: ["recently-added", limit],
@@ -493,7 +515,10 @@ export function useDeleteSubtitle(id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (key: string) =>
-      apiSend(`/api/items/${id}/subtitles/${encodeURIComponent(key)}`, "DELETE"),
+      apiSend(
+        `/api/items/${id}/subtitles/${encodeURIComponent(key)}`,
+        "DELETE",
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["subtitles", id] }),
   });
 }
@@ -577,7 +602,9 @@ export function usePlugins(enabled = true) {
   return useQuery({
     queryKey: ["plugins"],
     queryFn: ({ signal }) =>
-      apiGet<{ plugins: Plugin[] }>("/api/plugins", signal).then((r) => r.plugins),
+      apiGet<{ plugins: Plugin[] }>("/api/plugins", signal).then(
+        (r) => r.plugins,
+      ),
     enabled,
     staleTime: 15_000,
   });
@@ -598,7 +625,10 @@ export function useGrantPlugin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (args: { name: string; caps: PluginCaps }) =>
-      apiPost<Plugin>(`/api/plugins/${encodeURIComponent(args.name)}/grant`, args.caps),
+      apiPost<Plugin>(
+        `/api/plugins/${encodeURIComponent(args.name)}/grant`,
+        args.caps,
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
   });
 }
