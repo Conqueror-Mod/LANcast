@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-09 · **v0.6.4 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-09 · **v0.6.5 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -64,6 +64,7 @@ rather than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.6.5** | 2026-08-09 | **Pictures** ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)) — the third media type, and the second test of ADR 0002's no-new-tables claim, which holds again: gallery → photo on `media_item`, one nullable column (`taken_at`) at schema 16. The design follows from one fact — a photo *is* its own artwork, where every other media type points at an image representing it — so thumbnails are generated into the existing content-addressed cache by their own worker, and the cache is handed a 1600px copy rather than the original, because storing what it is given would put a second copy of the library on disk. Folders become galleries because in a picture library the folder is the only grouping that means anything: the filenames are UUIDs and there is no provider to ask, so titles are stored verbatim — a name that means nothing beats a tidied version of one. The library opens on a banner cycling the library, a gallery on a banner over its photos; pressing a photo selects it into the banner rather than navigating, since a photograph has no detail page worth visiting. Expand opens a viewer that owns the keyboard, restores focus on escape, and never auto-starts its slideshow. EXIF gives orientation and capture date; **GPS is never read**, because the surest way not to leak location data is not to load it. Also fixed: every rescan of a music library had been re-recording every track and re-queueing the whole library for enrichment since v0.5.0 — found by a picture test asking a new kind an old question |
 | **v0.6.4** | 2026-08-09 | The in-app updater could find a new version and never install one, found by pressing the button on the first release it could have installed. Two faults. The release lookup asked GitHub's JSON endpoint for `application/octet-stream` and got 415 — the check path had it right, so checking worked, finding the release worked, and only fetching it was impossible. And the failure had nowhere to go: the download runs detached from the request that starts it, so the error reached the log and nothing else, leaving the panel on "Downloading…" indefinitely. A download that died half an hour ago was indistinguishable from a slow one. `download_error` is now reported and rendered separately from a failed check. **The tests could not have caught the first fault** — the fake releases server accepted any `Accept` header, so a downloader that asked wrongly passed every test and failed against the only server that matters. The fake is now as strict as GitHub on that dimension, verified by reintroducing the bug and watching the suite fail with the same 415. Installed by hand, necessarily: a broken updater cannot deliver its own fix |
 | **v0.6.3** | 2026-08-09 | A home page worth opening, and two libraries that stop failing quietly. Home now opens on a **spotlight** — the thing you are part-way through, full-bleed artwork behind a floating poster, with a Resume button; failing that, the newest addition. The screen gained **depth built from everything except colour** ([ADR 0027](adr/0027-depth-in-the-canonical-look.md)): shadows cast in the void colour so a raised object reads as further from the same field, artwork tinted into the nebula rather than pasted on top of it, and a backdrop that parallaxes behind the shelves. Gold is untouched, because the ring is the focus indicator and diluting it costs an accessibility affordance rather than a look. **Listening separated from watching** — Continue Listening and New Music are their own rows, since a square sleeve beside a 2:3 poster is a row with no shared baseline, and a half-played track among films reads as broken films. On the library side, a **kind mismatch stops being silent**: a music folder added as a Movies library scanned 1,592 tracks, imported none and reported "0 items · scanned", which reads as an empty folder; it now names what it ignored and why, and the library-type field no longer has a default, because the choice is permanent and anything selectable by inattention eventually will be. Fixed: the Start menu's server shortcut carried a data-directory argument that never expanded — NSIS resolves `$%VAR%` at compile time, on a Linux runner — so starting the server that way opened a second, empty database beside the install |
 | **v0.6.2** | 2026-08-09 | LANcast updates itself, opens in its own window by default, and the source is public under MIT. **The first signed release** — a signature over the checksum list, verified against a key compiled into the binary, which is what makes automatic installation defensible rather than merely convenient: installing an update is a system-level process executing a downloaded binary, and without proof of origin that is a hole. Three outcomes stay distinct — signed installs automatically, unsigned is offered for a manual install, present-and-wrong is refused before anything is downloaded. The install is staged and swapped on the way down, so it is one restart with no elevation prompt and no second process. The check is on by default and is not a phone-home exception: a plain GET with no install identifier, statistics or history, switchable off, with a manual check that still works. The `-window` flip landed here too, with `-browser` as the opt-out and the installer offering both. Fixes: a database handle held open after a stop that raced startup (which is what makes an installer's file replacement fail), and an NFO edit that claimed the whole file rather than the field that changed |
@@ -176,7 +177,7 @@ Status: **planned** · **next** · *unplanned*
 | Artwork pipeline | **built** | Fetch, cache, resize; fanart for detail pages; art-less children inherit the parent poster |
 | External ratings | **built** | RT / Metacritic / IMDb via OMDb; `RatingSource` + `item_rating` side table + `imdb_id` ([ADR 0019](adr/0019-external-ratings.md)) |
 | OST identification | *unplanned* | Feeds theme music; MusicBrainz / TheAudioDB |
-| Library types beyond video | **partly built** | **Music built** ([ADR 0024](adr/0024-music-libraries.md)): artist → album → track on `media_item`, no new tables — the taxonomy claim holds. **Pictures now planned** ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)): gallery → photo, the second test of that claim, and the first media type where the file *is* its own artwork |
+| Library types beyond video | **built** | **Music** ([ADR 0024](adr/0024-music-libraries.md)) and **pictures** ([ADR 0028](adr/0028-pictures-library.md)) both on `media_item` with no new tables — the taxonomy claim from ADR 0002 has now survived two media types that work nothing like video. Pictures added the case nobody predicted: the file *is* its own artwork, where everything else points at an image representing it |
 | Embedded tags as a source | **built** | ID3v2 / Vorbis / MP4 atoms via the probe that already runs. Authority order for a track: locked fields, tags, folder, filename — the inverse of video, because the file carries the answer |
 | Album artwork | **built** | `internal/coverart`: embedded picture first, then `cover.jpg`/`folder.jpg` beside the tracks, in its own worker. Measured on the real library — 369 of 398 albums, 10.7s, no network. A directory's image is refused when the directory also holds audio that is not the album's, which is what stops a letter-bucket `folder.jpg` being worn by five unrelated records |
 | Artist images | **back burner** | The placeholder is good enough to wait behind: artists **borrow** their most-substantial album's cover, flagged `inherited`, and a real image supersedes it automatically with nothing to clean up. TheAudioDB, name-keyed and opt-in, is the decided source ([ADR 0025](adr/0025-artist-images.md), accepted, unbuilt) — it was sequenced after the client UI, which is now built, so nothing blocks it except priority. Deferred deliberately: music has had a long run and this is the first item where the gap is cosmetic rather than functional |
@@ -283,7 +284,7 @@ group is not priority.
   profile so a FLAC is not re-encoded to deliver a format every browser plays.
 - ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
   UI and mini-player in v0.6.0.
-- **Photo library** with a built-in **image viewer** — **planned, not built** ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)). Folders become galleries, because a filename like `openart-f81b76…_raw.jpg` says nothing and there is no provider to ask. Thumbnails run in their own worker through the existing content-addressed cache; HEIC decodes through the ffmpeg already required, because a phone backup is mostly HEIC and a wall of placeholders would be a feature that looks finished and is useless. EXIF orientation and date-taken only — **GPS deliberately unread**, since the safest way never to leak location data is never to load it.
+- ~~**Photo library** with a built-in **image viewer**~~ — **built** in v0.6.5 ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)). Folders become galleries, because a filename like `openart-f81b76…_raw.jpg` says nothing and there is no provider to ask. Thumbnails run in their own worker through the existing content-addressed cache; HEIC decodes through the ffmpeg already required, because a phone backup is mostly HEIC and a wall of placeholders would be a feature that looks finished and is useless. EXIF orientation and date-taken only — **GPS deliberately unread**, since the safest way never to leak location data is never to load it.
 - **Live TV** — a tuner page and function.
 
 ### Metadata, ratings and discovery
@@ -492,6 +493,27 @@ reading the config would have sent someone first. The same pass found a second
 branch that had never run — the unsigned fallback, which could not have worked
 either, since goreleaser expects the signature file the block declares. **Every
 branch of a release pipeline is untested until a real tag takes it.**
+
+**A rule derived from reasoning met a library and lost.** The picture decoder
+sent HEIC and HEIF to ffmpeg and nothing else, on the sound-sounding logic that
+those are the formats Go cannot read. The first scan of a real library found
+eight photographs that disprove it — ordinary BMPs, family pictures, that Go's
+decoder rejects and ffmpeg reads without complaint. They were reported as
+failures because `.bmp` was not on a list someone had written from memory. The
+replacement rule needs no list: whatever the in-process decoders refuse is
+offered to ffmpeg. **A list of exceptions is a claim about the world, and the
+world has more cases than the person writing the list.**
+
+**A new media type is an audit of every assumption the old ones left behind.**
+Adding pictures found a detail page offering to *play* a photograph, a gallery
+offering "Play all" over 779 of them, Fix match offered against a provider that
+will never exist, "recently added" answering with folders, and a library opening
+sorted by UUID. None of those were pictures bugs; they were places where "a leaf
+is something you press play on" had been true for so long it had stopped being
+written down. It also found a real one in music: every rescan re-recorded every
+track, because the reinterpretation check had a default that assumed anything
+unfamiliar was "other". True since v0.5.0, found by a picture test asking a new
+kind an old question.
 
 **A fake that is more permissive than the real thing tests nothing.** The
 updater's download was broken from the day it shipped: the release lookup asked
