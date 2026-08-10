@@ -63,6 +63,13 @@ jobs:
         run: npm run build
         working-directory: web
 
+      # Runs after the build so a type error is reported as a type error rather
+      # than as a pile of failing tests. The suite is jsdom-only and takes a
+      # couple of seconds; nothing here needs a browser or a media file.
+      - name: test
+        run: npm test
+        working-directory: web
+
       # The committed internal/web/dist is what the Go binary embeds. If a client
       # change was committed without rebuilding it, a fresh build here differs —
       # the exact drift that shipped a stale UI once (#10).
