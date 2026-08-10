@@ -267,3 +267,51 @@ func jpegWithEXIF(t *testing.T, w, h int, tiff []byte) []byte {
 	out.Write(raw[2:])
 	return out.Bytes()
 }
+
+// The rule that replaced an extension allowlist: anything the in-process
+// decoders refuse is handed to ffmpeg. Found by a real library — eight valid
+// BMPs that Go does not read and ffmpeg does, reported as failures only because
+// ".bmp" was not on a list.
+func TestAnythingGoCannotDecodeIsOfferedToFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "old.bmp")
+	// Content Go's decoders do not recognise, with an extension that is not on
+	// any HEIC list.
+	if err := os.WriteFile(path, []byte("BM\x00\x00 not a shape x/image reads"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &fakeFFmpeg{png: onePixelPNG(t)}
+	d := &Decoder{FFmpeg: fake}
+	img, _, err := d.Read(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if img == nil {
+		t.Fatal("no image")
+	}
+	if !fake.called {
+		t.Error("ffmpeg was never offered the file")
+	}
+}
+
+type fakeFFmpeg struct {
+	png    []byte
+	called bool
+}
+
+func (f *fakeFFmpeg) Available() bool { return true }
+func (f *fakeFFmpeg) ToPNG(_ context.Context, _ string) ([]byte, error) {
+	f.called = true
+	return f.png, nil
+}
+
+func onePixelPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}

@@ -55,6 +55,16 @@ worker, and because the cache is content-addressed, a rescan re-does nothing.
 
 ### Decoding, and the format that will otherwise bite
 
+> **Amendment, 2026-08-09 (Phase 2).** The rule below named an extension list —
+> HEIC and HEIF go to ffmpeg, everything else does not. The first run against a
+> real library disproved it: eight of the reference photographs are valid BMPs
+> that Go's decoder does not read and ffmpeg decodes without complaint. They
+> were reported as failures because `.bmp` was not on a list. The rule is now
+> **whatever the in-process decoders refuse is offered to ffmpeg** — no list to
+> go stale, and it covers HEIC anyway. With no ffmpeg available the two outcomes
+> are still told apart: `image.ErrFormat` means this build cannot read the
+> format, any other decode error means the file is broken.
+
 Go's standard library covers jpeg, png and gif; `golang.org/x/image` — already a
 dependency — covers webp, bmp and tiff. **HEIC/HEIF goes through ffmpeg**, which
 is already a hard requirement for probing and transcoding. This matters more

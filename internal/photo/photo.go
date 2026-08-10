@@ -15,7 +15,6 @@ import (
 	"image"
 	"os"
 	"path/filepath"
-	"strings"
 
 	// Registered for their side effects: each adds itself to image.Decode's
 	// format table. jpeg and png also carry the encoders used below.
@@ -47,12 +46,6 @@ type Meta struct {
 	// consumer responsible for rotating correctly.
 	Orientation int
 }
-
-// needsFFmpeg is the set Go cannot decode in-process. HEIC is the whole reason
-// this branch exists: a phone backup is mostly HEIC, and a picture library that
-// showed placeholders for the user's actual photos would be a feature that
-// looks finished and is useless.
-var needsFFmpeg = map[string]bool{".heic": true, ".heif": true}
 
 // Decoder reads pictures, spawning ffmpeg only for the formats that need it.
 type Decoder struct {
@@ -89,12 +82,25 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
-		ext := strings.ToLower(filepath.Ext(path))
-		if !needsFFmpeg[ext] {
-			return nil, meta, fmt.Errorf("decode %s: %w", filepath.Base(path), err)
-		}
+		// ffmpeg is tried for anything the in-process decoders refuse, not for a
+		// list of extensions known to need it. The list was the obvious design
+		// and it was wrong: a real library turned up eight BMPs that are valid
+		// BMPs, that Go's decoder does not read, and that ffmpeg decodes
+		// without complaint — family photographs, reported as failures because
+		// ".bmp" was not on a list. "Whatever Go cannot read, ask ffmpeg" needs
+		// no list, cannot go stale as formats appear, and is what HEIC needed
+		// anyway.
 		if d.FFmpeg == nil || !d.FFmpeg.Available() {
-			return nil, meta, ErrUnsupported
+			// No second decoder to try, so the two outcomes have to be told
+			// apart here. image.ErrFormat means no decoder recognised the file
+			// at all — this build cannot read that format. Any other error came
+			// from a decoder that recognised the format and then choked, which
+			// is a broken file. They are reported apart because their cures
+			// are: install ffmpeg, or look at the file.
+			if errors.Is(err, image.ErrFormat) {
+				return nil, meta, ErrUnsupported
+			}
+			return nil, meta, fmt.Errorf("decode %s: %w", filepath.Base(path), err)
 		}
 		png, ferr := d.FFmpeg.ToPNG(ctx, path)
 		if ferr != nil {

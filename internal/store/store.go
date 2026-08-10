@@ -227,11 +227,16 @@ type Item struct {
 	MetadataUpdatedAt *int64 `json:"metadata_updated_at"`
 
 	// Probe results. Nil until the file has been inspected.
-	ProbedAt      *int64   `json:"probed_at"`
-	VideoCodec    *string  `json:"video_codec"`
-	VideoProfile  *string  `json:"video_profile"`
-	Width         *int     `json:"width"`
-	Height        *int     `json:"height"`
+	ProbedAt     *int64  `json:"probed_at"`
+	VideoCodec   *string `json:"video_codec"`
+	VideoProfile *string `json:"video_profile"`
+	Width        *int    `json:"width"`
+	Height       *int    `json:"height"`
+	// TakenAt is EXIF capture time for a photo (ADR 0028), null when the file
+	// carries none — which is most of a wallpaper library. Distinct from
+	// AddedAt: one is when the picture was made, the other when it reached this
+	// disk.
+	TakenAt       *int64   `json:"taken_at,omitempty"`
 	VideoBitRate  *int64   `json:"video_bitrate"`
 	FrameRate     *float64 `json:"frame_rate"`
 	AudioCodec    *string  `json:"audio_codec"`
@@ -463,7 +468,7 @@ const itemCols = `id, library_id, kind, path, title, sort_title, year, series, s
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
-	audio_codec, audio_channels, video_frame_rate, imdb_id, artist`
+	audio_codec, audio_channels, video_frame_rate, imdb_id, artist, taken_at`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -496,7 +501,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
 		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID,
-		&it.Artist)
+		&it.Artist, &it.TakenAt)
 	if err != nil {
 		return nil, err
 	}
@@ -592,6 +597,12 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// Highest rated first; unrated rows sink to the bottom rather than
 		// sorting as if they were zero-rated.
 		order = ` ORDER BY rating IS NULL, rating DESC, sort_title`
+	case "taken":
+		// When the picture was made, newest first, falling back to when the file
+		// reached this disk. A photo library sorted purely by taken_at would put
+		// every EXIF-less wallpaper in one undifferentiated block; COALESCE
+		// keeps them in a sensible place among the dated ones instead (ADR 0028).
+		order = ` ORDER BY COALESCE(taken_at, mtime, added_at) DESC, sort_title`
 	case "track":
 		// Disc, then track number — an album in the order the record plays.
 		//

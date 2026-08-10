@@ -229,6 +229,36 @@ folder were empty.
 Only files that are media of the other sort are counted. Artwork, `.nfo`
 sidecars and subtitles are ignored by every library and would bury the signal.
 
+### `GET /api/items/{id}/photo`
+
+The picture itself, at full resolution. Photos only; anything else is `404`.
+
+Serves the **original file** when a browser can render it — jpeg, png, webp,
+gif, bmp — and the cached rendition when it cannot. HEIC is the case that
+matters: Chromium and Firefox do not decode it, so handing over the original
+bytes would be technically correct and useless. The rendition is the 1600px copy
+the thumbnail worker made, and until that worker has reached the file the
+endpoint answers `503` with a plain reason rather than serving bytes nothing can
+draw.
+
+Like `/api/stream/{id}`, this handler turns a database row into filesystem
+access, so it **re-verifies containment** within the owning library root after
+resolving the path. A row pointing outside its library is `404`, not a file.
+
+The original is served with `Cache-Control: private, max-age=0,
+must-revalidate` — it is addressed by item id, and the file behind an id can be
+replaced on disk without the id changing. The rendition is content-addressed and
+is served `immutable`.
+
+Items in a picture library also carry `width`, `height` and `taken_at`.
+`taken_at` is EXIF capture time and is absent when the file carries none, which
+is most of a wallpaper or AI-art library — it is not `added_at`, which is when
+the file reached this disk.
+
+`sort=taken` orders by capture time, newest first, falling back to file mtime so
+that pictures without EXIF stay among the dated ones rather than forming one
+undifferentiated block.
+
 ### `GET /api/libraries/{id}/facets`
 
 The filter values a library's browse view offers — genres, decades, and content
