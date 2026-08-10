@@ -5,34 +5,86 @@
 
 /*
  * The rail: destinations, vertically, because that is the axis with room.
- * Sticky and full-height rather than scrolling away, so where-you-can-go is
- * always answerable without going back to the top of a 2,600-photo grid.
+ *
+ * Collapsed it is icons, and it expands to names on hover or focus. Two
+ * elements rather than one: the outer keeps the *collapsed* width in the layout
+ * and never changes, while the inner is what grows — so the expanded rail
+ * passes over the content instead of shoving it sideways. A page that slides
+ * whenever the pointer crosses the left edge is harder to use than a narrow
+ * rail, and the thing being read is never the thing being hovered.
  */
 .app-shell__rail {
   flex: none;
-  width: 208px;
-  position: sticky;
+  width: var(--rail-collapsed);
+}
+
+.app-shell__rail-inner {
+  position: fixed;
   top: 0;
-  align-self: flex-start;
-  height: 100vh;
-  overflow-y: auto;
+  left: 0;
+  bottom: 0;
+  z-index: 20;
+  width: var(--rail-collapsed);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding: 18px 12px 24px;
-  /* A hairline, not a panel. The rail is part of the same field as the content
-     — giving it its own surface would make the app look like two applications
-     sharing a window. */
+  padding: 18px 10px 24px;
+  /* A hairline while collapsed: the rail is part of the same field as the
+     content, and giving it its own surface would make the app look like two
+     applications sharing a window. Expanded it has to become a surface, because
+     it is then covering things that must not show through it. */
   border-right: 1px solid rgba(242, 245, 251, 0.06);
+  background: transparent;
+  transition:
+    width var(--dur-base) ease,
+    background-color var(--dur-base) ease,
+    box-shadow var(--dur-base) ease;
+}
+
+.app-shell__rail-inner:hover,
+.app-shell__rail-inner:focus-within {
+  width: var(--rail-expanded);
+  overflow-y: auto;
+  background: var(--space-void);
+  box-shadow: var(--elev-3);
   scrollbar-width: thin;
 }
 
+/*
+ * Labels are hidden by clipping, not by display:none. A hidden label is not
+ * read by a screen reader and not found by in-page search; a clipped one is
+ * both. The icon carries the meaning visually, the label carries it to
+ * everything else, and the title attribute covers the hover case.
+ */
+.app-shell__label {
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.app-shell__rail-inner:hover .app-shell__label,
+.app-shell__rail-inner:focus-within .app-shell__label {
+  opacity: 1;
+}
+
 .app-shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 13px;
   letter-spacing: 0.28em;
   font-weight: 600;
   color: var(--text-primary);
-  padding: 4px 10px;
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+
+/* Sized and positioned so a name appearing beside it does not move it. Every
+   row's icon sits on the same vertical line, collapsed or not. */
+.rail-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
 }
 
 .app-shell__body {
@@ -74,9 +126,18 @@
   min-width: 0;
 }
 
-/* Sits above the list rather than beside it, and only when there is a list. */
+/* Sits above the list rather than beside it, and only when there is a list.
+   Collapsed it would be a word crushed into 60px, so it fades with the rest. */
 .app-shell__rail-label {
-  padding: 0 10px 6px;
+  padding: 0 9px 6px;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.app-shell__rail-inner:hover .app-shell__rail-label,
+.app-shell__rail-inner:focus-within .app-shell__rail-label {
+  opacity: 1;
 }
 
 .app-shell__settings,
@@ -97,11 +158,11 @@
 .app-shell__lib {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   font-size: 13px;
   color: var(--text-muted);
-  padding: 7px 10px;
+  padding: 7px 9px;
+  white-space: nowrap;
   /* Single-sided border, so no radius — a rounded corner on one edge reads as
      a rendering fault. */
   border-left: 2px solid transparent;
@@ -113,6 +174,7 @@
 }
 
 .app-shell__lib-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -238,15 +300,32 @@
 
   .app-shell__rail {
     width: auto;
-    height: auto;
+  }
+
+  .app-shell__rail-inner {
     position: static;
-    align-self: stretch;
+    width: auto;
     flex-direction: row;
     align-items: center;
     gap: 16px;
     padding: 12px 20px 0;
     border-right: none;
     overflow-x: auto;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* Nothing is collapsed here, so nothing is hidden. */
+  .app-shell__label,
+  .app-shell__rail-label {
+    opacity: 1;
+  }
+
+  .app-shell__rail-inner:hover,
+  .app-shell__rail-inner:focus-within {
+    width: auto;
+    background: transparent;
+    box-shadow: none;
   }
 
   .app-shell__libs {
@@ -273,5 +352,17 @@
 
   .app-shell__top {
     padding: 8px 20px 12px;
+  }
+}
+
+/*
+ * Motion is opt-out. The rail still expands — it has to, or the labels are
+ * unreachable — it simply arrives instead of sliding.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__rail-inner,
+  .app-shell__label,
+  .app-shell__rail-label {
+    transition: none;
   }
 }

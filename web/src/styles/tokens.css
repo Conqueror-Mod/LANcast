@@ -56,6 +56,16 @@
    */
   --hero-height: clamp(280px, 31vh, 380px);
 
+  /*
+   * The navigation rail's two widths. Collapsed it shows icons; expanded it
+   * shows names and overlays the content rather than pushing it. Here rather
+   * than in the component, because tokens.css is where a number two rules
+   * depend on belongs — the rail reserves the first in the layout and animates
+   * to the second.
+   */
+  --rail-collapsed: 60px;
+  --rail-expanded: 208px;
+
   /* Motion. */
   --dur-fast: 120ms; /* hover / focus */
   --dur-base: 280ms; /* page and panel transitions */
