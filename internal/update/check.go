@@ -54,6 +54,14 @@ type State struct {
 	Error string `json:"error,omitempty"`
 	// Checking is true while a check is in flight.
 	Checking bool `json:"checking"`
+	// DownloadError is the last failed download, cleared when one starts or
+	// succeeds. Separate from Error because the two mean different things to a
+	// reader — "I could not ask" versus "I asked, and installing it failed" —
+	// and because a download runs detached from the request that started it.
+	// Without this the handler logged the failure and returned 202, so the UI
+	// sat on "Downloading…" with nothing to tell it otherwise: a 415 from the
+	// release lookup was indistinguishable from a slow connection.
+	DownloadError string `json:"download_error,omitempty"`
 }
 
 // Checker holds the last result and does the asking.

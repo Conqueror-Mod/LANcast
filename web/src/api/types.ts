@@ -369,6 +369,10 @@ export interface UpdateStatus {
   checked_at?: number;
   checking?: boolean;
   error?: string;
+  // The last failed download, distinct from a failed check: "I could not ask"
+  // versus "I asked, and installing it failed". A download runs detached from
+  // the request that starts it, so this is the only way its outcome is visible.
+  download_error?: string;
   can_verify?: boolean;
   enabled?: boolean;
   // Set once an update is downloaded and verified. Distinct from `available`:

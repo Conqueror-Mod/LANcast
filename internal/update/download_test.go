@@ -73,6 +73,15 @@ func (f *fakeRelease) start(t *testing.T) string {
 	mux.HandleFunc("/checksums.txt.sig", func(w http.ResponseWriter, r *http.Request) { w.Write(f.sig) })
 	mux.HandleFunc("/archive", func(w http.ResponseWriter, r *http.Request) { w.Write(f.archive) })
 	mux.HandleFunc("/release", func(w http.ResponseWriter, r *http.Request) {
+		// As strict as GitHub is, deliberately. This endpoint returns JSON, and
+		// the real API answers 415 Unsupported Media Type when it is asked for
+		// octet-stream. The fake used to accept anything, so a downloader that
+		// asked wrongly passed every test here and failed against the only
+		// server that matters — which is exactly what shipped in v0.6.2.
+		if !strings.Contains(r.Header.Get("Accept"), "json") {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return
+		}
 		base := "http://" + r.Host
 		assets := []map[string]string{
 			{"name": "checksums.txt", "browser_download_url": base + "/checksums.txt"},
@@ -193,5 +202,40 @@ func TestArchiveNameMatchesGoreleaser(t *testing.T) {
 	}
 	if strings.Contains(got, "vv") {
 		t.Errorf("archiveName = %q", got)
+	}
+}
+
+// A download that fails must be readable afterwards. It runs detached from the
+// request that started it, so the state is the only place a UI can learn the
+// outcome — and without it the panel sits on "Downloading…" forever, which is
+// what a 415 looked like from the outside.
+func TestAFailedDownloadIsRecordedInState(t *testing.T) {
+	f := newFakeRelease(t, "v9.9.9", map[string][]byte{
+		"LANcast-Server.exe": []byte("new server"),
+		"LANcast-Client.exe": []byte("new client"),
+	})
+	f.sign(t)
+	endpoint := f.start(t)
+
+	c := New("0.6.2")
+	// Tamper after signing: the archive no longer matches its signed digest, so
+	// the download refuses. Any failure would do; this one needs no network.
+	f.archive = append(f.archive, 'x')
+
+	err := c.downloadFrom(context.Background(), t.TempDir(), endpoint)
+	if err == nil {
+		t.Fatal("expected the tampered archive to be refused")
+	}
+	c.setDownloadError(err)
+
+	if got := c.State().DownloadError; got == "" {
+		t.Fatal("DownloadError is empty — the failure reached the log and nothing else")
+	}
+
+	// And a fresh attempt clears it, so a retry never shows a stale failure
+	// beside a running download.
+	c.setDownloadError(nil)
+	if got := c.State().DownloadError; got != "" {
+		t.Errorf("DownloadError = %q after a reset, want empty", got)
 	}
 }

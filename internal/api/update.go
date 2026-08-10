@@ -81,6 +81,11 @@ func (s *Server) updateView() map[string]any {
 		"checked_at": st.CheckedAt,
 		"checking":   st.Checking,
 		"error":      st.Error,
+		// The last failed download, distinct from a failed check. Reported
+		// because a download runs detached from the request that starts it —
+		// without this the UI has no way to learn the difference between a slow
+		// download and one that died half an hour ago.
+		"download_error": st.DownloadError,
 		// Whether this build can verify a release at all. False means automatic
 		// installation is unavailable no matter what the setting says, and the
 		// UI should say so rather than offering a button that cannot work

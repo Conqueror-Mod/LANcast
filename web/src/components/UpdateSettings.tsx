@@ -52,6 +52,18 @@ export function UpdateSettings() {
               The last check failed: {status.error}
             </p>
           )}
+          {/*
+            A failed download used to be visible only in the server log, so the
+            panel kept saying "Downloading…" and stopped meaning anything. It
+            reads separately from a failed check because the two ask different
+            things of the reader: a check that fails is worth retrying later, a
+            download that fails is worth reading.
+          */}
+          {status.download_error && (
+            <p className="upd-note upd-note--warn">
+              The last download failed: {status.download_error}
+            </p>
+          )}
         </div>
         <div className="set-row__actions">
           {status.available && status.url && (
