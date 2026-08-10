@@ -2,10 +2,23 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
 import type { ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
+import { LibraryIcon, HomeIcon } from "./LibraryIcon";
 import "./AppShell.css";
 
-// The top nav. Library names go straight to the full grid — hubs are a
-// convenience, never a gate (the deliberate fix for the main Plex complaint).
+// The shell: a vertical rail of places, and a top bar of state.
+//
+// The split is by what each thing *is*. The rail holds destinations — home, and
+// every library — and it runs vertically because that is the axis with room to
+// spare. Horizontally, library names competed with each other and with the
+// account controls for the same strip of pixels, so a fourth library made the
+// third one shorter. Vertically each name gets its own line and stops fighting.
+//
+// The top bar holds what is true right now rather than where you can go: what
+// needs review, what the server is doing, settings, and who you are signed in
+// as. Those were already on the right and stay there.
+//
+// Library names still go straight to the full grid — hubs are a convenience,
+// never a gate (the deliberate fix for the main Plex complaint).
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: libraries } = useLibraries();
   const { data: review } = useReview();
@@ -16,61 +29,89 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
-      <header className="app-shell__nav">
-        <NavLink to="/" className="app-shell__brand">
-          LANCAST
-        </NavLink>
-        <nav className="app-shell__libs">
-          {libraries?.map((lib) => (
+      {/* The rail keeps its collapsed width in the layout and expands over the
+          content rather than pushing it. Plex does the same, and the reason is
+          worth stating: a page that slides sideways whenever the pointer
+          crosses the left edge is harder to use than a narrow rail, and the
+          thing being read is never the thing being hovered. */}
+      <aside className="app-shell__rail">
+        <div className="app-shell__rail-inner">
+          <NavLink to="/" className="app-shell__brand" title="Home">
+            <HomeIcon />
+            <span className="app-shell__label">LANCAST</span>
+          </NavLink>
+
+          <nav className="app-shell__libs" aria-label="Libraries">
+            {libraries && libraries.length > 0 && (
+              <span className="section-label app-shell__rail-label">
+                Libraries
+              </span>
+            )}
+            {libraries?.map((lib) => (
+              <NavLink
+                key={lib.id}
+                to={`/library/${lib.id}`}
+                title={lib.name}
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
+                }
+              >
+                <LibraryIcon kind={lib.kind} />
+                <span className="app-shell__lib-name app-shell__label">
+                  {lib.name}
+                </span>
+                <span className="app-shell__lib-count app-shell__label">
+                  {lib.item_count}
+                </span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+      </aside>
+
+      <div className="app-shell__body">
+        <header className="app-shell__top">
+          {reviewCount > 0 && (
             <NavLink
-              key={lib.id}
-              to={`/library/${lib.id}`}
+              to="/review"
               className={({ isActive }) =>
-                "app-shell__lib" + (isActive ? " is-active" : "")
+                "app-shell__review" + (isActive ? " is-active" : "")
               }
             >
-              {lib.name}
-              <span className="app-shell__lib-count">{lib.item_count}</span>
+              Review<span className="app-shell__badge">{reviewCount}</span>
             </NavLink>
-          ))}
-        </nav>
-        {reviewCount > 0 && (
+          )}
+          <ActivityPanel />
           <NavLink
-            to="/review"
-            className={({ isActive }) =>
-              "app-shell__review" + (isActive ? " is-active" : "")
+            to="/settings"
+            className={
+              "app-shell__settings" +
+              (location.pathname === "/settings" ? " is-active" : "")
             }
           >
-            Review<span className="app-shell__badge">{reviewCount}</span>
+            Settings
           </NavLink>
-        )}
-        <ActivityPanel />
-        <NavLink
-          to="/settings"
-          className={
-            "app-shell__settings" +
-            (location.pathname === "/settings" ? " is-active" : "")
-          }
-        >
-          Settings
-        </NavLink>
-        {user && (
-          <div className="app-shell__account">
-            <span className="app-shell__user" title={`Signed in as ${user.name}`}>
-              {user.name}
-            </span>
-            <button
-              type="button"
-              className="app-shell__signout"
-              onClick={() => logout.mutate()}
-              disabled={logout.isPending}
-            >
-              Sign out
-            </button>
-          </div>
-        )}
-      </header>
-      <main className="app-shell__main">{children}</main>
+          {user && (
+            <div className="app-shell__account">
+              <span
+                className="app-shell__user"
+                title={`Signed in as ${user.name}`}
+              >
+                {user.name}
+              </span>
+              <button
+                type="button"
+                className="app-shell__signout"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+        </header>
+        <main className="app-shell__main">{children}</main>
+      </div>
     </div>
   );
 }
