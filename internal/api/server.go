@@ -210,6 +210,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
 
+	// A picture is served by item id like a stream, and for the same reason:
+	// the client knows items, not paths, and paths never leave the server.
+	mux.HandleFunc("GET /api/items/{id}/photo", s.photo)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)

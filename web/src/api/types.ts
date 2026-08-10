@@ -121,6 +121,13 @@ export interface Item {
   locked_fields?: string[] | null;
   ratings?: Rating[];
   artwork?: Artwork;
+  // Pictures (ADR 0028). width/height describe the photo as it will be seen —
+  // a quarter-turned phone photo reports its rotated dimensions, so a layout
+  // can reserve the right box before the image loads. taken_at is EXIF capture
+  // time, absent when the file carries none.
+  width?: number | null;
+  height?: number | null;
+  taken_at?: number | null;
   progress?: Progress | null;
 }
 
