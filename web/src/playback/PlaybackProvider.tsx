@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
-import type { Item, SubtitleTrack } from "@/api/types";
+import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
 
 // Playback lives above the router.
@@ -35,15 +35,33 @@ interface Decision {
 // natively. A transcode has no length and cannot be range-served: seeking means
 // restarting ffmpeg at a new offset, and the displayed time is that offset plus
 // the element's own clock.
-function sourceURL(id: number, method: Decision["method"], offset: number): string {
-  if (method === "direct") return `/api/stream/${id}`;
-  const t = offset > 0 ? `?t=${Math.floor(offset)}` : "";
+function sourceURL(
+  id: number,
+  method: Decision["method"],
+  offset: number,
+  audio?: number | null,
+): string {
+  // ?audio= names the absolute stream index (docs/api.md). It participates in
+  // the delivery decision rather than only in stream selection, because a file
+  // that direct-plays with its default track may need converting to deliver a
+  // different one — a second audio track is often the one codec the browser
+  // cannot decode.
+  const a = audio != null ? `audio=${audio}` : "";
+  if (method === "direct") {
+    return a ? `/api/stream/${id}?${a}` : `/api/stream/${id}`;
+  }
+  const parts = [offset > 0 ? `t=${Math.floor(offset)}` : "", a].filter(Boolean);
+  const t = parts.length > 0 ? `?${parts.join("&")}` : "";
   // Carries the same capabilities the decision was made with. The transcode
   // endpoint decides again from its own parameters, so a request claiming less
   // than the one before it gets a different answer — the file the server just
   // called direct-playable is re-encoded, or refused with a 409.
   return withCapabilities(`/api/stream/${id}/transcode${t}`);
 }
+
+// Repeat cycles off -> all -> one, which is the order every music player uses:
+// each press is "more repetition than before".
+export type RepeatMode = "off" | "all" | "one";
 
 // Surface is where the media element is drawn. "full" is the player screen,
 // "mini" the docked corner, "idle" nothing playing.
@@ -68,6 +86,19 @@ interface PlaybackState {
   activeSub: SubtitleTrack | null;
   subKey: string | null;
 
+  /** Alternate audio tracks the file carries, from the probe. */
+  audioTracks: MediaStream[];
+  /** The chosen track's absolute stream index, null for the file's default. */
+  audioIndex: number | null;
+  speed: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+  /** Item ids queued behind this one, in play order. */
+  queue: number[];
+  /** Whether there is anything to move to in each direction. */
+  hasNext: boolean;
+  hasPrev: boolean;
+
   play: (id: number, queue: number[]) => void;
   stop: () => void;
   togglePlay: () => void;
@@ -78,6 +109,13 @@ interface PlaybackState {
   toggleFullscreen: () => void;
   cycleSub: (dir: 1 | -1) => void;
   selectSub: (key: string | null) => void;
+  selectAudio: (index: number | null) => void;
+  setSpeed: (rate: number) => void;
+  toggleShuffle: () => void;
+  cycleRepeat: () => void;
+  playNext: () => void;
+  playPrev: () => void;
+  playFromQueue: (id: number) => void;
 
   videoRef: React.RefObject<HTMLVideoElement>;
   containerRef: React.RefObject<HTMLDivElement>;
@@ -110,6 +148,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [itemID, setItemID] = useState(0);
   const [queue, setQueue] = useState<number[]>([]);
   const [fullClaimed, setFullClaimed] = useState(false);
+  // Speed belongs to the session, not the item. Resetting it every episode is
+  // the behaviour people complain about in other players: you set 1.25x for a
+  // slow talker and the next episode undoes it.
+  const [speed, setSpeedState] = useState(1);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState<RepeatMode>("off");
+  // The audio track to ask the server for, null meaning "whatever the file
+  // leads with". Cleared when the item changes: a stream index is only
+  // meaningful within one file.
+  const [audioIndex, setAudioIndex] = useState<number | null>(null);
 
   const { data: item } = useItem(itemID);
 
@@ -242,12 +290,108 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // "Play all" hands over the ordered ids of a container's children; the player
   // advances through them as each finishes. Advancing is internal now rather
   // than a route change, because it has to work with no player screen open.
+  // The order the queue is actually played in. Shuffle is a *view* of the queue
+  // rather than a rewrite of it: turning shuffle off has to give back the
+  // original order, and a queue that had been shuffled in place could not.
+  //
+  // Seeded by the queue's own contents so it is stable for as long as that
+  // queue is — re-shuffling on every render would make "next" mean something
+  // different each time it was pressed.
+  const order = useMemo(() => {
+    if (!shuffle) return queue;
+    const out = queue.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shuffle, queue.join(",")]);
+
+  const idxInOrder = order.indexOf(itemID);
+  const hasNext = repeat !== "off" ? order.length > 1 : idxInOrder >= 0 && idxInOrder + 1 < order.length;
+  const hasPrev = order.length > 1;
+
+  // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
+  // the caller, which reseeks rather than reloading the same source.
+  // A stream index is only meaningful inside one file, so a new item starts
+  // from the file's own default rather than carrying index 3 into something
+  // that has two tracks.
+  useEffect(() => {
+    setAudioIndex(null);
+  }, [itemID]);
+
   const advanceQueue = useCallback((): boolean => {
-    const idx = queue.indexOf(itemID);
-    if (idx < 0 || idx + 1 >= queue.length) return false;
-    setItemID(queue[idx + 1]);
-    return true;
-  }, [queue, itemID]);
+    const idx = order.indexOf(itemID);
+    if (idx < 0) return false;
+    if (idx + 1 < order.length) {
+      setItemID(order[idx + 1]);
+      return true;
+    }
+    // End of the queue. "all" wraps; "off" stops, which is what finishing an
+    // album should do rather than starting it again.
+    if (repeat === "all" && order.length > 0) {
+      setItemID(order[0]);
+      return true;
+    }
+    return false;
+  }, [order, itemID, repeat]);
+
+  const playNext = useCallback(() => {
+    advanceQueue();
+  }, [advanceQueue]);
+
+  // Previous follows the convention every music player has taught people: near
+  // the start of a track it goes back one, later it restarts the track. Without
+  // it, "previous" three minutes into a song is a mis-press that loses your
+  // place in the song you meant to keep.
+  const playPrev = useCallback(() => {
+    const v = videoRef.current;
+    const elapsed = v ? offset.current + v.currentTime : 0;
+    if (elapsed > 3) {
+      seekTo(0);
+      return;
+    }
+    const idx = order.indexOf(itemID);
+    if (idx > 0) {
+      setItemID(order[idx - 1]);
+    } else if (repeat === "all" && order.length > 0) {
+      setItemID(order[order.length - 1]);
+    } else {
+      seekTo(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order, itemID, repeat]);
+
+  const playFromQueue = useCallback((id: number) => setItemID(id), []);
+
+  const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
+  const cycleRepeat = useCallback(
+    () => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")),
+    [],
+  );
+
+  // Speed is applied to the element rather than held as a wish: it has to be
+  // re-applied after every source change, because a fresh <video> src resets
+  // playbackRate to 1 — the same reason volume is re-applied on loadedmetadata.
+  const setSpeed = useCallback((rate: number) => {
+    setSpeedState(rate);
+    const v = videoRef.current;
+    if (v) v.playbackRate = rate;
+  }, []);
+
+  const audioTracks = useMemo(
+    () => (item?.streams ?? []).filter((st) => st.kind === "audio"),
+    [item?.streams],
+  );
+
+  // Choosing a track reloads the source, because the server decides delivery
+  // from the track: a file that direct-plays with its first track may have to be
+  // converted to deliver its second. Handled by the source effect, which this
+  // re-triggers.
+  const selectAudio = useCallback((index: number | null) => {
+    setAudioIndex(index);
+  }, []);
 
   // ---- source selection + resume -------------------------------------------
   useEffect(() => {
@@ -284,7 +428,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setSubOffset(0);
       }
       setLoading(true);
-      v.src = sourceURL(item.id, decision.current.method, startedFrom.current);
+      v.src = sourceURL(
+        item.id,
+        decision.current.method,
+        startedFrom.current,
+        audioIndex,
+      );
       v.load();
       void v.play().catch(() => {});
     })();
@@ -297,9 +446,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       v.removeAttribute("src");
       v.load();
     };
-    // Re-run only when the item identity changes.
+    // Re-run when the item changes, and when a different audio track is asked
+    // for — that is a new request to the server, not a client-side switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id]);
+  }, [item?.id, audioIndex]);
 
   // A direct-played file that fails is a capability this browser claimed and
   // does not have.
@@ -450,6 +600,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     subtitles,
     activeSub,
     subKey,
+    audioTracks,
+    audioIndex,
+    speed,
+    shuffle,
+    repeat,
+    queue,
+    hasNext,
+    hasPrev,
     play,
     stop,
     togglePlay,
@@ -460,6 +618,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     toggleFullscreen,
     cycleSub,
     selectSub: setSubKey,
+    selectAudio,
+    setSpeed,
+    toggleShuffle,
+    cycleRepeat,
+    playNext,
+    playPrev,
+    playFromQueue,
     videoRef,
     containerRef,
     claimFullSurface,
@@ -503,6 +668,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             // remembered level has to be re-applied — including across a
             // transcode seek, which reloads the source.
             v.volume = volume;
+            // Same reason as volume: a fresh source resets playbackRate to 1,
+            // so a chosen speed has to be re-applied or it silently reverts on
+            // the next episode.
+            v.playbackRate = speed;
             // Resume: for direct play the element carries the offset itself.
             if (!transcoding.current && startedFrom.current > 0) {
               v.currentTime = startedFrom.current;
@@ -529,6 +698,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           }}
           onEnded={() => {
             saveProgress(true);
+            // Repeat one reseeks rather than reloading: the source is already
+            // the right file, and re-requesting it would restart a transcode
+            // that is already running.
+            if (repeat === "one") {
+              const v = e2(videoRef);
+              if (v) {
+                v.currentTime = 0;
+                void v.play().catch(() => {});
+                return;
+              }
+            }
             // Roll on to the next queued item; if there is none, it ends here.
             if (!advanceQueue()) setPlaying(false);
           }}
@@ -553,4 +733,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       </div>
     </Ctx.Provider>
   );
+}
+
+// e2 reads a ref inside a JSX handler without widening its type at every call
+// site. Small, but it keeps the handler above readable.
+function e2(ref: React.RefObject<HTMLVideoElement>): HTMLVideoElement | null {
+  return ref.current;
 }

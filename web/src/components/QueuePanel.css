@@ -1,0 +1,101 @@
+/*
+ * The queue, as a popover over the player chrome. Same surface language as the
+ * subtitle menu: a raised panel on the void, a gold hairline, and nothing gold
+ * inside it except focus.
+ */
+.queue {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-height: 46vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--elev-3);
+  overflow: hidden;
+  z-index: 5;
+}
+
+.queue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(242, 245, 251, 0.06);
+}
+
+.queue__count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue__list {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.queue__row {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.queue__row:hover {
+  background: rgba(242, 245, 251, 0.05);
+}
+
+.queue__row:focus {
+  outline: none;
+  border-left-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-ring) inset;
+}
+
+/* What is playing now, marked the way the rail marks where you are. */
+.queue__row.is-current {
+  border-left-color: var(--gold);
+  background: rgba(242, 245, 251, 0.04);
+}
+
+.queue__num {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.queue__title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue__row.is-current .queue__title {
+  color: var(--text-primary);
+}
+
+.queue__sub {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

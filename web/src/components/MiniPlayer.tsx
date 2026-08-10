@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useFocusable } from "@/focus/FocusController";
+import { PrevGlyph, NextGlyph, VolumeGlyph } from "@/components/PlayerGlyphs";
 import "./MiniPlayer.css";
 
 // The docked player, bottom-right, when something is playing and you are not on
@@ -22,6 +24,10 @@ export function MiniPlayer() {
   const expandFocus = useFocusable(expand);
   const playFocus = useFocusable(pb.togglePlay);
   const stopFocus = useFocusable(pb.stop);
+  const prevFocus = useFocusable(pb.playPrev);
+  const nextFocus = useFocusable(pb.playNext);
+  const [volOpen, setVolOpen] = useState(false);
+  const volFocus = useFocusable(() => setVolOpen((o) => !o));
 
   if (pb.surface !== "mini") return null;
 
@@ -45,6 +51,21 @@ export function MiniPlayer() {
       </button>
 
       <div className="mini__controls">
+        {/* Track navigation is the point of a mini-player: moving through a
+            record without leaving the page you are on. Hidden rather than
+            disabled when there is no queue — a permanently dead button in a
+            180px strip is spent space. */}
+        {pb.hasPrev && (
+          <button
+            {...prevFocus}
+            className="mini__icon"
+            onClick={pb.playPrev}
+            aria-label="Previous"
+            title="Previous"
+          >
+            <PrevGlyph size={16} />
+          </button>
+        )}
         <button
           {...playFocus}
           className="mini__icon"
@@ -53,6 +74,53 @@ export function MiniPlayer() {
         >
           {pb.playing ? "❚❚" : "▶"}
         </button>
+        {pb.hasNext && (
+          <button
+            {...nextFocus}
+            className="mini__icon"
+            onClick={pb.playNext}
+            aria-label="Next"
+            title="Next"
+          >
+            <NextGlyph size={16} />
+          </button>
+        )}
+        {/* Volume as a button that reveals a slider, not a slider always shown.
+            A permanent slider is the single widest thing that could go in this
+            strip, and the strip sits over content. */}
+        <div className="mini__volume">
+          <button
+            {...volFocus}
+            className="mini__icon"
+            onClick={() => setVolOpen((o) => !o)}
+            aria-label="Volume"
+            aria-expanded={volOpen}
+            title={`Volume ${Math.round((pb.muted ? 0 : pb.volume) * 100)}%`}
+          >
+            <VolumeGlyph size={16} muted={pb.muted || pb.volume === 0} />
+          </button>
+          {volOpen && (
+            <div className="mini__volume-pop">
+              <button
+                className="mini__icon"
+                onClick={pb.toggleMute}
+                aria-label={pb.muted ? "Unmute" : "Mute"}
+              >
+                <VolumeGlyph size={16} muted={pb.muted || pb.volume === 0} />
+              </button>
+              <input
+                className="mini__volume-slider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={pb.muted ? 0 : pb.volume}
+                onChange={(e) => pb.changeVolume(Number(e.target.value))}
+                aria-label="Volume"
+              />
+            </div>
+          )}
+        </div>
         <button
           {...stopFocus}
           className="mini__icon"
