@@ -80,3 +80,31 @@ jobs:
             git diff --stat -- internal/web/dist
             exit 1
           fi
+
+  # The installer is only built on a tag, so until now nothing checked it until a
+  # release was already being cut. That is how a shortcut shipped carrying the
+  # literal text "$%ProgramData%\LANcast": the script compiled cleanly and simply
+  # produced the wrong string. A compile here will not catch a wrong-but-valid
+  # value, but it does catch the whole class above it — undefined variables,
+  # renamed constants, syntax — at PR time rather than mid-release.
+  installer:
+    name: Installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install nsis
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      # makensis needs the two executables and the WebView2 loader to exist; the
+      # real ones come from goreleaser at release time, so stand in placeholders.
+      # This checks the script, not the payload.
+      - name: stage placeholders
+        run: |
+          : > installer/LANcast-Server.exe
+          : > installer/LANcast-Client.exe
+
+      # -WX turns warnings into errors. An undefined $VARIABLE is a warning in
+      # NSIS and would otherwise compile straight into a shipped installer.
+      - name: compile the installer script
+        run: makensis -WX -DVERSION=0.0.0-ci installer/lancast.nsi

@@ -129,10 +129,23 @@ Section "LANcast"
     "" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" "Open LANcast"
   ; The server pinned to the same machine-wide data directory the service uses,
   ; so starting it by hand cannot quietly open a second, per-user database.
-  ; $%ProgramData% is the environment variable, expanded on the target machine —
-  ; the same directory `service install` pins to. NSIS has no built-in for it.
+  ;
+  ; ReadEnvStr, not $%ProgramData%. NSIS expands $%VAR% at COMPILE time from the
+  ; compiler's own environment, and this installer is compiled by makensis on a
+  ; Linux runner where ProgramData does not exist — so it expanded to nothing and
+  ; shipped the literal text "$%ProgramData%\LANcast" into the shortcut. The
+  ; server then read that as a relative directory and opened a second database
+  ; beside the install, which is exactly the failure this -data argument exists
+  ; to prevent (v0.4.1). The original intent — "the environment variable,
+  ; expanded on the target machine" — was right; only the mechanism was wrong,
+  ; and ReadEnvStr is the one that actually runs there.
+  ;
+  ; Not SetShellVarContext all + $APPDATA, which is the other documented route:
+  ; that setting also moves $SMPROGRAMS and $DESKTOP to the all-users folders, so
+  ; using it here would quietly relocate every shortcut this installer writes.
+  ReadEnvStr $0 "ProgramData"
   CreateShortcut "$SMPROGRAMS\LANcast\LANcast Server.lnk" "$INSTDIR\LANcast-Server.exe" \
-    'tray -data "$%ProgramData%\LANcast"' "$INSTDIR\LANcast-Server.exe" 0 SW_SHOWNORMAL "" \
+    'tray -data "$0\LANcast"' "$INSTDIR\LANcast-Server.exe" 0 SW_SHOWNORMAL "" \
     "Run the LANcast server in the system tray"
   CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
 
