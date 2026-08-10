@@ -2,11 +2,12 @@ import {
   useLibraries,
   useContinueWatching,
   useRecentlyAdded,
+  useRecentPhotos,
   useItems,
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
 import { HomeHero } from "@/components/HomeHero";
-import { isMusic } from "@/lib/kind";
+import { isMusic, isPicture } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import "./Home.css";
 
@@ -27,16 +28,19 @@ function LibraryShelf({ library }: { library: Library }) {
 // candidate that actually has fanart rather than simply the first candidate.
 // Resume wins over new: it is the likeliest reason someone opened LANcast.
 //
-// Music is excluded rather than left to fail the fanart test. A track has no
-// backdrop today and would be skipped anyway, but "the hero is for something you
-// watch" is the actual rule, and leaving it implicit means the first album that
-// arrives with provider artwork silently becomes a 640px-tall hero.
+// Music and pictures are excluded rather than left to fail the fanart test.
+// Neither has a backdrop today and both would be skipped anyway, but "the hero
+// is for something you watch" is the actual rule, and leaving it implicit means
+// the first album that arrives with provider artwork — or the first photo wide
+// enough to look like one — silently becomes a hero.
 function pickHero(
   resumable: Item[] | undefined,
   recent: Item[] | undefined,
 ): { item: Item; resuming: boolean } | null {
   const withArt = (items: Item[] | undefined) =>
-    items?.find((i) => i.artwork?.fanart && !i.missing && !isMusic(i));
+    items?.find(
+      (i) => i.artwork?.fanart && !i.missing && !isMusic(i) && !isPicture(i),
+    );
 
   const inProgress = withArt(resumable);
   if (inProgress) return { item: inProgress, resuming: true };
@@ -57,6 +61,11 @@ export function Home() {
   // library where a scan just added 200 tracks, the top 20 by date are all
   // music and "Recently Added" would be empty while New Music overflowed.
   const { data: recentlyAdded } = useRecentlyAdded(40);
+  // Photos come from their own query rather than out of recentlyAdded: that one
+  // is top-level, so on a picture library it answers with galleries — the same
+  // 25 folders every time, which is not what "recently added" means when you
+  // are looking at photographs.
+  const { data: recentPhotos } = useRecentPhotos(20);
 
   const hero = pickHero(continueWatching, recentlyAdded);
 
@@ -80,8 +89,9 @@ export function Home() {
   const continueAudio = resumable.filter(isMusic);
 
   const recent = withoutHero(recentlyAdded);
-  const recentVideo = recent.filter((i) => !isMusic(i));
+  const recentVideo = recent.filter((i) => !isMusic(i) && !isPicture(i));
   const recentAudio = recent.filter(isMusic);
+  const recentPictures = (recentPhotos ?? []).filter((i) => !i.missing);
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
@@ -96,6 +106,7 @@ export function Home() {
         <Shelf title="Continue Listening" items={continueAudio} />
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />
+        <Shelf title="Recently Added Photos" items={recentPictures} />
         {libraries?.map((lib) => (
           <LibraryShelf key={lib.id} library={lib} />
         ))}

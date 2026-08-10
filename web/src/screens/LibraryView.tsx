@@ -25,7 +25,10 @@ export function LibraryView({
   const libraryID = library.id;
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
-  const sort = params.get("sort") ?? "title";
+  // The default comes from the kind rather than being "title" for everyone: a
+  // picture library sorted by title is sorted by UUID, which is no order at
+  // all. Each config lists its natural default first.
+  const sort = params.get("sort") ?? config.sorts[0].value;
   const genres = params.getAll("genre");
   const decades = params.getAll("decade");
   const contentRatings = params.getAll("content_rating");
@@ -100,7 +103,8 @@ export function LibraryView({
     if (!el) return;
 
     // Near enough to the viewport that the next page should already be loading.
-    const near = () => el.getBoundingClientRect().top < window.innerHeight + 600;
+    const near = () =>
+      el.getBoundingClientRect().top < window.innerHeight + 600;
     const maybeFetch = () => {
       if (near()) fetchNextPage();
     };
@@ -165,7 +169,10 @@ export function LibraryView({
       <div className="browse__filters">
         <label className="browse__filter">
           <span>Sort</span>
-          <select value={sort} onChange={(e) => setParam("sort", e.target.value)}>
+          <select
+            value={sort}
+            onChange={(e) => setParam("sort", e.target.value)}
+          >
             {config.sorts.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -232,7 +239,9 @@ export function LibraryView({
 
       {!isError && items.length === 0 && !isLoading && (
         <p className="browse__message">
-          {filtered ? "Nothing matches these filters." : "This library is empty."}
+          {filtered
+            ? "Nothing matches these filters."
+            : "This library is empty."}
         </p>
       )}
 

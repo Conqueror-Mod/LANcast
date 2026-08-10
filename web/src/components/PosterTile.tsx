@@ -60,14 +60,23 @@ export function PosterTile({ item }: { item: Item }) {
           <div className="poster-tile__progress" style={{ width: `${pct}%` }} />
         )}
       </div>
-      <div className="poster-tile__meta">
-        <span className="poster-tile__title">{item.title}</span>
-        {count ? (
-          <span className="poster-tile__year">{count}</span>
-        ) : (
-          item.year && <span className="poster-tile__year">{item.year}</span>
-        )}
-      </div>
+      {/*
+        A photo's caption is its filename, and a photo library's filenames are
+        UUIDs and camera serials — the reason the scanner stores them verbatim
+        rather than tidying them. Printing 2,600 of those under a grid is noise
+        that makes the pictures harder to look at, so the tile carries the title
+        for assistive technology (aria-label, above) and shows nothing.
+      */}
+      {item.kind !== "photo" && (
+        <div className="poster-tile__meta">
+          <span className="poster-tile__title">{item.title}</span>
+          {count ? (
+            <span className="poster-tile__year">{count}</span>
+          ) : (
+            item.year && <span className="poster-tile__year">{item.year}</span>
+          )}
+        </div>
+      )}
     </button>
   );
 }
