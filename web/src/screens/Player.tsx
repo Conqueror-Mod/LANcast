@@ -16,6 +16,7 @@ import {
   FullscreenGlyph,
   PrevGlyph,
   NextGlyph,
+  StopGlyph,
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import "./Player.css";
@@ -86,6 +87,14 @@ export function Player() {
   // Leaving the player leaves it playing. That is the point of the change, and
   // it is why Back no longer stops anything.
   const close = useCallback(() => navigate(-1), [navigate]);
+  // Stop is close plus teardown. pb.stop() already saves progress, drops the
+  // source (which ends the transcode) and clears the queue, so nothing
+  // auto-advances behind you and the mini-player has nothing to dock — the same
+  // verb the mini-player's stop performs, so it means one thing in both places.
+  const stopAndLeave = useCallback(() => {
+    pb.stop();
+    navigate(-1);
+  }, [pb, navigate]);
   useSuspendFocus();
   useBackHandler(close);
 
@@ -281,6 +290,22 @@ export function Player() {
                 <NextGlyph />
               </button>
             )}
+            {/* Stop ends the session and leaves; close (top left) leaves and
+                keeps it playing in the corner. Two different intentions that
+                the back arrow alone could not tell apart.
+
+                It sits at the end of the transport group rather than beside
+                play, deliberately. Stop tears down a running transcode and
+                navigates away — a misfire costs the startup wait again, and
+                play is the one control people hit without looking. */}
+            <button
+              className="player__icon"
+              onClick={stopAndLeave}
+              aria-label="Stop"
+              title="Stop"
+            >
+              <StopGlyph />
+            </button>
             <div className="player__volume">
               <button
                 className="player__icon"

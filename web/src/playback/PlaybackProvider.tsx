@@ -530,6 +530,108 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setMuted(v.muted);
   }, []);
 
+  /*
+   * ---- MediaSession ---------------------------------------------------------
+   *
+   * What is playing, and where in it we are, told to the browser rather than
+   * left to be inferred from the element.
+   *
+   * The element cannot be trusted for this. A transcode is a progressive fMP4
+   * off a live pipe with no duration in its header, so `video.duration` is
+   * whatever has been produced so far and grows a second per second — the same
+   * reason `totalDuration` above prefers the probed runtime. Anything drawing
+   * its own scrubber from the element inherits that lie: Windows' media overlay,
+   * the media keys, and Chrome's picture-in-picture window, which is where it
+   * was first noticed (0:12 and counting, on a 1h23m film).
+   *
+   * `setPositionState` is the only way to correct it without owning the window.
+   * Whether Chrome's PiP scrubber honours it is the open question this is here
+   * to answer; the OS-level controls are fixed by it either way, and they were
+   * getting nothing at all before this.
+   */
+  useEffect(() => {
+    const ms = navigator.mediaSession;
+    if (!ms) return;
+
+    if (!itemID || !item) {
+      ms.metadata = null;
+      ms.playbackState = "none";
+      return;
+    }
+
+    ms.metadata = new MediaMetadata({
+      title: item.title,
+      // Read in the music sense on a track (ADR 0024): `series` is the album.
+      artist: item.artist ?? "",
+      album: item.series ?? "",
+      artwork: cover ? [{ src: cover }] : [],
+    });
+    ms.playbackState = playing ? "playing" : "paused";
+  }, [itemID, item, cover, playing]);
+
+  useEffect(() => {
+    const ms = navigator.mediaSession;
+    if (!ms?.setPositionState) return;
+    if (!itemID || !totalDuration) return;
+    try {
+      ms.setPositionState({
+        duration: totalDuration,
+        playbackRate: speed,
+        // displayTime, not the element's clock: on a transcode the element
+        // restarts at zero after every seek and the offset is what makes the
+        // two agree.
+        position: Math.min(displayTime, totalDuration),
+      });
+    } catch {
+      // Chrome throws if position exceeds duration, which a rounding error at
+      // the very end can produce. A stale position beats a dead player.
+    }
+  }, [itemID, totalDuration, displayTime, speed]);
+
+  useEffect(() => {
+    const ms = navigator.mediaSession;
+    if (!ms?.setActionHandler) return;
+    // Only what this player can actually do — an unhandled action makes the
+    // browser hide that button, which is the same rule the control bar follows.
+    const handlers: [MediaSessionAction, (() => void) | null][] = [
+      ["play", togglePlay],
+      ["pause", togglePlay],
+      ["seekbackward", () => seekBy(-10)],
+      ["seekforward", () => seekBy(10)],
+      ["previoustrack", hasPrev ? playPrev : null],
+      ["nexttrack", hasNext ? playNext : null],
+    ];
+    for (const [action, fn] of handlers) {
+      try {
+        ms.setActionHandler(action, fn);
+      } catch {
+        // Not every engine implements every action; an unsupported one throws
+        // rather than being ignored, and it must not take the rest down.
+      }
+    }
+    try {
+      ms.setActionHandler("seekto", (d) => {
+        if (typeof d.seekTime === "number") seekTo(d.seekTime);
+      });
+    } catch {
+      /* no seekto on this engine */
+    }
+    return () => {
+      for (const [action] of handlers) {
+        try {
+          ms.setActionHandler(action, null);
+        } catch {
+          /* as above */
+        }
+      }
+      try {
+        ms.setActionHandler("seekto", null);
+      } catch {
+        /* as above */
+      }
+    };
+  }, [togglePlay, seekBy, seekTo, playNext, playPrev, hasNext, hasPrev]);
+
   // Apply and remember the level. Setting a level unmutes, which is what a user
   // dragging the slider up plainly means.
   const changeVolume = useCallback((next: number) => {
@@ -684,7 +786,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             }
           }}
           onLoadedData={() => setLoading(false)}
-          onPlaying={() => setLoading(false)}
+          // The note explains a wait ("Converting — audio codec ac3 is not
+          // supported"). Once frames are arriving there is no wait left to
+          // explain, and a permanent banner over the picture reads as a warning
+          // about the thing you are currently watching happily. A later stall
+          // shows the spinner on its own, which is the honest signal for it.
+          onPlaying={() => {
+            setLoading(false);
+            setNote("");
+          }}
           onWaiting={() => setLoading(true)}
           onError={() => retryWithoutClaims()}
           onTimeUpdate={(e) => {

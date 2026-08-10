@@ -4,25 +4,23 @@
 
 .mini {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  right: var(--mini-inset);
+  bottom: var(--mini-inset);
   z-index: 121;
   display: flex;
   align-items: center;
+  /* Five controls where there were two: they wrap onto their own line under the
+     title rather than squeezing it, since the title is the thing that says what
+     is playing. */
+  flex-wrap: wrap;
   gap: 10px;
-  width: 180px;
+  width: var(--mini-strip-w);
   padding: 8px 10px;
   background: var(--space-raised);
   border: 1px solid var(--gold-dormant);
   border-radius: var(--radius-panel);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   overflow: hidden;
-}
-
-/* Under a 16:9 video the strip sits below the picture rather than beside it —
-   a 300px-wide video with a control strip alongside would run off the screen. */
-.mini {
-  bottom: 18px;
 }
 
 .mini__open {
@@ -128,14 +126,6 @@
 
 .mini__volume-slider {
   width: 96px;
-}
-
-/* Five controls where there were two: they get their own line under the title
-   rather than squeezing it, since the title is the thing that identifies what
-   is playing. */
-.mini {
-  width: 236px;
-  flex-wrap: wrap;
 }
 
 .mini__controls {

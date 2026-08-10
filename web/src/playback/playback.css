@@ -18,9 +18,14 @@
 
 /* Docked bottom-right, Plex-style, while you browse. Sits above the app shell
    and clear of the window edge so it reads as floating rather than stuck. */
+/* A 16:9 picture is too wide to sit beside the strip, so the strip goes under
+   it and the picture is lifted clear by exactly the strip's height. Both were
+   pinned to bottom: 18px, which stacked the strip on top of the picture's lower
+   edge — over the title button, so the one control that gets you back to the
+   full player could not be clicked. */
 .playback--mini {
-  right: 18px;
-  bottom: 18px;
+  right: var(--mini-inset);
+  bottom: calc(var(--mini-inset) + var(--mini-strip-h) + var(--mini-gap));
   width: 300px;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-panel);
@@ -34,8 +39,10 @@
 .playback--mini.playback--audio {
   width: 132px;
   aspect-ratio: 1 / 1;
-  /* Clear of the controls strip, which docks beside it. */
-  right: 210px;
+  /* A square is narrow enough to sit beside the strip rather than above it, so
+     this one clears sideways and drops back to the strip's own baseline. */
+  right: calc(var(--mini-inset) + var(--mini-strip-w) + var(--mini-gap));
+  bottom: var(--mini-inset);
 }
 
 /* Nothing playing: kept mounted, taken out of the way. `display: none` would

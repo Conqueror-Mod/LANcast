@@ -160,7 +160,11 @@
   align-items: center;
   gap: 12px;
   font-size: 13px;
-  color: var(--text-muted);
+  /* Secondary, not muted. Muted is the right weight for a count or a caption;
+     on a destination it was 3.4:1 over the void and read as disabled rather
+     than merely unselected. The active row still leads, through gold on the
+     left edge and primary text — it does not need the rest held down to win. */
+  color: var(--text-secondary);
   padding: 7px 9px;
   white-space: nowrap;
   /* Single-sided border, so no radius — a rounded corner on one edge reads as
@@ -187,7 +191,10 @@
   color: var(--text-secondary);
 }
 
+/* Hover has to outrun the resting state, and the resting state is now secondary
+   — so the shared rule above no longer moves. */
 .app-shell__lib:hover {
+  color: var(--text-primary);
   background: rgba(242, 245, 251, 0.04);
 }
 
