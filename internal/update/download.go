@@ -65,7 +65,22 @@ func (c *Checker) setProgress(p Progress) {
 // directory at all — staging goes to the data directory, and the swap happens
 // on shutdown (internal/selfupdate).
 func (c *Checker) DownloadAndStage(ctx context.Context, dataDir string) error {
-	return c.downloadFrom(ctx, dataDir, releasesURL)
+	err := c.downloadFrom(ctx, dataDir, releasesURL)
+	c.setDownloadError(err)
+	return err
+}
+
+// setDownloadError records the outcome where the UI can see it. A download is
+// started by a request that returns 202 and then runs detached, so returning
+// the error to the caller tells nobody: the only reader left is the state.
+func (c *Checker) setDownloadError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err == nil {
+		c.state.DownloadError = ""
+		return
+	}
+	c.state.DownloadError = err.Error()
 }
 
 // downloadFrom is DownloadAndStage against a given endpoint, so tests can serve
@@ -79,6 +94,7 @@ func (c *Checker) downloadFrom(ctx context.Context, dataDir, endpoint string) er
 		return fmt.Errorf("this build cannot verify a release signature, so it will not install one")
 	}
 
+	c.setDownloadError(nil)
 	c.setProgress(Progress{Active: true, Stage: "looking up the release"})
 	defer func() { c.setProgress(Progress{}) }()
 
@@ -105,11 +121,11 @@ func (c *Checker) downloadFrom(ctx context.Context, dataDir, endpoint string) er
 	}
 
 	c.setProgress(Progress{Active: true, Stage: "verifying the release"})
-	checksums, err := c.get(ctx, urls["checksums.txt"], nil)
+	checksums, err := c.get(ctx, urls["checksums.txt"], acceptBytes, nil)
 	if err != nil {
 		return err
 	}
-	sig, err := c.get(ctx, urls["checksums.txt.sig"], nil)
+	sig, err := c.get(ctx, urls["checksums.txt.sig"], acceptBytes, nil)
 	if err != nil {
 		return err
 	}
@@ -120,7 +136,7 @@ func (c *Checker) downloadFrom(ctx context.Context, dataDir, endpoint string) er
 
 	c.setProgress(Progress{Active: true, Stage: "downloading " + rel.TagName})
 	var done atomic.Int64
-	body, err := c.get(ctx, urls[archive], func(n int64, total int64) {
+	body, err := c.get(ctx, urls[archive], acceptBytes, func(n int64, total int64) {
 		done.Store(n)
 		c.setProgress(Progress{Active: true, Done: n, Total: total,
 			Stage: "downloading " + rel.TagName})
@@ -190,7 +206,7 @@ type ghAsset struct {
 }
 
 func (c *Checker) fetchRelease(ctx context.Context, endpoint string) (*ghReleaseFull, error) {
-	body, err := c.get(ctx, endpoint, nil)
+	body, err := c.get(ctx, endpoint, acceptJSON, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +220,13 @@ func (c *Checker) fetchRelease(ctx context.Context, endpoint string) (*ghRelease
 	return &rel, nil
 }
 
+// The two Accept values this package uses. Named, because the difference
+// between them is the difference between a working updater and a 415.
+const (
+	acceptJSON  = "application/vnd.github+json"
+	acceptBytes = "application/octet-stream"
+)
+
 type ghReleaseFull struct {
 	TagName    string    `json:"tag_name"`
 	Draft      bool      `json:"draft"`
@@ -213,12 +236,18 @@ type ghReleaseFull struct {
 
 // get fetches a URL, optionally reporting progress. Bounded by maxArtifact so a
 // redirect to something enormous cannot exhaust memory.
-func (c *Checker) get(ctx context.Context, url string, onProgress func(done, total int64)) ([]byte, error) {
+//
+// accept is a parameter rather than a constant because the two things this
+// fetches want different answers, and getting it wrong is not a warning: the
+// GitHub API replies 415 Unsupported Media Type when a JSON endpoint is asked
+// for octet-stream. That is what "latest: 415 Unsupported Media Type" was — the
+// release lookup, not the archive.
+func (c *Checker) get(ctx context.Context, url, accept string, onProgress func(done, total int64)) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/octet-stream")
+	req.Header.Set("Accept", accept)
 
 	// A download needs longer than a status check; the client's own short
 	// timeout would cut a 15 MB archive off on a slow line.

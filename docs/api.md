@@ -809,8 +809,16 @@ Whether a newer release exists. **Admin only.**
 ```json
 { "supported": true, "current": "0.6.1", "latest": "v0.7.0", "available": true,
   "url": "https://github.com/…/releases/tag/v0.7.0", "checked_at": 1786254604,
-  "checking": false, "error": "", "can_verify": false, "enabled": true }
+  "checking": false, "error": "", "download_error": "", "can_verify": false,
+  "enabled": true }
 ```
+
+`error` is a failed *check*; `download_error` is a failed *download*. They are
+separate because they ask different things of the reader — "I could not ask"
+versus "I asked, and installing it failed" — and because a download is started
+by a request that returns `202` and then runs detached. Its outcome reaches no
+caller, so the state is the only place a client can learn it. Without that, a
+download that died is indistinguishable from one still running.
 
 `GET` reads the last known result; the server checks on its own timer, so this
 costs nothing. `POST /api/update/check` asks now, and **works whether or not the
