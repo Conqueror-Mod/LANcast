@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useInfiniteItems, useFacets } from "@/api/hooks";
+import { useInfiniteItems, useFacets, useRecentPhotos } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
+import { PhotoBanner } from "@/components/PhotoBanner";
+import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterChips } from "@/components/FilterChips";
-import type { Library } from "@/api/types";
+import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
 import "./Browse.css";
 
@@ -133,6 +135,18 @@ export function LibraryView({
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // A picture library opens on a banner cycling the library itself (ADR 0028).
+  // Drawn from the newest photographs rather than a random sample, because
+  // "random" over 2,610 files means a fresh trip to the database on every visit
+  // and a banner that can show the same picture twice in a row; the newest are
+  // already cached for the Home row, and shuffling them client-side gives the
+  // variety without the cost.
+  const isPictures = library.kind === "picture";
+  const { data: bannerPool } = useRecentPhotos(isPictures ? 24 : 0);
+  const [shownPhoto, setShownPhoto] = useState<Item | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const bannerPhotos = useMemo(() => shuffle(bannerPool ?? []), [bannerPool]);
+
   const items = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
   const filtered =
@@ -144,6 +158,27 @@ export function LibraryView({
 
   return (
     <div className="browse">
+      {isPictures && bannerPhotos.length > 0 && (
+        <PhotoBanner
+          photos={bannerPhotos}
+          selected={shownPhoto}
+          label={library.name}
+          onExpand={(p) => {
+            setShownPhoto(p);
+            setViewerOpen(true);
+          }}
+        />
+      )}
+      {viewerOpen && (
+        <PhotoViewer
+          photos={bannerPhotos}
+          startAt={Math.max(
+            0,
+            bannerPhotos.findIndex((p) => p.id === shownPhoto?.id),
+          )}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
       <div className="browse__header">
         <div className="browse__heading">
           <span className="section-label">{library.name}</span>
@@ -261,4 +296,16 @@ export function LibraryView({
       )}
     </div>
   );
+}
+
+// A stable shuffle for one render of one pool. Seeded by nothing and computed
+// once per pool via useMemo: re-shuffling on every render would reorder the
+// banner mid-cycle, which looks like a bug rather than variety.
+function shuffle(items: Item[]): Item[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

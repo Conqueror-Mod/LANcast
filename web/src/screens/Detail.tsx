@@ -11,9 +11,12 @@ import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating, ratingLabel } from "@/lib/format";
 import { isContainer, childLabel, isPicture } from "@/lib/kind";
+import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { PosterTile } from "@/components/PosterTile";
+import { PhotoBanner } from "@/components/PhotoBanner";
+import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
 import { TrailerModal } from "@/components/TrailerModal";
 import type { Credit } from "@/api/types";
@@ -106,6 +109,10 @@ export function Detail() {
   const children = isCollection ? members : parentChildren;
 
   const [fixOpen, setFixOpen] = useState(false);
+  // The picture currently in the banner, and the one the viewer opened at.
+  // Selecting is not navigating: the banner is the detail view for a photo.
+  const [shown, setShown] = useState<Item | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const isAdmin = useIsAdmin();
@@ -142,6 +149,7 @@ export function Detail() {
   // photograph against. A gallery is a folder the scanner read.
   const isMusic =
     item.kind === "artist" || item.kind === "album" || item.kind === "track";
+  const isGallery = item.kind === "gallery";
   const canFixMatch =
     item.kind !== "collection" &&
     item.kind !== "season" &&
@@ -312,6 +320,18 @@ export function Detail() {
           </div>
         </div>
 
+        {isGallery && children && children.length > 0 && (
+          <PhotoBanner
+            photos={children}
+            selected={shown}
+            label={item.title}
+            onExpand={(p) => {
+              setShown(p);
+              setViewerOpen(true);
+            }}
+          />
+        )}
+
         {container && children && children.length > 0 && (
           <section className="detail__children">
             <span className="section-label">
@@ -327,6 +347,23 @@ export function Detail() {
                 tracks={children}
                 albumArtist={item.artist ?? undefined}
               />
+            ) : isGallery ? (
+              <div className="detail__children-grid">
+                {children.map((child) => (
+                  <PosterTile
+                    key={child.id}
+                    item={child}
+                    onOpen={() => {
+                      setShown(child);
+                      // Scroll the banner back into view: on a gallery of 779
+                      // photographs the tile pressed is usually far below it,
+                      // and replacing a banner nobody can see is the same as
+                      // doing nothing.
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="detail__children-grid">
                 {children.map((child) => (
@@ -349,6 +386,16 @@ export function Detail() {
         )}
       </div>
 
+      {viewerOpen && children && (
+        <PhotoViewer
+          photos={children}
+          startAt={Math.max(
+            0,
+            children.findIndex((c) => c.id === shown?.id),
+          )}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
       {fixOpen && <FixMatch item={item} onClose={() => setFixOpen(false)} />}
       {removeOpen && (
         <RemoveDialog
