@@ -1,6 +1,6 @@
 # ADR 0030 — Playlists, and what an `.m3u` on disk means
 
-Date: 2026-08-11 · Status: proposed
+Date: 2026-08-11 · Status: accepted
 
 ## Context
 
