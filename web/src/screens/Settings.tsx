@@ -11,6 +11,7 @@ import {
   useScanStatus,
   useProbeStatus,
   useReprobe,
+  useHealth,
   useCurrentUser,
   useIsAdmin,
   useUsers,
@@ -1056,6 +1057,117 @@ function ServerLogSection() {
   );
 }
 
+
+/*
+ * Server identity. /api/health has returned the version since the beginning and
+ * nothing ever asked for it, so a settings page could not tell you which server
+ * it was configuring — the first question anyone has when something behaves
+ * unexpectedly after an update.
+ */
+function GeneralSection() {
+  const { data: health } = useHealth();
+  return (
+    <section className="settings__section">
+      <span className="section-label">Server</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Version</div>
+          <div className="set-row__sub">
+            {health ? `LANcast ${health.version}` : "…"}
+          </div>
+        </div>
+      </div>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">API version</div>
+          <div className="set-row__sub">
+            {/* Shown because it is the number a third-party client is built
+                against (ADR 0018), and the only place it was visible before was
+                a response header nobody reads. */}
+            {health ? health.api_version : "…"}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/*
+ * Two settings the server has always accepted and validated, and that no
+ * control has ever reached: the provider rate limit and the update check. Both
+ * were editable only by hand-editing config.json — which is the same
+ * "capability with no path to it" that hid track deletion, arrived at from the
+ * configuration side rather than the UI side.
+ *
+ * Separate sections rather than surgery inside AdminSections. They re-read the
+ * same queries, which react-query serves from one cache entry, so the cost of
+ * keeping the edit contained is nothing.
+ */
+function RateLimitSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  if (!settings) return null;
+  return (
+    <section className="settings__section">
+      <span className="section-label">Provider requests</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Rate limit</div>
+          <div className="set-row__sub">
+            Requests per second to TMDB, OMDb and OpenSubtitles. Lower this if a
+            provider starts refusing; the server rejects anything above 50.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <input
+            className="set-input set-input--num"
+            type="number"
+            min={1}
+            max={50}
+            step={1}
+            defaultValue={settings.rate_per_sec}
+            aria-label="Provider requests per second"
+            // On blur rather than on change: this is a number field, and
+            // committing every keystroke would PATCH "1" on the way to "12"
+            // and briefly throttle the server to a crawl.
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 1 && v <= 50 && v !== settings.rate_per_sec) {
+                update.mutate({ rate_per_sec: v });
+              } else {
+                e.target.value = String(settings.rate_per_sec);
+              }
+            }}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UpdateCheckSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  if (!settings) return null;
+  return (
+    <section className="settings__section">
+      <span className="section-label">Update checks</span>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={settings.update_check}
+          onChange={(e) => update.mutate({ update_check: e.target.checked })}
+        />
+        Check for new LANcast releases
+      </label>
+      <div className="set-row__sub">
+        Turning this off stops the server contacting GitHub. Nothing else here
+        reaches the internet on its own.
+      </div>
+    </section>
+  );
+}
+
 /*
  * The settings shell.
  *
@@ -1080,6 +1192,7 @@ interface Pane {
 }
 
 const SERVER_PANES: Pane[] = [
+  { id: "general", label: "General", admin: true },
   { id: "libraries", label: "Libraries", admin: true },
   { id: "metadata", label: "Metadata", admin: true },
   { id: "playback", label: "Playback", admin: true },
@@ -1167,10 +1280,17 @@ export function Settings() {
         <div className="settings__pane">
           {isAdmin && (
             <>
+              {pane === "general" && <GeneralSection />}
               <AdminSections pane={pane} />
+              {pane === "metadata" && <RateLimitSection />}
               {pane === "users" && <UsersSection />}
               {pane === "addons" && <AddonsSection />}
-              {pane === "updates" && <UpdateSettings />}
+              {pane === "updates" && (
+                <>
+                  <UpdateSettings />
+                  <UpdateCheckSection />
+                </>
+              )}
               {pane === "activity" && <AuditLog />}
               {pane === "logs" && <ServerLogSection />}
             </>

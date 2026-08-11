@@ -486,3 +486,9 @@
     border-bottom-color: var(--gold);
   }
 }
+
+/* A number field does not need the width of a path. */
+.set-input--num {
+  width: 84px;
+  text-align: right;
+}
