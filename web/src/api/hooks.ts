@@ -4,8 +4,10 @@ import {
   useMutation,
   useQueryClient,
   keepPreviousData,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
+import { isContainer } from "@/lib/kind";
 import type {
   ActivityStatus,
   AuditPage,
@@ -807,4 +809,42 @@ export function useDownloadUpdate() {
       qc.invalidateQueries({ queryKey: ["update"] });
     },
   });
+}
+
+/**
+ * fetchArtistQueue flattens an artist into a play queue: every track of every
+ * album, albums in the order the artist page lists them and tracks in the order
+ * the record plays.
+ *
+ * An artist's children are albums, so the ordinary Play all — which queues a
+ * container's directly-playable children — has nothing to work with and does
+ * not appear. This is the two-level version.
+ *
+ * It is a fetch rather than a hook because it runs when the button is pressed,
+ * not when the page opens. A prolific artist is thirty albums, and thirty
+ * requests to render a page whose Play all may never be pressed is a bad
+ * trade — where thirty requests on the press, once, cached afterwards by the
+ * same query keys the album pages use, costs nothing anybody notices on a LAN.
+ */
+export async function fetchArtistQueue(
+  qc: QueryClient,
+  albumIDs: number[],
+): Promise<number[]> {
+  const pages = await Promise.all(
+    albumIDs.map((id) =>
+      qc.fetchQuery({
+        // The same key useChildren uses for an album, so a record already
+        // opened is already here, and opening one later is served from this.
+        queryKey: ["children", id, "track"],
+        queryFn: () =>
+          apiGet<ItemsPage>(`/api/items?parent_id=${id}&sort=track`).then(
+            (r) => r.items,
+          ),
+      }),
+    ),
+  );
+  // Only leaves. An album containing anything other than tracks is not a shape
+  // the scanner produces today, but handing the player a container would be a
+  // silent failure rather than a loud one.
+  return pages.flat().filter((t) => !isContainer(t)).map((t) => t.id);
 }
