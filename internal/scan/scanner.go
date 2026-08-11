@@ -37,11 +37,16 @@ type Progress struct {
 	// nothing went wrong reading these files — but it is the one number that
 	// explains an empty library, and silence here is what let a music library
 	// created as a movie library report "0 items · scanned" over 1,592 tracks.
-	SkippedKind int     `json:"skipped_kind"`
-	Issues      []Issue `json:"issues,omitempty"`
-	StartedAt   int64   `json:"started_at"`
-	FinishedAt  *int64  `json:"finished_at,omitempty"`
-	Error       string  `json:"error,omitempty"`
+	SkippedKind int `json:"skipped_kind"`
+	// Playlists imported from .m3u files found in the library (ADR 0030).
+	// Reported for the same reason SkippedKind is: a scan that quietly imported
+	// nothing, or quietly imported forty, should not have to be inferred from
+	// the library page afterwards.
+	PlaylistsImported int     `json:"playlists_imported"`
+	Issues            []Issue `json:"issues,omitempty"`
+	StartedAt         int64   `json:"started_at"`
+	FinishedAt        *int64  `json:"finished_at,omitempty"`
+	Error             string  `json:"error,omitempty"`
 }
 
 // Issue is a file or directory the scan could not fully process. It carries a
@@ -169,6 +174,9 @@ func (s *Scanner) recordIssue(p *Progress, root, path, reason string) {
 }
 
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {
+	// .m3u files seen on the way past, imported once the tracks they reference
+	// exist. Never nil-checked below: ranging over an empty slice is a no-op.
+	var playlists []string
 	known, err := s.st.KnownFiles(ctx, lib.ID)
 	if err != nil {
 		return err
@@ -193,6 +201,16 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			return nil
 		}
 		if d.IsDir() {
+			return nil
+		}
+		// Playlists are not media and never become items on this pass — they are
+		// collected here and imported after the tracks exist, because an import
+		// resolves paths against rows the walk has not written yet. Collected
+		// during the walk rather than by a second one: a library is walked once,
+		// and a 200,000-file tree does not want traversing twice for the handful
+		// of .m3u files in it.
+		if isPlaylistFile(path) {
+			playlists = append(playlists, path)
 			return nil
 		}
 		// What the library is for decides what counts as media in it — a movie
@@ -301,6 +319,9 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		if err := s.applyTrackTags(ctx, lib, p); err != nil {
 			s.log.Warn("reading tags failed", "library", lib.ID, "error", err)
 		}
+		// After the tags, not before: an import resolves each line to an item
+		// by path, and on a first scan those rows are written by the pass above.
+		s.importPlaylists(ctx, lib, p, playlists)
 	}
 
 	// Pictures group by folder and nothing else (ADR 0028), so they take none of

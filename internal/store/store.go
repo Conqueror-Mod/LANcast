@@ -1082,10 +1082,19 @@ func (s *Store) IgnoredPaths(ctx context.Context, libraryID int64) (map[string]b
 // this can never touch a real movie or episode. It runs after reconciliation,
 // once children have been re-parented, so a container is pruned only when it is
 // genuinely orphaned rather than mid-rebuild.
+//
+// Playlists are exempt, for two reasons that both had to be true (ADR 0030).
+// Their members live in playlist_entry, not in parent_id or item_collection, so
+// every one of them looked empty here and was deleted at the end of the same
+// scan that imported it. And an empty playlist is a legitimate object anyway —
+// the importer creates one deliberately when none of its lines resolve, so that
+// a person can see it exists and find out why it is empty, rather than watching
+// their .m3u vanish in silence. "Empty" is not "orphaned" for this kind.
 func (s *Store) PruneEmptyContainers(ctx context.Context, libraryID int64) (int, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM media_item
 		WHERE library_id = ? AND container IS NULL
+		  AND kind != 'playlist'
 		  AND NOT EXISTS (SELECT 1 FROM media_item c WHERE c.parent_id = media_item.id)
 		  AND NOT EXISTS (SELECT 1 FROM item_collection ic WHERE ic.collection_id = media_item.id)`,
 		libraryID)
