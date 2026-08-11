@@ -86,6 +86,22 @@
   color: var(--text-faint);
 }
 
+/*
+ * The filename, shown only on rows whose title collides with another in the
+ * same list — see collidingTitles in TrackList.tsx. Quieter than the performer
+ * line and monospaced, because it is a file rather than prose and the eye is
+ * comparing two of them character by character, which is the whole job it has
+ * to do here.
+ */
+.track-row__file {
+  font-family: var(--font-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .track-row__time {
   color: var(--text-faint);
   font-size: 13px;

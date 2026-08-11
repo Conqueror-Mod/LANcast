@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
-import { useIsAdmin } from "@/api/hooks";
+import { useIsAdmin, useItem } from "@/api/hooks";
 import { clock } from "@/lib/format";
 import type { Item } from "@/api/types";
 import { RemoveDialog } from "./RemoveDialog";
@@ -21,23 +21,71 @@ function trackQueue(tracks: Item[]): string {
   return tracks.map((t) => t.id).join(",");
 }
 
+/*
+ * Titles that appear more than once in the same list.
+ *
+ * Embedded tags are the authoritative local source for music (ADR 0024), and
+ * real files lie: a folder here has You're Pretty When I'm Drunk.mp3 tagged
+ * title="Fire Water Burn" track=2, sitting beside the actual Fire Water Burn.
+ * The list then shows two rows that are identical except for their length,
+ * which reads as the application duplicating something rather than as the
+ * record being mis-tagged.
+ *
+ * That was survivable while a row could only be played. It is not now there is
+ * a delete control on each one: two indistinguishable rows, a destructive
+ * button apiece, and no way to tell which is the file whose tags are right.
+ *
+ * The detail page already answers this for films by showing the filename, on
+ * the grounds that a wrongly matched title cannot be corrected if you cannot
+ * tell which file it is. Same answer, applied only where it is needed — a
+ * correctly tagged record shows nothing extra.
+ */
+function collidingTitles(tracks: Item[]): Set<string> {
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const t of tracks) {
+    const key = (t.title ?? "").toLowerCase();
+    if (seen.has(key)) twice.add(key);
+    else seen.add(key);
+  }
+  return twice;
+}
+
 function TrackRow({
   track,
   queue,
   albumArtist,
   showNumbers,
+  ambiguous,
   onRemove,
 }: {
   track: Item;
   queue: string;
   albumArtist: string | undefined;
   showNumbers: boolean;
+  /** Another track in this list carries the same title. */
+  ambiguous: boolean;
   /** Admin only; absent for everyone else, and the control is not rendered. */
   onRemove?: (track: Item) => void;
 }) {
   const navigate = useNavigate();
   const play = () => navigate(`/watch/${track.id}?queue=${queue}`);
   const focusable = useFocusable(play);
+
+  /*
+   * The filename is detail-only — deliberately, since it is a fragment of the
+   * server's filesystem and the grid has no use for it. So the row fetches its
+   * own detail, and only when it has to: useItem(0) is disabled, so a row whose
+   * title is unique never asks.
+   *
+   * The alternative was adding file_name to every list response, which would
+   * put a base name on every poster in every grid in the application to serve a
+   * case that is rare by definition. This costs one request per colliding row,
+   * on the rare records that have any, cached afterwards by the same key the
+   * track's own detail page would use.
+   */
+  const { data: detail } = useItem(ambiguous ? track.id : 0);
+  const fileName = detail?.file_name;
 
   // A compilation has one album artist and a different performer per track —
   // which is exactly why the scanner groups on album artist (ADR 0024). Showing
@@ -80,6 +128,11 @@ function TrackRow({
       <span className="track-row__title">
         {track.title}
         {performer && <span className="track-row__artist">{performer}</span>}
+        {ambiguous && fileName && (
+          <span className="track-row__file" title={fileName}>
+            {fileName}
+          </span>
+        )}
       </span>
       <span className="track-row__time">
         {track.duration_ms ? clock(track.duration_ms / 1000) : ""}
@@ -132,6 +185,8 @@ export function TrackList({
   // numbering fault rather than a second disc. A release with no disc tag at
   // all stores 0, so a single-disc album has exactly one distinct value and
   // shows no heading.
+  const ambiguousTitles = collidingTitles(tracks);
+
   const discs = [...new Set(tracks.map((t) => t.season ?? 0))];
   const multiDisc = discs.length > 1;
 
@@ -153,6 +208,7 @@ export function TrackList({
                 queue={queue}
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}
+                ambiguous={ambiguousTitles.has((track.title ?? "").toLowerCase())}
                 onRemove={isAdmin ? setRemoving : undefined}
               />
             ))}
