@@ -268,8 +268,16 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 
 	video := r.Video()
 	audio := r.Audio()
+	// Whether a track other than the file's own has been asked for. Direct play
+	// serves the file's bytes and nothing else, so it cannot honour that choice:
+	// the browser opens the whole file and picks a track by its own rules. A
+	// second track that happens to be playable would then be selected in the UI
+	// and silently ignored in the output — the worst of the three outcomes,
+	// because it looks like it worked.
+	alternateAudio := false
 	if audioIndex >= 0 {
 		if s := r.AudioByIndex(audioIndex); s != nil {
+			alternateAudio = audio == nil || s.Index != audio.Index
 			audio = s
 		}
 	}
@@ -279,7 +287,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 	videoOK, videoWhy := videoCompatible(video, p)
 	audioOK, audioWhy := audioCompatible(audio, p)
 
-	if videoOK && audioOK && contains(p.Containers, r.Container) {
+	if videoOK && audioOK && contains(p.Containers, r.Container) && !alternateAudio {
 		return Decision{
 			Method: DirectPlay, Reason: "container and codecs are supported",
 			VideoAction: "copy", AudioAction: "copy", AudioOnly: audioOnly,
@@ -307,9 +315,18 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 	case videoCopyable && audioCopyable:
 		// The expensive part — the pixels — is already fine. Only the wrapper
 		// is wrong, and rewrapping is close to free.
+		//
+		// The container may in fact be fine and the rewrap happen only because
+		// a different audio track was asked for. Saying "the container is not
+		// supported" there would be a plain lie in the one place the user is
+		// shown a reason, so it says what actually forced it.
+		reason := fmt.Sprintf("%s container is not supported, but both codecs are", r.Container)
+		if alternateAudio && contains(p.Containers, r.Container) {
+			reason = "a different audio track was chosen, which direct play cannot select"
+		}
 		return Decision{
 			Method:      Remux,
-			Reason:      fmt.Sprintf("%s container is not supported, but both codecs are", r.Container),
+			Reason:      reason,
 			VideoAction: "copy", AudioAction: "copy", TargetFormat: "mp4",
 			AudioOnly: audioOnly,
 		}

@@ -223,6 +223,9 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 	res := probe.ResultWithStreams(it, streams)
 	audioIndex := queryIntDefault(r, "audio", -1)
 	if audioIndex >= 0 && res != nil && res.AudioByIndex(audioIndex) == nil {
+		// Also logged: same argument as the refusal below. A stale index after
+		// a rescan reads at the player as a file that simply stopped working.
+		s.log.Debug("transcode refused, no such audio track", "item", id, "audio", audioIndex)
 		writeError(w, http.StatusBadRequest, "bad_request", "no audio track at that index")
 		return playTarget{}, false
 	}
@@ -231,6 +234,15 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 	if decision.Method == probe.DirectPlay {
 		// Nothing to do. Transcoding a file the client can already play is
 		// pure waste, so say so rather than quietly burning CPU.
+		//
+		// Logged because this refusal is indistinguishable from a hang at the
+		// player: the element gets an error, playback stops, and nothing is
+		// recorded anywhere. A client asking to transcode something it was told
+		// to direct-play means the two disagree about the request — a seek that
+		// dropped its ?audio= did exactly that, and the silence here is what
+		// made it take a code read to find rather than a log read.
+		s.log.Debug("transcode refused, file direct-plays",
+			"item", id, "audio", audioIndex, "profile", clientProfile(r).Name)
 		writeError(w, http.StatusConflict, "conflict", "this file can be played directly")
 		return playTarget{}, false
 	}

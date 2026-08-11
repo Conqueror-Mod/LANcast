@@ -214,8 +214,19 @@ func TestPlaybackProfileChangesTheDecision(t *testing.T) {
 	if name, _, action := get("?profile=safari"); name != "safari" || action != "copy" {
 		t.Errorf("safari: profile = %q, video_action = %q; want safari/copy", name, action)
 	}
-	if name, method, _ := get("?profile=tv&audio=2"); name != "tv" || method != "direct" {
+	// A capable profile direct-plays this file as it stands: the TV profile
+	// carries HEVC, TrueHD and matroska, so nothing has to be touched.
+	if name, method, _ := get("?profile=tv"); name != "tv" || method != "direct" {
 		t.Errorf("tv: profile = %q, method = %q; want tv/direct", name, method)
+	}
+	// Naming the alternate track changes that answer even for a profile that
+	// could play everything, because direct play serves the file's bytes and
+	// cannot select a track — the device would pick for itself and the choice
+	// would be silently lost. This assertion used to read tv/direct with
+	// &audio=2, which is how the audio picker came to do nothing at all.
+	if name, method, action := get("?profile=tv&audio=2"); name != "tv" || method != "remux" || action != "copy" {
+		t.Errorf("tv+track: profile = %q, method = %q, video_action = %q; want tv/remux/copy",
+			name, method, action)
 	}
 	// An unrecognised profile falls back to the conservative default rather
 	// than erroring: a client naming a profile this build does not know should
