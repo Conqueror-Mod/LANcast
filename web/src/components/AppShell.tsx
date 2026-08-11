@@ -32,6 +32,21 @@ import "./AppShell.css";
 //
 // Library names still go straight to the full grid — hubs are a convenience,
 // never a gate (the deliberate fix for the main Plex complaint).
+/*
+ * The rail expands on hover *and* on focus-within, and a click leaves focus on
+ * the thing clicked — so choosing a library kept the rail open over the page it
+ * had just navigated to, until you clicked somewhere else to dismiss it.
+ *
+ * Dropping focus on the way out closes it. Only for a pointer click, which is
+ * what `detail > 0` distinguishes: a keyboard activation reports 0, and blurring
+ * there would throw a keyboard user back to the top of the document having just
+ * chosen where to go. Hover is unaffected either way — move the pointer off and
+ * it closes as it always did.
+ */
+function releaseRail(e: React.MouseEvent<HTMLElement>) {
+  if (e.detail > 0) e.currentTarget.blur();
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: libraries } = useLibraries();
   const { data: review } = useReview();
@@ -52,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           thing being read is never the thing being hovered. */}
       <aside className="app-shell__rail">
         <div className="app-shell__rail-inner">
-          <NavLink to="/" className="app-shell__brand" title="Home">
+          <NavLink to="/" className="app-shell__brand" title="Home" onClick={releaseRail}>
             <HomeIcon />
             <span className="app-shell__label">LANCAST</span>
           </NavLink>
@@ -68,6 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={lib.id}
                 to={`/library/${lib.id}`}
                 title={lib.name}
+                onClick={releaseRail}
                 className={({ isActive }) =>
                   "app-shell__lib" + (isActive ? " is-active" : "")
                 }
@@ -91,6 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLink
               to="/settings"
               title="Settings"
+              onClick={releaseRail}
               className={
                 "app-shell__lib" +
                 (location.pathname === "/settings" ? " is-active" : "")
