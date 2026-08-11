@@ -850,6 +850,44 @@ Whether a newer release exists. **Admin only.**
   "enabled": true }
 ```
 
+### `GET /api/items/{id}/trailer`
+
+The trailer for an identified item, looked up through the provider that
+identified it.
+
+```json
+{ "trailer": { "site": "YouTube", "key": "abc123", "name": "Official Trailer" } }
+```
+
+`trailer` is `null` when the item has no external id, the provider has no
+trailer for it, or the lookup failed — all three are the same answer to a
+client, which is "do not offer a trailer button". A failed lookup is **200 with
+a null**, never an error: a provider being unreachable must not turn a detail
+page into an error page over something optional.
+
+### `GET /api/enrich`
+
+A snapshot of the enrichment worker, for the activity display.
+
+```json
+{ "running": true, "enriched": 412, "failed": 3,
+  "remaining": 88, "total": 500, "updated_at": 1754870400 }
+```
+
+Poll it while `running` is true. `failed` counts items the providers could not
+identify, which is information rather than an error — an unmatched file is a
+review-queue entry, not a fault.
+
+### `POST /api/update/download`
+
+Fetches the release the last check found and stages it, without applying it.
+Admin only. The download is the slow half and the restart is the disruptive
+half, so they are separate calls: a client can stage an update while people are
+watching and restart when nobody is.
+
+Returns the staged version. Calling it with no update available is a no-op
+rather than an error — the check may simply have gone stale.
+
 ### `POST /api/update/restart`
 
 Finishes a staged update by restarting the server. **Admin only.** `202` once the
@@ -1147,7 +1185,7 @@ Served with `ETag: "{hash}"` and `Cache-Control: public, max-age=31536000,
 immutable`. Content addressing makes indefinite caching safe — the bytes behind
 a hash cannot change.
 
-### `GET` / `PUT /api/settings/providers`
+### `GET` / `PUT /api/settings`
 
 TMDB key, OpenSubtitles key, OMDb key (external ratings, [ADR 0019](adr/0019-external-ratings.md)),
 rate limit, and the per-library NFO write toggle.
@@ -1240,6 +1278,13 @@ source; film score audio does not, so films are identified but play only from a
 local file. See [ADR 0005](adr/0005-theme-music-sourcing.md).
 
 ### `GET /api/items/{id}/theme`
+
+> **Not implemented.** This endpoint is specified and has no handler: theme
+> music is blocked on OST identification ([ADR 0005](adr/0005-theme-music-sourcing.md)),
+> so the field it depends on is never populated. It is documented here because
+> the shape is decided, and a client must not build against it until this note
+> goes away. Requesting it today is a 404 from the router, not the `not_found`
+> described below.
 
 Streams the resolved theme audio. Returns `not_found` when
 `theme.available` is false — clients must treat that as silence, never as an
