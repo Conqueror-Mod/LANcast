@@ -224,6 +224,15 @@ func TestChosenAudioTrackDrivesTheDecision(t *testing.T) {
 }
 
 // A non-default AAC track must not inherit the default track's transcode.
+//
+// This asserted direct play until the picker was first exercised against a real
+// dual-audio file. It never encoded, which was the point of the test and is
+// still true — but direct play cannot *select* a track, so the guarantee it
+// claimed was being provided by the browser skipping a TrueHD track it could
+// not decode, rather than by us. Where both tracks are playable that accident
+// does not happen and the choice is silently ignored.
+//
+// It rewraps now: copy/copy, no encode, and the chosen track actually mapped.
 func TestChoosingACompatibleTrackAvoidsAnEncode(t *testing.T) {
 	r := result("mp4",
 		Stream{Index: 0, Kind: KindVideo, Codec: "h264", Height: 1080, Default: true},
@@ -231,8 +240,15 @@ func TestChoosingACompatibleTrackAvoidsAnEncode(t *testing.T) {
 		track(2, "aac", 6, false),
 	)
 
-	if d := DecideTrack(r, BrowserProfile(), 2); d.Method != DirectPlay {
-		t.Errorf("Method = %q (%s), want direct play — the chosen track is AAC", d.Method, d.Reason)
+	d := DecideTrack(r, BrowserProfile(), 2)
+	if d.Method != Remux {
+		t.Errorf("Method = %q (%s), want remux — the chosen track has to be mapped", d.Method, d.Reason)
+	}
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q, want copy — the chosen track is AAC and needs nothing", d.AudioAction)
+	}
+	if d.VideoAction != "copy" {
+		t.Errorf("VideoAction = %q, want copy", d.VideoAction)
 	}
 }
 
@@ -520,5 +536,89 @@ func TestHighBitDepthWAVIsConvertedForABrowserAndNotForATV(t *testing.T) {
 	}
 	if d := Decide(r, TVProfile()); d.Method != DirectPlay {
 		t.Errorf("tv: Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+// ---- choosing an audio track --------------------------------------------
+//
+// Direct play serves the file's bytes and nothing else, so it cannot deliver a
+// track other than the one the file leads with: the browser opens the whole
+// file and picks by its own rules. Deciding "direct play" for an explicitly
+// chosen alternate track therefore produces a picker that appears to work and
+// changes nothing — which is worse than one that fails, because nobody
+// investigates it.
+
+func audioTrack(index int, codec string, ch int, def bool) Stream {
+	return Stream{Kind: KindAudio, Index: index, Codec: codec, Channels: ch, Default: def}
+}
+
+// The case the dual-audio test file exercises: the second track is a codec the
+// browser cannot decode, so it has to be encoded whatever else happens.
+func TestChoosingAnUndecodableAudioTrackTranscodes(t *testing.T) {
+	r := result("mp4",
+		Stream{Kind: KindVideo, Index: 0, Codec: "h264", Width: 1920, Height: 1080, Default: true},
+		audioTrack(1, "aac", 2, true),
+		audioTrack(2, "ac3", 2, false),
+	)
+	d := DecideTrack(r, BrowserProfile(), 2)
+	if d.Method != Transcode {
+		t.Fatalf("Method = %q (%s), want transcode", d.Method, d.Reason)
+	}
+	if d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q, want encode — ac3 cannot be decoded", d.AudioAction)
+	}
+	if d.VideoAction != "copy" {
+		t.Errorf("VideoAction = %q, want copy — only the audio is the problem", d.VideoAction)
+	}
+}
+
+// The subtle one, and the reason this rule exists at all. Everything is
+// playable and the container is fine, so every other signal says direct play —
+// but direct play cannot select the second track, so it would be ignored in
+// silence.
+func TestChoosingAPlayableAlternateTrackStillRemuxes(t *testing.T) {
+	r := result("mp4",
+		Stream{Kind: KindVideo, Index: 0, Codec: "h264", Width: 1920, Height: 1080, Default: true},
+		audioTrack(1, "aac", 2, true),
+		audioTrack(2, "aac", 6, false),
+	)
+	d := DecideTrack(r, BrowserProfile(), 2)
+	if d.Method != Remux {
+		t.Fatalf("Method = %q (%s), want remux — direct play cannot select a track", d.Method, d.Reason)
+	}
+	if d.VideoAction != "copy" || d.AudioAction != "copy" {
+		t.Errorf("actions = %s/%s, want copy/copy — nothing needs re-encoding", d.VideoAction, d.AudioAction)
+	}
+	// The reason is shown to the user. Blaming the container here would be a
+	// lie: the container is supported and is not why this is being rewrapped.
+	if d.Reason != "a different audio track was chosen, which direct play cannot select" {
+		t.Errorf("Reason = %q, want the alternate-track reason", d.Reason)
+	}
+}
+
+// Asking for the track the file already leads with is not a change, and must
+// not cost a rewrap.
+func TestChoosingTheDefaultTrackStillDirectPlays(t *testing.T) {
+	r := result("mp4",
+		Stream{Kind: KindVideo, Index: 0, Codec: "h264", Width: 1920, Height: 1080, Default: true},
+		audioTrack(1, "aac", 2, true),
+		audioTrack(2, "ac3", 2, false),
+	)
+	d := DecideTrack(r, BrowserProfile(), 1)
+	if d.Method != DirectPlay {
+		t.Fatalf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+// No explicit choice is the ordinary case and must be untouched by any of this.
+func TestNoAudioChoiceIsUnaffected(t *testing.T) {
+	r := result("mp4",
+		Stream{Kind: KindVideo, Index: 0, Codec: "h264", Width: 1920, Height: 1080, Default: true},
+		audioTrack(1, "aac", 2, true),
+		audioTrack(2, "ac3", 2, false),
+	)
+	d := DecideTrack(r, BrowserProfile(), -1)
+	if d.Method != DirectPlay {
+		t.Fatalf("Method = %q (%s), want direct play", d.Method, d.Reason)
 	}
 }

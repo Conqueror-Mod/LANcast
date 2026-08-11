@@ -84,6 +84,26 @@ export function Player() {
     );
   }, []);
 
+  /*
+   * Which audio track is actually playing.
+   *
+   * `audioIndex` is null until you choose one, meaning "whatever the file leads
+   * with" — but that is still a real track, and something is coming out of the
+   * speakers. Marking the current row from `audioIndex` alone left *nothing*
+   * ticked the first time the picker was opened, which is every time on a file
+   * you have not already fiddled with: two tracks offered and no indication of
+   * which one you are listening to. The point of the picker is telling them
+   * apart.
+   *
+   * The file's own default is the stream flagged `default`, not simply the
+   * first one — a release with a commentary track first and the feature audio
+   * second is unusual but entirely legal. First is the fallback when nothing
+   * carries the flag.
+   */
+  const defaultAudio =
+    pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0];
+  const currentAudio = pb.audioIndex ?? defaultAudio?.index;
+
   // Leaving the player leaves it playing. That is the point of the change, and
   // it is why Back no longer stops anything.
   const close = useCallback(() => navigate(-1), [navigate]);
@@ -429,8 +449,11 @@ export function Player() {
               {pb.audioTracks.length > 1 && (
                 <div className="player__menu">
                   <button
+                    /* Engaged means "not the track this file leads with", so
+                       explicitly choosing the default does not light it. */
                     className={
-                      "player__icon" + (pb.audioIndex != null ? " is-on" : "")
+                      "player__icon" +
+                      (currentAudio !== defaultAudio?.index ? " is-on" : "")
                     }
                     onClick={() => setAudioOpen((o) => !o)}
                     aria-label="Audio track"
@@ -445,10 +468,10 @@ export function Player() {
                         <button
                           key={t.index}
                           role="menuitemradio"
-                          aria-checked={pb.audioIndex === t.index}
+                          aria-checked={currentAudio === t.index}
                           className={
                             "player__pop-item" +
-                            (pb.audioIndex === t.index ? " is-on" : "")
+                            (currentAudio === t.index ? " is-on" : "")
                           }
                           onClick={() => {
                             pb.selectAudio(t.index);

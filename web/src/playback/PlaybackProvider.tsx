@@ -409,8 +409,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
+        // The chosen audio track has to be part of the question. The decision
+        // depends on it — a file that direct-plays with its own track may have
+        // to be converted to deliver a different one — and asking without it
+        // got an answer about the wrong track: "direct play", followed by a
+        // request to /stream?audio=N, which serves the file's bytes and cannot
+        // select anything. The browser then picked a track by its own rules and
+        // the picker did nothing at all.
         const pb = await apiGet<{ decision: Decision }>(
-          withCapabilities(`/api/items/${item.id}/playback`),
+          withCapabilities(
+            `/api/items/${item.id}/playback` +
+              (audioIndex != null ? `?audio=${audioIndex}` : ""),
+          ),
         );
         if (cancelled) return;
         decision.current = pb.decision;
@@ -486,10 +496,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     offset.current = startedFrom.current;
     setSubOffset(startedFrom.current);
     setLoading(true);
-    v.src = sourceURL(item.id, "transcode", startedFrom.current);
+    // Same reason as the seek below: the retry is about whichever track is
+    // playing, not the file's default.
+    v.src = sourceURL(item.id, "transcode", startedFrom.current, audioIndex);
     v.load();
     void v.play().catch(() => {});
-  }, [item]);
+  }, [item, audioIndex]);
 
   // ---- seeking --------------------------------------------------------------
   const seekTo = useCallback(
@@ -502,7 +514,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setSubOffset(t);
         setCurrent(0);
         setLoading(true);
-        v.src = sourceURL(itemID, decision.current.method, t);
+        // audioIndex has to travel with the seek. Without it the request is
+        // about a different track than the one playing, and on a file whose
+        // default track direct-plays the server answers 409 "this file can be
+        // played directly" — so the seek dies, and with it the playback.
+        v.src = sourceURL(itemID, decision.current.method, t, audioIndex);
         v.load();
         void v.play().catch(() => {});
       } else {
@@ -510,7 +526,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
       saveProgress(true);
     },
-    [itemID, totalDuration, saveProgress],
+    [itemID, totalDuration, saveProgress, audioIndex],
   );
 
   const seekBy = useCallback(
