@@ -104,6 +104,22 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 
+/*
+ * A record is square and a film is 2:3, and forcing one into the other's frame
+ * is not a small thing: object-fit: cover took a 1:1 sleeve and cropped a third
+ * of it away, so an artist's borrowed cover arrived with its title sliced off.
+ *
+ * It also caused the empty page. A 280px poster at 2:3 is 420px tall, and an
+ * artist has nothing to put beside it — no year, no runtime, no rating, no
+ * genres, no overview, no cast — so the hero became a tall picture next to a
+ * title, and the discography sat below the fold behind 200px of nothing. Square
+ * halves that height, which is most of the fix on its own.
+ */
+.detail__poster--square {
+  width: 260px;
+  aspect-ratio: 1 / 1;
+}
+
 .detail__info {
   flex: 1;
   min-width: 0;

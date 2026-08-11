@@ -210,6 +210,19 @@ export function Detail() {
     runtime(item.duration_ms),
     item.content_rating ?? "",
     rating(item.rating) && `★ ${rating(item.rating)}`,
+    // What a container holds. Every other kind has something factual on this
+    // line; an artist had nothing at all — no year, no runtime, no rating, no
+    // certificate — so the page opened with a title and a button and asserted
+    // nothing about the thing you were looking at. "12 albums" is small, but it
+    // is the difference between a page and a heading.
+    //
+    // Counted from the children rather than from child_count so it can never
+    // disagree with the list directly beneath it, and only once they have
+    // arrived — a flash of "0 albums" is worse than a line that appears a beat
+    // late.
+    container && children && children.length > 0
+      ? `${children.length} ${childLabel(children[0].kind).toLowerCase()}`
+      : "",
   ].filter(Boolean);
 
   return (
@@ -229,7 +242,9 @@ export function Detail() {
         <div className="detail__hero">
           {poster && (
             <img
-              className="detail__poster"
+              className={
+                "detail__poster" + (isMusic ? " detail__poster--square" : "")
+              }
               src={poster}
               alt=""
               draggable={false}
