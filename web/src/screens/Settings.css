@@ -377,3 +377,112 @@
   white-space: pre;
   tab-size: 2;
 }
+
+/*
+ * The settings shell: categories down the left, one pane on the right.
+ *
+ * The nav is sticky rather than fixed — it scrolls with the page until it
+ * reaches the top and then holds, so a long pane (the log, the audit list)
+ * never scrolls its own categories out of reach, and a short one does not leave
+ * the column floating in space.
+ */
+.settings__layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 36px;
+}
+
+.settings__nav {
+  position: sticky;
+  top: 60px;
+  flex: none;
+  width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings__navgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings__navgroup .section-label {
+  margin-bottom: 6px;
+}
+
+/* A category is a destination, so it is marked the way destinations are marked
+   everywhere else in this client: gold on the leading edge, and nothing else
+   uses gold. Same language as the library rail, deliberately. */
+.settings__navitem {
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.settings__navitem:hover {
+  color: var(--text-primary);
+  background: rgba(242, 245, 251, 0.04);
+}
+
+.settings__navitem:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.settings__navitem.is-active {
+  color: var(--text-primary);
+  border-left-color: var(--gold);
+  background: rgba(242, 245, 251, 0.05);
+}
+
+.settings__pane {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The pane owns the spacing between its sections now that there is usually one
+   of them; the old stacked page relied on the section's own margin. */
+.settings__pane .settings__section:first-child {
+  margin-top: 0;
+}
+
+/* Narrow: the categories lie down above the pane rather than squeezing it into
+   a column too thin for a library row. */
+@media (max-width: 860px) {
+  .settings__layout {
+    flex-direction: column;
+    gap: 18px;
+  }
+  .settings__nav {
+    position: static;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .settings__navgroup {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .settings__navitem {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+  .settings__navitem.is-active {
+    border-left-color: transparent;
+    border-bottom-color: var(--gold);
+  }
+}
