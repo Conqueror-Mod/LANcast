@@ -1435,7 +1435,13 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 // nothing queries. Pictures joined it in ADR 0028: a gallery is assembled from
 // the folder its photos sit in, exactly as an album is assembled from its
 // tracks' tags.
-var derivedContainerKinds = map[string]bool{"artist": true, "album": true, "gallery": true}
+// A playlist is here for the same reason the others are: it is a container row
+// the scanner invents, keyed by a path, with no file of its own. For one
+// imported from an .m3u that path is the .m3u itself, which is what makes a
+// re-import update the playlist rather than accumulate a second one.
+var derivedContainerKinds = map[string]bool{
+	"artist": true, "album": true, "gallery": true, "playlist": true,
+}
 
 func (s *Store) EnsureDerivedContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string, parentID *int64) (int64, error) {
 	if !derivedContainerKinds[kind] {

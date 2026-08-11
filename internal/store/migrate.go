@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 16
+const CurrentSchemaVersion = 17
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -34,6 +34,7 @@ var migrations = []migration{
 	{version: 14, sql: schemaRevision14},
 	{version: 15, sql: schemaRevision15},
 	{version: 16, sql: schemaRevision16},
+	{version: 17, sql: schemaRevision17},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -485,4 +486,31 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_event(action, at DESC);
 const schemaRevision16 = `
 ALTER TABLE media_item ADD COLUMN taken_at INTEGER;
 CREATE INDEX IF NOT EXISTS idx_item_taken ON media_item(library_id, taken_at DESC);
+`
+
+// Playlist membership (ADR 0030).
+//
+// A playlist is kind = 'playlist' on media_item — no new item table, the third
+// media concept to manage that after music and pictures. Its membership cannot
+// reuse item_collection, and the reason is the whole point of this revision:
+// that table is keyed (item_id, collection_id), so it physically cannot hold
+// the same track twice. Correct for a collection, where a film belongs to a
+// franchise once. Wrong for a playlist, where a repeat is ordinary — a reprise,
+// a track that opens and closes a set.
+//
+// So this is keyed on POSITION rather than on membership, which is the
+// difference between the two concepts written in SQL.
+//
+// ON DELETE CASCADE on item_id means deleting a track removes it from every
+// playlist holding it. The alternative is a playlist that silently plays eleven
+// of its twelve entries, which is worse than one that visibly got shorter.
+const schemaRevision17 = `
+CREATE TABLE IF NOT EXISTS playlist_entry (
+    playlist_id INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    item_id     INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    ord         INTEGER NOT NULL,
+    PRIMARY KEY (playlist_id, ord)
+);
+
+CREATE INDEX IF NOT EXISTS idx_playlist_entry_item ON playlist_entry(item_id);
 `
