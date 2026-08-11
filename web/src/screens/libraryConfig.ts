@@ -42,11 +42,20 @@ const SHOW: LibraryKindConfig = {
 // The facet row needs no configuration. Facets return only values actually
 // present, so a tag-only music library yields no genres and no content ratings
 // and those chips simply do not render.
+// Year is gone for the same reason rating never appeared, and it should have
+// gone at the same time. A music library's top level is artists, and an artist
+// row carries no year: FillAlbumMetadata derives year for `kind = 'album'`
+// only, from the earliest year among its tracks. An artist has no equivalent
+// and nothing fills one.
+//
+// So "Year" ordered by a column that is NULL for every row, fell through to the
+// sort_title tie-breaker, and produced exactly the same list as "Title". Two of
+// the three options did the same thing, which is indistinguishable from sorting
+// being broken — and is what it was reported as.
 const MUSIC: LibraryKindConfig = {
   searchPlaceholder: "Search artists",
   sorts: [
     { value: "title", label: "Title" },
-    { value: "year", label: "Year" },
     { value: "added", label: "Recently added" },
   ],
 };

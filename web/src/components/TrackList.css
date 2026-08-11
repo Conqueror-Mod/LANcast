@@ -98,3 +98,55 @@
 .track-row--played .track-row__title {
   color: var(--text-muted);
 }
+
+/*
+ * A row is a line: the play button, and an admin's remove control beside it.
+ * The play button keeps the whole width it had, so nothing shifts for a
+ * non-admin and the hit target for playing is unchanged.
+ */
+.track-line {
+  display: flex;
+  align-items: stretch;
+}
+
+.track-line .track-row {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * Quiet until wanted. Deleting a track is not something to advertise on every
+ * line of a record — but it must be reachable by keyboard, so it appears on
+ * focus as well as on hover, and it is never display:none, which would take it
+ * out of the tab order entirely.
+ */
+.track-line__remove {
+  flex: none;
+  width: 32px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.track-line:hover .track-line__remove,
+.track-line__remove:focus-visible {
+  opacity: 1;
+}
+
+.track-line__remove:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.track-line__remove:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}

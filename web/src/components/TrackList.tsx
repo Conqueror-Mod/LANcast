@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
+import { useIsAdmin } from "@/api/hooks";
 import { clock } from "@/lib/format";
 import type { Item } from "@/api/types";
+import { RemoveDialog } from "./RemoveDialog";
 import "./TrackList.css";
 
 // A record is a numbered list, not a grid. Rendering an album's tracks as
@@ -23,11 +26,14 @@ function TrackRow({
   queue,
   albumArtist,
   showNumbers,
+  onRemove,
 }: {
   track: Item;
   queue: string;
   albumArtist: string | undefined;
   showNumbers: boolean;
+  /** Admin only; absent for everyone else, and the control is not rendered. */
+  onRemove?: (track: Item) => void;
 }) {
   const navigate = useNavigate();
   const play = () => navigate(`/watch/${track.id}?queue=${queue}`);
@@ -42,7 +48,18 @@ function TrackRow({
 
   const played = track.progress?.watched ?? false;
 
+  /*
+   * A row is a line containing a play button and, for an admin, a remove
+   * control beside it — not one button, which is what it used to be. A button
+   * cannot contain a button, and the removal has to be a separate control
+   * rather than a click target inside the play target, or pressing it would
+   * play the track it is meant to delete.
+   *
+   * Same shape as the subtitle menu's rows (.submenu__line), for the same
+   * reason and deliberately not a second pattern.
+   */
   return (
+    <div className="track-line">
     <button
       {...focusable}
       className={
@@ -68,6 +85,17 @@ function TrackRow({
         {track.duration_ms ? clock(track.duration_ms / 1000) : ""}
       </span>
     </button>
+      {onRemove && (
+        <button
+          className="track-line__remove"
+          onClick={() => onRemove(track)}
+          aria-label={`Remove ${track.title}`}
+          title="Remove this track"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -79,6 +107,20 @@ export function TrackList({
   albumArtist?: string;
 }) {
   const queue = trackQueue(tracks);
+  const isAdmin = useIsAdmin();
+  /*
+   * Removal was already permitted for a track — canRemove on the detail page
+   * allows it, and RemoveDialog already offers the two answers a duplicate
+   * needs: drop it from the library, or delete the file. It was simply
+   * unreachable, because a track row's only action is play and nothing
+   * navigates to a track's page. So the capability existed and could not be
+   * used, which is indistinguishable from not having it.
+   *
+   * One dialog for the list rather than one per row: only one can be open, and
+   * a RemoveDialog mounted per track would be a hundred dialogs on a long
+   * record.
+   */
+  const [removing, setRemoving] = useState<Item | null>(null);
 
   // Numbering is shown when at least one track has a number. A record where no
   // file was tagged with one — a folder of downloads, typically — has no
@@ -111,10 +153,22 @@ export function TrackList({
                 queue={queue}
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}
+                onRemove={isAdmin ? setRemoving : undefined}
               />
             ))}
         </div>
       ))}
+
+      {removing && (
+        <RemoveDialog
+          item={removing}
+          onClose={() => setRemoving(null)}
+          // Deleting invalidates "children", so the list refetches without this
+          // component knowing how it is loaded. Nothing to navigate away from:
+          // the record outlives the track.
+          onDone={() => setRemoving(null)}
+        />
+      )}
     </div>
   );
 }
