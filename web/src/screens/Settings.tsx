@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useLibraries,
   useSettings,
@@ -10,6 +11,7 @@ import {
   useScanStatus,
   useProbeStatus,
   useReprobe,
+  useHealth,
   useCurrentUser,
   useIsAdmin,
   useUsers,
@@ -538,13 +540,17 @@ function AccountSection() {
 
 // The metadata, playback, and library sections all read admin-only settings, so
 // they live in a child that members never mount.
-function AdminSections() {
+// Each of these is its own pane now, so the component renders one at a time.
+// Kept as one component rather than three because all three read the same two
+// queries — splitting would triple the fetches to save a prop.
+function AdminSections({ pane }: { pane: string }) {
   const { data: libraries } = useLibraries();
   const { data: settings } = useSettings(true);
   const update = useUpdateSettings();
 
   return (
     <>
+      {pane === "libraries" && (
       <section className="settings__section">
         <span className="section-label">Libraries</span>
         {libraries?.map((lib) => (
@@ -552,7 +558,9 @@ function AdminSections() {
         ))}
         <AddLibrary />
       </section>
+      )}
 
+      {pane === "metadata" && (
       <section className="settings__section">
         <span className="section-label">Metadata</span>
         {settings && (
@@ -599,7 +607,9 @@ function AdminSections() {
           </>
         )}
       </section>
+      )}
 
+      {pane === "playback" && (
       <section className="settings__section">
         <span className="section-label">Playback</span>
         {settings && (
@@ -630,6 +640,7 @@ function AdminSections() {
           </div>
         )}
       </section>
+      )}
 
     </>
   );
@@ -1046,25 +1057,249 @@ function ServerLogSection() {
   );
 }
 
+
+/*
+ * Server identity. /api/health has returned the version since the beginning and
+ * nothing ever asked for it, so a settings page could not tell you which server
+ * it was configuring — the first question anyone has when something behaves
+ * unexpectedly after an update.
+ */
+function GeneralSection() {
+  const { data: health } = useHealth();
+  return (
+    <section className="settings__section">
+      <span className="section-label">Server</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Version</div>
+          <div className="set-row__sub">
+            {health ? `LANcast ${health.version}` : "…"}
+          </div>
+        </div>
+      </div>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">API version</div>
+          <div className="set-row__sub">
+            {/* Shown because it is the number a third-party client is built
+                against (ADR 0018), and the only place it was visible before was
+                a response header nobody reads. */}
+            {health ? health.api_version : "…"}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/*
+ * Two settings the server has always accepted and validated, and that no
+ * control has ever reached: the provider rate limit and the update check. Both
+ * were editable only by hand-editing config.json — which is the same
+ * "capability with no path to it" that hid track deletion, arrived at from the
+ * configuration side rather than the UI side.
+ *
+ * Separate sections rather than surgery inside AdminSections. They re-read the
+ * same queries, which react-query serves from one cache entry, so the cost of
+ * keeping the edit contained is nothing.
+ */
+function RateLimitSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  if (!settings) return null;
+  return (
+    <section className="settings__section">
+      <span className="section-label">Provider requests</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Rate limit</div>
+          <div className="set-row__sub">
+            Requests per second to TMDB, OMDb and OpenSubtitles. Lower this if a
+            provider starts refusing; the server rejects anything above 50.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <input
+            className="set-input set-input--num"
+            type="number"
+            min={1}
+            max={50}
+            step={1}
+            defaultValue={settings.rate_per_sec}
+            aria-label="Provider requests per second"
+            // On blur rather than on change: this is a number field, and
+            // committing every keystroke would PATCH "1" on the way to "12"
+            // and briefly throttle the server to a crawl.
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 1 && v <= 50 && v !== settings.rate_per_sec) {
+                update.mutate({ rate_per_sec: v });
+              } else {
+                e.target.value = String(settings.rate_per_sec);
+              }
+            }}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UpdateCheckSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  if (!settings) return null;
+  return (
+    <section className="settings__section">
+      <span className="section-label">Update checks</span>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={settings.update_check}
+          onChange={(e) => update.mutate({ update_check: e.target.checked })}
+        />
+        Check for new LANcast releases
+      </label>
+      <div className="set-row__sub">
+        Turning this off stops the server contacting GitHub. Nothing else here
+        reaches the internet on its own.
+      </div>
+    </section>
+  );
+}
+
+/*
+ * The settings shell.
+ *
+ * Everything used to be one column: eight sections stacked in a single scroll,
+ * so finding the log meant passing every library, every provider key and every
+ * user on the way down, and the page got longer with each release. Plex answers
+ * this with a vertical list of categories on the left, and the answer is right —
+ * settings are looked up, not read through.
+ *
+ * The pane lives in the URL, like every other view state in this client, so a
+ * category is linkable and survives a reload.
+ *
+ * Two groups, split by who the setting belongs to rather than by subject: the
+ * server, which is shared and admin-only, and this device, which is yours and
+ * affects nobody else. That distinction is the one that actually matters when
+ * two people use the same server, and it is invisible in a flat list.
+ */
+interface Pane {
+  id: string;
+  label: string;
+  admin?: boolean;
+}
+
+const SERVER_PANES: Pane[] = [
+  { id: "general", label: "General", admin: true },
+  { id: "libraries", label: "Libraries", admin: true },
+  { id: "metadata", label: "Metadata", admin: true },
+  { id: "playback", label: "Playback", admin: true },
+  { id: "users", label: "Users", admin: true },
+  { id: "addons", label: "Add-ons", admin: true },
+  { id: "updates", label: "Updates", admin: true },
+  { id: "activity", label: "Activity", admin: true },
+  { id: "logs", label: "Logs", admin: true },
+];
+
+const DEVICE_PANES: Pane[] = [
+  { id: "account", label: "Account" },
+  { id: "app", label: "This app" },
+  { id: "keyboard", label: "Keyboard" },
+];
+
+// DesktopSettings renders nothing in a browser tab — there is no tray to reduce
+// to and no close button LANcast owns. Offering the category anyway would give a
+// browser user a heading that leads to an empty column, which is the same fault
+// the player's controls avoid by appearing only when they can act. Asked the
+// same way the component asks itself, so the two cannot disagree.
+function desktopAvailable(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof (window as { lancastDesktopState?: unknown }).lancastDesktopState ===
+      "function"
+  );
+}
+
 export function Settings() {
   const isAdmin = useIsAdmin();
+  const [params, setParams] = useSearchParams();
+
+  const server = isAdmin ? SERVER_PANES : [];
+  const device = DEVICE_PANES.filter(
+    (x) => x.id !== "app" || desktopAvailable(),
+  );
+  const all = [...server, ...device];
+  // An unknown or absent pane falls back to the first one the user may see,
+  // rather than rendering an empty column — a link to an admin pane followed by
+  // a demotion should land somewhere, not nowhere.
+  const requested = params.get("pane") ?? "";
+  const pane = all.some((x) => x.id === requested)
+    ? requested
+    : (all[0]?.id ?? "account");
+
+  const go = (id: string) =>
+    setParams(
+      (prev) => {
+        prev.set("pane", id);
+        return prev;
+      },
+      { replace: true },
+    );
+
+  const navGroup = (label: string, panes: Pane[]) =>
+    panes.length > 0 && (
+      <div className="settings__navgroup">
+        <span className="section-label">{label}</span>
+        {panes.map((x) => (
+          <button
+            key={x.id}
+            className={
+              "settings__navitem" + (pane === x.id ? " is-active" : "")
+            }
+            aria-current={pane === x.id ? "page" : undefined}
+            onClick={() => go(x.id)}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+    );
 
   return (
     <div className="settings">
       <h1 className="settings__title">Settings</h1>
-      {isAdmin && (
-        <>
-          <AdminSections />
-          <AddonsSection />
-          <UsersSection />
-          <UpdateSettings />
-          <AuditLog />
-          <ServerLogSection />
-        </>
-      )}
-      <DesktopSettings />
-      <AccountSection />
-      <KeyboardSection />
+
+      <div className="settings__layout">
+        <nav className="settings__nav" aria-label="Settings categories">
+          {navGroup("Server", server)}
+          {navGroup("This device", device)}
+        </nav>
+
+        <div className="settings__pane">
+          {isAdmin && (
+            <>
+              {pane === "general" && <GeneralSection />}
+              <AdminSections pane={pane} />
+              {pane === "metadata" && <RateLimitSection />}
+              {pane === "users" && <UsersSection />}
+              {pane === "addons" && <AddonsSection />}
+              {pane === "updates" && (
+                <>
+                  <UpdateSettings />
+                  <UpdateCheckSection />
+                </>
+              )}
+              {pane === "activity" && <AuditLog />}
+              {pane === "logs" && <ServerLogSection />}
+            </>
+          )}
+          {pane === "account" && <AccountSection />}
+          {pane === "app" && <DesktopSettings />}
+          {pane === "keyboard" && <KeyboardSection />}
+        </div>
+      </div>
     </div>
   );
 }

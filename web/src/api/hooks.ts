@@ -885,3 +885,17 @@ export async function fetchLibraryTracks(
   }
   return ids;
 }
+
+// Server identity. /api/health has always returned this and nothing has ever
+// asked — so the settings page could not say which version it was talking to.
+export function useHealth() {
+  return useQuery({
+    queryKey: ["health"],
+    queryFn: ({ signal }) =>
+      apiGet<{ status: string; version: string; api_version: number }>(
+        "/api/health",
+        signal,
+      ),
+    staleTime: 60_000,
+  });
+}
