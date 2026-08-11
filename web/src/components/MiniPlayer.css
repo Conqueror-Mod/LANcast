@@ -20,7 +20,23 @@
   border: 1px solid var(--gold-dormant);
   border-radius: var(--radius-panel);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
+  /*
+   * Not `overflow: hidden`, which is what it was.
+   *
+   * The volume popover opens upward out of the strip — bottom: calc(100% + 8px)
+   * on a control near the bottom edge of the screen, because there is nowhere
+   * else for it to go. Clipping the strip clipped the popover with it: the
+   * slider rendered, took the space, and was invisible and unreachable, leaving
+   * a sliver showing where it crossed the boundary. A control you can see the
+   * edge of and cannot use reads as broken rather than absent, which is the one
+   * outcome the whole "hidden unless it can act" rule exists to avoid.
+   *
+   * Nothing needed the clipping. The title and subtitle carry their own
+   * overflow/ellipsis (they are the only things that can overrun), and the
+   * rounded corners are drawn by border-radius on a background, which does not
+   * need clipping to hold its shape.
+   */
+  overflow: visible;
 }
 
 .mini__open {
@@ -116,16 +132,24 @@
   right: -6px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 5px 8px;
   background: var(--space-raised);
   border: 1px solid var(--gold-dormant);
   border-radius: var(--radius-panel);
   box-shadow: var(--elev-3);
 }
 
+/* The same slider the full player uses: a 4px track with the gold accent. It
+   had a width and nothing else, so it fell back to Chrome's default range
+   control — twice the height, a large pale thumb, and the browser's blue rather
+   than any colour in this design. Two volume sliders in one application should
+   not be two different objects. */
 .mini__volume-slider {
-  width: 96px;
+  width: 88px;
+  height: 4px;
+  accent-color: var(--gold);
+  cursor: pointer;
 }
 
 .mini__controls {
