@@ -95,6 +95,52 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* The second step. It replaces the × in place rather than opening anything, so
+   the row does not move and the choice is where the pointer already is. */
+.submenu__confirm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
+}
+
+.submenu__confirm-yes,
+.submenu__confirm-no {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  padding: 4px 7px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+/* The destructive half is the one that has to be read, so it carries the
+   weight. Not gold: gold is where you are, never what something does. */
+.submenu__confirm-yes {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.18);
+  font-weight: 600;
+}
+
+.submenu__confirm-yes:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.submenu__confirm-yes:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.submenu__confirm-no {
+  color: var(--text-muted);
+}
+
+.submenu__confirm-no:hover {
+  color: var(--text-primary);
+}
+
 .submenu__search-open {
   margin-top: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);

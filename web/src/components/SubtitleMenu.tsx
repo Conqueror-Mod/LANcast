@@ -34,6 +34,11 @@ export function SubtitleMenu({
 }: Props) {
   const [mode, setMode] = useState<"list" | "search">("list");
   const del = useDeleteSubtitle(itemID);
+  // The row whose × has been pressed once. Deleting a downloaded file is not
+  // undoable — it has to be searched for and fetched again — and the × sits one
+  // button away from the row you press to *play* that file, in a popover where
+  // the pointer is already moving quickly. A single click was too cheap for it.
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   if (mode === "search") {
     return (
@@ -70,20 +75,42 @@ export function SubtitleMenu({
           {sub && <span className="submenu__sub">{sub}</span>}
         </span>
       </button>
-      {removable && (
-        <button
-          className="submenu__del"
-          title="Remove this downloaded subtitle"
-          aria-label="Remove subtitle"
-          disabled={del.isPending}
-          onClick={() => {
-            if (activeKey === key) onSelect(null);
-            del.mutate(key as string);
-          }}
-        >
-          ×
-        </button>
-      )}
+      {removable &&
+        (confirming === key ? (
+          // Two steps, in place. A modal for one subtitle file would be heavier
+          // than the thing it guards, and this menu is itself a popover — the
+          // confirmation stays where the eye already is.
+          <span className="submenu__confirm">
+            <button
+              className="submenu__confirm-yes"
+              disabled={del.isPending}
+              onClick={() => {
+                if (activeKey === key) onSelect(null);
+                del.mutate(key as string, {
+                  onSettled: () => setConfirming(null),
+                });
+              }}
+            >
+              Delete
+            </button>
+            <button
+              className="submenu__confirm-no"
+              onClick={() => setConfirming(null)}
+              aria-label="Keep this subtitle"
+            >
+              Keep
+            </button>
+          </span>
+        ) : (
+          <button
+            className="submenu__del"
+            title="Remove this downloaded subtitle"
+            aria-label={`Remove subtitle ${label}`}
+            onClick={() => setConfirming(key)}
+          >
+            ×
+          </button>
+        ))}
     </div>
   );
 
