@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useItem,
@@ -6,6 +7,7 @@ import {
   useChildren,
   useCollectionMembers,
   useIsAdmin,
+  fetchArtistQueue,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
@@ -107,6 +109,29 @@ export function Detail() {
     container && isCollection,
   );
   const children = isCollection ? members : parentChildren;
+
+  // ---- an artist's Play all -------------------------------------------------
+  const isArtist = item?.kind === "artist";
+  const albumIDs = isArtist ? (children ?? []).map((c) => c.id) : [];
+  const qc = useQueryClient();
+  const [queueing, setQueueing] = useState(false);
+  const playArtist = useCallback(async () => {
+    if (queueing) return;
+    setQueueing(true);
+    try {
+      const queue = await fetchArtistQueue(qc, albumIDs);
+      if (queue.length > 0) {
+        navigate(`/watch/${queue[0]}?queue=${queue.join(",")}`);
+      }
+    } finally {
+      // Cleared even on failure: a button stuck reading "Gathering…" forever is
+      // a worse answer than one that simply did not work and can be pressed
+      // again.
+      setQueueing(false);
+    }
+    // albumIDs is rebuilt each render; its contents are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qc, albumIDs.join(","), navigate, queueing]);
 
   const [fixOpen, setFixOpen] = useState(false);
   // The picture currently in the banner, and the one the viewer opened at.
@@ -288,6 +313,19 @@ export function Detail() {
                         .join(",")}`,
                     )
                   }
+                />
+              )}
+              {/* An artist's children are albums, so the rule above finds
+                  nothing playable and offers nothing — the same reason a show
+                  offers nothing over its seasons. But a discography is a
+                  perfectly ordinary thing to put on, where "every episode of
+                  this programme" is not, so the artist gets the two-level
+                  version: every track of every album, records in the order
+                  shown and tracks in the order they play. */}
+              {isArtist && albumIDs.length > 0 && (
+                <PlayButton
+                  label={queueing ? "Gathering…" : "Play all"}
+                  onPlay={playArtist}
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}

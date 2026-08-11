@@ -46,8 +46,30 @@
   padding: 20px 28px 56px;
 }
 
+/*
+ * Back stays reachable.
+ *
+ * Returning from a played item now lands you where you left off, which on a
+ * long track list is a long way from the top — and the only way out of the page
+ * was a button up there. Sticky is the whole fix: it sits in the flow until the
+ * page scrolls past it, then holds.
+ *
+ * It sticks *below* the app-shell top bar, not over it. It cannot go over:
+ * .detail__body carries z-index 1 and so opens a stacking context, which traps
+ * any z-index in here below the bar's 10 no matter how large. The offset clears
+ * the bar's height (16px padding, twice, around a 13px line) with a little air.
+ * A magic number, but the honest kind — the alternative is dismantling the
+ * layering that gives fanart its scrim.
+ *
+ * It needs a ground of its own: a bare button with a title scrolling under it
+ * is unreadable within a line or two. The ground is the void colour, so it
+ * reads as the page's own surface rather than a floating chip, per ADR 0027.
+ */
 .detail__back {
-  background: none;
+  position: sticky;
+  top: 60px;
+  background: rgba(5, 7, 15, 0.72);
+  backdrop-filter: blur(6px);
   border: 1px solid transparent;
   border-radius: var(--radius-tile);
   color: var(--text-muted);

@@ -2,7 +2,14 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
 import type { ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
-import { LibraryIcon, HomeIcon } from "./LibraryIcon";
+import { useScrollRestoration } from "@/lib/useScrollRestoration";
+import {
+  LibraryIcon,
+  HomeIcon,
+  SettingsIcon,
+  AccountIcon,
+  SignOutIcon,
+} from "./LibraryIcon";
 import "./AppShell.css";
 
 // The shell: a vertical rail of places, and a top bar of state.
@@ -14,8 +21,14 @@ import "./AppShell.css";
 // third one shorter. Vertically each name gets its own line and stops fighting.
 //
 // The top bar holds what is true right now rather than where you can go: what
-// needs review, what the server is doing, settings, and who you are signed in
-// as. Those were already on the right and stay there.
+// needs review, and what the server is doing. Both are transient and both are
+// about the moment, so they stay at the top where a glance finds them.
+//
+// Settings, who you are, and signing out went to the foot of the rail. They are
+// destinations and an action *about you*, not state — and every application
+// that has a rail puts that group at the bottom of it, which is a convention
+// worth obeying rather than being interesting about. It also stops the top bar
+// being a drawer of leftovers.
 //
 // Library names still go straight to the full grid — hubs are a convenience,
 // never a gate (the deliberate fix for the main Plex complaint).
@@ -26,6 +39,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const logout = useLogout();
   const location = useLocation();
   const reviewCount = review?.total ?? 0;
+  // Back returns you to where you were, and a new page starts at the top.
+  // Neither is the browser's default in a single-page app; see the hook.
+  useScrollRestoration();
 
   return (
     <div className="app-shell">
@@ -66,6 +82,51 @@ export function AppShell({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
+
+          {/* The foot of the rail. `margin-top: auto` puts it against the
+              bottom edge however many libraries there are, and it collapses to
+              icons with everything else — the labels use the same class, so
+              they appear and disappear on the same hover. */}
+          <div className="app-shell__foot">
+            <NavLink
+              to="/settings"
+              title="Settings"
+              className={
+                "app-shell__lib" +
+                (location.pathname === "/settings" ? " is-active" : "")
+              }
+            >
+              <SettingsIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                Settings
+              </span>
+            </NavLink>
+
+            {user && (
+              <>
+                {/* The name is a destination in waiting — the profile page —
+                    so it is shaped like one rather than like a label. */}
+                <div className="app-shell__lib app-shell__whoami" title={`Signed in as ${user.name}`}>
+                  <AccountIcon />
+                  <span className="app-shell__lib-name app-shell__label">
+                    {user.name}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="app-shell__lib app-shell__signout"
+                  onClick={() => logout.mutate()}
+                  disabled={logout.isPending}
+                  title="Sign out"
+                >
+                  <SignOutIcon />
+                  <span className="app-shell__lib-name app-shell__label">
+                    Sign out
+                  </span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -81,34 +142,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               Review<span className="app-shell__badge">{reviewCount}</span>
             </NavLink>
           )}
+          {/* Stays put. The activity tracker is the one thing here that is
+              genuinely live, and moving it would cost the glance that finds it
+              while something is scanning. */}
           <ActivityPanel />
-          <NavLink
-            to="/settings"
-            className={
-              "app-shell__settings" +
-              (location.pathname === "/settings" ? " is-active" : "")
-            }
-          >
-            Settings
-          </NavLink>
-          {user && (
-            <div className="app-shell__account">
-              <span
-                className="app-shell__user"
-                title={`Signed in as ${user.name}`}
-              >
-                {user.name}
-              </span>
-              <button
-                type="button"
-                className="app-shell__signout"
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending}
-              >
-                Sign out
-              </button>
-            </div>
-          )}
         </header>
         <main className="app-shell__main">{children}</main>
       </div>

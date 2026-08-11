@@ -93,3 +93,59 @@ export function HomeIcon() {
     </svg>
   );
 }
+
+// The foot of the rail: settings, who you are, and the way out. Same 20-unit
+// grid and same stroke weight as the library glyphs above, because they sit in
+// the same column and any difference in weight reads as a mistake.
+function RailGlyph({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      className="rail-icon"
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+// A gear, reduced to a ring and six teeth. More teeth than that turns to mush
+// at 18px, which is the only size this is ever drawn at.
+export function SettingsIcon() {
+  return (
+    <RailGlyph>
+      <circle cx="10" cy="10" r="2.6" />
+      <path d="M10 2.6v2.1M10 15.3v2.1M17.4 10h-2.1M4.7 10H2.6M15.2 4.8l-1.5 1.5M6.3 13.7l-1.5 1.5M15.2 15.2l-1.5-1.5M6.3 6.3L4.8 4.8" />
+    </RailGlyph>
+  );
+}
+
+// Head and shoulders. Deliberately not a filled avatar: this is a person, not
+// a photograph, and a filled shape here would out-weigh the gear beside it.
+export function AccountIcon() {
+  return (
+    <RailGlyph>
+      <circle cx="10" cy="7" r="3" />
+      <path d="M4.5 16.5c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8" />
+    </RailGlyph>
+  );
+}
+
+// A door with the arrow leaving it. The arrow points out of the frame, which is
+// the half people actually read.
+export function SignOutIcon() {
+  return (
+    <RailGlyph>
+      <path d="M12 3.5H5.5v13H12" />
+      <path d="M9.5 10h8" />
+      <path d="M15 7.2 17.8 10 15 12.8" />
+    </RailGlyph>
+  );
+}

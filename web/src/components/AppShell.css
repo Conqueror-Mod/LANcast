@@ -140,7 +140,6 @@
   opacity: 1;
 }
 
-.app-shell__settings,
 .app-shell__review {
   font-size: 13px;
   color: var(--text-muted);
@@ -186,7 +185,6 @@
 }
 
 .app-shell__lib:hover,
-.app-shell__settings:hover,
 .app-shell__review:hover {
   color: var(--text-secondary);
 }
@@ -213,7 +211,6 @@
   box-shadow: 0 0 0 2px var(--gold-ring) inset;
 }
 
-.app-shell__settings.is-active,
 .app-shell__review.is-active {
   color: var(--text-primary);
   border-bottom-color: var(--gold);
@@ -250,43 +247,43 @@
   padding: 8px 28px 48px;
 }
 
-/* The signed-in account sits at the far right. The name is quiet content type;
-   Sign out is a neutral control that earns a gold ring only on hover/focus. */
-.app-shell__account {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: 20px;
+/*
+ * The foot of the rail: settings, who you are, the way out.
+ *
+ * They are rail rows, sharing .app-shell__lib so the gold left edge, the hover
+ * ground and the label collapse are the one implementation rather than three
+ * that agree by coincidence. margin-top: auto pins the group to the bottom
+ * whatever the library count, and the hairline separates it from destinations
+ * without drawing a second surface.
+ */
+.app-shell__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(242, 245, 251, 0.06);
 }
 
-.app-shell__user {
-  font-size: 12px;
-  color: var(--text-muted);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-shell__signout {
+/* Sign out is a <button> and settings a link; neither may look it. */
+.app-shell__foot .app-shell__lib {
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  background: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Who you are is not a control yet — no pointer, no hover lift. It becomes a
+   link when the profile page exists, and then this rule goes. */
+.app-shell__whoami {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.app-shell__whoami:hover {
   color: var(--text-muted);
   background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-tile);
-  padding: 4px 10px;
-  cursor: pointer;
-  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
-    box-shadow var(--dur-fast) ease;
-}
-
-.app-shell__signout:hover:not(:disabled),
-.app-shell__signout:focus {
-  color: var(--text-primary);
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-ring);
-  outline: none;
 }
 
 .app-shell__signout:disabled {
