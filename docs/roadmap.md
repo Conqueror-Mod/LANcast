@@ -290,6 +290,21 @@ group is not priority.
 
 ### Libraries and media types
 
+- **Playlists, and importing `.m3u`** — **decided, not built**
+  ([ADR 0030](adr/0030-playlists-and-m3u.md), accepted). A playlist is
+  `kind = 'playlist'` on `media_item`, the third media concept to need no new
+  *item* table — but membership needs one, because `item_collection` is keyed
+  `(item_id, collection_id)` and so cannot hold the same track twice, which is
+  ordinary in a playlist and impossible in a collection. Schema revision 17. An
+  `.m3u` on disk is an **import, not a mirror**: the database is the truth, a
+  scanned file seeds a playlist once and is not watched afterwards, and a
+  rescan must never undo an edit — locked fields, applied to membership. An
+  unresolvable path is counted and reported, never silently skipped. The parser
+  is built and tested (`internal/playlist`, fifteen dialect cases including
+  refusing our own HLS playlists and resolving Windows paths on Linux); nothing
+  calls it yet. Still open inside the ADR: whether playlists are per-user or
+  server-wide — accepted as server-wide, the smaller claim, narrowable later.
+
 - ~~**Wide-scope audio codec support** — MP3, FLAC, WAV.~~ — **done**: eleven
   audio formats scanned, and audio containers are first class in the playback
   profile so a FLAC is not re-encoded to deliver a format every browser plays.
