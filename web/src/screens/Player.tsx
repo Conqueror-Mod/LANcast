@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
@@ -43,13 +48,46 @@ export function Player() {
   // that item, which is what makes returning from the mini-player continuous
   // rather than a restart.
   //
+  /*
+   * A queue arrives one of two ways.
+   *
+   * ?queue= is the original, and stays: it is short, it survives a reload, and
+   * it makes an album or a season a linkable thing. It does not scale. "Play
+   * all" over a music library is every track in it — a few thousand ids is tens
+   * of kilobytes of URL, and history entries are not the place for that.
+   *
+   * So a large queue is handed over in history state instead, which is held in
+   * memory and never parsed by anything. It cannot be linked to, and that is
+   * the honest trade: "everything in this library, shuffled" is not a thing
+   * anyone bookmarks, where "this album from track 4" is.
+   *
+   * State wins when both are present. Nothing sends both.
+   */
+  const handoff = (useLocation().state ?? null) as {
+    queue?: number[];
+    shuffle?: boolean;
+  } | null;
+  const stateQueue = handoff?.queue;
+  const stateShuffle = handoff?.shuffle;
+
   const queueParam = searchParams.get("queue");
-  const { play } = pb;
+  const { play, setShuffle } = pb;
   useEffect(() => {
     if (!itemID) return;
-    const queue = queueParam ? queueParam.split(",").map(Number) : [itemID];
+    const queue =
+      stateQueue && stateQueue.length > 0
+        ? stateQueue
+        : queueParam
+          ? queueParam.split(",").map(Number)
+          : [itemID];
     play(itemID, queue);
-  }, [itemID, queueParam, play]);
+    // Only when the caller said so. Shuffle otherwise belongs to the session —
+    // starting an album should not silently clear a shuffle you had turned on.
+    if (stateShuffle !== undefined) setShuffle(stateShuffle);
+    // stateQueue is stable for a history entry; its length identifies it well
+    // enough to avoid re-running on an unrelated render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemID, queueParam, play, setShuffle, stateQueue?.length, stateShuffle]);
 
   // **The URL is not kept in step with the queue, deliberately.**
   //

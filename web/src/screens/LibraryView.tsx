@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useInfiniteItems, useFacets, useRecentPhotos } from "@/api/hooks";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteItems,
+  useFacets,
+  useRecentPhotos,
+  fetchLibraryTracks,
+} from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterChips } from "@/components/FilterChips";
+import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
 import "./Browse.css";
@@ -35,6 +42,42 @@ export function LibraryView({
   const decades = params.getAll("decade");
   const contentRatings = params.getAll("content_rating");
   const unwatched = params.get("watched") === "false";
+
+  /*
+   * Putting a whole music library on.
+   *
+   * "Play all" is the library in title order; "Shuffle" is the same queue with
+   * the player's own shuffle turned on rather than a second randomiser beside
+   * it — so turning shuffle off afterwards gives the ordered library back,
+   * which is the behaviour that already exists everywhere else.
+   *
+   * Shuffle also starts somewhere random. Starting a randomised library at
+   * whatever happens to be alphabetically first would make every shuffle open
+   * with the same song, and that reads as a broken shuffle however random the
+   * rest of it is.
+   *
+   * The queue is handed over in history state rather than in ?queue=: every
+   * track of a library is far too much URL. See the Player.
+   */
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const isMusic = library.kind === "music";
+  const [gathering, setGathering] = useState<"play" | "shuffle" | null>(null);
+
+  const playEverything = async (shuffle: boolean) => {
+    if (gathering) return;
+    setGathering(shuffle ? "shuffle" : "play");
+    try {
+      const ids = await fetchLibraryTracks(qc, libraryID);
+      if (ids.length === 0) return;
+      const startAt = shuffle ? Math.floor(Math.random() * ids.length) : 0;
+      navigate(`/watch/${ids[startAt]}`, { state: { queue: ids, shuffle } });
+    } finally {
+      // Cleared even on failure, so a button cannot sit reading "Gathering…"
+      // for the rest of the session.
+      setGathering(null);
+    }
+  };
 
   const { data: facets } = useFacets(libraryID);
   const {
@@ -202,6 +245,28 @@ export function LibraryView({
       </div>
 
       <div className="browse__filters">
+        {/* Music only. "Play all" over a film library is not a thing anybody
+            wants, and over a picture library it is nonsense. */}
+        {isMusic && (
+          <div className="browse__playall">
+            <button
+              className="browse__playall-btn"
+              onClick={() => void playEverything(false)}
+              disabled={gathering !== null}
+            >
+              <span aria-hidden="true">▶</span>{" "}
+              {gathering === "play" ? "Gathering…" : "Play all"}
+            </button>
+            <button
+              className="browse__playall-btn"
+              onClick={() => void playEverything(true)}
+              disabled={gathering !== null}
+            >
+              <ShuffleGlyph size={15} />{" "}
+              {gathering === "shuffle" ? "Gathering…" : "Shuffle"}
+            </button>
+          </div>
+        )}
         <label className="browse__filter">
           <span>Sort</span>
           <select
