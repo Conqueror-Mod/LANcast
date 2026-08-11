@@ -848,3 +848,40 @@ export async function fetchArtistQueue(
   // silent failure rather than a loud one.
   return pages.flat().filter((t) => !isContainer(t)).map((t) => t.id);
 }
+
+/**
+ * fetchLibraryTracks returns every track id in a library, in title order.
+ *
+ * Pages rather than asking for everything at once: `limit` is capped at 500 by
+ * the API, and a library larger than that would otherwise be silently truncated
+ * — the worst kind of bug, because "Play all" would work perfectly and quietly
+ * leave out the last nine thousand songs.
+ */
+export async function fetchLibraryTracks(
+  qc: QueryClient,
+  libraryID: number,
+): Promise<number[]> {
+  const PAGE = 500;
+  const ids: number[] = [];
+  let offset = 0;
+  for (;;) {
+    const params = new URLSearchParams({
+      library_id: String(libraryID),
+      kind: "track",
+      sort: "title",
+      limit: String(PAGE),
+      offset: String(offset),
+    });
+    const page = await qc.fetchQuery({
+      queryKey: ["library-tracks", libraryID, offset],
+      queryFn: () => apiGet<ItemsPage>(`/api/items?${params.toString()}`),
+    });
+    ids.push(...page.items.map((t) => t.id));
+    offset += page.items.length;
+    // Stop on the server's own total, and stop on an empty page regardless —
+    // a total that disagrees with what is returned must not become a loop that
+    // never ends.
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+  return ids;
+}

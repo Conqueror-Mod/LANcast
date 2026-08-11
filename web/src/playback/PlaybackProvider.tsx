@@ -112,6 +112,9 @@ interface PlaybackState {
   selectAudio: (index: number | null) => void;
   setSpeed: (rate: number) => void;
   toggleShuffle: () => void;
+  /** Set shuffle outright. A caller starting a randomised queue cannot use a
+   *  toggle: it would turn shuffle *off* if it happened to be on already. */
+  setShuffle: (on: boolean) => void;
   cycleRepeat: () => void;
   playNext: () => void;
   playPrev: () => void;
@@ -369,6 +372,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const playFromQueue = useCallback((id: number) => setItemID(id), []);
 
   const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
+  const setShuffleMode = useCallback((on: boolean) => setShuffle(on), []);
   const cycleRepeat = useCallback(
     () => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")),
     [],
@@ -762,6 +766,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     selectAudio,
     setSpeed,
     toggleShuffle,
+    setShuffle: setShuffleMode,
     cycleRepeat,
     playNext,
     playPrev,

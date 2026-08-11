@@ -130,3 +130,50 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/*
+ * Play all / Shuffle, on a music library only. They sit at the head of the
+ * filter row rather than beside the title: they act on whatever the row below
+ * describes, so they belong with the controls, not with the heading.
+ */
+.browse__playall {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 6px;
+}
+
+.browse__playall-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(242, 245, 251, 0.05);
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  padding: 7px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.browse__playall-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+/* Gold on focus and nothing else — it marks where you are, never what a
+   control does. */
+.browse__playall-btn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.browse__playall-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
