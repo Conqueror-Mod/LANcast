@@ -533,6 +533,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		photoSoon()
 	})
 
+	// Periodic library scans, when the operator has asked for them.
+	go periodicScan(ctx, st, scanner, settings, log)
+
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
 	trans.Start(ctx)
@@ -832,4 +835,63 @@ func applyStagedUpdate(dataDir string, log *slog.Logger) {
 	}
 	log.Info("staged update applied; it takes effect on the next start",
 		"version", m.Version, "files", len(m.Files))
+}
+
+// periodicScan rescans every library on the configured interval.
+//
+// Off by default and off when the interval is zero: LANcast scans when asked
+// and when a library is created, and a timer is for a server whose media
+// arrives by other means — a downloader, a sync job, another machine's writes.
+//
+// The interval is re-read every tick rather than captured at boot, so changing
+// it in Settings takes effect without a restart; the ticker itself runs at a
+// fixed short period for the same reason. A scan already running is skipped
+// rather than queued: Scanner.Start answers ErrBusy, and a timer that stacks up
+// scans behind a slow one turns a quiet server into a permanently scanning one.
+func periodicScan(ctx context.Context, st *store.Store, scanner *scan.Scanner,
+	settings *config.SettingsStore, log *slog.Logger) {
+
+	const tick = time.Minute
+	last := time.Time{}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			hours := settings.Get().ScanIntervalHours
+			if hours <= 0 {
+				// Off. The clock is not started until it is switched on, so
+				// enabling it does not immediately fire a scan for a period
+				// that elapsed while the feature was disabled.
+				last = time.Time{}
+				continue
+			}
+			if last.IsZero() {
+				last = now
+				continue
+			}
+			if now.Sub(last) < time.Duration(hours)*time.Hour {
+				continue
+			}
+			last = now
+
+			libs, err := st.ListLibraries(ctx)
+			if err != nil {
+				log.Error("periodic scan: list libraries", "error", err)
+				continue
+			}
+			for _, lib := range libs {
+				if _, err := scanner.Start(lib); err != nil {
+					// ErrBusy is the ordinary case for a library still
+					// scanning, and is not worth an error line every hour.
+					log.Debug("periodic scan skipped", "library", lib.ID, "error", err)
+					continue
+				}
+				log.Info("periodic scan started", "library", lib.ID, "every_hours", hours)
+			}
+		}
+	}
 }

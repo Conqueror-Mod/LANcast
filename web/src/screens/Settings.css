@@ -492,3 +492,11 @@
   width: 84px;
   text-align: right;
 }
+
+/* A hint that belongs to the toggle above it rather than to a set-row, used
+   where the control is a checkbox and the explanation is longer than its
+   label. */
+.set-row__sub--standalone {
+  padding: 0 2px 6px;
+  max-width: 620px;
+}

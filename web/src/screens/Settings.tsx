@@ -557,6 +557,43 @@ function AdminSections({ pane }: { pane: string }) {
           <LibraryRow key={lib.id} library={lib} />
         ))}
         <AddLibrary />
+
+        {settings && (
+          <>
+            <RuleSelect
+              title="Rescan libraries automatically"
+              sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."
+              value={settings.scan_interval_hours}
+              options={[
+                { value: 0, label: "Never" },
+                { value: 1, label: "Hourly" },
+                { value: 6, label: "Every 6 hours" },
+                { value: 12, label: "Every 12 hours" },
+                { value: 24, label: "Daily" },
+                { value: 168, label: "Weekly" },
+              ]}
+              onChange={(v) => update.mutate({ scan_interval_hours: v })}
+            />
+            {/* The switch that decides whether this server can destroy media at
+                all. Off is a real answer, and it was not available before:
+                every install could delete files from disk through the API. */}
+            <label className="set-toggle">
+              <input
+                type="checkbox"
+                checked={settings.allow_media_deletion}
+                onChange={(e) =>
+                  update.mutate({ allow_media_deletion: e.target.checked })
+                }
+              />
+              Allow deleting media files from disk
+            </label>
+            <div className="set-row__sub set-row__sub--standalone">
+              When off, removing a title takes it out of the library and leaves
+              every file where it is. Nothing on this server can then delete
+              your media.
+            </div>
+          </>
+        )}
       </section>
       )}
 
@@ -639,10 +676,154 @@ function AdminSections({ pane }: { pane: string }) {
             </div>
           </div>
         )}
+
+        {settings && (
+          <>
+            {/* Applied by the server on every progress write, so every client
+                agrees about what is finished — the reason this is here and not
+                in each player. */}
+            <RuleSelect
+              title="Counts as watched at"
+              sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."
+              value={settings.watched_threshold}
+              options={[
+                { value: 70, label: "70%" },
+                { value: 80, label: "80%" },
+                { value: 85, label: "85%" },
+                { value: 90, label: "90%" },
+                { value: 95, label: "95%" },
+                { value: 100, label: "100% — only at the end" },
+              ]}
+              onChange={(v) => update.mutate({ watched_threshold: v })}
+            />
+            <RuleNumber
+              title="Weeks to keep in Continue Watching"
+              sub="Anything untouched for longer drops off the shelf. 0 keeps everything for ever — the half hour of a documentary you abandoned in March is not something you are in the middle of, and it pushes out what you paused last night."
+              value={settings.continue_weeks}
+              min={0}
+              max={520}
+              onCommit={(v) => update.mutate({ continue_weeks: v })}
+            />
+            <RuleNumber
+              title="Items in Continue Watching"
+              sub="How many the shelf holds at most. A client may ask for fewer; it cannot ask for more."
+              value={settings.continue_limit}
+              min={1}
+              max={100}
+              onCommit={(v) => update.mutate({ continue_limit: v })}
+            />
+          </>
+        )}
       </section>
       )}
 
     </>
+  );
+}
+
+/*
+ * A server rule with a fixed set of answers.
+ *
+ * A select rather than a free number field, for the settings where the useful
+ * values are few and the useless ones are harmful: a watched threshold of 3%
+ * marks a library watched, and nobody wanted 3%. Where a range genuinely is a
+ * range (weeks, items) the field is a number and the server validates it —
+ * these are the ones where the list *is* the vocabulary.
+ */
+function RuleSelect({
+  title,
+  sub,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  sub: string;
+  value: number;
+  options: { value: number; label: string }[];
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">{title}</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        <select
+          className="set-select"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(Number(e.target.value))}
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * A server rule that is a number in a range.
+ *
+ * Committed on blur and on Enter rather than per keystroke: saving "1" on the
+ * way to typing "16" is a write that means nothing, and with continue_weeks it
+ * is a write that briefly empties somebody's shelf. Out-of-range input is put
+ * back rather than sent — the server rejects it anyway, and a field that snaps
+ * back says so faster than a toast.
+ */
+function RuleNumber({
+  title,
+  sub,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  title: string;
+  sub: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">{title}</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        <input
+          className="set-input"
+          type="number"
+          min={min}
+          max={max}
+          // Uncontrolled, keyed on the server's value: the field is the user's
+          // while they are typing in it, and the server's again once they are
+          // done. A controlled input here fights every keystroke.
+          key={value}
+          defaultValue={value}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          onBlur={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isInteger(v) && v >= min && v <= max && v !== value) {
+              onCommit(v);
+            } else {
+              e.target.value = String(value);
+            }
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

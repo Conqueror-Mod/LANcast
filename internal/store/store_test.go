@@ -193,7 +193,7 @@ func TestContinueWatching(t *testing.T) {
 	must(st.SaveProgress(ctx, e, "local", 1500, false))
 	must(st.MarkMissing(ctx, []int64{e}))
 
-	got, err := st.ContinueWatching(ctx, "local", 20)
+	got, err := st.ContinueWatching(ctx, "local", 20, 0)
 	if err != nil {
 		t.Fatalf("ContinueWatching: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestContinueWatching(t *testing.T) {
 	}
 
 	// A different user shares no progress.
-	other, err := st.ContinueWatching(ctx, "someone-else", 20)
+	other, err := st.ContinueWatching(ctx, "someone-else", 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

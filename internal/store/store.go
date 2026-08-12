@@ -1270,7 +1270,12 @@ func (s *Store) CollectionsOf(ctx context.Context, itemID int64) ([]Item, error)
 // first: everything they have started but not finished. "Started" means a saved
 // position past zero; "not finished" means the watched flag is unset, so an item
 // played to the end drops off the shelf rather than inviting a replay.
-func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int) ([]Item, error) {
+// sinceUnix drops anything untouched before that time, or 0 for no cutoff — the
+// configured Continue Watching window (config.Settings.ContinueWeeks). Filtered
+// in SQL rather than after the fact so the limit applies to what survives: a
+// shelf of 40 that is 39 abandoned documentaries and one real row is the bug
+// this window exists to prevent, and trimming afterwards reproduces it exactly.
+func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, sinceUnix int64) ([]Item, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -1278,8 +1283,9 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int) 
 		FROM media_item mi
 		JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
 		WHERE ps.position_ms > 0 AND ps.watched = 0 AND mi.missing = 0
+		  AND (? = 0 OR ps.updated_at >= ?)
 		ORDER BY ps.updated_at DESC
-		LIMIT ?`, userID, limit)
+		LIMIT ?`, userID, sinceUnix, sinceUnix, limit)
 	if err != nil {
 		return nil, fmt.Errorf("continue watching: %w", err)
 	}
