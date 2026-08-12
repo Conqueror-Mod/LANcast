@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useItem } from "@/api/hooks";
 import type { MediaStream } from "@/api/types";
 import "./QueuePanel.css";
@@ -18,6 +19,26 @@ export function QueuePanel({
   currentID: number;
   onPick: (id: number) => void;
 }) {
+  /*
+   * Open the panel on the track that is playing, not on the top of the list.
+   *
+   * The current row was always marked; on a queue of a dozen that was enough.
+   * On "shuffle the whole library" it is 1,591 rows and the marked one is eight
+   * hundred down, so the panel opened on a wall of songs with no indication
+   * that any of them was the one you could hear. A highlight nobody can reach
+   * is the same as no highlight.
+   *
+   * `block: "center"` rather than "nearest": the useful thing about opening
+   * here is seeing what comes *next*, which means the current row wants room
+   * beneath it.
+   */
+  const currentRow = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    currentRow.current?.scrollIntoView({ block: "center" });
+    // On open only. Re-running as the queue advances would drag the list out
+    // from under someone who had scrolled off to look at something else.
+  }, []);
+
   return (
     <div className="queue" role="menu" aria-label="Queue">
       <div className="queue__head">
@@ -31,6 +52,7 @@ export function QueuePanel({
             id={id}
             position={i + 1}
             current={id === currentID}
+            rowRef={id === currentID ? currentRow : undefined}
             onPick={onPick}
           />
         ))}
@@ -43,17 +65,20 @@ function QueueRow({
   id,
   position,
   current,
+  rowRef,
   onPick,
 }: {
   id: number;
   position: number;
   current: boolean;
+  rowRef?: React.RefObject<HTMLButtonElement>;
   onPick: (id: number) => void;
 }) {
   const { data: item } = useItem(id);
   return (
     <button
       role="menuitem"
+      ref={rowRef}
       className={"queue__row" + (current ? " is-current" : "")}
       onClick={() => onPick(id)}
       aria-current={current ? "true" : undefined}

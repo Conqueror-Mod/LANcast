@@ -12,6 +12,7 @@ import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
+import { shuffledStartingWith, nextAfter } from "./queueOrder";
 
 // Playback lives above the router.
 //
@@ -95,6 +96,10 @@ interface PlaybackState {
   repeat: RepeatMode;
   /** Item ids queued behind this one, in play order. */
   queue: number[];
+  /** The queue as it will actually play: shuffled when shuffle is on, and the
+   *  same array as `queue` when it is off. Anything *showing* the queue must
+   *  use this, or it describes an order that is not going to happen. */
+  playOrder: number[];
   /** Whether there is anything to move to in each direction. */
   hasNext: boolean;
   hasPrev: boolean;
@@ -305,12 +310,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // different each time it was pressed.
   const order = useMemo(() => {
     if (!shuffle) return queue;
-    const out = queue.slice();
-    for (let i = out.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
+    // Starting with what is playing, so nothing shuffled in front of it is
+    // stranded — see shuffledStartingWith.
+    return shuffledStartingWith(queue, itemID);
+    // itemID is deliberately absent: re-shuffling every time the track changes
+    // would make "next" mean something different on each press. The order is
+    // fixed when shuffle is turned on, or when the queue itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shuffle, queue.join(",")]);
 
@@ -328,19 +333,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [itemID]);
 
   const advanceQueue = useCallback((): boolean => {
-    const idx = order.indexOf(itemID);
-    if (idx < 0) return false;
-    if (idx + 1 < order.length) {
-      setItemID(order[idx + 1]);
-      return true;
-    }
-    // End of the queue. "all" wraps; "off" stops, which is what finishing an
-    // album should do rather than starting it again.
-    if (repeat === "all" && order.length > 0) {
-      setItemID(order[0]);
-      return true;
-    }
-    return false;
+    const next = nextAfter(order, itemID, repeat);
+    if (next == null) return false;
+    setItemID(next);
+    return true;
   }, [order, itemID, repeat]);
 
   const playNext = useCallback(() => {
@@ -751,6 +747,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     shuffle,
     repeat,
     queue,
+    playOrder: order,
     hasNext,
     hasPrev,
     play,

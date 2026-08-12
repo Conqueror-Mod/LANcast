@@ -436,7 +436,12 @@ export function Player() {
                     </button>
                     {queueOpen && (
                       <QueuePanel
-                        ids={pb.queue}
+                        // The order that will play, not the order it was
+                        // gathered in. With shuffle on these differ, and a
+                        // panel showing the wrong one is not a cosmetic bug: it
+                        // is a list of what is coming next that is wrong about
+                        // what is coming next.
+                        ids={pb.playOrder}
                         currentID={pb.itemID}
                         onPick={(id) => {
                           pb.playFromQueue(id);
