@@ -79,7 +79,7 @@ Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md
 - **member** — browse, play, and their own watch state. A member calling an
   admin-only endpoint gets `403 forbidden`.
 
-Admin-only endpoints: `GET /api/browse`; `POST`/`DELETE /api/libraries…`, library
+Admin-only endpoints: `GET /api/browse`; `POST` and `DELETE` on `/api/libraries`, library
 `scan` and `refresh`; item metadata mutation (`PATCH /api/items/{id}`, lock
 delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 `/api/users`. Everything else a signed-in member may call.
@@ -1273,7 +1273,7 @@ it takes effect immediately (the registry reloads).
 { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] }
 ```
 
-### `POST /api/plugins/{name}/enable` · `/disable`
+### `POST /api/plugins/{name}/enable` · `POST /api/plugins/{name}/disable`
 
 Flip a plugin on or off. `204`; the registry reloads. `404` if unknown.
 
