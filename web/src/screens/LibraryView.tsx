@@ -51,10 +51,9 @@ export function LibraryView({
    * it — so turning shuffle off afterwards gives the ordered library back,
    * which is the behaviour that already exists everywhere else.
    *
-   * Shuffle also starts somewhere random. Starting a randomised library at
-   * whatever happens to be alphabetically first would make every shuffle open
-   * with the same song, and that reads as a broken shuffle however random the
-   * rest of it is.
+   * Shuffle opens on a random song because the shuffled order begins with
+   * whatever it was handed and the rest follows at random — one randomiser, not
+   * two.
    *
    * The queue is handed over in history state rather than in ?queue=: every
    * track of a library is far too much URL. See the Player.
@@ -70,8 +69,12 @@ export function LibraryView({
     try {
       const ids = await fetchLibraryTracks(qc, libraryID);
       if (ids.length === 0) return;
-      const startAt = shuffle ? Math.floor(Math.random() * ids.length) : 0;
-      navigate(`/watch/${ids[startAt]}`, { state: { queue: ids, shuffle } });
+      // Always the first track. Shuffle does the randomising, and it moves
+      // whatever is playing to the front of its order — so picking a random
+      // start here as well was a second randomiser doing nothing, and until the
+      // order started with the current track it actively stranded everything
+      // shuffled in front of it.
+      navigate(`/watch/${ids[0]}`, { state: { queue: ids, shuffle } });
     } finally {
       // Cleared even on failure, so a button cannot sit reading "Gathering…"
       // for the rest of the session.
