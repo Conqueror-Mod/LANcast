@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
+import { Playlists } from "@/screens/Playlists";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
 import { Settings } from "@/screens/Settings";
@@ -36,6 +37,9 @@ export function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/library/:id" element={<Browse />} />
+          {/* A page *of* a library, not a global one: a playlist belongs to the
+              library its tracks and its .m3u live in (ADR 0030). */}
+          <Route path="/library/:id/playlists" element={<Playlists />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />

@@ -270,6 +270,19 @@ export function LibraryView({
             </button>
           </div>
         )}
+        {/* Playlists, beside the play controls rather than in a tab strip: the
+            header already carries search, a sort and the facet row, and a tab
+            strip would compete with the facets for the same line and the same
+            gesture. Only where the config says so — a control that leads to an
+            empty grid in every library anyone has is spent space. */}
+        {config.playlists && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/playlists`)}
+          >
+            Playlists
+          </button>
+        )}
         <label className="browse__filter">
           <span>Sort</span>
           <select

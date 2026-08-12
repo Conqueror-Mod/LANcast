@@ -11,6 +11,17 @@ export interface SortOption {
 export interface LibraryKindConfig {
   searchPlaceholder: string;
   sorts: SortOption[];
+  /**
+   * Whether this library offers a Playlists page.
+   *
+   * On for music and off everywhere else. Nothing stops a film library holding
+   * a playlist — the kind is not restricted server-side — but a control that
+   * leads to an empty grid in every library anyone actually has is spent space,
+   * and the top of a library screen is the most contested row in the client.
+   * The flag exists so turning it on elsewhere is one word, on the day someone
+   * asks.
+   */
+  playlists?: boolean;
 }
 
 // Sort values the API supports (title | year | added | rating).
@@ -54,6 +65,7 @@ const SHOW: LibraryKindConfig = {
 // being broken — and is what it was reported as.
 const MUSIC: LibraryKindConfig = {
   searchPlaceholder: "Search artists",
+  playlists: true,
   sorts: [
     { value: "title", label: "Title" },
     { value: "added", label: "Recently added" },

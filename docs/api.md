@@ -866,8 +866,15 @@ into one row and silently shorten the playlist; key on position.
 
 Entries come back in playing order, so no `sort` is needed or accepted here.
 
-`child_count` is **0** for a playlist. It counts `parent_id` children, which a
-playlist has none of; the entry count comes from the entries themselves.
+`child_count` is the **number of entries**, counting repeats — so a set that
+opens and closes with the same song counts it twice, exactly as the entry
+listing returns it twice.
+
+It was 0 before v0.6.12, on the grounds that the field counts `parent_id`
+children and a playlist has none. That was true about the implementation and
+useless to a client, which reads the field as "how many things are in this" and
+had no way to ask. Entries whose file is currently **missing** are counted: a
+playlist does not shorten itself because a drive is unplugged.
 
 Playlists found on disk as `.m3u` files are imported on scan, and the database
 is the source of truth afterwards — editing one in LANcast locks its membership
