@@ -8,8 +8,9 @@ multi-user accounts (admin/member roles) are built, and branding & splash shippe
 All of it is released: the repository is **public under MIT**, releases are
 **signed**, the client **opens its own window by default**, and the server can
 **check for, download, verify and stage an update** that swaps itself in on the
-way down. Nothing sits unreleased on `main`. Details in the areas below; what
-the pass taught is at the end.
+way down. **Playlist editing** sits on `main` unreleased — v0.6.9 shipped
+playlists you could import and play but not change. Details in the areas below;
+what the pass taught is at the end.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -314,6 +315,26 @@ group is not priority.
   cursor to become a *position* rather than an id: `indexOf` always finds the
   first occurrence, so a track appearing twice used to send playback backwards
   and strand everything after it.
+- ~~**Editing a playlist**~~ — **built**, on `main` after v0.6.9, which shipped
+  playlists that could be imported and played and not changed. Five writes:
+  create, add, reorder, remove an entry, delete the list. Entries are addressed
+  by **position**, not by item id, for the same reason the queue cursor is — an
+  id does not name a row in the one listing that may hold the same id twice —
+  and a removal resequences so a position stays the index the client rendered.
+  Every membership write **locks `members` before writing**, which is what stops
+  the next scan re-importing the `.m3u` over the edit; a rescan against the real
+  test libraries confirms it, re-importing the untouched playlist beside it and
+  leaving the edited one alone, with the `.m3u` on disk byte-identical.
+  Deletion is its own route rather than `DELETE /api/items/{id}`, whose modes
+  are about *files*: one would delete the seeding `.m3u`, the other ignore-list
+  it. The writes need a session but **no particular role** — the admin gate is
+  for filesystem access and account control, and a playlist edit is neither —
+  which stands until ADR 0030's open question about per-user playlists is
+  decided. In the client, playlist rows gain reorder and remove-from-list
+  controls (buttons, not a drag: a d-pad cannot drag), numbered by position
+  rather than by the track numbers they carried on their own records, and any
+  playable item gains **Add to playlist**, which appends and can create the list
+  on the way.
 - ~~**Wide-scope audio codec support** — MP3, FLAC, WAV.~~ — **done**: eleven
   audio formats scanned, and audio containers are first class in the playback
   profile so a FLAC is not re-encoded to deliver a format every browser plays.
