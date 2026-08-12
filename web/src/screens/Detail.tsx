@@ -8,6 +8,7 @@ import {
   useCollectionMembers,
   useIsAdmin,
   fetchArtistQueue,
+  usePlaylistEntries,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
@@ -108,7 +109,15 @@ export function Detail() {
     itemID,
     container && isCollection,
   );
-  const children = isCollection ? members : parentChildren;
+  // A playlist's entries come from playlist_entry, not parent_id — and unlike
+  // every other container they may repeat (ADR 0030).
+  const isPlaylist = item?.kind === "playlist";
+  const { data: entries } = usePlaylistEntries(itemID, isPlaylist);
+  const children = isPlaylist
+    ? entries
+    : isCollection
+      ? members
+      : parentChildren;
 
   // ---- an artist's Play all -------------------------------------------------
   const isArtist = item?.kind === "artist";
@@ -395,10 +404,14 @@ export function Detail() {
                 its length. The album's `artist` is the album artist, so a
                 per-track performer shows only where it differs — the
                 compilation case (ADR 0024). */}
-            {isAlbum ? (
+            {isAlbum || isPlaylist ? (
+              // A playlist is a numbered list for the same reason a record is,
+              // and more so: its tracks come from everywhere, so the performer
+              // shows on every row rather than only where it differs from an
+              // album artist there is no such thing as here.
               <TrackList
                 tracks={children}
-                albumArtist={item.artist ?? undefined}
+                albumArtist={isPlaylist ? undefined : (item.artist ?? undefined)}
               />
             ) : isGallery ? (
               <div className="detail__children-grid">

@@ -12,6 +12,11 @@ const CONTAINER_KINDS = new Set([
   "season",
   "collection",
   "serial",
+  // A playlist holds entries through playlist_entry, not parent_id, so its
+  // child_count is 0 and the fallback below would call it a leaf — an item with
+  // a Play button and no file behind it (ADR 0030). Named, like a gallery, for
+  // exactly that reason.
+  "playlist",
   // A gallery holds photos (ADR 0028). Named rather than left to the
   // child-count fallback, so an empty gallery mid-scan reads as a container
   // with nothing in it rather than as something to open.

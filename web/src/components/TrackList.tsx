@@ -201,9 +201,14 @@ export function TrackList({
           )}
           {tracks
             .filter((t) => (t.season ?? 0) === disc)
-            .map((track) => (
+            .map((track, i) => (
               <TrackRow
-                key={track.id}
+                // Position, not id. A playlist may hold the same track twice
+                // (ADR 0030), and keying on id would collapse the repeat into
+                // one row — silently shortening the record the user is looking
+                // at. The index is stable here because the list is an ordered
+                // sequence that only changes when the whole thing is replaced.
+                key={`${track.id}@${i}`}
                 track={track}
                 queue={queue}
                 albumArtist={albumArtist}
