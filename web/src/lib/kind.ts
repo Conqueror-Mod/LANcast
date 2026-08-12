@@ -63,6 +63,20 @@ export function childLabel(childKind: string | undefined): string {
   }
 }
 
+// childCountLabel renders "12 tracks" / "1 track" for a list of children whose
+// kind is known — the detail page's meta line, which had been rendering the
+// plural label unconditionally and saying "1 tracks" on every single-track
+// album. Singular from the count, plural from the label, which is already the
+// right word for every kind childLabel knows.
+export function childCountLabel(n: number, childKind: string | undefined): string {
+  const plural = childLabel(childKind).toLowerCase();
+  if (n !== 1) return `${n} ${plural}`;
+  // "Contents" is the fallback label and has no sensible singular; it is also
+  // the only one that is not a plain plural, so it is the only special case.
+  const singular = plural === "contents" ? "item" : plural.replace(/s$/, "");
+  return `1 ${singular}`;
+}
+
 // containerNoun is the singular word for what a container of this kind holds,
 // derived from the container's own kind — the children's kind is not on the
 // parent row in a grid listing. A movie-kind parent of parts (ADR 0017) reads

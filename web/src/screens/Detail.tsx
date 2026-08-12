@@ -14,7 +14,12 @@ import {
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import { runtime, rating, ratingLabel } from "@/lib/format";
-import { isContainer, childLabel, isPicture } from "@/lib/kind";
+import {
+  isContainer,
+  childLabel,
+  childCountLabel,
+  isPicture,
+} from "@/lib/kind";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
@@ -214,7 +219,12 @@ export function Detail() {
     item.kind !== "collection" &&
     item.kind !== "season" &&
     !isMusic &&
-    !isPicture(item);
+    !isPicture(item) &&
+    // A playlist has no provider identity to correct. It is a list somebody
+    // named, and the only thing a search could do with "Road Trip" is offer the
+    // film — the same reason a collection and a season are excluded, arrived at
+    // one media type later.
+    !isPlaylist;
   // Removing something removes files. An artist and an album have none — they
   // are rows the scanner invented and sweeps when they empty — so, like a
   // collection, they are not offered. A track is a real file and keeps it.
@@ -261,7 +271,7 @@ export function Detail() {
     // arrived — a flash of "0 albums" is worse than a line that appears a beat
     // late.
     container && children && children.length > 0
-      ? `${children.length} ${childLabel(children[0].kind).toLowerCase()}`
+      ? childCountLabel(children.length, children[0].kind)
       : "",
   ].filter(Boolean);
 

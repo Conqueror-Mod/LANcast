@@ -163,6 +163,20 @@ describe("playlist rows", () => {
     expect(writes()[0].url).toBe("/api/playlists/12/entries/2");
   });
 
+  /*
+   * The filename hint belongs to the mis-tagged album, not to the playlist.
+   *
+   * collidingTitles annotates rows whose titles match, because on an album that
+   * means two files disagree about what they are and the path is the only way
+   * to tell them apart. A playlist holding the same track twice is the opposite
+   * situation — identical rows that are correct — and a path under each one is
+   * noise claiming something is wrong.
+   */
+  it("does not annotate a deliberate repeat with its filename", () => {
+    render(12);
+    expect(host.querySelectorAll(".track-row__file")).toHaveLength(0);
+  });
+
   it("does not offer to move the ends off the list", () => {
     render(12);
     const up = buttons(/^Move .* up$/);
