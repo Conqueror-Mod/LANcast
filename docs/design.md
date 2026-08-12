@@ -180,9 +180,21 @@ music.
 after 2.5s idle. Scrubber is a hairline that thickens on hover, filled `--gold`.
 Everything else in the player is neutral — the video is the content.
 
-**Settings.** Deliberately plain. Libraries with live scan progress, playback
-preferences, theme-music toggle and volume, keyboard reference. No nebula
-theatrics; this screen is a tool.
+**Settings.** Deliberately plain — this screen is a tool, and there are no
+nebula theatrics on it.
+
+Categories run down the left and one pane shows at a time, because settings are
+looked up rather than read through and a single column got longer with every
+release. The categories are grouped by *whose* setting it is rather than by
+subject: **Server** (libraries, metadata, playback, users, add-ons, updates,
+activity, logs) is shared and admin-only, **This device** (account, this app,
+keyboard) affects nobody else. That distinction is the one that matters the
+moment two people use the same server, and a flat list hides it completely.
+
+The active category is marked the way every destination in this client is
+marked: gold on the leading edge, and nothing else uses gold. A category is
+offered only where its pane can act — "This app" is absent in a browser tab,
+because the desktop settings behind it have nothing to say there.
 
 ## Keyboard model
 

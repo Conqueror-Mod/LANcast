@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-11 · **v0.6.8 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-12 · **v0.6.8 released; playlists and the settings shell are on `main`, unreleased · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -282,7 +282,15 @@ group is not priority.
   (Phase 1): media-type-aware browse views selected by library kind.
 - **Add-ons page** — placeholder for now; add-ons themselves come later in the
   app's life (M4 territory).
-- **More defined settings page** — a real structure, not a flat list.
+- ~~**More defined settings page** — a real structure, not a flat list.~~ —
+  **built**, unreleased. Categories down the left, one pane at a time, the pane
+  in the URL. Grouped by whose setting it is (server versus this device) rather
+  than by subject, because that is the distinction that matters once two people
+  share a server. Also added: a General pane showing the server and API version
+  from `/api/health`, which no client had ever asked for, and controls for
+  `rate_per_sec` and `update_check` — both accepted and validated by the API for
+  as long as it has existed, and reachable until now only by hand-editing
+  `config.json`.
 - **Downloads page** and a **download handler** that manages downloaded content
   from any library, any library type, or any add-on.
 - **Profile page** (details under Social and profiles below).
@@ -290,21 +298,21 @@ group is not priority.
 
 ### Libraries and media types
 
-- **Playlists, and importing `.m3u`** — **decided, not built**
+- ~~**Playlists, and importing `.m3u`**~~ — **built**, unreleased
   ([ADR 0030](adr/0030-playlists-and-m3u.md), accepted). A playlist is
-  `kind = 'playlist'` on `media_item`, the third media concept to need no new
-  *item* table — but membership needs one, because `item_collection` is keyed
+  `kind = 'playlist'` on `media_item` — no new *item* table, the third media
+  concept to manage that — but membership needed one: `item_collection` is keyed
   `(item_id, collection_id)` and so cannot hold the same track twice, which is
-  ordinary in a playlist and impossible in a collection. Schema revision 17. An
-  `.m3u` on disk is an **import, not a mirror**: the database is the truth, a
-  scanned file seeds a playlist once and is not watched afterwards, and a
-  rescan must never undo an edit — locked fields, applied to membership. An
-  unresolvable path is counted and reported, never silently skipped. The parser
-  is built and tested (`internal/playlist`, fifteen dialect cases including
-  refusing our own HLS playlists and resolving Windows paths on Linux); nothing
-  calls it yet. Still open inside the ADR: whether playlists are per-user or
-  server-wide — accepted as server-wide, the smaller claim, narrowable later.
-
+  ordinary in a playlist and impossible in a collection. `playlist_entry` is
+  keyed on **position** instead, which is that difference written in SQL
+  (schema 17). An `.m3u` is an **import, not a mirror**: the database is the
+  truth, and editing a playlist locks its membership so a rescan cannot undo the
+  edit — the locked-fields rule applied to membership. Unresolvable lines are
+  counted and reported rather than silently dropped, our own HLS output is
+  refused, and Windows paths resolve on Linux. The repeat case forced the queue
+  cursor to become a *position* rather than an id: `indexOf` always finds the
+  first occurrence, so a track appearing twice used to send playback backwards
+  and strand everything after it.
 - ~~**Wide-scope audio codec support** — MP3, FLAC, WAV.~~ — **done**: eleven
   audio formats scanned, and audio containers are first class in the playback
   profile so a FLAC is not re-encoded to deliver a format every browser plays.

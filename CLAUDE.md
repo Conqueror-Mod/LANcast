@@ -25,6 +25,7 @@ internal/auth/     password hashing, server-side sessions
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
 internal/transcode/ ffmpeg pipeline: progressive fMP4 and HLS
 internal/subtitle/ discovery, WebVTT conversion
+internal/playlist/ .m3u parsing and import (pure parser + importer)
 internal/api/      HTTP handlers
 internal/web/      embedded client assets
 docs/adr/          decision records (13 and counting — read before re-deciding)
@@ -59,6 +60,17 @@ provider refresh, rescan, or merge may touch a locked field, and a `locked`
 match state is never re-scored. A rescan reconciles *files*; it does not
 re-litigate *identity*. This has a permanent integration test — if it fails,
 LANcast has become the thing it was built to replace.
+
+**A playlist's membership is locked once a human edits it.** An `.m3u` on disk
+seeds a playlist and is not the playlist (ADR 0030): the importer skips any
+playlist carrying a `members` lock, so a rescan can never undo an edit. This is
+the locked-fields rule applied to membership, and it has the same standing —
+a rescan reconciles *files*, it does not re-litigate *decisions*.
+
+**A playlist may hold the same track twice.** It is the only listing in the
+system that can return a duplicate id, which is why `playlist_entry` is keyed on
+position and why the queue cursor is a position rather than an id. Anything that
+keys a playlist on item id silently shortens it.
 
 **One normalizer.** Title normalization for matching reuses `clean` and
 `SortTitle` in `internal/media/parse.go`. A second normalizer that disagrees
@@ -122,11 +134,17 @@ sessions — everything else is repeatable.
 ## Before claiming done
 
 ```bash
-go test ./...          # ~296 test funcs
+go test ./...          # ~757 test funcs
 go build ./...
+npm --prefix web test  # ~38 client tests, vitest + jsdom
 ```
 
-Both must pass. If a test fails, say so with the output — do not describe
+All three must pass. The client suite is newer than the rest of this file: it
+exists because the picture-in-picture work needed to know whether a media
+element survives being moved between documents, and it has since caught things
+no Go test could — a settings shell whose panes were not wired to its buttons,
+and a queue whose shuffle could not be told apart from a broken one by reading
+it. `npm run build` in `web/` type-checks as a side effect. If a test fails, say so with the output — do not describe
 partial work as finished.
 
 Narrowing while iterating:
