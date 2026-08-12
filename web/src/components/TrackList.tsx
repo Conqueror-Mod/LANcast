@@ -10,6 +10,7 @@ import {
 import { clock } from "@/lib/format";
 import type { Item } from "@/api/types";
 import { RemoveDialog } from "./RemoveDialog";
+import { AddToPlaylist } from "./AddToPlaylist";
 import "./TrackList.css";
 
 // A record is a numbered list, not a grid. Rendering an album's tracks as
@@ -80,6 +81,7 @@ function TrackRow({
   showNumbers,
   ambiguous,
   onRemove,
+  onAddToPlaylist,
   edits,
 }: {
   track: Item;
@@ -90,6 +92,8 @@ function TrackRow({
   ambiguous: boolean;
   /** Admin only; absent for everyone else, and the control is not rendered. */
   onRemove?: (track: Item) => void;
+  /** Opens the playlist picker for this track. */
+  onAddToPlaylist: (track: Item) => void;
   /** Playlist rows only. */
   edits?: PlaylistRowEdits;
 }) {
@@ -165,6 +169,23 @@ function TrackRow({
         {track.duration_ms ? clock(track.duration_ms / 1000) : ""}
       </span>
     </button>
+      {/*
+        * Add to playlist lives on the row because a track's detail page is
+        * unreachable: nothing in the client navigates to /item/{id} for a
+        * track, since tracks are rows here and never poster tiles. The control
+        * shipped on that page in v0.6.10 and could not be used by anyone with a
+        * music library — the same failure the remove control had, and it is
+        * recorded three comments up. A capability you cannot reach is not a
+        * capability.
+        */}
+      <button
+        className="track-line__act"
+        onClick={() => onAddToPlaylist(track)}
+        aria-label={`Add ${track.title} to a playlist`}
+        title="Add to playlist"
+      >
+        +
+      </button>
       {/* Reordering is two buttons rather than a drag handle, on purpose: this
           list is used with a remote as well as a mouse, and a drag is not
           something a d-pad can do. The ends are disabled rather than hidden so
@@ -264,6 +285,10 @@ export function TrackList({
    * record.
    */
   const [removing, setRemoving] = useState<Item | null>(null);
+  // One picker for the list, for the same reason there is one RemoveDialog:
+  // only one can be open, and a dialog per row is a hundred dialogs on a long
+  // record.
+  const [adding, setAdding] = useState<Item | null>(null);
 
   // Numbering is shown when at least one track has a number. A record where no
   // file was tagged with one — a folder of downloads, typically — has no
@@ -314,6 +339,7 @@ export function TrackList({
                 // one deleting a file, is a mistake waiting for a tired
                 // evening. Deleting the file is still on the track's own page.
                 onRemove={isAdmin && !editing ? setRemoving : undefined}
+                onAddToPlaylist={setAdding}
                 edits={
                   editing
                     ? {
@@ -335,6 +361,10 @@ export function TrackList({
             ))}
         </div>
       ))}
+
+      {adding && (
+        <AddToPlaylist item={adding} onClose={() => setAdding(null)} />
+      )}
 
       {removing && (
         <RemoveDialog

@@ -113,6 +113,21 @@ describe("playlist rows", () => {
     expect(buttons(/from this playlist$/)).toHaveLength(0);
   });
 
+  /*
+   * Reachability, not decoration. "Add to playlist" also exists on an item's
+   * detail page — where it is useless for music, because nothing in the client
+   * navigates to a track's detail page: tracks are rows here and never poster
+   * tiles. It shipped that way in v0.6.10 and no one with a music library could
+   * reach it. The row is the only place a track can actually be pressed, so the
+   * control has to be here, on every list and not only on playlists.
+   */
+  it("offers add-to-playlist on every row, playlist or not", () => {
+    render(undefined);
+    expect(buttons(/to a playlist$/)).toHaveLength(3);
+    render(12);
+    expect(buttons(/to a playlist$/)).toHaveLength(3);
+  });
+
   it("renders every entry, including the repeat", () => {
     render(12);
     // Three rows, not two: keying on id would collapse the repeat and silently

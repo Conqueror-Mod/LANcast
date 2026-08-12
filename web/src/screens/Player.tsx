@@ -10,6 +10,7 @@ import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
 import { SubtitleMenu } from "@/components/SubtitleMenu";
 import { QueuePanel, audioLabel } from "@/components/QueuePanel";
+import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
   ShuffleGlyph,
@@ -110,6 +111,7 @@ export function Player() {
   const [speedOpen, setSpeedOpen] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [pipAvailable, setPipAvailable] = useState(false);
 
   // Picture-in-picture is offered only where it exists. WebView2 is a different
@@ -397,6 +399,20 @@ export function Player() {
                 over a season is the same thing and gets them too. An engaged
                 toggle reads through weight and a filled background, never gold:
                 gold means focus and nothing else. */}
+              {/* Add to playlist. Deliberately outside the queue gate above:
+                  a single track put on with no queue behind it is the most
+                  ordinary thing to want on a list, and it is the one case that
+                  gate excludes. */}
+              {item && (
+                <button
+                  className="player__icon"
+                  onClick={() => setAddOpen(true)}
+                  aria-label="Add to playlist"
+                  title="Add to playlist"
+                >
+                  +
+                </button>
+              )}
               {pb.queue.length > 1 && (
                 <>
                   <button
@@ -595,6 +611,10 @@ export function Player() {
           </div>
         </div>
       </div>
+
+      {addOpen && item && (
+        <AddToPlaylist item={item} onClose={() => setAddOpen(false)} />
+      )}
     </div>
   );
 }
