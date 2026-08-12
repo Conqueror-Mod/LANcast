@@ -12,7 +12,11 @@ import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
-import { shuffledStartingWith, nextAfter } from "./queueOrder";
+import {
+  shuffledStartingWith,
+  nextAfter,
+  queueAfterEntry,
+} from "./queueOrder";
 
 // Playback lives above the router.
 //
@@ -279,7 +283,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (prev === id) return prev;
       return id;
     });
-    setQueue(q);
+    // Not setQueue(q): re-entering the player for something already playing
+    // inside a queue must not discard the queue. See queueAfterEntry.
+    setQueue((prev) => queueAfterEntry(prev, q, id));
   }, []);
 
   const stop = useCallback(() => {

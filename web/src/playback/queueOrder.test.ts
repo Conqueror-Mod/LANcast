@@ -4,6 +4,7 @@ import {
   shuffledStartingWith,
   nextAfter,
   prevBefore,
+  queueAfterEntry,
 } from "./queueOrder";
 
 const seq = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -133,5 +134,34 @@ describe("shuffledStartingWith", () => {
     const out = shuffledStartingWith(seq(5), 99);
     expect(out.length).toBe(5);
     expect(out).not.toContain(99);
+  });
+});
+
+describe("queueAfterEntry", () => {
+  const album = [10, 11, 12, 13];
+
+  // The mini-player round trip: navigate to /watch/11 with no queue at all.
+  it("keeps the queue when re-entering with no queue information", () => {
+    expect(queueAfterEntry(album, [11], 11)).toEqual(album);
+  });
+
+  it("takes a real queue when one is supplied", () => {
+    expect(queueAfterEntry(album, [20, 21], 20)).toEqual([20, 21]);
+  });
+
+  // Playing a single track that is not part of what is playing replaces the
+  // queue — otherwise picking one song would silently inherit the last album.
+  it("replaces the queue for a single item from outside it", () => {
+    expect(queueAfterEntry(album, [99], 99)).toEqual([99]);
+  });
+
+  it("replaces an empty queue", () => {
+    expect(queueAfterEntry([], [7], 7)).toEqual([7]);
+  });
+
+  // A playlist may contain the same track twice; re-entry must still find it.
+  it("keeps a queue that holds the item more than once", () => {
+    const withRepeat = [10, 11, 10];
+    expect(queueAfterEntry(withRepeat, [10], 10)).toEqual(withRepeat);
   });
 });

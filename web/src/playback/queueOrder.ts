@@ -76,3 +76,30 @@ export function prevBefore(order: number[], current: number): number | null {
   if (idx <= 0) return null;
   return order[idx - 1];
 }
+
+/**
+ * queueAfterEntry decides what the queue becomes when the player screen is
+ * entered for `id` carrying `incoming`.
+ *
+ * Entering the player with no queue information — which is what returning from
+ * the mini-player does, since it navigates to /watch/{id} with no ?queue= and
+ * no state — used to replace the queue with a single item. The whole record
+ * collapsed to the song that was playing: shuffle, repeat, the queue panel and
+ * both skip buttons disappeared, and nothing could advance.
+ *
+ * play() already refused to restart the *item* on re-entry for exactly this
+ * reason. The queue needed the same protection and did not have it.
+ *
+ * A genuine single-item play still replaces the queue: it is only "keep what we
+ * have" when the caller supplied nothing AND the current queue already contains
+ * what is being played.
+ */
+export function queueAfterEntry(
+  existing: number[],
+  incoming: number[],
+  id: number,
+): number[] {
+  const noInformation = incoming.length === 1 && incoming[0] === id;
+  if (noInformation && existing.includes(id)) return existing;
+  return incoming;
+}
