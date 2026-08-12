@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useFocusable } from "@/focus/FocusController";
 import { PrevGlyph, NextGlyph, VolumeGlyph } from "@/components/PlayerGlyphs";
+import { AddToPlaylist } from "@/components/AddToPlaylist";
 import "./MiniPlayer.css";
 
 // The docked player, bottom-right, when something is playing and you are not on
@@ -27,6 +28,8 @@ export function MiniPlayer() {
   const prevFocus = useFocusable(pb.playPrev);
   const nextFocus = useFocusable(pb.playNext);
   const [volOpen, setVolOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const addFocus = useFocusable(() => setAddOpen(true));
   const volFocus = useFocusable(() => setVolOpen((o) => !o));
 
   if (pb.surface !== "mini") return null;
@@ -40,6 +43,9 @@ export function MiniPlayer() {
 
   return (
     <div className="mini" role="region" aria-label="Now playing">
+      {addOpen && item && (
+        <AddToPlaylist item={item} onClose={() => setAddOpen(false)} />
+      )}
       <button
         {...expandFocus}
         className="mini__open"
@@ -121,6 +127,21 @@ export function MiniPlayer() {
             </div>
           )}
         </div>
+        {/* "Put this on a list" is a thought you have *while a song is
+            playing*, which is exactly when the track is not on screen anywhere
+            else. Audio only: the strip has room for one more control, and a
+            film in a playlist is not what anyone is reaching for here. */}
+        {pb.isAudio && item && (
+          <button
+            {...addFocus}
+            className="mini__icon"
+            onClick={() => setAddOpen(true)}
+            aria-label="Add to playlist"
+            title="Add to playlist"
+          >
+            +
+          </button>
+        )}
         <button
           {...stopFocus}
           className="mini__icon"
