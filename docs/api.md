@@ -285,7 +285,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
-| `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `track`, `other` |
+| `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `playlist_id` | Return a playlist's entries **in playing order** ([ADR 0030](adr/0030-playlists-and-m3u.md)). The only listing that may repeat an item id — see below |
