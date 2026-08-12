@@ -874,6 +874,66 @@ is the source of truth afterwards — editing one in LANcast locks its membershi
 so a later scan cannot undo the edit. `.m3u8` files containing `#EXT-X-` tags
 are HLS playlists (LANcast writes them itself) and are never imported.
 
+#### `POST /api/playlists`
+
+Creates an empty playlist. `library_id` is required — every item belongs to a
+library, and a server with films and music has no defensible default.
+
+```json
+{ "title": "Road Trip", "library_id": 2 }
+```
+
+Responds `200` with the new item, in the shape `GET /api/items/{id}` returns.
+
+#### `DELETE /api/playlists/{id}`
+
+Deletes the playlist and its entries. `204`.
+
+Its own route rather than `DELETE /api/items/{id}`, which takes a `mode`
+because it is about files: for an imported playlist, `mode=delete` would remove
+the `.m3u` and `mode=ignore` would add it to the ignore list. This route touches
+no file. The tracks are untouched — being in a playlist was never where they
+lived.
+
+#### `PUT /api/playlists/{id}/entries`
+
+Replaces the membership with exactly this list, in this order.
+
+```json
+{ "item_ids": [12, 40, 12] }
+```
+
+`204`. Reorder, insert, and remove-several are all this call: a playlist is an
+ordered sequence, and every one of those edits is the caller having decided the
+whole sequence. Repeats are kept — sending the same id twice is a playlist that
+holds a track twice, not an error.
+
+`400` naming the id if any item does not exist, and nothing is written.
+
+#### `POST /api/playlists/{id}/entries`
+
+Appends to the end, in the order given. Same body, `204`. The one edit whose
+position the caller does not have to decide.
+
+#### `DELETE /api/playlists/{id}/entries/{position}`
+
+Removes one entry. `204`, or `404` if there is no entry there.
+
+**By position, not by item id.** An id does not identify an entry in the one
+listing that may hold the same id twice. Positions are 0-based and stay dense,
+so a position is the index the client rendered; after a removal, everything
+below it has shifted up by one.
+
+#### What playlist writes require
+
+A session, and no particular role. The admin gate exists for filesystem access
+and account control; a playlist edit is neither, and the audit log records who
+made it. Playlists are server-wide ([ADR 0030](adr/0030-playlists-and-m3u.md)
+leaves per-user ownership undecided), so any member may edit any playlist.
+
+Every one of these writes **locks `members`** on the playlist, which is what
+stops the next scan re-importing the `.m3u` over the edit. Renaming is the
+ordinary `PATCH /api/items/{id}` with a `title`.
 
 ### `GET /api/items/{id}/trailer`
 

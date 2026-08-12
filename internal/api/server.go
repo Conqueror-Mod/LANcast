@@ -185,6 +185,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/subtitles/{key}", s.serveSubtitle)
 	mux.HandleFunc("DELETE /api/items/{id}/subtitles/{key}", s.deleteSubtitle)
 
+	// Playlist editing (ADR 0030). Not adminOnly, and playlists.go says why.
+	mux.HandleFunc("POST /api/playlists", s.createPlaylist)
+	mux.HandleFunc("DELETE /api/playlists/{id}", s.deletePlaylist)
+	mux.HandleFunc("PUT /api/playlists/{id}/entries", s.setPlaylistEntries)
+	mux.HandleFunc("POST /api/playlists/{id}/entries", s.addPlaylistEntries)
+	mux.HandleFunc("DELETE /api/playlists/{id}/entries/{pos}", s.removePlaylistEntry)
+
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)

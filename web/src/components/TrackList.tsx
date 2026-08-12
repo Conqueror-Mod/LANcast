@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
-import { useIsAdmin, useItem } from "@/api/hooks";
+import {
+  useIsAdmin,
+  useItem,
+  useRemovePlaylistEntry,
+  useSetPlaylistEntries,
+} from "@/api/hooks";
 import { clock } from "@/lib/format";
 import type { Item } from "@/api/types";
 import { RemoveDialog } from "./RemoveDialog";
@@ -51,6 +56,23 @@ function collidingTitles(tracks: Item[]): Set<string> {
   return twice;
 }
 
+/**
+ * The edits a playlist row offers. Absent everywhere else, which is what keeps
+ * an album's rows exactly as they were.
+ *
+ * `number` overrides the track number with the playlist position: a playlist's
+ * tracks come from everywhere, so their own track numbers are the numbers they
+ * had on their records — 1, 4, 1, 9 down a list of eleven. The position is the
+ * only numbering that describes *this* list.
+ */
+type PlaylistRowEdits = {
+  number: number;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onRemoveEntry: () => void;
+  busy: boolean;
+};
+
 function TrackRow({
   track,
   queue,
@@ -58,6 +80,7 @@ function TrackRow({
   showNumbers,
   ambiguous,
   onRemove,
+  edits,
 }: {
   track: Item;
   queue: string;
@@ -67,6 +90,8 @@ function TrackRow({
   ambiguous: boolean;
   /** Admin only; absent for everyone else, and the control is not rendered. */
   onRemove?: (track: Item) => void;
+  /** Playlist rows only. */
+  edits?: PlaylistRowEdits;
 }) {
   const navigate = useNavigate();
   const play = () => navigate(`/watch/${track.id}?queue=${queue}`);
@@ -123,7 +148,9 @@ function TrackRow({
           record where no file carries a number, is just noise pretending to be
           data — so the column goes instead. */}
       {showNumbers && (
-        <span className="track-row__num">{track.episode || "—"}</span>
+        <span className="track-row__num">
+          {edits ? edits.number : track.episode || "—"}
+        </span>
       )}
       <span className="track-row__title">
         {track.title}
@@ -138,6 +165,46 @@ function TrackRow({
         {track.duration_ms ? clock(track.duration_ms / 1000) : ""}
       </span>
     </button>
+      {/* Reordering is two buttons rather than a drag handle, on purpose: this
+          list is used with a remote as well as a mouse, and a drag is not
+          something a d-pad can do. The ends are disabled rather than hidden so
+          the controls do not move around under the pointer as you work down a
+          list. */}
+      {edits && (
+        <>
+          <button
+            className="track-line__act"
+            onClick={edits.onMoveUp}
+            disabled={!edits.onMoveUp || edits.busy}
+            aria-label={`Move ${track.title} up`}
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button
+            className="track-line__act"
+            onClick={edits.onMoveDown}
+            disabled={!edits.onMoveDown || edits.busy}
+            aria-label={`Move ${track.title} down`}
+            title="Move down"
+          >
+            ↓
+          </button>
+          {/* No confirmation. This removes an entry from a list, not a file
+              from a disk — the destructive control that needs a dialog is the
+              admin one below, and conflating them is how someone deletes media
+              while tidying a playlist. */}
+          <button
+            className="track-line__act"
+            onClick={edits.onRemoveEntry}
+            disabled={edits.busy}
+            aria-label={`Remove ${track.title} from this playlist`}
+            title="Remove from playlist"
+          >
+            ×
+          </button>
+        </>
+      )}
       {onRemove && (
         <button
           className="track-line__remove"
@@ -155,12 +222,35 @@ function TrackRow({
 export function TrackList({
   tracks,
   albumArtist,
+  playlistID,
 }: {
   tracks: Item[];
   albumArtist?: string;
+  /**
+   * Set when this list *is* a playlist, which turns on the row edits. Absent
+   * for an album, whose order is the record's and not the viewer's to change.
+   */
+  playlistID?: number;
 }) {
   const queue = trackQueue(tracks);
   const isAdmin = useIsAdmin();
+  const editing = (playlistID ?? 0) > 0;
+  const reorder = useSetPlaylistEntries(playlistID ?? 0);
+  const removeEntry = useRemovePlaylistEntry(playlistID ?? 0);
+  const busy = reorder.isPending || removeEntry.isPending;
+
+  /*
+   * A move sends the whole sequence, because that is what the endpoint takes —
+   * a playlist is an ordered list and the client already knows what the order
+   * should be. Built from `tracks` by index, so a repeated track moves the copy
+   * that was pressed rather than the first one with that id.
+   */
+  const move = (from: number, to: number) => {
+    const ids = tracks.map((t) => t.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    reorder.mutate(ids);
+  };
   /*
    * Removal was already permitted for a track — canRemove on the detail page
    * allows it, and RemoveDialog already offers the two answers a duplicate
@@ -178,7 +268,8 @@ export function TrackList({
   // Numbering is shown when at least one track has a number. A record where no
   // file was tagged with one — a folder of downloads, typically — has no
   // ordering to display, and a column of dashes claims otherwise.
-  const showNumbers = tracks.some((t) => (t.episode ?? 0) > 0);
+  // A playlist is always numbered, by position — see PlaylistRowEdits.
+  const showNumbers = editing || tracks.some((t) => (t.episode ?? 0) > 0);
 
   // Disc headings appear only on a set that has more than one. Without them a
   // two-disc release counts 1..17 and then 1..15 again, which reads as a
@@ -187,7 +278,11 @@ export function TrackList({
   // shows no heading.
   const ambiguousTitles = collidingTitles(tracks);
 
-  const discs = [...new Set(tracks.map((t) => t.season ?? 0))];
+  // A playlist is one sequence, never grouped by disc: its tracks carry the
+  // disc numbers of the records they came from, so grouping on them would cut a
+  // playlist into "Disc 1 / Disc 2" sections that mean nothing about this list
+  // and, worse, would reorder it on screen.
+  const discs = editing ? [0] : [...new Set(tracks.map((t) => t.season ?? 0))];
   const multiDisc = discs.length > 1;
 
   return (
@@ -199,8 +294,7 @@ export function TrackList({
               <span className="section-label">Disc {disc || "—"}</span>
             </div>
           )}
-          {tracks
-            .filter((t) => (t.season ?? 0) === disc)
+          {(editing ? tracks : tracks.filter((t) => (t.season ?? 0) === disc))
             .map((track, i) => (
               <TrackRow
                 // Position, not id. A playlist may hold the same track twice
@@ -214,7 +308,29 @@ export function TrackList({
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}
                 ambiguous={ambiguousTitles.has((track.title ?? "").toLowerCase())}
-                onRemove={isAdmin ? setRemoving : undefined}
+                // In a playlist the row's × removes the entry, and the
+                // library-level delete is deliberately not also on the row:
+                // two × controls a few pixels apart, one removing a line and
+                // one deleting a file, is a mistake waiting for a tired
+                // evening. Deleting the file is still on the track's own page.
+                onRemove={isAdmin && !editing ? setRemoving : undefined}
+                edits={
+                  editing
+                    ? {
+                        number: i + 1,
+                        onMoveUp: i > 0 ? () => move(i, i - 1) : undefined,
+                        onMoveDown:
+                          i < tracks.length - 1
+                            ? () => move(i, i + 1)
+                            : undefined,
+                        // Position, which is how the endpoint addresses an
+                        // entry — an id cannot, since the same track may be in
+                        // the list twice.
+                        onRemoveEntry: () => removeEntry.mutate(i),
+                        busy,
+                      }
+                    : undefined
+                }
               />
             ))}
         </div>
