@@ -332,7 +332,17 @@ export function TrackList({
                 queue={queue}
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}
-                ambiguous={ambiguousTitles.has((track.title ?? "").toLowerCase())}
+                // A repeat in a playlist is deliberate, so the filename hint is
+                // suppressed there. It exists for the mis-tagged album — two
+                // rows that differ only by length, where the file is the only
+                // way to tell which is which. A playlist that opens and closes
+                // with the same song shows two identical rows *on purpose*, and
+                // annotating them with a path is noise on the one case where
+                // identical rows are correct.
+                ambiguous={
+                  !editing &&
+                  ambiguousTitles.has((track.title ?? "").toLowerCase())
+                }
                 // In a playlist the row's × removes the entry, and the
                 // library-level delete is deliberately not also on the row:
                 // two × controls a few pixels apart, one removing a line and

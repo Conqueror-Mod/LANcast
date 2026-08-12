@@ -298,3 +298,49 @@ func TestEmptyPlaylistIsNotAnError(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
+
+// A playlist's child_count is its entry count, repeats included.
+//
+// It was 0 until the playlists page needed to say how long a list is, and a grid
+// of tiles all reading "0 tracks" is a screen asserting something false about
+// every playlist on it. Counted from playlist_entry rather than parent_id,
+// because a playlist's members keep their real parents (ADR 0030).
+func TestPlaylistChildCountIsItsEntryCount(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	a := h.addFile(t, "a.mkv", []byte("a"))
+	b := h.addFile(t, "b.mkv", []byte("b"))
+
+	pid, err := h.st.EnsurePlaylist(ctx, h.lib.ID, h.dir+"/set.m3u", "The Set", "the set")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetPlaylistEntries(ctx, pid, []int64{a, b, a}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.do(t, "GET", "/api/items?kind=playlist", nil)
+	var body struct {
+		Items []struct {
+			ID         int64 `json:"id"`
+			ChildCount int   `json:"child_count"`
+		} `json:"items"`
+	}
+	decode(t, resp, &body)
+
+	var found bool
+	for _, it := range body.Items {
+		if it.ID != pid {
+			continue
+		}
+		found = true
+		// Three, not two: the repeat is an entry, and the detail page below
+		// this tile will render three rows.
+		if it.ChildCount != 3 {
+			t.Errorf("child_count = %d, want 3 (repeats counted)", it.ChildCount)
+		}
+	}
+	if !found {
+		t.Fatal("the playlist did not appear in ?kind=playlist")
+	}
+}

@@ -925,15 +925,39 @@ export function usePlaylistEntries(playlistID: number, enabled: boolean) {
  * artwork every other grid gets. Playlists are server-wide (ADR 0030), so there
  * is no per-user filtering to do here yet.
  */
-export function usePlaylists(enabled = true) {
+export function usePlaylists(libraryID?: number, enabled = true) {
+  // Scoped to a library when one is given, because a playlist belongs to the
+  // library its tracks and its .m3u live in and the playlists page is a page
+  // *of* a library. The picker passes nothing and gets them all: when you are
+  // adding a track to a list, "which library is this list filed in" is a
+  // question about the database, not about music.
+  const scope = libraryID ? `&library_id=${libraryID}` : "";
   return useQuery({
-    queryKey: ["playlists"],
+    queryKey: ["playlists", libraryID ?? 0],
     queryFn: ({ signal }) =>
-      apiGet<ItemsPage>("/api/items?kind=playlist&limit=200", signal).then(
-        (r) => r.items,
-      ),
+      apiGet<ItemsPage>(
+        `/api/items?kind=playlist&limit=200${scope}`,
+        signal,
+      ).then((r) => r.items),
     enabled,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * Rename a playlist.
+ *
+ * PATCH /api/items/{id} — the ordinary metadata edit, which has accepted a
+ * title since M2 and which no client has ever called for a playlist. Editing a
+ * field locks it, which is the point: a name someone typed is not something a
+ * later provider refresh or rescan may overwrite.
+ */
+export function useRenamePlaylist(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) =>
+      apiSend(`/api/items/${id}`, "PATCH", { title }),
+    onSuccess: () => invalidatePlaylists(qc, id),
   });
 }
 

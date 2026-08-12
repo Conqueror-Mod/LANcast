@@ -29,11 +29,11 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return body as T;
 }
 
-// apiSend performs a write (PUT/POST/DELETE), sending JSON when a body is given
-// and tolerating the empty 204 responses these endpoints return.
+// apiSend performs a write (PUT/POST/PATCH/DELETE), sending JSON when a body is
+// given and tolerating the empty 204 responses these endpoints return.
 export async function apiSend(
   path: string,
-  method: "PUT" | "POST" | "DELETE",
+  method: "PUT" | "POST" | "PATCH" | "DELETE",
   body?: unknown,
 ): Promise<void> {
   const res = await fetch(path, {

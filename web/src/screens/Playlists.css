@@ -1,0 +1,271 @@
+/*
+ * The playlists page. It borrows the browse shell's header and filter row
+ * (Browse.css) so it reads as a page of the library rather than a new place;
+ * only the tile is its own, because a playlist tile has to say something a
+ * poster tile never does — how long the list is, and what is in it.
+ */
+
+.pl-back {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 10px 0 0;
+}
+
+.pl-back:hover,
+.pl-back:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+}
+
+.pl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 18px;
+  padding: 4px 0 40px;
+}
+
+.pl-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Tiles in a grid do not shrink; a collapsed tile with an invisible cover is
+     a bug that looks like a styling accident. */
+  flex-shrink: 0;
+}
+
+.pl-tile__open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  text-align: left;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.pl-tile__open:hover {
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+/* Gold is where you are, and nothing else. */
+.pl-tile__open:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/*
+ * The quilt. One cover fills it; two split it; three gives the first one the
+ * left half and stacks the other two beside it, so an odd count reads as
+ * composed rather than as a missing corner; four is the familiar square.
+ */
+.pl-tile__art {
+  display: grid;
+  aspect-ratio: 1;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-tile);
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+}
+
+.pl-tile__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pl-tile__art--n1 {
+  grid-template-columns: 1fr;
+}
+
+.pl-tile__art--n2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.pl-tile__art--n3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.pl-tile__art--n3 img:first-child {
+  grid-row: span 2;
+}
+
+.pl-tile__art--n4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.pl-tile__art--empty {
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 40px;
+  font-weight: 300;
+}
+
+.pl-tile__title {
+  font-size: 14px;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-tile__count {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* Rename and delete: quiet until the tile is wanted, reachable by keyboard
+   because they are never display:none. Same discipline as a track row's
+   controls. */
+.pl-tile__acts {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.pl-tile:hover .pl-tile__acts,
+.pl-tile__acts:focus-within {
+  opacity: 1;
+}
+
+.pl-tile__act {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(3, 5, 12, 0.72);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pl-tile__act:hover {
+  color: var(--text-primary);
+}
+
+.pl-tile__act:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/* The prompt: the dialog language RemoveDialog and AddToPlaylist already use,
+   at the smallest size that holds one field. */
+.pl-prompt__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.pl-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 380px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  padding: 18px 20px 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.pl-prompt__title {
+  font-size: 17px;
+  color: var(--text-primary);
+}
+
+.pl-prompt__sub {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.pl-prompt__input {
+  padding: 10px 12px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.pl-prompt__input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.pl-prompt__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pl-prompt__cancel {
+  padding: 9px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pl-prompt__cancel:hover {
+  color: var(--text-primary);
+}
+
+.pl-prompt__ok {
+  padding: 9px 16px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pl-prompt__ok:hover:not(:disabled),
+.pl-prompt__ok:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.pl-prompt__ok:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pl-prompt__ok--danger {
+  color: var(--danger, #ff6b6b);
+}
+
+.pl-prompt__ok--danger:hover:not(:disabled),
+.pl-prompt__ok--danger:focus-visible {
+  border-color: var(--danger, #ff6b6b);
+}

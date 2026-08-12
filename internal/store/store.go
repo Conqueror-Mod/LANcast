@@ -1169,7 +1169,45 @@ func (s *Store) AttachChildCounts(ctx context.Context, items []Item) error {
 			it.ChildCount = n
 		}
 	}
-	return crows.Err()
+	if err := crows.Err(); err != nil {
+		return err
+	}
+
+	// Playlist entries (ADR 0030), the third kind of containment and the only
+	// one that counts repeats. A playlist held zero here until the playlists
+	// page needed to say how long a list was, and "0 tracks" under a playlist
+	// with eleven in it is worse than saying nothing — it is a grid asserting
+	// something false about every tile.
+	//
+	// COUNT(*) over the entries, not over distinct items: a set that opens and
+	// closes with the same song is twelve entries, and the detail page beneath
+	// this tile will show twelve rows.
+	//
+	// Missing files are counted, unlike the two queries above. A playlist entry
+	// whose file is temporarily gone — an unmounted drive — is still an entry;
+	// scanning marks missing rather than deleting for exactly this reason, and a
+	// playlist that silently shortens itself when a drive is unplugged is the
+	// failure that rule exists to prevent.
+	prows, err := s.db.QueryContext(ctx, `
+		SELECT playlist_id, COUNT(*)
+		FROM playlist_entry
+		WHERE playlist_id IN (`+in+`)
+		GROUP BY playlist_id`, args...)
+	if err != nil {
+		return fmt.Errorf("attach playlist counts: %w", err)
+	}
+	defer prows.Close()
+	for prows.Next() {
+		var pl int64
+		var n int
+		if err := prows.Scan(&pl, &n); err != nil {
+			return fmt.Errorf("attach playlist counts: %w", err)
+		}
+		if it := byID[pl]; it != nil {
+			it.ChildCount = n
+		}
+	}
+	return prows.Err()
 }
 
 // AddToCollection links an item into a collection (ADR 0017). Membership is
