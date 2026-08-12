@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   shuffled,
   shuffledStartingWith,
-  nextAfter,
-  prevBefore,
   queueAfterEntry,
+  resolvePos,
+  nextPos,
+  prevPos,
 } from "./queueOrder";
 
 const seq = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
@@ -71,38 +72,7 @@ describe("shuffled", () => {
   });
 });
 
-describe("nextAfter", () => {
-  it("follows the order it is given, not the natural order", () => {
-    const order = [5, 1, 4, 2, 3];
-    expect(nextAfter(order, 5, "off")).toBe(1);
-    expect(nextAfter(order, 1, "off")).toBe(4);
-    expect(nextAfter(order, 2, "off")).toBe(3);
-  });
 
-  it("stops at the end when repeat is off", () => {
-    expect(nextAfter([1, 2, 3], 3, "off")).toBeNull();
-  });
-
-  it("wraps to the front when repeat is all", () => {
-    expect(nextAfter([5, 1, 4], 4, "all")).toBe(5);
-  });
-
-  // An item that is not in the queue at all — which happens if the queue is
-  // replaced while something from the old one is still playing.
-  it("returns null for an item outside the order", () => {
-    expect(nextAfter([1, 2, 3], 99, "all")).toBeNull();
-  });
-});
-
-describe("prevBefore", () => {
-  it("steps back through the given order", () => {
-    expect(prevBefore([5, 1, 4], 4)).toBe(1);
-  });
-
-  it("does nothing at the start", () => {
-    expect(prevBefore([5, 1, 4], 5)).toBeNull();
-  });
-});
 
 describe("shuffledStartingWith", () => {
   it("puts the playing track first and keeps everything else", () => {
@@ -163,5 +133,62 @@ describe("queueAfterEntry", () => {
   it("keeps a queue that holds the item more than once", () => {
     const withRepeat = [10, 11, 10];
     expect(queueAfterEntry(withRepeat, [10], 10)).toEqual(withRepeat);
+  });
+});
+
+/*
+ * The repeat case these exist for. A playlist holding the same track twice —
+ * [10, 11, 10] — was unplayable past position 1 with id-based navigation:
+ * indexOf(10) is always 0, so the second copy resumed from the first.
+ */
+describe("position-based navigation", () => {
+  const withRepeat = [10, 11, 10, 12];
+
+  it("tells two copies of the same track apart", () => {
+    // Playing the copy at position 2, not the one at position 0.
+    expect(nextPos(withRepeat, 2, "off")).toBe(3);
+    // The id-based answer would have been position 1 — going backwards.
+  });
+
+  it("advances through a repeat instead of looping on it", () => {
+    const seen: number[] = [];
+    let pos: number | null = 0;
+    while (pos !== null && seen.length < 10) {
+      seen.push(withRepeat[pos]);
+      pos = nextPos(withRepeat, pos, "off");
+    }
+    expect(seen).toEqual([10, 11, 10, 12]);
+  });
+
+  it("stops at the end with repeat off", () => {
+    expect(nextPos(withRepeat, 3, "off")).toBeNull();
+  });
+
+  it("wraps with repeat all", () => {
+    expect(nextPos(withRepeat, 3, "all")).toBe(0);
+    expect(prevPos(withRepeat, 0, "all")).toBe(3);
+  });
+
+  it("does nothing before the first track without repeat", () => {
+    expect(prevPos(withRepeat, 0, "off")).toBeNull();
+  });
+
+  describe("resolvePos", () => {
+    it("keeps a position that still holds the playing item", () => {
+      expect(resolvePos(withRepeat, 2, 10)).toBe(2);
+    });
+
+    it("falls back when the order changed under it", () => {
+      // Shuffled: the remembered index now holds something else.
+      expect(resolvePos([12, 10, 11, 10], 2, 12)).toBe(0);
+    });
+
+    it("falls back for an unset position", () => {
+      expect(resolvePos(withRepeat, -1, 11)).toBe(1);
+    });
+
+    it("returns -1 when the item is not in the order at all", () => {
+      expect(resolvePos(withRepeat, 5, 99)).toBe(-1);
+    });
   });
 });

@@ -443,8 +443,8 @@ export function Player() {
                         // what is coming next.
                         ids={pb.playOrder}
                         currentID={pb.itemID}
-                        onPick={(id) => {
-                          pb.playFromQueue(id);
+                        onPick={(id, at) => {
+                          pb.playFromQueue(id, at);
                           setQueueOpen(false);
                         }}
                       />
