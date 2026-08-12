@@ -14,8 +14,10 @@ import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
 import {
   shuffledStartingWith,
-  nextAfter,
   queueAfterEntry,
+  resolvePos,
+  nextPos,
+  prevPos,
 } from "./queueOrder";
 
 // Playback lives above the router.
@@ -127,7 +129,9 @@ interface PlaybackState {
   cycleRepeat: () => void;
   playNext: () => void;
   playPrev: () => void;
-  playFromQueue: (id: number) => void;
+  /** `at` is the row's position, which is the only way to tell two copies of
+   *  the same track apart in a playlist. */
+  playFromQueue: (id: number, at?: number) => void;
 
   videoRef: React.RefObject<HTMLVideoElement>;
   containerRef: React.RefObject<HTMLDivElement>;
@@ -199,6 +203,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // For a transcode, the element's clock is relative to this offset.
   const offset = useRef(0);
   const startedFrom = useRef(0);
+
+  /*
+   * Where in the order we are, as a position rather than an id.
+   *
+   * A playlist may hold the same track twice (ADR 0030), and an id cannot say
+   * which copy is playing — indexOf always answers "the first one", so the
+   * second copy resumed from the first and the rest of the queue was
+   * unreachable. The id is still what plays; this is where it is playing from.
+   *
+   * Kept as a hint rather than as the source of truth: it is validated against
+   * the order on every read (resolvePos), because shuffle and queue changes can
+   * both leave it pointing at a different song.
+   */
+  const [pos, setPos] = useState(-1);
 
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -286,6 +304,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Not setQueue(q): re-entering the player for something already playing
     // inside a queue must not discard the queue. See queueAfterEntry.
     setQueue((prev) => queueAfterEntry(prev, q, id));
+    // A new entry into the player has no opinion about position. Clearing it
+    // makes the next read fall back to finding the item, rather than trusting
+    // an index left over from a different queue.
+    setPos(-1);
   }, []);
 
   const stop = useCallback(() => {
@@ -325,8 +347,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shuffle, queue.join(",")]);
 
-  const idxInOrder = order.indexOf(itemID);
-  const hasNext = repeat !== "off" ? order.length > 1 : idxInOrder >= 0 && idxInOrder + 1 < order.length;
+  const idxInOrder = resolvePos(order, pos, itemID);
+  const hasNext = repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null;
   const hasPrev = order.length > 1;
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
@@ -339,11 +361,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [itemID]);
 
   const advanceQueue = useCallback((): boolean => {
-    const next = nextAfter(order, itemID, repeat);
-    if (next == null) return false;
-    setItemID(next);
+    const from = resolvePos(order, pos, itemID);
+    const to = nextPos(order, from, repeat);
+    if (to == null) return false;
+    setPos(to);
+    setItemID(order[to]);
     return true;
-  }, [order, itemID, repeat]);
+  }, [order, pos, itemID, repeat]);
 
   const playNext = useCallback(() => {
     advanceQueue();
@@ -360,18 +384,28 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       seekTo(0);
       return;
     }
-    const idx = order.indexOf(itemID);
-    if (idx > 0) {
-      setItemID(order[idx - 1]);
-    } else if (repeat === "all" && order.length > 0) {
-      setItemID(order[order.length - 1]);
-    } else {
+    const from = resolvePos(order, pos, itemID);
+    const to = prevPos(order, from, repeat);
+    if (to == null) {
+      // Nothing before this one: restart it, which is what every player does.
       seekTo(0);
+      return;
     }
+    setPos(to);
+    setItemID(order[to]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order, itemID, repeat]);
+  }, [order, pos, itemID, repeat]);
 
-  const playFromQueue = useCallback((id: number) => setItemID(id), []);
+  /*
+   * Picked from the queue panel. The position comes with it, because the panel
+   * is the one place that knows *which* row was pressed — and on a playlist
+   * with a repeat, two rows carry the same id. Without the position, pressing
+   * the second copy would start the first.
+   */
+  const playFromQueue = useCallback((id: number, at?: number) => {
+    if (at != null) setPos(at);
+    setItemID(id);
+  }, []);
 
   const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
   const setShuffleMode = useCallback((on: boolean) => setShuffle(on), []);

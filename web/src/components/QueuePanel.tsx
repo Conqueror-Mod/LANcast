@@ -17,7 +17,7 @@ export function QueuePanel({
 }: {
   ids: number[];
   currentID: number;
-  onPick: (id: number) => void;
+  onPick: (id: number, at: number) => void;
 }) {
   /*
    * Open the panel on the track that is playing, not on the top of the list.
@@ -53,7 +53,10 @@ export function QueuePanel({
             position={i + 1}
             current={id === currentID}
             rowRef={id === currentID ? currentRow : undefined}
-            onPick={onPick}
+            // The row's position, not just its id: two rows in a playlist can
+            // carry the same track, and only the position says which was
+            // pressed.
+            onPick={() => onPick(id, i)}
           />
         ))}
       </div>
@@ -72,7 +75,7 @@ function QueueRow({
   position: number;
   current: boolean;
   rowRef?: React.RefObject<HTMLButtonElement>;
-  onPick: (id: number) => void;
+  onPick: () => void;
 }) {
   const { data: item } = useItem(id);
   return (
@@ -80,7 +83,7 @@ function QueueRow({
       role="menuitem"
       ref={rowRef}
       className={"queue__row" + (current ? " is-current" : "")}
-      onClick={() => onPick(id)}
+      onClick={onPick}
       aria-current={current ? "true" : undefined}
     >
       <span className="queue__num">{position}</span>

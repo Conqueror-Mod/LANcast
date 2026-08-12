@@ -47,37 +47,6 @@ export function shuffledStartingWith(
 export type RepeatMode = "off" | "all" | "one";
 
 /**
- * nextAfter returns the item that follows `current` in `order`, or null when
- * playback should stop.
- *
- * `repeat: "all"` wraps to the front. `"off"` stops at the end, which is what
- * finishing an album should do rather than starting it again. `"one"` never
- * reaches here — the caller reseeks instead of reloading the same source.
- */
-export function nextAfter(
-  order: number[],
-  current: number,
-  repeat: RepeatMode,
-): number | null {
-  const idx = order.indexOf(current);
-  if (idx < 0) return null;
-  if (idx + 1 < order.length) return order[idx + 1];
-  if (repeat === "all" && order.length > 0) return order[0];
-  return null;
-}
-
-/**
- * prevBefore is the mirror, without the wrap. Stepping back from the first item
- * does nothing rather than jumping to the end: "previous" at the start of a
- * record is not a request to hear the last song.
- */
-export function prevBefore(order: number[], current: number): number | null {
-  const idx = order.indexOf(current);
-  if (idx <= 0) return null;
-  return order[idx - 1];
-}
-
-/**
  * queueAfterEntry decides what the queue becomes when the player screen is
  * entered for `id` carrying `incoming`.
  *
@@ -102,4 +71,63 @@ export function queueAfterEntry(
   const noInformation = incoming.length === 1 && incoming[0] === id;
   if (noInformation && existing.includes(id)) return existing;
   return incoming;
+}
+
+/*
+ * Positions, not identities.
+ *
+ * Everything above answers "what comes after this id", which is the wrong
+ * question the moment a queue can hold the same id twice — and a playlist can
+ * (ADR 0030). indexOf finds the *first* occurrence, so a track appearing at
+ * positions 0 and 2 always resumed from position 0: Road Trip played 1, 2, then
+ * 1 again, and then 2 again, forever. Nothing else in the queue was reachable.
+ *
+ * The cursor is a position now. The id is still what plays; the position is
+ * where in the order it is playing from, and only the position can tell two
+ * copies of the same track apart.
+ */
+
+/**
+ * resolvePos validates a remembered position against the order.
+ *
+ * The position can go stale — shuffle is toggled, the queue is replaced — and a
+ * stale index into a reordered array is worse than no index, because it points
+ * confidently at the wrong song. When it no longer holds the item that is
+ * playing, fall back to finding that item. First occurrence is the honest
+ * answer there: with nothing else to go on, the front of the queue is where a
+ * listener would assume they are.
+ */
+export function resolvePos(order: number[], pos: number, current: number): number {
+  if (pos >= 0 && pos < order.length && order[pos] === current) return pos;
+  return order.indexOf(current);
+}
+
+/** The next position, or null when playback should stop. */
+export function nextPos(
+  order: number[],
+  pos: number,
+  repeat: RepeatMode,
+): number | null {
+  if (pos < 0) return null;
+  if (pos + 1 < order.length) return pos + 1;
+  if (repeat === "all" && order.length > 0) return 0;
+  return null;
+}
+
+/**
+ * The previous position, or null to stay where we are.
+ *
+ * "all" wraps to the end, matching next. Without repeat, previous at the front
+ * does nothing rather than jumping to the last track — that is a restart, and
+ * the caller handles it.
+ */
+export function prevPos(
+  order: number[],
+  pos: number,
+  repeat: RepeatMode,
+): number | null {
+  if (pos < 0) return null;
+  if (pos > 0) return pos - 1;
+  if (repeat === "all" && order.length > 0) return order.length - 1;
+  return null;
 }
