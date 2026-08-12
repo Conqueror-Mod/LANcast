@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"lancast/internal/media"
 	"lancast/internal/store"
@@ -85,6 +86,16 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "mode must be 'ignore' or 'delete'")
 		return
 	}
+	// Deleting files can be switched off for the whole server. Checked before
+	// anything is read, so a server that does not delete media never even looks
+	// up what it would have deleted. mode=ignore is untouched: it writes no
+	// file and removes nothing from disk.
+	if mode == "delete" && !s.settings.Get().AllowMediaDeletion {
+		writeError(w, http.StatusForbidden, "forbidden",
+			"this server does not allow deleting media files; remove from library instead")
+		return
+	}
+
 	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
@@ -333,7 +344,16 @@ func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, i
 // first — the home screen's first shelf. Progress is included so tiles can draw
 // their resume bar without a second call.
 func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
-	items, err := s.st.ContinueWatching(r.Context(), s.userID(r), queryInt(r, "limit"))
+	// The client may ask for fewer; it may not ask for more than the server's
+	// configured shelf. A limit is a rule about what this server shows, not a
+	// suggestion a client gets to raise.
+	cur := s.settings.Get()
+	limit := queryInt(r, "limit")
+	if limit <= 0 || limit > cur.ContinueLimit {
+		limit = cur.ContinueLimit
+	}
+	items, err := s.st.ContinueWatching(r.Context(), s.userID(r), limit,
+		cur.ContinueCutoff(time.Now()))
 	if err != nil {
 		s.writeInternal(w, err, "continue watching")
 		return
@@ -376,10 +396,27 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
-	if err := s.st.SaveProgress(r.Context(), id, s.userID(r), req.PositionMS, req.Watched); err != nil {
+
+	// The threshold is applied here, not in the client. Credits are not the
+	// film: stopping at 96% is finishing it, and a shelf that keeps offering
+	// the last ninety seconds back is a shelf nobody clears.
+	//
+	// OR rather than override, in that direction only. A client that knows it
+	// reached the end (it fired `ended`) is telling the truth about something
+	// the server cannot see; a client that says "not watched" at 98% is a
+	// client whose idea of finished is out of date, and the server's rule wins.
+	// A nil duration is an unprobed file, and a percentage of an unknown length
+	// is not a fact about anything — Watched answers false for it.
+	var duration int64
+	if it.DurationMS != nil {
+		duration = *it.DurationMS
+	}
+	watched := req.Watched || s.settings.Get().Watched(req.PositionMS, duration)
+	if err := s.st.SaveProgress(r.Context(), id, s.userID(r), req.PositionMS, watched); err != nil {
 		s.writeInternal(w, err, "save progress")
 		return
 	}

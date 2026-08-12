@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Settings is the user-editable runtime configuration.
@@ -31,6 +32,50 @@ type Settings struct {
 	// installs, and the check is a plain GET carrying no identifier. Off stops
 	// it entirely — nothing else changes.
 	UpdateCheck bool `json:"update_check"`
+
+	// ---- library and playback rules -------------------------------------
+	//
+	// These four are the server's opinion about what a client shows, and they
+	// live here rather than in the client for the reason every rule in LANcast
+	// does: the server owns truth, and a household with a phone, a browser and
+	// a TV must not have three answers to "have I watched this".
+
+	// WatchedThreshold is the percentage of an item's duration past which it
+	// counts as watched. Plex's equivalent exists because credits are not the
+	// film: stopping at 96% is finishing it, and a shelf that keeps offering
+	// the last ninety seconds back is a shelf nobody clears.
+	//
+	// Applied server-side on every progress write, so a client that never
+	// bothers to send `watched` still gets correct state, and a client that
+	// sends it early cannot un-finish something.
+	WatchedThreshold int `json:"watched_threshold,omitempty"`
+
+	// ContinueWeeks drops anything untouched for this many weeks off the
+	// Continue Watching shelf. Zero means never drop anything.
+	//
+	// A shelf is a promise that these are the things you are in the middle of.
+	// The half-hour of a documentary you abandoned in March is not that, and it
+	// pushes out the thing you paused last night.
+	ContinueWeeks int `json:"continue_weeks,omitempty"`
+
+	// ContinueLimit caps how many items that shelf holds.
+	ContinueLimit int `json:"continue_limit,omitempty"`
+
+	// AllowMediaDeletion permits deleting media *files from disk* through the
+	// API. Off makes `DELETE /api/items/{id}?mode=delete` a 403; removing a
+	// title from the library (mode=ignore) is unaffected, because that touches
+	// no file.
+	//
+	// On by default, matching the behaviour that already shipped — turning it
+	// off is an operator saying "this server does not delete my media", which
+	// is a thing a person should be able to say and could not before.
+	AllowMediaDeletion bool `json:"allow_media_deletion"`
+
+	// ScanIntervalHours rescans every library on a timer. Zero is off, which is
+	// the default: LANcast scans when asked and when a library is created, and
+	// a periodic scan is for a server whose media arrives by other means —
+	// a downloader, a sync job, another machine's writes.
+	ScanIntervalHours int `json:"scan_interval_hours,omitempty"`
 
 	// HardwareEncoder is "auto", "off", or a specific ffmpeg encoder name.
 	// Auto takes the fastest encoder that passed a real test encode.
@@ -68,7 +113,15 @@ func (s Settings) Secured() bool { return s.PasswordHash != "" }
 // someone's media folders is not something to do unasked.
 func Defaults() Settings {
 	return Settings{RatePerSec: 5, WriteNFO: false, AutoEnrich: true,
-		UpdateCheck: true, HardwareEncoder: "auto"}
+		UpdateCheck: true, HardwareEncoder: "auto",
+		// 90% is the long-standing convention and the value Plex ships; the
+		// last tenth of a film is credits often enough that finishing it is the
+		// safer default. 16 weeks and 40 items match it too — not out of
+		// deference, but because they are the numbers a decade of people have
+		// found unsurprising, and an unsurprising default is the whole job of a
+		// default.
+		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
+		AllowMediaDeletion: true, ScanIntervalHours: 0}
 }
 
 // SettingsStore reads and writes the settings file.
@@ -100,6 +153,7 @@ func LoadSettings(dir string) (*SettingsStore, error) {
 	if loaded.RatePerSec <= 0 {
 		loaded.RatePerSec = Defaults().RatePerSec
 	}
+	clamp(&loaded)
 	s.cur = loaded
 	return s, nil
 }
@@ -116,6 +170,7 @@ func (s *SettingsStore) Set(next Settings) error {
 	if next.RatePerSec <= 0 {
 		next.RatePerSec = Defaults().RatePerSec
 	}
+	clamp(&next)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -139,6 +194,53 @@ func (s *SettingsStore) Set(next Settings) error {
 
 	s.cur = next
 	return nil
+}
+
+// clamp replaces out-of-range numbers with their defaults.
+//
+// Here rather than only in the API handler, because the file is editable by
+// hand and a hand-edited zero must not become a rule. A WatchedThreshold of 0
+// would mark everything watched the instant it started playing — the setting
+// failing open in the most destructive direction available to it, against
+// state a person cannot easily reconstruct.
+//
+// Zero is meaningful for ContinueWeeks (never expire) and ScanIntervalHours
+// (off), so those are floors rather than replacements.
+func clamp(s *Settings) {
+	d := Defaults()
+	if s.WatchedThreshold < 50 || s.WatchedThreshold > 100 {
+		s.WatchedThreshold = d.WatchedThreshold
+	}
+	if s.ContinueWeeks < 0 {
+		s.ContinueWeeks = d.ContinueWeeks
+	}
+	if s.ContinueLimit <= 0 || s.ContinueLimit > 100 {
+		s.ContinueLimit = d.ContinueLimit
+	}
+	if s.ScanIntervalHours < 0 {
+		s.ScanIntervalHours = 0
+	}
+}
+
+// ContinueCutoff is the unix time before which a paused item leaves the
+// Continue Watching shelf, or 0 when nothing ever expires.
+func (s Settings) ContinueCutoff(now time.Time) int64 {
+	if s.ContinueWeeks <= 0 {
+		return 0
+	}
+	return now.AddDate(0, 0, -7*s.ContinueWeeks).Unix()
+}
+
+// Watched reports whether this position finishes an item of this duration.
+//
+// False when the duration is unknown — an unprobed file, or a live stream —
+// because a percentage of nothing is not a fact about anything, and guessing
+// here marks things watched that were never played.
+func (s Settings) Watched(positionMS, durationMS int64) bool {
+	if durationMS <= 0 || positionMS <= 0 {
+		return false
+	}
+	return positionMS*100 >= durationMS*int64(s.WatchedThreshold)
 }
 
 // Path is the settings file location, for diagnostics.

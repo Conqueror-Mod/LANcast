@@ -26,9 +26,15 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			"configured": cur.OMDbKey != "",
 		},
 		"rate_per_sec": cur.RatePerSec,
-		"write_nfo":    cur.WriteNFO,
-		"auto_enrich":  cur.AutoEnrich,
-		"update_check": cur.UpdateCheck,
+		// The server's rules about what a client shows and what it may do.
+		"watched_threshold":    cur.WatchedThreshold,
+		"continue_weeks":       cur.ContinueWeeks,
+		"continue_limit":       cur.ContinueLimit,
+		"allow_media_deletion": cur.AllowMediaDeletion,
+		"scan_interval_hours":  cur.ScanIntervalHours,
+		"write_nfo":            cur.WriteNFO,
+		"auto_enrich":          cur.AutoEnrich,
+		"update_check":         cur.UpdateCheck,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -59,6 +65,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AutoEnrich       *bool    `json:"auto_enrich"`
 		UpdateCheck      *bool    `json:"update_check"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
+
+		WatchedThreshold   *int  `json:"watched_threshold"`
+		ContinueWeeks      *int  `json:"continue_weeks"`
+		ContinueLimit      *int  `json:"continue_limit"`
+		AllowMediaDeletion *bool `json:"allow_media_deletion"`
+		ScanIntervalHours  *int  `json:"scan_interval_hours"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -95,6 +107,45 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
 	}
+	// Ranges are rejected rather than clamped, because a client sending 200%
+	// has a bug and silently storing 90 hides it. config.clamp is the floor
+	// under a hand-edited file, not a substitute for saying no here.
+	if req.WatchedThreshold != nil {
+		if *req.WatchedThreshold < 50 || *req.WatchedThreshold > 100 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"watched_threshold must be between 50 and 100")
+			return
+		}
+		next.WatchedThreshold = *req.WatchedThreshold
+	}
+	if req.ContinueWeeks != nil {
+		if *req.ContinueWeeks < 0 || *req.ContinueWeeks > 520 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"continue_weeks must be between 0 and 520")
+			return
+		}
+		next.ContinueWeeks = *req.ContinueWeeks
+	}
+	if req.ContinueLimit != nil {
+		if *req.ContinueLimit < 1 || *req.ContinueLimit > 100 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"continue_limit must be between 1 and 100")
+			return
+		}
+		next.ContinueLimit = *req.ContinueLimit
+	}
+	if req.AllowMediaDeletion != nil {
+		next.AllowMediaDeletion = *req.AllowMediaDeletion
+	}
+	if req.ScanIntervalHours != nil {
+		if *req.ScanIntervalHours < 0 || *req.ScanIntervalHours > 168 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"scan_interval_hours must be between 0 (off) and 168")
+			return
+		}
+		next.ScanIntervalHours = *req.ScanIntervalHours
+	}
+
 	encoderChanged := req.HardwareEncoder != nil &&
 		*req.HardwareEncoder != next.HardwareEncoder
 	if req.HardwareEncoder != nil {
@@ -147,5 +198,12 @@ func changedSettings(prev, next config.Settings) []string {
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
+	add("watched_threshold", prev.WatchedThreshold != next.WatchedThreshold)
+	add("continue_weeks", prev.ContinueWeeks != next.ContinueWeeks)
+	add("continue_limit", prev.ContinueLimit != next.ContinueLimit)
+	// Worth auditing loudly: it is the switch that decides whether this server
+	// can destroy media at all.
+	add("allow_media_deletion", prev.AllowMediaDeletion != next.AllowMediaDeletion)
+	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
 	return out
 }

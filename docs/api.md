@@ -1289,6 +1289,28 @@ database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
 empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
 
+**Server rules** (v0.6.13). These five decide what a client shows and what it
+may do, and they live here rather than in each client because the server owns
+truth: a household with a phone, a browser and a TV must not hold three answers
+to "have I watched this".
+
+| Field | Default | Range | What it does |
+|---|---|---|---|
+| `watched_threshold` | `90` | 50–100 | The percentage of an item's duration past which it counts as watched. Applied on **every** `PUT /api/items/{id}/progress`, so a client that never sends `watched` still gets correct state. An item with no known duration is never marked by it |
+| `continue_weeks` | `16` | 0–520 | Items untouched for this many weeks leave `GET /api/continue`. **0 means never expire**, which is a different answer from "expire now" |
+| `continue_limit` | `40` | 1–100 | How many items that shelf holds. A client may ask for fewer with `?limit=`; it **cannot ask for more** |
+| `allow_media_deletion` | `true` | — | When false, `DELETE /api/items/{id}?mode=delete` is **403**. `mode=ignore` is unaffected: it writes no file and deletes nothing from disk |
+| `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
+
+Out-of-range values are **rejected with 400**, not clamped — a client sending
+`200` has a bug, and silently storing `90` hides it. The config file is also
+repaired on load, because it is hand-editable and a hand-edited `0` threshold
+would mark everything watched the moment it started playing.
+
+`watched` on a progress write is **OR-ed** with the threshold, never overridden
+downward: a client that fired `ended` knows something the server cannot see, and
+a client claiming "not watched" at 98% has an out-of-date idea of finished.
+
 ---
 
 ## Plugins
