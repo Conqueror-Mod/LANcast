@@ -917,3 +917,102 @@ export function usePlaylistEntries(playlistID: number, enabled: boolean) {
     enabled: enabled && playlistID > 0,
   });
 }
+
+/**
+ * Every playlist on the server, for the "add to playlist" menu.
+ *
+ * A plain item listing filtered to the kind, so it picks up the same sort and
+ * artwork every other grid gets. Playlists are server-wide (ADR 0030), so there
+ * is no per-user filtering to do here yet.
+ */
+export function usePlaylists(enabled = true) {
+  return useQuery({
+    queryKey: ["playlists"],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>("/api/items?kind=playlist&limit=200", signal).then(
+        (r) => r.items,
+      ),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Invalidate everything a playlist edit can be seen through.
+ *
+ * One helper rather than a list per mutation: a playlist appears in its own
+ * entry list, in the playlist picker, and in the grids and shelves that list
+ * items — and an edit that refreshes two of those three leaves the third
+ * showing a playlist that no longer exists.
+ */
+function invalidatePlaylists(qc: QueryClient, playlistID?: number) {
+  if (playlistID) {
+    qc.invalidateQueries({ queryKey: ["playlist-entries", playlistID] });
+    qc.invalidateQueries({ queryKey: ["item", playlistID] });
+  }
+  for (const key of ["playlists", "items", "recently-added"]) {
+    qc.invalidateQueries({ queryKey: [key] });
+  }
+}
+
+export function useCreatePlaylist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { title: string; library_id: number }) =>
+      apiPost<Item>("/api/playlists", v),
+    onSuccess: () => invalidatePlaylists(qc),
+  });
+}
+
+export function useDeletePlaylist(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend(`/api/playlists/${id}`, "DELETE"),
+    onSuccess: () => invalidatePlaylists(qc, id),
+  });
+}
+
+/** Append to the end of a playlist — "add to playlist". */
+export function useAddToPlaylist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { playlistID: number; itemIDs: number[] }) =>
+      apiSend(`/api/playlists/${v.playlistID}/entries`, "POST", {
+        item_ids: v.itemIDs,
+      }),
+    onSuccess: (_r, v) => invalidatePlaylists(qc, v.playlistID),
+  });
+}
+
+/**
+ * Replace the whole sequence — a reorder.
+ *
+ * The server takes the entire order rather than a move instruction, because a
+ * playlist is an ordered sequence and the client already knows what it should
+ * be. Sending the list it just rendered is also what makes a repeated track
+ * survive a reorder: the ids go as they are, duplicates and all.
+ */
+export function useSetPlaylistEntries(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (itemIDs: number[]) =>
+      apiSend(`/api/playlists/${id}/entries`, "PUT", { item_ids: itemIDs }),
+    onSuccess: () => invalidatePlaylists(qc, id),
+  });
+}
+
+/**
+ * Remove one entry, addressed by position.
+ *
+ * Not by item id: a playlist may hold the same track twice, so an id does not
+ * name a row. The position is the index the list rendered, which is why the
+ * server keeps them dense.
+ */
+export function useRemovePlaylistEntry(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (position: number) =>
+      apiSend(`/api/playlists/${id}/entries/${position}`, "DELETE"),
+    onSuccess: () => invalidatePlaylists(qc, id),
+  });
+}

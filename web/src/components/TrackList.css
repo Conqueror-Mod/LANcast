@@ -166,3 +166,58 @@
   border-color: var(--gold);
   box-shadow: 0 0 0 3px var(--gold-ring);
 }
+
+/*
+ * A playlist row's edits: move up, move down, remove from the list. Same quiet
+ * treatment as the admin remove above and deliberately the same shape — these
+ * are the controls on the right of a row, not a second visual language for
+ * them.
+ *
+ * They are quiet rather than absent at rest because a playlist page that shows
+ * three buttons per line reads as a spreadsheet; you find them by going to the
+ * row you meant, which is the same gesture as pressing it to play.
+ */
+.track-line__act {
+  flex: none;
+  width: 30px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+
+.track-line:hover .track-line__act,
+.track-line__act:focus-visible {
+  opacity: 1;
+}
+
+.track-line__act:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.track-line__act:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/* The first row's "up" and the last row's "down". Dimmed in place rather than
+   removed, so the two live controls do not slide sideways on those rows. */
+.track-line__act:disabled {
+  cursor: default;
+  color: var(--text-faint);
+  opacity: 0;
+}
+
+.track-line:hover .track-line__act:disabled {
+  opacity: 0.25;
+}

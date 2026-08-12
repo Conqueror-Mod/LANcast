@@ -1,0 +1,146 @@
+/*
+ * Same dialog language as RemoveDialog — overlay, raised panel, gold only on
+ * focus and hover. A second dialog style would say this is a different kind of
+ * thing, and it is not.
+ */
+.addpl__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.addpl {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  padding: 18px 20px 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.addpl__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.addpl__x {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.addpl__title {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 6px 0 12px;
+}
+
+.addpl__error {
+  color: var(--danger, #ff6b6b);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.addpl__done {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+/* The list scrolls; the name field below it does not scroll away with it, so
+   "make a new one" is reachable however many playlists exist. */
+.addpl__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.addpl__empty {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.addpl__opt {
+  /* Rows in a scrollable flex column must not shrink, or they collapse to
+     slivers instead of overflowing into the scrollbar. */
+  flex-shrink: 0;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.addpl__opt:hover:not(:disabled),
+.addpl__opt:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.addpl__opt:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.addpl__new {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.addpl__input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.addpl__input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.addpl__create {
+  flex: none;
+  padding: 10px 16px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.addpl__create:hover:not(:disabled),
+.addpl__create:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.addpl__create:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

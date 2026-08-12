@@ -9,6 +9,7 @@ import {
   useIsAdmin,
   fetchArtistQueue,
   usePlaylistEntries,
+  useDeletePlaylist,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
@@ -17,6 +18,7 @@ import { isContainer, childLabel, isPicture } from "@/lib/kind";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
+import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
@@ -66,6 +68,23 @@ function TrailerButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button {...focusable} className="detail__trailer-btn" onClick={onOpen}>
       <span aria-hidden="true">▶</span> Trailer
+    </button>
+  );
+}
+
+function SecondaryButton({
+  label,
+  onPress,
+  className = "detail__fix",
+}: {
+  label: string;
+  onPress: () => void;
+  className?: string;
+}) {
+  const focusable = useFocusable(onPress);
+  return (
+    <button {...focusable} className={className} onClick={onPress}>
+      {label}
     </button>
   );
 }
@@ -149,6 +168,13 @@ export function Detail() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  // Deleting a playlist asks once, in the button itself. A dialog would be the
+  // RemoveDialog's shape and RemoveDialog is about files; a native confirm() is
+  // never an option in this application (it steals focus from the web contents
+  // in a frameless window and does not reliably give it back).
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
@@ -198,7 +224,12 @@ export function Detail() {
     item.kind !== "album" &&
     // A gallery is a folder the scanner invented and sweeps when it empties,
     // exactly like an artist. A photo is a real file and keeps the option.
-    item.kind !== "gallery";
+    item.kind !== "gallery" &&
+    // A playlist gets its own delete, below. This dialog is about files: for a
+    // playlist imported from disk, "delete from disk" would remove the .m3u and
+    // "remove from library" would add it to the ignore list — two filesystem
+    // side effects for what a person meant as "I don't want this list".
+    !isPlaylist;
   // Children that can be played directly (not themselves containers), in order —
   // the queue behind Play all. A show's children are seasons, so it gets none;
   // a season's episodes, a work's parts, and a collection's films all qualify.
@@ -353,6 +384,37 @@ export function Detail() {
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
+              {/* Anything that plays on its own can go in a playlist — a
+                  track, a film, an episode. A container cannot: a playlist
+                  holds entries, not albums, so "add this record" would have to
+                  silently mean "add its twelve tracks", which is a different
+                  request and not one this button asked. Pictures are not
+                  playable at all. */}
+              {!container && !isPicture(item) && (
+                <SecondaryButton
+                  label="Add to playlist"
+                  onPress={() => setAddOpen(true)}
+                />
+              )}
+              {isPlaylist && (
+                <SecondaryButton
+                  className="detail__remove"
+                  label={
+                    deletePlaylist.isPending
+                      ? "Deleting…"
+                      : confirmDelete
+                        ? "Delete this playlist?"
+                        : "Delete playlist"
+                  }
+                  onPress={() => {
+                    if (!confirmDelete) {
+                      setConfirmDelete(true);
+                      return;
+                    }
+                    deletePlaylist.mutate(undefined, { onSuccess: back });
+                  }}
+                />
+              )}
               {isAdmin && canRemove && (
                 <RemoveButton onOpen={() => setRemoveOpen(true)} />
               )}
@@ -412,6 +474,8 @@ export function Detail() {
               <TrackList
                 tracks={children}
                 albumArtist={isPlaylist ? undefined : (item.artist ?? undefined)}
+                // Turns on the row edits: reorder, and remove from the list.
+                playlistID={isPlaylist ? item.id : undefined}
               />
             ) : isGallery ? (
               <div className="detail__children-grid">
@@ -472,6 +536,9 @@ export function Detail() {
             back();
           }}
         />
+      )}
+      {addOpen && (
+        <AddToPlaylist item={item} onClose={() => setAddOpen(false)} />
       )}
       {trailerOpen && trailer && (
         <TrailerModal
