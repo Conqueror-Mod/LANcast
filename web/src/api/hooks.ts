@@ -899,3 +899,21 @@ export function useHealth() {
     staleTime: 60_000,
   });
 }
+
+/**
+ * A playlist's entries, in playing order.
+ *
+ * Not useChildren: a playlist's members live in playlist_entry rather than
+ * under parent_id, because a track belongs to its album and being in a playlist
+ * does not move it (ADR 0030).
+ */
+export function usePlaylistEntries(playlistID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["playlist-entries", playlistID],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?playlist_id=${playlistID}`, signal).then(
+        (r) => r.items,
+      ),
+    enabled: enabled && playlistID > 0,
+  });
+}

@@ -288,6 +288,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `track`, `other` |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
+| `playlist_id` | Return a playlist's entries **in playing order** ([ADR 0030](adr/0030-playlists-and-m3u.md)). The only listing that may repeat an item id — see below |
 | `q` | Case-insensitive substring match on title and series |
 | `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
@@ -849,6 +850,30 @@ Whether a newer release exists. **Admin only.**
   "checking": false, "error": "", "download_error": "", "can_verify": false,
   "enabled": true }
 ```
+
+### Playlists
+
+A playlist is an ordinary item with `kind` `playlist`
+([ADR 0030](adr/0030-playlists-and-m3u.md)). Its entries are **not** `parent_id`
+children — a track belongs to its album, and being in a playlist does not move
+it — so they are fetched with `?playlist_id=`, the way a collection's members
+are fetched with `?collection_id=`.
+
+**A playlist may contain the same item twice**, and this is the one listing in
+the API that can return a duplicate id. A reprise, or a track that opens and
+closes a set, is ordinary. Clients keying a list on item id will collapse those
+into one row and silently shorten the playlist; key on position.
+
+Entries come back in playing order, so no `sort` is needed or accepted here.
+
+`child_count` is **0** for a playlist. It counts `parent_id` children, which a
+playlist has none of; the entry count comes from the entries themselves.
+
+Playlists found on disk as `.m3u` files are imported on scan, and the database
+is the source of truth afterwards — editing one in LANcast locks its membership
+so a later scan cannot undo the edit. `.m3u8` files containing `#EXT-X-` tags
+are HLS playlists (LANcast writes them itself) and are never imported.
+
 
 ### `GET /api/items/{id}/trailer`
 

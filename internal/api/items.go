@@ -236,6 +236,26 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// playlist_id returns a playlist's entries, in playing order. Its own path
+	// for the same reason collection_id has one, and one more besides: a
+	// playlist may hold the same track twice (ADR 0030), so this is the only
+	// listing in the API that can return the same item id more than once. A
+	// caller keying on id — a React list, a map — must key on position instead.
+	if v := q.Get("playlist_id"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid playlist_id")
+			return
+		}
+		items, err := s.st.PlaylistEntries(r.Context(), id)
+		if err != nil {
+			s.writeInternal(w, err, "playlist entries")
+			return
+		}
+		s.decorateAndWriteItems(w, r, items)
+		return
+	}
+
 	// Genre, decade, and content_rating are repeatable: ?genre=A&genre=B widens
 	// within a facet. Empty values are dropped so a trailing "&genre=" is a
 	// no-op rather than a filter for the empty string.
