@@ -7,7 +7,7 @@
  * and everybody notices.
  */
 import { describe, it, expect } from "vitest";
-import { childCountLabel } from "./kind";
+import { childCountLabel, containerCountLabel } from "./kind";
 
 describe("childCountLabel", () => {
   it("says one track, not one tracks", () => {
@@ -31,5 +31,20 @@ describe("childCountLabel", () => {
 
   it("says zero in the plural", () => {
     expect(childCountLabel(0, "track")).toBe("0 tracks");
+  });
+});
+
+// A playlist tile in a grid. child_count became the entry count in v0.6.12, at
+// which point every playlist tile started reading "3 items" — honest about the
+// schema and useless on a tile.
+describe("containerCountLabel", () => {
+  it("counts a playlist in tracks", () => {
+    const playlist = { kind: "playlist", child_count: 3 } as never;
+    expect(containerCountLabel(playlist)).toBe("3 tracks");
+  });
+
+  it("still says nothing for an empty one", () => {
+    const empty = { kind: "playlist", child_count: 0 } as never;
+    expect(containerCountLabel(empty)).toBeNull();
   });
 });

@@ -415,10 +415,12 @@ group is not priority.
   candidates are a post-scan sanity check (a `show`-kind library that produced no
   shows, or a `movie`-kind library where most files parsed as episodes) surfaced
   the same way the review queue surfaces uncertain matches.
-- **Library editing, deferred to the settings redesign.** With kind immutable,
-  what an Edit control would actually govern is the name — worth having, not
-  worth bolting onto the current page. The settings page is due a planned
-  rebuild, and this belongs to it.
+- ~~**Library editing, deferred to the settings redesign.**~~ — **built** in
+  v0.6.16, and it governs more than the name: the *path* is editable too, which
+  is the drive-letter case. Repointing rewrites every item path under the old
+  root in one transaction, so a moved library keeps its matches, artwork, watch
+  positions and playlist membership rather than being deleted and re-added.
+  Kind remains immutable, for the reasons above.
 - **Crash reporting.**
 - ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
   `lancastd.log` and Settings shows it, collapsed by default and never polled.
@@ -426,9 +428,17 @@ group is not priority.
   read by opening a file manager — the wrong ask for the case it serves, since
   it matters most when the server runs as a service and something is wrong. It
   says when the view is partial rather than letting a reader believe they have
-  the whole file. **Debug logging** — raising the level from the UI — is still
-  open.
-- **Clear cache and data** and **reset settings** actions.
+  the whole file. ~~**Debug logging** — raising the level from the UI~~ —
+  **built**: a toggle on the Logs pane that takes effect on the next line
+  logged, no restart, and survives one, because the faults worth turning it on
+  for are the intermittent ones.
+- ~~**Clear cache and data** and **reset settings** actions.~~ — **built**,
+  with the boundary stated rather than assumed: every action must be
+  recoverable *by the server itself*. Cached artwork re-downloads, transcode
+  scratch is rebuilt on the next play, settings return to documented defaults —
+  and the password hash, provider keys, certificate paths and ffmpeg location
+  survive a reset, because a reset cannot restore them and losing the first
+  would lock the operator out of their own server.
 - ~~**Check for updates** with an **auto-update** toggle.~~ — **built,
   unreleased on `main`.** Signed releases, an update check on by default, and a
   download-verify-stage path that swaps the binary in on shutdown. What remains

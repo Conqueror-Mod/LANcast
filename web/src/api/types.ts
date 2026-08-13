@@ -216,6 +216,7 @@ export interface Settings {
   // Server rules: what a client shows and what it may do. They live on the
   // server because a household with a phone, a browser and a TV must not hold
   // three answers to "have I watched this".
+  debug_logging: boolean;
   watched_threshold: number;
   continue_weeks: number;
   continue_limit: number;
@@ -233,6 +234,7 @@ export interface SettingsUpdate {
   auto_enrich?: boolean;
   update_check?: boolean;
   hardware_encoder?: string;
+  debug_logging?: boolean;
   watched_threshold?: number;
   continue_weeks?: number;
   continue_limit?: number;

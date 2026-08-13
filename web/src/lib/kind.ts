@@ -96,6 +96,11 @@ function containerNoun(kind: string): string {
       return "track";
     case "gallery":
       return "photo";
+    // A playlist counts entries, not children, and its entries are tracks in
+    // every playlist anyone has made — an .m3u is a music format. "3 items"
+    // was honest about the schema and useless on a tile.
+    case "playlist":
+      return "track";
     default:
       return "item";
   }
