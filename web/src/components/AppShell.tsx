@@ -9,6 +9,7 @@ import {
 } from "@/api/hooks";
 import { useState, type ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
+import { plainVersion } from "./UpdateSettings";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
 import {
   LibraryIcon,
@@ -228,7 +229,15 @@ function UpdateBanner() {
   const navigate = useNavigate();
 
   const staged = status?.staged ?? "";
-  if (!isAdmin || !staged || dismissed === staged) return null;
+  // A staged update whose version is already the one running is an update that
+  // has been installed — the banner's own belt to the panel's braces, for the
+  // case where this page never saw the install happen (a different tab, a
+  // reload mid-restart) and would otherwise offer to install what is already
+  // there.
+  const running = status?.current ?? "";
+  const alreadyOn =
+    staged !== "" && running !== "" && plainVersion(staged) === plainVersion(running);
+  if (!isAdmin || !staged || alreadyOn || dismissed === staged) return null;
 
   return (
     <div className="app-shell__banner" role="status">

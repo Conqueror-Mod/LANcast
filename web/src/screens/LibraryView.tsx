@@ -257,6 +257,7 @@ export function LibraryView({
         />
       </div>
 
+      <div className="browse__controls">
       {facets?.initials && facets.initials.length > 1 && (
         <AlphabetRail
           initials={facets.initials}
@@ -374,6 +375,7 @@ export function LibraryView({
             Clear
           </button>
         )}
+      </div>
       </div>
 
       {isError && (

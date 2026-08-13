@@ -228,3 +228,39 @@
   background: var(--space-raised);
   font-weight: 600;
 }
+
+/*
+ * The controls stay reachable.
+ *
+ * The A–Z rail and the filter row scroll with the page, which put them off
+ * screen the moment you went looking through a library — and a jump list you
+ * have to scroll back up to reach is a jump list that costs more than it saves.
+ * They stick to the top instead, under the shell's own bar.
+ *
+ * A wrapper rather than sticking each one: two sticky siblings would overlap
+ * each other as they caught, and the letters and the chips are one control
+ * surface anyway.
+ *
+ * Nearly opaque *and* blurred, which is the shell top bar's treatment rather
+ * than a fourth one. Flat opaque would read as a band: the page ground is a
+ * gradient, so a solid strip only matches it at one scroll position. Fully
+ * translucent would let posters scroll through the letters, which is the one
+ * place this app's dark ground stops reading as depth and starts reading as a
+ * rendering fault.
+ */
+.browse__controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 -28px;
+  padding: 4px 28px 2px;
+  background: rgba(7, 11, 24, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Inside the sticky wrapper the filter row keeps its spacing but loses the top
+   margin that was separating it from the header — the wrapper does that now. */
+.browse__controls .browse__filters {
+  margin-top: 8px;
+}

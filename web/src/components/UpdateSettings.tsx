@@ -7,6 +7,7 @@ import {
   useUpdateSettings,
 } from "@/api/hooks";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useHealth } from "@/api/hooks";
 import "./UpdateSettings.css";
 
@@ -62,6 +63,7 @@ export function UpdateSettings() {
    * `installing` is held in the component rather than read from the server for
    * the obvious reason: during it, there is no server to ask.
    */
+  const qc = useQueryClient();
   const [installing, setInstalling] = useState(false);
   const [installedTo, setInstalledTo] = useState<string | null>(null);
   // The version that was staged when the restart began, so the confirmation can
@@ -115,6 +117,12 @@ export function UpdateSettings() {
       setInstalling(false);
       setRestartedUnconfirmed(false);
       setInstalledTo(health.version);
+      // The staged update is gone — the server applied it on the way down — but
+      // /api/update is cached for a minute, so the shell's banner would go on
+      // offering to install something that is already installed until somebody
+      // dismissed it by hand. Ask again now that the answer has changed.
+      qc.invalidateQueries({ queryKey: ["update"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
       return;
     }
 
