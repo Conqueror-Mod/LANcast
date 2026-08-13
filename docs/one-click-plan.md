@@ -1,6 +1,6 @@
 # Updating and starting LANcast without a terminal — plan
 
-Status: proposed · 2026-08-12 · follows [ADR 0022](adr/0022-desktop-modes.md),
+Status: **both built** (v0.6.14) · 2026-08-12 · follows [ADR 0022](adr/0022-desktop-modes.md),
 [ADR 0016](adr/0016-release-and-update.md)
 
 Two complaints, one shape: **the server does work the user cannot see, and then
@@ -108,7 +108,18 @@ user currently has no way to do without Task Manager.
 - **No Linux tray.** There is no tray there and the service manager is systemd,
   which already restarts a unit on its own.
 
-## Order
+## Built
+
+Both, in that order. Problem 1 landed as the relaunch helper plus the four-state
+panel and the shell banner; problem 2 as the service-first launch, the elevation
+prompt, and the failure messages below.
+
+One thing changed on contact with the code: the tray gained **Check for
+updates** as a deep link into Settings rather than a status dialog. The answer
+already lives in the application, and a message box repeating it would give the
+same fact two places to be wrong.
+
+## Order (as planned)
 
 Problem 1 first. It is the one the user hit twice, it is contained to the update
 panel plus one helper mode, and its worst failure is cosmetic. Problem 2 touches
