@@ -837,6 +837,31 @@ func applyStagedUpdate(dataDir string, log *slog.Logger) {
 		"version", m.Version, "files", len(m.Files))
 }
 
+// scanDue decides whether this tick should start a round of scans, and returns
+// the clock to carry into the next one.
+//
+// Separated from the loop because it is the only part of the timer with any
+// judgement in it, and a rule that fires once an hour is otherwise a rule you
+// cannot test in less than an hour. Same split as probe.ParseJSON: the decision
+// is pure, the process is not.
+//
+// The zero `last` means "not started". Enabling the timer starts the clock at
+// that moment rather than firing immediately, so switching it on does not
+// launch a scan for a period that elapsed while it was switched off — and
+// switching it off resets the clock, so switching it back on does not either.
+func scanDue(last, now time.Time, hours int) (time.Time, bool) {
+	if hours <= 0 {
+		return time.Time{}, false
+	}
+	if last.IsZero() {
+		return now, false
+	}
+	if now.Sub(last) < time.Duration(hours)*time.Hour {
+		return last, false
+	}
+	return now, true
+}
+
 // periodicScan rescans every library on the configured interval.
 //
 // Off by default and off when the interval is zero: LANcast scans when asked
@@ -862,21 +887,11 @@ func periodicScan(ctx context.Context, st *store.Store, scanner *scan.Scanner,
 			return
 		case now := <-t.C:
 			hours := settings.Get().ScanIntervalHours
-			if hours <= 0 {
-				// Off. The clock is not started until it is switched on, so
-				// enabling it does not immediately fire a scan for a period
-				// that elapsed while the feature was disabled.
-				last = time.Time{}
+			var due bool
+			last, due = scanDue(last, now, hours)
+			if !due {
 				continue
 			}
-			if last.IsZero() {
-				last = now
-				continue
-			}
-			if now.Sub(last) < time.Duration(hours)*time.Hour {
-				continue
-			}
-			last = now
 
 			libs, err := st.ListLibraries(ctx)
 			if err != nil {
