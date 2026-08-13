@@ -80,6 +80,17 @@ func main() {
 		return
 	}
 
+	// `lancastd relaunch <pid> [args…]` finishes a staged update on an install
+	// that is not a service: it waits for the old server to exit and starts it
+	// again. Never typed by a person — it is a step in an update.
+	if len(os.Args) > 1 && os.Args[1] == relaunchArg {
+		if err := runRelaunch(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd relaunch:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// `lancastd tray` is the windowless desktop mode: the server plus a
 	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
 	if len(os.Args) > 1 && os.Args[1] == "tray" {
@@ -502,6 +513,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	// Closed by the relaunch path below to bring this process down from the
+	// inside. A channel rather than a second cancel func so the reason is
+	// legible at the select: signals mean "stop", this means "stop, something
+	// is waiting to start you again".
+	quit := make(chan struct{})
+	var quitOnce sync.Once
+
 	srv := &http.Server{
 		Addr: listenAddr,
 		Handler: api.New(api.Deps{
@@ -509,6 +527,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 			Worker: worker, Probes: probes, Covers: covers, Photos: photos,
 			ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
+			// Only for installs that are not a service; the service path
+			// restarts through the service manager instead.
+			Relaunch: func() error {
+				if err := scheduleRelaunch(log); err != nil {
+					return err
+				}
+				quitOnce.Do(func() { close(quit) })
+				return nil
+			},
 			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
 			Updates: updates,
 			Rebuild: func(s config.Settings) {
@@ -615,6 +642,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		return err
 	case <-ctx.Done():
 		log.Info("shutting down")
+	case <-quit:
+		// Asked for from inside: the update panel finishing a staged update on
+		// an install that is not a service. The helper is already running and
+		// waiting for this process to disappear.
+		log.Info("shutting down to finish an update")
 	}
 
 	cancelEnrich()

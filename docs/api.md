@@ -997,15 +997,32 @@ to complete**, and starts it again. Renaming a running executable is permitted
 on Windows, which is what lets the helper keep executing while the swap replaces
 the file it was started from.
 
+**An install that is not a service restarts itself too** (v0.6.14). It used to
+be told to close LANcast and open it again, which left the user with no way to
+know whether the swap had happened short of starting the server and reading the
+version — the application knew, and did not say. The same trick one level down:
+a detached `lancastd relaunch <pid> [args…]` waits for this process to exit
+(which is when the staged files are applied, on the way down) and starts it
+again **with the arguments it had**, so a tray launch comes back as a tray and a
+`-data`/`-addr` launch comes back on the same directory and port. The helper
+waits on the process rather than on a timer, and gives up rather than starting a
+second server over one that will not stop.
+
 Two refusals, both `412`:
 
 - `nothing_staged` — there is no update to finish. This endpoint is not a
   general "restart the server" button; that is a bigger and more dangerous
   control, and it would want its own thinking about sessions and playback in
   flight.
-- `not_a_service` — this process belongs to whoever started it. Killing it and
-  hoping something brings it back is not an answer, so the caller is told to
-  close LANcast and open it again.
+- `not_a_service` — only where the host cannot relaunch either, which is now the
+  narrow case rather than the ordinary one. Killing a process nothing will bring
+  back is not an answer, so the caller is told to close LANcast and open it
+  again.
+
+A client finishing an update should **poll `GET /api/health` until it answers
+with the new version** rather than assuming. That is the confirmation the panel
+shows, and the reason the endpoint's silence is not ambiguous: the server is
+expected to stop answering and then answer again as something new.
 
 **The request often gets no response**, because the process answering it is the
 one going down. A dropped connection here means the restart began.

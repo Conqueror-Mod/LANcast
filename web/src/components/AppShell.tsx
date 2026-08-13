@@ -1,6 +1,13 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { useLibraries, useReview, useCurrentUser, useLogout } from "@/api/hooks";
-import type { ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  useLibraries,
+  useReview,
+  useCurrentUser,
+  useLogout,
+  useIsAdmin,
+  useUpdateStatus,
+} from "@/api/hooks";
+import { useState, type ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
 import {
@@ -164,8 +171,57 @@ export function AppShell({ children }: { children: ReactNode }) {
               while something is scanning. */}
           <ActivityPanel />
         </header>
+        <UpdateBanner />
         <main className="app-shell__main">{children}</main>
       </div>
+    </div>
+  );
+}
+
+/*
+ * "An update is ready" is not an activity log entry.
+ *
+ * It lived only in the activity indicator, which is a list of things the server
+ * is *doing* — a scan running, an enrichment pass working through a library.
+ * A staged update is not that: it is a thing waiting on a decision, and the
+ * only reason to look in an activity list for one is that you already know it
+ * is there. So it gets a line at the top of the page, once, until it is either
+ * installed or dismissed.
+ *
+ * Admin only, because nobody else can act on it: the restart endpoint is
+ * admin-gated, and a banner that offers a button a member cannot press is worse
+ * than saying nothing to them.
+ */
+function UpdateBanner() {
+  const isAdmin = useIsAdmin();
+  const { data: status } = useUpdateStatus(isAdmin);
+  const [dismissed, setDismissed] = useState("");
+  const navigate = useNavigate();
+
+  const staged = status?.staged ?? "";
+  if (!isAdmin || !staged || dismissed === staged) return null;
+
+  return (
+    <div className="app-shell__banner" role="status">
+      <span className="app-shell__banner-text">
+        LANcast {staged} has been downloaded and verified, and is ready to
+        install.
+      </span>
+      <button
+        className="app-shell__banner-go"
+        onClick={() => navigate("/settings?pane=updates")}
+      >
+        Install it
+      </button>
+      {/* Dismissal is per version: a new staged update says so again, and the
+          one you dismissed does not come back to nag. */}
+      <button
+        className="app-shell__banner-x"
+        onClick={() => setDismissed(staged)}
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
     </div>
   );
 }

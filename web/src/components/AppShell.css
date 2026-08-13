@@ -370,3 +370,60 @@
     transition: none;
   }
 }
+
+/*
+ * The staged-update line. Across the top of the content, above whatever page
+ * you are on, because it is a decision waiting rather than a page.
+ *
+ * Quiet: a raised strip and ordinary text, no colour shouting. An update that
+ * is downloaded and verified is good news, and good news does not need a
+ * warning treatment — the failure mode of a loud banner is that people learn to
+ * ignore banners.
+ */
+.app-shell__banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 4px;
+  padding: 10px 18px;
+  background: var(--space-raised);
+  border-bottom: 1px solid var(--gold-dormant);
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.app-shell__banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell__banner-go {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.app-shell__banner-go:hover,
+.app-shell__banner-go:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.app-shell__banner-x {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app-shell__banner-x:hover {
+  color: var(--text-primary);
+}

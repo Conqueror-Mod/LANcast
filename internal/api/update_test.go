@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -113,5 +114,64 @@ func TestRestartRefusesWithNothingStaged(t *testing.T) {
 	resp := h.do(t, "POST", "/api/update/restart", nil)
 	if resp.StatusCode != http.StatusPreconditionFailed {
 		t.Errorf("status = %d, want 412", resp.StatusCode)
+	}
+}
+
+// stageFakeUpdate puts a verified-looking update in the staging directory, so a
+// restart has something to finish.
+func stageFakeUpdate(t *testing.T, h *harness) {
+	t.Helper()
+	if err := selfupdate.Stage(h.dataDir, "v0.7.0",
+		map[string][]byte{"LANcast-Server.exe": []byte("new")}, 1234); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Finishing a staged update on an install that is not a service.
+//
+// This used to be a dead end: a 412 telling the user to close LANcast and open
+// it again, with nothing afterwards to say whether the swap had happened. The
+// server knows how to bring itself back now, and the endpoint has to use it.
+func TestRestartUsesTheRelaunchHelperWhenNotAService(t *testing.T) {
+	h := newHarness(t)
+	stageFakeUpdate(t, h)
+
+	called := 0
+	h.srvAPI.relaunch = func() error { called++; return nil }
+	h.srvAPI.serviceManaged = false
+
+	resp := h.do(t, "POST", "/api/update/restart", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 202 {
+		t.Fatalf("status = %d, want 202 accepted", resp.StatusCode)
+	}
+	if called != 1 {
+		t.Errorf("relaunch called %d times, want 1", called)
+	}
+}
+
+// With no way to come back, the honest answer is still the old one. Killing the
+// process and hoping something restarts it is the failure this guards.
+func TestRestartStillRefusesWhenItCannotComeBack(t *testing.T) {
+	h := newHarness(t)
+	stageFakeUpdate(t, h)
+	h.srvAPI.relaunch = nil
+	h.srvAPI.serviceManaged = false
+
+	wantError(t, h.do(t, "POST", "/api/update/restart", nil), 412, "not_a_service")
+}
+
+// A relaunch that cannot even be scheduled must not report success: the client
+// would show "Installing…" over a server that is going to sit there.
+func TestRestartReportsAFailedRelaunch(t *testing.T) {
+	h := newHarness(t)
+	stageFakeUpdate(t, h)
+	h.srvAPI.serviceManaged = false
+	h.srvAPI.relaunch = func() error { return errors.New("no") }
+
+	resp := h.do(t, "POST", "/api/update/restart", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 500 {
+		t.Errorf("status = %d, want 500 — a failed relaunch is not an accepted one", resp.StatusCode)
 	}
 }
