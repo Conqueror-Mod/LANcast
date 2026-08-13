@@ -166,6 +166,38 @@ describe("update panel", () => {
     expect(host.textContent).toContain("Updated to LANcast 0.6.14");
   });
 
+  /*
+   * The floor under the whole thing.
+   *
+   * Three releases running shipped a confident version comparison that was
+   * wrong in a way nobody could see until an update ran, and the cost each time
+   * was a panel saying "Installing…" for ever over a server that had finished
+   * minutes earlier. So the panel now has a state it cannot fail to reach: if
+   * the server is answering and the version still proves nothing, it says what
+   * it actually knows.
+   *
+   * The version here never changes and never matches — the shape of every bug
+   * this has had.
+   */
+  it("stops waiting eventually, even when the version proves nothing", { timeout: 70000 }, async () => {
+    // The server keeps reporting the version it started on: neither signal ever
+    // fires. That is what a broken comparison looks like from here — and what
+    // an install that genuinely did not take would look like too, which is why
+    // the fallback says "reload and look" rather than claiming success.
+    statusBody = { ...base, staged: "v0.6.14", staged_at: 1 };
+    healthBody = { status: "ok", version: "0.6.13", api_version: 1 };
+    await render();
+    await act(async () => button(/Install and restart/).click());
+    await settle();
+    expect(host.textContent).toContain("Installing");
+
+    // Past the deadline, with the server answering the whole time.
+    await settle(46_000);
+    expect(host.textContent).toContain("may have restarted");
+    expect(host.textContent).toContain("reload");
+    expect(host.textContent).not.toContain("Installing LANcast");
+  });
+
   it("stops waiting when the download fails rather than saying Downloading for ever", { timeout: 20000 }, async () => {
     await render();
     await act(async () => button(/Download and install/).click());

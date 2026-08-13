@@ -70,6 +70,13 @@ export function UpdateSettings() {
   // And what it was *before* — the second, independent signal that the restart
   // happened. See the effect below.
   const startedFrom = useRef<string>("");
+  // When the install began, for the deadline below.
+  const startedAt = useRef<number>(0);
+  // The panel could not confirm which version came back, but the server is
+  // answering again. A terminal state, because the alternative is the one this
+  // whole thread has been about: a panel that waits for ever on something that
+  // already happened.
+  const [restartedUnconfirmed, setRestartedUnconfirmed] = useState(false);
 
   // Polled only while installing: the server is expected to stop answering and
   // then answer again, which is the one time a failing health check is the
@@ -106,9 +113,35 @@ export function UpdateSettings() {
     const before = plainVersion(startedFrom.current);
     if ((wanted && now === wanted) || (before && now !== before)) {
       setInstalling(false);
+      setRestartedUnconfirmed(false);
       setInstalledTo(health.version);
+      return;
     }
+
   }, [installing, health?.version]);
+
+  /*
+   * The floor under all of it.
+   *
+   * Three releases running shipped a confident version comparison that was
+   * wrong in a way nobody could see until an update ran, and the cost each time
+   * was the same: "Installing…" for ever, over a server that had finished
+   * minutes earlier. So the wait has an end that does not depend on
+   * understanding the versions at all.
+   *
+   * A timer rather than a check inside the effect above, because that effect is
+   * keyed on the version — and React Query preserves object identity when the
+   * data has not changed, so a version that never changes never re-runs it.
+   * The case the floor exists for is precisely the case where nothing changes.
+   */
+  useEffect(() => {
+    if (!installing) return;
+    const t = setTimeout(() => {
+      setInstalling(false);
+      setRestartedUnconfirmed(true);
+    }, 45_000);
+    return () => clearTimeout(t);
+  }, [installing]);
 
   if (!status?.supported) return null;
 
@@ -131,6 +164,11 @@ export function UpdateSettings() {
                 Updated to LANcast {installedTo}
                 <span className="upd-badge upd-badge--done">done</span>
               </>
+            ) : restartedUnconfirmed ? (
+              <>
+                LANcast may have restarted
+                <span className="upd-badge">reload</span>
+              </>
             ) : status.staged ? (
               <>
                 LANcast {status.staged} is ready to install
@@ -150,7 +188,9 @@ export function UpdateSettings() {
               ? "LANcast is restarting to finish the update. This takes a few seconds — the server will come back on its own."
               : installedTo
                 ? "The server restarted and is running the new version."
-                : status.staged
+                : restartedUnconfirmed
+                  ? "This page could not confirm which version came back. Reload it to see what is running — the update itself is applied by the server, not by this page."
+                  : status.staged
                   ? "Downloaded and verified. Installing restarts the server: playback stops for a few seconds and LANcast starts itself again."
                   : describe(status)}
           </div>
@@ -190,6 +230,8 @@ export function UpdateSettings() {
               onClick={() => {
                 target.current = status.staged ?? "";
                 startedFrom.current = status.current ?? "";
+                startedAt.current = Date.now();
+                setRestartedUnconfirmed(false);
                 restart.mutate(undefined, {
                   // Only once the server has accepted it: a failed request
                   // leaves a server that is still running and still staged, and
