@@ -102,12 +102,25 @@
  * gradient the old nav had, because it still floats over content that scrolls
  * beneath it.
  */
+/*
+ * The bar's height is a token because something else has to sit under it: the
+ * browse controls stick below this, and "0" put them behind it — the A-Z rail
+ * scrolled up and vanished under the bar while the filters below it stayed,
+ * which read as the rail disappearing rather than as two sticky things
+ * overlapping.
+ */
+:root {
+  --topbar-h: 52px;
+}
+
 .app-shell__top {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 24px;
-  padding: 16px 28px;
+  padding: 14px 28px;
+  min-height: var(--topbar-h);
+  box-sizing: border-box;
   position: sticky;
   top: 0;
   z-index: 10;
