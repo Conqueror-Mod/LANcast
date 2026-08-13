@@ -177,3 +177,54 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/*
+ * The A–Z rail. A horizontal strip above the filters rather than the vertical
+ * bar Plex floats over the grid: this client's right edge belongs to the
+ * content, and a floating column of letters over a poster grid is the one place
+ * a pointer and a d-pad want opposite things.
+ *
+ * It wraps rather than scrolls — at most twenty-seven keys, and a strip that
+ * scrolls sideways hides the very letters it exists to expose.
+ */
+.browse__az {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 0 6px;
+}
+
+.browse__az-key {
+  min-width: 26px;
+  padding: 4px 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile, 8px);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
+}
+
+.browse__az-key:hover {
+  color: var(--text-primary);
+  background: var(--space-raised);
+}
+
+.browse__az-key:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/* The selected letter. Weight and a raised background, never gold — gold means
+   where the focus is, and a filter is not that. */
+.browse__az-key.is-on {
+  color: var(--text-primary);
+  background: var(--space-raised);
+  font-weight: 600;
+}

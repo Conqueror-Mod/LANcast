@@ -183,6 +183,8 @@ export interface ItemsPage {
 // present are returned, so a chosen filter never empties the grid. has_watched
 // gates the unwatched-only toggle: offered only when it would remove something.
 export interface Facets {
+  /** First letters present in this library, "#" first. Drives the A–Z rail. */
+  initials?: string[];
   genres: string[];
   decades: number[];
   content_ratings: string[];

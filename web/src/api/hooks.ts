@@ -560,6 +560,8 @@ export interface ItemQuery {
   unwatched?: boolean;
   /** Drop one kind from the listing — the grid uses it for collections. */
   excludeKind?: string;
+  /** A–Z rail: one letter, or "#" for everything that starts with anything else. */
+  initial?: string;
   limit?: number;
   offset?: number;
 }
@@ -576,6 +578,7 @@ function itemsParams({
   contentRatings = [],
   unwatched = false,
   excludeKind,
+  initial,
   limit = 120,
   offset = 0,
 }: ItemQuery): URLSearchParams {
@@ -588,6 +591,7 @@ function itemsParams({
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
   if (excludeKind) params.set("exclude_kind", excludeKind);
+  if (initial) params.set("initial", initial);
   // Repeatable facet filters — one param per chosen value (OR within a facet).
   for (const g of genres) params.append("genre", g);
   for (const d of decades) params.append("decade", String(d));
