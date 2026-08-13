@@ -209,6 +209,29 @@ export function useCreateLibrary() {
 
 // Forgets a library (never deletes files). Its items vanish from every view, so
 // the lists that could be showing them are refreshed.
+/**
+ * Edit a library: its name, its path, or both.
+ *
+ * Not its kind — the server refuses that, and the client does not offer it. A
+ * kind decides which scanner runs and what the top level of the browse is;
+ * changing it would leave a library describing itself as something its rows are
+ * not.
+ */
+export function useUpdateLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; name?: string; path?: string }) =>
+      apiSend(`/api/libraries/${v.id}`, "PATCH", { name: v.name, path: v.path }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+      // A repoint rewrites every item path in the library, so anything holding
+      // items has to be re-read rather than trusted.
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}
+
 export function useDeleteLibrary() {
   const qc = useQueryClient();
   return useMutation({

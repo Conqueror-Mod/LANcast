@@ -173,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)
 	mux.HandleFunc("POST /api/libraries", s.adminOnly(s.createLibrary))
+	mux.HandleFunc("PATCH /api/libraries/{id}", s.adminOnly(s.patchLibrary))
 	mux.HandleFunc("DELETE /api/libraries/{id}", s.adminOnly(s.deleteLibrary))
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)

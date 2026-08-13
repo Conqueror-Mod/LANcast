@@ -1589,3 +1589,78 @@ func (s *Store) DeleteEmptyMusicContainers(ctx context.Context, libraryID int64)
 	}
 	return total, nil
 }
+
+// RenameLibrary changes a library's display name. Nothing else moves: the name
+// is a label, and no row anywhere refers to it.
+func (s *Store) RenameLibrary(ctx context.Context, id int64, name string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE library SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return fmt.Errorf("rename library: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RepointLibrary moves a library to a new root, carrying its contents with it.
+//
+// This is the drive-letter case, and it is the reason editing a path is worth
+// having at all: the media moved from D: to E:, or a folder was renamed, and
+// everything LANcast knows about it — matches, artwork, watch state, playlist
+// membership — is keyed on rows whose `path` still names the old place. A
+// library that could only be deleted and re-added would throw all of that away
+// to record a fact about a drive letter.
+//
+// So every path under the old root is rewritten to the new one, in a single
+// transaction, and *nothing else changes*: no row is deleted, no item is marked
+// missing, no scan is triggered. A rescan afterwards reconciles files the same
+// way it always does — this only tells it where to look.
+//
+// Deliberately not clever about case or separators. It is an exact prefix swap
+// on the stored strings, because the stored strings are what every other query
+// joins on; a normalizing rewrite would "fix" paths into a form the filesystem
+// layer never produced and quietly orphan them.
+//
+// The ignore list moves too. Those are absolute paths to files somebody chose
+// not to see, and a library that moved must not resurrect them.
+func (s *Store) RepointLibrary(ctx context.Context, id int64, oldRoot, newRoot string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("repoint library: %w", err)
+	}
+	defer tx.Rollback()
+
+	// A trailing separator on either side would double it in every rewritten
+	// path, so both are normalized to "no trailing separator" and the separator
+	// comes from the stored path itself.
+	oldRoot = strings.TrimRight(oldRoot, `/\`)
+	newRoot = strings.TrimRight(newRoot, `/\`)
+	prefix := oldRoot + "%"
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE media_item
+		SET path = ? || SUBSTR(path, ?)
+		WHERE library_id = ? AND path LIKE ?`,
+		newRoot, len(oldRoot)+1, id, prefix); err != nil {
+		return fmt.Errorf("repoint library: items: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE ignored_path
+		SET path = ? || SUBSTR(path, ?)
+		WHERE path LIKE ?`,
+		newRoot, len(oldRoot)+1, prefix); err != nil {
+		return fmt.Errorf("repoint library: ignored paths: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE library SET path = ? WHERE id = ?`, newRoot, id)
+	if err != nil {
+		return fmt.Errorf("repoint library: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("repoint library: commit: %w", err)
+	}
+	return nil
+}

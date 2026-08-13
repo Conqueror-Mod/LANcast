@@ -178,6 +178,31 @@ directory; both are validated before insert.
 Returns `201` with the created library. Returns `conflict` if the path is
 already registered.
 
+### `PATCH /api/libraries/{id}`
+
+Edits a library. **Admin only.** Returns the updated library.
+
+```json
+{ "name": "Films", "path": "E:\Movies" }
+```
+
+Both fields are optional; omitted means unchanged.
+
+**`kind` cannot be changed** and sending a different one is a `400`, not a
+silent no-op — a client that sends a kind believes it is changing one. A kind
+decides which scanner runs, which provider is asked, and what the top level of
+the browse is; changing it would leave a library describing itself as something
+its rows are not. Add the folder again as the type you meant.
+
+**Changing `path` moves the library and its contents.** Every item path under
+the old root is rewritten to the new one in a single transaction, along with the
+ignore list — so a drive letter change keeps every match, every piece of
+artwork, every watch position and every playlist that referenced those files.
+Nothing is deleted and nothing is marked missing; a rescan afterwards reconciles
+files exactly as it always does. A path that does not exist, or is not a
+directory, is refused **before** anything is rewritten: a typo must not mark a
+whole library missing.
+
 ### `DELETE /api/libraries/{id}`
 
 Forgets a library: its rows and, by `ON DELETE CASCADE`, its items, playback

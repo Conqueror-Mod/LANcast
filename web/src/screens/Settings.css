@@ -500,3 +500,34 @@
   padding: 0 2px 6px;
   max-width: 620px;
 }
+
+/* The library editor, opened under the row it edits. Indented so it reads as
+   belonging to that library rather than as a new section. */
+.set-libedit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 2px 0 10px 14px;
+  padding: 14px 16px;
+  border-left: 2px solid var(--gold-dormant);
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  border-radius: 0 var(--radius-tile, 8px) var(--radius-tile, 8px) 0;
+}
+
+.set-libedit__field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.set-libedit__field > span {
+  width: 56px;
+  flex: none;
+}
+
+.set-libedit__field input {
+  flex: 1;
+  min-width: 0;
+}
