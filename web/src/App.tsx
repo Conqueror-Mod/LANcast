@@ -4,6 +4,7 @@ import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
+import { Search } from "@/screens/Search";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
 import { Settings } from "@/screens/Settings";
@@ -37,6 +38,7 @@ export function App() {
       <AppShell>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/search" element={<Search />} />
           <Route path="/library/:id" element={<Browse />} />
           {/* A page *of* a library, not a global one: a playlist belongs to the
               library its tracks and its .m3u live in (ADR 0030). */}

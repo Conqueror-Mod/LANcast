@@ -1,0 +1,77 @@
+/* The shortcut overlay. Same dialog language as the rest — overlay, raised
+   panel, gold only on focus. It appears over a film, so it is dark and small
+   rather than a page of documentation. */
+.keyhelp__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.keyhelp {
+  width: 100%;
+  max-width: 560px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  padding: 18px 20px 20px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.keyhelp__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.keyhelp__x {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.keyhelp__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 28px;
+}
+
+@media (max-width: 620px) {
+  .keyhelp__cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.keyhelp__group {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.keyhelp__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.keyhelp__row kbd {
+  flex: none;
+  min-width: 84px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+  color: var(--text-primary);
+}

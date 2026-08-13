@@ -440,3 +440,33 @@
 .app-shell__banner-x:hover {
   color: var(--text-primary);
 }
+
+/* Search, in the bar. A quiet control until wanted, like the review link beside
+   it — it is a destination, not a state. */
+.app-shell__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.app-shell__search:hover {
+  color: var(--text-primary);
+  background: var(--space-raised);
+}
+
+.app-shell__search:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.app-shell__search.is-active {
+  color: var(--text-primary);
+}

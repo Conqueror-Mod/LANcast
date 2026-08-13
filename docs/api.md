@@ -321,6 +321,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
+| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it |
 | `initial` | The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on `sort_title`, case-insensitively. A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns `initials`, the letters actually present, so a client never offers one that finds nothing |
 | `exclude_kind` | Drops one kind from the listing. The browse grid passes `collection`: a franchise groups films rather than being one, and a collection tile beside its own members made a curated shelf read as an unsorted one. Collections have their own page, asked for with `kind=collection` |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |

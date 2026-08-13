@@ -30,6 +30,7 @@ import {
   useServerLog,
 } from "@/api/hooks";
 import { LIBRARY_KINDS, kindLabel } from "./libraryConfig";
+import { ALL_KEYS } from "@/lib/keys";
 import { DirectoryPicker } from "@/components/DirectoryPicker";
 import { AuditLog } from "@/components/AuditLog";
 import { UpdateSettings } from "@/components/UpdateSettings";
@@ -44,16 +45,6 @@ import type {
 } from "@/api/types";
 import "./Settings.css";
 
-const KEYS: [string, string][] = [
-  ["Arrows", "Move between tiles and shelves"],
-  ["Enter", "Open the focused item"],
-  ["Esc", "Back / close"],
-  ["Space · K", "Play / pause (player)"],
-  ["← · →", "Seek ∓10s (player)"],
-  ["[ · ]", "Cycle subtitle track (player)"],
-  ["↑ · ↓", "Volume up · down (player)"],
-  ["F · M", "Fullscreen · mute (player)"],
-];
 
 function whenScanned(ts: number | null): string {
   if (!ts) return "never scanned";
@@ -947,7 +938,7 @@ function KeyboardSection() {
     <section className="settings__section">
       <span className="section-label">Keyboard</span>
       <div className="set-keys">
-        {KEYS.map(([k, d]) => (
+        {ALL_KEYS.map(([k, d]) => (
           <div className="set-key" key={k}>
             <kbd>{k}</kbd>
             <span>{d}</span>
