@@ -139,13 +139,27 @@ func TestScanReconcileRacesBackgroundWrites(t *testing.T) {
 					errs <- err
 					return
 				}
+				// Yield. Without this the workers write in a tight loop with no
+				// gap at all, which is not what enrichment and probing do —
+				// they write once per item, between reads and network calls —
+				// and the difference is the whole flake.
+				time.Sleep(time.Millisecond)
 			}
 		}()
 	}
 
 	// The scan side: read the known files, then reconcile.
+	//
+	// Forty rounds against three writers that never pause is far more
+	// contention than a real scan meets, and on a busy CI runner it can exhaust
+	// the 5s busy_timeout in the DSN — which failed the build twice with
+	// SQLITE_BUSY and taught everyone to re-run it, which is the worst thing a
+	// test can teach. The invariant is "these two can write concurrently", not
+	// "SQLite never queues", so the loop is shorter and the writers yield
+	// between statements. Contention is still constant; it is no longer a
+	// benchmark of the lock.
 	var scanErr error
-	for i := 0; i < 40 && scanErr == nil; i++ {
+	for i := 0; i < 12 && scanErr == nil; i++ {
 		if _, err := st.KnownFiles(ctx, lib.ID); err != nil {
 			scanErr = err
 			break
