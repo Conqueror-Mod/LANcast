@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 17
+const CurrentSchemaVersion = 18
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -14,6 +14,27 @@ const CurrentSchemaVersion = 17
 type migration struct {
 	version int
 	sql     string
+
+	/*
+	 * rebuildsTable turns foreign keys off for the duration.
+	 *
+	 * SQLite cannot ALTER TABLE ... DROP COLUMN a column carrying a UNIQUE
+	 * constraint, so removing one means the documented twelve-step dance:
+	 * create the replacement, copy, drop the original, rename. With
+	 * `foreign_keys` on — which this store sets, and wants — the DROP is not a
+	 * schema operation but a data one: SQLite treats dropping a parent table as
+	 * deleting all of its rows, and `media_item.library_id` cascades. Dropping
+	 * `library` would take every item, and therefore every watch position and
+	 * every lock, with it.
+	 *
+	 * The pragma cannot be changed inside a transaction, so it is set around
+	 * the whole thing and `foreign_key_check` runs before the commit rather
+	 * than enforcement running during it. That check is what makes this safe:
+	 * it fails the migration if the rebuild left a single dangling reference,
+	 * and it is the reason this is a declared property of the migration rather
+	 * than something a migration could do quietly with a stray PRAGMA.
+	 */
+	rebuildsTable bool
 }
 
 // migrations run in order, each inside its own transaction. schema.sql creates
@@ -35,6 +56,7 @@ var migrations = []migration{
 	{version: 15, sql: schemaRevision15},
 	{version: 16, sql: schemaRevision16},
 	{version: 17, sql: schemaRevision17},
+	{version: 18, sql: schemaRevision18, rebuildsTable: true},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -64,6 +86,22 @@ func migrate(db *sql.DB) error {
 }
 
 func applyMigration(db *sql.DB, m migration) error {
+	if m.rebuildsTable {
+		// Outside the transaction, because SQLite ignores the pragma inside
+		// one. Restored on every path out, including a failed migration: a
+		// connection left with foreign keys off would enforce nothing for the
+		// rest of the process, which is a far worse outcome than the migration
+		// that failed.
+		if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+			return fmt.Errorf("migration %d: disable foreign keys: %w", m.version, err)
+		}
+		defer func() {
+			if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+				panic(fmt.Sprintf("migration %d: could not re-enable foreign keys: %v", m.version, err))
+			}
+		}()
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("migration %d: begin: %w", m.version, err)
@@ -73,6 +111,28 @@ func applyMigration(db *sql.DB, m migration) error {
 	if _, err := tx.Exec(m.sql); err != nil {
 		return fmt.Errorf("migration %d: %w", m.version, err)
 	}
+
+	// With enforcement off for the rebuild, this is what actually checks the
+	// work — and it runs before the commit, so a rebuild that orphaned a row
+	// rolls back rather than shipping a database whose references are wrong.
+	if m.rebuildsTable {
+		rows, err := tx.Query(`PRAGMA foreign_key_check`)
+		if err != nil {
+			return fmt.Errorf("migration %d: foreign key check: %w", m.version, err)
+		}
+		bad := false
+		for rows.Next() {
+			bad = true
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("migration %d: foreign key check: %w", m.version, err)
+		}
+		if bad {
+			return fmt.Errorf("migration %d: rebuild left dangling references", m.version)
+		}
+	}
+
 	if _, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, m.version); err != nil {
 		return fmt.Errorf("migration %d: record version: %w", m.version, err)
 	}
@@ -513,4 +573,80 @@ CREATE TABLE IF NOT EXISTS playlist_entry (
 );
 
 CREATE INDEX IF NOT EXISTS idx_playlist_entry_item ON playlist_entry(item_id);
+`
+
+// Revision 18 — a library in more than one place (ADR 0034).
+//
+// `library.path` becomes rows in `library_root`, and every item records which
+// root it came from.
+//
+// **The root_id column is the reason this design was chosen over the obvious
+// one.** A library with several roots could resolve a file by asking "does any
+// of these roots contain this path?", and that is a weaker property than the
+// single-root check it replaces: a row pointing under root B while belonging to
+// root A would pass, because some root matched. The containment check is the
+// boundary where a bad row becomes arbitrary file access, and a loop that
+// accepts on first match is how a boundary stops being one. With the root on
+// the item there is never a search — it stays one root, one check, and only the
+// lookup moves.
+//
+// It also scopes reconciliation. An unplugged drive must mark its own items
+// missing and not a single file on the other root, which is a `WHERE root_id`
+// rather than a judgement call at scan time.
+//
+// `library.path` is dropped rather than kept alongside the new table. Two
+// places holding the same truth is a bug factory, and this migration has to
+// rewrite every library row regardless.
+//
+// The backfill gives every existing library exactly one root at its current
+// path, so a single-root library is indistinguishable afterwards — which is the
+// property the migration test asserts, because every library in the field is
+// one today.
+//
+// root_id stays nullable despite never being null after this runs. A NOT NULL
+// column would make a half-applied migration unreadable rather than merely
+// incomplete, and this project's rule is that a database is restored from
+// backup rather than migrated backwards — so the failure mode worth optimising
+// for is "can still be opened and inspected".
+const schemaRevision18 = `
+CREATE TABLE IF NOT EXISTS library_root (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    path       TEXT    NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_root_lib ON library_root(library_id);
+
+INSERT INTO library_root (library_id, path, created_at)
+SELECT id, path, created_at FROM library;
+
+ALTER TABLE media_item ADD COLUMN root_id INTEGER REFERENCES library_root(id) ON DELETE CASCADE;
+
+UPDATE media_item
+   SET root_id = (SELECT r.id FROM library_root r WHERE r.library_id = media_item.library_id);
+
+CREATE INDEX IF NOT EXISTS idx_item_root ON media_item(root_id);
+
+-- SQLite cannot DROP COLUMN on a UNIQUE column, so the library table is
+-- rebuilt without it. Foreign keys are off for this (see
+-- migration.rebuildsTable) and PRAGMA foreign_key_check runs before the commit.
+--
+-- The child tables keep referencing the name "library" throughout: they are
+-- never touched, the replacement is renamed into place, and the check at the
+-- end is what proves that held.
+CREATE TABLE library_new (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    scanned_at INTEGER
+);
+
+INSERT INTO library_new (id, name, kind, created_at, scanned_at)
+SELECT id, name, kind, created_at, scanned_at FROM library;
+
+DROP TABLE library;
+
+ALTER TABLE library_new RENAME TO library;
 `
