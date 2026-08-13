@@ -706,11 +706,28 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /*
+   * Fullscreen takes the whole document, not the media surface.
+   *
+   * The surface below holds the media element and nothing else — the player's
+   * controls are a sibling of it, in the screen that `children` renders. So
+   * asking the *surface* to go fullscreen displayed the video and hid every
+   * control, which is what "the player breaks and all the buttons disappear"
+   * was: not a fault at all, but fullscreen doing exactly what it was told.
+   *
+   * The document element contains both, and the player screen is already a
+   * fixed overlay filling the viewport, so fullscreening it changes what the
+   * viewport *is* and nothing about the layout. It also keeps the mousemove
+   * that wakes the controls inside the fullscreened subtree, which fullscreening
+   * the surface did not: the controls could not have come back even if they had
+   * been visible.
+   */
   const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void el.requestFullscreen().catch(() => {});
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    void document.documentElement.requestFullscreen().catch(() => {});
   }, []);
 
   // Cycle Off → each usable track → Off, for the [ and ] keys. Bitmap tracks
