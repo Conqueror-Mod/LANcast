@@ -238,6 +238,30 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		return err
 	}
 
+	/*
+	 * The location being walked (ADR 0034).
+	 *
+	 * Resolved rather than assumed, because every row this pass writes records
+	 * it, and every containment check downstream resolves against what is
+	 * recorded. A library has exactly one root today, so this is its only one —
+	 * step 4 turns this lookup into the loop that walks each of them, and this
+	 * is deliberately shaped so that becomes a change of scope rather than a
+	 * change of meaning.
+	 */
+	roots, err := s.st.ListRoots(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
+	if len(roots) == 0 {
+		// A library with no location cannot be scanned. The store refuses to
+		// create one and refuses to remove the last, so this is a corrupted row
+		// rather than an ordinary state — and reconciling against nothing would
+		// mark the whole library missing, which is the failure checkRoot exists
+		// to prevent, arrived at from a different direction.
+		return fmt.Errorf("%w: library %d has no location", ErrRootUnavailable, lib.ID)
+	}
+	root := roots[0]
+
 	// .m3u files seen on the way past, imported once the tracks they reference
 	// exist. Never nil-checked below: ranging over an empty slice is a no-op.
 	var playlists []string
@@ -329,7 +353,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			// so do it and act only when the classification actually moved
 			// families — otherwise a rescan stays the cheap no-op it must be.
 			if reinterpreted(st.Kind, media.Parse(lib.Path, path, lib.Kind).Kind) {
-				if _, err := s.upsert(ctx, lib, path, info, p); err == nil {
+				if _, err := s.upsert(ctx, lib, root, path, info, p); err == nil {
 					// A changed identity must be re-matched; the stamp is what
 					// removes it from the enrichment queue.
 					_ = s.st.ClearMetadataStamp(ctx, lib.ID, st.ID)
@@ -345,7 +369,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			return nil
 		}
 
-		id, err := s.upsert(ctx, lib, path, info, p)
+		id, err := s.upsert(ctx, lib, root, path, info, p)
 		if err != nil {
 			s.log.Warn("upsert failed", "path", path, "error", err)
 			s.recordIssue(p, lib.Path, path, "could not be recorded")
@@ -654,11 +678,22 @@ func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath str
 	}
 }
 
-func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo, p *Progress) (int64, error) {
-	nfo := media.Parse(lib.Path, path, lib.Kind)
+func (s *Scanner) upsert(ctx context.Context, lib store.Library, root store.LibraryRoot, path string, info fs.FileInfo, p *Progress) (int64, error) {
+	// Parsed against the root this file was walked under, not the library's
+	// first one (ADR 0034).
+	//
+	// This is the call with the quietest failure in the whole change. Parse
+	// derives structure from the path *relative to the root* — for music,
+	// ParseTrack reads artist and album out of the folder layout — so a file
+	// under the second location parsed against the first one does not error,
+	// it produces a plausible wrong answer. Containment fails closed if it gets
+	// the root wrong; this fails open, and it fails as a mis-titled album
+	// somebody notices weeks later.
+	nfo := media.Parse(root.Path, path, lib.Kind)
 
 	f := store.ScanFile{
 		LibraryID: lib.ID,
+		RootID:    root.ID,
 		Path:      path,
 		Kind:      string(nfo.Kind),
 		Title:     nfo.Title,

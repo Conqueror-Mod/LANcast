@@ -195,13 +195,28 @@ func (s *Server) externalSubtitle(r *http.Request, id int64, rest string) ([]byt
 	return s.subs.Sidecar(r.Context(), ext.Path, ext.Format)
 }
 
-// itemFilePath resolves an item's file, re-checking library containment.
+/*
+ * itemFilePath resolves an item's file, re-checking containment against the
+ * location that item was scanned under (ADR 0034).
+ *
+ * The root comes from the *item*, not from its library. A library may hold
+ * several locations, and the check must stay one root against one path: asking
+ * "does any of this library's roots contain it" would accept a row pointing
+ * under root B while belonging to root A, on the strength of some root
+ * matching. That is the difference between a boundary and a search, and this is
+ * the boundary where a bad row becomes arbitrary file access.
+ *
+ * An item with no recorded root resolves to nothing rather than falling back to
+ * the library. Falling back would reintroduce exactly the ambiguity above, and
+ * failing closed here costs one unplayable item where guessing costs the
+ * property this function exists to hold.
+ */
 func (s *Server) itemFilePath(r *http.Request, it *store.Item) (string, error) {
-	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
+	root, err := s.st.RootForItem(r.Context(), it.ID)
 	if err != nil {
 		return "", err
 	}
-	return containedPath(lib.Path, it.Path)
+	return containedPath(root.Path, it.Path)
 }
 
 // subtitleLabel builds what a person reads in the picker.

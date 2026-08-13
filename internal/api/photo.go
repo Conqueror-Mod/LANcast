@@ -47,12 +47,7 @@ func (s *Server) photo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
-	if s.notFoundOr(w, err, "get library", "owning library is gone") {
-		return
-	}
-
-	path, err := containedPath(lib.Path, it.Path)
+	path, err := s.itemFilePath(r, it)
 	if err != nil {
 		// Not a client error to explain in detail — log it and treat the item
 		// as unavailable, the same as stream does.

@@ -100,23 +100,29 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
-	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
-	if err != nil {
-		s.writeInternal(w, err, "get library")
-		return
-	}
 	targets, err := s.st.ItemSubtree(r.Context(), id)
 	if err != nil {
 		s.writeInternal(w, err, "item subtree")
 		return
 	}
 
-	var files []string
+	// The item id travels with the path (ADR 0034).
+	//
+	// A subtree can span locations — a show whose later seasons live on a
+	// second drive is the ordinary case this is for — so "which root contains
+	// this file" has a different answer per file, and a flat list of paths
+	// cannot ask it. Losing the pairing here is how a delete would end up
+	// validating one location's file against another location's root.
+	type fileTarget struct {
+		itemID int64
+		path   string
+	}
+	var files []fileTarget
 	var rowIDs []int64
 	for _, t := range targets {
 		rowIDs = append(rowIDs, t.ID)
 		if t.IsFile && t.Path != "" {
-			files = append(files, t.Path)
+			files = append(files, fileTarget{itemID: t.ID, path: t.Path})
 		}
 	}
 
@@ -126,20 +132,27 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		// delete is avoided.
 		// Expand each video to itself plus its companion files (subtitles, nfo,
 		// artwork), so a delete does not leave leftovers behind.
-		toRemove := make([]string, 0, len(files)*2)
-		for _, f := range files {
-			toRemove = append(toRemove, f)
-			toRemove = append(toRemove, associatedSidecars(f)...)
-		}
-		abs := make([]string, 0, len(toRemove))
-		for _, f := range toRemove {
-			a, err := containedPath(lib.Path, f)
+		abs := make([]string, 0, len(files)*2)
+		for _, ft := range files {
+			// Resolved per file, against the location that file was scanned
+			// under. A sidecar sits beside its video, so it is checked against
+			// the same root — deriving it from the video's path is what makes
+			// that true rather than assumed.
+			root, err := s.st.RootForItem(r.Context(), ft.itemID)
 			if err != nil {
-				s.log.Error("delete containment check failed", "item", id, "path", f, "error", err)
-				writeError(w, http.StatusInternalServerError, "internal", "a file path escaped its library; nothing was deleted")
+				s.log.Error("delete root lookup failed", "item", ft.itemID, "error", err)
+				writeError(w, http.StatusInternalServerError, "internal", "a file could not be resolved to a library location; nothing was deleted")
 				return
 			}
-			abs = append(abs, a)
+			for _, f := range append([]string{ft.path}, associatedSidecars(ft.path)...) {
+				a, err := containedPath(root.Path, f)
+				if err != nil {
+					s.log.Error("delete containment check failed", "item", ft.itemID, "path", f, "error", err)
+					writeError(w, http.StatusInternalServerError, "internal", "a file path escaped its library; nothing was deleted")
+					return
+				}
+				abs = append(abs, a)
+			}
 		}
 		for _, a := range abs {
 			if err := os.Remove(a); err != nil && !os.IsNotExist(err) {
@@ -147,7 +160,13 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		if err := s.st.IgnorePaths(r.Context(), it.LibraryID, files); err != nil {
+		// Ignoring records paths, not locations: the list is library-scoped and
+		// a path identifies itself.
+		paths := make([]string, 0, len(files))
+		for _, ft := range files {
+			paths = append(paths, ft.path)
+		}
+		if err := s.st.IgnorePaths(r.Context(), it.LibraryID, paths); err != nil {
 			s.writeInternal(w, err, "ignore paths")
 			return
 		}
