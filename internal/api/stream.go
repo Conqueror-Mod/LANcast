@@ -57,12 +57,9 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
-	if s.notFoundOr(w, err, "get library", "owning library is gone") {
-		return
-	}
-
-	path, err := containedPath(lib.Path, it.Path)
+	// Contained within the location this item was scanned under, not its
+	// library's first one (ADR 0034).
+	path, err := s.itemFilePath(r, it)
 	if err != nil {
 		// Not a client error to explain in detail — log it and treat the item
 		// as unavailable.

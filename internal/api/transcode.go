@@ -194,14 +194,10 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 		return playTarget{}, false
 	}
 
-	lib, err := s.st.GetLibrary(r.Context(), it.LibraryID)
-	if s.notFoundOr(w, err, "get library", "owning library is gone") {
-		return playTarget{}, false
-	}
-
 	// Transcoding hands a path to a subprocess, which is if anything a
 	// stronger reason to verify containment than serving bytes directly.
-	path, err := containedPath(lib.Path, it.Path)
+	// Against the item's own location (ADR 0034).
+	path, err := s.itemFilePath(r, it)
 	if err != nil {
 		s.log.Error("transcode containment check failed", "item", id, "error", err)
 		writeError(w, http.StatusNotFound, "not_found", "no such item")

@@ -345,6 +345,13 @@ type Progress struct {
 // ScanFile is what the scanner knows about a file on disk.
 type ScanFile struct {
 	LibraryID int64
+	// RootID is the location this file was walked under (ADR 0034).
+	//
+	// Not derivable from LibraryID once a library has more than one: it is the
+	// scanner that knows which root it was walking, and it is the only thing
+	// that knows. Every containment check downstream resolves against this, so
+	// a file written without it is a file nothing can later serve.
+	RootID    int64
 	Path      string
 	Kind      string
 	Title     string
@@ -363,12 +370,50 @@ type ScanFile struct {
 // one — do not have to re-query the whole library to find it.
 func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 	now := time.Now().Unix()
+
+	/*
+	 * A caller that did not say which location this file came from.
+	 *
+	 * Resolved from the library, but only while that is unambiguous. A library
+	 * with one root has exactly one answer and inferring it saves every caller
+	 * that predates roots from having to care. A library with several has no
+	 * answer worth guessing: picking the first would file the item under a
+	 * location it is not in, and the containment check downstream would then
+	 * resolve it against the wrong directory — quietly, and in the one place
+	 * this project treats as a security boundary.
+	 *
+	 * So it refuses instead. This cannot rot into a silent mis-assignment the
+	 * day a second root appears, because the day a second root appears it starts
+	 * erroring loudly at whichever caller never learned to pass one.
+	 */
+	if f.RootID == 0 {
+		roots, err := s.ListRoots(ctx, f.LibraryID)
+		if err != nil {
+			return 0, fmt.Errorf("upsert item %q: %w", f.Path, err)
+		}
+		switch len(roots) {
+		case 0:
+			return 0, fmt.Errorf("upsert item %q: library %d has no location", f.Path, f.LibraryID)
+		case 1:
+			f.RootID = roots[0].ID
+		default:
+			return 0, fmt.Errorf(
+				"upsert item %q: library %d has %d locations and no root was given",
+				f.Path, f.LibraryID, len(roots))
+		}
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
-			(library_id, kind, path, title, sort_title, year, series, season, episode,
+			(library_id, root_id, kind, path, title, sort_title, year, series, season, episode,
 			 container, size_bytes, mtime, added_at, updated_at, missing)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 		ON CONFLICT(path) DO UPDATE SET
+			-- root_id is refreshed too. A file can change roots without changing
+			-- path only if the roots themselves moved, which RepointRoot does --
+			-- but a row left pointing at a stale root is a row whose containment
+			-- check resolves against the wrong directory, so it is cheaper to
+			-- keep it current than to reason about when it cannot drift.
+			root_id = excluded.root_id,
 			kind = excluded.kind, title = excluded.title, sort_title = excluded.sort_title,
 			year = excluded.year, series = excluded.series, season = excluded.season,
 			episode = excluded.episode, container = excluded.container,
@@ -378,7 +423,7 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			-- reaching here means the bytes are different and any previous
 			-- probe describes a file that no longer exists.
 			probed_at = NULL`,
-		f.LibraryID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
+		f.LibraryID, f.RootID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
 		f.Container, f.SizeBytes, f.MTime, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("upsert item %q: %w", f.Path, err)

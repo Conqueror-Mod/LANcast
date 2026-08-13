@@ -363,3 +363,27 @@ func TestRepointRootToItsOwnPathIsAllowed(t *testing.T) {
 		t.Errorf("RepointRoot to the same path: %v", err)
 	}
 }
+
+// An item with no recorded location has no root, and RootForItem says so
+// rather than falling back to the library.
+//
+// The API layer turns this into a 404, which is the fail-closed half of ADR
+// 0034: falling back would reintroduce exactly the "any root will do"
+// ambiguity that recording the root on the item exists to remove.
+func TestRootForItemRefusesARootlessRow(t *testing.T) {
+	st, ctx, lib := libFixture(t)
+	if _, err := st.db.ExecContext(ctx, `
+		INSERT INTO media_item (library_id, kind, path, title, sort_title, container, added_at, updated_at)
+		VALUES (?, 'movie', ?, 'rootless', 'rootless', 'mkv', 100, 100)`,
+		lib.ID, filepath.FromSlash("/mnt/films/rootless.mkv")); err != nil {
+		t.Fatal(err)
+	}
+	var id int64
+	if err := st.db.QueryRowContext(ctx,
+		`SELECT id FROM media_item WHERE title = 'rootless'`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RootForItem(ctx, id); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
