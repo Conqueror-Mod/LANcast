@@ -622,3 +622,64 @@ func TestNoAudioChoiceIsUnaffected(t *testing.T) {
 		t.Fatalf("Method = %q (%s), want direct play", d.Method, d.Reason)
 	}
 }
+
+// ---- quality ceilings -------------------------------------------------------
+
+// A ceiling below the source is what forces the encode, and the target has to
+// travel with the decision: ffmpeg is built from the decision, not the profile,
+// so a cap the decision does not carry is a cap that never reaches a pixel.
+func TestHeightCeilingForcesEncodeAndSetsTarget(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxHeight = 720
+	d := Decide(result("mp4", video("h264", 1080), audio("aac", 2)), p)
+	if d.Method != Transcode || d.VideoAction != "encode" {
+		t.Fatalf("decision = %+v, want a video encode", d)
+	}
+	if d.TargetHeight != 720 {
+		t.Errorf("TargetHeight = %d, want 720", d.TargetHeight)
+	}
+}
+
+// A limit is not a request. Scaling a 480p file up to the 720p ceiling pays for
+// an encode that adds no detail and costs more bandwidth than the source did.
+func TestCeilingAboveSourceIsNotAnUpscale(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxHeight = 720
+	d := Decide(result("mp4", video("h264", 480), audio("aac", 2)), p)
+	if d.Method != DirectPlay {
+		t.Fatalf("Method = %q (%s), want direct play — the file is already under the ceiling", d.Method, d.Reason)
+	}
+	if d.TargetHeight != 0 {
+		t.Errorf("TargetHeight = %d, want 0", d.TargetHeight)
+	}
+}
+
+func TestBitrateCeilingSetsTarget(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 4_000_000
+	v := video("h264", 1080)
+	v.BitRate = 12_000_000
+	d := Decide(result("mp4", v, audio("aac", 2)), p)
+	if d.Method != Transcode || d.VideoAction != "encode" {
+		t.Fatalf("decision = %+v, want a video encode", d)
+	}
+	if d.TargetVideoBitRate != 4_000_000 {
+		t.Errorf("TargetVideoBitRate = %d, want 4000000", d.TargetVideoBitRate)
+	}
+}
+
+// A copy cannot honour a ceiling. Reporting one on a remux would have the
+// client believe a cap applied to bytes nothing re-encoded.
+func TestNoTargetOnACopy(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxHeight = 720
+	p.MaxVideoBitRate = 4_000_000
+	// 720p h264 in matroska: the container forces a remux, nothing else.
+	d := Decide(result("matroska", video("h264", 720), audio("aac", 2)), p)
+	if d.Method != Remux {
+		t.Fatalf("Method = %q (%s), want remux", d.Method, d.Reason)
+	}
+	if d.TargetHeight != 0 || d.TargetVideoBitRate != 0 {
+		t.Errorf("remux carries a target: height %d, bitrate %d", d.TargetHeight, d.TargetVideoBitRate)
+	}
+}

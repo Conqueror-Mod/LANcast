@@ -239,3 +239,50 @@ func TestDefaultsApplied(t *testing.T) {
 		t.Errorf("channels = %q, want a stereo downmix", argValue(args, "-ac"))
 	}
 }
+
+// ---- quality ceilings -------------------------------------------------------
+
+// -2, not -1, on the derived width. H.264 requires even dimensions and -1
+// computes an exact width that lands odd on plenty of ordinary aspect ratios;
+// the encoder does not round it, it exits.
+func TestScaleFilterKeepsWidthEven(t *testing.T) {
+	d := probe.Decision{Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy", TargetHeight: 720}
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d, AudioIndex: -1})
+	if got := argValue(args, "-vf"); got != "scale=-2:720" {
+		t.Errorf("-vf = %q, want scale=-2:720", got)
+	}
+}
+
+// The cap has to be rate limiting on top of the quality-based encode, with a
+// buffer. -maxrate without -bufsize is ignored by x264.
+func TestBitrateCeilingLimitsRate(t *testing.T) {
+	d := probe.Decision{Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy",
+		TargetVideoBitRate: 4_000_000}
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d, AudioIndex: -1})
+	if got := argValue(args, "-maxrate"); got != "4000k" {
+		t.Errorf("-maxrate = %q, want 4000k", got)
+	}
+	if got := argValue(args, "-bufsize"); got != "8000k" {
+		t.Errorf("-bufsize = %q, want 8000k", got)
+	}
+}
+
+// A copy has no filter chain to put a scale into. Emitting one against
+// -c:v copy is not a no-op — ffmpeg refuses to start.
+func TestNoScaleOnAVideoCopy(t *testing.T) {
+	d := probe.Decision{Method: probe.Remux, VideoAction: "copy", AudioAction: "copy", TargetHeight: 720}
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d, AudioIndex: -1})
+	if argIndex(args, "-vf") >= 0 {
+		t.Errorf("-vf emitted alongside -c:v copy: %v", args)
+	}
+}
+
+// No ceiling, no flags. An unconstrained encode must look exactly as it did
+// before quality selection existed.
+func TestNoCeilingEmitsNothing(t *testing.T) {
+	d := probe.Decision{Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy"}
+	args := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d, AudioIndex: -1})
+	if argIndex(args, "-vf") >= 0 || argIndex(args, "-maxrate") >= 0 {
+		t.Errorf("unconstrained encode carries ceiling flags: %v", args)
+	}
+}

@@ -36,6 +36,16 @@ type Decision struct {
 	// `-map 0:v:0` against a music file is a hard failure, not a degraded
 	// stream, and the caller has no other way to know.
 	AudioOnly bool `json:"audio_only,omitempty"`
+
+	// TargetHeight and TargetVideoBitRate are the ceiling the re-encode must
+	// come in under, 0 meaning "no ceiling". They ride on the decision for the
+	// same reason AudioOnly does: the decision is the only thing that knows a
+	// limit was what forced the encode, and ffmpeg is built from it rather than
+	// from the profile. Set only when VideoAction is "encode" — a copy cannot
+	// honour a ceiling, and claiming otherwise would have the client believe a
+	// cap applied that never reached a pixel.
+	TargetHeight       int   `json:"target_height,omitempty"`
+	TargetVideoBitRate int64 `json:"target_video_bitrate,omitempty"`
 }
 
 // Profile describes what a client can play.
@@ -351,10 +361,30 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 				reason += "; " + audioMuxWhy
 			}
 		}
-		return Decision{
+		d := Decision{
 			Method: Transcode, Reason: reason,
 			VideoAction: "encode", AudioAction: audioAction, TargetFormat: "mp4",
 		}
+		// A ceiling only becomes a target when the source is actually above it.
+		// Carrying it down unconditionally would tell ffmpeg to scale a 720p
+		// file up to 1080p because the client said "1080p is my limit" — a
+		// limit read as a request, paying for an encode that adds no detail and
+		// costs bandwidth. Same for bitrate: capping a 3 Mbps file at 8 Mbps is
+		// a rate control constraint that can only ever be slack.
+		if video != nil {
+			if p.MaxHeight > 0 && video.Height > p.MaxHeight {
+				d.TargetHeight = p.MaxHeight
+			}
+			if p.MaxVideoBitRate > 0 &&
+				(video.BitRate == 0 || video.BitRate > p.MaxVideoBitRate) {
+				// An unknown source bitrate is capped rather than left open:
+				// a file the probe could not measure is exactly the case where
+				// a cap is worth having, and rate control that does nothing is
+				// indistinguishable from a quality setting that does nothing.
+				d.TargetVideoBitRate = p.MaxVideoBitRate
+			}
+		}
+		return d
 	}
 }
 

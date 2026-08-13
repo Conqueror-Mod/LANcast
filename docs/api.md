@@ -632,11 +632,17 @@ the picture would have ffmpeg encode it for the length of the track. A client
 can use this to attach the source to an `<audio>` element; a non-direct stream
 of audio-only content is served as `audio/mp4` rather than `video/mp4`.
 
-Takes the same `?profile=` and `?audio=` parameters as the stream endpoints,
-and echoes the resolved profile back. Call it with the parameters you intend to
-stream with: an explanation of a decision the server would not actually make
-sends you looking in the wrong place. `?audio=` naming a track that does not
-exist returns `400 bad_request`.
+`target_height` and `target_video_bitrate` are present only on a decision whose
+`video_action` is `encode` **and** which a quality ceiling actually constrained.
+They are what the re-encode will come in under. A copy carries neither: nothing
+re-encodes, so no ceiling reached a pixel, and reporting one would have a client
+believe a cap applied that did not.
+
+Takes the same `?profile=`, `?audio=`, `?max_height=` and `?max_bitrate=`
+parameters as the stream endpoints, and echoes the resolved profile back. Call
+it with the parameters you intend to stream with: an explanation of a decision
+the server would not actually make sends you looking in the wrong place.
+`?audio=` naming a track that does not exist returns `400 bad_request`.
 
 An unprobed item returns `direct` — the same behavior LANcast had before
 probing existed, rather than guessing at a transcode for a file nothing has
@@ -693,6 +699,42 @@ something it cannot decode gets a failure only it sees — nothing else on the
 LAN is affected — and is expected to stop claiming it and ask again. The
 shipped client does exactly that: it drops the capability, remembers the
 refusal, and re-requests the file as a conversion.
+
+#### `?max_height=` and `?max_bitrate=` — the quality ceiling
+
+A limit on what the client is willing to receive, applied **on top of** the
+profile and whatever `?can=` widened it to:
+
+```
+GET /api/items/87/playback?max_height=720&max_bitrate=4000000
+```
+
+| Parameter | Unit | Meaning |
+| --- | --- | --- |
+| `max_height` | pixels | Video taller than this is scaled down to it |
+| `max_bitrate` | **bits** per second | Video above this rate is re-encoded under it |
+
+Bits per second, not kilobits — the same unit `Profile.MaxVideoBitRate` uses
+internally. Absent, zero, or unparseable means no ceiling.
+
+**It only ever narrows,** which is the mirror image of `?can=` and the reason
+the two are separate parameters rather than one. A ceiling can force an encode
+that would not otherwise have happened; it can never talk the server into
+direct-playing something the client cannot decode. Where a named profile carries
+its own ceiling, the lower of the two wins — asking for `max_height=1080`
+against a profile capped at 720p does not raise it.
+
+**A ceiling is not a target.** A file already under it is untouched: no upscale,
+and no rate control that could only ever be slack. Asking for 1080p on a 480p
+file direct-plays exactly as it would with no parameter at all.
+
+**Send it to every endpoint that decides, or none** — the same rule as `?can=`,
+for the same reason. A seek that drops the ceiling asks `/transcode` about an
+uncapped stream and gets `409 conflict` on a file the ceiling was the only
+reason to touch.
+
+Absent, it behaves exactly as before this existed, so it is additive under
+[ADR 0018](adr/0018-api-contract-and-versioning.md).
 
 The bare audio containers exist for music, where the container *is* the codec:
 an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`.
