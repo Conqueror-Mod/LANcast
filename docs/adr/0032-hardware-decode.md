@@ -1,6 +1,15 @@
-# ADR 0032 — Hardware decode, and why it lands in two stages
+# ADR 0032 — Hardware decode, and where the cost actually is
 
-Date: 2026-08-13 · Status: **proposed**
+Date: 2026-08-13 · Status: **proposed** · Amended 2026-08-13 after measurement
+
+> **Amendment note.** This ADR was first written proposing a two-stage rollout
+> with decode-only shipping first. It was measured before any code was written,
+> and the measurement overturned that decision: decode-only delivers a large CPU
+> saving and *no* wall-clock improvement, because the dominant cost is the CPU
+> scale it leaves in place rather than the decode it removes. The staging is
+> revised below. The original reasoning is kept rather than deleted — the plan
+> was wrong for a specific, instructive reason, and the numbers are now in the
+> record.
 
 ## Context
 
@@ -45,27 +54,76 @@ them there, and the encoder takes them without a round trip. Saves the decode
 cost *and* the readback *and* the CPU scale. It also invalidates both flags the
 current pipeline relies on.
 
+## The measurement
+
+Taken before writing any code, on an RTX 3060 (Ampere) with ffmpeg 8.1.2.
+Every cell produces the same 480 frames of the same output; timings are
+ffmpeg's own `-benchmark` accounting, best of three, discarding the first run's
+file-cache and clock-ramp effects.
+
+**4K HEVC 10-bit → 720p, 4 Mbps ceiling**
+
+| Pipeline | Wall | CPU (user) |
+| --- | --- | --- |
+| A. Software decode → NVENC *(today)* | 4.37s | **49.4s** |
+| B. CUDA decode → download → NVENC *(decode-only)* | 5.05s | 15.1s |
+| C. CUDA decode → `scale_cuda` → NVENC *(GPU-resident)* | **1.46s** | **0.39s** |
+
+**1080p HEVC → 720p, same ceiling**
+
+| Pipeline | Wall | CPU (user) |
+| --- | --- | --- |
+| A. *(today)* | 1.28s | 8.27s |
+| B. *(decode-only)* | 1.31s | 1.67s |
+| C. *(GPU-resident)* | **0.74s** | **0.70s** |
+
+Two things fall out, and both contradict the original plan.
+
+**Decode-only buys CPU and not latency.** It is 3–5x cheaper in CPU and very
+slightly *slower* on the clock. The readback is synchronous and the 4K→720p
+scale still runs on the CPU afterwards — 15 of decode-only's 15.1 CPU seconds
+are that scale, not the decode. Shipping it alone would be a change that makes
+the server measurably cheaper and every individual playback no faster, which is
+not what anyone reaching for hardware acceleration expects to have bought.
+
+**The scale was the bottleneck, not the decode.** The original text asserted
+that a 4K HEVC source "is expensive to decode — it is the reason the file needed
+touching at all". That is true of the file and false of the *pipeline*: once the
+decode moves to the GPU, downscaling 4K frames on the CPU becomes the dominant
+cost, and it is only eliminated by the half that was deferred. The premise was
+wrong about where the time went, which is exactly the thing a measurement is for
+and a plan cannot supply.
+
 ## Decision
 
-### Stage 1 is decode-only, and it ships on its own
+### Go to GPU residency; decode-only is a checkpoint, not a release
 
-Frames come back to system memory. `-vf scale` and `-pix_fmt yuv420p` are
-untouched.
+The target is pipeline C: `-hwaccel_output_format`, a vendor scaler, and format
+conversion on the device, with no readback.
 
-This is not timidity, it is the only ordering that produces a measurement. Stage
-2 changes decode, scaling and pixel-format conversion simultaneously, across four
-vendors; a regression there has twelve places to hide and no baseline to compare
-against. Stage 1 changes one thing, cannot regress the filter chain because it
-does not touch it, and answers the question stage 2 depends on — *what is the
-decode alone worth on this hardware?* If the answer is "most of it", stage 2 is
-a smaller prize than it looks.
+Decode-only survives as an **intermediate commit** — it is genuinely useful for
+bisecting a regression, and it is where the per-vendor `-hwaccel` spellings get
+proven independently of the filter chain. It is not a milestone worth shipping
+or measuring a release against, because on its own it improves nothing a user
+can perceive.
 
-It also keeps 10-bit safe for free. A hardware decoder hands back `p010`
-surfaces for 10-bit HEVC, and the existing `-pix_fmt yuv420p` converts them
-through swscale exactly as it converts a software-decoded 10-bit frame today.
-On a GPU-resident path that conversion has to happen on the device instead, in a
-different spelling per vendor, and 10-bit HEVC Main10 is not an edge case — it
-is most of a modern 4K library.
+This raises the risk the original staging existed to manage, and the mitigation
+moves rather than disappears: the fallback below is now load-bearing, and the
+per-vendor filter work gets built one vendor at a time behind the same
+detection, rather than four at once.
+
+### 10-bit conversion moves onto the device, and HDR comes with it
+
+A hardware decoder hands back `p010` surfaces for 10-bit HEVC. On the current
+path `-pix_fmt yuv420p` converts them through swscale; on a GPU-resident path
+that conversion happens in the scaler (`scale_cuda=format=yuv420p` and its
+per-vendor equivalents) and `-pix_fmt` comes out of the command line entirely.
+
+10-bit HEVC Main10 is not an edge case — it is most of a modern 4K library, and
+it is also where [ADR 0033](0033-hdr-tonemapping.md) lives. The two must be
+designed together: both rewrite the same filter chain, and a tonemap inserted
+into a GPU-resident pipeline is a different filter from one inserted into a CPU
+one. Neither should land without the other having been read.
 
 ### The accelerator is data on the Encoder, not a branch
 
@@ -145,12 +203,13 @@ the acceleration that already works is worth one config field.
 
 ## Consequences
 
-**The scale filter added in ADR 0031 becomes a stage 2 problem.** `-vf
-scale=-2:720` assumes frames are in system memory. They are, in stage 1. The
-moment `-hwaccel_output_format` is added, that filter forces a download, a CPU
-scale and an upload — a pipeline *slower* than the software one it replaced, and
-one that presents as a hardware regression rather than a filter mistake. Two
-places carry the assumption and both must move together in stage 2: the `-vf` in
+**The scale filter added in ADR 0031 is now on the critical path, not a later
+problem.** `-vf scale=-2:720` assumes frames are in system memory, and the
+measurement shows that assumption is where the remaining cost lives: it is 15 of
+decode-only's 15.1 CPU seconds. Adding `-hwaccel_output_format` without changing
+it forces a download, a CPU scale and an upload — *slower* than the software
+pipeline it replaced, presenting as a hardware regression rather than a filter
+mistake. Two places carry the assumption and must move together: the `-vf` in
 `args.go` and the `-pix_fmt yuv420p` in `hwaccel.go`, whose comment already
 names `-hwaccel` as the thing that would invalidate it.
 
@@ -164,16 +223,19 @@ sample per codec, which means having one — generated at build time or encoded 
 the fly. This is already an accepted cost for encoders and the same argument
 applies, but it is a second or two more before the first transcode of a run.
 
-**HDR is not addressed and is worth its own work.** `-pix_fmt yuv420p` converts
-a BT.2020 PQ source to 8-bit without tonemapping, which produces the washed-out,
-desaturated picture that HDR-to-SDR conversion is notorious for. That is true
-**today**, on the software path — this ADR neither causes it nor fixes it — but
-anyone reading the pixel-format handling because of this work will walk straight
-into it. It needs a tonemap filter and its own decision record.
+**HDR is not addressed here and is worse than "not addressed" suggests.**
+Measured on a real BT.2020 PQ sample through the current command line, the
+output loses 3.7x of its saturation *and* carries `smpte2084` / `bt2020` tags
+copied from the source onto 8-bit H.264 that cannot honour them. This is true
+**today**, on the software path — this ADR neither causes nor fixes it — but the
+filter chain being rewritten here is the same one that has to carry the fix.
+[ADR 0033](0033-hdr-tonemapping.md) covers it, and the two should be read
+together.
 
 ## Work breakdown
 
-**Stage 1 — decode-only**
+Ordered so that each step is verifiable on its own. Steps 1–4 are the
+intermediate decode-only commit; the win arrives at step 6.
 
 1. `decodeAccel` on `Encoder`, populated for all four hardware candidates.
 2. `Args` emits `-hwaccel` before `-i`, gated on `VideoAction == "encode"`.
@@ -181,25 +243,29 @@ into it. It needs a tonemap filter and its own decision record.
 3. Decode detection: `(accelerator, codec)` pairs, verified against a real
    sample, surfaced through `Manager` beside `AvailableEncoders`.
 4. Runtime fallback: one software retry per failing pairing, remembered.
+   Load-bearing now that decode-only is not a shipping checkpoint.
 5. `hardware_decode` setting, `"auto"` default, through `config.Settings`,
    `/api/settings`, and the settings UI. `docs/api.md` in the same commit.
-6. A measurement: same file, same ceiling, decode on and off, wall-clock to
-   first byte and CPU seconds. Without this there is no way to know stage 2 is
-   worth doing.
+6. **GPU residency, one vendor at a time.** `-hwaccel_output_format` plus the
+   vendor scaler, replacing `-vf scale` and removing `-pix_fmt` from the
+   command line. CUDA first — it is the best-documented path and the one these
+   numbers were taken on. A vendor without a usable scaler falls back to the
+   decode-only shape rather than blocking the others; AMF is the likeliest,
+   having no scaler of its own and riding d3d11.
+7. Re-measure per vendor against the table above, which is the baseline.
 
-**Stage 2 — GPU residency** *(separate ADR, gated on stage 1's numbers)*
+## Resolved: `-ss` with `-hwaccel`
 
-`-hwaccel_output_format` per vendor; `scale_cuda` / `scale_qsv` / `scale_vt`
-replacing `-vf scale`; on-device format conversion replacing `-pix_fmt`; a
-software-scale fallback for whichever vendor's filter proves unavailable —
-AMF being the likeliest, since it has no scaler of its own and rides d3d11.
+The original open question asked whether fast-seek and hardware decode
+co-operate, since every resumed playback in LANcast uses both, and a carve-out
+for offset starts would have excluded the most common case.
 
-## Open question
+**They co-operate.** Tested at a 2400s offset into a real 83-minute HEVC file
+across all three pipelines, and at 20s into the 4K sample: no failures, in
+either argument order. The offset does cost something — roughly 3% on the
+1080p file — but it costs the same in the pure *software* pipeline, so it is
+seek cost rather than any interaction with the decoder.
 
-`-ss` before `-i` seeks by keyframe without decoding, which is what keeps
-resuming a two-hour film from costing minutes. Fast-seek combined with
-`-hwaccel` is known to be fussier than either alone on some driver versions, and
-every resumed playback in LANcast uses both. Stage 1 needs a test against a real
-file at a real offset before this is called done; if the combination proves
-unreliable, decode acceleration may have to be skipped for offset starts, which
-would be an unwelcome carve-out of the most common case.
+One GPU and one driver, so this is evidence rather than proof; the per-vendor
+work in step 6 should re-run it. But the carve-out this worried about is not
+needed.
