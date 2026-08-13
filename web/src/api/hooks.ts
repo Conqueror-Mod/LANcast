@@ -752,7 +752,7 @@ export function useAuditLog(enabled: boolean, action: string, limit: number) {
 
 // The update status. Cheap and static — the server checks on its own timer, so
 // this only reads what it already knows.
-export function useUpdateStatus(enabled = true) {
+export function useUpdateStatus(enabled = true, watch = false) {
   return useQuery({
     queryKey: ["update"],
     queryFn: ({ signal }) => apiGet<UpdateStatus>("/api/update", signal),
@@ -760,7 +760,18 @@ export function useUpdateStatus(enabled = true) {
     // passes false rather than filling the console with refused requests on
     // every page load.
     enabled,
-    staleTime: 60_000,
+    /*
+     * `watch` is for the window between "download started" and "staged".
+     *
+     * POST /api/update/download returns immediately and downloads in the
+     * background — deliberately, since it is not a request to hold open. But
+     * this query was cached for a minute and never refetched, so the panel kept
+     * showing "Downloading…" indefinitely while the activity indicator, which
+     * polls, already said the update was ready. Two surfaces reading the same
+     * server and disagreeing, which reads as a hang.
+     */
+    staleTime: watch ? 0 : 60_000,
+    refetchInterval: watch ? 2000 : false,
   });
 }
 

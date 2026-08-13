@@ -10,11 +10,30 @@ import { useEffect, useRef, useState } from "react";
 import { useHealth } from "@/api/hooks";
 import "./UpdateSettings.css";
 
+// downloadLabel shows how far along a download is when the server says, and
+// falls back to the plain word when it does not.
+//
+// A percentage matters here more than it looks: the download is ~16MB over a
+// link nobody chose, and a button that says only "Downloading…" for a minute is
+// indistinguishable from one that is stuck — which is exactly how this was
+// reported.
+function downloadLabel(status: { downloading?: { done: number; total: number } }): string {
+  const p = status.downloading;
+  if (!p || !p.total) return "Downloading…";
+  const pct = Math.min(100, Math.round((p.done / p.total) * 100));
+  return `Downloading ${pct}%`;
+}
+
 // Updates, in Settings. The activity indicator carries the same fact when an
 // update is waiting; this is the place to ask on purpose, and the place that
 // explains why automatic installation is or is not available.
 export function UpdateSettings() {
-  const { data: status } = useUpdateStatus();
+  // Set the moment a download is accepted and cleared when the server reports
+  // something staged (or a failure). Local, because the server has no idea a
+  // *this client* is waiting on it, and because the first status fetch after
+  // the POST can still arrive before the download has registered as active.
+  const [downloading, setDownloading] = useState(false);
+  const { data: status } = useUpdateStatus(true, downloading);
   const { data: settings } = useSettings();
   const check = useCheckForUpdate();
   const download = useDownloadUpdate();
@@ -43,6 +62,13 @@ export function UpdateSettings() {
   // then answer again, which is the one time a failing health check is the
   // normal course of events rather than something to report.
   const { data: health } = useHealth(installing);
+
+  // The download is over when there is something staged, or when it failed.
+  // Both are the server's word rather than a timer.
+  useEffect(() => {
+    if (!downloading) return;
+    if (status?.staged || status?.download_error) setDownloading(false);
+  }, [downloading, status?.staged, status?.download_error]);
 
   useEffect(() => {
     if (!installing || !health?.version) return;
@@ -146,11 +172,20 @@ export function UpdateSettings() {
           {status.available && !status.staged && status.can_verify && (
             <button
               className="set-btn"
-              disabled={download.isPending || status.downloading?.active}
-              onClick={() => download.mutate()}
+              disabled={download.isPending || downloading || status.downloading?.active}
+              onClick={() =>
+                download.mutate(undefined, {
+                  // Watch from the moment the server accepts it. The POST
+                  // returns immediately and downloads in the background, so
+                  // without this the panel has nothing telling it to look
+                  // again — which is how it sat on "Downloading…" while the
+                  // activity indicator already said the update was ready.
+                  onSuccess: () => setDownloading(true),
+                })
+              }
             >
-              {status.downloading?.active
-                ? "Downloading…"
+              {downloading || status.downloading?.active
+                ? downloadLabel(status)
                 : "Download and install"}
             </button>
           )}
