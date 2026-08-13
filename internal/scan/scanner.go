@@ -56,11 +56,28 @@ type Progress struct {
 	// Reported for the same reason SkippedKind is: a scan that quietly imported
 	// nothing, or quietly imported forty, should not have to be inferred from
 	// the library page afterwards.
-	PlaylistsImported int     `json:"playlists_imported"`
-	Issues            []Issue `json:"issues,omitempty"`
-	StartedAt         int64   `json:"started_at"`
-	FinishedAt        *int64  `json:"finished_at,omitempty"`
-	Error             string  `json:"error,omitempty"`
+	PlaylistsImported int `json:"playlists_imported"`
+
+	/*
+	 * Which of the library's locations this scan actually read (ADR 0034).
+	 *
+	 * Reported because the alternative is a scan that looks complete while
+	 * having covered half the library. With one location a skip is a failure
+	 * and shows as one; with several it is ordinary — an external drive asleep
+	 * — and the honest report is "3 of 4", not silence.
+	 *
+	 * The path is included because "a location was skipped" is not actionable
+	 * and "D:\Family is not available" is. These are user-configured
+	 * directories the settings screen already shows, not the per-file paths
+	 * Issue deliberately keeps relative.
+	 */
+	RootsScanned int           `json:"roots_scanned"`
+	RootsSkipped []SkippedRoot `json:"roots_skipped,omitempty"`
+
+	Issues     []Issue `json:"issues,omitempty"`
+	StartedAt  int64   `json:"started_at"`
+	FinishedAt *int64  `json:"finished_at,omitempty"`
+	Error      string  `json:"error,omitempty"`
 }
 
 // Issue is a file or directory the scan could not fully process. It carries a
@@ -69,6 +86,12 @@ type Progress struct {
 type Issue struct {
 	Path   string `json:"path"`
 	Reason string `json:"reason"`
+}
+
+// SkippedRoot is a library location this scan could not read.
+type SkippedRoot struct {
+	ID   int64  `json:"id"`
+	Path string `json:"path"`
 }
 
 // maxIssues caps the recorded list so a pathological library (thousands of
@@ -231,58 +254,92 @@ func checkRoot(root string) error {
 	return nil
 }
 
+/*
+ * walk scans every location a library has, and reconciles each against itself.
+ *
+ * Partial availability is the normal case once a library lives in more than one
+ * place (ADR 0034), not a failure: an external drive asleep while the internal
+ * one is fine is a Tuesday. So a location that cannot be seen is skipped and
+ * reported, the ones that can be seen are scanned, and only a library with no
+ * reachable location at all fails.
+ *
+ * The reconciliation is per location and that is the load-bearing part. A scan
+ * that walked two of three must compare what it saw against what those two
+ * held — comparing against the *library* would find the third location's files
+ * unseen and mark every one of them missing, which is the bug fixed in #228
+ * arriving on a healthy server every time a drive slept.
+ */
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {
-	// Before anything reads or writes: an absent root means this scan has
-	// nothing true to say about the library, so it must not say anything.
-	if err := checkRoot(lib.Path); err != nil {
-		return err
-	}
-
-	/*
-	 * The location being walked (ADR 0034).
-	 *
-	 * Resolved rather than assumed, because every row this pass writes records
-	 * it, and every containment check downstream resolves against what is
-	 * recorded. A library has exactly one root today, so this is its only one —
-	 * step 4 turns this lookup into the loop that walks each of them, and this
-	 * is deliberately shaped so that becomes a change of scope rather than a
-	 * change of meaning.
-	 */
 	roots, err := s.st.ListRoots(ctx, lib.ID)
 	if err != nil {
 		return err
 	}
 	if len(roots) == 0 {
-		// A library with no location cannot be scanned. The store refuses to
-		// create one and refuses to remove the last, so this is a corrupted row
-		// rather than an ordinary state — and reconciling against nothing would
-		// mark the whole library missing, which is the failure checkRoot exists
-		// to prevent, arrived at from a different direction.
+		// The store refuses to create a library without a location and refuses
+		// to remove the last one, so this is a corrupted row rather than an
+		// ordinary state. Reconciling against nothing would mark the whole
+		// library missing.
 		return fmt.Errorf("%w: library %d has no location", ErrRootUnavailable, lib.ID)
 	}
-	root := roots[0]
 
-	// .m3u files seen on the way past, imported once the tracks they reference
-	// exist. Never nil-checked below: ranging over an empty slice is a no-op.
-	var playlists []string
-	known, err := s.st.KnownFiles(ctx, lib.ID)
+	// Library-scoped, so read once rather than per location: an ignored path is
+	// a decision about a file, and which location it sits under is not part of
+	// that decision.
+	ignored, err := s.st.IgnoredPaths(ctx, lib.ID)
 	if err != nil {
 		return err
 	}
-	// Paths the user removed from the server without deleting the file. They are
-	// skipped so a rescan never re-adds them.
-	ignored, err := s.st.IgnoredPaths(ctx, lib.ID)
+
+	// .m3u files seen on the way past, imported once the tracks they reference
+	// exist. Accumulated across locations, because a playlist on one drive may
+	// legitimately reference tracks on another.
+	var playlists []string
+
+	for _, root := range roots {
+		if err := checkRoot(root.Path); err != nil {
+			// Not a failure. Recorded so the UI can say "3 of 4 locations
+			// scanned" rather than silently doing less than it appears to.
+			s.log.Info("skipping unavailable location",
+				"library", lib.ID, "root", root.ID, "path", root.Path)
+			s.mu.Lock()
+			p.RootsSkipped = append(p.RootsSkipped, SkippedRoot{ID: root.ID, Path: root.Path})
+			s.mu.Unlock()
+			continue
+		}
+		if err := s.walkRoot(ctx, lib, root, ignored, &playlists, p); err != nil {
+			return err
+		}
+		s.mu.Lock()
+		p.RootsScanned++
+		s.mu.Unlock()
+	}
+
+	if p.RootsScanned == 0 {
+		// Every location is gone. With one location this is exactly the
+		// single-root behaviour #228 introduced, generalised rather than
+		// replaced: a scan with nothing true to say says nothing.
+		return fmt.Errorf("%w: no location of library %d could be read", ErrRootUnavailable, lib.ID)
+	}
+
+	return s.reconcileLibrary(ctx, lib, p, playlists)
+}
+
+// walkRoot scans one location and reconciles that location alone.
+func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.LibraryRoot,
+	ignored map[string]bool, playlists *[]string, p *Progress) error {
+
+	known, err := s.st.KnownFilesInRoot(ctx, root.ID)
 	if err != nil {
 		return err
 	}
 
 	seen := make(map[string]bool, len(known))
 
-	err = filepath.WalkDir(lib.Path, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// A single unreadable directory shouldn't abort the whole scan.
 			s.log.Warn("skipping unreadable path", "path", path, "error", err)
-			s.recordIssue(p, lib.Path, path, "unreadable")
+			s.recordIssue(p, root.Path, path, "unreadable")
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -298,7 +355,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		// and a 200,000-file tree does not want traversing twice for the handful
 		// of .m3u files in it.
 		if isPlaylistFile(path) {
-			playlists = append(playlists, path)
+			*playlists = append(*playlists, path)
 			return nil
 		}
 		// What the library is for decides what counts as media in it — a movie
@@ -333,7 +390,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		info, err := d.Info()
 		if err != nil {
 			s.log.Warn("stat failed", "path", path, "error", err)
-			s.recordIssue(p, lib.Path, path, "could not read file info")
+			s.recordIssue(p, root.Path, path, "could not read file info")
 			return nil
 		}
 
@@ -352,7 +409,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			// reclassify a file too. Re-parsing a name is nearly free (no I/O),
 			// so do it and act only when the classification actually moved
 			// families — otherwise a rescan stays the cheap no-op it must be.
-			if reinterpreted(st.Kind, media.Parse(lib.Path, path, lib.Kind).Kind) {
+			if reinterpreted(st.Kind, media.Parse(root.Path, path, lib.Kind).Kind) {
 				if _, err := s.upsert(ctx, lib, root, path, info, p); err == nil {
 					// A changed identity must be re-matched; the stamp is what
 					// removes it from the enrichment queue.
@@ -372,7 +429,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		id, err := s.upsert(ctx, lib, root, path, info, p)
 		if err != nil {
 			s.log.Warn("upsert failed", "path", path, "error", err)
-			s.recordIssue(p, lib.Path, path, "could not be recorded")
+			s.recordIssue(p, root.Path, path, "could not be recorded")
 			return nil
 		}
 		s.syncSubtitles(ctx, id, path)
@@ -382,7 +439,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("walk %q: %w", lib.Path, err)
+		return fmt.Errorf("walk %q: %w", root.Path, err)
 	}
 
 	/*
@@ -401,13 +458,14 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 	 * that loses its root mid-flight has nothing trustworthy to reconcile, so it
 	 * fails rather than writing a half-truth.
 	 */
-	if err := checkRoot(lib.Path); err != nil {
+	if err := checkRoot(root.Path); err != nil {
 		return err
 	}
 
-	// Anything previously known but not seen this pass is marked missing —
-	// never deleted. An unmounted drive must not destroy library data, which is
-	// enforced by the two checkRoot calls rather than by this loop.
+	// Anything previously known *in this location* but not seen this pass is
+	// marked missing — never deleted. Scoped to the location by KnownFilesInRoot
+	// above, so a drive that is merely asleep cannot cost a file on the drive
+	// that is awake.
 	var gone []int64
 	for path, st := range known {
 		if !seen[path] {
@@ -418,8 +476,20 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		return err
 	}
 	s.mu.Lock()
-	p.ItemsMissing = len(gone)
+	p.ItemsMissing += len(gone)
 	s.mu.Unlock()
+	return nil
+}
+
+// reconcileLibrary runs the passes that are about the library as a whole rather
+// than about any one location.
+//
+// Deliberately after every location has been walked, and deliberately not
+// per-root: a show whose seasons are split across two drives is one show, and
+// grouping it needs both walks to have happened. That is also why containers
+// are keyed on library rather than on root — a container that belonged to a
+// location could not span them.
+func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Progress, playlists []string) error {
 
 	// Music reads its metadata from the files themselves before anything is
 	// grouped, because for music the tags are the authority and the folder is
