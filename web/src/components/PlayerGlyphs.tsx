@@ -104,6 +104,23 @@ export function AudioTrackGlyph(p: Props) {
   );
 }
 
+/* Sliders, not a cog.
+ *
+ * A cog means "application settings" everywhere else in this app, and the row
+ * of controls this opens is what a person came to adjust rather than a
+ * configuration screen. Three sliders at different positions says "the things
+ * you can change about this playback", which is exactly what is behind it. */
+export function SettingsGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+      <circle cx="9" cy="7" r="2" />
+      <circle cx="15" cy="12" r="2" />
+      <circle cx="7" cy="17" r="2" />
+    </Svg>
+  );
+}
+
 // A list, for the queue.
 export function QueueGlyph(p: Props) {
   return (

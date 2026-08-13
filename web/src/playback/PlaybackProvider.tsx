@@ -19,6 +19,7 @@ import {
   nextPos,
   prevPos,
 } from "./queueOrder";
+import { usePrefs, qualityQuery, type Prefs } from "./prefs";
 
 // Playback lives above the router.
 //
@@ -47,7 +48,17 @@ function sourceURL(
   method: Decision["method"],
   offset: number,
   audio?: number | null,
+  quality?: string,
 ): string {
+  // The chosen quality ceiling, or nothing at all for Original.
+  //
+  // It must ride on *every* request that participates in the delivery decision,
+  // for the same reason ?audio= does: /playback and /transcode each decide from
+  // their own parameters, so a seek that dropped the ceiling would be answered
+  // about an uncapped stream — 409 "this file can be played directly" on a file
+  // the ceiling is the only reason to touch, which kills the seek and with it
+  // the playback.
+  const cap = quality ? qualityQuery(quality) : "";
   // ?audio= names the absolute stream index (docs/api.md). It participates in
   // the delivery decision rather than only in stream selection, because a file
   // that direct-plays with its default track may need converting to deliver a
@@ -55,9 +66,13 @@ function sourceURL(
   // cannot decode.
   const a = audio != null ? `audio=${audio}` : "";
   if (method === "direct") {
+    // A direct source is the file's own bytes; there is no encode to constrain,
+    // and the server would not have said "direct" if the ceiling applied.
     return a ? `/api/stream/${id}?${a}` : `/api/stream/${id}`;
   }
-  const parts = [offset > 0 ? `t=${Math.floor(offset)}` : "", a].filter(Boolean);
+  const parts = [offset > 0 ? `t=${Math.floor(offset)}` : "", a, cap].filter(
+    Boolean,
+  );
   const t = parts.length > 0 ? `?${parts.join("&")}` : "";
   // Carries the same capabilities the decision was made with. The transcode
   // endpoint decides again from its own parameters, so a request claiming less
@@ -137,6 +152,10 @@ interface PlaybackState {
    *  the same track apart in a playlist. */
   playFromQueue: (id: number, at?: number) => void;
 
+  /** Device-local playback preferences; see prefs.ts. */
+  prefs: Prefs;
+  setPrefs: (patch: Partial<Prefs>) => void;
+
   videoRef: React.RefObject<HTMLVideoElement>;
   containerRef: React.RefObject<HTMLDivElement>;
   /** Claimed by the player screen while it is mounted. */
@@ -179,6 +198,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // meaningful within one file.
   const [audioIndex, setAudioIndex] = useState<number | null>(null);
 
+  // Device-local playback preferences (quality, output device, subtitle look,
+  // auto play). See prefs.ts for why these are not per-user on the server.
+  const [prefs, updatePrefs] = usePrefs();
+  // Read inside callbacks that must not be rebuilt when the quality changes —
+  // the source effect keys on the value itself so it reloads, but seekTo and
+  // the failed-direct-play retry only need whatever is current at the moment
+  // they fire. A dependency there would rebuild them on every settings change
+  // for no behavioural difference.
+  const qualityRef = useRef(prefs.quality);
+  qualityRef.current = prefs.quality;
+  // Same reasoning for the whole object, read by the `ended` handler.
+  const prefsRef = useRef<Prefs>(prefs);
+  prefsRef.current = prefs;
+
   const { data: item } = useItem(itemID);
 
   // A track has nothing to show, so its surface becomes the album's cover.
@@ -201,6 +234,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // The <track> element currently mounted. Its .track is the one TextTrack
   // allowed to be showing; see the effect that enforces that below.
   const trackRef = useRef<HTMLTrackElement>(null);
+
+  // The position the film is actually at, tagged with what it is the position
+  // *in*. Kept as a ref because it is read by the source effect, which must not
+  // re-run when it changes — it updates several times a second, and an effect
+  // that reloads the source on it would reload the source forever.
+  const livePos = useRef<{ id: number; at: number }>({ id: 0, at: 0 });
 
   const decision = useRef<Decision>({ method: "direct", reason: "" });
   const transcoding = useRef(false);
@@ -447,9 +486,26 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (!v) return;
     let cancelled = false;
 
-    startedFrom.current = item.progress?.position_ms
-      ? item.progress.position_ms / 1000
-      : 0;
+    /*
+     * Where to come back in.
+     *
+     * Normally the saved progress, which is what starting a film means. But
+     * this effect also re-runs *during* playback — a different audio track, or
+     * a different quality — and there the saved progress is up to five seconds
+     * stale, because that is how often it is written. Reloading onto it would
+     * rewind the film by a few seconds every time the settings panel was
+     * touched, which reads as the player losing its place.
+     *
+     * So: the live position wins whenever we are already playing this same
+     * item, and the saved one is for arriving at it.
+     */
+    const live = livePos.current;
+    startedFrom.current =
+      live.id === item.id && live.at > 0
+        ? live.at
+        : item.progress?.position_ms
+          ? item.progress.position_ms / 1000
+          : 0;
 
     (async () => {
       try {
@@ -460,10 +516,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // request to /stream?audio=N, which serves the file's bytes and cannot
         // select anything. The browser then picked a track by its own rules and
         // the picker did nothing at all.
+        // The quality ceiling is part of the question too, and for the same
+        // reason the audio track is: it changes the answer. A 4K file the
+        // client could decode direct-plays when nothing is capped and needs a
+        // full encode at 720p, and asking without it gets an answer about a
+        // stream that is not the one about to be requested.
+        const ask = [
+          audioIndex != null ? `audio=${audioIndex}` : "",
+          qualityQuery(qualityRef.current),
+        ].filter(Boolean);
         const pb = await apiGet<{ decision: Decision }>(
           withCapabilities(
             `/api/items/${item.id}/playback` +
-              (audioIndex != null ? `?audio=${audioIndex}` : ""),
+              (ask.length > 0 ? `?${ask.join("&")}` : ""),
           ),
         );
         if (cancelled) return;
@@ -490,6 +555,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         decision.current.method,
         startedFrom.current,
         audioIndex,
+        qualityRef.current,
       );
       v.load();
       void v.play().catch(() => {});
@@ -503,10 +569,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       v.removeAttribute("src");
       v.load();
     };
-    // Re-run when the item changes, and when a different audio track is asked
-    // for — that is a new request to the server, not a client-side switch.
+    // Re-run when the item changes, when a different audio track is asked for,
+    // and when the quality ceiling moves — all three are new requests to the
+    // server rather than client-side switches.
+    //
+    // Changing quality mid-film therefore restarts the source. It resumes at
+    // the saved position, because that is what startedFrom reads, so what you
+    // see is a short reconnect rather than a jump back to the beginning — the
+    // same interruption a transcode seek already costs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id, audioIndex]);
+  }, [item?.id, audioIndex, prefs.quality]);
 
   // A direct-played file that fails is a capability this browser claimed and
   // does not have.
@@ -542,7 +614,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     // Same reason as the seek below: the retry is about whichever track is
     // playing, not the file's default.
-    v.src = sourceURL(item.id, "transcode", startedFrom.current, audioIndex);
+    v.src = sourceURL(
+      item.id,
+      "transcode",
+      startedFrom.current,
+      audioIndex,
+      qualityRef.current,
+    );
     v.load();
     void v.play().catch(() => {});
   }, [item, audioIndex]);
@@ -562,7 +640,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // about a different track than the one playing, and on a file whose
         // default track direct-plays the server answers 409 "this file can be
         // played directly" — so the seek dies, and with it the playback.
-        v.src = sourceURL(itemID, decision.current.method, t, audioIndex);
+        v.src = sourceURL(
+          itemID,
+          decision.current.method,
+          t,
+          audioIndex,
+          qualityRef.current,
+        );
         v.load();
         void v.play().catch(() => {});
       } else {
@@ -834,6 +918,103 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // new offset-shifted src; the fresh track must be switched to showing too.
   }, [activeSub, subKey, subOffset]);
 
+  /*
+   * ---- subtitle timing offset -----------------------------------------------
+   *
+   * Applied to the parsed cues here rather than by asking the server for a
+   * shifted file, for three reasons. It is instant, where a refetch is a
+   * visible gap in the subtitles every time the control moves — and this is a
+   * control people nudge repeatedly until it looks right, so the gap would land
+   * on every press. It works in both directions, where the server's ShiftVTT
+   * only moves cues *earlier* and drops what falls off the front, which is
+   * correct for its actual job (lining a file up with a transcode's zero point)
+   * and wrong as a user control. And it composes with that job rather than
+   * fighting it: ?t= still handles the transcode shift, and this rides on top.
+   *
+   * The applied amount is tracked because cues are mutated in place. Shifting
+   * by the preference each time the effect ran would shift by it again on every
+   * render; the delta is what makes it idempotent. A remounted <track> parses
+   * fresh cues, so the applied amount resets with it.
+   */
+  const appliedOffset = useRef(0);
+  useEffect(() => {
+    const el = trackRef.current;
+    const tt = el?.track;
+    if (!el || !tt) return;
+
+    const apply = () => {
+      const cues = tt.cues;
+      if (!cues) return;
+      const delta = prefs.subOffset - appliedOffset.current;
+      if (delta === 0) return;
+      for (let i = 0; i < cues.length; i++) {
+        const c = cues[i];
+        // Never past zero: a negative start time is not a cue that shows
+        // earlier, it is a cue the engine drops.
+        c.startTime = Math.max(0, c.startTime + delta);
+        c.endTime = Math.max(0, c.endTime + delta);
+      }
+      appliedOffset.current = prefs.subOffset;
+    };
+
+    // Cues are parsed asynchronously; an offset set before the file has loaded
+    // would find an empty list and silently do nothing.
+    if (tt.cues && tt.cues.length > 0) apply();
+    el.addEventListener("load", apply);
+    return () => el.removeEventListener("load", apply);
+    // subOffset and the track key are in here because both remount the element,
+    // which resets the cues to their unshifted state.
+  }, [prefs.subOffset, subKey, subOffset, activeSub]);
+
+  // A remount means fresh cues, so nothing has been applied to them yet.
+  useEffect(() => {
+    appliedOffset.current = 0;
+  }, [subKey, subOffset]);
+
+  /*
+   * ---- audio output device --------------------------------------------------
+   *
+   * setSinkId is not universal — Firefox has it behind a pref and Safari has
+   * none — so this is best-effort by design: an engine without it plays out of
+   * the system default, which is what it did before this existed. The settings
+   * panel hides the row rather than offering a control that cannot do anything.
+   *
+   * Re-applied on every source change as well as on the choice itself: a fresh
+   * src does not reset the sink in the engines that implement it, but a *new
+   * element* would, and the pop-out window in ADR 0029 moves this element
+   * between documents. Cheap enough to simply re-assert.
+   */
+  useEffect(() => {
+    const v = videoRef.current as (HTMLVideoElement & {
+      setSinkId?: (id: string) => Promise<void>;
+    }) | null;
+    if (!v?.setSinkId) return;
+    v.setSinkId(prefs.audioDevice).catch(() => {
+      // A device that has been unplugged since it was chosen. Falling back to
+      // the default is what the engine does anyway, and there is nothing useful
+      // to say about it mid-film.
+    });
+  }, [prefs.audioDevice, itemID, subOffset]);
+
+  /*
+   * ---- subtitle appearance --------------------------------------------------
+   *
+   * Written as CSS custom properties on the document, because ::cue cannot be
+   * styled inline — the cue box lives in a shadow tree the page cannot reach
+   * with a style attribute, and the only hook is a stylesheet rule that reads
+   * these. The rule itself is in playback.css.
+   *
+   * Position is a percentage from the bottom of the picture. It moves the cue
+   * box rather than the text inside it, which is why it is a `bottom` on the
+   * container and not something ::cue could express at all.
+   */
+  useEffect(() => {
+    const s = document.documentElement.style;
+    s.setProperty("--cue-color", prefs.subColor);
+    s.setProperty("--cue-scale", String(prefs.subSize));
+    s.setProperty("--cue-bottom", `${prefs.subPosition}%`);
+  }, [prefs.subColor, prefs.subSize, prefs.subPosition]);
+
   const claimFullSurface = useCallback((claimed: boolean) => {
     setFullClaimed(claimed);
   }, []);
@@ -883,6 +1064,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     playNext,
     playPrev,
     playFromQueue,
+    prefs,
+    setPrefs: updatePrefs,
     videoRef,
     containerRef,
     claimFullSurface,
@@ -985,7 +1168,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             onWaiting={() => setLoading(true)}
             onError={() => retryWithoutClaims()}
             onTimeUpdate={(e) => {
-              setCurrent(e.currentTarget.currentTime);
+              const t = e.currentTarget.currentTime;
+              setCurrent(t);
+              // What a reload should come back in at. offset.current is zero on
+              // direct play and the transcode's own zero point otherwise, which
+              // is the same sum displayTime makes.
+              livePos.current = {
+                id: itemID,
+                at: (transcoding.current ? offset.current : 0) + t,
+              };
               saveProgress();
             }}
             onPlay={() => setPlaying(true)}
@@ -1005,6 +1196,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                   void v.play().catch(() => {});
                   return;
                 }
+              }
+              /*
+               * Auto play, and what it does *not* cover.
+               *
+               * Only the end of a track consults it. Pressing Next is an
+               * explicit request to move on and must work regardless — a
+               * setting that disabled the next button would be a broken
+               * control, not an honoured preference. Repeat one is likewise
+               * above this: it is a loop the user asked for, not an advance.
+               *
+               * With it off the queue stays intact and the position stays put,
+               * so pressing play again resumes into it. Clearing the queue here
+               * would make "don't roll on automatically" mean "throw away the
+               * album", which is not what it says.
+               */
+              if (!prefsRef.current.autoPlay) {
+                setPlaying(false);
+                return;
               }
               // Roll on to the next queued item; if there is none, it ends here.
               if (!advanceQueue()) setPlaying(false);

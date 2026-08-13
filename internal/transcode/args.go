@@ -130,6 +130,30 @@ func Args(o Options) []string {
 		// level stated or it defaults to something browsers refuse.
 		a = append(a, o.Encoder.EncoderArgs(o.CRF)...)
 
+		// The quality ceiling, if the decision carries one.
+		//
+		// -2 rather than -1 on the width: the height is fixed and the width is
+		// derived from the aspect ratio, and H.264 needs even dimensions. -1
+		// computes the exact width and hands ffmpeg an odd number on plenty of
+		// ordinary aspect ratios, where the encoder does not round — it exits.
+		// -2 asks for the same computation constrained to a multiple of two.
+		if o.Decision.TargetHeight > 0 {
+			a = append(a, "-vf",
+				fmt.Sprintf("scale=-2:%d", o.Decision.TargetHeight))
+		}
+		// A ceiling, not a target: -maxrate with -bufsize is rate *limiting* on
+		// top of the quality-based encode above, so a scene that compresses well
+		// still comes in under it rather than being padded up to it. bufsize at
+		// twice maxrate is the usual choice — smaller makes the limiter clamp on
+		// short bursts and visibly softens hard cuts.
+		if o.Decision.TargetVideoBitRate > 0 {
+			kbit := o.Decision.TargetVideoBitRate / 1000
+			a = append(a,
+				"-maxrate", strconv.FormatInt(kbit, 10)+"k",
+				"-bufsize", strconv.FormatInt(kbit*2, 10)+"k",
+			)
+		}
+
 		if o.Output == HLS {
 			// Force keyframes on segment boundaries, or segments cannot start
 			// with an IDR frame and seeking breaks.

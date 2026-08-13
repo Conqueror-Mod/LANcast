@@ -143,3 +143,37 @@
   font-size: 11px;
   max-width: 90%;
 }
+
+/* ---- subtitle appearance ---------------------------------------------------
+ *
+ * The cue box lives in a shadow tree the page cannot reach with a style
+ * attribute, so the only hook is a rule reading custom properties the provider
+ * writes onto the document. The fallbacks are the shipped defaults, so a
+ * browser that has never stored a preference renders identically to one that
+ * has stored the default.
+ *
+ * Colour applies to the text only. The background stays a dark box regardless,
+ * because it is what makes a subtitle readable over a bright scene — a control
+ * that could turn it off would let someone make their subtitles invisible over
+ * exactly the shots that need them most, and then blame the player.
+ */
+.playback__video::cue {
+  color: var(--cue-color, #ffffff);
+  background: rgba(0, 0, 0, 0.62);
+  /* Scaled from the engine's own default rather than a fixed pixel size: the
+     default is already relative to the video box, so this keeps subtitles
+     sized to the picture in the mini-player, fullscreen and the pop-out
+     window without any of them needing a rule of their own. */
+  font-size: calc(100% * var(--cue-scale, 1));
+  line-height: 1.3;
+}
+
+/* Position. ::cue cannot express where the box sits — only what is inside it —
+   so the lift is applied by padding the element's own cue area from below.
+   Chromium honours this on the internal cue container; engines that do not
+   simply leave subtitles at their default height, which is a preference that
+   does nothing rather than a player that breaks. */
+.playback__video::-webkit-media-text-track-container {
+  bottom: var(--cue-bottom, 8%);
+  position: relative;
+}

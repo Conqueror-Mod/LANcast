@@ -8,15 +8,15 @@ import {
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
 import { Scrubber } from "@/components/Scrubber";
-import { SubtitleMenu } from "@/components/SubtitleMenu";
-import { QueuePanel, audioLabel } from "@/components/QueuePanel";
+import { PlaybackSettings } from "@/components/PlaybackSettings";
+import { QueuePanel } from "@/components/QueuePanel";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
   ShuffleGlyph,
   RepeatGlyph,
   VolumeGlyph,
-  AudioTrackGlyph,
+  SettingsGlyph,
   QueueGlyph,
   PipGlyph,
   FullscreenGlyph,
@@ -25,6 +25,7 @@ import {
   StopGlyph,
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
+import { DEFAULTS } from "@/playback/prefs";
 import "./Player.css";
 
 // The player screen is chrome. The media element and everything that drives it
@@ -107,9 +108,31 @@ export function Player() {
   // things race to own what is playing.
 
   const [chromeVisible, setChromeVisible] = useState(true);
-  const [subMenuOpen, setSubMenuOpen] = useState(false);
-  const [speedOpen, setSpeedOpen] = useState(false);
-  const [audioOpen, setAudioOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /*
+   * Whether anything behind the settings button is away from its default.
+   *
+   * The five separate buttons this replaced each lit up on their own, so the
+   * strip said at a glance that the speed was up or a non-default audio track
+   * was selected. Collapsing them into one panel would have thrown that signal
+   * away — and it is the signal that answers "why does this sound wrong" a week
+   * later, when the setting has long been forgotten.
+   *
+   * Deliberately not gold: an engaged control reads through weight and a filled
+   * background. Gold is where you are, and nothing else.
+   */
+  const settingsChanged =
+    pb.speed !== 1 ||
+    pb.prefs.quality !== DEFAULTS.quality ||
+    pb.prefs.audioDevice !== DEFAULTS.audioDevice ||
+    pb.prefs.autoPlay !== DEFAULTS.autoPlay ||
+    pb.prefs.subOffset !== DEFAULTS.subOffset ||
+    // The audio track is engaged when it is not the one the file leads with,
+    // which is the stream flagged `default` rather than simply the first — a
+    // release with a commentary track first is unusual but entirely legal.
+    (pb.audioIndex != null &&
+      pb.audioIndex !==
+        (pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0])?.index);
   const [queueOpen, setQueueOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pipAvailable, setPipAvailable] = useState(false);
@@ -123,26 +146,6 @@ export function Player() {
       typeof document !== "undefined" && !!document.pictureInPictureEnabled,
     );
   }, []);
-
-  /*
-   * Which audio track is actually playing.
-   *
-   * `audioIndex` is null until you choose one, meaning "whatever the file leads
-   * with" — but that is still a real track, and something is coming out of the
-   * speakers. Marking the current row from `audioIndex` alone left *nothing*
-   * ticked the first time the picker was opened, which is every time on a file
-   * you have not already fiddled with: two tracks offered and no indication of
-   * which one you are listening to. The point of the picker is telling them
-   * apart.
-   *
-   * The file's own default is the stream flagged `default`, not simply the
-   * first one — a release with a commentary track first and the feature audio
-   * second is unusual but entirely legal. First is the fallback when nothing
-   * carries the flag.
-   */
-  const defaultAudio =
-    pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0];
-  const currentAudio = pb.audioIndex ?? defaultAudio?.index;
 
   // Leaving the player leaves it playing. That is the point of the change, and
   // it is why Back no longer stops anything.
@@ -517,111 +520,54 @@ export function Player() {
                 </>
               )}
 
-              {/* Speed is offered everywhere: a slow talker is as common in a
-                podcast-length album track as in a documentary. */}
-              <div className="player__menu">
-                <button
-                  className={"player__icon" + (pb.speed !== 1 ? " is-on" : "")}
-                  onClick={() => setSpeedOpen((o) => !o)}
-                  aria-label="Playback speed"
-                  aria-expanded={speedOpen}
-                  title={`Speed ${pb.speed}×`}
-                >
-                  {pb.speed}×
-                </button>
-                {speedOpen && (
-                  <div className="player__pop" role="menu">
-                    {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((r) => (
-                      <button
-                        key={r}
-                        role="menuitemradio"
-                        aria-checked={pb.speed === r}
-                        className={
-                          "player__pop-item" + (pb.speed === r ? " is-on" : "")
-                        }
-                        onClick={() => {
-                          pb.setSpeed(r);
-                          setSpeedOpen(false);
-                        }}
-                      >
-                        {r === 1 ? "Normal" : `${r}×`}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Only when the file actually carries a choice. A picker listing
-                one track is a control that cannot do anything. */}
-              {pb.audioTracks.length > 1 && (
-                <div className="player__menu">
-                  <button
-                    /* Engaged means "not the track this file leads with", so
-                       explicitly choosing the default does not light it. */
-                    className={
-                      "player__icon" +
-                      (currentAudio !== defaultAudio?.index ? " is-on" : "")
-                    }
-                    onClick={() => setAudioOpen((o) => !o)}
-                    aria-label="Audio track"
-                    aria-expanded={audioOpen}
-                    title="Audio track"
-                  >
-                    <AudioTrackGlyph />
-                  </button>
-                  {audioOpen && (
-                    <div className="player__pop" role="menu">
-                      {pb.audioTracks.map((t) => (
-                        <button
-                          key={t.index}
-                          role="menuitemradio"
-                          aria-checked={currentAudio === t.index}
-                          className={
-                            "player__pop-item" +
-                            (currentAudio === t.index ? " is-on" : "")
-                          }
-                          onClick={() => {
-                            pb.selectAudio(t.index);
-                            setAudioOpen(false);
-                          }}
-                        >
-                          {audioLabel(t)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Subtitles and fullscreen are video affordances. A subtitle menu
-                that can only ever say "none", and a fullscreen button for a
-                still image, are both controls that promise something the
-                content cannot give. */}
+              {/* Subtitles keep a button of their own, and only they do.
+                  Turning subtitles on or off mid-scene is a *transport* action
+                  — you missed a line, you want them now — not a settings
+                  change, and it is the one thing in the panel frequent enough
+                  that two clicks and a scan of a list would be felt. It stays
+                  a video affordance: a menu that can only ever say "None" is a
+                  control promising something a song cannot give. */}
               {!pb.isAudio && (
                 <div className="player__subs">
                   <button
                     className={"player__icon" + (pb.activeSub ? " is-on" : "")}
-                    onClick={() => setSubMenuOpen((o) => !o)}
-                    aria-label="Subtitles"
-                    aria-expanded={subMenuOpen}
+                    onClick={() => {
+                      pb.cycleSub(1);
+                    }}
+                    aria-label="Toggle subtitles"
+                    aria-pressed={!!pb.activeSub}
+                    title={
+                      pb.activeSub
+                        ? `Subtitles: ${pb.activeSub.label}`
+                        : "Subtitles off"
+                    }
                   >
                     CC
                   </button>
-                  {subMenuOpen && (
-                    <SubtitleMenu
-                      itemID={pb.itemID}
-                      itemTitle={item?.title ?? ""}
-                      language="en"
-                      tracks={pb.subtitles}
-                      activeKey={pb.subKey}
-                      onSelect={(key) => {
-                        pb.selectSub(key);
-                        setSubMenuOpen(false);
-                      }}
-                    />
-                  )}
                 </div>
               )}
+
+              {/* Everything about *how* this plays, in one place. Engaged when
+                  any of it is away from its default, so the strip still says at
+                  a glance that something has been changed — which is what the
+                  five separate lit-up buttons used to say between them. */}
+              <div className="player__menu">
+                <button
+                  className={
+                    "player__icon" +
+                    (settingsOpen || settingsChanged ? " is-on" : "")
+                  }
+                  onClick={() => setSettingsOpen((o) => !o)}
+                  aria-label="Playback settings"
+                  aria-expanded={settingsOpen}
+                  title="Playback settings"
+                >
+                  <SettingsGlyph />
+                </button>
+                {settingsOpen && (
+                  <PlaybackSettings onClose={() => setSettingsOpen(false)} />
+                )}
+              </div>
               {!pb.isAudio && pipAvailable && (
                 <button
                   className="player__icon"
