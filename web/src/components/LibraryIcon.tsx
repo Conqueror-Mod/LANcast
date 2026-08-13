@@ -127,6 +127,21 @@ export function SettingsIcon() {
   );
 }
 
+// Add-ons: a block joining two others. A puzzle piece is the conventional
+// glyph and is wrong at 20px — the notches vanish and it reads as a blob. Three
+// squares with one offset says "a part that plugs in" at this size, which is
+// the whole job.
+export function AddonIcon() {
+  return (
+    <RailGlyph>
+      <rect x="2.8" y="2.8" width="6" height="6" rx="1.2" />
+      <rect x="11.2" y="2.8" width="6" height="6" rx="1.2" />
+      <rect x="2.8" y="11.2" width="6" height="6" rx="1.2" />
+      <path d="M11.2 14.2h6M14.2 11.2v6" />
+    </RailGlyph>
+  );
+}
+
 // Head and shoulders. Deliberately not a filled avatar: this is a person, not
 // a photograph, and a filled shape here would out-weigh the gear beside it.
 export function AccountIcon() {

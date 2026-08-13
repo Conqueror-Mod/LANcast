@@ -8,6 +8,7 @@ import {
   useDeleteLibrary,
   useStartScan,
   useRefreshLibrary,
+  useUpdateLibrary,
   useScanStatus,
   useProbeStatus,
   useReprobe,
@@ -65,6 +66,8 @@ function LibraryRow({ library }: { library: Library }) {
   const running = status?.state === "running";
   const [showIssues, setShowIssues] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const edit = useUpdateLibrary();
 
   const skipped = status?.skipped ?? 0;
   const issues = status?.issues ?? [];
@@ -113,6 +116,16 @@ function LibraryRow({ library }: { library: Library }) {
           <button
             className="set-btn"
             disabled={running || scan.isPending}
+            onClick={() => {
+              edit.reset();
+              setEditing((v) => !v);
+            }}
+          >
+            {editing ? "Cancel" : "Edit"}
+          </button>
+          <button
+            className="set-btn"
+            disabled={running || scan.isPending}
             onClick={() => scan.mutate(library.id)}
           >
             {running ? "Scanning…" : "Scan"}
@@ -150,6 +163,19 @@ function LibraryRow({ library }: { library: Library }) {
           )}
         </div>
       </div>
+      {editing && (
+        <LibraryEditor
+          library={library}
+          pending={edit.isPending}
+          error={(edit.error as Error | null)?.message}
+          onSave={(v) =>
+            edit.mutate(
+              { id: library.id, ...v },
+              { onSuccess: () => setEditing(false) },
+            )
+          }
+        />
+      )}
       {showIssues && issues.length > 0 && (
         <ul className="set-issues">
           {issues.map((i, k) => (
@@ -165,6 +191,76 @@ function LibraryRow({ library }: { library: Library }) {
           )}
         </ul>
       )}
+    </div>
+  );
+}
+
+/*
+ * Editing a library: its name, and where it is.
+ *
+ * The type is shown and not editable, with the reason on the line rather than
+ * in a tooltip — a disabled control with no explanation reads as a bug. A kind
+ * decides which scanner runs, which provider is asked, and what the top level
+ * of the browse is; changing it would not convert a library, it would leave one
+ * describing itself as something its rows are not.
+ *
+ * The path is editable because the drive-letter case is real: D: became E:, or
+ * a folder was renamed. Every item moves with it — matches, artwork, watch
+ * positions, playlist membership — which is precisely what deleting the library
+ * and adding it again would throw away.
+ */
+function LibraryEditor({
+  library,
+  pending,
+  error,
+  onSave,
+}: {
+  library: Library;
+  pending: boolean;
+  error?: string;
+  onSave: (v: { name?: string; path?: string }) => void;
+}) {
+  const [name, setName] = useState(library.name);
+  const [path, setPath] = useState(library.path);
+  const dirty = name.trim() !== library.name || path.trim() !== library.path;
+
+  return (
+    <div className="set-libedit">
+      <label className="set-libedit__field">
+        <span>Name</span>
+        <input
+          className="set-input set-input--wide"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </label>
+      <label className="set-libedit__field">
+        <span>Folder</span>
+        <input
+          className="set-input set-input--wide"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+        />
+      </label>
+      <p className="set-row__sub">
+        Type: {kindLabel(library.kind)} — a library's type cannot be changed.
+        Add the folder again as the type you want.
+      </p>
+      <p className="set-row__sub">
+        Changing the folder moves this library and everything in it: matches,
+        artwork and watch progress are kept. Scan afterwards to pick up
+        anything that changed on disk.
+      </p>
+      {error && <p className="set-row__note">{error}</p>}
+      <div className="set-row__actions">
+        <button
+          className="set-btn"
+          disabled={!dirty || pending || name.trim() === "" || path.trim() === ""}
+          onClick={() => onSave({ name: name.trim(), path: path.trim() })}
+        >
+          {pending ? "Saving…" : "Save changes"}
+        </button>
+      </div>
     </div>
   );
 }

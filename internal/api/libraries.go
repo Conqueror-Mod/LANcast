@@ -78,6 +78,106 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, lib)
 }
 
+// patchLibrary edits a library. Admin-only.
+//
+// Everything is editable except the kind. A kind is not a label — it decides
+// which scanner runs, which metadata provider is asked, what the top level of
+// the browse is, and what a file even counts as. Changing it would not convert
+// a library, it would leave one describing itself as something its rows are
+// not; the honest way to change a kind is to add the library again as the kind
+// you meant.
+//
+// The path is editable because the drive-letter case is real and the
+// alternative is deleting a library and losing every match, every piece of
+// artwork, every watch position and every playlist that referenced it — to
+// record a fact about a drive letter. See store.RepointLibrary: the rows move
+// with it, and a rescan afterwards reconciles files exactly as it always does.
+func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	var req struct {
+		Name *string `json:"name"`
+		Path *string `json:"path"`
+		Kind *string `json:"kind"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
+		return
+	}
+
+	lib, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+
+	// Refused rather than ignored. A client that sends a kind believes it is
+	// changing one, and silently dropping it would leave the caller thinking a
+	// library had been converted.
+	if req.Kind != nil && *req.Kind != lib.Kind {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"a library's type cannot be changed; add the folder again as the type you want")
+		return
+	}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "name cannot be empty")
+			return
+		}
+		if name != lib.Name {
+			if err := s.st.RenameLibrary(r.Context(), id, name); err != nil {
+				s.writeInternal(w, err, "rename library")
+				return
+			}
+			s.audit(r, "library.update", "library", auditID(id),
+				"Renamed library "+lib.Name+" to "+name, nil)
+		}
+	}
+
+	if req.Path != nil {
+		abs, err := filepath.Abs(strings.TrimSpace(*req.Path))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "path could not be resolved")
+			return
+		}
+		if abs != lib.Path {
+			// Checked before anything is rewritten: repointing a library at a
+			// folder that is not there would mark its whole contents missing on
+			// the next scan, which is a long way to travel for a typo.
+			info, err := os.Stat(abs)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "bad_request", "path does not exist or is unreadable")
+				return
+			}
+			if !info.IsDir() {
+				writeError(w, http.StatusBadRequest, "bad_request", "path is not a directory")
+				return
+			}
+			if err := s.st.RepointLibrary(r.Context(), id, lib.Path, abs); err != nil {
+				if strings.Contains(err.Error(), "UNIQUE") {
+					writeError(w, http.StatusConflict, "conflict", "another library already uses that path")
+					return
+				}
+				s.writeInternal(w, err, "repoint library")
+				return
+			}
+			s.audit(r, "library.update", "library", auditID(id),
+				"Moved library "+lib.Name+" from "+lib.Path+" to "+abs,
+				map[string]any{"from": lib.Path, "to": abs})
+		}
+	}
+
+	updated, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
 func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {

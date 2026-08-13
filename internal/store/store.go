@@ -423,6 +423,24 @@ func (s *Store) MarkMissing(ctx context.Context, ids []int64) error {
 	return tx.Commit()
 }
 
+// bucketInitial maps a first character to the bucket the A–Z rail shows it in:
+// itself when it is a Latin letter, "#" for everything else.
+//
+// Everything else really is everything else — a number, a bracket, a Cyrillic
+// or Japanese title. Transliterating would be a second normalizer with an
+// opinion about scripts, and the one rule this project has about normalizers is
+// that a second one disagrees with the first.
+func bucketInitial(c string) string {
+	if c == "" {
+		return "#"
+	}
+	r := []rune(strings.ToUpper(c))[0]
+	if r >= 'A' && r <= 'Z' {
+		return string(r)
+	}
+	return "#"
+}
+
 // ItemFilter narrows a listing. Zero values mean "no restriction".
 type ItemFilter struct {
 	LibraryID int64
@@ -443,6 +461,23 @@ type ItemFilter struct {
 	// (a show) carries no watched flag and is unaffected.
 	Unwatched bool
 	UserID    string
+
+	// Initial restricts to items whose sort_title starts with this letter, or
+	// with anything that is not a Latin letter when it is "#". The A–Z rail.
+	//
+	// A filter rather than a scroll offset: the grid pages in as you scroll, so
+	// "jump to S" cannot mean "scroll to a row that is not loaded". Asking the
+	// server for the S items is the same gesture with an answer that exists.
+	Initial string
+
+	// ExcludeKind drops one kind from a listing.
+	//
+	// For the browse grid, where collections were mixed in among the films they
+	// group: a franchise tile beside its own members, sorted by a title nobody
+	// chose, in a grid whose job is "what have I got". They are a different
+	// question — "what belongs together" — and they get their own page. Empty
+	// means no exclusion, which is every other caller.
+	ExcludeKind string
 
 	// TopLevel restricts the listing to rows with no parent — the browse-grid
 	// default. Children (seasons, episodes, parts, chapters) have a parent_id
@@ -547,6 +582,21 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
 	}
+	if f.ExcludeKind != "" {
+		where += ` AND kind != ?`
+		args = append(args, f.ExcludeKind)
+	}
+	if f.Initial != "" {
+		if f.Initial == "#" {
+			// Everything that does not begin with a Latin letter. GLOB is
+			// case-sensitive in SQLite, which is what makes the range test mean
+			// what it says here.
+			where += ` AND UPPER(SUBSTR(sort_title, 1, 1)) NOT GLOB '[A-Z]'`
+		} else {
+			where += ` AND UPPER(SUBSTR(sort_title, 1, 1)) = ?`
+			args = append(args, strings.ToUpper(f.Initial))
+		}
+	}
 	if len(f.Genres) > 0 {
 		// EXISTS rather than a join, so a multi-genre item is not duplicated in
 		// the result or double-counted in the total. IN over the chosen names is
@@ -650,12 +700,55 @@ type Facets struct {
 	Decades        []int    `json:"decades"`
 	ContentRatings []string `json:"content_ratings"`
 	HasWatched     bool     `json:"has_watched"`
+	// Initials are the first letters present among this library's top-level
+	// items, for the A–Z rail. Uppercase letters, plus "#" for everything that
+	// does not start with one — a number, a bracket, a non-Latin script.
+	//
+	// Returned rather than assumed, because a rail of twenty-six letters where
+	// nineteen do nothing is a control that lies about what is there. Sorted,
+	// with "#" first, which is where a list sorted by sort_title puts it.
+	Initials []string `json:"initials"`
 }
 
 // LibraryFacets returns the filter values present among a library's top-level
 // items, and whether this user has watched any of them.
 func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID string) (Facets, error) {
-	f := Facets{Genres: []string{}, Decades: []int{}, ContentRatings: []string{}}
+	f := Facets{Genres: []string{}, Decades: []int{}, ContentRatings: []string{}, Initials: []string{}}
+
+	// The initials present, computed the same way InitialFilter selects on so
+	// the rail can never offer a letter the filter then finds nothing for.
+	irows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT UPPER(SUBSTR(sort_title, 1, 1)) AS initial
+		FROM media_item
+		WHERE library_id = ? AND missing = 0 AND `+topLevelPredicate+`
+		  AND sort_title != ''
+		ORDER BY initial`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (initials): %w", err)
+	}
+	defer irows.Close()
+	seen := map[string]bool{}
+	for irows.Next() {
+		var c string
+		if err := irows.Scan(&c); err != nil {
+			return f, fmt.Errorf("library facets (initials): %w", err)
+		}
+		key := bucketInitial(c)
+		if !seen[key] {
+			seen[key] = true
+		}
+	}
+	if err := irows.Err(); err != nil {
+		return f, err
+	}
+	if seen["#"] {
+		f.Initials = append(f.Initials, "#")
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		if seen[string(c)] {
+			f.Initials = append(f.Initials, string(c))
+		}
+	}
 
 	grows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT g.name FROM genre g
@@ -1588,4 +1681,79 @@ func (s *Store) DeleteEmptyMusicContainers(ctx context.Context, libraryID int64)
 		total += n
 	}
 	return total, nil
+}
+
+// RenameLibrary changes a library's display name. Nothing else moves: the name
+// is a label, and no row anywhere refers to it.
+func (s *Store) RenameLibrary(ctx context.Context, id int64, name string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE library SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return fmt.Errorf("rename library: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RepointLibrary moves a library to a new root, carrying its contents with it.
+//
+// This is the drive-letter case, and it is the reason editing a path is worth
+// having at all: the media moved from D: to E:, or a folder was renamed, and
+// everything LANcast knows about it — matches, artwork, watch state, playlist
+// membership — is keyed on rows whose `path` still names the old place. A
+// library that could only be deleted and re-added would throw all of that away
+// to record a fact about a drive letter.
+//
+// So every path under the old root is rewritten to the new one, in a single
+// transaction, and *nothing else changes*: no row is deleted, no item is marked
+// missing, no scan is triggered. A rescan afterwards reconciles files the same
+// way it always does — this only tells it where to look.
+//
+// Deliberately not clever about case or separators. It is an exact prefix swap
+// on the stored strings, because the stored strings are what every other query
+// joins on; a normalizing rewrite would "fix" paths into a form the filesystem
+// layer never produced and quietly orphan them.
+//
+// The ignore list moves too. Those are absolute paths to files somebody chose
+// not to see, and a library that moved must not resurrect them.
+func (s *Store) RepointLibrary(ctx context.Context, id int64, oldRoot, newRoot string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("repoint library: %w", err)
+	}
+	defer tx.Rollback()
+
+	// A trailing separator on either side would double it in every rewritten
+	// path, so both are normalized to "no trailing separator" and the separator
+	// comes from the stored path itself.
+	oldRoot = strings.TrimRight(oldRoot, `/\`)
+	newRoot = strings.TrimRight(newRoot, `/\`)
+	prefix := oldRoot + "%"
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE media_item
+		SET path = ? || SUBSTR(path, ?)
+		WHERE library_id = ? AND path LIKE ?`,
+		newRoot, len(oldRoot)+1, id, prefix); err != nil {
+		return fmt.Errorf("repoint library: items: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE ignored_path
+		SET path = ? || SUBSTR(path, ?)
+		WHERE path LIKE ?`,
+		newRoot, len(oldRoot)+1, prefix); err != nil {
+		return fmt.Errorf("repoint library: ignored paths: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE library SET path = ? WHERE id = ?`, newRoot, id)
+	if err != nil {
+		return fmt.Errorf("repoint library: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("repoint library: commit: %w", err)
+	}
+	return nil
 }

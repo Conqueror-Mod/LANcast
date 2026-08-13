@@ -3,6 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
+import { Collections } from "@/screens/Collections";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
 import { Settings } from "@/screens/Settings";
@@ -40,6 +41,7 @@ export function App() {
           {/* A page *of* a library, not a global one: a playlist belongs to the
               library its tracks and its .m3u live in (ADR 0030). */}
           <Route path="/library/:id/playlists" element={<Playlists />} />
+          <Route path="/library/:id/collections" element={<Collections />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />

@@ -14,6 +14,7 @@ import {
   LibraryIcon,
   HomeIcon,
   SettingsIcon,
+  AddonIcon,
   AccountIcon,
   SignOutIcon,
 } from "./LibraryIcon";
@@ -60,6 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const user = useCurrentUser();
   const logout = useLogout();
   const location = useLocation();
+  const isAdmin = useIsAdmin();
   const reviewCount = review?.total ?? 0;
   // Back returns you to where you were, and a new page starts at the top.
   // Neither is the browser's default in a single-page app; see the hook.
@@ -104,6 +106,33 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </NavLink>
             ))}
+
+            {/* Add-ons sits at the foot of the library list rather than buried
+                three levels into Settings, because it is a *place* — a thing
+                with contents you go and look at — and the rail is where places
+                live. It is here whether or not there are libraries: on a fresh
+                install the rail is otherwise empty, which is exactly when
+                somebody is looking for what else this thing can do.
+
+                Admin only: installing and granting a plugin is an admin act,
+                and a rail entry leading to a panel of refusals is worse than
+                no entry. */}
+            {isAdmin && (
+              <NavLink
+                to="/settings?pane=addons"
+                title="Add-ons"
+                onClick={releaseRail}
+                className={
+                  "app-shell__lib" +
+                  (location.search.includes("pane=addons") ? " is-active" : "")
+                }
+              >
+                <AddonIcon />
+                <span className="app-shell__lib-name app-shell__label">
+                  Add-ons
+                </span>
+              </NavLink>
+            )}
           </nav>
 
           {/* The foot of the rail. `margin-top: auto` puts it against the

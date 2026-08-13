@@ -42,6 +42,9 @@ export function LibraryView({
   const decades = params.getAll("decade");
   const contentRatings = params.getAll("content_rating");
   const unwatched = params.get("watched") === "false";
+  // The A–Z rail's selection lives in the URL like every other control here, so
+  // "the S films" is a link, survives a reload, and comes back with Back.
+  const initial = params.get("initial") ?? "";
 
   /*
    * Putting a whole music library on.
@@ -99,6 +102,13 @@ export function LibraryView({
     decades: decades.map(Number),
     contentRatings,
     unwatched,
+    // Collections are not in the grid. They group films rather than being them,
+    // and a franchise tile beside its own members made a curated shelf read as
+    // an unsorted one. They have their own page — except while searching, where
+    // hiding a matching collection would be the search lying about what is
+    // here.
+    excludeKind: library.kind === "movie" && !q ? "collection" : undefined,
+    initial: initial || undefined,
   });
 
   // Every control lives in the URL, so a filtered view is linkable and survives
@@ -247,6 +257,14 @@ export function LibraryView({
         />
       </div>
 
+      {facets?.initials && facets.initials.length > 1 && (
+        <AlphabetRail
+          initials={facets.initials}
+          selected={initial}
+          onPick={(c) => setParam("initial", c === initial ? "" : c)}
+        />
+      )}
+
       <div className="browse__filters">
         {/* Music only. "Play all" over a film library is not a thing anybody
             wants, and over a picture library it is nonsense. */}
@@ -275,6 +293,17 @@ export function LibraryView({
             strip would compete with the facets for the same line and the same
             gesture. Only where the config says so — a control that leads to an
             empty grid in every library anyone has is spent space. */}
+        {/* Collections have their own page for movie libraries. Only there:
+            a shows library groups by series already, and music and pictures
+            have no collections at all. */}
+        {library.kind === "movie" && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/collections`)}
+          >
+            Collections
+          </button>
+        )}
         {config.playlists && (
           <button
             className="browse__playall-btn"
@@ -389,4 +418,46 @@ function shuffle(items: Item[]): Item[] {
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
+}
+
+/*
+ * The A–Z rail.
+ *
+ * A jump list, not a scrollbar. The grid pages in as you scroll, so "jump to S"
+ * cannot mean "scroll to a row that has not loaded" — it means "ask the server
+ * for the S titles", which is the same gesture with an answer that exists, and
+ * it stays correct on a library of nine hundred as easily as one of nine.
+ *
+ * Only the letters that are actually there. A strip of twenty-six where
+ * nineteen do nothing is a control that lies about what is in the library, and
+ * the server answers which ones exist for exactly this reason. Fewer than two
+ * and there is nothing to jump between, so it does not render at all.
+ *
+ * Pressing the selected letter again clears it. A filter you can enter and not
+ * leave is a trap, and there is no other affordance here for "show me
+ * everything again".
+ */
+function AlphabetRail({
+  initials,
+  selected,
+  onPick,
+}: {
+  initials: string[];
+  selected: string;
+  onPick: (initial: string) => void;
+}) {
+  return (
+    <div className="browse__az" role="group" aria-label="Jump to a letter">
+      {initials.map((c) => (
+        <button
+          key={c}
+          className={"browse__az-key" + (c === selected ? " is-on" : "")}
+          aria-pressed={c === selected}
+          onClick={() => onPick(c)}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
 }

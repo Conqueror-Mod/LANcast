@@ -209,6 +209,29 @@ export function useCreateLibrary() {
 
 // Forgets a library (never deletes files). Its items vanish from every view, so
 // the lists that could be showing them are refreshed.
+/**
+ * Edit a library: its name, its path, or both.
+ *
+ * Not its kind — the server refuses that, and the client does not offer it. A
+ * kind decides which scanner runs and what the top level of the browse is;
+ * changing it would leave a library describing itself as something its rows are
+ * not.
+ */
+export function useUpdateLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; name?: string; path?: string }) =>
+      apiSend(`/api/libraries/${v.id}`, "PATCH", { name: v.name, path: v.path }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+      // A repoint rewrites every item path in the library, so anything holding
+      // items has to be re-read rather than trusted.
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}
+
 export function useDeleteLibrary() {
   const qc = useQueryClient();
   return useMutation({
@@ -527,12 +550,18 @@ export function useDeleteSubtitle(id: number) {
 
 export interface ItemQuery {
   libraryID: number;
+  /** Restrict to one kind — the collections page asks for exactly those. */
+  kind?: string;
   q?: string;
   sort?: string; // title | year | added
   genres?: string[];
   decades?: number[];
   contentRatings?: string[];
   unwatched?: boolean;
+  /** Drop one kind from the listing — the grid uses it for collections. */
+  excludeKind?: string;
+  /** A–Z rail: one letter, or "#" for everything that starts with anything else. */
+  initial?: string;
   limit?: number;
   offset?: number;
 }
@@ -541,12 +570,15 @@ export interface ItemQuery {
 // paging hooks so the two can never disagree about how a filter is encoded.
 function itemsParams({
   libraryID,
+  kind,
   q,
   sort,
   genres = [],
   decades = [],
   contentRatings = [],
   unwatched = false,
+  excludeKind,
+  initial,
   limit = 120,
   offset = 0,
 }: ItemQuery): URLSearchParams {
@@ -555,8 +587,11 @@ function itemsParams({
     limit: String(limit),
     offset: String(offset),
   });
+  if (kind) params.set("kind", kind);
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
+  if (excludeKind) params.set("exclude_kind", excludeKind);
+  if (initial) params.set("initial", initial);
   // Repeatable facet filters — one param per chosen value (OR within a facet).
   for (const g of genres) params.append("genre", g);
   for (const d of decades) params.append("decade", String(d));

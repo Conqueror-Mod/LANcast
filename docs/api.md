@@ -178,6 +178,31 @@ directory; both are validated before insert.
 Returns `201` with the created library. Returns `conflict` if the path is
 already registered.
 
+### `PATCH /api/libraries/{id}`
+
+Edits a library. **Admin only.** Returns the updated library.
+
+```json
+{ "name": "Films", "path": "E:\Movies" }
+```
+
+Both fields are optional; omitted means unchanged.
+
+**`kind` cannot be changed** and sending a different one is a `400`, not a
+silent no-op — a client that sends a kind believes it is changing one. A kind
+decides which scanner runs, which provider is asked, and what the top level of
+the browse is; changing it would leave a library describing itself as something
+its rows are not. Add the folder again as the type you meant.
+
+**Changing `path` moves the library and its contents.** Every item path under
+the old root is rewritten to the new one in a single transaction, along with the
+ignore list — so a drive letter change keeps every match, every piece of
+artwork, every watch position and every playlist that referenced those files.
+Nothing is deleted and nothing is marked missing; a rescan afterwards reconciles
+files exactly as it always does. A path that does not exist, or is not a
+directory, is refused **before** anything is rewritten: a typo must not mark a
+whole library missing.
+
 ### `DELETE /api/libraries/{id}`
 
 Forgets a library: its rows and, by `ON DELETE CASCADE`, its items, playback
@@ -285,6 +310,8 @@ would actually remove something rather than being a silent no-op. `genres`,
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
+| `initial` | The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on `sort_title`, case-insensitively. A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns `initials`, the letters actually present, so a client never offers one that finds nothing |
+| `exclude_kind` | Drops one kind from the listing. The browse grid passes `collection`: a franchise groups films rather than being one, and a collection tile beside its own members made a curated shelf read as an unsorted one. Collections have their own page, asked for with `kind=collection` |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
