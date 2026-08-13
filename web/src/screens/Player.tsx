@@ -205,6 +205,22 @@ export function Player() {
         case "f":
           toggleFullscreen();
           break;
+        case "Escape":
+          /*
+           * Fullscreen first, close second.
+           *
+           * In the desktop client fullscreen is a borderless *window*, not the
+           * browser's fullscreen, so nothing exits it for us — Escape did
+           * nothing at all, in the one state where the controls are hidden and
+           * there is least to aim at. Closing the player from fullscreen would
+           * also leave the window borderless over the library, which is a
+           * stranger place to end up than where you started.
+           */
+          if (pb.fullscreen) {
+            e.preventDefault();
+            pb.exitFullscreen();
+          }
+          break;
         case "m":
           toggleMute();
           break;
@@ -261,6 +277,21 @@ export function Player() {
         // Clicks land on this overlay, not the element underneath it, so the
         // click-to-pause target is the empty area rather than the video itself.
         if (e.target === e.currentTarget) pb.togglePlay();
+      }}
+      onDoubleClick={(e) => {
+        /*
+         * Double-click the picture for fullscreen, the way every video player
+         * does — and a second way in and out that does not depend on finding a
+         * small button in chrome that hides itself after two and a half
+         * seconds.
+         *
+         * The single click above has already toggled play by the time this
+         * fires, so this undoes it: a double-click is one gesture and should
+         * not also leave the film paused.
+         */
+        if (e.target !== e.currentTarget || pb.isAudio) return;
+        pb.togglePlay();
+        pb.toggleFullscreen();
       }}
     >
       {/* A black rectangle with a running clock is what a failed playback looks
@@ -602,7 +633,9 @@ export function Player() {
                 <button
                   className="player__icon"
                   onClick={pb.toggleFullscreen}
-                  aria-label="Fullscreen"
+                  aria-label={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
+                  aria-pressed={pb.fullscreen}
+                  title={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
                 >
                   <FullscreenGlyph />
                 </button>

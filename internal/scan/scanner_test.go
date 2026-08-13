@@ -1105,3 +1105,59 @@ func TestRescanOfAMusicLibraryChangesNothing(t *testing.T) {
 		t.Errorf("ItemsChanged = %d on a rescan, want 0 — every track was re-recorded", p.ItemsChanged)
 	}
 }
+
+// The other half of the wrong-kind warning.
+//
+// A music library created as a movie library already says so: its audio is
+// discarded outright and SkippedKind is the only thing that explains an empty
+// library. A *shows* library created as a movie library is worse, because it
+// looks fine — every episode imports as a film, sitting loose in the grid with
+// no series and no seasons, and nothing says why. Kind cannot be changed, so
+// the mistake is unrecoverable except by removing and re-adding the library,
+// which makes being loud at the moment it happens the only defence there is.
+func TestEpisodesInAMovieLibraryAreCounted(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{
+		"The Expanse S01E01 Dulcinea.mkv",
+		"The Expanse S01E02 The Big Empty.mkv",
+		"Blade Runner (1982).mkv",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sc, st := newScanner(t)
+	lib, err := st.CreateLibrary(context.Background(), "Films", "movie", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := scanAndWait(t, sc, *lib)
+
+	if p.EpisodesInMovieLibrary != 2 {
+		t.Errorf("episodes counted = %d, want 2", p.EpisodesInMovieLibrary)
+	}
+	// The film is not counted, or the warning would fire on every library that
+	// happens to contain a file with a number in it.
+	if p.FilesSeen != 3 {
+		t.Errorf("files seen = %d, want 3", p.FilesSeen)
+	}
+}
+
+// And a shows library holding episodes is the ordinary case, which must stay
+// silent — a warning that fires when nothing is wrong is a warning that gets
+// ignored when something is.
+func TestEpisodesInAShowsLibraryAreNotCounted(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "The Expanse S01E01 Dulcinea.mkv"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sc, st := newScanner(t)
+	lib, err := st.CreateLibrary(context.Background(), "Shows", "show", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := scanAndWait(t, sc, *lib); p.EpisodesInMovieLibrary != 0 {
+		t.Errorf("counted %d episodes in a shows library", p.EpisodesInMovieLibrary)
+	}
+}

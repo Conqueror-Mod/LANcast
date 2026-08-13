@@ -290,3 +290,19 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/*
+ * These pages have a header and no filters, so the header itself is what has to
+ * stay: it carries the way back to the library and, on the playlists page, the
+ * only route to making a new one. Same offset as the browse strip — under the
+ * shell's bar, never behind it.
+ */
+.browse__head--sticky {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  margin: 0 -28px;
+  padding: 6px 28px;
+  background: rgba(7, 11, 24, 0.92);
+  backdrop-filter: blur(10px);
+}

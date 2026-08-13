@@ -234,6 +234,7 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 { "library_id": 1, "state": "running", "files_seen": 318,
   "items_changed": 12, "items_missing": 0, "skipped": 2,
   "skipped_kind": 0,
+  "episodes_in_movie_library": 0,
   "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
   "started_at": 1753228800 }
 ```
@@ -253,6 +254,16 @@ folder were empty.
 
 Only files that are media of the other sort are counted. Artwork, `.nfo`
 sidecars and subtitles are ignored by every library and would bury the signal.
+
+`episodes_in_movie_library` is the other half of that warning, and the half that
+is easy to miss. A music library created as a movie library reports an empty
+library, which is loud. A **shows** library created as a movie library imports
+everything and looks fine: every episode becomes a film, loose in the grid with
+no series and no seasons, and nothing says why. Counted, never corrected — the
+parse is right and the *library* is wrong, and a scan that changed the kind
+would be re-litigating identity for a whole library, which the locked-fields
+rule forbids. Kind cannot be changed afterwards, so being loud at the moment it
+happens is the only defence there is.
 
 ### `GET /api/items/{id}/photo`
 

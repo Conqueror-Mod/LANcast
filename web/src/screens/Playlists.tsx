@@ -256,7 +256,7 @@ export function Playlists() {
 
   return (
     <div className="browse">
-      <div className="browse__head">
+      <div className="browse__head browse__head--sticky">
         <button className="pl-back" onClick={back}>
           ← {library?.name ?? "Library"}
         </button>

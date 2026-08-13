@@ -80,6 +80,7 @@ function LibraryRow({ library }: { library: Library }) {
   // the scan looked successful. The wording names both halves: what was
   // ignored, and the setting that ignored it.
   const skippedKind = status?.skipped_kind ?? 0;
+  const episodesMissed = status?.episodes_in_movie_library ?? 0;
   const excluded = library.kind === "music" ? "video" : "audio";
 
   return (
@@ -104,6 +105,22 @@ function LibraryRow({ library }: { library: Library }) {
               </>
             )}
           </div>
+          {/*
+            The other half of the wrong-kind warning, and the one that is easy
+            to miss: a shows library created as a movie library imports
+            everything and looks fine — every episode becomes a film, loose in
+            the grid with no series and no seasons. Nothing said why, and the
+            kind cannot be changed afterwards.
+          */}
+          {!running && episodesMissed > 0 && library.kind === "movie" && (
+            <div className="set-row__note">
+              {episodesMissed.toLocaleString()} file
+              {episodesMissed === 1 ? "" : "s"} here look like TV episodes, but
+              this library's type is Movies — they will appear as individual
+              films with no series or seasons. If this folder holds a TV
+              collection, remove this library and add it again as Shows.
+            </div>
+          )}
           {!running && skippedKind > 0 && (
             <div className="set-row__note">
               {skippedKind.toLocaleString()} {excluded} file

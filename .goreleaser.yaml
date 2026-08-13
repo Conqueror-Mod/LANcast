@@ -39,8 +39,11 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [windows]
     goarch: [amd64]
+    # The client carries its version too, so the page can tell when the window
+    # it is running in predates the server it is talking to. The in-app updater
+    # replaces only the server, so that gap is normal rather than exotic.
     ldflags:
-      - -s -w -H=windowsgui
+      - -s -w -X main.Version={{ .Version }} -H=windowsgui
 
   - id: lancast-unix
     main: ./cmd/lancast
@@ -49,7 +52,7 @@ builds:
     goos: [linux]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w
+      - -s -w -X main.Version={{ .Version }}
 
 # The archive names are unchanged from the single-archive version: same
 # template, same formats per OS. Splitting the block is about what goes *in*

@@ -38,6 +38,19 @@ type Progress struct {
 	// explains an empty library, and silence here is what let a music library
 	// created as a movie library report "0 items · scanned" over 1,592 tracks.
 	SkippedKind int `json:"skipped_kind"`
+	// EpisodesInMovieLibrary counts files in a `movie` library that parsed as
+	// episodes — S01E02, 1x02, and the rest.
+	//
+	// The other half of the same warning. A music library created as a movie
+	// library says so, because its audio is discarded outright and the count is
+	// the only thing that explains an empty library. A *shows* library created
+	// as a movie library imports everything and looks fine: every episode
+	// becomes a film, sitting loose in the grid with no series and no seasons,
+	// and nothing anywhere says why. Kind cannot be changed (it decides which
+	// scanner runs and biases matching), so the mistake is unrecoverable except
+	// by removing and re-adding the library — which makes being loud at the
+	// moment it happens the only defence there is.
+	EpisodesInMovieLibrary int `json:"episodes_in_movie_library"`
 	// Playlists imported from .m3u files found in the library (ADR 0030).
 	// Reported for the same reason SkippedKind is: a scan that quietly imported
 	// nothing, or quietly imported forty, should not have to be inferred from
@@ -265,7 +278,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			// so do it and act only when the classification actually moved
 			// families — otherwise a rescan stays the cheap no-op it must be.
 			if reinterpreted(st.Kind, media.Parse(lib.Path, path, lib.Kind).Kind) {
-				if _, err := s.upsert(ctx, lib, path, info); err == nil {
+				if _, err := s.upsert(ctx, lib, path, info, p); err == nil {
 					// A changed identity must be re-matched; the stamp is what
 					// removes it from the enrichment queue.
 					_ = s.st.ClearMetadataStamp(ctx, lib.ID, st.ID)
@@ -281,7 +294,7 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 			return nil
 		}
 
-		id, err := s.upsert(ctx, lib, path, info)
+		id, err := s.upsert(ctx, lib, path, info, p)
 		if err != nil {
 			s.log.Warn("upsert failed", "path", path, "error", err)
 			s.recordIssue(p, lib.Path, path, "could not be recorded")
@@ -569,7 +582,7 @@ func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath str
 	}
 }
 
-func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo) (int64, error) {
+func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, info fs.FileInfo, p *Progress) (int64, error) {
 	nfo := media.Parse(lib.Path, path, lib.Kind)
 
 	f := store.ScanFile{
@@ -581,6 +594,16 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, path string, in
 		Container: trimDot(filepath.Ext(path)),
 		SizeBytes: info.Size(),
 		MTime:     info.ModTime().Unix(),
+	}
+	if p != nil && lib.Kind == "movie" && nfo.Kind == media.KindEpisode {
+		// Counted, not corrected. The parse is right — this file *is* an
+		// episode — and the library says it holds films, so what is wrong is
+		// the library. Changing the kind here would be a scan re-litigating
+		// identity for a whole library, which is the thing the locked-fields
+		// rule forbids.
+		s.mu.Lock()
+		p.EpisodesInMovieLibrary++
+		s.mu.Unlock()
 	}
 	if nfo.Year != 0 {
 		y := nfo.Year
