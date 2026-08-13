@@ -76,16 +76,58 @@ type Library struct {
 	ItemCount int    `json:"item_count"`
 }
 
+/*
+ * firstRoot is the library's path as everything above this layer still
+ * understands it (ADR 0034).
+ *
+ * A library's roots live in `library_root` from revision 18, and `Library.Path`
+ * is the first of them by id — the one the library was created with. It is a
+ * correlated subquery rather than a join so a library with several roots still
+ * produces exactly one row per library, which is what every caller of
+ * ListLibraries already assumes.
+ *
+ * This exists so the schema could move without thirty call sites moving on the
+ * same day. It is a compatibility shim with a deliberately short life: the
+ * handlers that resolve an item to a file must end up using the *item's* root,
+ * not the library's first one, and until they do a multi-root library would
+ * resolve its second root's files against its first root's path. That is why
+ * nothing yet creates a second root.
+ */
+const firstRootPath = `(SELECT r.path FROM library_root r
+	WHERE r.library_id = l.id ORDER BY r.id LIMIT 1)`
+
 func (s *Store) CreateLibrary(ctx context.Context, name, kind, path string) (*Library, error) {
 	now := time.Now().Unix()
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO library (name, kind, path, created_at) VALUES (?, ?, ?, ?)`,
-		name, kind, path, now)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create library: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO library (name, kind, created_at) VALUES (?, ?, ?)`,
+		name, kind, now)
 	if err != nil {
 		return nil, fmt.Errorf("create library: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		return nil, fmt.Errorf("create library: %w", err)
+	}
+
+	// The library and its first root are one act, so they are one transaction.
+	// A library with no root is not a degraded library, it is a row nothing can
+	// scan, resolve or repoint — and the UNIQUE on path means the second
+	// statement is the one that rejects a duplicate location, which has to
+	// take the first statement down with it.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO library_root (library_id, path, created_at) VALUES (?, ?, ?)`,
+		id, path, now); err != nil {
+		return nil, fmt.Errorf("create library: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("create library: %w", err)
 	}
 	return &Library{ID: id, Name: name, Kind: kind, Path: path, CreatedAt: now}, nil
@@ -119,7 +161,7 @@ const libraryItemCount = `(SELECT COUNT(*) FROM media_item
 
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT l.id, l.name, l.kind, l.path, l.created_at, l.scanned_at,
+		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
 		       `+libraryItemCount+`
 		FROM library l ORDER BY l.name`)
 	if err != nil {
@@ -141,7 +183,7 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	var l Library
 	err := s.db.QueryRowContext(ctx, `
-		SELECT l.id, l.name, l.kind, l.path, l.created_at, l.scanned_at,
+		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
 		       `+libraryItemCount+`
 		FROM library l WHERE l.id = ?`, id).
 		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount)
@@ -1745,7 +1787,14 @@ func (s *Store) RepointLibrary(ctx context.Context, id int64, oldRoot, newRoot s
 		newRoot, len(oldRoot)+1, prefix); err != nil {
 		return fmt.Errorf("repoint library: ignored paths: %w", err)
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE library SET path = ? WHERE id = ?`, newRoot, id)
+	// The root row, not the library row — the path lives in `library_root` from
+	// revision 18. Matched on the old path rather than on "the first root",
+	// because repointing is per *location*: a library with two roots has one of
+	// them move, and picking by ordinal would rewrite whichever root happened to
+	// be created first regardless of which one the caller meant.
+	res, err := tx.ExecContext(ctx,
+		`UPDATE library_root SET path = ? WHERE library_id = ? AND path = ?`,
+		newRoot, id, oldRoot)
 	if err != nil {
 		return fmt.Errorf("repoint library: %w", err)
 	}
