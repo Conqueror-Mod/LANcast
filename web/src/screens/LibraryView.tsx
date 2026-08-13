@@ -99,6 +99,12 @@ export function LibraryView({
     decades: decades.map(Number),
     contentRatings,
     unwatched,
+    // Collections are not in the grid. They group films rather than being them,
+    // and a franchise tile beside its own members made a curated shelf read as
+    // an unsorted one. They have their own page — except while searching, where
+    // hiding a matching collection would be the search lying about what is
+    // here.
+    excludeKind: library.kind === "movie" && !q ? "collection" : undefined,
   });
 
   // Every control lives in the URL, so a filtered view is linkable and survives
@@ -275,6 +281,17 @@ export function LibraryView({
             strip would compete with the facets for the same line and the same
             gesture. Only where the config says so — a control that leads to an
             empty grid in every library anyone has is spent space. */}
+        {/* Collections have their own page for movie libraries. Only there:
+            a shows library groups by series already, and music and pictures
+            have no collections at all. */}
+        {library.kind === "movie" && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/collections`)}
+          >
+            Collections
+          </button>
+        )}
         {config.playlists && (
           <button
             className="browse__playall-btn"

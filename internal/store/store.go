@@ -444,6 +444,15 @@ type ItemFilter struct {
 	Unwatched bool
 	UserID    string
 
+	// ExcludeKind drops one kind from a listing.
+	//
+	// For the browse grid, where collections were mixed in among the films they
+	// group: a franchise tile beside its own members, sorted by a title nobody
+	// chose, in a grid whose job is "what have I got". They are a different
+	// question — "what belongs together" — and they get their own page. Empty
+	// means no exclusion, which is every other caller.
+	ExcludeKind string
+
 	// TopLevel restricts the listing to rows with no parent — the browse-grid
 	// default. Children (seasons, episodes, parts, chapters) have a parent_id
 	// and belong under it, never loose in the grid; this is the guard ADR 0010
@@ -546,6 +555,10 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND (title LIKE ? OR series LIKE ?)`
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
+	}
+	if f.ExcludeKind != "" {
+		where += ` AND kind != ?`
+		args = append(args, f.ExcludeKind)
 	}
 	if len(f.Genres) > 0 {
 		// EXISTS rather than a join, so a multi-genre item is not duplicated in

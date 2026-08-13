@@ -550,12 +550,16 @@ export function useDeleteSubtitle(id: number) {
 
 export interface ItemQuery {
   libraryID: number;
+  /** Restrict to one kind — the collections page asks for exactly those. */
+  kind?: string;
   q?: string;
   sort?: string; // title | year | added
   genres?: string[];
   decades?: number[];
   contentRatings?: string[];
   unwatched?: boolean;
+  /** Drop one kind from the listing — the grid uses it for collections. */
+  excludeKind?: string;
   limit?: number;
   offset?: number;
 }
@@ -564,12 +568,14 @@ export interface ItemQuery {
 // paging hooks so the two can never disagree about how a filter is encoded.
 function itemsParams({
   libraryID,
+  kind,
   q,
   sort,
   genres = [],
   decades = [],
   contentRatings = [],
   unwatched = false,
+  excludeKind,
   limit = 120,
   offset = 0,
 }: ItemQuery): URLSearchParams {
@@ -578,8 +584,10 @@ function itemsParams({
     limit: String(limit),
     offset: String(offset),
   });
+  if (kind) params.set("kind", kind);
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
+  if (excludeKind) params.set("exclude_kind", excludeKind);
   // Repeatable facet filters — one param per chosen value (OR within a facet).
   for (const g of genres) params.append("genre", g);
   for (const d of decades) params.append("decade", String(d));

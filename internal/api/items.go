@@ -276,8 +276,12 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := store.ItemFilter{
-		LibraryID:      int64(queryInt(r, "library_id")),
-		Kind:           q.Get("kind"),
+		LibraryID: int64(queryInt(r, "library_id")),
+		Kind:      q.Get("kind"),
+		// The browse grid passes exclude_kind=collection: a franchise tile
+		// sitting beside the films it groups answers a different question from
+		// the grid it is in, and collections have their own page.
+		ExcludeKind:    q.Get("exclude_kind"),
 		Query:          q.Get("q"),
 		Sort:           q.Get("sort"),
 		Genres:         nonEmpty(q["genre"]),
