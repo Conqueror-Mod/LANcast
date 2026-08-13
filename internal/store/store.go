@@ -1738,6 +1738,35 @@ func (s *Store) RenameLibrary(ctx context.Context, id int64, name string) error 
 	return nil
 }
 
+// RepointRoot moves one location to a new path, resolving it by id.
+//
+// The shape this wants to be from ADR 0034: repointing is per *location*, and a
+// library with two of them has one move while the other stays where it is.
+// RepointLibrary below is the older signature, kept until the handlers learn
+// about roots, and it delegates here.
+func (s *Store) RepointRoot(ctx context.Context, rootID int64, newRoot string) error {
+	root, err := s.GetRoot(ctx, rootID)
+	if err != nil {
+		return err
+	}
+	// Overlap is checked for the same reason AddRoot checks it: a repoint can
+	// land a root inside another one just as easily as adding it there could,
+	// and the resulting ambiguity is identical.
+	all, err := s.AllRoots(ctx)
+	if err != nil {
+		return err
+	}
+	for _, r := range all {
+		if r.ID == rootID {
+			continue
+		}
+		if rootsOverlap(r.Path, newRoot) {
+			return fmt.Errorf("%w: %s", ErrRootOverlaps, r.Path)
+		}
+	}
+	return s.repoint(ctx, root.LibraryID, root.Path, newRoot)
+}
+
 // RepointLibrary moves a library to a new root, carrying its contents with it.
 //
 // This is the drive-letter case, and it is the reason editing a path is worth
@@ -1760,6 +1789,13 @@ func (s *Store) RenameLibrary(ctx context.Context, id int64, name string) error 
 // The ignore list moves too. Those are absolute paths to files somebody chose
 // not to see, and a library that moved must not resurrect them.
 func (s *Store) RepointLibrary(ctx context.Context, id int64, oldRoot, newRoot string) error {
+	return s.repoint(ctx, id, oldRoot, newRoot)
+}
+
+// repoint is the prefix swap both entry points share. Splitting it keeps the
+// reasoning above attached to one implementation rather than two that could
+// drift — the failure mode this whole file is organised against.
+func (s *Store) repoint(ctx context.Context, id int64, oldRoot, newRoot string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("repoint library: %w", err)
