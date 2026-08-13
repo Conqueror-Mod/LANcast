@@ -258,6 +258,8 @@ export interface ScanStatus {
   // music library. Not a failure, which is why it is not part of `skipped`:
   // it answers "why is this library empty", not "what went wrong".
   skipped_kind: number;
+  /** Files that parsed as episodes in a library that says it holds films. */
+  episodes_in_movie_library?: number;
   issues?: ScanIssue[];
   started_at: number;
   finished_at?: number;

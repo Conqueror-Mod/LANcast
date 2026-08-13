@@ -118,6 +118,10 @@ interface PlaybackState {
   toggleMute: () => void;
   changeVolume: (v: number) => void;
   toggleFullscreen: () => void;
+  /** Whether the picture is filling the screen, however it got there. */
+  fullscreen: boolean;
+  /** Leave fullscreen if we are in it, by whichever mechanism put us there. */
+  exitFullscreen: () => void;
   cycleSub: (dir: 1 | -1) => void;
   selectSub: (key: string | null) => void;
   selectAudio: (index: number | null) => void;
@@ -722,6 +726,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * the surface did not: the controls could not have come back even if they had
    * been visible.
    */
+  /*
+   * Whether the picture is filling the screen.
+   *
+   * Tracked here rather than read from document.fullscreenElement, because in
+   * the desktop client there is no fullscreen element: the *window* is
+   * borderless and the size of a monitor, and the page knows nothing about it.
+   * Without this the control could never show its state, and Escape had nothing
+   * to ask.
+   */
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // The browser's own exits — Escape, F11, the window manager — happen without
+  // asking us, so the flag follows the document rather than only the button.
+  useEffect(() => {
+    const sync = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    const host = (window as { lancastToggleFullscreen?: () => Promise<boolean> })
+      .lancastToggleFullscreen;
+    if (host) {
+      // The binding is a toggle, so this asks only when there is something to
+      // leave — calling it blind would put a windowed player into fullscreen,
+      // which is the opposite of what Escape means.
+      if (fullscreen) void host().then((on) => setFullscreen(Boolean(on)));
+      return;
+    }
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, [fullscreen]);
+
   const toggleFullscreen = useCallback(() => {
     /*
      * In the LANcast window, fullscreen is the *window's* job.
@@ -738,7 +774,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const host = (window as { lancastToggleFullscreen?: () => Promise<boolean> })
       .lancastToggleFullscreen;
     if (host) {
-      void host();
+      // The binding answers with the state it ended in, which is the only
+      // source of truth for a window the page cannot see.
+      void host().then((on) => setFullscreen(Boolean(on)));
       return;
     }
     if (document.fullscreenElement) {
@@ -833,6 +871,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     toggleMute,
     changeVolume,
     toggleFullscreen,
+    fullscreen,
+    exitFullscreen,
     cycleSub,
     selectSub: setSubKey,
     selectAudio,
