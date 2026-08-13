@@ -99,6 +99,24 @@ describe("fullscreen", () => {
     expect(requested[0]).not.toBe(surface);
   });
 
+  /*
+   * The desktop window does its own fullscreen, because WebView2's does not
+   * exist until the host implements it: the page can enter "fullscreen" inside
+   * a window that never changes size, which looks exactly like a broken button.
+   * When the binding is there it wins, and the Fullscreen API is not called at
+   * all — two mechanisms fighting over one window is worse than either.
+   */
+  it("hands fullscreen to the desktop window when there is one", () => {
+    const toggle = vi.fn(async () => true);
+    vi.stubGlobal("lancastToggleFullscreen", toggle);
+    render();
+    act(() => {
+      host.querySelector<HTMLButtonElement>("#fs")!.click();
+    });
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(requested).toHaveLength(0);
+  });
+
   it("exits when something is already fullscreen", () => {
     Object.defineProperty(document, "fullscreenElement", {
       configurable: true,

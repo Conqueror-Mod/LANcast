@@ -723,6 +723,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * been visible.
    */
   const toggleFullscreen = useCallback(() => {
+    /*
+     * In the LANcast window, fullscreen is the *window's* job.
+     *
+     * WebView2 hands "this page wants fullscreen" to its host and does nothing
+     * itself, and the host has to resize, drop the frame and cover the taskbar.
+     * So requestFullscreen() in the desktop client left the page believing it
+     * was fullscreen inside a window that had not changed size — a button that
+     * appears to do nothing. The host exposes a binding that does the real
+     * thing, on the monitor the window is actually on.
+     *
+     * In a browser there is no binding and the Fullscreen API is right.
+     */
+    const host = (window as { lancastToggleFullscreen?: () => Promise<boolean> })
+      .lancastToggleFullscreen;
+    if (host) {
+      void host();
+      return;
+    }
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => {});
       return;

@@ -57,6 +57,22 @@ func open(o Options) error {
 	}
 	defer w.Destroy()
 
+	// Fullscreen is the host's job, not the page's.
+	//
+	// WebView2 tells its host that a page wants fullscreen and the host is what
+	// has to act on it — resize, drop the frame, cover the taskbar. Nothing
+	// listened, so requestFullscreen() left the page believing it was
+	// fullscreen inside a window that had not changed size, which is
+	// indistinguishable from a button that does not work. The page calls this
+	// instead when it is running in the LANcast window.
+	var fs fullscreener
+	if o.Bindings == nil {
+		o.Bindings = map[string]any{}
+	}
+	o.Bindings["lancastToggleFullscreen"] = func() bool {
+		return fs.Toggle(uintptr(w.Window()))
+	}
+
 	// Bound before Navigate: the binding is injected at document creation, and a
 	// page that has already started loading would miss it and conclude it is
 	// running in a browser.

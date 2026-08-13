@@ -123,6 +123,21 @@ export function UpdateSettings() {
       // dismissed it by hand. Ask again now that the answer has changed.
       qc.invalidateQueries({ queryKey: ["update"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+
+      /*
+       * And reload, once, a beat later.
+       *
+       * The server restarted; this page did not. Every script and stylesheet in
+       * front of the user is still the old version's, served before the swap —
+       * so "updated" was true of the server and false of the thing they were
+       * looking at, and the new client only appeared if they thought to
+       * refresh. That is the shape of the whole complaint about this feature:
+       * something finished and nobody said so.
+       *
+       * The beat is so the confirmation is readable rather than a flash before
+       * the page goes white.
+       */
+      window.setTimeout(() => window.location.reload(), 1800);
       return;
     }
 

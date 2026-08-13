@@ -190,13 +190,13 @@
 .browse__az {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px 0 6px;
+  gap: 1px;
+  padding: 0;
 }
 
 .browse__az-key {
-  min-width: 26px;
-  padding: 4px 6px;
+  min-width: 22px;
+  padding: 2px 5px;
   background: none;
   border: 1px solid transparent;
   border-radius: var(--radius-tile, 8px);
@@ -250,7 +250,8 @@
  */
 .browse__controls {
   position: sticky;
-  top: 0;
+  /* Under the shell bar, not behind it. */
+  top: var(--topbar-h);
   z-index: 5;
   margin: 0 -28px;
   padding: 4px 28px 2px;
@@ -259,8 +260,33 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Inside the sticky wrapper the filter row keeps its spacing but loses the top
-   margin that was separating it from the header — the wrapper does that now. */
+/*
+ * Inside the sticky strip everything tightens.
+ *
+ * The strip is on screen the whole time now, so its height is a permanent tax
+ * on the grid — at the original spacing it took a quarter of the window before
+ * a single poster. The chips keep their hit area; what goes is the air between
+ * the three rows, which was sized for a block you scrolled past once.
+ */
 .browse__controls .browse__filters {
-  margin-top: 8px;
+  margin: 4px 0 0;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.browse__controls .chips {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.browse__controls .chips__label {
+  /* The facet labels — GENRE, DECADE, STATUS — cost a line each and say what
+     the chips underneath already say. Kept for screen readers. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
