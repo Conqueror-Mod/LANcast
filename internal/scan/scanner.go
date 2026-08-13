@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -77,6 +78,13 @@ const maxIssues = 50
 
 // ErrBusy is returned when a scan is already running for a library.
 var ErrBusy = fmt.Errorf("scan already running")
+
+// ErrRootUnavailable is returned when a library's root is not a directory this
+// process can see — an unmounted drive, a disconnected share, a deleted folder.
+//
+// It is deliberately distinct from any other scan failure, because the correct
+// response to it is to change *nothing*. See checkRoot.
+var ErrRootUnavailable = fmt.Errorf("library root is unavailable")
 
 // Scanner runs library scans, at most one per library at a time.
 type Scanner struct {
@@ -186,7 +194,50 @@ func (s *Scanner) recordIssue(p *Progress, root, path, reason string) {
 	s.mu.Unlock()
 }
 
+/*
+ * checkRoot reports whether a library's root is a directory we can currently
+ * see.
+ *
+ * This exists because of how filepath.WalkDir fails, which is not how it looks
+ * like it fails. Given a root that does not exist it calls the walk function
+ * once with a nil DirEntry and an error, and then **returns nil** — a scan that
+ * reports complete success having seen zero files. The handler below cannot
+ * rescue it either: with a nil DirEntry there is nothing to answer SkipDir
+ * about, so it logs the unreadable path and carries on.
+ *
+ * A successful walk that saw nothing is indistinguishable, further down, from a
+ * library whose every file was deleted. So reconciliation marked the entire
+ * library missing the first time anyone scanned with a drive unplugged — under
+ * a comment promising that an unmounted drive must not destroy library data.
+ * Nothing was deleted, so the letter of that rule held while the outcome it
+ * exists to prevent happened anyway.
+ *
+ * The fix is to never let reconciliation run against an absent root, rather
+ * than to make the walk report harder — an empty result is a legitimate answer
+ * for an empty directory, and only the root's own existence tells the two
+ * apart.
+ */
+func checkRoot(root string) error {
+	st, err := os.Stat(root)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrRootUnavailable, root)
+	}
+	// A root that has become a *file* is as unusable as one that is absent, and
+	// rather more alarming: WalkDir would happily walk it as a single entry and
+	// reconciliation would mark every real item missing against it.
+	if !st.IsDir() {
+		return fmt.Errorf("%w: %s is not a directory", ErrRootUnavailable, root)
+	}
+	return nil
+}
+
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {
+	// Before anything reads or writes: an absent root means this scan has
+	// nothing true to say about the library, so it must not say anything.
+	if err := checkRoot(lib.Path); err != nil {
+		return err
+	}
+
 	// .m3u files seen on the way past, imported once the tracks they reference
 	// exist. Never nil-checked below: ranging over an empty slice is a no-op.
 	var playlists []string
@@ -310,8 +361,29 @@ func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) erro
 		return fmt.Errorf("walk %q: %w", lib.Path, err)
 	}
 
+	/*
+	 * Checked again, immediately before the only destructive step.
+	 *
+	 * The pre-flight check above cannot cover a drive pulled *during* a scan.
+	 * That failure looks different and is just as bad: the walk is partway
+	 * through, every remaining directory errors, each one is tolerated as "a
+	 * single unreadable directory" — which is deliberate and right for a genuine
+	 * one-off — and the walk ends normally with a `seen` set holding only what
+	 * was reached before the drive went. Everything after that point is then
+	 * marked missing.
+	 *
+	 * Re-statting the root is cheap and answers exactly the question that
+	 * matters here: is this partial result worth reconciling against? A scan
+	 * that loses its root mid-flight has nothing trustworthy to reconcile, so it
+	 * fails rather than writing a half-truth.
+	 */
+	if err := checkRoot(lib.Path); err != nil {
+		return err
+	}
+
 	// Anything previously known but not seen this pass is marked missing —
-	// never deleted. An unmounted drive must not destroy library data.
+	// never deleted. An unmounted drive must not destroy library data, which is
+	// enforced by the two checkRoot calls rather than by this loop.
 	var gone []int64
 	for path, st := range known {
 		if !seen[path] {

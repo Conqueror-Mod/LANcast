@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -1159,5 +1160,166 @@ func TestEpisodesInAShowsLibraryAreNotCounted(t *testing.T) {
 	}
 	if p := scanAndWait(t, sc, *lib); p.EpisodesInMovieLibrary != 0 {
 		t.Errorf("counted %d episodes in a shows library", p.EpisodesInMovieLibrary)
+	}
+}
+
+// ---- an unavailable root ----------------------------------------------------
+
+/*
+ * The bug these cover.
+ *
+ * filepath.WalkDir on a root that does not exist calls the walk function once
+ * with a nil DirEntry and an error, and then returns nil — a scan that reports
+ * complete success having seen zero files. Reconciliation cannot tell that
+ * apart from "every file was deleted", so scanning a library on an unplugged
+ * drive marked the entire library missing.
+ *
+ * Nothing was deleted, so "scanning marks missing, never deletes" was literally
+ * upheld while the outcome it exists to prevent happened to every row at once.
+ */
+
+// scanAndWaitFailing is scanAndWait for a scan that is *supposed* to fail;
+// scanAndWait calls t.Fatal on StateFailed, which is right everywhere else.
+func scanAndWaitFailing(t *testing.T, sc *Scanner, lib store.Library) Progress {
+	t.Helper()
+	if _, err := sc.Start(lib); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		p := sc.Status(lib.ID)
+		if p.State != StateRunning {
+			return p
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("scan did not finish within 15s")
+	return Progress{}
+}
+
+func TestScanRefusesWhenRootIsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "kept.mkv", 10)
+	writeFile(t, root, "also kept.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	// The drive goes away. Removing the root is the closest a test can get to
+	// unplugging it, and it is the same os.Stat failure.
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWaitFailing(t, sc, lib)
+	// Deliberately not Fatal: the state is the smaller half of this. What the
+	// bug actually did was report success — StateIdle — while marking every row
+	// missing, so the assertions about the *data* have to run even when the
+	// state assertion has already failed. A Fatal here would hide the damage
+	// behind the symptom.
+	if p.State != StateFailed {
+		t.Errorf("State = %v, want failed — an absent root is not a successful scan", p.State)
+	}
+	if p.ItemsMissing != 0 {
+		t.Errorf("ItemsMissing = %d, want 0 — nothing is missing, the drive is", p.ItemsMissing)
+	}
+
+	// The point of the whole exercise: the library is intact.
+	items, total, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 {
+		t.Fatalf("total = %d, want 2", total)
+	}
+	for _, it := range items {
+		if it.Missing {
+			t.Errorf("%q marked missing by a scan that could not see the drive", it.Title)
+		}
+	}
+}
+
+// The error has to be identifiable, because "the drive is unplugged" and "the
+// scan crashed" want different words in front of a user and different responses
+// from anything automated.
+func TestUnavailableRootIsADistinctError(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := sc.walk(context.Background(), lib, &Progress{}); !errors.Is(err, ErrRootUnavailable) {
+		t.Errorf("walk error = %v, want ErrRootUnavailable", err)
+	}
+}
+
+// A root that has become a file is as unusable as one that is absent, and
+// WalkDir would walk it as a single entry rather than failing — so every real
+// item would reconcile as missing against it.
+func TestScanRefusesWhenRootIsAFile(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "kept.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWaitFailing(t, sc, lib)
+	if p.State != StateFailed {
+		t.Errorf("State = %v, want failed", p.State)
+	}
+	if p.ItemsMissing != 0 {
+		t.Errorf("ItemsMissing = %d, want 0", p.ItemsMissing)
+	}
+}
+
+// The guard must not have bought safety by breaking the thing it guards. A
+// genuinely deleted file, on a root that is present, still goes missing.
+func TestDeletedFileStillGoesMissingOnAHealthyRoot(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	gone := writeFile(t, root, "gone.mkv", 10)
+	writeFile(t, root, "stays.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWait(t, sc, lib)
+	if p.ItemsMissing != 1 {
+		t.Errorf("ItemsMissing = %d, want 1 — a real deletion must still be noticed", p.ItemsMissing)
+	}
+	_, total, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
+	}
+}
+
+// An empty directory is a legitimate answer, not a failure: a library really
+// can have everything removed from it, and that has to keep working or the
+// guard has replaced one wrong behaviour with another.
+func TestEmptiedLibraryOnAPresentRootStillReconciles(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "a.mkv", 10)
+	writeFile(t, root, "b.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	for _, n := range []string{"a.mkv", "b.mkv"} {
+		if err := os.Remove(filepath.Join(root, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p := scanAndWait(t, sc, lib)
+	if p.ItemsMissing != 2 {
+		t.Errorf("ItemsMissing = %d, want 2", p.ItemsMissing)
 	}
 }
