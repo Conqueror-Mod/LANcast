@@ -16,7 +16,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { UpdateSettings } from "./UpdateSettings";
+import { UpdateSettings, plainVersion } from "./UpdateSettings";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -28,6 +28,7 @@ let host: HTMLDivElement;
 let root: Root;
 let statusBody: Record<string, unknown>;
 let statusReads: number;
+let healthBody: Record<string, unknown>;
 
 const base = {
   supported: true,
@@ -47,6 +48,7 @@ beforeEach(() => {
   root = createRoot(host);
   statusBody = { ...base };
   statusReads = 0;
+  healthBody = { status: "ok", version: "0.6.13", api_version: 1 };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -60,6 +62,7 @@ beforeEach(() => {
         statusReads++;
         return json(statusBody);
       }
+      if (url.includes("/api/health")) return json(healthBody);
       if (url.includes("/api/settings")) return json({ update_check: true });
       return json({});
     }),
@@ -100,6 +103,27 @@ function button(text: RegExp): HTMLButtonElement {
   return b;
 }
 
+/*
+ * The comparison that hung.
+ *
+ * Reported from a real update: the server restarted, came back on the new
+ * version, and the panel sat on "Installing…" for ever. `staged` is the release
+ * tag as GitHub published it — "v0.6.16" — and /api/health reports the string
+ * the build injected — "0.6.16". An exact comparison between them can never
+ * match, and the earlier test missed it by using the same string on both sides,
+ * which is the shape of assumption a test is supposed to catch rather than
+ * share.
+ */
+describe("version comparison", () => {
+  it("treats a release tag and a running version as the same version", () => {
+    expect(plainVersion("v0.6.16")).toBe(plainVersion("0.6.16"));
+    expect(plainVersion("V1.2.3")).toBe("1.2.3");
+    expect(plainVersion(undefined)).toBe("");
+    // Not a blanket strip: only a leading v, and only one.
+    expect(plainVersion("vv1.0.0")).toBe("v1.0.0");
+  });
+});
+
 describe("update panel", () => {
   // Real timers: the panel polls every 2s, so these wait it out. Slow for a
   // unit test and worth it — the bug was entirely about time passing and
@@ -126,6 +150,20 @@ describe("update panel", () => {
     const afterStaged = statusReads;
     await settle(2500);
     expect(statusReads).toBe(afterStaged);
+  });
+
+  it("finishes installing when the server comes back, tag prefix and all", { timeout: 20000 }, async () => {
+    // Staged, the way the server actually reports it: with the v.
+    statusBody = { ...base, staged: "v0.6.14", staged_at: 1 };
+    await render();
+    await act(async () => button(/Install and restart/).click());
+    await settle();
+    expect(host.textContent).toContain("Installing");
+
+    // The server comes back as the build reports itself: without the v.
+    healthBody = { status: "ok", version: "0.6.14", api_version: 1 };
+    await settle(2500);
+    expect(host.textContent).toContain("Updated to LANcast 0.6.14");
   });
 
   it("stops waiting when the download fails rather than saying Downloading for ever", { timeout: 20000 }, async () => {

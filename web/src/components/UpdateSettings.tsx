@@ -10,6 +10,16 @@ import { useEffect, useRef, useState } from "react";
 import { useHealth } from "@/api/hooks";
 import "./UpdateSettings.css";
 
+// plainVersion strips a leading "v", so a release tag and a running version can
+// be compared.
+//
+// They are written differently on purpose and by different systems: `staged` is
+// the tag as GitHub published it ("v0.6.16"), `/api/health` is the string the
+// build injected ("0.6.16"). Comparing them raw is a bug that looks like a hang.
+export function plainVersion(v: string | undefined): string {
+  return (v ?? "").trim().replace(/^v/i, "");
+}
+
 // downloadLabel shows how far along a download is when the server says, and
 // falls back to the plain word when it does not.
 //
@@ -57,6 +67,9 @@ export function UpdateSettings() {
   // The version that was staged when the restart began, so the confirmation can
   // name it after the server comes back as that version.
   const target = useRef<string>("");
+  // And what it was *before* — the second, independent signal that the restart
+  // happened. See the effect below.
+  const startedFrom = useRef<string>("");
 
   // Polled only while installing: the server is expected to stop answering and
   // then answer again, which is the one time a failing health check is the
@@ -70,9 +83,28 @@ export function UpdateSettings() {
     if (status?.staged || status?.download_error) setDownloading(false);
   }, [downloading, status?.staged, status?.download_error]);
 
+  /*
+   * Deciding that the restart is over.
+   *
+   * Two signals, because the first one alone was wrong in a way that shipped:
+   * `staged` is a release *tag* ("v0.6.16") and `/api/health` reports a plain
+   * version ("0.6.16"), so an exact comparison never matched and the panel sat
+   * on "Installing…" for ever — over a server that had already come back on the
+   * new version. The update worked; the panel lied about it, which is the exact
+   * failure this whole panel was rewritten to stop doing.
+   *
+   * So: the versions are compared with any leading "v" removed, *and* a version
+   * that simply differs from the one running before the restart also counts.
+   * The tag-to-ldflag relationship is a build convention rather than a
+   * guarantee, and "it came back as something else" is the fact that actually
+   * matters.
+   */
   useEffect(() => {
     if (!installing || !health?.version) return;
-    if (target.current && health.version === target.current) {
+    const now = plainVersion(health.version);
+    const wanted = plainVersion(target.current);
+    const before = plainVersion(startedFrom.current);
+    if ((wanted && now === wanted) || (before && now !== before)) {
       setInstalling(false);
       setInstalledTo(health.version);
     }
@@ -157,6 +189,7 @@ export function UpdateSettings() {
               disabled={restart.isPending || installing}
               onClick={() => {
                 target.current = status.staged ?? "";
+                startedFrom.current = status.current ?? "";
                 restart.mutate(undefined, {
                   // Only once the server has accepted it: a failed request
                   // leaves a server that is still running and still staged, and
