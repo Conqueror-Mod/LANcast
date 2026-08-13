@@ -214,7 +214,7 @@ export function UpdateSettings() {
                 : restartedUnconfirmed
                   ? "This page could not confirm which version came back. Reload it to see what is running — the update itself is applied by the server, not by this page."
                   : status.staged
-                  ? "Downloaded and verified. Installing restarts the server: playback stops for a few seconds and LANcast starts itself again."
+                  ? "Downloaded and verified. Installing restarts the server: playback stops for a few seconds and LANcast starts itself again. If the release changes the desktop app, close and reopen LANcast afterwards — the server cannot replace a window that is running."
                   : describe(status)}
           </div>
           {status.error && (

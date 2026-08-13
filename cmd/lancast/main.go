@@ -24,6 +24,14 @@ import (
 	"lancast/internal/singleton"
 )
 
+// Version is the client build, injected at release time exactly as the server's
+// is. It exists so the page can notice that this window is older than the
+// server it is talking to — which is an ordinary state, not an exotic one: the
+// in-app updater replaces the server and the web assets it serves, and cannot
+// replace a running client. Until somebody restarts the app, the window is the
+// previous release and nothing said so.
+var Version = "dev"
+
 // browserMode records whether this client was launched with -browser, so the
 // autostart entry reproduces the same mode rather than quietly changing it.
 var browserMode bool
@@ -182,8 +190,11 @@ func (l *launcher) desktopBindings() map[string]any {
 			// would be showing an intention rather than a fact.
 			atLogin, autoErr := autostart.Enabled()
 			state := map[string]any{
-				"close_to_tray": prefs.CloseToTray,
-				"open_at_login": atLogin,
+				// What this window is, so the page can compare it with what the
+				// server says it is.
+				"client_version": Version,
+				"close_to_tray":  prefs.CloseToTray,
+				"open_at_login":  atLogin,
 				// True when this launcher started the server, so closing the
 				// window ends it. False when a service or an earlier launch
 				// owns it, in which case closing this window stops nothing —

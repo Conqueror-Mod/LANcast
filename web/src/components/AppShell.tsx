@@ -6,10 +6,12 @@ import {
   useLogout,
   useIsAdmin,
   useUpdateStatus,
+  useHealth,
 } from "@/api/hooks";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
 import { plainVersion } from "./UpdateSettings";
+import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
 import {
   LibraryIcon,
@@ -202,6 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ActivityPanel />
         </header>
         <UpdateBanner />
+      <RestartBanner />
         <main className="app-shell__main">{children}</main>
       </div>
     </div>
@@ -256,6 +259,52 @@ function UpdateBanner() {
       <button
         className="app-shell__banner-x"
         onClick={() => setDismissed(staged)}
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/*
+ * "The server updated; this window did not."
+ *
+ * The in-app updater replaces the server and the assets it serves, and cannot
+ * replace a running client. So after a release that changed the desktop shell,
+ * the app on screen is the previous version — its bindings, its window
+ * behaviour, its tray — and until now nothing said so. A fullscreen fix shipped
+ * inside the client, the server updated itself, and the button went on doing
+ * nothing because the window predated the binary on disk by twenty-six minutes.
+ *
+ * Everyone sees this one, not just admins: it is a fact about the app in front
+ * of them and the fix is closing a window, which needs no permission.
+ */
+function RestartBanner() {
+  const { data: health } = useHealth();
+  const [desktop, setDesktop] = useState<DesktopVersion>(null);
+  const [dismissed, setDismissed] = useState("");
+
+  useEffect(() => {
+    const state = (window as { lancastDesktopState?: () => Promise<DesktopVersion> })
+      .lancastDesktopState;
+    if (!state) return;
+    state().then(setDesktop).catch(() => setDesktop(null));
+  }, []);
+
+  const stale = clientIsStale(desktop, health?.version);
+  if (!stale || dismissed === health?.version) return null;
+
+  return (
+    <div className="app-shell__banner" role="status">
+      <span className="app-shell__banner-text">
+        The server is running LANcast {health?.version} and this window is still{" "}
+        {desktop?.client_version}. Close LANcast and open it again to finish
+        updating — your library and playback are unaffected.
+      </span>
+      <button
+        className="app-shell__banner-x"
+        onClick={() => setDismissed(health?.version ?? "")}
         aria-label="Dismiss"
       >
         ✕
