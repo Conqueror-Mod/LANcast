@@ -24,6 +24,7 @@ import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
+import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
@@ -179,6 +180,7 @@ export function Detail() {
   // never an option in this application (it steals focus from the web contents
   // in a frameless window and does not reliably give it back).
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
   const back = useCallback(() => navigate(-1), [navigate]);
@@ -408,6 +410,12 @@ export function Detail() {
               )}
               {isPlaylist && (
                 <SecondaryButton
+                  label="Rename"
+                  onPress={() => setRenaming(true)}
+                />
+              )}
+              {isPlaylist && (
+                <SecondaryButton
                   className="detail__remove"
                   label={
                     deletePlaylist.isPending
@@ -549,6 +557,9 @@ export function Detail() {
       )}
       {addOpen && (
         <AddToPlaylist item={item} onClose={() => setAddOpen(false)} />
+      )}
+      {renaming && (
+        <RenamePlaylist playlist={item} onClose={() => setRenaming(false)} />
       )}
       {trailerOpen && trailer && (
         <TrailerModal
