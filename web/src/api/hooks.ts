@@ -752,10 +752,14 @@ export function useAuditLog(enabled: boolean, action: string, limit: number) {
 
 // The update status. Cheap and static — the server checks on its own timer, so
 // this only reads what it already knows.
-export function useUpdateStatus() {
+export function useUpdateStatus(enabled = true) {
   return useQuery({
     queryKey: ["update"],
     queryFn: ({ signal }) => apiGet<UpdateStatus>("/api/update", signal),
+    // Admin-only endpoint: a member asking gets a 401, so the shell's banner
+    // passes false rather than filling the console with refused requests on
+    // every page load.
+    enabled,
     staleTime: 60_000,
   });
 }
@@ -888,7 +892,7 @@ export async function fetchLibraryTracks(
 
 // Server identity. /api/health has always returned this and nothing has ever
 // asked — so the settings page could not say which version it was talking to.
-export function useHealth() {
+export function useHealth(watch = false) {
   return useQuery({
     queryKey: ["health"],
     queryFn: ({ signal }) =>
@@ -896,7 +900,14 @@ export function useHealth() {
         "/api/health",
         signal,
       ),
-    staleTime: 60_000,
+    // `watch` is for the one moment the server is expected to stop answering
+    // and then answer again: finishing an update. Polling fast and retrying
+    // hard is right there and wrong everywhere else, which is why it is a
+    // parameter rather than the default.
+    staleTime: watch ? 0 : 60_000,
+    refetchInterval: watch ? 1000 : false,
+    retry: watch ? 60 : 3,
+    retryDelay: 1000,
   });
 }
 

@@ -34,3 +34,10 @@
 .upd-toggle input[type="checkbox"] {
   accent-color: var(--nebula-blue);
 }
+
+/* The finished state. Green rather than gold: gold means where you are, and a
+   badge is not where you are. */
+.upd-badge--done {
+  border-color: rgba(120, 200, 140, 0.5);
+  color: #86d29a;
+}

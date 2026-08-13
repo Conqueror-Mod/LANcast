@@ -37,11 +37,24 @@ func (s *Server) restartForUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.serviceManaged {
-		// Not a service: this process belongs to whoever started it, and the
-		// honest answer is to say so rather than to kill it and hope something
-		// brings it back.
-		writeError(w, http.StatusPreconditionFailed, "not_a_service",
-			"this server is not running as a service — close LANcast and open it again to finish the update")
+		// Not a service. This used to be a dead end — a 412 telling the user to
+		// close LANcast and open it again, with nothing afterwards to say
+		// whether the swap had happened. The relaunch helper is the same idea
+		// the service path uses, one level down: a detached copy waits for this
+		// process to exit (which is when the staged files are applied, on the
+		// way down) and starts it again with the arguments it had.
+		if s.relaunch == nil {
+			writeError(w, http.StatusPreconditionFailed, "not_a_service",
+				"this server cannot restart itself here — close LANcast and open it again to finish the update")
+			return
+		}
+		if err := s.relaunch(); err != nil {
+			s.writeInternal(w, err, "schedule the relaunch")
+			return
+		}
+		s.audit(r, "update.restart", "", m.Version,
+			"Restarted to finish updating to "+m.Version, nil)
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 

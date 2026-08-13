@@ -53,10 +53,24 @@ type Deps struct {
 	// restarted for the user, a foreground server can only be told to close and
 	// reopen — and guessing wrong means killing a process nothing will restart.
 	ServiceManaged bool
-	Trans          *transcode.Manager
-	Updates        *update.Checker
-	Subs           *subtitle.Extractor
-	Settings       *config.SettingsStore
+
+	// Relaunch finishes a staged update when this server is *not* a service:
+	// it spawns a detached helper that waits for this process to exit and then
+	// starts it again with the arguments it had, and then triggers a graceful
+	// shutdown. Nil where that cannot work (an unsupported host), in which case
+	// the API says so rather than pretending.
+	//
+	// It exists because "close LANcast and open it again" was the whole
+	// instruction a non-service install got, delivered once, with nothing
+	// afterwards to say whether the swap had happened — so the only way to find
+	// out was to start the server and read the version. The application knows
+	// exactly when the update completes; it should say so.
+	Relaunch func() error
+
+	Trans    *transcode.Manager
+	Updates  *update.Checker
+	Subs     *subtitle.Extractor
+	Settings *config.SettingsStore
 	// DataDir is the server data directory: where downloaded subtitles are
 	// written — never beside the media, which is the same rule NFO writing
 	// follows — and where lancastd.log is read from for GET /api/logs.
@@ -98,6 +112,7 @@ type Server struct {
 	covers         *coverart.Worker
 	photos         *photo.Worker
 	serviceManaged bool
+	relaunch       func() error
 	trans          *transcode.Manager
 	updates        *update.Checker
 	subs           *subtitle.Extractor
@@ -122,7 +137,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,

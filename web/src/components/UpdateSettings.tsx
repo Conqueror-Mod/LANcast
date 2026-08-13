@@ -6,6 +6,8 @@ import {
   useSettings,
   useUpdateSettings,
 } from "@/api/hooks";
+import { useEffect, useRef, useState } from "react";
+import { useHealth } from "@/api/hooks";
 import "./UpdateSettings.css";
 
 // Updates, in Settings. The activity indicator carries the same fact when an
@@ -19,6 +21,37 @@ export function UpdateSettings() {
   const restart = useRestartForUpdate();
   const save = useUpdateSettings();
 
+  /*
+   * The four states this panel used to collapse into one.
+   *
+   * "Downloaded and verified. Restart to finish." was the last thing anybody
+   * was told. What happened next — whether the swap worked, whether the server
+   * came back, what version it came back as — was left to the user to discover
+   * by starting the server and reading the version, which is the complaint this
+   * addresses. The application knows; it should say.
+   *
+   * `installing` is held in the component rather than read from the server for
+   * the obvious reason: during it, there is no server to ask.
+   */
+  const [installing, setInstalling] = useState(false);
+  const [installedTo, setInstalledTo] = useState<string | null>(null);
+  // The version that was staged when the restart began, so the confirmation can
+  // name it after the server comes back as that version.
+  const target = useRef<string>("");
+
+  // Polled only while installing: the server is expected to stop answering and
+  // then answer again, which is the one time a failing health check is the
+  // normal course of events rather than something to report.
+  const { data: health } = useHealth(installing);
+
+  useEffect(() => {
+    if (!installing || !health?.version) return;
+    if (target.current && health.version === target.current) {
+      setInstalling(false);
+      setInstalledTo(health.version);
+    }
+  }, [installing, health?.version]);
+
   if (!status?.supported) return null;
 
   const enabled = settings?.update_check ?? true;
@@ -30,9 +63,19 @@ export function UpdateSettings() {
       <div className="set-row">
         <div className="set-row__main">
           <div className="set-row__title">
-            {status.staged ? (
+            {installing ? (
               <>
-                LANcast {status.staged} is ready
+                Installing LANcast {target.current}
+                <span className="upd-badge">restarting</span>
+              </>
+            ) : installedTo ? (
+              <>
+                Updated to LANcast {installedTo}
+                <span className="upd-badge upd-badge--done">done</span>
+              </>
+            ) : status.staged ? (
+              <>
+                LANcast {status.staged} is ready to install
                 <span className="upd-badge">restart</span>
               </>
             ) : status.available ? (
@@ -45,9 +88,13 @@ export function UpdateSettings() {
             )}
           </div>
           <div className="set-row__sub">
-            {status.staged
-              ? "Downloaded and verified. Restart to finish."
-              : describe(status)}
+            {installing
+              ? "LANcast is restarting to finish the update. This takes a few seconds — the server will come back on its own."
+              : installedTo
+                ? "The server restarted and is running the new version."
+                : status.staged
+                  ? "Downloaded and verified. Installing restarts the server: playback stops for a few seconds and LANcast starts itself again."
+                  : describe(status)}
           </div>
           {status.error && (
             <p className="upd-note upd-note--warn">
@@ -81,10 +128,19 @@ export function UpdateSettings() {
           {status.staged && (
             <button
               className="set-btn"
-              disabled={restart.isPending}
-              onClick={() => restart.mutate()}
+              disabled={restart.isPending || installing}
+              onClick={() => {
+                target.current = status.staged ?? "";
+                restart.mutate(undefined, {
+                  // Only once the server has accepted it: a failed request
+                  // leaves a server that is still running and still staged, and
+                  // showing "Installing…" over it would be the same lie in a
+                  // new place.
+                  onSuccess: () => setInstalling(true),
+                });
+              }}
             >
-              {restart.isPending ? "Restarting…" : "Restart now"}
+              {installing ? "Installing…" : restart.isPending ? "Starting…" : "Install and restart"}
             </button>
           )}
           {status.available && !status.staged && status.can_verify && (

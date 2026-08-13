@@ -24,7 +24,11 @@ import (
 )
 
 type harness struct {
-	srv      *httptest.Server
+	srv *httptest.Server
+	// The server object behind srv, so a test can set the dependencies that are
+	// facts about the host rather than about the request — whether this process
+	// is a service, and whether it can relaunch itself.
+	srvAPI   *Server
 	st       *store.Store
 	lib      *store.Library
 	dir      string
@@ -66,6 +70,7 @@ func newHarness(t *testing.T) *harness {
 		Enrich: func() { h.enriched++ },
 	})
 
+	h.srvAPI = api
 	h.srv = httptest.NewServer(api.Handler())
 	t.Cleanup(h.srv.Close)
 
