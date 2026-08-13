@@ -127,6 +127,18 @@ export function SettingsIcon() {
   );
 }
 
+// A magnifier, at the weight the top bar's other marks carry.
+export function SearchGlyph() {
+  return (
+    <svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.6"
+      strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="9" r="5.2" />
+      <path d="M12.8 12.8 17 17" />
+    </svg>
+  );
+}
+
 // Add-ons: a block joining two others. A puzzle piece is the conventional
 // glyph and is wrong at 20px — the notches vanish and it reads as a blob. Three
 // squares with one offset says "a part that plugs in" at this size, which is

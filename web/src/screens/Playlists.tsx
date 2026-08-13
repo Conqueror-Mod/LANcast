@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   useCreatePlaylist,
   useDeletePlaylist,
@@ -10,6 +10,11 @@ import {
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
+import {
+  AlphabetRail,
+  initialsOf,
+  matchesInitial,
+} from "@/components/AlphabetRail";
 import type { Item } from "@/api/types";
 import "./Playlists.css";
 
@@ -245,7 +250,12 @@ export function Playlists() {
   const { data: libraries } = useLibraries();
   const library = libraries?.find((l) => l.id === libraryID);
 
-  const { data: playlists, isLoading } = usePlaylists(libraryID);
+  const { data: all, isLoading } = usePlaylists(libraryID);
+  const [params, setParams] = useSearchParams();
+  const initial = params.get("initial") ?? "";
+  // In memory: this page holds every playlist it has, so a round trip to filter
+  // a list already on screen would buy nothing.
+  const playlists = (all ?? []).filter((p) => matchesInitial(p.title, initial));
   const create = useCreatePlaylist();
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<Item | null>(null);
@@ -262,7 +272,7 @@ export function Playlists() {
         </button>
         <h1 className="browse__title">Playlists</h1>
         <span className="browse__count">
-          {playlists ? `${playlists.length}` : ""}
+          {all ? `${playlists.length}` : ""}
         </span>
       </div>
 
@@ -275,15 +285,26 @@ export function Playlists() {
       {/* An empty state that says how a playlist comes into being, because on
           this page the answer is not obvious: they are usually born from a
           track, and the .m3u route is invisible unless you know it exists. */}
-      {!isLoading && (playlists ?? []).length === 0 && (
+      {!isLoading && (all ?? []).length === 0 && (
         <p className="browse__message">
           No playlists in this library yet. Make one here, add tracks to it from
           any song, or drop an <code>.m3u</code> file in the library and rescan.
         </p>
       )}
 
+      <AlphabetRail
+        initials={initialsOf((all ?? []).map((p) => p.title))}
+        selected={initial}
+        onPick={(c) => {
+          const next = new URLSearchParams(params);
+          if (c) next.set("initial", c);
+          else next.delete("initial");
+          setParams(next);
+        }}
+      />
+
       <div className="pl-grid">
-        {(playlists ?? []).map((p) => (
+        {playlists.map((p) => (
           <PlaylistTile
             key={p.id}
             playlist={p}

@@ -11,6 +11,7 @@ import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterChips } from "@/components/FilterChips";
+import { AlphabetRail } from "@/components/AlphabetRail";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
@@ -258,11 +259,11 @@ export function LibraryView({
       </div>
 
       <div className="browse__controls">
-      {facets?.initials && facets.initials.length > 1 && (
+      {facets?.initials && (
         <AlphabetRail
           initials={facets.initials}
           selected={initial}
-          onPick={(c) => setParam("initial", c === initial ? "" : c)}
+          onPick={(c) => setParam("initial", c)}
         />
       )}
 
@@ -422,44 +423,3 @@ function shuffle(items: Item[]): Item[] {
   return out;
 }
 
-/*
- * The A–Z rail.
- *
- * A jump list, not a scrollbar. The grid pages in as you scroll, so "jump to S"
- * cannot mean "scroll to a row that has not loaded" — it means "ask the server
- * for the S titles", which is the same gesture with an answer that exists, and
- * it stays correct on a library of nine hundred as easily as one of nine.
- *
- * Only the letters that are actually there. A strip of twenty-six where
- * nineteen do nothing is a control that lies about what is in the library, and
- * the server answers which ones exist for exactly this reason. Fewer than two
- * and there is nothing to jump between, so it does not render at all.
- *
- * Pressing the selected letter again clears it. A filter you can enter and not
- * leave is a trap, and there is no other affordance here for "show me
- * everything again".
- */
-function AlphabetRail({
-  initials,
-  selected,
-  onPick,
-}: {
-  initials: string[];
-  selected: string;
-  onPick: (initial: string) => void;
-}) {
-  return (
-    <div className="browse__az" role="group" aria-label="Jump to a letter">
-      {initials.map((c) => (
-        <button
-          key={c}
-          className={"browse__az-key" + (c === selected ? " is-on" : "")}
-          aria-pressed={c === selected}
-          onClick={() => onPick(c)}
-        >
-          {c}
-        </button>
-      ))}
-    </div>
-  );
-}

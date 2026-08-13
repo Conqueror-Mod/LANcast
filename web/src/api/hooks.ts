@@ -600,6 +600,33 @@ function itemsParams({
   return params;
 }
 
+/**
+ * Search every library at once.
+ *
+ * The server has always been able to do this — ItemFilter only constrains
+ * library_id when it is non-zero — and nothing ever asked. Searching was
+ * per-library, which means knowing which library a thing is in before you can
+ * look for it, which is the opposite of what search is for.
+ *
+ * Top-level rows only, the same as a browse grid: a search that returns
+ * episodes loose among films answers a question nobody asked, and the episode's
+ * show is the thing you wanted.
+ */
+export function useGlobalSearch(q: string) {
+  const query = q.trim();
+  return useQuery({
+    queryKey: ["search", query],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(
+        `/api/items?q=${encodeURIComponent(query)}&limit=60`,
+        signal,
+      ),
+    enabled: query.length >= 2,
+    // A search that flashes empty between keystrokes reads as "no results".
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);

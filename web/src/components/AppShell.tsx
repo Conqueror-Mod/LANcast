@@ -10,6 +10,7 @@ import {
 } from "@/api/hooks";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityPanel } from "./ActivityPanel";
+import { KeyHelp } from "./KeyHelp";
 import { plainVersion } from "./UpdateSettings";
 import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
@@ -17,6 +18,7 @@ import {
   LibraryIcon,
   HomeIcon,
   SettingsIcon,
+  SearchGlyph,
   AddonIcon,
   AccountIcon,
   SignOutIcon,
@@ -66,6 +68,35 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const isAdmin = useIsAdmin();
   const reviewCount = review?.total ?? 0;
+  const navigate = useNavigate();
+
+  /*
+   * "/" opens search, the way it does in every application with a search.
+   *
+   * Not while typing, and not while something is playing full-screen — the
+   * player owns its keys, and pulling somebody out of a film into a search box
+   * because they pressed a punctuation key would be worse than the shortcut is
+   * worth.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+      if (location.pathname.startsWith("/watch/")) return;
+      e.preventDefault();
+      navigate("/search");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navigate, location.pathname]);
   // Back returns you to where you were, and a new page starts at the top.
   // Neither is the browser's default in a single-page app; see the hook.
   useScrollRestoration();
@@ -188,6 +219,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="app-shell__body">
         <header className="app-shell__top">
+          {/* Search is a place, and it is the first place somebody goes on a
+              server with more than one library — so it lives in the bar rather
+              than inside one library's page, where it can only find that
+              library's contents. */}
+          <NavLink
+            to="/search"
+            className={({ isActive }) =>
+              "app-shell__search" + (isActive ? " is-active" : "")
+            }
+            title="Search everything (/)"
+          >
+            <SearchGlyph />
+            <span>Search</span>
+          </NavLink>
           {reviewCount > 0 && (
             <NavLink
               to="/review"
@@ -205,6 +250,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <UpdateBanner />
       <RestartBanner />
+      <KeyHelp />
         <main className="app-shell__main">{children}</main>
       </div>
     </div>

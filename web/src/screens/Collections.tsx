@@ -1,7 +1,12 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteItems, useLibraries } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
 import { PosterTile } from "@/components/PosterTile";
+import {
+  AlphabetRail,
+  initialsOf,
+  matchesInitial,
+} from "@/components/AlphabetRail";
 import "./Browse.css";
 
 /*
@@ -16,6 +21,7 @@ import "./Browse.css";
  * is a place, and a place can be linked to, returned to, and found again.
  */
 export function Collections() {
+  const [params, setParams] = useSearchParams();
   const { id } = useParams();
   const libraryID = Number(id);
   const navigate = useNavigate();
@@ -27,7 +33,17 @@ export function Collections() {
     kind: "collection",
     sort: "title",
   });
-  const items = (data?.pages ?? []).flatMap((p) => p.items);
+  const all = (data?.pages ?? []).flatMap((p) => p.items);
+  /*
+   * Filtered here rather than at the server, unlike the library grid.
+   *
+   * A library holds thousands of items and pages them in, so its rail has to
+   * ask the server — the S titles may not be loaded. A collections page holds
+   * everything it has, so the same rail can filter in memory, and asking the
+   * server would be a round trip to sort a list already on screen.
+   */
+  const initial = params.get("initial") ?? "";
+  const items = all.filter((i) => matchesInitial(i.title, initial));
 
   const back = () => navigate(`/library/${libraryID}`);
   useBackHandler(back);
@@ -49,6 +65,17 @@ export function Collections() {
           once at least two of its films are in this library.
         </p>
       )}
+
+      <AlphabetRail
+        initials={initialsOf(all.map((i) => i.title))}
+        selected={initial}
+        onPick={(c) => {
+          const next = new URLSearchParams(params);
+          if (c) next.set("initial", c);
+          else next.delete("initial");
+          setParams(next);
+        }}
+      />
 
       <div className="browse__grid">
         {items.map((item) => (

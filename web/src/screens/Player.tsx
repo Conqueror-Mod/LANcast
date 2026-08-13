@@ -156,10 +156,33 @@ export function Player() {
     navigate(-1);
   }, [pb, navigate]);
   useSuspendFocus();
-  useBackHandler(close);
+  /*
+   * Escape is Back, and Back leaves fullscreen before it leaves the player.
+   *
+   * Wired through the back stack rather than as a second Escape listener,
+   * because this app resolves Escape centrally on purpose — the controller
+   * binds it on `document` and the player's own keydown is on `window`, which
+   * fires later, so a case for it here could never win. It did not: pressing
+   * Escape in fullscreen closed the player and left a borderless window over
+   * the library, with the film playing on in the corner.
+   *
+   * Fullscreen first, close second. Closing from fullscreen would leave the
+   * window borderless over a page that has no idea it is, which is a stranger
+   * place to end up than where you started.
+   */
+  const back = useCallback(() => {
+    if (pb.fullscreen) {
+      pb.exitFullscreen();
+      return;
+    }
+    close();
+  }, [pb, close]);
+  useBackHandler(back);
 
   // ---- auto-hide chrome -----------------------------------------------------
   const idleTimer = useRef<number>();
+  // Set by a click on the picture, cancelled by a second one. See the handlers.
+  const clickTimer = useRef<number>();
   const wakeChrome = useCallback(() => {
     setChromeVisible(true);
     window.clearTimeout(idleTimer.current);
@@ -173,7 +196,13 @@ export function Player() {
     }, 2500);
   }, [pb.isAudio, pb.playing]);
 
-  useEffect(() => () => window.clearTimeout(idleTimer.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(idleTimer.current);
+      window.clearTimeout(clickTimer.current);
+    },
+    [],
+  );
 
   // ---- keyboard (transport surface owns its keys; spatial nav is suspended) --
   const {
@@ -204,22 +233,6 @@ export function Player() {
           break;
         case "f":
           toggleFullscreen();
-          break;
-        case "Escape":
-          /*
-           * Fullscreen first, close second.
-           *
-           * In the desktop client fullscreen is a borderless *window*, not the
-           * browser's fullscreen, so nothing exits it for us — Escape did
-           * nothing at all, in the one state where the controls are hidden and
-           * there is least to aim at. Closing the player from fullscreen would
-           * also leave the window borderless over the library, which is a
-           * stranger place to end up than where you started.
-           */
-          if (pb.fullscreen) {
-            e.preventDefault();
-            pb.exitFullscreen();
-          }
           break;
         case "m":
           toggleMute();
@@ -276,21 +289,25 @@ export function Player() {
       onClick={(e) => {
         // Clicks land on this overlay, not the element underneath it, so the
         // click-to-pause target is the empty area rather than the video itself.
-        if (e.target === e.currentTarget) pb.togglePlay();
+        if (e.target !== e.currentTarget) return;
+        /*
+         * Held for a moment, in case a second click is coming.
+         *
+         * A double-click fires *two* click events and then dblclick, so play
+         * was toggled twice — a no-op — and the compensating toggle written to
+         * cancel "the" click made it an odd number again: double-clicking out
+         * of fullscreen paused the film. Counting clicks is the wrong tool.
+         * Waiting is the right one, and it is what every video player does.
+         */
+        window.clearTimeout(clickTimer.current);
+        clickTimer.current = window.setTimeout(() => pb.togglePlay(), 220);
       }}
       onDoubleClick={(e) => {
-        /*
-         * Double-click the picture for fullscreen, the way every video player
-         * does — and a second way in and out that does not depend on finding a
-         * small button in chrome that hides itself after two and a half
-         * seconds.
-         *
-         * The single click above has already toggled play by the time this
-         * fires, so this undoes it: a double-click is one gesture and should
-         * not also leave the film paused.
-         */
+        // Fullscreen, and the pending play toggle is cancelled rather than
+        // undone: a double-click is one gesture and must not also change what
+        // the film is doing.
         if (e.target !== e.currentTarget || pb.isAudio) return;
-        pb.togglePlay();
+        window.clearTimeout(clickTimer.current);
         pb.toggleFullscreen();
       }}
     >
