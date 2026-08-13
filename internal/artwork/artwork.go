@@ -15,6 +15,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -261,3 +262,54 @@ func writeAtomic(target string, body []byte) error {
 type stringWriter struct{ b *strings.Builder }
 
 func (w *stringWriter) Write(p []byte) (int, error) { return w.b.Write(p) }
+
+// Clear removes every cached image, originals and derived sizes alike, and
+// reports how many bytes went.
+//
+// Safe because the cache is a cache: every file in it is content-addressed and
+// re-derivable from its original, and every original is re-fetchable from the
+// provider that supplied it. What it costs is time and provider requests, not
+// information — which is exactly the property that makes offering a "clear the
+// cache" button honest rather than reckless.
+//
+// The rows that reference these hashes are deliberately left alone. An item
+// keeps knowing which artwork it has; the bytes come back on the next refresh,
+// and until then a tile falls back the way it already does for art that has not
+// arrived yet.
+func (c *Cache) Clear() (freed int64, err error) {
+	entries, err := os.ReadDir(c.root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("clear artwork cache: %w", err)
+	}
+	for _, e := range entries {
+		p := filepath.Join(c.root, e.Name())
+		if info, statErr := e.Info(); statErr == nil && !info.IsDir() {
+			freed += info.Size()
+		} else if statErr == nil {
+			freed += dirSize(p)
+		}
+		if rmErr := os.RemoveAll(p); rmErr != nil && err == nil {
+			err = fmt.Errorf("clear artwork cache: %w", rmErr)
+		}
+	}
+	return freed, err
+}
+
+// dirSize adds up a directory, ignoring what it cannot read: this is for a
+// human-readable "freed 412 MB", not for accounting.
+func dirSize(root string) int64 {
+	var total int64
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}

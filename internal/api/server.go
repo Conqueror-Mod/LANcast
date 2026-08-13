@@ -225,6 +225,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
+	mux.HandleFunc("POST /api/settings/reset", s.adminOnly(s.resetSettings))
+	mux.HandleFunc("POST /api/cache/clear", s.adminOnly(s.clearCache))
 
 	// Plugins (ADR 0021). Install is two steps — upload/inspect, then grant — so
 	// the capability approval is an explicit act. All admin-only.

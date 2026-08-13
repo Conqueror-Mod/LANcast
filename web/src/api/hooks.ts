@@ -787,6 +787,35 @@ export function useAuditLog(enabled: boolean, action: string, limit: number) {
 
 // The update status. Cheap and static — the server checks on its own timer, so
 // this only reads what it already knows.
+/**
+ * Throw away something the server can make again.
+ *
+ * Deliberately narrow: the only targets are caches. Everything reachable here
+ * costs time and provider requests to rebuild, never information.
+ */
+export function useClearCache() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (target: "artwork" | "transcode") =>
+      apiPost<{ freed_bytes: number }>("/api/cache/clear", { target }),
+    onSuccess: () => {
+      // Artwork URLs are content-addressed and unchanged, but everything on
+      // screen is now pointing at bytes that are gone until a refresh.
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}
+
+/** Restore the documented defaults. Credentials and machine facts survive. */
+export function useResetSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<unknown>("/api/settings/reset", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
 export function useUpdateStatus(enabled = true, watch = false) {
   return useQuery({
     queryKey: ["update"],

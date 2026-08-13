@@ -77,6 +77,13 @@ type Settings struct {
 	// a downloader, a sync job, another machine's writes.
 	ScanIntervalHours int `json:"scan_interval_hours,omitempty"`
 
+	// DebugLogging raises the server's log level to debug, at runtime and
+	// across restarts. Persisted rather than a one-shot toggle because the
+	// faults worth debug logging for are usually the intermittent ones: turning
+	// it on, restarting, and losing the setting is how a person ends up
+	// reproducing a bug three times.
+	DebugLogging bool `json:"debug_logging"`
+
 	// HardwareEncoder is "auto", "off", or a specific ffmpeg encoder name.
 	// Auto takes the fastest encoder that passed a real test encode.
 	HardwareEncoder string `json:"hardware_encoder,omitempty"`

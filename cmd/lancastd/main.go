@@ -179,12 +179,31 @@ func logAlreadyRunning(log *slog.Logger) {
 }
 
 // newLogger builds the stderr logger used foreground and by the service run mode.
+// logLevel is the level every logger in this process shares.
+//
+// A LevelVar rather than a fixed level, so debug logging can be turned on from
+// Settings without a restart. That matters more than it sounds: the moment
+// somebody wants debug output is the moment something is misbehaving, and
+// "restart the server to find out why it is misbehaving" throws away the state
+// they were trying to look at. It is one variable because there is one process
+// and one log file — a per-subsystem level is a thing to want later, and a
+// thing that would need somewhere to put it.
+var logLevel = new(slog.LevelVar)
+
 func newLogger(verbose bool) *slog.Logger {
-	level := slog.LevelInfo
 	if verbose {
-		level = slog.LevelDebug
+		logLevel.Set(slog.LevelDebug)
 	}
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+}
+
+// setLogLevel switches between debug and the ordinary level at runtime.
+func setLogLevel(debug bool) {
+	if debug {
+		logLevel.Set(slog.LevelDebug)
+		return
+	}
+	logLevel.Set(slog.LevelInfo)
 }
 
 // shutdownGrace is how long in-flight requests get to finish once a stop has
@@ -541,6 +560,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			Rebuild: func(s config.Settings) {
 				rebuild(s)
 				worker.SetNFOWriter(nfoWriterFor(s))
+				// Takes effect on the next line logged, not the next start:
+				// the moment somebody wants debug output is the moment
+				// something is misbehaving, and a restart throws away the
+				// state they were trying to look at.
+				setLogLevel(s.DebugLogging)
 			},
 			ReloadPlugins: reloadPlugins,
 			Enrich:        enrichSoon,
@@ -559,6 +583,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		coverSoon()
 		photoSoon()
 	})
+
+	// The persisted level. Only ever raises here: -v already set debug on the
+	// way in, and a stored `false` must not quietly undo the flag somebody
+	// passed on this launch.
+	if settings.Get().DebugLogging {
+		setLogLevel(true)
+	}
 
 	// Periodic library scans, when the operator has asked for them.
 	go periodicScan(ctx, st, scanner, settings, log)

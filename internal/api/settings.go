@@ -25,7 +25,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"omdb": map[string]any{
 			"configured": cur.OMDbKey != "",
 		},
-		"rate_per_sec": cur.RatePerSec,
+		"rate_per_sec":  cur.RatePerSec,
+		"debug_logging": cur.DebugLogging,
 		// The server's rules about what a client shows and what it may do.
 		"watched_threshold":    cur.WatchedThreshold,
 		"continue_weeks":       cur.ContinueWeeks,
@@ -66,6 +67,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		UpdateCheck      *bool    `json:"update_check"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
+		DebugLogging       *bool `json:"debug_logging"`
 		WatchedThreshold   *int  `json:"watched_threshold"`
 		ContinueWeeks      *int  `json:"continue_weeks"`
 		ContinueLimit      *int  `json:"continue_limit"`
@@ -110,6 +112,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// Ranges are rejected rather than clamped, because a client sending 200%
 	// has a bug and silently storing 90 hides it. config.clamp is the floor
 	// under a hand-edited file, not a substitute for saying no here.
+	if req.DebugLogging != nil {
+		next.DebugLogging = *req.DebugLogging
+	}
 	if req.WatchedThreshold != nil {
 		if *req.WatchedThreshold < 50 || *req.WatchedThreshold > 100 {
 			writeError(w, http.StatusBadRequest, "bad_request",
@@ -198,6 +203,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
+	add("debug_logging", prev.DebugLogging != next.DebugLogging)
 	add("watched_threshold", prev.WatchedThreshold != next.WatchedThreshold)
 	add("continue_weeks", prev.ContinueWeeks != next.ContinueWeeks)
 	add("continue_limit", prev.ContinueLimit != next.ContinueLimit)

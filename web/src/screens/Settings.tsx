@@ -9,6 +9,8 @@ import {
   useStartScan,
   useRefreshLibrary,
   useUpdateLibrary,
+  useClearCache,
+  useResetSettings,
   useScanStatus,
   useProbeStatus,
   useReprobe,
@@ -1569,7 +1571,12 @@ export function Settings() {
                 </>
               )}
               {pane === "activity" && <AuditLog />}
-              {pane === "logs" && <ServerLogSection />}
+              {pane === "logs" && (
+        <>
+          <ServerLogSection />
+          <MaintenanceSection />
+        </>
+      )}
             </>
           )}
           {pane === "account" && <AccountSection />}
@@ -1578,5 +1585,129 @@ export function Settings() {
         </div>
       </div>
     </div>
+  );
+}
+
+/*
+ * Debug logging, and the two things it is reasonable to throw away.
+ *
+ * On the Logs pane because that is where somebody already is when they want
+ * any of it: they came to read the log because something is wrong, and the next
+ * two questions are "can I get more detail" and "can I make it stop by clearing
+ * something".
+ *
+ * Every action here is recoverable by the server itself — cached artwork
+ * re-downloads, transcode scratch is rebuilt on the next play, settings return
+ * to documented defaults. Nothing touches media, the database, accounts, or
+ * anything a person typed. That boundary is the feature, and it is stated on
+ * the controls rather than left to be discovered.
+ */
+function MaintenanceSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  const clear = useClearCache();
+  const reset = useResetSettings();
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [freed, setFreed] = useState<string | null>(null);
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Diagnostics</span>
+
+      {settings && (
+        <>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.debug_logging}
+              onChange={(e) => update.mutate({ debug_logging: e.target.checked })}
+            />
+            Write debug detail to the log
+          </label>
+          <div className="set-row__sub set-row__sub--standalone">
+            Takes effect on the next line logged — no restart — and survives one,
+            because the faults worth turning this on for are the intermittent
+            ones. Leave it off for ordinary running: it is verbose.
+          </div>
+        </>
+      )}
+
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Clear cached artwork</div>
+          <div className="set-row__sub">
+            Posters and backgrounds are downloaded again as they are needed.
+            Nothing about your library changes; artwork is blank until it
+            arrives.
+            {freed && <> · {freed} freed</>}
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <button
+            className="set-btn"
+            disabled={clear.isPending}
+            onClick={() =>
+              clear.mutate("artwork", {
+                onSuccess: (r) =>
+                  setFreed(`${Math.round((r.freed_bytes / 1048576) * 10) / 10} MB`),
+              })
+            }
+          >
+            {clear.isPending ? "Clearing…" : "Clear"}
+          </button>
+        </div>
+      </div>
+
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Clear transcode scratch</div>
+          <div className="set-row__sub">
+            Stops anything being transcoded right now and deletes its working
+            files. A few seconds of buffered video, rebuilt the moment somebody
+            presses play.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <button
+            className="set-btn"
+            disabled={clear.isPending}
+            onClick={() => clear.mutate("transcode")}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Reset settings</div>
+          <div className="set-row__sub">
+            Puts every setting back to its default. Your password, provider API
+            keys, certificate paths and ffmpeg location are kept — a reset
+            cannot restore those, and losing the first would lock you out of
+            your own server.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <button
+            className="set-btn"
+            disabled={reset.isPending}
+            onClick={() => {
+              if (!confirmReset) {
+                setConfirmReset(true);
+                return;
+              }
+              reset.mutate(undefined, { onSuccess: () => setConfirmReset(false) });
+            }}
+          >
+            {reset.isPending
+              ? "Resetting…"
+              : confirmReset
+                ? "Reset everything?"
+                : "Reset"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -1333,6 +1333,39 @@ database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
 empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
 
+**Diagnostics.** `debug_logging` raises the server's log level to debug. It
+takes effect on the next line logged — no restart — and is persisted, because
+the faults worth turning it on for are the intermittent ones and losing the
+toggle on restart is how somebody reproduces a bug three times.
+
+### `POST /api/settings/reset`
+
+Restores the documented defaults. **Admin only.** Returns the settings, like
+`GET`.
+
+**Credentials and machine facts survive**: the password hash, the provider API
+keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first
+would lock the operator out of their own server and wiping the others would
+break metadata and HTTPS — none of which is what anybody means by "reset
+settings", and none of which a reset can restore. What resets is behaviour.
+
+### `POST /api/cache/clear`
+
+Throws away something the server can make again. **Admin only.**
+
+```json
+{ "target": "artwork" }
+```
+
+| Target | What goes | What it costs |
+|---|---|---|
+| `artwork` | every cached image, original and derived | time and provider requests; artwork is blank until it is fetched again. The rows referencing those hashes are **left alone**, so an item keeps knowing which artwork it has |
+| `transcode` | scratch space, and every running session with it | a few seconds of buffered video per viewer, rebuilt on the next play |
+
+Responds `{"freed_bytes": N}`. Any other target is a `400`: everything reachable
+here is recoverable **by the server itself**, and that is the boundary — nothing
+here touches media, the database, accounts, or anything a person typed.
+
 **Server rules** (v0.6.13). These five decide what a client shows and what it
 may do, and they live here rather than in each client because the server owns
 truth: a household with a phone, a browser and a TV must not hold three answers
