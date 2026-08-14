@@ -232,6 +232,63 @@ export function useUpdateLibrary() {
   });
 }
 
+/*
+ * A library's locations (ADR 0034).
+ *
+ * All three invalidate `items` as well as `libraries`, and for different
+ * reasons that all end the same way: adding one changes what a scan will find,
+ * removing one deletes every row under it, and moving one rewrites every item
+ * path in it. Anything holding items has to be re-read rather than trusted.
+ */
+export function useAddRoot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { libraryID: number; path: string }) =>
+      apiSend(`/api/libraries/${v.libraryID}/roots`, "POST", { path: v.path }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+    },
+  });
+}
+
+/**
+ * Remove a location and every item scanned under it.
+ *
+ * This deletes rows where an unreachable drive only marks them missing, which
+ * is why the caller has to say the count out loud before asking.
+ */
+export function useRemoveRoot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { libraryID: number; rootID: number }) =>
+      apiSend(`/api/libraries/${v.libraryID}/roots/${v.rootID}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+      qc.invalidateQueries({ queryKey: ["review"] });
+      qc.invalidateQueries({ queryKey: ["recently-added"] });
+      qc.invalidateQueries({ queryKey: ["continue"] });
+    },
+  });
+}
+
+/** Move one location, carrying its contents with it — the drive-letter case. */
+export function useRepointRoot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { libraryID: number; rootID: number; path: string }) =>
+      apiSend(`/api/libraries/${v.libraryID}/roots/${v.rootID}`, "PATCH", {
+        path: v.path,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}
+
 export function useDeleteLibrary() {
   const qc = useQueryClient();
   return useMutation({

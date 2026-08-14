@@ -8,11 +8,30 @@ export type MatchState =
   | "locked"
   | "local";
 
+/** One place a library's files live (ADR 0034). */
+export interface LibraryRoot {
+  id: number;
+  library_id: number;
+  path: string;
+  created_at: number;
+  /** Rows that would go with this location if it were removed. */
+  item_count: number;
+}
+
 export interface Library {
   id: number;
   name: string;
   kind: string;
+  /**
+   * The library's first location.
+   *
+   * Kept by the server so clients that predate multi-root libraries keep
+   * working, and superseded by `roots`. Read `roots` for anything that has to
+   * be right about a library in more than one place; this stays correct for
+   * the single-location case, which is most of them.
+   */
   path: string;
+  roots?: LibraryRoot[];
   created_at: number;
   scanned_at: number | null;
   item_count: number;
@@ -260,6 +279,15 @@ export interface ScanStatus {
   skipped_kind: number;
   /** Files that parsed as episodes in a library that says it holds films. */
   episodes_in_movie_library?: number;
+  /** How many of the library's locations this scan actually read (ADR 0034). */
+  roots_scanned?: number;
+  /**
+   * Locations the scan could not read — an unplugged drive, a disconnected
+   * share. Not a failure when others were readable: the scan did real work on
+   * the rest, and this is what stops it looking complete when it covered half
+   * the library.
+   */
+  roots_skipped?: { id: number; path: string }[];
   issues?: ScanIssue[];
   started_at: number;
   finished_at?: number;
