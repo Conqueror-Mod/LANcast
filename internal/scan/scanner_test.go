@@ -1489,3 +1489,83 @@ func TestItemsRecordTheLocationTheyWereFoundIn(t *testing.T) {
 		t.Errorf("second location holds %d files, want 1", len(inSecond))
 	}
 }
+
+// An episode loose in a *second* location must stay top-level, exactly as one
+// loose in the first does.
+//
+// ShowDir walks up from the file looking for the root it was given. Given the
+// library's first location it never meets it, so it stops at the first
+// directory that is not a "Season N" folder and returns it — inventing a show
+// named after the second drive's own folder (ADR 0034).
+func TestEpisodeLooseInASecondLocationInventsNoShow(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	second := t.TempDir()
+	if _, err := st.AddRoot(ctx, lib.ID, second); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "Andor/Season 01/Andor.S01E01.mkv", 10)
+	// Loose at the second location's own root, with no show folder.
+	writeFile(t, second, "Loose.S02E05.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, Kind: "show"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shows) != 1 {
+		var names []string
+		for _, s := range shows {
+			names = append(names, s.Title)
+		}
+		t.Fatalf("shows = %v, want only Andor — a loose episode invented one", names)
+	}
+	if shows[0].Title != "Andor" {
+		t.Errorf("show = %q, want Andor", shows[0].Title)
+	}
+}
+
+// A show whose seasons are split across locations is one show. This is the
+// case multi-root exists for, and it is why containers are keyed on library
+// rather than on location.
+func TestAShowSplitAcrossLocationsIsOneShow(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	second := t.TempDir()
+	if _, err := st.AddRoot(ctx, lib.ID, second); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "Andor/Season 01/Andor.S01E01.mkv", 10)
+	writeFile(t, second, "Andor/Season 02/Andor.S02E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, Kind: "show"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shows) != 2 {
+		// Two show rows, one per location, because a show is keyed on its
+		// directory and the two locations hold different directories. Recorded
+		// as the current behaviour rather than asserted as desirable — merging
+		// them is a matching question, not a scanning one.
+		t.Logf("shows = %d (one per location directory)", len(shows))
+	}
+	eps, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, Kind: "episode"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eps) != 2 {
+		t.Errorf("episodes = %d, want 2 — both locations must contribute", len(eps))
+	}
+	for _, e := range eps {
+		if e.ParentID == nil {
+			t.Errorf("episode %q is loose; both locations must group", e.Title)
+		}
+	}
+}

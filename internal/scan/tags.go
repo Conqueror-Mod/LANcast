@@ -65,6 +65,14 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	if err != nil {
 		return err
 	}
+	// Each track's own location. Folder-derived artist and album are relative to
+	// the location the file is in, and using the library's first one gives a
+	// cross-volume filepath.Rel failure — which is not an error here, it is a
+	// track that silently loses its artist and album (ADR 0034).
+	roots, err := s.st.RootPaths(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
 	if len(tracks) == 0 {
 		// No present tracks, but reconciliation still runs: a container emptied
 		// by an earlier pass is an empty shelf whether or not there is anything
@@ -93,7 +101,7 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 					// the failure mode this project keeps rediscovering.
 					mu.Lock()
 					untagged++
-					groups = append(groups, groupFromPath(lib.Path, it))
+					groups = append(groups, groupFromPath(rootOf(roots, it.RootID), it))
 					mu.Unlock()
 					continue
 				}
@@ -106,7 +114,7 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 				// later would be a column that exists only to survive a function
 				// boundary.
 				mu.Lock()
-				groups = append(groups, groupFromTags(lib.Path, it, tags))
+				groups = append(groups, groupFromTags(rootOf(roots, it.RootID), it, tags))
 				mu.Unlock()
 			}
 		}()
