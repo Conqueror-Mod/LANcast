@@ -2,6 +2,9 @@ import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   useLibraries,
+  useAddRoot,
+  useRemoveRoot,
+  useRepointRoot,
   useSettings,
   useUpdateSettings,
   useCreateLibrary,
@@ -39,6 +42,7 @@ import { ApiFailure } from "@/api/client";
 import type {
   AuthUser,
   Library,
+  LibraryRoot,
   Plugin,
   Settings as SettingsType,
   SettingsUpdate,
@@ -74,13 +78,26 @@ function LibraryRow({ library }: { library: Library }) {
   const episodesMissed = status?.episodes_in_movie_library ?? 0;
   const excluded = library.kind === "music" ? "video" : "audio";
 
+  // A library always has at least one location; falling back to `path` covers
+  // a server older than the roots endpoint rather than an empty case.
+  const roots = library.roots ?? [
+    { id: 0, library_id: library.id, path: library.path, created_at: 0, item_count: 0 },
+  ];
+  const skippedRoots = status?.roots_skipped ?? [];
+
   return (
     <div className="set-lib">
       <div className="set-row">
         <div className="set-row__main">
           <div className="set-row__title">{library.name}</div>
           <div className="set-row__sub">
-            {library.path} · {library.item_count.toLocaleString()} items ·{" "}
+            {/* One location still reads as a path, which is what it is and what
+                every library was until now. Several read as a count, because
+                three absolute paths on one line is not a subtitle. */}
+            {roots.length > 1
+              ? `${roots.length} locations`
+              : (roots[0]?.path ?? library.path)}{" "}
+            · {library.item_count.toLocaleString()} items ·{" "}
             {running
               ? `scanning — ${status?.files_seen ?? 0} seen`
               : whenScanned(library.scanned_at)}
@@ -110,6 +127,22 @@ function LibraryRow({ library }: { library: Library }) {
               this library's type is Movies — they will appear as individual
               films with no series or seasons. If this folder holds a TV
               collection, remove this library and add it again as Shows.
+            </div>
+          )}
+          {/*
+            A location the scan could not read.
+
+            Stated in the row rather than behind the issues toggle, for the
+            same reason the wrong-kind warning is: the scan *succeeded* and
+            looks it, while having covered less of the library than it appears
+            to. Nothing else on this screen would say so.
+          */}
+          {!running && skippedRoots.length > 0 && (
+            <div className="set-row__note">
+              {status?.roots_scanned ?? 0} of {roots.length} location
+              {roots.length === 1 ? "" : "s"} scanned — could not read{" "}
+              {skippedRoots.map((r) => r.path).join(", ")}. Items there were
+              left alone, not marked missing.
             </div>
           )}
           {!running && skippedKind > 0 && (
@@ -228,11 +261,10 @@ function LibraryEditor({
   library: Library;
   pending: boolean;
   error?: string;
-  onSave: (v: { name?: string; path?: string }) => void;
+  onSave: (v: { name?: string }) => void;
 }) {
   const [name, setName] = useState(library.name);
-  const [path, setPath] = useState(library.path);
-  const dirty = name.trim() !== library.name || path.trim() !== library.path;
+  const dirty = name.trim() !== library.name;
 
   return (
     <div className="set-libedit">
@@ -244,33 +276,179 @@ function LibraryEditor({
           onChange={(e) => setName(e.target.value)}
         />
       </label>
-      <label className="set-libedit__field">
-        <span>Folder</span>
-        <input
-          className="set-input set-input--wide"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-        />
-      </label>
+      <LibraryLocations library={library} />
       <p className="set-row__sub">
         Type: {kindLabel(library.kind)} — a library's type cannot be changed.
         Add the folder again as the type you want.
-      </p>
-      <p className="set-row__sub">
-        Changing the folder moves this library and everything in it: matches,
-        artwork and watch progress are kept. Scan afterwards to pick up
-        anything that changed on disk.
       </p>
       {error && <p className="set-row__note">{error}</p>}
       <div className="set-row__actions">
         <button
           className="set-btn"
-          disabled={!dirty || pending || name.trim() === "" || path.trim() === ""}
-          onClick={() => onSave({ name: name.trim(), path: path.trim() })}
+          disabled={!dirty || pending || name.trim() === ""}
+          onClick={() => onSave({ name: name.trim() })}
         >
-          {pending ? "Saving…" : "Save changes"}
+          {pending ? "Saving…" : "Save name"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/*
+ * Where a library's files live (ADR 0034).
+ *
+ * A library used to have one folder and this used to be one text field. It has
+ * locations now, and each is edited on its own line rather than through the
+ * library — moving a location is per location, and a library with two has one
+ * of them move while the other stays exactly where it is.
+ *
+ * Removing is the only destructive control on this screen that deletes rows
+ * rather than files, so it says the count before it asks. The rule everywhere
+ * else is that scanning marks missing and never deletes; that governs what the
+ * server may *infer* from an absent drive, not what a person may ask for here,
+ * and the difference is worth spelling out at the moment of asking.
+ */
+function LibraryLocations({ library }: { library: Library }) {
+  const roots = library.roots ?? [];
+  const add = useAddRoot();
+  const [adding, setAdding] = useState("");
+  const [confirming, setConfirming] = useState<number | null>(null);
+
+  return (
+    <div className="set-roots">
+      <span className="section-label">Locations</span>
+
+      {roots.map((root) => (
+        <LocationRow
+          key={root.id}
+          library={library}
+          root={root}
+          // The last location cannot go: a library with none cannot be
+          // scanned, resolved or moved, and the honest way to remove it is to
+          // remove the library. Disabled with the reason on the control, not
+          // hidden — a missing button is a question nobody can ask.
+          canRemove={roots.length > 1}
+          confirming={confirming === root.id}
+          onConfirm={() => setConfirming(root.id)}
+          onCancel={() => setConfirming(null)}
+        />
+      ))}
+
+      <div className="set-roots__add">
+        <input
+          className="set-input set-input--wide"
+          placeholder="Add another folder…"
+          value={adding}
+          onChange={(e) => setAdding(e.target.value)}
+        />
+        <button
+          className="set-btn"
+          disabled={adding.trim() === "" || add.isPending}
+          onClick={() =>
+            add.mutate(
+              { libraryID: library.id, path: adding.trim() },
+              { onSuccess: () => setAdding("") },
+            )
+          }
+        >
+          {add.isPending ? "Adding…" : "Add location"}
+        </button>
+      </div>
+      {add.error && (
+        <p className="set-row__note">{(add.error as Error).message}</p>
+      )}
+      <p className="set-row__sub">
+        Folders cannot overlap — one inside another would be scanned twice, and
+        which location a file belongs to would depend on scan order. Scan after
+        adding one to pick up what is in it.
+      </p>
+    </div>
+  );
+}
+
+function LocationRow({
+  library,
+  root,
+  canRemove,
+  confirming,
+  onConfirm,
+  onCancel,
+}: {
+  library: Library;
+  root: LibraryRoot;
+  canRemove: boolean;
+  confirming: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [path, setPath] = useState(root.path);
+  const move = useRepointRoot();
+  const remove = useRemoveRoot();
+  const dirty = path.trim() !== root.path;
+  const err = (move.error ?? remove.error) as Error | null;
+
+  return (
+    <div className="set-root">
+      <div className="set-root__line">
+        <input
+          className="set-input set-input--wide"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+        />
+        <button
+          className="set-btn"
+          disabled={!dirty || move.isPending}
+          onClick={() =>
+            move.mutate({
+              libraryID: library.id,
+              rootID: root.id,
+              path: path.trim(),
+            })
+          }
+        >
+          {move.isPending ? "Moving…" : "Move"}
+        </button>
+        {confirming ? (
+          <>
+            <span className="set-confirm">
+              Remove {root.item_count.toLocaleString()} item
+              {root.item_count === 1 ? "" : "s"}?
+            </span>
+            <button
+              className="set-btn set-btn--danger"
+              disabled={remove.isPending}
+              onClick={() =>
+                remove.mutate({ libraryID: library.id, rootID: root.id })
+              }
+            >
+              Yes, remove
+            </button>
+            <button className="set-btn" onClick={onCancel}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            className="set-btn set-btn--danger"
+            disabled={!canRemove}
+            title={
+              canRemove
+                ? undefined
+                : "A library must keep at least one location — remove the library instead"
+            }
+            onClick={onConfirm}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <div className="set-root__sub">
+        {root.item_count.toLocaleString()} item
+        {root.item_count === 1 ? "" : "s"} here. Moving keeps every one of them
+        — matches, artwork and watch progress travel with the folder.
+      </div>
+      {err && <p className="set-row__note">{err.message}</p>}
     </div>
   );
 }
