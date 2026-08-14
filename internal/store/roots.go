@@ -24,6 +24,12 @@ type LibraryRoot struct {
 	LibraryID int64  `json:"library_id"`
 	Path      string `json:"path"`
 	CreatedAt int64  `json:"created_at"`
+	// ItemCount is how many rows would go if this location were removed.
+	//
+	// Carried on the listing rather than fetched separately because it is what
+	// the confirmation has to say, and a removal dialog that cannot name the
+	// cost is a removal dialog nobody can answer honestly.
+	ItemCount int `json:"item_count"`
 }
 
 /*
@@ -87,16 +93,57 @@ func scanRoots(rows *sql.Rows) ([]LibraryRoot, error) {
 	return out, rows.Err()
 }
 
+// rootItemCount counts the file-backed rows filed under a location. Written as
+// a correlated subquery so a listing stays one round trip however many
+// locations a library has.
+const rootItemCount = `(SELECT COUNT(*) FROM media_item i WHERE i.root_id = r.id)`
+
+func scanRootsWithCounts(rows *sql.Rows) ([]LibraryRoot, error) {
+	defer rows.Close()
+	out := []LibraryRoot{}
+	for rows.Next() {
+		var r LibraryRoot
+		if err := rows.Scan(&r.ID, &r.LibraryID, &r.Path, &r.CreatedAt, &r.ItemCount); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// RootsByLibrary returns every root grouped by library.
+//
+// One query for the whole listing rather than one per library: a server with a
+// dozen libraries would otherwise pay a dozen round trips to render a page that
+// is mostly names.
+func (s *Store) RootsByLibrary(ctx context.Context) (map[int64][]LibraryRoot, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT r.id, r.library_id, r.path, r.created_at, `+rootItemCount+`
+		 FROM library_root r ORDER BY r.library_id, r.id`)
+	if err != nil {
+		return nil, fmt.Errorf("roots by library: %w", err)
+	}
+	all, err := scanRootsWithCounts(rows)
+	if err != nil {
+		return nil, fmt.Errorf("roots by library: %w", err)
+	}
+	out := map[int64][]LibraryRoot{}
+	for _, r := range all {
+		out[r.LibraryID] = append(out[r.LibraryID], r)
+	}
+	return out, nil
+}
+
 // ListRoots returns a library's locations, oldest first — so the first is the
 // one the library was created with, which is what Library.Path reports.
 func (s *Store) ListRoots(ctx context.Context, libraryID int64) ([]LibraryRoot, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, library_id, path, created_at FROM library_root
-		 WHERE library_id = ? ORDER BY id`, libraryID)
+		`SELECT r.id, r.library_id, r.path, r.created_at, `+rootItemCount+`
+		 FROM library_root r WHERE r.library_id = ? ORDER BY r.id`, libraryID)
 	if err != nil {
 		return nil, fmt.Errorf("list roots: %w", err)
 	}
-	out, err := scanRoots(rows)
+	out, err := scanRootsWithCounts(rows)
 	if err != nil {
 		return nil, fmt.Errorf("list roots: %w", err)
 	}

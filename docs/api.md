@@ -162,21 +162,47 @@ Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and
 ```json
 [
   { "id": 1, "name": "Films", "kind": "movie", "path": "D:/Media/Films",
+    "roots": [
+      { "id": 1, "library_id": 1, "path": "D:/Media/Films",
+        "created_at": 1753142400, "item_count": 380 },
+      { "id": 4, "library_id": 1, "path": "E:/Family",
+        "created_at": 1755100000, "item_count": 32 }
+    ],
     "created_at": 1753142400, "scanned_at": 1753228800, "item_count": 412 }
 ]
 ```
 
+**A library can live in more than one place** ([ADR 0034](adr/0034-multi-root-libraries.md)).
+`roots` is the full list; `path` is the **first** of them, kept so clients that
+predate multi-root libraries keep working, and superseded by `roots` for
+anything new. On a single-location library the two say the same thing, which is
+every library that existed before this.
+
+`item_count` on a root is what would be removed with it. `item_count` on the
+library is the whole library, and the two are not comparable: the library's
+excludes containers and honours the browse rules, a root's is a plain row count.
+
 ### `POST /api/libraries`
 
-`kind` is one of `movie`, `show`, `music`, `picture`, `other`. The path must exist and be a
-directory; both are validated before insert.
+`kind` is one of `movie`, `show`, `music`, `picture`, `other`. Every path must
+exist and be a directory; all are validated **before** anything is inserted, so
+a typo in the third location does not leave a half-made library behind.
 
 ```json
 { "name": "Films", "kind": "movie", "path": "D:/Media/Films" }
 ```
 
-Returns `201` with the created library. Returns `conflict` if the path is
-already registered.
+```json
+{ "name": "Films", "kind": "movie", "roots": ["D:/Media/Films", "E:/Family"] }
+```
+
+`path` and `roots` mean the same thing; `path` is a single-element `roots`. Both
+together is accepted rather than refused, with `path` first, so a client
+migrating between the two forms produces the same library either way. Additive
+under [ADR 0018](adr/0018-api-contract-and-versioning.md).
+
+Returns `201` with the created library. Returns `conflict` if any path is
+already registered, or overlaps a location that is — see the overlap rule below.
 
 ### `PATCH /api/libraries/{id}`
 
@@ -202,6 +228,78 @@ Nothing is deleted and nothing is marked missing; a rescan afterwards reconciles
 files exactly as it always does. A path that does not exist, or is not a
 directory, is refused **before** anything is rewritten: a typo must not mark a
 whole library missing.
+
+**Changing `path` moves the library's *first* location.** With several, the
+per-location endpoints below are the precise form.
+
+---
+
+## Library locations
+
+Where a library's files live. **Admin only**, except the listing.
+
+Adding a location is filesystem access at a path the caller chooses — the same
+capability `POST /api/libraries` has — so it carries the same gate. Listing is
+not gated, because those paths are already in `GET /api/libraries`, which any
+signed-in user can read.
+
+### `GET /api/libraries/{id}/roots`
+
+```json
+[ { "id": 1, "library_id": 1, "path": "D:/Media/Films",
+    "created_at": 1753142400, "item_count": 380 } ]
+```
+
+Oldest first, so the first entry is the one `library.path` reports.
+
+### `POST /api/libraries/{id}/roots`
+
+```json
+{ "path": "E:/Family" }
+```
+
+Returns `201` with the created location.
+
+**Locations may not overlap.** A path that is the same directory as an existing
+location, or contains one, or sits inside one — in *any* library — is `409`.
+Nesting has no good answer at scan time: files under the inner location are
+walked by both passes, `media_item.path` is unique so the second write fights
+the first, and the item's recorded location ends up decided by scan ordering,
+which is what every containment check resolves against. Compared by path
+component rather than string prefix, so `/mnt/films` and `/mnt/films2` are
+unrelated; case-insensitively on Windows, where `D:\Media` and `d:\media` are
+one directory.
+
+### `PATCH /api/libraries/{id}/roots/{rootID}`
+
+```json
+{ "path": "F:/Family" }
+```
+
+Moves one location, carrying its contents with it — the drive-letter case, per
+location. Every item path under the old location is rewritten in a single
+transaction along with the ignore list, nothing is deleted and nothing is marked
+missing, and a rescan afterwards reconciles as it always does. A path that does
+not exist is refused **before** anything is rewritten. Overlap is refused as
+above.
+
+A location belonging to a different library is `404`, not `403`: the caller has
+no business knowing it exists.
+
+### `DELETE /api/libraries/{id}/roots/{rootID}`
+
+Removes a location **and every item scanned under it**. `204` on success.
+
+This deletes where an unreachable drive marks missing, and the difference is
+deliberate. "Scanning marks missing, never deletes" governs what the server may
+*infer* — a scan deduces absence from not finding a file, and that deduction is
+wrong when a drive is merely unplugged. This is not a deduction; it is an
+administrator saying the location is no longer part of the library, which is the
+same class of act as deleting the library.
+
+**The last location cannot be removed** (`409`). A library with none cannot be
+scanned, resolved or repointed; delete the library instead. Use the `item_count`
+on the location to say what goes before asking.
 
 ### `DELETE /api/libraries/{id}`
 

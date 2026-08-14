@@ -30,6 +30,10 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 		Kind string `json:"kind"`
 		Path string `json:"path"`
+		// Roots is the multi-location form (ADR 0034). `path` remains accepted
+		// and means the same as a single-element roots array, so every client
+		// that predates this keeps working unchanged.
+		Roots []string `json:"roots"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -38,8 +42,21 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.Path = strings.TrimSpace(req.Path)
-	if req.Name == "" || req.Path == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "name and path are required")
+
+	// One list, however it was spelled. Both together is accepted rather than
+	// refused, with `path` first: a client migrating from one to the other
+	// sending both means the same library either way.
+	wanted := []string{}
+	if req.Path != "" {
+		wanted = append(wanted, req.Path)
+	}
+	for _, p := range req.Roots {
+		if t := strings.TrimSpace(p); t != "" {
+			wanted = append(wanted, t)
+		}
+	}
+	if req.Name == "" || len(wanted) == 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "name and at least one path are required")
 		return
 	}
 	if !validKinds[req.Kind] {
@@ -47,22 +64,19 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	abs, err := filepath.Abs(req.Path)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "path could not be resolved")
-		return
-	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "path does not exist or is unreadable")
-		return
-	}
-	if !info.IsDir() {
-		writeError(w, http.StatusBadRequest, "bad_request", "path is not a directory")
-		return
+	// Every path is checked before any of them is written, so a typo in the
+	// third location does not leave a half-made library behind.
+	abs := make([]string, 0, len(wanted))
+	for _, p := range wanted {
+		a, msg := checkDirectory(p)
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, "bad_request", msg)
+			return
+		}
+		abs = append(abs, a)
 	}
 
-	lib, err := s.st.CreateLibrary(r.Context(), req.Name, req.Kind, abs)
+	lib, err := s.st.CreateLibrary(r.Context(), req.Name, req.Kind, abs[0])
 	if err != nil {
 		// The unique index on path is the only realistic conflict here.
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -72,10 +86,33 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "create library")
 		return
 	}
+
+	// The remaining locations. A failure here leaves a library that exists with
+	// fewer locations than asked for, so it is removed again rather than left
+	// half-configured — a partially created library is the kind of thing
+	// somebody scans without noticing.
+	for _, a := range abs[1:] {
+		if _, err := s.st.AddRoot(r.Context(), lib.ID, a); err != nil {
+			if delErr := s.st.DeleteLibrary(r.Context(), lib.ID); delErr != nil {
+				s.log.Error("could not roll back a partial library",
+					"library", lib.ID, "error", delErr)
+			}
+			if s.writeRootErr(w, err, "add root") {
+				return
+			}
+			return
+		}
+	}
+
+	created, err := s.st.GetLibrary(r.Context(), lib.ID)
+	if err != nil {
+		s.writeInternal(w, err, "get library")
+		return
+	}
 	s.audit(r, "library.create", "library", auditID(lib.ID),
-		fmt.Sprintf("Added %s library %q at %s", lib.Kind, lib.Name, lib.Path),
-		map[string]any{"path": lib.Path, "kind": lib.Kind})
-	writeJSON(w, http.StatusCreated, lib)
+		fmt.Sprintf("Added %s library %q at %s", lib.Kind, lib.Name, strings.Join(abs, ", ")),
+		map[string]any{"path": abs[0], "roots": abs, "kind": lib.Kind})
+	writeJSON(w, http.StatusCreated, created)
 }
 
 // patchLibrary edits a library. Admin-only.
