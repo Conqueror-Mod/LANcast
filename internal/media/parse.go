@@ -224,7 +224,7 @@ func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 // reading of ambiguous names — in a show library a bare "E2" is a miniseries
 // episode, where in a movie library the same name is left a film.
 func Parse(root, path, libKind string) Info {
-	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	base := stripGroupPrefix(path, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
 	info := Info{Kind: KindOther}
 
 	// A music library reads its files by a different set of conventions
@@ -365,6 +365,41 @@ func showDirWalk(root, path string) string {
 		dir = filepath.Dir(dir)
 	}
 	return ""
+}
+
+/*
+ * stripGroupPrefix drops a scene release group from the *front* of a filename,
+ * and only when the folder around it agrees.
+ *
+ * The shape is "veto-beavis.and.butthead.do.america.1996.1080p.bluray.x264.mkv"
+ * inside a folder called "Beavis.And.Butthead.Do.America.1996...-VETO". The
+ * group is a trailing marker on the folder and a *leading* one on the file, and
+ * stripNoise only knows about trailing ones — so the title came out as "veto
+ * beavis and butthead do america".
+ *
+ * The naive fix is a catastrophe. Stripping any leading "word-" turns
+ * "Spider-Man.2002.1080p.mkv" into "Man 2002", and there is nothing in the
+ * filename alone that separates the two cases: both are a word, a hyphen, and a
+ * dotted title.
+ *
+ * The folder is what separates them. A release group appears at the end of the
+ * directory it produced, so the prefix is only removed when the containing
+ * folder actually ends with it. "Spider-Man" is never inside a folder ending
+ * "-Spider", and a mismatch leaves the name exactly as it was.
+ */
+func stripGroupPrefix(path, base string) string {
+	i := strings.Index(base, "-")
+	// Nothing before the hyphen, nothing after it, or a dot inside the
+	// candidate: not a group name.
+	if i <= 0 || i+1 >= len(base) || strings.Contains(base[:i], ".") {
+		return base
+	}
+	group := strings.ToLower(base[:i])
+	dir := strings.ToLower(filepath.Base(filepath.Dir(path)))
+	if strings.HasSuffix(dir, "-"+group) {
+		return base[i+1:]
+	}
+	return base
 }
 
 // stripNoise drops everything from the first release-quality marker onward.

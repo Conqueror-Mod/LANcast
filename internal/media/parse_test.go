@@ -374,3 +374,44 @@ func TestParseTrackLeavesFourDigitTitlesAlone(t *testing.T) {
 		t.Errorf("track = %d, want 0 — a four-digit stem is not a track number", got.Episode)
 	}
 }
+
+// A scene release group is a trailing marker on the folder and a leading one on
+// the file. stripNoise only knew about trailing ones, so the group survived
+// into the title — found on a real library as "veto beavis and butthead do
+// america".
+func TestLeadingReleaseGroupIsStrippedWhenTheFolderAgrees(t *testing.T) {
+	path := filepath.FromSlash(
+		"/lib/Beavis.And.Butthead.Do.America.1996.1080p.BluRay.x264-VETO/" +
+			"veto-beavis.and.butthead.do.america.1996.1080p.bluray.x264.mkv")
+	got := Parse(filepath.FromSlash("/lib"), path, "movie")
+	// Lower case because the filename is: this parser does not title-case, and
+	// the group is the only thing being removed here. A provider match supplies
+	// the real casing later.
+	if got.Title != "beavis and butthead do america" {
+		t.Errorf("Title = %q, want the group gone", got.Title)
+	}
+	if got.Year != 1996 {
+		t.Errorf("Year = %v, want 1996", got.Year)
+	}
+}
+
+// The reason the folder has to agree. Nothing in the filename alone separates a
+// group prefix from a hyphenated title, and getting this wrong renames the film
+// to "Man".
+func TestHyphenatedTitleIsNotMistakenForAReleaseGroup(t *testing.T) {
+	path := filepath.FromSlash("/lib/Spider-Man (2002)/Spider-Man.2002.1080p.BluRay.x264.mkv")
+	got := Parse(filepath.FromSlash("/lib"), path, "movie")
+	if got.Title != "Spider Man" {
+		t.Errorf("Title = %q, want %q", got.Title, "Spider Man")
+	}
+}
+
+// A leading word that looks like a group but is not confirmed by the folder is
+// left alone.
+func TestLeadingWordSurvivesWhenTheFolderDoesNotAgree(t *testing.T) {
+	path := filepath.FromSlash("/lib/Some Film (2010)/nonsense-some.film.2010.1080p.mkv")
+	got := Parse(filepath.FromSlash("/lib"), path, "movie")
+	if got.Title != "nonsense some film" {
+		t.Errorf("Title = %q, want the name untouched", got.Title)
+	}
+}
