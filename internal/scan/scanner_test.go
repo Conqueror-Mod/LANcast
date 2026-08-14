@@ -1323,3 +1323,169 @@ func TestEmptiedLibraryOnAPresentRootStillReconciles(t *testing.T) {
 		t.Errorf("ItemsMissing = %d, want 2", p.ItemsMissing)
 	}
 }
+
+// ---- more than one location (ADR 0034) --------------------------------------
+
+/*
+ * Partial availability is the normal case, not a failure.
+ *
+ * The property these exist for: reconciliation is scoped to the location it
+ * walked. Comparing a partial walk against the *library* would find the absent
+ * location's files unseen and mark every one of them missing — which is the bug
+ * fixed in #228, arriving on a perfectly healthy server every time an external
+ * drive went to sleep.
+ */
+
+// twoRoots gives lib a second location with a file in it, and returns both dirs.
+func twoRoots(t *testing.T, sc *Scanner, st *store.Store, lib store.Library, first string) (string, string) {
+	t.Helper()
+	second := t.TempDir()
+	if _, err := st.AddRoot(context.Background(), lib.ID, second); err != nil {
+		t.Fatalf("AddRoot: %v", err)
+	}
+	return first, second
+}
+
+func TestScanWalksEveryLocation(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	_, second := twoRoots(t, sc, st, lib, root)
+
+	writeFile(t, root, "first.mkv", 10)
+	writeFile(t, second, "second.mkv", 10)
+
+	p := scanAndWait(t, sc, lib)
+	if p.RootsScanned != 2 {
+		t.Errorf("RootsScanned = %d, want 2", p.RootsScanned)
+	}
+	_, total, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if total != 2 {
+		t.Errorf("total = %d, want 2 — both locations must be walked", total)
+	}
+}
+
+// The one that matters. An unavailable location must cost nothing on the
+// location that is present.
+func TestSleepingLocationDoesNotMarkTheOtherMissing(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	_, second := twoRoots(t, sc, st, lib, root)
+
+	writeFile(t, root, "stays.mkv", 10)
+	writeFile(t, second, "away.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	// The external drive goes to sleep.
+	if err := os.RemoveAll(second); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWait(t, sc, lib)
+	if p.State != StateIdle {
+		t.Errorf("State = %v, want idle — one location of two is not a failed scan", p.State)
+	}
+	if p.RootsScanned != 1 {
+		t.Errorf("RootsScanned = %d, want 1", p.RootsScanned)
+	}
+	if len(p.RootsSkipped) != 1 {
+		t.Fatalf("RootsSkipped = %v, want one entry", p.RootsSkipped)
+	}
+	if p.RootsSkipped[0].Path != second {
+		t.Errorf("skipped path = %q, want %q", p.RootsSkipped[0].Path, second)
+	}
+
+	items, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Title == "stays" && it.Missing {
+			t.Error("a file on the present location was marked missing by the absent one")
+		}
+	}
+	if p.ItemsMissing != 0 {
+		t.Errorf("ItemsMissing = %d, want 0 — the sleeping drive's rows are untouched", p.ItemsMissing)
+	}
+}
+
+// A file genuinely deleted from one location still goes missing, and only it.
+func TestDeletionInOneLocationIsScopedToThatLocation(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	_, second := twoRoots(t, sc, st, lib, root)
+
+	writeFile(t, root, "stays.mkv", 10)
+	gone := writeFile(t, second, "gone.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWait(t, sc, lib)
+	if p.ItemsMissing != 1 {
+		t.Errorf("ItemsMissing = %d, want 1", p.ItemsMissing)
+	}
+	items, _, _ := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID})
+	for _, it := range items {
+		if it.Title == "stays" && it.Missing {
+			t.Error("the surviving file was marked missing")
+		}
+	}
+}
+
+// Every location gone is the single-root behaviour generalised: a scan with
+// nothing true to say says nothing.
+func TestScanFailsOnlyWhenNoLocationIsAvailable(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	_, second := twoRoots(t, sc, st, lib, root)
+	writeFile(t, root, "a.mkv", 10)
+	writeFile(t, second, "b.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(second); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWaitFailing(t, sc, lib)
+	if p.State != StateFailed {
+		t.Errorf("State = %v, want failed", p.State)
+	}
+	if p.ItemsMissing != 0 {
+		t.Errorf("ItemsMissing = %d, want 0", p.ItemsMissing)
+	}
+}
+
+// Items are filed under the location they were found in, which is what every
+// containment check downstream resolves against.
+func TestItemsRecordTheLocationTheyWereFoundIn(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	_, second := twoRoots(t, sc, st, lib, root)
+	writeFile(t, root, "first.mkv", 10)
+	path := writeFile(t, second, "second.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	roots, err := st.ListRoots(ctx, lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inSecond, err := st.KnownFilesInRoot(ctx, roots[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := inSecond[path]; !ok {
+		t.Errorf("the second location's file is not filed under it: %v", inSecond)
+	}
+	if len(inSecond) != 1 {
+		t.Errorf("second location holds %d files, want 1", len(inSecond))
+	}
+}
