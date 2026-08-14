@@ -175,6 +175,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/libraries", s.adminOnly(s.createLibrary))
 	mux.HandleFunc("PATCH /api/libraries/{id}", s.adminOnly(s.patchLibrary))
 	mux.HandleFunc("DELETE /api/libraries/{id}", s.adminOnly(s.deleteLibrary))
+	// A library's locations (ADR 0034). Adding one is filesystem access at a
+	// caller-chosen path, so it is gated exactly as library creation is;
+	// listing is not, because the same paths are already in the library listing.
+	mux.HandleFunc("GET /api/libraries/{id}/roots", s.listRoots)
+	mux.HandleFunc("POST /api/libraries/{id}/roots", s.adminOnly(s.addRoot))
+	mux.HandleFunc("PATCH /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.patchRoot))
+	mux.HandleFunc("DELETE /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.removeRoot))
+
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)

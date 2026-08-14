@@ -67,13 +67,17 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // Library is a configured root directory.
 type Library struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Path      string `json:"path"`
-	CreatedAt int64  `json:"created_at"`
-	ScannedAt *int64 `json:"scanned_at"`
-	ItemCount int    `json:"item_count"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+	// Path is the library's first location, kept so clients that predate
+	// multi-root libraries keep working (ADR 0034). Superseded by Roots, which
+	// is what anything new should read.
+	Path      string        `json:"path"`
+	Roots     []LibraryRoot `json:"roots,omitempty"`
+	CreatedAt int64         `json:"created_at"`
+	ScannedAt *int64        `json:"scanned_at"`
+	ItemCount int           `json:"item_count"`
 }
 
 /*
@@ -177,7 +181,21 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 		}
 		out = append(out, l)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list libraries: %w", err)
+	}
+
+	// One query for every library's locations, attached in memory. A per-library
+	// lookup here would be a round trip each to render a page that is mostly
+	// names.
+	byLib, err := s.RootsByLibrary(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Roots = byLib[out[i].ID]
+	}
+	return out, nil
 }
 
 func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
@@ -193,6 +211,11 @@ func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get library: %w", err)
 	}
+	roots, err := s.ListRoots(ctx, l.ID)
+	if err != nil {
+		return nil, err
+	}
+	l.Roots = roots
 	return &l, nil
 }
 
