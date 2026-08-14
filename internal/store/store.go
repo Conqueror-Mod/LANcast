@@ -246,10 +246,18 @@ func (s *Store) DeleteLibrary(ctx context.Context, id int64) error {
 // for server filesystem paths, and withholding them keeps the layout private
 // when the server is reachable beyond the LAN.
 type Item struct {
-	ID        int64  `json:"id"`
-	LibraryID int64  `json:"library_id"`
-	Kind      string `json:"kind"`
-	Path      string `json:"-"`
+	ID        int64 `json:"id"`
+	LibraryID int64 `json:"library_id"`
+	// RootID is the location this item was scanned under (ADR 0034).
+	//
+	// Null on containers — a show, a season, a gallery — and that is correct
+	// rather than missing: a container groups items that may sit in different
+	// locations, so it cannot belong to one. Anything deriving structure from a
+	// path must read this and not the library, or it relativises a second
+	// location's file against the first location's root.
+	RootID *int64 `json:"-"`
+	Kind   string `json:"kind"`
+	Path   string `json:"-"`
 
 	Title     string `json:"title"`
 	SortTitle string `json:"-"`
@@ -608,7 +616,7 @@ type ItemFilter struct {
 	Offset int
 }
 
-const itemCols = `id, library_id, kind, path, title, sort_title, year, series, season, episode,
+const itemCols = `id, library_id, root_id, kind, path, title, sort_title, year, series, season, episode,
 	container, size_bytes, mtime, duration_ms, added_at, missing,
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
@@ -639,7 +647,7 @@ func qualifyCols(cols, alias string) string {
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var missing int
-	err := sc.Scan(&it.ID, &it.LibraryID, &it.Kind, &it.Path, &it.Title, &it.SortTitle,
+	err := sc.Scan(&it.ID, &it.LibraryID, &it.RootID, &it.Kind, &it.Path, &it.Title, &it.SortTitle,
 		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Container, &it.SizeBytes,
 		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,

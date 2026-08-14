@@ -413,3 +413,65 @@ func TestRescanRemovesTrulyEmptiedContainers(t *testing.T) {
 		t.Errorf("albums = %v, want only [Second Album] — the emptied one is an empty shelf", got)
 	}
 }
+
+/*
+ * A track loose at a second location's own root has no album folder.
+ *
+ * Deliberately the *loose* case rather than a nested one. Nested, the bug is
+ * invisible when both locations share a volume: filepath.Rel succeeds, produces
+ * "../../second/Portishead/Dummy", and the last two components are the right
+ * artist and album by luck. Loose at the root it cannot hide — the correct root
+ * gives Rel "." and no album, while the wrong one gives "../../second" and an
+ * album named after the other drive's own folder (ADR 0034).
+ */
+func TestTrackLooseInASecondLocationGetsNoFolderAlbum(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, _ := musicFixture(t, st)
+
+	second := t.TempDir()
+	if _, err := st.AddRoot(context.Background(), lib.ID, second); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, second, "03 Strangers.flac", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{}})
+	scanAndWait(t, sc, lib)
+
+	// Asserted on the album *container*, which is where the damage lands. The
+	// track's own Series stays nil either way, so a track-level assertion would
+	// pass against the bug — the wrong root produces a real album row named
+	// after the other location's folder, with this track parented to it.
+	albums, _, err := st.ListItems(context.Background(),
+		store.ItemFilter{LibraryID: lib.ID, Kind: "album"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(albums) != 0 {
+		var names []string
+		for _, a := range albums {
+			names = append(names, a.Title)
+		}
+		t.Errorf("albums = %v, want none — a track at a location's root has no album "+
+			"folder, and these names come from relativising against the wrong location", names)
+	}
+}
+
+// And the ordinary nested case still works from a second location.
+func TestUntaggedTrackInASecondLocationKeepsItsFolderAlbum(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, _ := musicFixture(t, st)
+
+	second := t.TempDir()
+	if _, err := st.AddRoot(context.Background(), lib.ID, second); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, second, "Portishead/Dummy/03 Strangers.flac", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{}})
+	scanAndWait(t, sc, lib)
+
+	it := trackByPath(t, st, lib.ID, "03 Strangers.flac")
+	if it.Series == nil || *it.Series != "Dummy" {
+		t.Errorf("album = %v, want Dummy from the folder in the second location", it.Series)
+	}
+}

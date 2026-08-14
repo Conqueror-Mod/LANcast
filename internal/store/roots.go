@@ -361,3 +361,21 @@ func (s *Store) KnownFilesInRoot(ctx context.Context, rootID int64) (map[string]
 	}
 	return out, rows.Err()
 }
+
+// RootPaths maps a library's location ids to their paths.
+//
+// For the reconciliation passes, which run once over a whole library and must
+// still derive each item's structure from the location that item is actually
+// in. Read as a map rather than per item: these passes already hold every row
+// in memory, and a lookup per episode would be a query per episode.
+func (s *Store) RootPaths(ctx context.Context, libraryID int64) (map[int64]string, error) {
+	roots, err := s.ListRoots(ctx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]string, len(roots))
+	for _, r := range roots {
+		out[r.ID] = r.Path
+	}
+	return out, nil
+}

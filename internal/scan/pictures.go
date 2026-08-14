@@ -37,13 +37,24 @@ func (s *Scanner) reconcilePictures(ctx context.Context, lib store.Library) erro
 		return err
 	}
 
-	root, err := filepath.Abs(lib.Path)
+	// Compared against each photo's own location (ADR 0034). Against the
+	// library's first one, a photo sitting loose in a *second* location never
+	// matches, so instead of staying top-level it is grouped into a gallery
+	// named after that drive's folder.
+	roots, err := s.st.RootPaths(ctx, lib.ID)
 	if err != nil {
 		return err
 	}
 
 	galleries := map[string]int64{}
 	for _, ph := range photos {
+		root := rootOf(roots, ph.RootID)
+		if root == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(root); err == nil {
+			root = abs
+		}
 		dir := filepath.Dir(ph.Path)
 		if abs, err := filepath.Abs(dir); err == nil && abs == root {
 			// Loose at the root: already top-level, nothing to group it under.

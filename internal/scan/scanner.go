@@ -560,11 +560,23 @@ func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) err
 	if err != nil {
 		return err
 	}
+	roots, err := s.st.RootPaths(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
 	shows := map[string]int64{}   // show dir  -> show id
 	seasons := map[string]int64{} // season key -> season id
 
 	for _, ep := range episodes {
-		showDir := media.ShowDir(lib.Path, ep.Path)
+		root := rootOf(roots, ep.RootID)
+		if root == "" {
+			continue
+		}
+		// Against the episode's own location. With the library's first one, an
+		// episode sitting loose in a *second* location never meets the root the
+		// walk is looking for, so instead of staying top-level it invents a show
+		// named after that drive's folder.
+		showDir := media.ShowDir(root, ep.Path)
 		if showDir == "" {
 			// An episode sitting directly in the library root is not a show
 			// layout; leave it top-level rather than invent a show for it.
@@ -817,4 +829,28 @@ func trimDot(ext string) string {
 		return ext[1:]
 	}
 	return ext
+}
+
+/*
+ * rootOf returns the location an item was scanned under, or "" when it has
+ * none.
+ *
+ * The reconciliation passes below run once per library and previously derived
+ * every item's structure from `lib.Path` — which is one location out of
+ * possibly several, so a file in the second one was relativised against the
+ * first one's root. That does not error. `ShowDir` walks up looking for a root
+ * it never meets and returns a directory anyway; `groupFromPath` gets a
+ * cross-volume `filepath.Rel` failure and quietly yields no artist and no
+ * album. Both produce a plausible wrong answer, which is the failure shape this
+ * whole change keeps running into (ADR 0034).
+ *
+ * Falling back to the library's first location would restore exactly that bug
+ * for the rows most likely to hit it, so a rootless row is skipped by the
+ * callers instead.
+ */
+func rootOf(roots map[int64]string, rootID *int64) string {
+	if rootID == nil {
+		return ""
+	}
+	return roots[*rootID]
 }
