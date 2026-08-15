@@ -309,10 +309,36 @@ group is not priority.
   `rate_per_sec` and `update_check` — both accepted and validated by the API for
   as long as it has existed, and reachable until now only by hand-editing
   `config.json`.
-- **Downloads page** and a **download handler** that manages downloaded content
-  from any library, any library type, or any add-on.
+- ~~**Downloads page** and a **download handler**~~ — **built.**
+  `GET /api/items/{id}/download` serves the original as an attachment, named
+  from the item's metadata rather than its path (`Arrival (2016).mkv`, and
+  `Show - S02E07 - Title.mkv` for an episode, because `Pilot.mkv` collides with
+  every other pilot ever made). **Never transcoded**: the transcoder exists so a
+  device that cannot play a file can still watch it, and a download that quietly
+  returned a re-encoded copy would be a lie about what you have. Range requests
+  are honoured, so an interrupted nine-gigabyte transfer resumes. The page
+  itself is deliberately **a receipt list, not a transfer manager** — once a
+  download starts the browser owns it, and a progress bar over an unobservable
+  transfer is a guess that reads as fact. Per device, because the phone that
+  downloaded something is the phone that has the file. What is still open: an
+  add-on's content, which has no route to serve until add-ons do.
 - **Profile page** (details under Social and profiles below).
-- **Bigscreen (10-foot) mode** — with a settings option to enable it at startup.
+- ~~**Bigscreen (10-foot) mode** — with a settings option to enable it at
+  startup.~~ — **built**, as one attribute on the document root and a `zoom` on
+  `body`. Not a second client: a separate television UI is a second set of
+  screens to keep in step, and every product that has built one has spent the
+  years afterwards explaining why a feature exists in one and not the other. It
+  is a zoom rather than a set of larger tokens because every size in this client
+  is in px, so a token-by-token enlargement would mean auditing every stylesheet
+  and would still miss the ones written after the audit. Applied **before the
+  first paint** by four lines in `index.html`, since React cannot read
+  localStorage until it has mounted and a television that flashes the desk
+  layout on every load reads as an app breaking and correcting itself. The
+  setting is per device — "I am ten feet away" is a fact about the room, not
+  about the account — and `Ctrl+Shift+B` toggles it from anywhere, because the
+  way people find it is by turning it on and wanting out. It works at all only
+  because the keyboard model came first (ADR 0004): a pointer-only client would
+  have needed a rewrite, and this one needed a stylesheet.
 
 ### Libraries and media types
 
@@ -370,9 +396,20 @@ group is not priority.
 
 ### Social and profiles
 
-- **Profile page**: watch/play/view history, Find Friends, Trending (trends
-  computed per library), ratings/reviews, a viewer-stats list, profile edit,
-  and profile information.
+- **Profile page** — **the history half is built**, and the rest is deliberately
+  not. `GET /api/profile` answers identity, history and totals in one request,
+  derived from `playback_state`, which has held those answers since v0.4 and had
+  never been asked. The stated cost of no new table: one row per item per user
+  means the *last* time each thing was played, not every time — a history, not a
+  log of sittings, and the page says so. `watched_ms` counts time **spent**, not
+  runtime owned, because summing the duration of everything opened reports
+  eleven hours for eleven films abandoned in their first minute. Missing items
+  stay listed: "what happened to the film I watched last week" is a question
+  about history, and a lost drive should not lose the answer. **Find Friends,
+  Trending, ratings/reviews and viewer stats are not stubbed** — two of them need
+  a decision about who may see whose viewing that nobody has made, and a page of
+  scaffolding promising four features is worse than three true numbers, because
+  the scaffolding is what people plan around.
 - **Watch Together** — synchronised playback across viewers.
 - **Better profile manager.**
 
@@ -430,7 +467,21 @@ group is not priority.
   root in one transaction, so a moved library keeps its matches, artwork, watch
   positions and playlist membership rather than being deleted and re-added.
   Kind remains immutable, for the reasons above.
-- **Crash reporting.**
+- ~~**Crash reporting.**~~ — **built**, local only. A panic used to unwind
+  through `net/http`, which closes the connection without a response: the client
+  saw a network error and the operator saw nothing unless they happened to be
+  reading the log at that moment — the recurring failure shape in this project,
+  a fault with nowhere to appear. Now the request answers `500` with the
+  ordinary error envelope and the panic becomes a numbered report, listed in
+  Settings → Logs. Reports record the **route pattern** rather than the URL,
+  because `GET /api/items/{id}` is what somebody fixes. They are JSON files in
+  the data directory rather than database rows, since the crash most worth
+  having is the one where the database was the thing going wrong; the newest 50
+  are kept, because a crash loop writes the same stack a thousand times and the
+  first one is the informative one. `http.ErrAbortHandler` is excluded — a
+  deliberate connection drop is not a crash. **Nothing is sent anywhere**, and
+  that is the point: "we do not phone home, except for crash reports" is how
+  every product that phones home began.
 - ~~**Internal log viewer**~~ — **built.** `GET /api/logs` returns the tail of
   `lancastd.log` and Settings shows it, collapsed by default and never polled.
   The log had been written beside the database since v0.4.2 and could only be
@@ -458,8 +509,22 @@ group is not priority.
 
 ### Input and control
 
-- **Keyboard-control shortcut map and customizer** — building on the existing
-  spatial focus model (ADR 0004).
+- ~~**Keyboard-control shortcut map and customizer**~~ — **built** on the
+  existing spatial focus model (ADR 0004). The map was already in one place so
+  the overlay and the settings pane could not disagree; the rows became
+  *bindings* rather than being replaced by them, so everything that rendered the
+  old shape renders the new one. Rebinding is by **capture** — press the key you
+  want — because a text field can be given a key that does not exist, and
+  because capture is also how the map ends up correct for a remote, which emits
+  whatever it emits. Three rules make it safe to hand somebody this control:
+  only **overrides** are stored, so a binding added in a later version still
+  arrives instead of being invisible to everyone who ever opened the pane;
+  Escape and the arrows are **fixed**, since a map that can strand you on a page
+  you cannot leave is a trap rather than a customizer; and a key already in use
+  is refused **by name** rather than silently taken. The motivating case is
+  ordinary: `[` and `]` for subtitle tracks are one key on a US layout and a dead
+  key on several European ones, and a shortcut you cannot physically press is
+  not a shortcut.
 - **Pop-out player** in our own window rather than the browser's
   ([ADR 0029](adr/0029-picture-in-picture-is-our-window.md), **accepted**, not
   yet built). Picture-in-picture hands the element to Chrome, so the window
