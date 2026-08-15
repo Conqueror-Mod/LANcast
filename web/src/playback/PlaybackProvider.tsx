@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
@@ -20,6 +21,8 @@ import {
   prevPos,
 } from "./queueOrder";
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
+import { popoutSupported, openPopout, moveElement } from "./popout";
+import { PopoutPlayer } from "./PopoutPlayer";
 
 // Playback lives above the router.
 //
@@ -160,6 +163,18 @@ interface PlaybackState {
   containerRef: React.RefObject<HTMLDivElement>;
   /** Claimed by the player screen while it is mounted. */
   claimFullSurface: (claimed: boolean) => void;
+
+  /*
+   * Pop-out: our own always-on-top window, not the browser's (ADR 0029).
+   *
+   * `popoutAvailable` is a feature test, not a preference — Document PiP is
+   * Chromium-only, and a button that cannot act is not shown. `popout` is
+   * whether the window is open right now, which the player screen reads so its
+   * own surface can say where the picture went.
+   */
+  popoutAvailable: boolean;
+  popout: boolean;
+  togglePopout: () => void;
 }
 
 const Ctx = createContext<PlaybackState | null>(null);
@@ -1015,6 +1030,80 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     s.setProperty("--cue-bottom", `${prefs.subPosition}%`);
   }, [prefs.subColor, prefs.subSize, prefs.subPosition]);
 
+  /*
+   * The pop-out window.
+   *
+   * `popoutWin` is state so the portal re-renders when the window opens or
+   * closes; the element move itself is imperative and happens in the effect
+   * below, outside React's reconciliation. That split is the whole design: React
+   * owns the controls in the other document, and the media element is moved by
+   * hand because a portal would unmount it and unmounting stops the sound.
+   */
+  const [popoutWin, setPopoutWin] = useState<Window | null>(null);
+  const [popoutRoot, setPopoutRoot] = useState<HTMLElement | null>(null);
+  const popoutAvailable = popoutSupported();
+
+  const closePopout = useCallback(() => {
+    setPopoutWin((w) => {
+      w?.close();
+      return null;
+    });
+    setPopoutRoot(null);
+  }, []);
+
+  const togglePopout = useCallback(() => {
+    if (popoutWin) {
+      closePopout();
+      return;
+    }
+    const v = videoRef.current;
+    const aspect =
+      v && v.videoWidth > 0 && v.videoHeight > 0
+        ? v.videoWidth / v.videoHeight
+        : undefined;
+    void openPopout(aspect).then((opened) => {
+      if (!opened) return;
+      // The browser's own close button, and the "return to tab" affordance,
+      // both fire pagehide on the window rather than telling us directly.
+      opened.win.addEventListener("pagehide", () => {
+        setPopoutWin(null);
+        setPopoutRoot(null);
+      });
+      setPopoutWin(opened.win);
+      setPopoutRoot(opened.root);
+    });
+  }, [popoutWin, closePopout]);
+
+  /*
+   * Move the element out, and bring it home.
+   *
+   * The stage is found by attribute rather than by ref, because the node lives
+   * in a portal rendered into the other document and a ref would arrive on a
+   * different commit than this effect. The element is returned to its slot on
+   * cleanup — including when the window is closed by the browser's own button,
+   * which is why the effect depends on the window rather than on a flag.
+   */
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!popoutRoot || !el) return;
+
+    const slot = el.parentElement;
+    const stage = popoutRoot.querySelector<HTMLElement>("[data-popout-stage]");
+    if (!stage || !slot) return;
+
+    moveElement(el, stage);
+    return () => {
+      // Home is the slot it came from. If the provider itself has gone, there
+      // is nothing to return to and nothing playing to protect.
+      if (slot.isConnected) moveElement(el, slot);
+    };
+  }, [popoutRoot]);
+
+  // A window left open after playback stops is a floating black rectangle.
+  useEffect(() => {
+    if (popoutWin && surface === "idle") closePopout();
+  }, [popoutWin, surface, closePopout]);
+
   const claimFullSurface = useCallback((claimed: boolean) => {
     setFullClaimed(claimed);
   }, []);
@@ -1069,11 +1158,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     videoRef,
     containerRef,
     claimFullSurface,
+    popoutAvailable,
+    popout: popoutWin !== null,
+    togglePopout,
   };
 
   return (
     <Ctx.Provider value={value}>
       {children}
+      {/* Our controls, in the other document. A portal keeps React context —
+          the playback state, the router, the query client — so these are the
+          same components behaving the same way, in a different window. */}
+      {popoutRoot &&
+        createPortal(<PopoutPlayer onClose={closePopout} />, popoutRoot)}
       {/* One media element for the life of the app.
           It is moved between surfaces with CSS rather than re-parented: React
           would unmount and remount it on a move, and an unmounted element stops

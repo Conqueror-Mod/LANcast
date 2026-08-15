@@ -59,7 +59,7 @@ export function LibraryRow({ library }: { library: Library }) {
   // the scan looked successful. The wording names both halves: what was
   // ignored, and the setting that ignored it.
   const skippedKind = status?.skipped_kind ?? 0;
-  const episodesMissed = status?.episodes_in_movie_library ?? 0;
+  const warning = status?.shape_warning;
   const excluded = library.kind === "music" ? "video" : "audio";
 
   // A library always has at least one location; falling back to `path` covers
@@ -98,19 +98,24 @@ export function LibraryRow({ library }: { library: Library }) {
             )}
           </div>
           {/*
-            The other half of the wrong-kind warning, and the one that is easy
-            to miss: a shows library created as a movie library imports
-            everything and looks fine — every episode becomes a film, loose in
-            the grid with no series and no seasons. Nothing said why, and the
-            kind cannot be changed afterwards.
+            The scan's verdict on its own output.
+
+            Rendered as the server wrote it. This used to be a sentence the
+            client assembled from `episodes_in_movie_library`, which covered one
+            of the two ways a library ends up the wrong kind and could not see
+            the other at all: a shows library that produced no shows is not
+            visible in any count the client receives, because nothing was
+            skipped and nothing failed.
+
+            Stated in the row rather than behind the issues toggle, for the same
+            reason the skipped-location note is: the scan *succeeded*, so nobody
+            has a reason to go looking — and the mistake is permanent, since
+            kind cannot be changed after a library is created.
           */}
-          {!running && episodesMissed > 0 && library.kind === "movie" && (
-            <div className="set-row__note">
-              {episodesMissed.toLocaleString()} file
-              {episodesMissed === 1 ? "" : "s"} here look like TV episodes, but
-              this library's type is Movies — they will appear as individual
-              films with no series or seasons. If this folder holds a TV
-              collection, remove this library and add it again as Shows.
+          {!running && warning && (
+            <div className="set-row__note set-row__note--warn">
+              <strong>{warning.message}</strong>
+              {warning.remedy && <span>{warning.remedy}</span>}
             </div>
           )}
           {/*

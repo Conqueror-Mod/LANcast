@@ -572,10 +572,26 @@ export function Player() {
                   <PlaybackSettings onClose={() => setSettingsOpen(false)} />
                 )}
               </div>
-              {!pb.isAudio && pipAvailable && (
+              {/*
+                  Pop out. Document picture-in-picture puts *our* player in an
+                  always-on-top window (ADR 0029); browser picture-in-picture is
+                  the fallback where that API does not exist, and hands the
+                  element to the browser along with every control except play
+                  and seek. Neither available means no button, which is the rule
+                  this bar already follows everywhere else.
+
+                  Audio can pop out too, and only under the document API: video
+                  PiP is video-only, while a floating window with cover art,
+                  transport and queue is a natural fit for a record.
+              */}
+              {(pb.popoutAvailable || (!pb.isAudio && pipAvailable)) && (
                 <button
-                  className="player__icon"
+                  className={"player__icon" + (pb.popout ? " is-on" : "")}
                   onClick={async () => {
+                    if (pb.popoutAvailable) {
+                      pb.togglePopout();
+                      return;
+                    }
                     const v = pb.videoRef.current;
                     if (!v) return;
                     try {
@@ -590,8 +606,9 @@ export function Player() {
                       // where it is.
                     }
                   }}
-                  aria-label="Picture in picture"
-                  title="Picture in picture"
+                  aria-label={pb.popoutAvailable ? "Pop out player" : "Picture in picture"}
+                  title={pb.popoutAvailable ? "Pop out player" : "Picture in picture"}
+                  aria-pressed={pb.popoutAvailable ? pb.popout : undefined}
                 >
                   <PipGlyph />
                 </button>

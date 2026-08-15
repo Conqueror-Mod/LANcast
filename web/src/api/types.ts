@@ -271,6 +271,21 @@ export interface ScanIssue {
   reason: string;
 }
 
+/**
+ * A finished scan's verdict on its own output (GET /api/libraries/{id}/scan).
+ *
+ * `code` is stable and machine-readable so a client can choose its own
+ * treatment for a case it knows; `message` is the fallback for one it does not,
+ * and the set is open. `remedy` is separate because it is the hard part to
+ * hear: a library's kind cannot be changed, so the only fix is to remove it and
+ * add it again.
+ */
+export interface ShapeWarning {
+  code: string;
+  message: string;
+  remedy?: string;
+}
+
 export interface ScanStatus {
   library_id: number;
   state: string; // idle | running | complete | failed
@@ -284,6 +299,18 @@ export interface ScanStatus {
   skipped_kind: number;
   /** Files that parsed as episodes in a library that says it holds films. */
   episodes_in_movie_library?: number;
+  /**
+   * The verdict those counts feed: present when a finished scan produced
+   * something that does not look like the kind it was scanned as.
+   *
+   * The sentence is written server-side and rendered as given. The client used
+   * to assemble its own from `episodes_in_movie_library`, which worked for the
+   * one case it knew about and could say nothing about the other — a shows
+   * library that produced no shows is not visible in any count the client
+   * receives. Prose the client reconstructs is prose that drifts from the rule
+   * that decided it.
+   */
+  shape_warning?: ShapeWarning;
   /** How many of the library's locations this scan actually read (ADR 0034). */
   roots_scanned?: number;
   /**
@@ -504,4 +531,23 @@ export interface CrashReport {
   value: string;
   stack: string;
   version: string;
+}
+
+// GET /api/libraries/{id}/trending. `viewers` counts *accounts*, not plays:
+// playback_state holds one row per item per user, so this is how many people
+// played something recently rather than how often it was played.
+export interface TrendingItem {
+  item: Item;
+  viewers: number;
+  finishers: number;
+  last_at: number;
+}
+
+export interface Trending {
+  items: TrendingItem[];
+  // How many accounts contributed anything in the window. With one, this is
+  // honestly "recently played" and not a trend — the client is given the number
+  // so it can say the true thing rather than calling it trending regardless.
+  contributors: number;
+  window_days: number;
 }

@@ -34,6 +34,7 @@ import type {
   SubtitleSearchResult,
   SubtitleTrack,
   Trailer,
+  Trending,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -1251,5 +1252,27 @@ export function useClearCrashes() {
   return useMutation({
     mutationFn: () => apiSend("/api/crashes", "DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crashes"] }),
+  });
+}
+
+// ------------------------------------------------------------ trending
+
+/*
+ * A library's recent activity.
+ *
+ * `staleTime` is generous: this changes when somebody finishes something, which
+ * is minutes-to-hours scale, and a shelf that refetches on every navigation
+ * would be a query per page view for a list that had not moved.
+ */
+export function useTrending(libraryID: number | undefined, limit = 12) {
+  return useQuery({
+    queryKey: ["trending", libraryID, limit],
+    queryFn: ({ signal }) =>
+      apiGet<Trending>(
+        `/api/libraries/${libraryID}/trending?limit=${limit}`,
+        signal,
+      ),
+    enabled: !!libraryID,
+    staleTime: 5 * 60_000,
   });
 }

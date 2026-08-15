@@ -11,6 +11,7 @@ import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Profile } from "@/screens/Profile";
 import { Downloads } from "@/screens/Downloads";
+import { Addons } from "@/screens/Addons";
 import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -51,6 +52,7 @@ export function App() {
           <Route path="/review" element={<Review />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/downloads" element={<Downloads />} />
+          <Route path="/addons" element={<Addons />} />
           <Route path="/settings" element={<Settings />} />
           <Route
             path="*"

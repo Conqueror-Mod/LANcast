@@ -1,0 +1,92 @@
+/* The add-ons page. Rows and prose, not tiles: there is nothing to look at
+   here yet, and a grid of placeholder cards would be a shop with no stock. */
+
+.addons__list {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+
+.addons__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  /* Rows in a scrolling column must not collapse — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.addons__what {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.addons__name {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.addons__version {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.addons__state {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Enabled is a state, not a place — so it does not get gold. It gets the
+   ordinary primary text colour, which is enough to tell it from Disabled. */
+.addons__state.is-on {
+  color: var(--text-secondary);
+}
+
+.addons__empty {
+  max-width: 58ch;
+  padding: 10px 0 26px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.addons__lead {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+}
+
+/* The paragraph that explains the delay rather than apologising for it. Set
+   apart because it is reasoning, not instruction. */
+.addons__aside {
+  margin-top: 16px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-faint);
+}
+
+.addons__manage {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  padding: 7px 13px;
+}
+
+.addons__manage:hover,
+.addons__manage:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}

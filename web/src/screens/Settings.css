@@ -92,6 +92,29 @@
   white-space: normal;
 }
 
+/*
+ * The wrong-kind verdict. Louder than an ordinary note because it reports a
+ * permanent mistake — kind cannot be changed — but not gold: gold means where
+ * you are and nothing else, and a warning that borrowed it would kill the focus
+ * signal everywhere on the page. A warm rule at the edge carries the weight.
+ */
+.set-row__note--warn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 2px solid #b8794a;
+  padding: 4px 0 4px 10px;
+}
+
+.set-row__note--warn strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.set-row__note--warn span {
+  color: var(--text-muted);
+}
+
 .set-row__actions {
   display: flex;
   align-items: center;

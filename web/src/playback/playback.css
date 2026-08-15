@@ -177,3 +177,115 @@
   bottom: var(--cue-bottom, 8%);
   position: relative;
 }
+
+/*
+ * The pop-out window (ADR 0029).
+ *
+ * These rules are copied into the other document by popout.ts, so they must not
+ * depend on anything outside this file's own tokens — that document has no
+ * .app-shell around it and no page layout to inherit from.
+ */
+.popout,
+.popout__ui {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* The stage holds the media element and nothing else, ever. React renders it
+   empty; the element is moved in imperatively. See the slot rule in ADR 0029 —
+   a conditional sibling in here would throw in the commit phase. */
+.popout__stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000;
+  display: flex;
+}
+
+.popout__stage > video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* The bar does not shrink: in a flex column with a growing stage above it, a
+   shrinkable bar collapses to nothing and the controls vanish while every rule
+   still appears to apply. */
+.popout__bar {
+  flex: 0 0 auto;
+  padding: 6px 10px 8px;
+  background: rgba(7, 11, 24, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.popout__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.popout__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: #c3cbe2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popout__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.popout__icon {
+  background: none;
+  border: none;
+  color: #c3cbe2;
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.popout__icon:hover {
+  color: #f2f5fb;
+}
+
+/* Gold means where you are, and in this window that is the focus ring and the
+   engaged state of a toggle — never decoration. Same rule as everywhere else. */
+.popout__icon:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(198, 163, 90, 0.9);
+}
+
+.popout__icon.is-on {
+  color: #e3c179;
+}
+
+.popout__icon--play {
+  font-size: 14px;
+}
+
+/* A panel in a window this small takes the whole area above the bar rather than
+   floating over a corner of it. */
+.popout__panel {
+  position: absolute;
+  inset: 0 0 62px 0;
+  overflow: auto;
+  background: rgba(5, 7, 15, 0.97);
+  padding: 8px;
+}
+
+.popout__ui {
+  position: relative;
+}
