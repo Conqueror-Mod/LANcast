@@ -8,15 +8,21 @@ import (
 
 // MediaStream is one track of a probed file.
 type MediaStream struct {
-	Index    int    `json:"index"`
-	Kind     string `json:"kind"`
-	Codec    string `json:"codec"`
-	Profile  string `json:"profile,omitempty"`
-	PixFmt   string `json:"pix_fmt,omitempty"`
-	Language string `json:"language,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Default  bool   `json:"default"`
-	Forced   bool   `json:"forced"`
+	Index   int    `json:"index"`
+	Kind    string `json:"kind"`
+	Codec   string `json:"codec"`
+	Profile string `json:"profile,omitempty"`
+	PixFmt  string `json:"pix_fmt,omitempty"`
+	// Colour, for telling HDR from SDR (ADR 0033). Empty means not probed
+	// since revision 19, which is not the same as SDR — IsHDR answers false
+	// for both, so an unprobed library reads exactly as it did.
+	ColorTransfer  string `json:"color_transfer,omitempty"`
+	ColorPrimaries string `json:"color_primaries,omitempty"`
+	ColorSpace     string `json:"color_space,omitempty"`
+	Language       string `json:"language,omitempty"`
+	Title          string `json:"title,omitempty"`
+	Default        bool   `json:"default"`
+	Forced         bool   `json:"forced"`
 
 	Width    int   `json:"width,omitempty"`
 	Height   int   `json:"height,omitempty"`
@@ -71,8 +77,9 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO media_stream
 			(item_id, idx, kind, codec, profile, pix_fmt, language, title, is_default, forced,
-			 width, height, channels, bit_rate)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			 width, height, channels, bit_rate,
+			 color_transfer, color_primaries, color_space)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}
@@ -83,7 +90,9 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 			nullEmpty(st.Profile), nullEmpty(st.PixFmt), nullEmpty(st.Language), nullEmpty(st.Title),
 			boolInt(st.Default), boolInt(st.Forced),
 			nullZero(st.Width), nullZero(st.Height), nullZero(st.Channels),
-			nullZero64(st.BitRate)); err != nil {
+			nullZero64(st.BitRate),
+			nullEmpty(st.ColorTransfer), nullEmpty(st.ColorPrimaries),
+			nullEmpty(st.ColorSpace)); err != nil {
 			return fmt.Errorf("save probe stream %d: %w", st.Index, err)
 		}
 	}
@@ -207,7 +216,9 @@ func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error
 		SELECT idx, kind, codec, COALESCE(profile,''), COALESCE(pix_fmt,''),
 		       COALESCE(language,''), COALESCE(title,''),
 		       is_default, forced, COALESCE(width,0), COALESCE(height,0),
-		       COALESCE(channels,0), COALESCE(bit_rate,0)
+		       COALESCE(channels,0), COALESCE(bit_rate,0),
+		       COALESCE(color_transfer,''), COALESCE(color_primaries,''),
+		       COALESCE(color_space,'')
 		FROM media_stream WHERE item_id = ? ORDER BY idx`, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("streams: %w", err)
@@ -219,7 +230,8 @@ func (s *Store) Streams(ctx context.Context, itemID int64) ([]MediaStream, error
 		var st MediaStream
 		var def, forced int
 		if err := rows.Scan(&st.Index, &st.Kind, &st.Codec, &st.Profile, &st.PixFmt, &st.Language,
-			&st.Title, &def, &forced, &st.Width, &st.Height, &st.Channels, &st.BitRate); err != nil {
+			&st.Title, &def, &forced, &st.Width, &st.Height, &st.Channels, &st.BitRate,
+			&st.ColorTransfer, &st.ColorPrimaries, &st.ColorSpace); err != nil {
 			return nil, fmt.Errorf("streams: %w", err)
 		}
 		st.Default, st.Forced = def != 0, forced != 0

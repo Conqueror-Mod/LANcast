@@ -213,8 +213,10 @@ func toStoreResult(r *Result) store.ProbeResult {
 	for _, s := range r.Streams {
 		out.Streams = append(out.Streams, store.MediaStream{
 			Index: s.Index, Kind: string(s.Kind), Codec: s.Codec, Profile: s.Profile,
-			PixFmt:   s.PixFmt,
-			Language: s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
+			PixFmt:        s.PixFmt,
+			ColorTransfer: s.ColorTransfer, ColorPrimaries: s.ColorPrimaries,
+			ColorSpace: s.ColorSpace,
+			Language:   s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
 			Width: s.Width, Height: s.Height, Channels: s.Channels, BitRate: s.BitRate,
 		})
 	}
@@ -241,7 +243,9 @@ func ResultWithStreams(it *store.Item, streams []store.MediaStream) *Result {
 		r.Streams = append(r.Streams, Stream{
 			Index: s.Index, Kind: StreamKind(s.Kind), Codec: s.Codec,
 			Profile: s.Profile, PixFmt: s.PixFmt,
-			Language: s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
+			ColorTransfer: s.ColorTransfer, ColorPrimaries: s.ColorPrimaries,
+			ColorSpace: s.ColorSpace,
+			Language:   s.Language, Title: s.Title, Default: s.Default, Forced: s.Forced,
 			Width: s.Width, Height: s.Height, Channels: s.Channels, BitRate: s.BitRate,
 		})
 	}

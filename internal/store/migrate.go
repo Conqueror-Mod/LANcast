@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 18
+const CurrentSchemaVersion = 19
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -57,6 +57,7 @@ var migrations = []migration{
 	{version: 16, sql: schemaRevision16},
 	{version: 17, sql: schemaRevision17},
 	{version: 18, sql: schemaRevision18, rebuildsTable: true},
+	{version: 19, sql: schemaRevision19},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -649,4 +650,28 @@ SELECT id, name, kind, created_at, scanned_at FROM library;
 DROP TABLE library;
 
 ALTER TABLE library_new RENAME TO library;
+`
+
+// Revision 19 — colour metadata on media_stream (ADR 0033).
+//
+// The server cannot currently tell an HDR file from an SDR one. pix_fmt is the
+// only colour-ish thing recorded, and `yuv420p10le` is what HDR10 reports *and*
+// what 10-bit SDR reports — so every HDR file is converted by dropping bits
+// with no tone map, which produces a washed-out picture and an output still
+// carrying the source's PQ tags. Nothing can be fixed until the difference is
+// visible, and these three columns are what make it visible.
+//
+// Three nullable columns rather than one derived `is_hdr` flag. The transfer
+// function is the fact; "is this HDR" is a rule applied to it, and rules change
+// — Dolby Vision profile 5 is not PQ and is out of scope today, and storing a
+// verdict rather than the evidence would mean re-probing an entire library to
+// change the rule. Same shape as revision 12, which recorded pix_fmt rather
+// than a `needs_transcode` boolean for the same reason.
+//
+// NULL means "not probed since this landed", not "SDR". IsHDR answers false for
+// it either way, so a library reads exactly as it did until re-probed.
+const schemaRevision19 = `
+ALTER TABLE media_stream ADD COLUMN color_transfer TEXT;
+ALTER TABLE media_stream ADD COLUMN color_primaries TEXT;
+ALTER TABLE media_stream ADD COLUMN color_space TEXT;
 `

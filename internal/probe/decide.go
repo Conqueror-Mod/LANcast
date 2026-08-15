@@ -485,3 +485,40 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+/*
+ * IsHDR reports whether a video stream carries high dynamic range.
+ *
+ * Defined by the **transfer function**, and deliberately by nothing else
+ * (ADR 0033).
+ *
+ * Bit depth is the trap. 10-bit is correlated with HDR and does not mean it:
+ * `yuv420p10le` is what HDR10 reports and it is also what 10-bit SDR reports,
+ * and a 10-bit SDR file put through a tone map would be damaged by it exactly
+ * as surely as an HDR file is damaged by not being.
+ *
+ * Primaries are the weaker signal from the other direction. BT.2020 primaries
+ * turn up on SDR content occasionally, and it is the transfer curve that
+ * actually decides whether the code values need converting rather than merely
+ * reinterpreting.
+ *
+ * The two values are the two HDR systems in circulation: `smpte2084` is PQ,
+ * which is HDR10 and the base layer Dolby Vision sits on top of, and
+ * `arib-std-b67` is HLG. Dolby Vision profile 5 is *not* PQ, will not match
+ * here, and is treated as SDR — which is what happens today, and is a much
+ * larger piece of work to do properly.
+ *
+ * A stream with no recorded transfer is not HDR. Every row predates the probe
+ * change that records it until re-probed, and guessing HDR from a blank field
+ * would tone map an entire library on no evidence.
+ */
+func IsHDR(s *Stream) bool {
+	if s == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(s.ColorTransfer)) {
+	case "smpte2084", "arib-std-b67":
+		return true
+	}
+	return false
+}

@@ -51,6 +51,17 @@ type Stream struct {
 	PixFmt    string `json:"pix_fmt,omitempty"`
 	FrameRate string `json:"frame_rate,omitempty"`
 
+	// Colour, for telling HDR from SDR (ADR 0033).
+	//
+	// Bit depth cannot do it. `yuv420p10le` is what HDR10 reports and it is
+	// also what 10-bit SDR reports, so without these the server has no way to
+	// know which files need tone mapping — and converts both by dropping bits,
+	// which on an HDR source produces a washed-out picture *and* an output
+	// still carrying the source's PQ tags.
+	ColorTransfer  string `json:"color_transfer,omitempty"`
+	ColorPrimaries string `json:"color_primaries,omitempty"`
+	ColorSpace     string `json:"color_space,omitempty"`
+
 	// Audio only.
 	Channels   int `json:"channels,omitempty"`
 	SampleRate int `json:"sample_rate,omitempty"`
@@ -304,21 +315,26 @@ func ParseJSON(raw []byte) (*Result, error) {
 		}
 
 		out := Stream{
-			Index:      s.Index,
-			Kind:       kind,
-			Codec:      s.CodecName,
-			Profile:    s.Profile,
-			Language:   strings.TrimSpace(s.Tags.Language),
-			Title:      strings.TrimSpace(s.Tags.Title),
-			Default:    s.Disposition.Default == 1,
-			Forced:     s.Disposition.Forced == 1,
-			Width:      s.Width,
-			Height:     s.Height,
-			PixFmt:     s.PixFmt,
-			FrameRate:  normalizeRate(s.AvgFrameRate),
-			Channels:   s.Channels,
-			SampleRate: atoi(s.SampleRate),
-			BitRate:    atoi64(s.BitRate),
+			Index:    s.Index,
+			Kind:     kind,
+			Codec:    s.CodecName,
+			Profile:  s.Profile,
+			Language: strings.TrimSpace(s.Tags.Language),
+			Title:    strings.TrimSpace(s.Tags.Title),
+			Default:  s.Disposition.Default == 1,
+			Forced:   s.Disposition.Forced == 1,
+			Width:    s.Width,
+			Height:   s.Height,
+			PixFmt:   s.PixFmt,
+			// Lower-cased because ffprobe's spelling varies with the container
+			// and the rule below is an exact match on a handful of names.
+			ColorTransfer:  strings.ToLower(strings.TrimSpace(s.ColorTransfer)),
+			ColorPrimaries: strings.ToLower(strings.TrimSpace(s.ColorPrimaries)),
+			ColorSpace:     strings.ToLower(strings.TrimSpace(s.ColorSpace)),
+			FrameRate:      normalizeRate(s.AvgFrameRate),
+			Channels:       s.Channels,
+			SampleRate:     atoi(s.SampleRate),
+			BitRate:        atoi64(s.BitRate),
 		}
 		// "und" is ffprobe's placeholder for unknown and carries no more
 		// information than an empty string, but reads as a real language.
@@ -357,19 +373,22 @@ type ffprobeDoc struct {
 		Tags map[string]string `json:"tags"`
 	} `json:"format"`
 	Streams []struct {
-		Index        int    `json:"index"`
-		CodecType    string `json:"codec_type"`
-		CodecName    string `json:"codec_name"`
-		Profile      string `json:"profile"`
-		Width        int    `json:"width"`
-		Height       int    `json:"height"`
-		PixFmt       string `json:"pix_fmt"`
-		AvgFrameRate string `json:"avg_frame_rate"`
-		Channels     int    `json:"channels"`
-		SampleRate   string `json:"sample_rate"`
-		BitRate      string `json:"bit_rate"`
-		Duration     string `json:"duration"`
-		Disposition  struct {
+		Index          int    `json:"index"`
+		CodecType      string `json:"codec_type"`
+		CodecName      string `json:"codec_name"`
+		Profile        string `json:"profile"`
+		Width          int    `json:"width"`
+		Height         int    `json:"height"`
+		PixFmt         string `json:"pix_fmt"`
+		ColorTransfer  string `json:"color_transfer"`
+		ColorPrimaries string `json:"color_primaries"`
+		ColorSpace     string `json:"color_space"`
+		AvgFrameRate   string `json:"avg_frame_rate"`
+		Channels       int    `json:"channels"`
+		SampleRate     string `json:"sample_rate"`
+		BitRate        string `json:"bit_rate"`
+		Duration       string `json:"duration"`
+		Disposition    struct {
 			Default int `json:"default"`
 			Forced  int `json:"forced"`
 		} `json:"disposition"`

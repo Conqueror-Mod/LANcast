@@ -438,3 +438,60 @@ func TestApplyTrackTagsEmptyValuesDoNotErase(t *testing.T) {
 		t.Errorf("Year = %v — a blank tag erased it", it.Year)
 	}
 }
+
+// Colour has to survive the round trip, because it is the only thing that tells
+// an HDR file from a 10-bit SDR one (ADR 0033). pix_fmt cannot: yuv420p10le is
+// what both report.
+func TestProbeRoundTripsColourMetadata(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\hdr.mkv`)
+
+	if err := st.SaveProbe(ctx, id, ProbeResult{
+		DurationMS: 1000, Container: "matroska",
+		Streams: []MediaStream{{
+			Index: 0, Kind: "video", Codec: "hevc", PixFmt: "yuv420p10le",
+			ColorTransfer: "smpte2084", ColorPrimaries: "bt2020", ColorSpace: "bt2020nc",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.Streams(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("streams = %d, want 1", len(got))
+	}
+	if got[0].ColorTransfer != "smpte2084" {
+		t.Errorf("ColorTransfer = %q, want smpte2084", got[0].ColorTransfer)
+	}
+	if got[0].ColorPrimaries != "bt2020" || got[0].ColorSpace != "bt2020nc" {
+		t.Errorf("primaries/space = %q/%q", got[0].ColorPrimaries, got[0].ColorSpace)
+	}
+}
+
+// A file with no colour metadata is not an error and not HDR. Every row
+// predates revision 19 until re-probed, and the empty string has to read back
+// cleanly rather than as a scan failure.
+func TestProbeWithoutColourMetadataReadsBackEmpty(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\sdr.mp4`)
+	if err := st.SaveProbe(ctx, id, ProbeResult{
+		DurationMS: 1000, Container: "mp4",
+		Streams: []MediaStream{{Index: 0, Kind: "video", Codec: "h264"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Streams(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].ColorTransfer != "" {
+		t.Errorf("ColorTransfer = %q, want empty", got[0].ColorTransfer)
+	}
+}

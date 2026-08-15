@@ -196,3 +196,55 @@ func TestAvailable(t *testing.T) {
 		t.Log("ffprobe is installed in this environment")
 	}
 }
+
+// ffprobe reports colour on the stream, and it is the only thing that
+// distinguishes HDR10 from 10-bit SDR — both report yuv420p10le (ADR 0033).
+// Tested through ParseJSON because that is the pure half: no ffmpeg, no file.
+func TestParseJSONReadsColourMetadata(t *testing.T) {
+	const hdrJSON = `{
+	  "format": {"format_name": "matroska,webm", "duration": "10.0"},
+	  "streams": [
+	    {"index": 0, "codec_type": "video", "codec_name": "hevc",
+	     "pix_fmt": "yuv420p10le", "width": 3840, "height": 2160,
+	     "color_transfer": "smpte2084", "color_primaries": "bt2020",
+	     "color_space": "bt2020nc"}
+	  ]
+	}`
+	r, err := ParseJSON([]byte(hdrJSON))
+	if err != nil {
+		t.Fatalf("ParseJSON: %v", err)
+	}
+	v := r.Video()
+	if v == nil {
+		t.Fatal("no video stream")
+	}
+	if v.ColorTransfer != "smpte2084" {
+		t.Errorf("ColorTransfer = %q, want smpte2084", v.ColorTransfer)
+	}
+	if v.ColorPrimaries != "bt2020" || v.ColorSpace != "bt2020nc" {
+		t.Errorf("primaries/space = %q/%q", v.ColorPrimaries, v.ColorSpace)
+	}
+	if !IsHDR(v) {
+		t.Error("a PQ stream was not detected as HDR")
+	}
+}
+
+// The case that makes bit depth useless as a signal: same pix_fmt, not HDR.
+func TestParseJSONTenBitSDRIsNotHDR(t *testing.T) {
+	const sdrJSON = `{
+	  "format": {"format_name": "matroska,webm", "duration": "10.0"},
+	  "streams": [
+	    {"index": 0, "codec_type": "video", "codec_name": "hevc",
+	     "pix_fmt": "yuv420p10le", "width": 1920, "height": 1080,
+	     "color_transfer": "bt709", "color_primaries": "bt709",
+	     "color_space": "bt709"}
+	  ]
+	}`
+	r, err := ParseJSON([]byte(sdrJSON))
+	if err != nil {
+		t.Fatalf("ParseJSON: %v", err)
+	}
+	if IsHDR(r.Video()) {
+		t.Error("10-bit SDR reported as HDR — the same pix_fmt as the HDR case above")
+	}
+}
