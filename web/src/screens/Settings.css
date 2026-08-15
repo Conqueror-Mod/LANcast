@@ -37,10 +37,40 @@
   color: var(--text-primary);
 }
 
+/*
+ * The line under a row's title. Wraps.
+ *
+ * It used to truncate with an ellipsis, which was written for the one case
+ * where that is right — a long absolute path under a library name. But the
+ * class is used about thirty times across five files, and almost all of those
+ * are prose explaining what a control does. Truncating those did not shorten
+ * them, it deleted the half that carried the point: "Folders cannot overlap —
+ * one inside another would be scanned twice, and which l…" stops exactly where
+ * it starts being useful.
+ *
+ * So wrapping is the default and truncation is opt-in, because that is the
+ * direction that fails safe. A new description added anywhere now wraps; the
+ * old default meant every one of them silently lost its ending, and nothing
+ * about the rendered page said so.
+ *
+ * max-width is measured in characters rather than pixels: the constraint is
+ * how far the eye tracks back to find the next line, not how wide the panel is.
+ */
 .set-row__sub {
   font-size: 12px;
+  line-height: 1.45;
   color: var(--text-faint);
   margin-top: 3px;
+  max-width: 68ch;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* For the cases that genuinely want one line — a path where the beginning is
+   the informative part and the middle is noise. Nothing uses it yet; it exists
+   so the next single-line case does not reach for the old default. */
+.set-row__sub--truncate {
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
