@@ -683,3 +683,43 @@ func TestNoTargetOnACopy(t *testing.T) {
 		t.Errorf("remux carries a target: height %d, bitrate %d", d.TargetHeight, d.TargetVideoBitRate)
 	}
 }
+
+// ---- HDR detection (ADR 0033) -----------------------------------------------
+
+func TestIsHDRDetectsPQAndHLG(t *testing.T) {
+	for _, tr := range []string{"smpte2084", "arib-std-b67", "SMPTE2084", " smpte2084 "} {
+		if !IsHDR(&Stream{Kind: KindVideo, ColorTransfer: tr}) {
+			t.Errorf("ColorTransfer %q not detected as HDR", tr)
+		}
+	}
+}
+
+// The trap the rule exists to avoid. 10-bit is correlated with HDR and does not
+// mean it — yuv420p10le is what HDR10 reports and what 10-bit SDR reports, and
+// tone mapping an SDR file damages it just as surely as not tone mapping an HDR
+// one does.
+func TestTenBitSDRIsNotHDR(t *testing.T) {
+	s := &Stream{Kind: KindVideo, Codec: "hevc", PixFmt: "yuv420p10le", ColorTransfer: "bt709"}
+	if IsHDR(s) {
+		t.Error("10-bit SDR reported as HDR — bit depth is not the signal")
+	}
+}
+
+// BT.2020 primaries turn up on SDR content. The transfer curve decides.
+func TestWideGamutSDRIsNotHDR(t *testing.T) {
+	s := &Stream{Kind: KindVideo, ColorPrimaries: "bt2020", ColorSpace: "bt2020nc", ColorTransfer: "bt709"}
+	if IsHDR(s) {
+		t.Error("wide-gamut SDR reported as HDR")
+	}
+}
+
+// Every row predates the probe change until re-probed. Guessing HDR from a
+// blank field would tone map a whole library on no evidence.
+func TestUnprobedColourIsNotHDR(t *testing.T) {
+	if IsHDR(&Stream{Kind: KindVideo, Codec: "hevc", PixFmt: "yuv420p10le"}) {
+		t.Error("a stream with no recorded transfer reported as HDR")
+	}
+	if IsHDR(nil) {
+		t.Error("nil reported as HDR")
+	}
+}

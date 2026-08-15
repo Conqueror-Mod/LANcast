@@ -302,3 +302,44 @@ func columnsOf(t *testing.T, s *Store, table string) string {
 	}
 	return out
 }
+
+// Revision 19 — colour on media_stream (ADR 0033).
+//
+// Additive columns, so the interesting property is that an existing database
+// carries forward with its rows intact and reads back as "not probed" rather
+// than as SDR.
+func TestRevision19AddsColourWithoutTouchingRows(t *testing.T) {
+	db, path := openAtRevision17(t)
+	seedRev17(t, db)
+	if err := migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if n := countRows(t, db, `SELECT COUNT(*) FROM media_item`); n != 4 {
+		t.Errorf("media_item = %d, want 4", n)
+	}
+	db.Close()
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	v, err := st.SchemaVersion()
+	if err != nil || v != CurrentSchemaVersion {
+		t.Fatalf("SchemaVersion = %d, %v, want %d", v, err, CurrentSchemaVersion)
+	}
+	// The columns exist and a pre-existing stream row reads back empty rather
+	// than failing to scan.
+	if _, err := st.db.ExecContext(t.Context(), `
+		INSERT INTO media_stream (item_id, idx, kind, codec) VALUES (10, 0, 'video', 'h264')`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Streams(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("Streams: %v", err)
+	}
+	if len(got) != 1 || got[0].ColorTransfer != "" {
+		t.Errorf("streams = %+v, want one row with empty colour", got)
+	}
+}
