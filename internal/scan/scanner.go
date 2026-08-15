@@ -74,6 +74,17 @@ type Progress struct {
 	RootsScanned int           `json:"roots_scanned"`
 	RootsSkipped []SkippedRoot `json:"roots_skipped,omitempty"`
 
+	/*
+	 * A verdict on the shape of what this scan produced, when it does not look
+	 * like the kind the library was created as (see shapecheck.go).
+	 *
+	 * Separate from Issues, which are files that could not be read. Nothing
+	 * failed here — the scan succeeded, and that is the problem: kind is
+	 * immutable, so a library scanned as the wrong one is wrong permanently
+	 * unless somebody is told at the moment it happens.
+	 */
+	ShapeWarning *ShapeWarning `json:"shape_warning,omitempty"`
+
 	Issues     []Issue `json:"issues,omitempty"`
 	StartedAt  int64   `json:"started_at"`
 	FinishedAt *int64  `json:"finished_at,omitempty"`
@@ -189,6 +200,19 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 		p.State = StateIdle
 		s.log.Info("scan complete", "library", lib.ID,
 			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing)
+
+		// The shape check runs on success only. A failed scan produced a
+		// partial library by definition, and telling somebody their TV library
+		// has no shows in it because the drive went away halfway through would
+		// be a false alarm about a permanent mistake — the most expensive kind
+		// of false alarm this project could ship.
+		if sh, err := s.st.Shape(ctx, lib.ID); err != nil {
+			s.log.Error("library shape check", "library", lib.ID, "error", err)
+		} else if w := CheckShape(lib.Kind, sh, *p); w.Code != "" {
+			p.ShapeWarning = &w
+			s.log.Warn("library shape looks wrong for its kind",
+				"library", lib.ID, "kind", lib.Kind, "code", w.Code)
+		}
 	}
 	delete(s.running, lib.ID)
 	done := s.onFinish
