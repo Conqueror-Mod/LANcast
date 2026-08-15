@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GLOBAL_KEYS, PLAYER_KEYS } from "@/lib/keys";
+import { useBindings, bindingLabel, matchesBinding } from "@/lib/keys";
 import "./KeyHelp.css";
 
 /*
@@ -15,6 +15,10 @@ import "./KeyHelp.css";
  */
 export function KeyHelp() {
   const [open, setOpen] = useState(false);
+  // Read live rather than from a module constant: the point of a customizer is
+  // that the overlay shows *your* keys, and an overlay still listing the
+  // defaults would be the one screen that lies about them.
+  const { bindings } = useBindings();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -29,7 +33,10 @@ export function KeyHelp() {
       ) {
         return;
       }
-      if (e.key === "?") {
+      // The binding, not the literal — this is the shortcut most likely to be
+      // rebound, because "?" is Shift+/ on some layouts and unreachable on
+      // others.
+      if (matchesBinding("help", e.key)) {
         e.preventDefault();
         setOpen((v) => !v);
         return;
@@ -74,21 +81,25 @@ export function KeyHelp() {
         <div className="keyhelp__cols">
           <div>
             <span className="keyhelp__group">Anywhere</span>
-            {GLOBAL_KEYS.map(([k, d]) => (
-              <div className="keyhelp__row" key={k}>
-                <kbd>{k}</kbd>
-                <span>{d}</span>
-              </div>
-            ))}
+            {bindings
+              .filter((b) => b.scope === "global")
+              .map((b) => (
+                <div className="keyhelp__row" key={b.id}>
+                  <kbd>{bindingLabel(b)}</kbd>
+                  <span>{b.meaning}</span>
+                </div>
+              ))}
           </div>
           <div>
             <span className="keyhelp__group">Playing</span>
-            {PLAYER_KEYS.map(([k, d]) => (
-              <div className="keyhelp__row" key={k}>
-                <kbd>{k}</kbd>
-                <span>{d}</span>
-              </div>
-            ))}
+            {bindings
+              .filter((b) => b.scope === "player")
+              .map((b) => (
+                <div className="keyhelp__row" key={b.id}>
+                  <kbd>{bindingLabel(b)}</kbd>
+                  <span>{b.meaning}</span>
+                </div>
+              ))}
           </div>
         </div>
       </div>

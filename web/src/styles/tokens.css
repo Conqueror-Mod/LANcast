@@ -67,6 +67,16 @@
   --rail-expanded: 208px;
 
   /*
+   * Tile sizes, as tokens rather than as numbers in two stylesheets.
+   *
+   * The shelf and the browse grid had 140px and 160px written into their own
+   * files, which was fine while there was one size. Bigscreen is a second, and
+   * the moment a size has two values it belongs where the other paired numbers
+   * live.
+   */
+  --tile-shelf: 140px;
+  --tile-grid: 160px;
+  /*
    * The docked corner. The control strip (MiniPlayer.css) and the picture it
    * belongs to (playback.css) are two elements in two files, both fixed to the
    * same corner — so each has to know how much room the other takes, or they
@@ -84,4 +94,38 @@
   --dur-ambient: 75s; /* nebula drift cycle */
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/*
+ * Bigscreen — the ten-foot layout.
+ *
+ * Not a theme and not a second client: the same screens, read from a sofa. A
+ * separate television client would be a second set of screens to keep in step,
+ * and every product that has built one has spent the years afterwards
+ * explaining why a feature exists in one and not the other.
+ *
+ * It is a `zoom` rather than a set of larger tokens, and that is the whole
+ * design decision. Every size in this client is in px — the type, the paddings,
+ * the tile widths, the focus rings — so a token-by-token enlargement would mean
+ * auditing every stylesheet and would still miss the ones written after the
+ * audit. Zoom scales the layout, which is exactly the transformation "sit
+ * further away" describes, and it cannot drift out of step with a new
+ * component. Applied to `body` so the overlays that live outside the shell —
+ * the player, the shortcut sheet — scale with everything else.
+ *
+ * Gold is untouched: the focus ring was already sized to be seen, and something
+ * louder at ten feet is something ambient at two.
+ */
+:root[data-bigscreen] body {
+  zoom: 1.45;
+}
+
+/*
+ * Zoom multiplies a viewport unit's *result*, not the viewport, so a hero at
+ * 31vh would occupy 45vh of actual screen and push both hub rows under the fold
+ * — the exact failure --hero-height's own comment warns about. Divided back out
+ * here rather than left to look like a deliberately bigger hero.
+ */
+:root[data-bigscreen] {
+  --hero-height: clamp(193px, 21vh, 262px);
 }

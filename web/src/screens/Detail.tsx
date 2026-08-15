@@ -30,6 +30,7 @@ import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
 import { TrailerModal } from "@/components/TrailerModal";
+import { useDownloads, downloadURL } from "@/lib/downloads";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -76,6 +77,72 @@ function TrailerButton({ onOpen }: { onOpen: () => void }) {
       <span aria-hidden="true">▶</span> Trailer
     </button>
   );
+}
+
+/*
+ * Download.
+ *
+ * A real anchor rather than a button with a click handler, because the browser
+ * already knows how to download a URL and any JavaScript version of that is a
+ * worse copy — no resume, no native progress, and nothing in the browser's own
+ * downloads list. `download` names the file; the server sends the same name in
+ * Content-Disposition, which is what wins for a cross-origin or proxied setup.
+ *
+ * The receipt is written on click, not on completion. Completion is not
+ * observable from here (see lib/downloads.ts), and a list that only recorded
+ * what it could prove finished would record almost nothing.
+ */
+function DownloadButton({ item }: { item: Item }) {
+  const [, record] = useDownloads();
+  const filename = downloadFilename(item);
+  const focusable = useFocusable(() => {
+    // Enter on a focused anchor does not follow it the way a click does when
+    // the focus controller is driving, so the navigation is explicit.
+    record(receiptFor(item, filename));
+    window.location.href = downloadURL(item.id);
+  });
+
+  return (
+    <a
+      {...focusable}
+      className="detail__fix"
+      href={downloadURL(item.id)}
+      download={filename}
+      onClick={() => record(receiptFor(item, filename))}
+    >
+      Download
+    </a>
+  );
+}
+
+// The name the receipt shows. The server decides the real filename — this is
+// the client's best guess at the same rule, used for the `download` attribute
+// and for the downloads list, so the two read alike.
+function downloadFilename(item: Item): string {
+  const base =
+    item.series && item.season != null && item.episode != null
+      ? `${item.series} - S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")} - ${item.title}`
+      : item.year
+        ? `${item.title} (${item.year})`
+        : item.title;
+  const ext = item.container ? `.${item.container.toLowerCase()}` : "";
+  return base.replace(/[/\:*?"<>|]/g, "-") + ext;
+}
+
+function receiptFor(item: Item, filename: string) {
+  return {
+    itemId: item.id,
+    title: item.title,
+    filename,
+    detail:
+      item.series && item.season != null && item.episode != null
+        ? `${item.series} · S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`
+        : item.year
+          ? String(item.year)
+          : undefined,
+    bytes: item.size_bytes ?? undefined,
+    at: Date.now(),
+  };
 }
 
 function SecondaryButton({
@@ -396,6 +463,13 @@ export function Detail() {
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
+              {/* Anything with a file of its own can be taken away. A container
+                  has no file — "download this season" would have to mean a zip
+                  the server does not build — and a missing item's file is not
+                  there to hand over. */}
+              {!container && !item.missing && (
+                <DownloadButton item={item} />
+              )}
               {/* Anything that plays on its own can go in a playlist — a
                   track, a film, an episode. A container cannot: a playlist
                   holds entries, not albums, so "add this record" would have to

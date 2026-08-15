@@ -23,7 +23,9 @@ import {
   useRemovePlugin,
   useServerLog,
 } from "@/api/hooks";
-import { ALL_KEYS } from "@/lib/keys";
+import { KeyBindings } from "@/components/KeyBindings";
+import { CrashReports } from "@/components/CrashReports";
+import { useBigscreen } from "@/lib/bigscreen";
 import { AuditLog } from "@/components/AuditLog";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
@@ -592,18 +594,38 @@ function RuleNumber({
   );
 }
 
-function KeyboardSection() {
+/*
+ * Display — the device's own view of the app.
+ *
+ * A device pane rather than a server one, and that is the substance of the
+ * choice: "make everything larger because I am ten feet away" is a fact about
+ * the room this device is in. Syncing it would shrink the phone in somebody's
+ * hand because the television downstairs is a television.
+ */
+function DisplaySection() {
+  const [bigscreen, setBigscreen] = useBigscreen();
+
   return (
     <section className="settings__section">
-      <span className="section-label">Keyboard</span>
-      <div className="set-keys">
-        {ALL_KEYS.map(([k, d]) => (
-          <div className="set-key" key={k}>
-            <kbd>{k}</kbd>
-            <span>{d}</span>
-          </div>
-        ))}
-      </div>
+      <span className="section-label">Display</span>
+
+      <label className="set-toggle set-toggle--described">
+        <input
+          type="checkbox"
+          checked={bigscreen}
+          onChange={(e) => setBigscreen(e.target.checked)}
+        />
+        <span>
+          <strong>Bigscreen mode</strong>
+          <span className="set-toggle__desc">
+            Scales the whole interface for a television across the room. The
+            same screens, larger — not a separate client. Applies on this device
+            only, survives a restart, and toggles with{" "}
+            <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> from anywhere, so you
+            can get back out without finding this page again.
+          </span>
+        </span>
+      </label>
     </section>
   );
 }
@@ -1152,6 +1174,7 @@ const SERVER_PANES: Pane[] = [
 const DEVICE_PANES: Pane[] = [
   { id: "account", label: "Account" },
   { id: "app", label: "This app" },
+  { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
 ];
 
@@ -1241,6 +1264,7 @@ export function Settings() {
               {pane === "logs" && (
         <>
           <ServerLogSection />
+          <CrashReports />
           <MaintenanceSection />
         </>
       )}
@@ -1248,7 +1272,8 @@ export function Settings() {
           )}
           {pane === "account" && <AccountSection />}
           {pane === "app" && <DesktopSettings />}
-          {pane === "keyboard" && <KeyboardSection />}
+          {pane === "keyboard" && <KeyBindings />}
+          {pane === "display" && <DisplaySection />}
         </div>
       </div>
     </div>

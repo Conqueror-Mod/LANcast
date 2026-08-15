@@ -1,0 +1,107 @@
+/* The downloads receipt list. Rows, not tiles: what matters here is the name,
+   the date and the link, and a poster grid would imply a library. */
+
+.downloads__note {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.downloads__list {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 20px;
+}
+
+.downloads__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  /* Rows in a scrolling column must not collapse — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.downloads__row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.downloads__what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.downloads__title {
+  font-size: 14px;
+  color: var(--text-primary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.downloads__title:hover,
+.downloads__title:focus-visible {
+  outline: none;
+  color: var(--gold-bright);
+}
+
+.downloads__detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.downloads__file {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+.downloads__when {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.downloads__again {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+.downloads__again:hover,
+.downloads__again:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.downloads__clear {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.downloads__clear:hover {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.downloads__clearnote {
+  font-size: 11px;
+  color: var(--text-faint);
+}

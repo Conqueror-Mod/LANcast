@@ -176,3 +176,16 @@ export function SignOutIcon() {
     </RailGlyph>
   );
 }
+
+// Downloads: an arrow into a tray. The arrow points down and stops at a line,
+// which is the whole of the idea — the tray is two strokes rather than a closed
+// box, because a filled box at 20px reads as a folder.
+export function DownloadIcon() {
+  return (
+    <RailGlyph>
+      <path d="M10 3.5v8.5" />
+      <path d="M6.6 9.2 10 12.6l3.4-3.4" />
+      <path d="M4.5 15.5v1h11v-1" />
+    </RailGlyph>
+  );
+}

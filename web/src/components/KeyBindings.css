@@ -1,0 +1,129 @@
+/* The keyboard customizer. Same settings-pane language as its neighbours:
+   rows on a raised surface, gold only where focus is. */
+
+.keybind__intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+.keybind__refused {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--gold-dormant);
+  padding-left: 10px;
+}
+
+.keybind {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  max-width: 560px;
+}
+
+.keybind__grouplabel {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.keybind__row {
+  display: grid;
+  /* The meaning takes the space; the key and its reset are fixed, so every row
+     lines up down the pane rather than shifting when a label gets longer. */
+  grid-template-columns: 1fr 132px 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.keybind__meaning {
+  font-size: 13px;
+  color: var(--text-secondary);
+  /* Long meanings wrap rather than pushing the key column off the pane — the
+     settings descriptions had this fault and it is the same fix. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.keybind__key,
+.keybind__fixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.keybind__key {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.keybind__key:hover,
+.keybind__key:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+/* Capturing is *where you are* — the one state on this pane that is a focus
+   state, so it is the one that earns gold at full strength. */
+.keybind__key.is-capturing {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.keybind__prompt {
+  font-size: 12px;
+  color: var(--gold-bright);
+}
+
+.keybind__key kbd,
+.keybind__fixed kbd {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+}
+
+/* A fixed binding is stated, not offered: no border-lit hover, no pointer. */
+.keybind__fixed {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.keybind__reset,
+.keybind__resetall {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.keybind__reset:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.keybind__reset:not(:disabled):hover,
+.keybind__resetall:hover {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.keybind__resetall {
+  margin-top: 16px;
+  padding: 6px 12px;
+  font-size: 12px;
+}

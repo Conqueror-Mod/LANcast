@@ -1,0 +1,114 @@
+/* Crash reports. Same collapsed-panel language as the server log beside it. */
+
+.crash__intro {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.crash__toggle,
+.crash__clear {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.crash__toggle:hover,
+.crash__clear:not(:disabled):hover {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.crash__clear {
+  margin-top: 12px;
+}
+
+.crash__empty {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.crash__list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.crash__row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  /* Rows in a scrolling column must not collapse — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.crash__head {
+  display: grid;
+  grid-template-columns: 150px 190px 1fr auto;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.crash__head:hover,
+.crash__head:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 760px) {
+  .crash__head {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}
+
+.crash__when {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.crash__where {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.crash__value {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.crash__version {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.crash__stack {
+  margin: 0;
+  padding: 10px 12px 14px;
+  background: rgba(0, 0, 0, 0.28);
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  /* A stack trace has long lines and must not reflow — a wrapped frame is
+     harder to read than a scrollbar. */
+  white-space: pre;
+  overflow-x: auto;
+  user-select: text;
+}

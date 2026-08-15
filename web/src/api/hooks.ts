@@ -14,6 +14,7 @@ import type {
   AuthStatus,
   AuthUser,
   BrowseResult,
+  CrashReport,
   Facets,
   Item,
   ItemsPage,
@@ -21,6 +22,7 @@ import type {
   MatchCandidate,
   Plugin,
   PluginCaps,
+  Profile,
   ProbeStatus,
   ReprobeResult,
   ScanStatus,
@@ -1208,5 +1210,46 @@ export function useRemovePlaylistEntry(id: number) {
     mutationFn: (position: number) =>
       apiSend(`/api/playlists/${id}/entries/${position}`, "DELETE"),
     onSuccess: () => invalidatePlaylists(qc, id),
+  });
+}
+
+// ------------------------------------------------------------- profile
+
+/*
+ * The profile page's one request.
+ *
+ * Paged rather than infinite: a history is read from the top and abandoned, and
+ * an infinite query for a list nobody scrolls to the end of buys nothing but a
+ * cache that never shrinks. `has_more` from the server drives the button.
+ */
+export function useProfile(limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: ["profile", limit, offset],
+    queryFn: ({ signal }) =>
+      apiGet<Profile>(`/api/profile?limit=${limit}&offset=${offset}`, signal),
+    placeholderData: keepPreviousData,
+    staleTime: 10_000,
+  });
+}
+
+// ------------------------------------------------------------- crashes
+
+// Fetched only when the pane is open. A crash list polled in the background is
+// a request per interval to answer "still none", forever.
+export function useCrashes(enabled: boolean) {
+  return useQuery({
+    queryKey: ["crashes"],
+    queryFn: ({ signal }) =>
+      apiGet<{ crashes: CrashReport[] }>("/api/crashes", signal),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+export function useClearCrashes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/crashes", "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crashes"] }),
   });
 }

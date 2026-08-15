@@ -12,6 +12,22 @@
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <title>LANcast</title>
+
+    <!--
+      Bigscreen, applied before the first paint.
+
+      The setting lives in localStorage (web/src/lib/bigscreen.ts) and React
+      cannot read it until it has mounted, so without this a television shows
+      one frame of the desk layout on every load — which reads as the app
+      breaking and correcting itself. Four lines here is the whole fix.
+    -->
+    <script>
+      try {
+        if (JSON.parse(localStorage.getItem("lancast:bigscreen") || "false")) {
+          document.documentElement.setAttribute("data-bigscreen", "");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
