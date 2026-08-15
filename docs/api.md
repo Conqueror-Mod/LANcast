@@ -516,6 +516,49 @@ first shelf. `limit` defaults to 20 (max 100).
 to the end drops off rather than inviting a replay. Progress and artwork are
 included so a tile draws its resume bar and poster without a second call.
 
+### `GET /api/profile`
+
+Who the caller is, what they have watched, and the totals behind it — in one
+request, because a page needing identity, statistics and a list should not
+discover that from three round trips and three loading states.
+
+```json
+{ "user": { "id": "u_3f9", "name": "Chris", "admin": true, "secured": true },
+  "stats": { "started": 214, "finished": 168,
+             "watched_ms": 913_400_000, "first_at": 1739000000 },
+  "history": [ { "item": { "id": 87, "title": "Arrival", ... },
+                 "position_ms": 1284000, "watched": false,
+                 "played_at": 1755200000 } ],
+  "has_more": true }
+```
+
+`?limit=` defaults to 50 (max 200) and `?offset=` pages. `has_more` says whether
+the history was cut short, so a client can offer the next page rather than infer
+it from a full-looking one.
+
+**History is derived from `playback_state`, not from a log of plays.** There is
+one row per item per user, so this is the *last* time each item was played and
+not every time it was. That is a stated limit rather than a hidden one: a
+per-play log is a second record of the same fact, free to disagree with the
+first, and nothing has yet asked for one.
+
+Items that are `missing` are included. "What happened to the film I watched last
+week" is a question about history, and a library that lost a drive should not
+lose the answer to it.
+
+`watched_ms` is time *spent*, not runtime owned: a finished item counts its
+duration, an unfinished one counts how far in you got. Summing the duration of
+everything touched would report eleven hours for eleven films abandoned in their
+first minute.
+
+`secured` is `false` on an unconfigured loopback server, where there is no
+account and the history belongs to the migrated `local` id. The client says so
+rather than inventing a person.
+
+The caller's own profile only. There is no per-user variant of this route: "what has
+everyone been watching" needs an answer to who may see it before it needs a
+route.
+
 ### `GET /api/items/{id}`
 
 The list shape plus M2 metadata and a `theme` block (both below). Returns
@@ -702,6 +745,30 @@ item returns `404`, since the lookup is scoped to `{id}`.
 ## Playback decisions
 
 > M3. Design reference: [ADR 0012](adr/0012-probe-before-transcode.md).
+
+### `GET /api/items/{id}/download`
+
+The item's original file, as an attachment.
+
+Same bytes as `GET /api/stream/{id}`, and a different intent. A stream is for a
+player and every browser treats it as one; this carries
+`Content-Disposition: attachment` with a filename built from the item's
+metadata rather than from its path — `Arrival (2016).mkv`, or
+`Storm of the Century - S02E07 - Pilot.mkv` for an episode, because `Pilot.mkv`
+collides with every other pilot ever made. The name is given in both the quoted
+`filename=` form and the RFC 5987 `filename*=UTF-8''` form, so a title outside
+ASCII survives.
+
+**Never transcoded.** The transcoder exists so a device that cannot play a file
+can still watch it; a download that quietly returned a re-encoded copy would be
+a lie about what you have, and the one operation where the original matters most
+is the one that takes it off the server.
+
+Range requests are honoured, so an interrupted transfer resumes — which is the
+case a nine-gigabyte file is in.
+
+`404` if the item has no file or its path does not resolve inside the location
+it was scanned under; `503` if the file is missing from disk.
 
 ### `GET /api/items/{id}/playback`
 
@@ -965,6 +1032,38 @@ This exists because the log has been written beside the database since v0.4.2
 and could only be read by finding the data directory in a file manager, which is
 the wrong ask for the case it serves: the log matters most when the server is
 running as a service and something is wrong.
+
+### `GET` / `DELETE /api/crashes`
+
+Recovered panics, newest first. **Admin only** — a stack trace names source
+paths and may name a route the caller cannot reach.
+
+```json
+{ "crashes": [ { "id": "20260815-142233.481-004", "at": 1755268953481,
+  "kind": "panic", "where": "GET /api/items/{id}",
+  "value": "assignment to entry in nil map",
+  "stack": "goroutine 42 [running]:
+...", "version": "0.6.26" } ] }
+```
+
+`where` is the **route pattern**, not the URL: `GET /api/items/{id}` is what
+somebody fixes, while the URL it came from invites the belief that one particular item is
+special.
+
+Without this a panic unwinds through `net/http`, which closes the connection
+without a response — the client sees a network error and the operator sees
+nothing unless they happen to be reading the log at the time. The request now
+answers `500` with the ordinary error envelope, and the panic becomes a numbered
+report.
+
+Reports are JSON files in `crashes/` under the data directory, not database
+rows: the crash most worth having is the one where the database was the thing
+going wrong. The newest 50 are kept — a crash loop produces the same stack a
+thousand times, and the first one is the informative one.
+
+`DELETE` removes them all and answers `204`. Nothing is ever sent anywhere;
+LANcast does not phone home, and "except for crash reports" is how every product
+that does began.
 
 ### `GET /api/audit`
 

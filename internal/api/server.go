@@ -16,6 +16,7 @@ import (
 	"lancast/internal/auth"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
+	"lancast/internal/crashlog"
 	"lancast/internal/enrich"
 	"lancast/internal/meta"
 	"lancast/internal/photo"
@@ -128,6 +129,11 @@ type Server struct {
 	lanBound       bool
 	restartWidens  bool
 	throttle       *auth.Throttle
+	// crashes records recovered panics as reports beside the database. Created
+	// here rather than injected: it needs only the data directory, and a
+	// dependency the caller may forget to wire is a crash reporter that is
+	// absent in exactly the builds nobody tested.
+	crashes *crashlog.Recorder
 }
 
 func New(d Deps) *Server {
@@ -144,6 +150,7 @@ func New(d Deps) *Server {
 		probe: d.Probe, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
+		crashes:  crashlog.New(d.DataDir, Version),
 	}
 }
 
@@ -190,6 +197,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)
+	mux.HandleFunc("GET /api/profile", s.profile)
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	// Editing shared metadata or identity re-litigates the library for everyone,
 	// so it is an admin action. Watching and progress are not.
@@ -201,6 +209,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/match", s.adminOnly(s.applyMatch))
 	mux.HandleFunc("POST /api/items/{id}/refresh", s.adminOnly(s.refreshItem))
 
+	mux.HandleFunc("GET /api/items/{id}/download", s.download)
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
@@ -221,6 +230,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
+	mux.HandleFunc("GET /api/crashes", s.adminOnly(s.listCrashes))
+	mux.HandleFunc("DELETE /api/crashes", s.adminOnly(s.clearCrashes))
 	mux.HandleFunc("GET /api/audit", s.adminOnly(s.listAudit))
 	mux.HandleFunc("GET /api/update", s.adminOnly(s.updateStatus))
 	mux.HandleFunc("POST /api/update/check", s.adminOnly(s.checkForUpdate))
@@ -260,7 +271,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/transcode", s.transcodeSessions)
 
 	mux.Handle("/", s.web)
-	return logRequests(s.log, s.requireAuth(mux))
+	// Outermost after logging: a panic anywhere inside — including in the auth
+	// middleware — is recovered and recorded, and the request that caused it is
+	// already in the log above.
+	return logRequests(s.log, s.recoverPanics(s.requireAuth(mux)))
 }
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
