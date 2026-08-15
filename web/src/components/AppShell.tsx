@@ -1,5 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";
+import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
   useLibraries,
   useReview,
@@ -72,6 +73,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reviewCount = review?.total ?? 0;
   const navigate = useNavigate();
 
+  // The tooltip names the shortcut, so it reads the binding rather than a
+  // literal — a tooltip advertising "/" after somebody has rebound search is
+  // the same lie the overlay would have told.
+  const { bindings } = useBindings();
+  const searchKey = bindingLabel(bindings.find((b) => b.id === "search")!);
+
   // Bigscreen is one attribute on the document root, applied here because the
   // shell is the one component always mounted. index.html sets it before the
   // first paint; this keeps it in step once React owns the page.
@@ -88,7 +95,11 @@ export function AppShell({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      // The binding, not the literal. A customizer whose keys the app then
+      // ignores is worse than no customizer: it stores a preference, shows it
+      // back, and does nothing with it.
+      if (!matchesBinding("search", e.key) || e.ctrlKey || e.metaKey || e.altKey)
+        return;
       const el = e.target as HTMLElement | null;
       if (
         el &&
@@ -262,7 +273,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className={({ isActive }) =>
               "app-shell__search" + (isActive ? " is-active" : "")
             }
-            title="Search everything (/)"
+            title={`Search everything (${searchKey})`}
           >
             <SearchGlyph />
             <span>Search</span>

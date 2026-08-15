@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lancastd-dev",
+      "runtimeExecutable": "./LANcast-Server.exe",
+      "runtimeArgs": [
+        "-data",
+        "D:/My Projects/LANcast-devcopy",
+        "-addr",
+        "127.0.0.1:8080"
+      ],
+      "port": 8080,
+      "url": "http://127.0.0.1:8080"
+    }
+  ]
+}

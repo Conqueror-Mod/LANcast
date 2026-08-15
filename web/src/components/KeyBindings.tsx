@@ -53,8 +53,11 @@ export function KeyBindings() {
         (b) => b.id !== target.id && b.keys.includes(e.key),
       );
       if (clash) {
+        // Named, not just refused — "that key is taken" leaves somebody
+        // hunting for which one took it. The meaning keeps its own casing;
+        // lowercasing it produced "S is already search everything".
         setRefused(
-          `${keyLabel(e.key)} is already ${clash.meaning.toLowerCase()}`,
+          `${keyLabel(e.key)} is already used for "${clash.meaning}"`,
         );
         setCapturing(null);
         return;
