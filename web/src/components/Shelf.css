@@ -43,6 +43,6 @@
 }
 
 .shelf__item {
-  width: 140px;
+  width: var(--tile-shelf);
   flex: none;
 }

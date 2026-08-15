@@ -135,6 +135,11 @@ export interface Item {
   // whole reason both exist.
   artist?: string | null;
   duration_ms: number | null;
+  // The file's container and size. Both have always been in the item JSON and
+  // no client had asked for either until the download button needed to propose
+  // a filename and the downloads list needed to say how big the file was.
+  container?: string | null;
+  size_bytes?: number | null;
   added_at: number;
   missing: boolean;
   parent_id: number | null;
@@ -452,4 +457,51 @@ export interface UpdateStatus {
   staged?: string;
   staged_at?: number;
   downloading?: { active: boolean; done: number; total: number; stage?: string };
+}
+
+// GET /api/profile. Identity, totals and history in one response — a page that
+// needs all three should not discover that from three round trips.
+export interface ProfileUser {
+  id: string;
+  name: string;
+  admin: boolean;
+  // False on an unconfigured loopback server, where there is no account and the
+  // history belongs to the migrated 'local' id. The page says so rather than
+  // inventing a person.
+  secured: boolean;
+}
+
+export interface ProfileStats {
+  started: number;
+  finished: number;
+  // Time spent, not runtime owned: an unfinished item counts how far in you
+  // got, so eleven abandoned films are not eleven hours.
+  watched_ms: number;
+  first_at: number | null;
+}
+
+export interface HistoryEntry {
+  item: Item;
+  position_ms: number;
+  watched: boolean;
+  played_at: number;
+}
+
+export interface Profile {
+  user: ProfileUser;
+  stats: ProfileStats;
+  history: HistoryEntry[];
+  has_more: boolean;
+}
+
+// GET /api/crashes — a recovered panic. `where` is the route pattern rather
+// than the URL: the pattern is what somebody fixes.
+export interface CrashReport {
+  id: string;
+  at: number;
+  kind: string;
+  where: string;
+  value: string;
+  stack: string;
+  version: string;
 }

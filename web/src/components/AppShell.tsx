@@ -1,4 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";
+import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
   useLibraries,
   useReview,
@@ -20,6 +22,7 @@ import {
   SettingsIcon,
   SearchGlyph,
   AddonIcon,
+  DownloadIcon,
   AccountIcon,
   SignOutIcon,
 } from "./LibraryIcon";
@@ -70,6 +73,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reviewCount = review?.total ?? 0;
   const navigate = useNavigate();
 
+  // The tooltip names the shortcut, so it reads the binding rather than a
+  // literal — a tooltip advertising "/" after somebody has rebound search is
+  // the same lie the overlay would have told.
+  const { bindings } = useBindings();
+  const searchKey = bindingLabel(bindings.find((b) => b.id === "search")!);
+
+  // Bigscreen is one attribute on the document root, applied here because the
+  // shell is the one component always mounted. index.html sets it before the
+  // first paint; this keeps it in step once React owns the page.
+  useBigscreen();
+  useBigscreenShortcut();
+
   /*
    * "/" opens search, the way it does in every application with a search.
    *
@@ -80,7 +95,11 @@ export function AppShell({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      // The binding, not the literal. A customizer whose keys the app then
+      // ignores is worse than no customizer: it stores a preference, shows it
+      // back, and does nothing with it.
+      if (!matchesBinding("search", e.key) || e.ctrlKey || e.metaKey || e.altKey)
+        return;
       const el = e.target as HTMLElement | null;
       if (
         el &&
@@ -167,6 +186,23 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </NavLink>
             )}
+            {/* Downloads is a place too, and unlike Add-ons it is one every
+                account has: the receipts are per device, so there is nothing
+                here to gate on a role. It sits after the libraries because it
+                is a view *of* them rather than one of them. */}
+            <NavLink
+              to="/downloads"
+              title="Downloads"
+              onClick={releaseRail}
+              className={({ isActive }) =>
+                "app-shell__lib" + (isActive ? " is-active" : "")
+              }
+            >
+              <DownloadIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                Downloads
+              </span>
+            </NavLink>
           </nav>
 
           {/* The foot of the rail. `margin-top: auto` puts it against the
@@ -191,14 +227,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             {user && (
               <>
-                {/* The name is a destination in waiting — the profile page —
-                    so it is shaped like one rather than like a label. */}
-                <div className="app-shell__lib app-shell__whoami" title={`Signed in as ${user.name}`}>
+                {/* The name was shaped like a destination while leading
+                    nowhere. It now leads to the profile page, which is the
+                    thing it was shaped for. */}
+                <NavLink
+                  to="/profile"
+                  title={`Signed in as ${user.name}`}
+                  onClick={releaseRail}
+                  className={({ isActive }) =>
+                    "app-shell__lib app-shell__whoami" +
+                    (isActive ? " is-active" : "")
+                  }
+                >
                   <AccountIcon />
                   <span className="app-shell__lib-name app-shell__label">
                     {user.name}
                   </span>
-                </div>
+                </NavLink>
                 <button
                   type="button"
                   className="app-shell__lib app-shell__signout"
@@ -228,7 +273,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className={({ isActive }) =>
               "app-shell__search" + (isActive ? " is-active" : "")
             }
-            title="Search everything (/)"
+            title={`Search everything (${searchKey})`}
           >
             <SearchGlyph />
             <span>Search</span>
@@ -276,6 +321,12 @@ function UpdateBanner() {
   const { data: status } = useUpdateStatus(isAdmin);
   const [dismissed, setDismissed] = useState("");
   const navigate = useNavigate();
+
+  // Bigscreen is one attribute on the document root, applied here because the
+  // shell is the one component always mounted. index.html sets it before the
+  // first paint; this keeps it in step once React owns the page.
+  useBigscreen();
+  useBigscreenShortcut();
 
   const staged = status?.staged ?? "";
   // A staged update whose version is already the one running is an update that

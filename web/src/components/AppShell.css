@@ -289,14 +289,11 @@
 
 /* Who you are is not a control yet — no pointer, no hover lift. It becomes a
    link when the profile page exists, and then this rule goes. */
+/* The name is a link now, so it stops declaring itself inert: it lights like
+   every other rail destination. It keeps the muted resting colour, because who
+   you are is context rather than a place you are being sent. */
 .app-shell__whoami {
-  cursor: default;
   color: var(--text-muted);
-}
-
-.app-shell__whoami:hover {
-  color: var(--text-muted);
-  background: none;
 }
 
 .app-shell__signout:disabled {

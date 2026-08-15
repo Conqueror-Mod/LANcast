@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
+import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
@@ -228,40 +229,43 @@ export function Player() {
       ) {
         return;
       }
-      switch (e.key) {
-        case " ":
-        case "k":
-          e.preventDefault();
-          togglePlay();
-          break;
-        case "f":
-          toggleFullscreen();
-          break;
-        case "m":
-          toggleMute();
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          seekBy(-10);
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          seekBy(10);
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          changeVolume((pb.muted ? 0 : pb.volume) + 0.05);
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          changeVolume((pb.muted ? 0 : pb.volume) - 0.05);
-          break;
-        case "[":
-          cycleSub(-1);
-          break;
-        case "]":
-          cycleSub(1);
-          break;
+      /*
+       * Matched against the bindings rather than against literals.
+       *
+       * These were a switch on hard-coded keys, which meant the keyboard
+       * customizer could store an override, render it back, and change
+       * nothing — the pane and the player disagreeing about what a key does
+       * is the exact failure the single key map exists to prevent.
+       *
+       * Seek and volume stay on the arrows because those bindings are fixed:
+       * they are how you move through a film and around a grid, and the
+       * customizer refuses to rebind them for the same reason.
+       */
+      if (matchesBinding("playpause", e.key)) {
+        e.preventDefault();
+        togglePlay();
+      } else if (matchesBinding("fullscreen", e.key)) {
+        toggleFullscreen();
+      } else if (matchesBinding("mute", e.key)) {
+        toggleMute();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        seekBy(-10);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        seekBy(10);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        changeVolume((pb.muted ? 0 : pb.volume) + 0.05);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        changeVolume((pb.muted ? 0 : pb.volume) - 0.05);
+      } else {
+        // The subtitle pair is one binding with two keys: the first cycles
+        // back, the second forward, whatever they have been rebound to.
+        const subs = bindingKeys("subtitles");
+        if (e.key === subs[0]) cycleSub(-1);
+        else if (e.key === subs[1]) cycleSub(1);
       }
       wakeChrome();
     };

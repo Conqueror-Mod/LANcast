@@ -47,3 +47,7 @@ Thumbs.db
 
 # Autonomous-session work logs. Kept on disk, not in the repo.
 /AUTO-AGENT TEST LOG/
+
+# Local run configuration for the preview tooling. Machine-specific: it names
+# a data directory that exists on one computer.
+.claude/launch.json

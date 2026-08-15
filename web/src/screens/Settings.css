@@ -180,6 +180,38 @@
   cursor: pointer;
 }
 
+/* A toggle with a paragraph under it. The plain .set-toggle centres a single
+   line against its box; once there is a description, the box belongs at the top
+   of the text rather than halfway down it. */
+.set-toggle--described {
+  align-items: flex-start;
+}
+
+.set-toggle--described > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.set-toggle__desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 56ch;
+  /* Descriptions wrap rather than pushing the pane wide — the same fault the
+     settings descriptions had before v0.6.26. */
+  overflow-wrap: anywhere;
+}
+
+.set-toggle__desc kbd {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
 .set-toggle input {
   accent-color: var(--gold);
   width: 16px;
