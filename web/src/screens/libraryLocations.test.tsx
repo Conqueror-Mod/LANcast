@@ -276,3 +276,26 @@ describe("a scan that could not read every location", () => {
     expect(host.textContent).not.toMatch(/locations scanned/);
   });
 });
+
+describe("browsing for a folder", () => {
+  /*
+   * An absolute server path typed from memory is the one field on this screen a
+   * person cannot check as they go: a typo is accepted, stored, and only shows
+   * up later as a location that scans nothing. The picker already existed for
+   * adding a library; these assert it is reachable from the two places that
+   * take a path per *location*.
+   */
+  it("offers Browse when adding a location", async () => {
+    mount(twoLocations);
+    await openEditor();
+    const browse = buttons("Browse…");
+    expect(browse.length).toBeGreaterThan(0);
+  });
+
+  it("offers Browse on each existing location, for moving it", async () => {
+    mount(twoLocations);
+    await openEditor();
+    // One per location, plus the one on the add row.
+    expect(buttons("Browse…").length).toBe(twoLocations[0].roots.length + 1);
+  });
+});

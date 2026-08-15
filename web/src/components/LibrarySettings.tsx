@@ -298,6 +298,10 @@ function LibraryLocations({ library }: { library: Library }) {
   const add = useAddRoot();
   const [adding, setAdding] = useState("");
   const [confirming, setConfirming] = useState<number | null>(null);
+  // Browse rather than type. An absolute server path from memory is the one
+  // field on this screen a person cannot check as they go — a typo is accepted,
+  // stored, and only shows up as a location that scans nothing.
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <div className="set-roots">
@@ -326,6 +330,9 @@ function LibraryLocations({ library }: { library: Library }) {
           value={adding}
           onChange={(e) => setAdding(e.target.value)}
         />
+        <button className="set-btn" onClick={() => setPickerOpen(true)}>
+          Browse…
+        </button>
         <button
           className="set-btn"
           disabled={adding.trim() === "" || add.isPending}
@@ -339,6 +346,15 @@ function LibraryLocations({ library }: { library: Library }) {
           {add.isPending ? "Adding…" : "Add location"}
         </button>
       </div>
+      {pickerOpen && (
+        <DirectoryPicker
+          onSelect={(p) => {
+            setAdding(p);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {add.error && (
         <p className="set-row__note">{(add.error as Error).message}</p>
       )}
@@ -369,6 +385,9 @@ function LocationRow({
   const [path, setPath] = useState(root.path);
   const move = useRepointRoot();
   const remove = useRemoveRoot();
+  // Opens where the location currently is, since a move is usually to a
+  // sibling of it — a drive letter changed, or a folder was renamed.
+  const [pickerOpen, setPickerOpen] = useState(false);
   const dirty = path.trim() !== root.path;
   const err = (move.error ?? remove.error) as Error | null;
 
@@ -380,6 +399,9 @@ function LocationRow({
           value={path}
           onChange={(e) => setPath(e.target.value)}
         />
+        <button className="set-btn" onClick={() => setPickerOpen(true)}>
+          Browse…
+        </button>
         <button
           className="set-btn"
           disabled={!dirty || move.isPending}
@@ -432,6 +454,16 @@ function LocationRow({
         {root.item_count === 1 ? "" : "s"} here. Moving keeps every one of them
         — matches, artwork and watch progress travel with the folder.
       </div>
+      {pickerOpen && (
+        <DirectoryPicker
+          initialPath={root.path}
+          onSelect={(p) => {
+            setPath(p);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {err && <p className="set-row__note">{err.message}</p>}
     </div>
   );
