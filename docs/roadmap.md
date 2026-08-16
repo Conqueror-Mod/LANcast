@@ -441,9 +441,31 @@ group is not priority.
   source never ends, so nothing else would ever stop it and a leak pulls a
   stream at full rate for ever.
 
+  **The EPG is built** ([ADR 0036](adr/0036-epg.md)). A source can carry a
+  second URL — an XMLTV guide, plain or gzipped — and the Live TV page shows
+  what is on now and next on every tile, with a schedule under the player and a
+  search that reads programme titles as well as channel names.
+
+  Listings attach to channels by **`tvg-id` and nothing else**, and that is a
+  decision to refuse a feature rather than a gap. Matching on display name is
+  the obvious fallback and it attaches "BBC One" listings to "BBC One HD" with
+  total confidence — a failure that is *invisible from the guide*, because the
+  titles and times are all plausible and the only way to find it is to watch the
+  channel. A channel with no `tvg-id` says it has no listings instead.
+
+  The ordering constraint that fell out of it: replacing a source's channels
+  cascades their listings away, so a refresh imports the channel list first and
+  the guide second. The other order yields an empty guide and no error anywhere
+  to explain it. Tested from both sides.
+
+  Guides refresh themselves every twelve hours, unlike library scans, which are
+  opt-in. The asymmetry is the point: an unrefreshed guide does not go blank, it
+  goes *wrong* — it is the only thing here that decays into a falsehood by being
+  left alone.
+
   **Still not built:** hardware tuners (HDHomeRun and friends — no device to
-  build against) and an EPG. A channel list carries names and logos, not a
-  schedule.
+  build against), and recording, which needs somewhere to put the files and a
+  decision about what a recording *is* once it lands in a library.
 
 ### Metadata, ratings and discovery
 

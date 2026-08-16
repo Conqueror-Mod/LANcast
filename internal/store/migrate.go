@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 23
+const CurrentSchemaVersion = 24
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -62,6 +62,7 @@ var migrations = []migration{
 	{version: 21, sql: schemaRevision21},
 	{version: 22, sql: schemaRevision22},
 	{version: 23, sql: schemaRevision23},
+	{version: 24, sql: schemaRevision24},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -797,4 +798,51 @@ CREATE TABLE IF NOT EXISTS channel (
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_source ON channel(source_id, position);
+`
+
+/*
+ * Revision 24 — the EPG (ADR 0031).
+ *
+ * A programme is not a media_item for the same reason a channel is not one, and
+ * then one reason more: there are hundreds of thousands of them, they are
+ * replaced wholesale every time the guide refreshes, and none of them is a work
+ * anybody can play. Putting a fortnight of listings for six hundred channels
+ * into the table that carries watch state and locks would mean half a million
+ * rows on the hot path of every library query.
+ *
+ * `epg_program.channel_id` references `channel`, resolved **at import** from
+ * XMLTV's channel id against `channel.tvg_id`. Storing the raw XMLTV id instead
+ * and joining at read time was the alternative and it is worse: every guide
+ * query would then carry a string join, and a listing for a channel nobody
+ * subscribes to would be stored for ever. Resolving at import means the guide
+ * holds exactly the schedule of channels that exist, and the cascade deletes
+ * it when the source goes.
+ *
+ * The index is on (channel_id, start_at) because every read this table has is
+ * "what is on channel N around time T" — now/next for a grid, or a day's
+ * schedule for one channel. `stop_at` is deliberately not in it: a range query
+ * bounded on start alone plus one row of slack answers both.
+ */
+const schemaRevision24 = `
+ALTER TABLE channel ADD COLUMN tvg_id TEXT;
+
+ALTER TABLE channel_source ADD COLUMN epg_url TEXT;
+ALTER TABLE channel_source ADD COLUMN epg_refreshed_at INTEGER;
+ALTER TABLE channel_source ADD COLUMN program_count INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS epg_program (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id INTEGER NOT NULL REFERENCES channel(id) ON DELETE CASCADE,
+    start_at   INTEGER NOT NULL,
+    stop_at    INTEGER NOT NULL,
+    title      TEXT    NOT NULL,
+    description TEXT,
+    category   TEXT,
+    season     INTEGER,
+    episode    INTEGER,
+    icon_url   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_epg_channel ON epg_program(channel_id, start_at);
+CREATE INDEX IF NOT EXISTS idx_epg_window  ON epg_program(start_at);
 `

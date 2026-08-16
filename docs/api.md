@@ -1910,8 +1910,8 @@ Not cacheable, and no `Content-Length`: this is a stream with no end, and a
 cache holding "the channel" would serve one viewer's minute to everybody who
 asked afterwards.
 
-**Still not built:** hardware tuners (HDHomeRun and friends), and an EPG. A
-channel list has names and logos, not a schedule.
+**Still not built:** hardware tuners (HDHomeRun and friends). The EPG is built —
+see `GET /api/guide` below.
 
 **Known limit:** `EXT-X-KEY` and `EXT-X-MAP` URIs are left pointing upstream
 rather than half-rewritten. A client that can reach the provider still plays;
@@ -1935,6 +1935,19 @@ adds it is the moment they are watching to see whether it worked. A source whose
 import fails is **kept**, with `import_error` in the response: the URL may be
 right and the provider down, and deleting it would mean retyping it.
 
+`epg_url` is optional and is an **XMLTV** document, plain or gzipped. It is
+imported in the same request, *after* the channel list, and a guide that fails
+is reported as `epg_error` — separately from `import_error`, because a working
+channel list with no schedule is a usable Live TV and conflating the two makes
+the channels look broken. The response carries `programs`, the number of
+listings stored, which is not the number in the file: a guide covers channels a
+source does not carry and those are dropped rather than stored against nothing.
+
+**Refused guide URLs are the same set as refused playlist URLs.** A guide URL is
+fetched by this server exactly as a playlist URL is, so it gets the identical
+check on both `POST` and `PATCH`. A door closed on one route and open on another
+is not closed.
+
 **Refused URLs:** anything that is not `http`/`https`, and **this server's own
 address**. Other loopback addresses are deliberately allowed â€” a tvheadend or a
 local transcoder on the same machine is one of the most ordinary sources this
@@ -1953,8 +1966,75 @@ each time the guess is wrong. The replacement runs in one transaction, or a
 refresh would leave a window where the old channels are gone and the new ones
 have not arrived.
 
+A refresh imports **channels first and the guide second**, and that ordering is
+load-bearing rather than incidental: replacing channels deletes their rows, and
+`epg_program.channel_id` cascades, so a guide imported first is deleted moments
+later by the channel import — producing an empty guide with no error anywhere to
+explain it.
+
 `502 upstream` when the provider cannot be reached or does not return a
-playlist.
+playlist. A guide failure is never a `502`: the channel list succeeded, and the
+guide is reported in `epg_error`.
+
+### `GET /api/guide`
+
+What is on now and next, for every channel that has listings. Not admin-gated —
+what is on television tonight is not a secret from the household.
+
+```json
+{ "at": 1755290400,
+  "channels": {
+    "12": { "now":  { "id": 91, "channel_id": 12,
+                      "start_at": 1755288000, "stop_at": 1755291600,
+                      "title": "The News", "description": "What happened.",
+                      "category": "News", "season": null, "episode": null,
+                      "icon_url": null },
+            "next": { "id": 92, "…": "…" } } } }
+```
+
+Keyed by channel id so a client can render a channel grid without joining
+anything — it already holds the channels. `at` is the instant the answer
+describes, and clients should draw progress from it rather than from their own
+clock, which may be skewed.
+
+**A channel with no listings is absent, not present and empty.** That is what
+lets a client tell "this channel has no guide" from "nothing is on", and those
+are different sentences.
+
+`?at=` takes a unix timestamp and answers as of then, for a client that wants
+the guide at a time other than now.
+
+**Listings attach to channels by `tvg-id`, and by nothing else.** A channel
+whose `#EXTINF` carries no `tvg-id` never appears here. Matching on display name
+instead would confidently attach "BBC One" listings to "BBC One HD" and be wrong
+in a way nobody could see from the guide, so it is refused
+([ADR 0036](adr/0036-epg.md)).
+
+### `GET /api/channels/{id}/guide`
+
+One channel's schedule.
+
+```json
+{ "programs": [ { "id": 91, "channel_id": 12, "start_at": 1755288000,
+                  "stop_at": 1755291600, "title": "The News",
+                  "description": null, "category": "News",
+                  "season": null, "episode": null, "icon_url": null } ] }
+```
+
+`?from=` is a unix timestamp defaulting to now, `?hours=` a window defaulting to
+12 and capped at 336 (a fortnight — more than any guide publishes). Programmes
+are returned if they *overlap* the window rather than fall inside it, because the
+programme that started before the window opened is the one being watched, and a
+schedule that omits it begins with a hole.
+
+`400 bad_request` on a malformed timestamp or an out-of-range window; `404` when
+there is no such channel.
+
+**Guides refresh by themselves, every twelve hours**, and expired listings are
+pruned a day after they end. This is the one thing in LANcast that goes wrong by
+*doing nothing*: an unrefreshed guide does not go blank, it goes wrong, and says
+last Tuesday's programme is on now. A library that is not rescanned still lists
+the films it listed yesterday, which is why scanning is opt-in and this is not.
 
 ### `GET /api/review?library_id=`
 

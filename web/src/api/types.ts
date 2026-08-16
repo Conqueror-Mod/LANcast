@@ -615,6 +615,10 @@ export interface Channel {
   logo_url: string | null;
   group: string | null;
   position: number;
+  // The XMLTV id listings arrive under. Null means this channel can never have
+  // a guide — the playlist did not say which channel it is, and matching by
+  // name would attach "BBC One" listings to "BBC One HD".
+  tvg_id: string | null;
 }
 
 export interface ChannelSource {
@@ -624,6 +628,33 @@ export interface ChannelSource {
   created_at: number;
   refreshed_at: number | null;
   channel_count: number;
+  epg_url: string | null;
+  epg_refreshed_at: number | null;
+  program_count: number;
+}
+
+// GET /api/guide, GET /api/channels/{id}/guide — one entry in the schedule.
+// Times are unix seconds; a programme is an interval, not a duration, because
+// live television has no "position" to resume from.
+export interface Program {
+  id: number;
+  channel_id: number;
+  start_at: number;
+  stop_at: number;
+  title: string;
+  description: string | null;
+  category: string | null;
+  season: number | null;
+  episode: number | null;
+  icon_url: string | null;
+}
+
+// GET /api/guide — keyed by channel id (as a string, because JSON keys are).
+// A channel with no listings is absent rather than present and empty, so "no
+// guide" can be told from "nothing on".
+export interface GuideNow {
+  now: Program;
+  next?: Program;
 }
 
 // GET /api/people — the other accounts on this server (ADR 0035). `sharing` is
