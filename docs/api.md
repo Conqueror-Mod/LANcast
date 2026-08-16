@@ -636,10 +636,18 @@ A **collection** (`kind: "collection"`) groups otherwise-independent items —
 a film series, a franchise — through many-to-many membership, not `parent_id`;
 its members stay top-level and may belong to more than one collection. Fetch its
 members with `?collection_id=`, **not** `?parent_id=` (which is always empty for
-a collection). A collection is shown in the top-level grid only when it groups
-**at least two present members**: a provider supplies a franchise even when the
-library holds a single film from it, and a collection of one is just a duplicate
-tile of that film.
+a collection). A collection is listed only when it groups **at least two present
+members**: a provider supplies a franchise even when the library holds a single
+film from it, and a collection of one is just a duplicate tile of that film with
+a "Play all" button.
+
+That rule applies to **every listing**, not only the top-level grid. It was once
+a property of the grid, which meant `?kind=collection` — the collections page,
+and not a top-level query — was the one listing that showed the singletons
+everything else refused: a Hitman Collection containing Hitman, an Aquaman
+Collection containing Aquaman, a hundred more. Fetching a collection's own
+members with `?collection_id=` is unaffected; the rule hides a collection from
+listings *of* collections, never what is inside one.
 
 A **multi-part work** (a two-part film, a serial, a miniseries) instead
 *contains* its pieces through `parent_id`: the parent carries the identity, the

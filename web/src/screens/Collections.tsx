@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteItems, useLibraries } from "@/api/hooks";
+import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { useBackHandler } from "@/focus/FocusController";
 import { PosterTile } from "@/components/PosterTile";
 import {
@@ -28,7 +30,13 @@ export function Collections() {
   const { data: libraries } = useLibraries();
   const library = libraries?.find((l) => l.id === libraryID);
 
-  const { data, isLoading } = useInfiniteItems({
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteItems({
     libraryID,
     kind: "collection",
     sort: "title",
@@ -44,6 +52,23 @@ export function Collections() {
    */
   const initial = params.get("initial") ?? "";
   const items = all.filter((i) => matchesInitial(i.title, initial));
+  const total = data?.pages[0]?.total ?? 0;
+
+  /*
+   * The page pages, like every other listing.
+   *
+   * It did not, and the omission was invisible: one page of 120 rendered, the
+   * count read "120", and every collection after roughly "H" was unreachable
+   * with nothing on screen to say so. The rail made it worse rather than
+   * better — it filters in memory over `all`, so a letter that had not loaded
+   * simply had no collections in it.
+   */
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useInfiniteScroll(sentinel, {
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  });
 
   const back = () => navigate(`/library/${libraryID}`);
   useBackHandler(back);
@@ -55,7 +80,17 @@ export function Collections() {
           ← {library?.name ?? "Library"}
         </button>
         <h1 className="browse__title">Collections</h1>
-        <span className="browse__count">{items.length || ""}</span>
+        {/* The server's total, not the number loaded — `items.length` read
+            "120" on a library with 170 collections, which is the paging bug
+            wearing a number. Filtering by letter narrows what is shown, so the
+            filtered count leads when the rail is in use. */}
+        <span className="browse__count">
+          {initial
+            ? items.length.toLocaleString()
+            : all.length < total
+              ? `${all.length.toLocaleString()} of ${total.toLocaleString()}`
+              : total.toLocaleString() || ""}
+        </span>
       </div>
 
       {!isLoading && items.length === 0 && (
@@ -82,6 +117,7 @@ export function Collections() {
           <PosterTile key={item.id} item={item} />
         ))}
       </div>
+      <div ref={sentinel} aria-hidden="true" />
     </div>
   );
 }
