@@ -41,26 +41,46 @@ export function clock(totalSeconds: number): string {
 }
 
 /*
- * "S01E02", and the series it belongs to.
+ * "S01E02" — but only for something that actually has episodes.
  *
- * An episode's own title is not enough to identify it anywhere it appears
- * outside its show. On Continue Watching, "Stray Dog Strut · 1998" reads as a
- * film nobody has heard of — it is the second episode of Cowboy Bebop, and the
- * tile said nothing that would tell you so.
+ * A music track reuses the show columns: the scanner writes the album into
+ * `series`, the disc into `season` and the track number into `episode`
+ * (ADR 0024, and `ApplyTrackTags`). So "has a season and an episode" is true of
+ * every tagged song in the library, and formatting on that test labelled Pearl
+ * Jam's *Black* as **S00E33** and Garbage's *#1 Crush* as **S00E14** — disc
+ * zero, track thirty-three.
  *
- * Detail.tsx already built this string twice, for a download filename and a
- * receipt. A third copy in the tile would be the version that drifts, so it
- * lives here and all three call it.
+ * The kind is the only thing that separates them, which is why it is checked
+ * here rather than left to each caller to remember.
+ */
+export function episodeCode(item: {
+  kind?: string;
+  season?: number | null;
+  episode?: number | null;
+}): string | null {
+  if (item.kind !== "episode") return null;
+  if (item.season == null || item.episode == null) return null;
+  return `S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`;
+}
+
+/*
+ * The series and the episode together, for a tile that has one line to say what
+ * it is looking at.
+ *
+ * Everywhere a tile appears outside its own show — Continue Watching, search, a
+ * shelf — the episode title alone is not an identification. "Stray Dog Strut ·
+ * 1998" reads as an obscure film; it is Cowboy Bebop S01E01.
  *
  * Returns null when the item is not an episode, which is how a caller decides
  * to fall back to the year.
  */
 export function episodeLabel(item: {
+  kind?: string;
   series?: string | null;
   season?: number | null;
   episode?: number | null;
 }): string | null {
-  if (item.season == null || item.episode == null) return null;
-  const code = `S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`;
+  const code = episodeCode(item);
+  if (!code) return null;
   return item.series ? `${item.series} · ${code}` : code;
 }
