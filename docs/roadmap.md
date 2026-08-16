@@ -401,7 +401,30 @@ group is not priority.
 - ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
   UI and mini-player in v0.6.0.
 - ~~**Photo library** with a built-in **image viewer**~~ — **built** in v0.6.5 ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)). Folders become galleries, because a filename like `openart-f81b76…_raw.jpg` says nothing and there is no provider to ask. Thumbnails run in their own worker through the existing content-addressed cache; HEIC decodes through the ffmpeg already required, because a phone backup is mostly HEIC and a wall of placeholders would be a feature that looks finished and is useless. EXIF orientation and date-taken only — **GPS deliberately unread**, since the safest way never to leak location data is never to load it.
-- **Live TV** — a tuner page and function.
+- **Live TV** — a tuner page and function. **Channels are built; playback is
+  half-built and the gap is named.** A channel source is an M3U — from an IPTV
+  provider or from a tuner on the network — and a channel is deliberately **not
+  a `media_item`**: that table describes works, and a channel has no duration,
+  no file, no position and no identity a provider could match, so it would have
+  meant six nullable columns and a `kind` every listing must exclude
+  ([ADR 0002](adr/0002-one-wide-media-item-table.md)). Channel lists are
+  routinely credentialed, so **the upstream URL never reaches a client**: clients
+  play through a proxy that takes a channel id rather than a URL, and for HLS the
+  playlist is rewritten so segments resolve *relative to that channel's own
+  base* — nothing a caller sends can change the host, which is what keeps it
+  from being an open relay inside somebody's network. Refreshing **replaces**
+  rather than merges, because the file carries no id worth trusting across
+  versions and merging duplicates every channel each time the guess is wrong.
+
+  **What is not built: playback of the common case.** Most IPTV channels are HLS
+  carrying MPEG-TS, and Chromium decodes neither — `canPlayType("video/mp2t")`
+  is empty — while [ADR 0013](adr/0013-transcode-pipeline.md) refuses to vendor
+  hls.js. So today this plays what a browser already understands, and says so
+  when it cannot. The fix is to route channels through the ffmpeg pipeline that
+  already produces progressive fMP4 for exactly this reason; it is the obvious
+  next step and it is deliberately not disguised as done. Hardware tuners
+  (HDHomeRun and friends) are also untouched — there was no device to build
+  against.
 
 ### Metadata, ratings and discovery
 
@@ -427,8 +450,20 @@ group is not priority.
   Trending, ratings/reviews and viewer stats are not stubbed** — two of them need
   a decision about who may see whose viewing that nobody has made, and a page of
   scaffolding promising four features is worse than three true numbers, because
-  the scaffolding is what people plan around. **Ratings and reviews are now
-  built, and only the private half**: your rating is yours, stored per user,
+  the scaffolding is what people plan around. **Find Friends and viewer stats
+  are now built too, because the decision they waited on has been made:**
+  [ADR 0035](adr/0035-who-may-see-whose-viewing.md) settles that viewing is
+  private by default and shared only by an explicit per-account opt-in. Four
+  deferrals across three passes was enough — each feature built around the
+  question had encoded an assumption about the answer, and the assumptions were
+  not obviously compatible. "Find Friends" became a **People** page, which is
+  the honest name on a household server: there is no directory to search and no
+  second server to federate with, so it lists the accounts already here. It says
+  who has chosen *not* to share rather than showing an empty list, because "has
+  not shared" and "watches nothing" are different statements. The switch lives
+  in the account's own settings and there is **no administrator route that could
+  set it** — a switch somebody else can flip is not consent. **Ratings and
+  reviews are also built, and only the private half**: your rating is yours, stored per user,
   shown to you, and aggregated for nobody. The routes carry no user id at all,
   so a leak cannot be introduced by forgetting a filter. Turning private
   verdicts into visible ones changes what people are willing to write, which
@@ -715,8 +750,15 @@ where that openness gets exercised.
       with a numbered track list, square sleeves, an audio mode in the player,
       and a docked mini-player. The grid artist images were waiting for now
       exists.
-   4. **Artist images from TheAudioDB** — **back burner.** Unblocked and not
-      next. The borrowed album cover is a placeholder good enough to wait
+   4. **Artist images from TheAudioDB** — **provider built, not yet wired to a
+      worker.** The lookup, the matching rules and the refusals are implemented
+      and tested against fixtures; what it does **not** have is a live
+      verification, because TheAudioDB needs an API key and none was added. The
+      rule worth keeping is that a **near miss is refused**: a search endpoint
+      returns neighbours, and taking the first row is how "Sun" gets a
+      photograph of "Sunn O)))" — a wrong face is worse than the borrowed album
+      sleeve it would replace, and refusing leaves that placeholder in place.
+      Originally recorded as: **back burner, unblocked and not next.** The borrowed album cover is a placeholder good enough to wait
       behind, and it supersedes itself with nothing to clean up
       ([ADR 0025](adr/0025-artist-images.md)). This is the first music item
       whose absence is cosmetic rather than functional, which makes it the right
