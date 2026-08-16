@@ -7,6 +7,8 @@ import {
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
 import { HomeHero } from "@/components/HomeHero";
+import { HomeMasthead } from "@/components/HomeMasthead";
+import { TrendingShelf } from "@/components/TrendingShelf";
 import { isMusic, isPicture } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import "./Home.css";
@@ -100,6 +102,13 @@ export function Home() {
 
   return (
     <div className="home">
+      {/*
+        The masthead runs above the hero when there is one and stands in for it
+        when there is not — a home page whose first screenful is an empty grid
+        is the state a new install spends its first hour in, and it is the one
+        nobody designs for.
+      */}
+      <HomeMasthead libraries={libraries} hasHero={!!hero} />
       {hero && <HomeHero item={hero.item} resuming={hero.resuming} />}
       <div className="home__shelves">
         <Shelf title="Continue Watching" items={continueVideo} />
@@ -107,6 +116,12 @@ export function Home() {
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />
         <Shelf title="Recently Added Photos" items={recentPictures} />
+        {/* Activity before catalogue: what people have been playing is a
+            livelier answer to "what now" than the same alphabetical grid the
+            library page already gives. */}
+        {libraries?.map((lib) => (
+          <TrendingShelf key={`trend-${lib.id}`} library={lib} />
+        ))}
         {libraries?.map((lib) => (
           <LibraryShelf key={lib.id} library={lib} />
         ))}

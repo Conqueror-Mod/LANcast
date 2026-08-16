@@ -74,6 +74,17 @@ type Progress struct {
 	RootsScanned int           `json:"roots_scanned"`
 	RootsSkipped []SkippedRoot `json:"roots_skipped,omitempty"`
 
+	/*
+	 * A verdict on the shape of what this scan produced, when it does not look
+	 * like the kind the library was created as (see shapecheck.go).
+	 *
+	 * Separate from Issues, which are files that could not be read. Nothing
+	 * failed here — the scan succeeded, and that is the problem: kind is
+	 * immutable, so a library scanned as the wrong one is wrong permanently
+	 * unless somebody is told at the moment it happens.
+	 */
+	ShapeWarning *ShapeWarning `json:"shape_warning,omitempty"`
+
 	Issues     []Issue `json:"issues,omitempty"`
 	StartedAt  int64   `json:"started_at"`
 	FinishedAt *int64  `json:"finished_at,omitempty"`
@@ -189,6 +200,49 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 		p.State = StateIdle
 		s.log.Info("scan complete", "library", lib.ID,
 			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing)
+
+		// The shape check runs on success only. A failed scan produced a
+		// partial library by definition, and telling somebody their TV library
+		// has no shows in it because the drive went away halfway through would
+		// be a false alarm about a permanent mistake — the most expensive kind
+		// of false alarm this project could ship.
+		if sh, err := s.st.Shape(ctx, lib.ID); err != nil {
+			s.log.Error("library shape check", "library", lib.ID, "error", err)
+		} else {
+			w := CheckShape(lib.Kind, sh, *p)
+			if w.Code != "" {
+				p.ShapeWarning = &w
+				s.log.Warn("library shape looks wrong for its kind",
+					"library", lib.ID, "kind", lib.Kind, "code", w.Code)
+			}
+			/*
+			 * Stored on the row, because live progress dies with the process and
+			 * this reports a mistake that cannot be undone — a library scanned on
+			 * Tuesday looked fine on Wednesday.
+			 *
+			 * Clearing is the subtle half. Part of the evidence — the count of
+			 * files that parsed as episodes — is gathered during the walk, so it
+			 * only reflects files *this* scan actually processed. A rescan that
+			 * finds nothing changed therefore produces no evidence and no
+			 * verdict, which is not the same as producing a clean bill of health.
+			 * Clearing on that would mean any rescan silently erased a standing
+			 * warning, which is how this was first written and what the run
+			 * against real files caught.
+			 *
+			 * So a warning is replaced when there is one, and withdrawn only by a
+			 * scan that did enough work to have seen the problem again.
+			 */
+			switch {
+			case w.Code != "":
+				if err := s.st.SetShapeWarning(ctx, lib.ID, &w); err != nil {
+					s.log.Error("store shape warning", "library", lib.ID, "error", err)
+				}
+			case p.ItemsChanged > 0 || p.ItemsMissing > 0:
+				if err := s.st.SetShapeWarning(ctx, lib.ID, nil); err != nil {
+					s.log.Error("clear shape warning", "library", lib.ID, "error", err)
+				}
+			}
+		}
 	}
 	delete(s.running, lib.ID)
 	done := s.onFinish

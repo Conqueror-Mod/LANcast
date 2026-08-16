@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
@@ -20,6 +21,8 @@ import {
   prevPos,
 } from "./queueOrder";
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
+import { popoutSupported, openPopout, moveElement } from "./popout";
+import { PopoutPlayer } from "./PopoutPlayer";
 
 // Playback lives above the router.
 //
@@ -160,6 +163,18 @@ interface PlaybackState {
   containerRef: React.RefObject<HTMLDivElement>;
   /** Claimed by the player screen while it is mounted. */
   claimFullSurface: (claimed: boolean) => void;
+
+  /*
+   * Pop-out: our own always-on-top window, not the browser's (ADR 0029).
+   *
+   * `popoutAvailable` is a feature test, not a preference — Document PiP is
+   * Chromium-only, and a button that cannot act is not shown. `popout` is
+   * whether the window is open right now, which the player screen reads so its
+   * own surface can say where the picture went.
+   */
+  popoutAvailable: boolean;
+  popout: boolean;
+  togglePopout: () => void;
 }
 
 const Ctx = createContext<PlaybackState | null>(null);
@@ -1015,6 +1030,115 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     s.setProperty("--cue-bottom", `${prefs.subPosition}%`);
   }, [prefs.subColor, prefs.subSize, prefs.subPosition]);
 
+  /*
+   * The pop-out window.
+   *
+   * `popoutWin` is state so the portal re-renders when the window opens or
+   * closes; the element move itself is imperative and happens in the effect
+   * below, outside React's reconciliation. That split is the whole design: React
+   * owns the controls in the other document, and the media element is moved by
+   * hand because a portal would unmount it and unmounting stops the sound.
+   */
+  const [popoutWin, setPopoutWin] = useState<Window | null>(null);
+  const [popoutRoot, setPopoutRoot] = useState<HTMLElement | null>(null);
+  /*
+   * Feature detection answers "does this host implement Document PiP". It does
+   * not answer "will it give me a window", and those come apart: an embedded
+   * WebView reports the API and then fails the call with InvalidStateError,
+   * because there is no window manager behind it.
+   *
+   * There is no way to find that out without asking, and asking requires a user
+   * gesture — so the first click is the probe. When it fails, this remembers,
+   * and every later click takes the browser picture-in-picture path instead.
+   * That path has to be reached *synchronously* from the click: the failed
+   * attempt consumes the transient activation, so a fallback inside the catch
+   * is already too late to open anything.
+   */
+  const [popoutRefused, setPopoutRefused] = useState(false);
+  const popoutAvailable = popoutSupported() && !popoutRefused;
+
+  const closePopout = useCallback(() => {
+    setPopoutWin((w) => {
+      w?.close();
+      return null;
+    });
+    setPopoutRoot(null);
+  }, []);
+
+  const togglePopout = useCallback(() => {
+    if (popoutWin) {
+      closePopout();
+      return;
+    }
+    const v = videoRef.current;
+    const aspect =
+      v && v.videoWidth > 0 && v.videoHeight > 0
+        ? v.videoWidth / v.videoHeight
+        : undefined;
+    void openPopout(aspect)
+      .then((opened) => {
+        if (!opened) return;
+        // The browser's own close button, and the "return to tab" affordance,
+        // both fire pagehide on the window rather than telling us directly.
+        opened.win.addEventListener("pagehide", () => {
+          setPopoutWin(null);
+          setPopoutRoot(null);
+        });
+        setPopoutWin(opened.win);
+        setPopoutRoot(opened.root);
+      })
+      .catch(() => {
+        /*
+         * The window could not be opened. Remember it, so the button stops
+         * offering something this host cannot do and becomes the browser
+         * picture-in-picture control instead — which is a worse pop-out, and
+         * the one the ADR keeps as the fallback for exactly this.
+         *
+         * Found by clicking the button rather than by reasoning about it.
+         * Before this, the rejection was unhandled and the button did nothing
+         * at all, forever: the dead control the ADR says not to ship.
+         */
+        setPopoutRefused(true);
+        // Attempted anyway, because in a host that merely declined this once it
+        // may still work — and if the activation has already been spent, this
+        // fails silently and the next click takes the synchronous path above.
+        const v = videoRef.current;
+        if (v && !isAudio && document.pictureInPictureEnabled) {
+          v.requestPictureInPicture().catch(() => {});
+        }
+      });
+  }, [popoutWin, closePopout]);
+
+  /*
+   * Move the element out, and bring it home.
+   *
+   * The stage is found by attribute rather than by ref, because the node lives
+   * in a portal rendered into the other document and a ref would arrive on a
+   * different commit than this effect. The element is returned to its slot on
+   * cleanup — including when the window is closed by the browser's own button,
+   * which is why the effect depends on the window rather than on a flag.
+   */
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!popoutRoot || !el) return;
+
+    const slot = el.parentElement;
+    const stage = popoutRoot.querySelector<HTMLElement>("[data-popout-stage]");
+    if (!stage || !slot) return;
+
+    moveElement(el, stage);
+    return () => {
+      // Home is the slot it came from. If the provider itself has gone, there
+      // is nothing to return to and nothing playing to protect.
+      if (slot.isConnected) moveElement(el, slot);
+    };
+  }, [popoutRoot]);
+
+  // A window left open after playback stops is a floating black rectangle.
+  useEffect(() => {
+    if (popoutWin && surface === "idle") closePopout();
+  }, [popoutWin, surface, closePopout]);
+
   const claimFullSurface = useCallback((claimed: boolean) => {
     setFullClaimed(claimed);
   }, []);
@@ -1069,11 +1193,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     videoRef,
     containerRef,
     claimFullSurface,
+    popoutAvailable,
+    popout: popoutWin !== null,
+    togglePopout,
   };
 
   return (
     <Ctx.Provider value={value}>
       {children}
+      {/* Our controls, in the other document. A portal keeps React context —
+          the playback state, the router, the query client — so these are the
+          same components behaving the same way, in a different window. */}
+      {popoutRoot &&
+        createPortal(<PopoutPlayer onClose={closePopout} />, popoutRoot)}
       {/* One media element for the life of the app.
           It is moved between surfaces with CSS rather than re-parented: React
           would unmount and remount it on a move, and an unmounted element stops

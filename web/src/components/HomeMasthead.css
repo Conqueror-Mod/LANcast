@@ -1,0 +1,128 @@
+/*
+ * The home masthead.
+ *
+ * Theme without gold. Gold means where you are and nothing else (docs/design.md),
+ * so the identity here comes from the things already in the palette: the void
+ * floor, the nebula's violet-blue, and the letterspaced caps the section labels
+ * use. The only gold on this block is the focus ring, which is the rule working
+ * rather than an exception to it.
+ */
+.masthead {
+  padding: 34px 0 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* With a hero below, this is an introduction rather than a statement — two
+   full-height openings stacked is one too many, and the hero is the better. */
+.masthead--compact {
+  padding: 18px 0 14px;
+  gap: 12px;
+}
+
+.masthead__greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.masthead__hello {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.masthead--compact .masthead__hello {
+  font-size: 21px;
+}
+
+.masthead__count {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+
+/*
+ * The libraries as destinations.
+ *
+ * A wrapping row rather than a scroller: there are three or four of these, not
+ * forty, and a horizontal scroller for four items is a scrollbar pretending to
+ * be a feature.
+ */
+.masthead__libs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.masthead__lib {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Cards in a wrapping row must not shrink — a collapsed card with an
+     invisible label is a bug that reads as a styling accident (CLAUDE.md). */
+  flex: none;
+  padding: 10px 16px 10px 12px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  /* The card catches a little of the nebula rather than sitting on it flat, so
+     the row reads as part of the field behind it. */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(74, 54, 140, 0.22),
+      rgba(38, 88, 168, 0.12) 60%,
+      rgba(10, 15, 34, 0.6)
+    );
+  box-shadow: var(--elev-1);
+  text-decoration: none;
+  color: var(--text-secondary);
+  transition:
+    border-color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.masthead__lib:hover,
+.masthead__lib:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.masthead__lib:focus-visible {
+  box-shadow: var(--elev-1), 0 0 0 3px var(--gold-ring);
+}
+
+.masthead__libicon {
+  display: flex;
+  color: var(--text-muted);
+}
+
+.masthead__lib:hover .masthead__libicon,
+.masthead__lib:focus-visible .masthead__libicon {
+  color: var(--gold-bright);
+}
+
+.masthead__libname {
+  font-size: 14px;
+}
+
+.masthead__libcount {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .masthead__hello {
+    font-size: 23px;
+  }
+  .masthead__lib {
+    padding: 8px 12px;
+  }
+}

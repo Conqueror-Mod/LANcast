@@ -363,6 +363,83 @@ would be re-litigating identity for a whole library, which the locked-fields
 rule forbids. Kind cannot be changed afterwards, so being loud at the moment it
 happens is the only defence there is.
 
+`shape_warning` is the **verdict** those counts feed, present only when a
+finished scan produced something that does not look like the kind it was
+scanned as:
+
+```json
+{ "shape_warning": {
+    "code": "episodes_in_movie_library",
+    "message": "This library was created for films, but 12 of 16 files are named like TV episodes...",
+    "remedy": "If this is a TV library, remove it and add it again as TV Shows..." } }
+```
+
+Three codes today — `no_shows_in_show_library`, `episodes_in_movie_library`,
+`everything_skipped_for_kind` — and the set is open, so a client renders its own
+wording for a code it knows and falls back to `message` for one it does not.
+
+`remedy` is separate from `message` because it is the part that is hard to hear:
+kind is immutable, so the only fix is to remove the library and add it again.
+Saying that plainly beats implying a settings toggle exists.
+
+It is a verdict rather than a measurement because "1 movie, 3 parts, 0 shows" is
+not something a person should have to interpret at the end of a scan. It is
+computed from a census of what the library actually *holds*, which is the only
+thing that can see the show-versus-movie case: nothing is skipped there, so no
+skip count can ever fire.
+
+**Only on a successful scan.** A failed scan produced a partial library by
+definition, and reporting "your TV library has no shows in it" because a drive
+went away halfway through would be a false alarm about a permanent mistake.
+
+**Stored on the library row** (schema 20) as well as reported in live progress,
+and also returned by `GET /api/libraries`. Progress is in memory and dies with
+the process, which gave a warning about an unchangeable property a lifetime of
+"until the server restarts" — a library scanned on Tuesday looked fine on
+Wednesday. The next clean scan clears it, because a warning that outlives its
+condition is worse than none.
+
+Thresholds are deliberately forgiving — a shows library with one show in it is
+doing its job, a film library with three episode-shaped names is a box set, and
+a library under five items is not judged at all. A check that cries wolf is a
+check that gets ignored, which is worse than no check.
+
+### `GET /api/libraries/{id}/trending`
+
+What this library's people have been playing in the last thirty days.
+
+```json
+{ "items": [ { "item": { "id": 87, "title": "Arrival", ... },
+               "viewers": 3, "finishers": 1, "last_at": 1755200000 } ],
+  "contributors": 3, "window_days": 30 }
+```
+
+`?limit=` defaults to 12 (max 50). Ranked by `viewers` descending, then by most
+recent activity — the tie-break is not decoration: without it a page of items
+that all have one viewer returns in whatever order SQLite chooses, and the shelf
+reshuffles itself on every refresh.
+
+`viewers` counts **accounts, not plays.** `playback_state` holds one row per
+item per user, so this is how many people have played something recently rather
+than how many times it has been played.
+
+`contributors` is why that is safe to expose. With one account every count is 1
+and the list is honestly "recently played", not a trend — so the client is given
+what it needs to say the true thing instead of being handed a list that calls
+itself trending regardless. A number meaning different things at different
+scales carries its scale with it.
+
+`finishers` is reported beside `viewers` because a title many people start and
+nobody finishes is a different fact from one everybody finished, and a single
+popularity number destroys the difference.
+
+Containers — shows, seasons, artists, albums, galleries, playlists — are
+excluded. A season is not a thing anybody played; it is where the episodes live.
+
+**Not admin-gated, and it names no accounts.** Which titles are popular is a
+fact about a shared library; who watched them is a fact about a person, and this
+endpoint deliberately cannot answer the second.
+
 ### `GET /api/items/{id}/photo`
 
 The picture itself, at full resolution. Photos only; anything else is `404`.

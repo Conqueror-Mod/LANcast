@@ -167,17 +167,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                 install the rail is otherwise empty, which is exactly when
                 somebody is looking for what else this thing can do.
 
-                Admin only: installing and granting a plugin is an admin act,
-                and a rail entry leading to a panel of refusals is worse than
-                no entry. */}
+                It leads to /addons — a page — rather than into Settings, which
+                is the mismatch this entry carried from the start: a rail item
+                that lands in Settings teaches that Add-ons is a setting.
+
+                Still admin only, and for a narrower reason than before: the
+                plugin list itself is admin-gated on the server, so a member
+                following this would reach a page that could not tell them
+                whether anything was installed. */}
             {isAdmin && (
               <NavLink
-                to="/settings?pane=addons"
+                to="/addons"
                 title="Add-ons"
                 onClick={releaseRail}
-                className={
-                  "app-shell__lib" +
-                  (location.search.includes("pane=addons") ? " is-active" : "")
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
                 }
               >
                 <AddonIcon />
