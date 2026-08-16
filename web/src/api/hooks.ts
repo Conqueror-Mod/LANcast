@@ -14,8 +14,12 @@ import type {
   AuthStatus,
   AuthUser,
   BrowseResult,
+  Channel,
+  ChannelSource,
+  Person,
   CrashReport,
   Facets,
+  HistoryEntry,
   Item,
   ItemsPage,
   Library,
@@ -1346,5 +1350,101 @@ export function useUpdateUser() {
     mutationFn: ({ id, ...patch }: { id: string; name?: string; role?: Role }) =>
       apiSend(`/api/users/${id}`, "PATCH", patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+// ------------------------------------------------------------- live tv
+
+export function useChannels(sourceID?: number) {
+  return useQuery({
+    queryKey: ["channels", sourceID ?? 0],
+    queryFn: ({ signal }) =>
+      apiGet<{ channels: Channel[] }>(
+        `/api/channels${sourceID ? `?source_id=${sourceID}` : ""}`,
+        signal,
+      ),
+    staleTime: 60_000,
+  });
+}
+
+export function useChannelSources(enabled: boolean) {
+  return useQuery({
+    queryKey: ["channel-sources"],
+    queryFn: ({ signal }) =>
+      apiGet<{ sources: ChannelSource[] }>("/api/channel-sources", signal),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useAddChannelSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; url: string }) =>
+      apiPost<{ source: ChannelSource; channels?: number; import_error?: string }>(
+        "/api/channel-sources",
+        body,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channel-sources"] });
+      qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+}
+
+export function useRefreshChannelSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiSend(`/api/channel-sources/${id}/refresh`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channel-sources"] });
+      qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+}
+
+export function useDeleteChannelSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiSend(`/api/channel-sources/${id}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channel-sources"] });
+      qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+  });
+}
+
+// -------------------------------------------------------------- people
+
+export function usePeople() {
+  return useQuery({
+    queryKey: ["people"],
+    queryFn: ({ signal }) => apiGet<{ people: Person[] }>("/api/people", signal),
+    staleTime: 60_000,
+  });
+}
+
+// Enabled only when that person shares — the endpoint answers an empty list
+// either way, and asking anyway would be a request whose answer is known.
+export function usePersonActivity(id: string | undefined, sharing: boolean) {
+  return useQuery({
+    queryKey: ["person-activity", id],
+    queryFn: ({ signal }) =>
+      apiGet<{ activity: HistoryEntry[] }>(`/api/people/${id}/activity`, signal),
+    enabled: !!id && sharing,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetSharing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (share: boolean) =>
+      apiSend("/api/profile/sharing", "PUT", { share }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["people"] });
+      qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
   });
 }

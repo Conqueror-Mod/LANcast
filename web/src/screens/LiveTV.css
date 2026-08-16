@@ -1,0 +1,178 @@
+/* Live TV. Channel tiles are wide and short — a channel is a name and a logo,
+   not a poster, and a 2:3 tile would be mostly empty. */
+
+.livetv__player {
+  margin-bottom: 18px;
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  border: 1px solid var(--gold-dormant);
+  background: #000;
+}
+
+.livetv__video {
+  width: 100%;
+  max-height: 60vh;
+  display: block;
+  background: #000;
+}
+
+.livetv__nowrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--space-raised);
+}
+
+.livetv__now {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.livetv__stop {
+  flex: none;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.livetv__stop:hover,
+.livetv__stop:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.livetv__filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+}
+
+.livetv__search {
+  align-self: flex-start;
+  width: min(320px, 100%);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+.livetv__search:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.livetv__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.livetv__group {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  flex: none;
+}
+
+.livetv__group:hover,
+.livetv__group:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+/* A selected group is where you are in this list, which is the one meaning gold
+   carries. */
+.livetv__group.is-on {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+}
+
+.livetv__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding-bottom: 40px;
+}
+
+.livetv__channel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Tiles in a grid must not shrink — a collapsed tile with an invisible label
+     is a bug that reads as a styling accident (CLAUDE.md). */
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.livetv__channel:hover,
+.livetv__channel:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.livetv__channel.is-playing {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 1px var(--gold-dormant);
+}
+
+.livetv__logo {
+  width: 40px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.livetv__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.livetv__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livetv__grouptag {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}

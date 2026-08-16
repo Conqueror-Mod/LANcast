@@ -1,0 +1,166 @@
+/* People on this server. Cards rather than rows, because each one can expand
+   into a list and a row that grows a list inside it reads as a broken row. */
+
+.people__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 20px;
+}
+
+.people__card {
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  /* Cards in a flex column must not shrink — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.people__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.people__avatar {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(74, 54, 140, 0.35);
+  color: var(--text-primary);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.people__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.people__name {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.people__meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.people__toggle {
+  flex: none;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.people__toggle:hover,
+.people__toggle:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+/* A choice, not an absence — so it is stated in words and not implied by an
+   empty space. */
+.people__private {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.people__activity {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 8px 8px;
+}
+
+.people__row {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px;
+  border-radius: var(--radius-tile);
+  text-decoration: none;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.people__row:hover,
+.people__row:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px var(--gold-dormant);
+}
+
+.people__art {
+  width: 34px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.people__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.people__title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.people__when,
+.people__empty {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.people__empty {
+  margin: 4px 6px;
+}
+
+.people__foot {
+  max-width: 62ch;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  padding-bottom: 40px;
+}
+
+.people__foot a {
+  color: var(--text-secondary);
+}
+
+.people__foot a:hover {
+  color: var(--gold-bright);
+}
