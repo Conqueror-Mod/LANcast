@@ -113,6 +113,37 @@ func TestShowAndSeasonDir(t *testing.T) {
 	}
 }
 
+// The season number can lead the folder name instead of trailing it — a
+// scene-release layout ("Season 1 - Star Trek Deep Space Nine") rather than
+// the "Show/Season 01" shape the rest of this file exercises. Before this
+// case matched reSeasonDir at all, showDirWalk stopped one level early and
+// treated the season folder as the show, producing a fake show per season
+// named after the folder rather than the series.
+func TestSeasonDirWithTrailingShowName(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	nested := filepath.Join(root, "Star Trek Deep Space Nine",
+		"Season 1 - Star Trek Deep Space Nine", "s01e005.babel.mkv")
+
+	if got, want := ShowDir(root, nested), filepath.Join(root, "Star Trek Deep Space Nine"); got != want {
+		t.Errorf("ShowDir(nested) = %q, want %q", got, want)
+	}
+	if got, want := SeasonDir(nested), filepath.Join(root, "Star Trek Deep Space Nine", "Season 1 - Star Trek Deep Space Nine"); got != want {
+		t.Errorf("SeasonDir(nested) = %q, want %q", got, want)
+	}
+}
+
+// A show folder that merely starts the way a season marker does must not be
+// swallowed by the wider match above: "S3rvant" has no separator between the
+// digit and the letter that follows it, so it never reads as season 3.
+func TestSeasonDirDoesNotMatchShowNameStartingWithS(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	nested := filepath.Join(root, "S3rvant", "S01E01.mkv")
+
+	if got, want := ShowDir(root, nested), filepath.Join(root, "S3rvant"); got != want {
+		t.Errorf("ShowDir(nested) = %q, want %q — \"S3rvant\" must not read as a season folder", got, want)
+	}
+}
+
 func TestPartOf(t *testing.T) {
 	tests := []struct {
 		name     string
