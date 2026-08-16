@@ -212,6 +212,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
 	mux.HandleFunc("GET /api/libraries/{id}/trending", s.libraryTrending)
 	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.adminOnly(s.refreshLibrary))
+	mux.HandleFunc("POST /api/libraries/{id}/reparse", s.adminOnly(s.reparseLibrary))
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)

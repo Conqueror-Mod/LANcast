@@ -118,7 +118,7 @@ Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md
   admin-only endpoint gets `403 forbidden`.
 
 Admin-only endpoints: `GET /api/browse`; `POST` and `DELETE` on `/api/libraries`, library
-`scan` and `refresh`; item metadata mutation (`PATCH /api/items/{id}`, lock
+`scan`, `refresh` and `reparse`; item metadata mutation (`PATCH /api/items/{id}`, lock
 delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 `/api/users`. Everything else a signed-in member may call.
 
@@ -2087,6 +2087,35 @@ filename alongside the proposed match so the two can be compared directly.
 ### `POST /api/items/{id}/refresh` · `POST /api/libraries/{id}/refresh`
 
 Re-fetch metadata, honoring all field locks. Returns `202`.
+
+### `POST /api/libraries/{id}/reparse`
+
+Re-runs the filename heuristics over a library's uncertain rows and requeues the
+ones whose guess changed. Admin only. Returns `200`.
+
+```json
+{ "examined": 140, "changed": 130 }
+```
+
+**Distinct from `refresh`, and the distinction is the point.** Refresh asks the
+provider the same question again; this corrects the question. A film whose year
+lived only in its folder name was searched with no year at all, and no number of
+refreshes would have changed that answer.
+
+Scope is deliberately narrow:
+
+- Only `review` and `unmatched` rows are touched. A `matched` row's title came
+  from a provider, which is better evidence than any filename.
+- `locked` and `local` rows are never offered — a locked identity is not
+  re-litigated, and a local one is what the user already said this is.
+- Field locks are honored **individually**: an item whose title a person
+  corrected still has its year re-parsed.
+- An empty guess never clears a populated field.
+
+Rows that already agree with their filename are neither rewritten nor requeued,
+so running it twice is free and the second call reports `"changed": 0`.
+
+`404` when there is no such library.
 
 ### `GET /api/artwork/{hash}?size=`
 
