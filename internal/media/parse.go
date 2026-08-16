@@ -138,7 +138,7 @@ var (
 	reYearBracket = regexp.MustCompile(`[\(\[]((?:19|20)\d{2})[\)\]]`)
 	reYearBare    = regexp.MustCompile(`[\s._-]((?:19|20)\d{2})(?:[\s._-]|$)`)
 	// Release-group noise: everything from the first quality marker onward is junk.
-	reNoise     = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|sdr|bluray|blu-ray|bdrip|brrip|dvdrip|webrip|web-dl|webdl|hdtv|remux|x264|x265|h264|h265|hevc|avc|xvid|divx|aac|ac3|eac3|dts|dts-hd|truehd|atmos|ddp5|dd5|10bit|8bit|proper|repack|extended|unrated|remastered|imax|multi)\b`)
+	reNoise = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p|4k|uhd|hdr|sdr|bluray|blu-ray|bdrip|brrip|dvdrip|webrip|web-dl|webdl|hdtv|remux|x264|x265|h264|h265|hevc|avc|xvid|divx|aac|ac3|eac3|dts|dts-hd|truehd|atmos|ddp5|dd5|10bit|8bit|proper|repack|extended|unrated|remastered|imax|multi)\b`)
 	// Trailing text is allowed after the number ("Season 1 - Star Trek Deep
 	// Space Nine"), but only behind a separator — "S3rvant" must not read as
 	// season 3. A folder that starts with the marker and immediately hits a
