@@ -302,6 +302,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stream/{id}/hls/{session}/{name}", s.hlsSegment)
 	mux.HandleFunc("GET /api/transcode", s.transcodeSessions)
 
+	/*
+	 * Anything under /api that matched no route is a 404 in the documented
+	 * error shape — not the client.
+	 *
+	 * Without this, an unknown API path fell through to the SPA fallback below
+	 * and answered **200 with an HTML page**. A browser never notices, because
+	 * a browser never asks for a route that does not exist; a third-party
+	 * client asking for a mistyped or newer endpoint got a success and a
+	 * document, which is the least debuggable answer available.
+	 *
+	 * It also quietly contradicted the version contract: ADR 0018 promises that
+	 * a client can tell what this server supports, and a 200 for every path is
+	 * a server that claims to support everything. Found by trying an endpoint
+	 * that was never built.
+	 *
+	 * Go 1.22 routing prefers the more specific pattern, so every registered
+	 * route still wins over this.
+	 */
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "not_found",
+			"no such endpoint: "+r.Method+" "+r.URL.Path)
+	})
+
 	mux.Handle("/", s.web)
 	// Outermost after logging: a panic anywhere inside — including in the auth
 	// middleware — is recovered and recorded, and the request that caused it is

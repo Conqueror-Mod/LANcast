@@ -26,6 +26,7 @@ import "./LiveTV.css";
 export function LiveTV() {
   const { data, isLoading } = useChannels();
   const [playing, setPlaying] = useState<Channel | null>(null);
+  const [playError, setPlayError] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -73,7 +74,31 @@ export function LiveTV() {
             autoPlay
             controls
             playsInline
+            /*
+             * A failed channel says why.
+             *
+             * This is not a rare case and it is worth naming rather than
+             * leaving as a black rectangle: most IPTV channels are HLS carrying
+             * MPEG-TS segments, and Chromium decodes neither natively —
+             * `canPlayType("video/mp2t")` answers with an empty string. Safari
+             * plays HLS; nothing else does without hls.js, which ADR 0013
+             * deliberately refuses to vendor.
+             *
+             * So the honest interface is one that explains the failure instead
+             * of implying the channel is broken.
+             */
+            onError={() =>
+              setPlayError(
+                "This browser could not play that channel. Most live channels are HLS, which only Safari plays without extra code — a stream this browser understands directly (a plain MP4 or WebM feed) will work here.",
+              )
+            }
+            onLoadedData={() => setPlayError(null)}
           />
+          {playError && (
+            <p className="livetv__error" role="alert">
+              {playError}
+            </p>
+          )}
           <div className="livetv__nowrow">
             <span className="livetv__now">{playing.name}</span>
             <button
@@ -128,7 +153,10 @@ export function LiveTV() {
             className={
               "livetv__channel" + (playing?.id === c.id ? " is-playing" : "")
             }
-            onClick={() => setPlaying(c)}
+            onClick={() => {
+              setPlayError(null);
+              setPlaying(c);
+            }}
           >
             <span className="livetv__logo">
               {c.logo_url ? (

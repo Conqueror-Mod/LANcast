@@ -1868,8 +1868,22 @@ absolute reference, or one that would change host, is `400`. There is no
 parameter that changes the destination, which is what keeps this from being an
 open relay inside somebody's network.
 
-No transcoding. A live stream re-encoded per viewer is a CPU cost this project
-has not agreed to, and most providers already serve something a browser plays.
+**No transcoding, and that is a limitation as much as a choice.** A live stream
+re-encoded per viewer is a CPU cost this project has not agreed to — but the
+consequence is sharper than "most providers serve something a browser plays",
+which was the original claim here and is wrong.
+
+Most IPTV channels are HLS carrying MPEG-TS segments, and **Chromium decodes
+neither natively**: `canPlayType("video/mp2t")` answers with an empty string.
+Safari plays HLS; nothing else does without hls.js, which
+[ADR 0013](adr/0013-transcode-pipeline.md) deliberately refuses to vendor. So
+today this route serves a channel a browser can already decode — a plain MP4 or
+WebM feed, or anything on Safari — and the client says so plainly when the
+element fails rather than showing a black rectangle.
+
+Closing that gap means putting live channels through the existing ffmpeg
+pipeline, which already produces progressive fMP4 from arbitrary input for
+exactly this reason. That is the obvious next step and it is not built.
 
 **Known limit:** `EXT-X-KEY` and `EXT-X-MAP` URIs are left pointing upstream
 rather than half-rewritten. A client that can reach the provider still plays;

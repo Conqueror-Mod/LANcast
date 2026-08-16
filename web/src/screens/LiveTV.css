@@ -176,3 +176,16 @@
   letter-spacing: 0.08em;
   color: var(--text-faint);
 }
+
+/* A channel that could not play. Stated in the player rather than as a toast,
+   because the question it answers — "why is this black?" — is asked while
+   looking at the player. */
+.livetv__error {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--space-raised);
+  border-top: 1px solid #b8794a;
+}
