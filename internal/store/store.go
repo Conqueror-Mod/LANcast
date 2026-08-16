@@ -166,7 +166,27 @@ func (s *Store) CreateLibrary(ctx context.Context, name, kind, path string) (*Li
 // table.
 const topLevelPredicate = `parent_id IS NULL
 	AND missing = 0
-	AND (kind != 'collection' OR (
+	AND ` + collectionIsReal
+
+/*
+ * collectionIsReal: a collection of one is not a collection.
+ *
+ * Split out of topLevelPredicate because it is a fact about *collections*, not
+ * about the browse grid. As a grid-only rule it held for the grid and the
+ * library count and nowhere else — so the Collections page, which asks for
+ * `kind=collection` and is therefore not a top-level query, listed a Hitman
+ * Collection containing Hitman, an Aquaman Collection containing Aquaman, and
+ * a hundred more. The page's own empty state promised the opposite: "a
+ * collection appears once at least two of its films are in this library".
+ *
+ * A provider hands us a franchise even when the library holds one film from it,
+ * and a collection of one is a duplicate tile of that film with a "Play all"
+ * button (ADR 0010, ADR 0017).
+ *
+ * Trivially true for every other kind, which is what makes it safe to apply to
+ * any listing rather than to the ones somebody remembered.
+ */
+const collectionIsReal = `(kind != 'collection' OR (
 		SELECT COUNT(*) FROM item_collection ic
 		JOIN media_item m2 ON m2.id = ic.item_id
 		WHERE ic.collection_id = media_item.id AND m2.missing = 0
@@ -712,6 +732,13 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		args = append(args, *f.ParentID)
 	case f.TopLevel:
 		where += ` AND ` + topLevelPredicate
+	default:
+		// Every other listing still gets the collection rule. A `kind=collection`
+		// query is not top-level — collections have no parent, but the handler
+		// treats an explicit kind as a deliberate cross-cutting query — and
+		// without this it is the one listing in the system that shows the
+		// one-film collections the grid and the count both refuse.
+		where += ` AND ` + collectionIsReal
 	}
 	if f.Query != "" {
 		where += ` AND (title LIKE ? OR series LIKE ?)`

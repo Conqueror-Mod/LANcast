@@ -296,3 +296,78 @@ func TestCollectionMembership(t *testing.T) {
 		t.Errorf("after remove, members = %v, want just anne1 %d", ids(members), anne1)
 	}
 }
+
+/*
+ * The Collections page asks for kind=collection, which is not a top-level
+ * query — and that listing showed every singleton the grid refuses.
+ *
+ * Found by piloting a real library: a "Hitman Collection" containing Hitman, an
+ * "Aquaman Collection" containing Aquaman, a "Deadpool Collection" containing
+ * Deadpool, and a hundred more, on a page whose own empty state promises "a
+ * collection appears once at least two of its films are in this library".
+ *
+ * The rule is a fact about collections, not about the grid, so it now applies
+ * to any listing rather than to the ones somebody remembered.
+ */
+func TestSingletonCollectionsHiddenFromKindListing(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	toy1 := mkItem(t, st, lib.ID, "movie", "/m/Toy1.mkv", "Toy Story")
+	toy2 := mkItem(t, st, lib.ID, "movie", "/m/Toy2.mkv", "Toy Story 2")
+	toyColl := mkItem(t, st, lib.ID, "collection", "/c/toy", "Toy Story Collection")
+	hitman := mkItem(t, st, lib.ID, "movie", "/m/Hitman.mkv", "Hitman")
+	hitmanColl := mkItem(t, st, lib.ID, "collection", "/c/hitman", "Hitman Collection")
+
+	for _, l := range []struct {
+		item, coll int64
+		ord        int
+	}{{toy1, toyColl, 0}, {toy2, toyColl, 1}, {hitman, hitmanColl, 0}} {
+		if err := st.AddToCollection(ctx, l.item, l.coll, l.ord); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, total, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, Kind: "collection"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(items)
+	if !got[toyColl] {
+		t.Error("a real collection is missing from the collections listing")
+	}
+	if got[hitmanColl] {
+		t.Error("a one-film collection is listed — it is a duplicate tile of that film")
+	}
+	// The total has to agree with the rows, or the page reports a number it
+	// cannot show.
+	if total != len(items) {
+		t.Errorf("total = %d, rows = %d", total, len(items))
+	}
+}
+
+// A collection's own members are still listed in full. The rule hides a
+// collection from listings of collections; it must not hide what is inside one.
+func TestCollectionMembersAreStillListed(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	a := mkItem(t, st, lib.ID, "movie", "/m/A.mkv", "A")
+	b := mkItem(t, st, lib.ID, "movie", "/m/B.mkv", "B")
+	coll := mkItem(t, st, lib.ID, "collection", "/c/ab", "AB Collection")
+	for i, id := range []int64{a, b} {
+		if err := st.AddToCollection(ctx, id, coll, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	members, err := st.CollectionMembers(ctx, coll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 2 {
+		t.Errorf("members = %d, want 2", len(members))
+	}
+}

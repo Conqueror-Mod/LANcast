@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,6 +12,7 @@ import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterChips } from "@/components/FilterChips";
 import { AlphabetRail } from "@/components/AlphabetRail";
+import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
@@ -152,45 +153,16 @@ export function LibraryView({
     );
   };
 
-  // A sentinel below the grid pulls the next page into view as the user reaches
-  // it, so a large library scrolls continuously instead of stopping at the first
-  // page with no sign there is more.
+  // A sentinel below the grid pulls the next page into view as the user
+  // reaches it, so a large library scrolls continuously instead of stopping at
+  // the first page with no sign there is more. Shared with the Collections
+  // page, which was built without it and truncated silently at 120.
   const sentinel = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!hasNextPage || isFetchingNextPage) return;
-    const el = sentinel.current;
-    if (!el) return;
-
-    // Near enough to the viewport that the next page should already be loading.
-    const near = () =>
-      el.getBoundingClientRect().top < window.innerHeight + 600;
-    const maybeFetch = () => {
-      if (near()) fetchNextPage();
-    };
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) fetchNextPage();
-      },
-      { rootMargin: "600px" },
-    );
-    io.observe(el);
-
-    // Scroll and resize back the observer up. Observer callbacks are suppressed
-    // in a hidden or throttled tab, and if they never arrive the grid just stops
-    // — a silent truncation with no sign there is more, which is the failure
-    // this paging exists to remove. The immediate call also covers a first page
-    // too short to fill the viewport.
-    window.addEventListener("scroll", maybeFetch, { passive: true });
-    window.addEventListener("resize", maybeFetch);
-    maybeFetch();
-
-    return () => {
-      io.disconnect();
-      window.removeEventListener("scroll", maybeFetch);
-      window.removeEventListener("resize", maybeFetch);
-    };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  useInfiniteScroll(sentinel, {
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  });
 
   // A picture library opens on a banner cycling the library itself (ADR 0028).
   // Drawn from the newest photographs rather than a random sample, because
