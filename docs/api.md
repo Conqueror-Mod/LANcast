@@ -727,6 +727,52 @@ hang off the id and follow silently.
 `409 no_account` on an unconfigured loopback server, where there is no account
 to edit.
 
+### `GET /api/people`
+
+The other accounts on this server. "Find Friends" on a self-hosted household
+server means the people already on it — there is no directory to search and no
+second server to federate with.
+
+```json
+{ "people": [ { "id": "u_3f9", "name": "Sam", "role": "member",
+                "sharing": true, "watched": 41, "joined_at": 1739000000 } ] }
+```
+
+The caller is excluded from their own list. `sharing` is reported even when
+false, so a page can say "has not shared" rather than showing an empty list that
+reads as "watches nothing" — those are different statements and a page that
+cannot tell them apart accuses the private of being inactive.
+
+`watched` is zero unless that person shares. A count is still a fact about a
+person.
+
+### `GET /api/people/{id}/activity`
+
+What one person has published — **finished titles only**, newest first.
+`?limit=` defaults to 20 (max 100).
+
+**Returns an empty list, not a `403`, for somebody who has not opted in.** A
+`403` confirms there is something being withheld; what somebody watched is
+private and so is how much of it there is. From outside, "has not shared" and
+"has watched nothing" are the same answer, deliberately.
+
+Governed by [ADR 0035](adr/0035-who-may-see-whose-viewing.md): viewing is
+private by default and shared only by an explicit per-account opt-in. Resume
+positions are never shared — where somebody stopped is a different and more
+intrusive fact than what they watched — and ratings and reviews are never shared
+at all.
+
+### `PUT /api/profile/sharing`
+
+`{ "share": true }` — the caller's own decision, and only ever the caller's.
+
+**There is deliberately no administrator variant.** An administrator may run the
+server; a switch somebody else can flip on your behalf is not consent. Audited,
+because it changes who can see something about a person.
+
+Turning it off is **retroactive**: past activity stops being visible along with
+future. A switch that cannot take back what it gave is not a switch.
+
 ### `GET /api/items/{id}`
 
 The list shape plus M2 metadata and a `theme` block (both below). Returns
@@ -1783,6 +1829,90 @@ client's cue to stop following.
 `updated_at` is when the host last reported, so a follower can work out how far
 the film has moved since - without it every poll would land one interval behind
 and never catch up.
+
+### `GET /api/channels`
+
+Live TV channels, in the order their source listed them. `?source_id=` filters
+to one source.
+
+```json
+{ "channels": [ { "id": 12, "source_id": 1, "name": "Channel One",
+                  "logo_url": "https://logos.example/one.png",
+                  "group": "UK", "position": 0 } ] }
+```
+
+**A channel is not a `media_item`**, and that is a modelling decision rather
+than a convenience. Every column on that table describes a *work* — a title a
+provider could match, a duration, a file, a position you stopped at — and a
+channel has none of them. It is a name, a logo and a URL whose contents differ
+every time you look. [ADR 0002](adr/0002-one-wide-media-item-table.md) chose one
+wide table for things that are works; this is the case that is not one.
+
+**The upstream URL is never serialised.** Channel lists are routinely
+credentialed — a token in the path, a password in the query — so publishing it
+to every browser on the LAN would publish the subscription.
+
+Source order is preserved rather than sorted: it is the order somebody curated,
+and alphabetical is not an improvement on the order the channels sit in on a
+remote control.
+
+### `GET /api/channels/{id}/stream`
+
+Relays a channel through the server. Clients play this; they never see the
+provider's address.
+
+**This proxy cannot be pointed anywhere.** It takes a channel id, not a URL. For
+HLS, the playlist is rewritten so every segment comes back through the same
+route, and `?path=` is resolved *relative to that channel's own base* — an
+absolute reference, or one that would change host, is `400`. There is no
+parameter that changes the destination, which is what keeps this from being an
+open relay inside somebody's network.
+
+No transcoding. A live stream re-encoded per viewer is a CPU cost this project
+has not agreed to, and most providers already serve something a browser plays.
+
+**Known limit:** `EXT-X-KEY` and `EXT-X-MAP` URIs are left pointing upstream
+rather than half-rewritten. A client that can reach the provider still plays;
+one that cannot will fail on an encrypted stream. Stated rather than guessed at.
+
+### `GET` / `POST /api/channel-sources`
+
+Channel lists and where they came from. **Admin only** — and for a stronger
+reason than most admin gates here: adding a source makes *the server* fetch a
+URL the caller chose, which is server-side request forgery in miniature.
+
+```json
+{ "sources": [ { "id": 1, "name": "Provider", "url": "https://…/list.m3u",
+                 "created_at": 1755200000, "refreshed_at": 1755290000,
+                 "channel_count": 612 } ] }
+```
+
+`POST` takes `{ "name": …, "url": … }` and imports immediately, because a source
+with no channels is indistinguishable from a broken one and the moment somebody
+adds it is the moment they are watching to see whether it worked. A source whose
+import fails is **kept**, with `import_error` in the response: the URL may be
+right and the provider down, and deleting it would mean retyping it.
+
+**Refused URLs:** anything that is not `http`/`https`, and **this server's own
+address**. Other loopback addresses are deliberately allowed — a tvheadend or a
+local transcoder on the same machine is one of the most ordinary sources this
+feature has, and banning loopback outright would make Live TV useless on the
+setup it suits best. What needs protecting is one origin, not one interface.
+
+### `POST /api/channel-sources/{id}/refresh` · `DELETE /api/channel-sources/{id}`
+
+Re-imports, or removes along with its channels. **Admin only.**
+
+A refresh **replaces** rather than merges. A channel list is a snapshot
+published by somebody else, not a collection curated here, and the file carries
+no id worth trusting across versions — `tvg-id` is optional and frequently
+absent — so merging means guessing at identity and duplicating every channel
+each time the guess is wrong. The replacement runs in one transaction, or a
+refresh would leave a window where the old channels are gone and the new ones
+have not arrived.
+
+`502 upstream` when the provider cannot be reached or does not return a
+playlist.
 
 ### `GET /api/review?library_id=`
 

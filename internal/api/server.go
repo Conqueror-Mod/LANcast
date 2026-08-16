@@ -208,6 +208,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile", s.profile)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
+	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
+
+	mux.HandleFunc("GET /api/people", s.listPeople)
+	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
+
+	mux.HandleFunc("GET /api/channels", s.listChannels)
+	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
+	mux.HandleFunc("GET /api/channel-sources", s.adminOnly(s.listChannelSources))
+	mux.HandleFunc("POST /api/channel-sources", s.adminOnly(s.createChannelSource))
+	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.adminOnly(s.refreshChannelSource))
+	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.adminOnly(s.deleteChannelSource))
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	// Editing shared metadata or identity re-litigates the library for everyone,
 	// so it is an admin action. Watching and progress are not.
