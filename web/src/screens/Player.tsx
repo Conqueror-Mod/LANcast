@@ -11,6 +11,7 @@ import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
+import { TogetherPanel } from "@/components/TogetherPanel";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -19,6 +20,7 @@ import {
   VolumeGlyph,
   SettingsGlyph,
   QueueGlyph,
+  TogetherGlyph,
   PipGlyph,
   FullscreenGlyph,
   PrevGlyph,
@@ -135,6 +137,7 @@ export function Player() {
       pb.audioIndex !==
         (pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0])?.index);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [togetherOpen, setTogetherOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pipAvailable, setPipAvailable] = useState(false);
 
@@ -584,6 +587,33 @@ export function Player() {
                   PiP is video-only, while a floating window with cover art,
                   transport and queue is a natural fit for a record.
               */}
+              {/*
+                  Watch together. Outside the queue-only group it was first put
+                  in by mistake — that group is shuffle and repeat, which need
+                  something to shuffle, and watching a single film with somebody
+                  needs no queue at all. The button was invisible for the most
+                  ordinary case there is: one film, two people.
+
+                  Video only. A synchronised record is a real idea and not this
+                  one, and offering it on audio would promise something the
+                  panel does not do.
+              */}
+              {!pb.isAudio && (
+                <div className="player__menu">
+                  <button
+                    className={"player__icon" + (togetherOpen ? " is-on" : "")}
+                    onClick={() => setTogetherOpen((o) => !o)}
+                    aria-label="Watch together"
+                    aria-expanded={togetherOpen}
+                    title="Watch together"
+                  >
+                    <TogetherGlyph />
+                  </button>
+                  {togetherOpen && (
+                    <TogetherPanel onClose={() => setTogetherOpen(false)} />
+                  )}
+                </div>
+              )}
               {(pb.popoutAvailable || (!pb.isAudio && pipAvailable)) && (
                 <button
                   className={"player__icon" + (pb.popout ? " is-on" : "")}

@@ -1,0 +1,144 @@
+/*
+ * Your own rating.
+ *
+ * Gold is the one colour a star wants and the one colour it cannot have for
+ * free: gold means where you are. A *filled* star is a state, not a location —
+ * so filled stars take the dormant gold the design system already defines for
+ * "present but not focused", and full-strength gold stays reserved for the
+ * focus ring, exactly as it is everywhere else.
+ */
+
+.rate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0 4px;
+}
+
+.rate__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rate__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.rate__stars {
+  display: flex;
+  gap: 2px;
+}
+
+.rate__star {
+  background: none;
+  border: none;
+  padding: 2px 3px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  /* An unrated star is present but unlit — not invisible, or there is nothing
+     to aim at. */
+  color: rgba(255, 255, 255, 0.16);
+  transition: color var(--dur-fast) ease;
+}
+
+.rate__star.is-full {
+  color: var(--gold);
+}
+
+/* Half is the second click on a star already lit. A gradient rather than a
+   second glyph, so the row keeps one shape at every score. */
+.rate__star.is-half {
+  background: linear-gradient(
+    90deg,
+    var(--gold) 50%,
+    rgba(255, 255, 255, 0.16) 50%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rate__star:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
+  border-radius: 3px;
+}
+
+.rate__score {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rate__clear,
+.rate__notebtn,
+.rate__save {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.rate__clear:hover,
+.rate__notebtn:hover,
+.rate__save:hover {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.rate__note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 62ch;
+}
+
+.rate__textarea {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.rate__textarea:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.rate__noteactions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Said once, quietly. Somebody writing a note deserves to know who can read it
+   without having to go and find out. */
+.rate__private {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.rate__review {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  border-left: 1px solid var(--gold-dormant);
+  padding-left: 10px;
+}

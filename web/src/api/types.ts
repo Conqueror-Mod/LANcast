@@ -557,3 +557,50 @@ export interface Trending {
   contributors: number;
   window_days: number;
 }
+
+// GET /api/items/{id}/rating — *your* rating. There is no route to anybody
+// else's: a rating is private to the account that wrote it, and the paths carry
+// no user id so a filter cannot be forgotten.
+export interface Rating {
+  item_id: number;
+  /** 1–10, not 1–5: a half-star interface then needs no migration. */
+  score: number;
+  review?: string | null;
+  updated_at: number;
+}
+
+export interface RatedItem {
+  item: Item;
+  rating: Rating;
+}
+
+// GET /api/together — a watch-together room. The server owns position and
+// paused; clients converge on them rather than each broadcasting their own.
+export interface TogetherMember {
+  user_id: string;
+  name: string;
+  host: boolean;
+  last_seen: number;
+}
+
+export interface TogetherSession {
+  id: string;
+  item_id: number;
+  host_id: string;
+  position_ms: number;
+  paused: boolean;
+  /** When the host last reported, so a follower can allow for the time since. */
+  updated_at: number;
+  members: TogetherMember[];
+  created_at: number;
+}
+
+// PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
+// sessions, not a login history: it answers "is this person here right now".
+export interface ManagedUser {
+  id: string;
+  name: string;
+  role: Role;
+  created_at: number;
+  sessions: number;
+}

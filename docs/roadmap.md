@@ -427,7 +427,15 @@ group is not priority.
   Trending, ratings/reviews and viewer stats are not stubbed** — two of them need
   a decision about who may see whose viewing that nobody has made, and a page of
   scaffolding promising four features is worse than three true numbers, because
-  the scaffolding is what people plan around.
+  the scaffolding is what people plan around. **Ratings and reviews are now
+  built, and only the private half**: your rating is yours, stored per user,
+  shown to you, and aggregated for nobody. The routes carry no user id at all,
+  so a leak cannot be introduced by forgetting a filter. Turning private
+  verdicts into visible ones changes what people are willing to write, which
+  makes it a decision about the product rather than a flag — and it stays
+  unmade. Scores are out of ten so a half-star interface needs no migration and
+  so the scale matches the provider ratings it sits beside; withdrawing a rating
+  is deliberately distinct from scoring something 1.
 - ~~**Trending (trends computed per library)**~~ — **built**, from
   `playback_state` and no new table. It counts **accounts, not plays**, because
   that table holds one row per item per user — so the API also reports how many
@@ -439,8 +447,43 @@ group is not priority.
   start and nobody finishes is a different fact from one everybody finished.
   Not admin-gated and it names no accounts: which titles are popular is a fact
   about a shared library, who watched them is a fact about a person.
-- **Watch Together** — synchronised playback across viewers.
-- **Better profile manager.**
+- ~~**Watch Together** — synchronised playback across viewers.~~ — **built.**
+  The design question is where the truth lives, and principle one answers it:
+  the server owns it. A room holds what is playing, the position, whether it is
+  paused and who is in it; clients converge on that. The alternative — every
+  client broadcasting its own position — makes the last writer win, and on a
+  lossy connection that is whoever lagged worst.
+
+  **In memory, no schema.** A room means nothing after a restart; persisting one
+  would resurrect a film nobody is watching. **Polling, not sockets**: nothing
+  else in this stack streams, and a socket layer for one feature is the
+  dependency argument [ADR 0013](adr/0013-transcode-pipeline.md) settled. A
+  second of drift is fine for "we are watching this together"; frame accuracy
+  was never the goal.
+
+  **One host drives**, and the host leaving *ends* the room rather than promoting
+  somebody — promotion sounds generous and is worse, because the film keeps
+  playing in three houses under a driver nobody chose. Rooms drop members who
+  stop polling, because **nobody presses leave, they close the laptop**.
+
+  Two things the build taught. The sweep that drops absent members has to record
+  the caller *before* it runs, or a host polling exactly on the interval is
+  judged absent and takes down their own room for being on time. And a
+  follower's correction has to allow for the time since the host reported —
+  otherwise every seek lands one poll-interval behind and never catches up,
+  including the case where two machines' clocks disagree and the naive sum seeks
+  backwards forever.
+- ~~**Better profile manager.**~~ — **built**, as two surfaces separated by
+  authority: your own display name lives in Account, while renaming anyone else
+  and changing roles lives in Users. A rename **keeps the account id**, so watch
+  history, ratings and playlist membership follow silently — that is what makes
+  it a rename rather than a replacement. Promotion and demotion are one button
+  because they are one decision with two directions, offered for yourself as
+  well: the rule that protects the install is "not the last admin", not "not
+  you". That refusal lives in the store, inside a transaction with the count,
+  because two admins demoting each other at the same moment is a race a
+  handler check loses — and the prize for losing it is a server nobody can
+  administer without `reset-auth` on the machine itself.
 
 ### System, operations and diagnostics
 
@@ -621,7 +664,17 @@ where that openness gets exercised.
   rewrite instead of a restyle.
 - **Plugin contract → one full build of the core.** Deliberately last.
 - **Users and auth → schema.** Already handled; can arrive late without data loss.
-- **API versioning → before any third-party client exists.** Cheap now, breaking later.
+- ~~**API versioning → before any third-party client exists.**~~ — **built**,
+  and deliberately not as a URL rewrite. [ADR 0018](adr/0018-api-contract-and-versioning.md)
+  has stated the policy since M3 and nothing enforced it. Now every `/api`
+  response carries `X-LANcast-API-Version`, a client may send the same header to
+  assert what it was built against, and a version this build cannot serve is
+  refused by name with `unsupported_api_version`. That refusal is the valuable
+  half: without it a mismatch surfaces as a field that is mysteriously absent
+  three screens later, and the report that arrives is "the library page is
+  blank". Moving every route under a version prefix would have broken the
+  existing client today to buy a property nobody is using yet, and ADR 0018
+  already promises `/api` never changes meaning — the same guarantee at no cost.
 
 ## Next planning order
 

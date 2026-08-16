@@ -31,6 +31,7 @@ import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
 import { TrailerModal } from "@/components/TrailerModal";
 import { useDownloads, downloadURL } from "@/lib/downloads";
+import { RateItem } from "@/components/RateItem";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -511,6 +512,14 @@ export function Detail() {
                 <RemoveButton onOpen={() => setRemoveOpen(true)} />
               )}
             </div>
+
+            {/* Rating sits under the actions and above the synopsis: it is
+                something you do *after* watching, so it belongs below the play
+                controls rather than competing with them — and above the
+                synopsis, because a note you wrote is worth more to you than a
+                summary you have already read. Containers and photos are not
+                things anybody rates. */}
+            {!container && !isPicture(item) && <RateItem itemID={item.id} />}
 
             {item.overview && (
               <p className="detail__overview">{item.overview}</p>
