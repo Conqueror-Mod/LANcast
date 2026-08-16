@@ -192,10 +192,35 @@ const collectionIsReal = `(kind != 'collection' OR (
 		WHERE ic.collection_id = media_item.id AND m2.missing = 0
 	) >= 2)`
 
+/*
+ * GroupingKinds are containers that group items rather than being them.
+ *
+ * They have their own pages and the browse grid excludes them, so the library
+ * count has to exclude them too or the two numbers describe different things.
+ * They did: a real library's sidebar read **1,381** beside a grid that said
+ * **1,211**, and the difference was exactly its 170 collections; the music
+ * sidebar read 1,177 beside a grid of 1,171, and the difference was exactly its
+ * 6 imported `.m3u` playlists.
+ *
+ * That is the *original* complaint this whole line of work started from — "the
+ * count is wrong" — and it survived three fixes to the grid because every one
+ * of them changed what the grid showed and none changed what the count counted.
+ *
+ * Exported so the API can hand the same list to clients as the browse default,
+ * rather than the client naming the kinds itself and the two drifting.
+ */
+var GroupingKinds = []string{"collection", "playlist"}
+
+// notAGroupingKind is GroupingKinds as SQL. Written out rather than built at
+// init so the predicate is a constant like the others around it; the test
+// TestGroupingKindsMatchTheCountPredicate fails if the two fall out of step.
+const notAGroupingKind = `kind NOT IN ('collection', 'playlist')`
+
 // libraryItemCount counts what the grid would show for one library, as a
 // correlated subquery against the `library l` row.
 const libraryItemCount = `(SELECT COUNT(*) FROM media_item
-	WHERE library_id = l.id AND missing = 0 AND ` + topLevelPredicate + `)`
+	WHERE library_id = l.id AND missing = 0
+	  AND ` + notAGroupingKind + ` AND ` + topLevelPredicate + `)`
 
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `

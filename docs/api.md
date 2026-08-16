@@ -220,6 +220,15 @@ every library that existed before this.
 library is the whole library, and the two are not comparable: the library's
 excludes containers and honours the browse rules, a root's is a plain row count.
 
+**The library's `item_count` is what the browse grid shows**, and that is a
+promise rather than a description. It counts top-level, present rows and
+excludes the kinds that *group* items rather than being them — `collection` and
+`playlist`, the same set the grid passes as `exclude_kind`. When it did not, a
+library's sidebar read 1,381 beside a grid that said 1,211, the difference being
+exactly its 170 collections; the music sidebar read 1,177 against a grid of
+1,171, exactly its 6 imported `.m3u` playlists. A client showing both numbers
+should be able to show them side by side without explaining the gap.
+
 ### `POST /api/libraries`
 
 `kind` is one of `movie`, `show`, `music`, `picture`, `other`. Every path must
