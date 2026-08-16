@@ -140,6 +140,15 @@ type Server struct {
 	// dependency the caller may forget to wire is a feature that is absent in
 	// exactly the builds nobody tested.
 	together *together.Manager
+	/*
+	 * prober inspects a single source on demand — a live channel — as opposed
+	 * to `probes`, which is the worker that walks the library.
+	 *
+	 * Separate because the two have different lifetimes and different failure
+	 * meanings: the worker's job is to eventually probe everything and it may
+	 * retry for hours, while this one has six seconds and a viewer waiting.
+	 */
+	prober *probe.Prober
 }
 
 func New(d Deps) *Server {
@@ -158,6 +167,7 @@ func New(d Deps) *Server {
 		throttle: auth.NewThrottle(),
 		crashes:  crashlog.New(d.DataDir, Version),
 		together: together.New(),
+		prober:   probe.New(),
 	}
 }
 
@@ -215,6 +225,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)
 	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
+	mux.HandleFunc("GET /api/channels/{id}/live", s.channelLive)
 	mux.HandleFunc("GET /api/channel-sources", s.adminOnly(s.listChannelSources))
 	mux.HandleFunc("POST /api/channel-sources", s.adminOnly(s.createChannelSource))
 	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.adminOnly(s.refreshChannelSource))

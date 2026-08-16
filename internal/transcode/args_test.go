@@ -286,3 +286,155 @@ func TestNoCeilingEmitsNothing(t *testing.T) {
 		t.Errorf("unconstrained encode carries ceiling flags: %v", args)
 	}
 }
+
+/*
+ * Live input, where the command line differs from a file in ways that are all
+ * invisible until an evening's viewing falls over.
+ *
+ * Same model as the decision tests: one named case per rule, asserting the
+ * flag *and* what it prevents.
+ */
+func TestLiveInputReconnects(t *testing.T) {
+	got := Args(Options{
+		Input: "https://provider.example/one.m3u8",
+		Live:  true,
+		Decision: probe.Decision{
+			Method: probe.Remux, VideoAction: "copy", AudioAction: "copy",
+		},
+	})
+	line := strings.Join(got, " ")
+
+	// A dropped source must stutter, not end the channel. reconnect_streamed is
+	// the one that covers live input — plain reconnect only covers seekable.
+	for _, want := range []string{"-reconnect 1", "-reconnect_streamed 1", "-reconnect_delay_max 5"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("missing %q in %s", want, line)
+		}
+	}
+}
+
+// A provider that stops sending without closing the socket would otherwise hold
+// a process and a connection for a viewer who has gone.
+func TestLiveInputTimesOutOnASilentSource(t *testing.T) {
+	got := strings.Join(Args(Options{Input: "u", Live: true}), " ")
+	// Microseconds. The obvious value of 10 means ten microseconds, which is
+	// the trap this assertion exists to pin.
+	if !strings.Contains(got, "-rw_timeout 15000000") {
+		t.Errorf("no read timeout in %s", got)
+	}
+}
+
+// Broadcast MPEG-TS carries timestamp discontinuities at every junction, and
+// fMP4 refuses them.
+func TestLiveGeneratesTimestamps(t *testing.T) {
+	got := strings.Join(Args(Options{Input: "u", Live: true}), " ")
+	if !strings.Contains(got, "-fflags +genpts") {
+		t.Errorf("no genpts in %s", got)
+	}
+}
+
+/*
+ * A live stream fragments on every frame, not on keyframes.
+ *
+ * frag_keyframe waits for the next IDR, and a channel with a long GOP can be
+ * several seconds between them — so the picture arrives late enough to look
+ * broken. The unbuffered flush is the same argument: a buffered live stream
+ * arrives in bursts behind whatever the buffer holds.
+ */
+func TestLiveFragmentsEveryFrameAndFlushes(t *testing.T) {
+	got := strings.Join(Args(Options{Input: "u", Live: true}), " ")
+	if !strings.Contains(got, "frag_every_frame") {
+		t.Errorf("live output fragments on keyframes: %s", got)
+	}
+	if !strings.Contains(got, "-flush_packets 1") {
+		t.Errorf("live output is buffered: %s", got)
+	}
+	if strings.Contains(got, "frag_keyframe") {
+		t.Errorf("live output kept the file movflags: %s", got)
+	}
+}
+
+// There is nothing to seek in a live stream, and -ss against one delays the
+// start while ffmpeg looks for a position that does not exist.
+func TestLiveIgnoresAnOffset(t *testing.T) {
+	got := strings.Join(Args(Options{Input: "u", Live: true, StartAt: 120}), " ")
+	if strings.Contains(got, "-ss") {
+		t.Errorf("live command carried a seek: %s", got)
+	}
+}
+
+// And a file is untouched by any of it — the flags are wrong for a file, and
+// the shared builder is exactly where that could go unnoticed.
+func TestAFileGetsNoLiveFlags(t *testing.T) {
+	got := strings.Join(Args(Options{Input: "/media/film.mkv", StartAt: 30}), " ")
+	for _, unwanted := range []string{"-reconnect", "-rw_timeout", "frag_every_frame", "+genpts"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("file command carried %q: %s", unwanted, got)
+		}
+	}
+	if !strings.Contains(got, "-ss 30.000") {
+		t.Errorf("file command lost its seek: %s", got)
+	}
+}
+
+// Remux is the case that matters most for cost: nearly every IPTV channel is
+// H.264/AAC in MPEG-TS, which becomes fMP4 with no re-encode at all.
+func TestLiveRemuxCopiesBothStreams(t *testing.T) {
+	got := strings.Join(Args(Options{
+		Input: "u", Live: true,
+		Decision: probe.Decision{
+			Method: probe.Remux, VideoAction: "copy", AudioAction: "copy",
+		},
+	}), " ")
+	if !strings.Contains(got, "-c:v copy") || !strings.Contains(got, "-c:a copy") {
+		t.Errorf("a remuxable channel is being re-encoded: %s", got)
+	}
+}
+
+/*
+ * AAC out of MPEG-TS needs its framing converted, and this is the case that
+ * shipped broken.
+ *
+ * H.264 with AAC in a transport stream is the single most common live format.
+ * Without the filter ffmpeg emits a valid ftyp box, refuses the first audio
+ * packet with "Malformed AAC bitstream", and exits — so the browser shows one
+ * frame and stops, which reads as a broken channel rather than a broken command
+ * line. Measured: 16 KB produced without it, 1.05 MB with it, on the same
+ * source.
+ */
+func TestLiveCopyConvertsADTSFraming(t *testing.T) {
+	got := strings.Join(Args(Options{
+		Input: "u", Live: true,
+		Decision: probe.Decision{VideoAction: "copy", AudioAction: "copy"},
+	}), " ")
+	if !strings.Contains(got, "-bsf:a aac_adtstoasc") {
+		t.Errorf("no ADTS conversion on a live audio copy: %s", got)
+	}
+}
+
+// A file remuxed from a container that already stores AAC the way MP4 wants it
+// must not get the filter — there would be nothing to convert.
+func TestAFileCopyDoesNotConvertFraming(t *testing.T) {
+	got := strings.Join(Args(Options{
+		Input:    "/media/film.mkv",
+		Decision: probe.Decision{VideoAction: "copy", AudioAction: "copy"},
+	}), " ")
+	if strings.Contains(got, "aac_adtstoasc") {
+		t.Errorf("a file copy carried the live bitstream filter: %s", got)
+	}
+}
+
+// An encoded audio track needs no filter: it is being produced fresh, in the
+// framing the muxer wants.
+func TestLiveEncodedAudioNeedsNoFilter(t *testing.T) {
+	got := strings.Join(Args(Options{
+		Input: "u", Live: true,
+		Decision: probe.Decision{VideoAction: "copy", AudioAction: "encode"},
+	}), " ")
+	if strings.Contains(got, "aac_adtstoasc") {
+		t.Errorf("filter applied to an encode: %s", got)
+	}
+	if !strings.Contains(got, "-c:a aac") {
+		t.Errorf("audio is not being encoded to AAC: %s", got)
+	}
+}

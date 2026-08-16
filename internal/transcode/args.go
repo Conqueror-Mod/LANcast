@@ -51,6 +51,26 @@ type Options struct {
 	Preset string
 	// Encoder chooses how video is re-encoded. The zero value is software.
 	Encoder Encoder
+
+	/*
+	 * Live marks input that never ends and cannot be sought.
+	 *
+	 * It changes the command line in four ways, each of which is wrong for a
+	 * file and necessary for a channel:
+	 *
+	 *   - reconnect flags, because a live HTTP source drops and a dropped
+	 *     source must not end the viewing;
+	 *   - a read timeout, so a provider that stops sending without closing the
+	 *     socket does not leave ffmpeg blocked for ever;
+	 *   - `-fflags +genpts`, because MPEG-TS from a broadcast chain routinely
+	 *     arrives with timestamp discontinuities that fMP4 will not accept;
+	 *   - no `-ss`, since there is nothing to seek in.
+	 *
+	 * It is a separate flag rather than an Output value because it is
+	 * orthogonal to the delivery format: live content still goes out as
+	 * progressive fMP4, and the two decisions do not belong in one field.
+	 */
+	Live bool
 }
 
 // withDefaults fills in the values most callers do not care about.
@@ -87,8 +107,12 @@ func Args(o Options) []string {
 	// -ss before -i seeks by keyframe without decoding everything up to the
 	// offset. Placing it after -i would decode and discard, which on a
 	// two-hour film means minutes of wasted work before the first frame.
-	if o.StartAt > 0 {
+	if o.StartAt > 0 && !o.Live {
 		a = append(a, "-ss", strconv.FormatFloat(o.StartAt, 'f', 3, 64))
+	}
+
+	if o.Live {
+		a = append(a, liveInputArgs()...)
 	}
 
 	a = append(a, "-i", o.Input)
@@ -164,6 +188,22 @@ func Args(o Options) []string {
 
 	if o.Decision.AudioAction == "copy" {
 		a = append(a, "-c:a", "copy")
+		/*
+		 * AAC out of MPEG-TS carries ADTS framing, and MP4 will not take it.
+		 *
+		 * This is the single most common live case — H.264 with AAC in a
+		 * transport stream — and without the filter ffmpeg emits a valid ftyp
+		 * box, refuses the first audio packet with "Malformed AAC bitstream",
+		 * and exits. The browser shows one frame and stops, which reads as a
+		 * broken channel rather than a broken command line.
+		 *
+		 * Only for live: a file being remuxed came from a container that
+		 * already stores AAC the way MP4 wants it, and applying the filter
+		 * there would be a conversion with nothing to convert.
+		 */
+		if o.Live {
+			a = append(a, "-bsf:a", "aac_adtstoasc")
+		}
 	} else {
 		a = append(a,
 			"-c:a", "aac",
@@ -188,6 +228,29 @@ func Args(o Options) []string {
 			o.OutputDir+"/index.m3u8",
 		)
 	default:
+		if o.Live {
+			/*
+			 * A live fMP4 stream, flushed as it is produced.
+			 *
+			 * `frag_keyframe` alone is not enough here. It fragments on
+			 * keyframes, which on a channel with a long GOP can be several
+			 * seconds apart — so the browser waits for the first keyframe
+			 * before showing anything, and the picture arrives late enough to
+			 * look broken. `frag_every_frame` costs a little overhead and
+			 * starts the picture immediately.
+			 *
+			 * `-flush_packets 1` matters for the same reason: without it
+			 * ffmpeg buffers its output, and a buffered live stream is one
+			 * that arrives in bursts behind whatever the buffer holds.
+			 */
+			a = append(a,
+				"-movflags", "frag_every_frame+empty_moov+default_base_moof",
+				"-flush_packets", "1",
+				"-f", "mp4",
+				"pipe:1",
+			)
+			break
+		}
 		a = append(a,
 			"-movflags", "frag_keyframe+empty_moov+default_base_moof",
 			"-f", "mp4",
@@ -196,6 +259,36 @@ func Args(o Options) []string {
 	}
 
 	return a
+}
+
+/*
+ * liveInputArgs are the flags that make a never-ending network source
+ * survivable.
+ *
+ * Every one of these is here because of a failure it prevents rather than as
+ * defensive decoration:
+ *
+ *   - **reconnect**: an IPTV source drops. Without these ffmpeg exits on the
+ *     first blip and the viewer sees the channel die rather than stutter.
+ *     `reconnect_streamed` is the one that matters for live — plain
+ *     `reconnect` only covers seekable input.
+ *   - **rw_timeout**: a provider that stops sending without closing the socket
+ *     leaves ffmpeg blocked indefinitely, holding a process and a connection
+ *     for a viewer who has long since given up. In microseconds, which is a
+ *     genuine ffmpeg trap: the obvious value of 10 is ten *microseconds*.
+ *   - **genpts**: broadcast MPEG-TS arrives with timestamp discontinuities at
+ *     every ad break and programme junction, and fMP4 refuses them. Generating
+ *     presentation timestamps is what keeps the mux from failing partway
+ *     through an evening.
+ */
+func liveInputArgs() []string {
+	return []string{
+		"-reconnect", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "5",
+		"-rw_timeout", "15000000",
+		"-fflags", "+genpts",
+	}
 }
 
 // NeedsTranscode reports whether a decision requires ffmpeg at all.
