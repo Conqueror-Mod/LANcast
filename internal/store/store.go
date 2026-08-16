@@ -78,6 +78,17 @@ type Library struct {
 	CreatedAt int64         `json:"created_at"`
 	ScannedAt *int64        `json:"scanned_at"`
 	ItemCount int           `json:"item_count"`
+	// MediaCount is the number of *files* in the library — songs, photos,
+	// films, episodes — as opposed to ItemCount, which is the number of tiles
+	// the grid shows.
+	//
+	// The two differ wherever a library groups its media: a music library of
+	// 1,171 artists holds tens of thousands of songs, and a picture library of
+	// 67 galleries holds thousands of photographs. Reporting only the tiles
+	// makes a nav that reads "Music 1,171" next to "Movies 1,209", where one is
+	// a count of performers and the other a count of films. Both are true and
+	// they are not the same question, so both are answered.
+	MediaCount int `json:"media_count"`
 	// ShapeWarning is the last scan's verdict, when it had one: this library
 	// does not look like the kind it was created as. Carried on the row rather
 	// than only in live scan progress, because that progress is lost on restart
@@ -216,6 +227,17 @@ var GroupingKinds = []string{"collection", "playlist"}
 // TestGroupingKindsMatchTheCountPredicate fails if the two fall out of step.
 const notAGroupingKind = `kind NOT IN ('collection', 'playlist')`
 
+/*
+ * libraryMediaCount counts the files: rows backed by something on disk.
+ *
+ * `container IS NOT NULL` is the same test that distinguishes a file from a
+ * directory row everywhere else in this package — a show, a season, an artist,
+ * an album and a gallery are all rows LANcast invented to group things, and
+ * none of them has bytes.
+ */
+const libraryMediaCount = `(SELECT COUNT(*) FROM media_item
+	WHERE library_id = l.id AND missing = 0 AND container IS NOT NULL)`
+
 // libraryItemCount counts what the grid would show for one library, as a
 // correlated subquery against the `library l` row.
 const libraryItemCount = `(SELECT COUNT(*) FROM media_item
@@ -225,7 +247,7 @@ const libraryItemCount = `(SELECT COUNT(*) FROM media_item
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`, l.shape_warning
+		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning
 		FROM library l ORDER BY l.name`)
 	if err != nil {
 		return nil, fmt.Errorf("list libraries: %w", err)
@@ -236,7 +258,8 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	for rows.Next() {
 		var l Library
 		var warning *string
-		if err := rows.Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount, &warning); err != nil {
+		if err := rows.Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt,
+			&l.ItemCount, &l.MediaCount, &warning); err != nil {
 			return nil, fmt.Errorf("list libraries: %w", err)
 		}
 		l.ShapeWarning = parseShapeWarning(warning)
@@ -264,9 +287,10 @@ func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	var warning *string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`, l.shape_warning
+		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning
 		FROM library l WHERE l.id = ?`, id).
-		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount, &warning)
+		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt,
+			&l.ItemCount, &l.MediaCount, &warning)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

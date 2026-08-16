@@ -36,6 +36,12 @@ export interface Library {
   scanned_at: number | null;
   item_count: number;
   /**
+   * Files in the library — songs, photos, films, episodes — as against
+   * `item_count`, which is tiles in the grid. They differ wherever a library
+   * groups its media: 1,171 artists holding tens of thousands of songs.
+   */
+  media_count: number;
+  /**
    * The last scan's verdict, when it had one. Carried on the library rather
    * than only in live scan progress, which dies with the server process — a
    * warning about a kind that cannot be changed needs to outlive a restart.

@@ -415,8 +415,22 @@ export function useDeleteItem(id: number) {
     mutationFn: (mode: "ignore" | "delete") =>
       apiSend(`/api/items/${id}?mode=${mode}`, "DELETE"),
     onSuccess: () => {
+      /*
+       * "items" does not match the grid, and that is the trap in this list.
+       *
+       * The browse grid's key is ["items-infinite", …], and invalidating
+       * ["items"] matches by key *prefix* — "items-infinite" is a different
+       * string, not a child of "items", so the grid kept its cached pages.
+       * "libraries" was missing outright, which is what left the nav reading
+       * 1,212 beside a grid that had moved on to 1,209 after three files were
+       * removed. The comment above claimed every list was refreshed; it was
+       * three short.
+       */
       for (const key of [
         "items",
+        "items-infinite",
+        "libraries",
+        "facets",
         "recently-added",
         "continue",
         "review",
