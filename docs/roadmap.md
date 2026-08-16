@@ -292,14 +292,32 @@ group is not priority.
 
 ### Pages and navigation
 
-- **More branded, thematic home page** — beyond functional shelves.
+- ~~**More branded, thematic home page** — beyond functional shelves.~~ —
+  **built**: a masthead that greets by name and by local hour, states the size
+  of the collection, and puts the libraries in reach as destinations with their
+  counts. It compresses when there is a hero below it, because two full-height
+  openings stacked is one too many. **No gold anywhere on it except the focus
+  ring** — the brief invites decoration and decoration is exactly what would
+  kill the focus signal, so the theme comes from the nebula palette and the
+  letterspaced caps instead. It also gives a fresh install something to say:
+  before this, a server with no watch history and no recent additions opened on
+  a blank page.
 - ~~**Auto-expanding / collapsing navigation bar**~~ — **built** in v0.6.7,
   alongside the move from a horizontal nav to a vertical rail. It expands over
   the content rather than displacing it, and on focus as well as hover.
 - ~~**Movie library page** and **TV-show library page**~~ — **done**
   (Phase 1): media-type-aware browse views selected by library kind.
-- **Add-ons page** — placeholder for now; add-ons themselves come later in the
-  app's life (M4 territory).
+- ~~**Add-ons page**~~ — **built** as a real page at `/addons`. The rail has
+  called Add-ons a destination since the shell was built and pointed it at
+  `/settings?pane=addons`, which taught that Add-ons is a setting. It lists what
+  is installed and says plainly why there is nothing to install yet — a plugin
+  contract is a promise about the shape of the core, and making that promise
+  before the core is finished is how a plugin API becomes the thing that stops
+  the core changing. Installation stays in the settings pane that already does
+  it properly rather than growing a second uploader to keep in step. Still admin
+  only, for a narrower reason than before: `/api/plugins` is admin-gated, so a
+  member would reach a page that could not tell them whether anything was
+  installed — and it says *that* instead of showing them an empty list.
 - ~~**More defined settings page** — a real structure, not a flat list.~~ —
   **built** in v0.6.9. Categories down the left, one pane at a time, the pane
   in the URL. Grouped by whose setting it is (server versus this device) rather
@@ -410,6 +428,17 @@ group is not priority.
   a decision about who may see whose viewing that nobody has made, and a page of
   scaffolding promising four features is worse than three true numbers, because
   the scaffolding is what people plan around.
+- ~~**Trending (trends computed per library)**~~ — **built**, from
+  `playback_state` and no new table. It counts **accounts, not plays**, because
+  that table holds one row per item per user — so the API also reports how many
+  accounts contributed, and the client names the shelf from that: "Trending in
+  Films" with several, "Recently Played in Films" with one. Calling one
+  person's history a trend would be a small lie told on the home page every
+  day, which is the kind that survives longest because nobody bothers to argue
+  with it. `finishers` is reported beside `viewers` because a title many people
+  start and nobody finishes is a different fact from one everybody finished.
+  Not admin-gated and it names no accounts: which titles are popular is a fact
+  about a shared library, who watched them is a fact about a person.
 - **Watch Together** — synchronised playback across viewers.
 - **Better profile manager.**
 
@@ -461,6 +490,27 @@ group is not priority.
   candidates are a post-scan sanity check (a `show`-kind library that produced no
   shows, or a `movie`-kind library where most files parsed as episodes) surfaced
   the same way the review queue surfaces uncertain matches.
+
+  **Built**, as both of those candidates plus a third. It is a *verdict* rather
+  than a count, because "1 movie, 3 parts, 0 shows" is not something a person
+  should have to interpret at the end of a scan; the sentence and its remedy are
+  written server-side and rendered as given, which also removed a sentence the
+  client used to assemble for the one case it could see. Thresholds are
+  deliberately forgiving — one show is enough to be a shows library, three
+  episode-shaped names in a film library is a box set, and a library under five
+  items is not judged — because a check that cries wolf is a check that gets
+  ignored, which is worse than no check. It runs only on a **successful** scan:
+  reporting "your TV library has no shows in it" because a drive vanished
+  halfway through would be a false alarm about a permanent mistake.
+
+  Two things the build taught, both found by running it rather than by
+  reasoning. The verdict has to be **stored** (schema 20): it began on live scan
+  progress, which dies with the process, so a library scanned on Tuesday looked
+  fine on Wednesday — the wrong lifetime for a warning about a property that
+  cannot be changed. And **withdrawing** it is the subtle half: the episode
+  count is gathered during the walk, so a rescan that changes nothing produces
+  no evidence and no verdict, which is not the same as a clean bill of health.
+  As first written, any rescan silently erased a standing warning.
 - ~~**Library editing, deferred to the settings redesign.**~~ — **built** in
   v0.6.16, and it governs more than the name: the *path* is editable too, which
   is the drive-letter case. Repointing rewrites every item path under the old
