@@ -183,3 +183,20 @@ export function StopGlyph(p: Props) {
     </Svg>
   );
 }
+
+// Watch together: two heads, one behind the other. Not a chain or a broadcast
+// tower — the thing being expressed is *people*, and at 20px a person is a
+// circle over a shoulder. The second is offset rather than beside, because two
+// side-by-side circles at this size read as a pause button.
+//
+// Drawn on the same 24-box as its neighbours so it sits on their baseline.
+export function TogetherGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <circle cx="9.5" cy="8.5" r="3" />
+      <path d="M4 19c0-3 2.5-4.8 5.5-4.8S15 16 15 19" />
+      <circle cx="17" cy="7.5" r="2.3" />
+      <path d="M15.6 14.4c2.7-.2 4.6 1.4 4.6 4" />
+    </Svg>
+  );
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   useLibraries,
@@ -12,6 +12,8 @@ import {
   useCurrentUser,
   useIsAdmin,
   useUsers,
+  useRenameSelf,
+  useUpdateUser,
   useCreateUser,
   useDeleteUser,
   useResetUserPassword,
@@ -96,7 +98,10 @@ function errorMessage(err: unknown): string {
 function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
   const del = useDeleteUser();
   const reset = useResetUserPassword();
+  const update = useUpdateUser();
   const [resetting, setResetting] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(user.name);
   const [password, setPassword] = useState("");
   const [done, setDone] = useState(false);
 
@@ -109,9 +114,44 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
             {isSelf && <span className="set-tag">you</span>}
           </div>
           <div className="set-row__sub">{user.role}</div>
+          {/* The server refuses to demote the last administrator — inside a
+              transaction with the count, because two admins demoting each other
+              at once is a race a client-side check cannot win. This surfaces
+              that refusal rather than pretending it cannot happen. */}
+          {update.isError && (
+            <div className="set-row__note set-row__note--warn">
+              <strong>{(update.error as Error).message}</strong>
+            </div>
+          )}
         </div>
         <div className="set-row__actions">
-          {resetting ? (
+          {renaming ? (
+            <>
+              <input
+                className="set-input"
+                autoFocus
+                value={newName}
+                maxLength={60}
+                onChange={(e) => setNewName(e.target.value)}
+                aria-label={`New name for ${user.name}`}
+              />
+              <button
+                className="set-btn"
+                disabled={!newName.trim() || update.isPending}
+                onClick={() =>
+                  update.mutate(
+                    { id: user.id, name: newName.trim() },
+                    { onSuccess: () => setRenaming(false) },
+                  )
+                }
+              >
+                Save
+              </button>
+              <button className="set-btn" onClick={() => setRenaming(false)}>
+                Cancel
+              </button>
+            </>
+          ) : resetting ? (
             <>
               <input
                 className="set-input"
@@ -146,6 +186,37 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
           ) : (
             <>
               {done && <span className="set-row__sub">password reset</span>}
+              <button
+                className="set-btn"
+                onClick={() => {
+                  setNewName(user.name);
+                  setRenaming(true);
+                }}
+              >
+                Rename
+              </button>
+              {/*
+                Promotion and demotion in one button, because they are one
+                decision with two directions and a pair of buttons would leave
+                one of them permanently inert.
+
+                Offered for yourself too: an admin demoting themselves is a
+                legitimate act on a household server, and the server refuses it
+                only when they are the last one — which is a different rule from
+                "not yourself" and the one that actually protects the install.
+              */}
+              <button
+                className="set-btn"
+                disabled={update.isPending}
+                onClick={() =>
+                  update.mutate({
+                    id: user.id,
+                    role: user.role === "admin" ? "member" : "admin",
+                  })
+                }
+              >
+                {user.role === "admin" ? "Make member" : "Make admin"}
+              </button>
               <button className="set-btn" onClick={() => setResetting(true)}>
                 Reset password
               </button>
@@ -240,6 +311,61 @@ function AddUser() {
 }
 
 // Admin-only. Members never mount this, so its admin-only queries never fire.
+/*
+ * Your own display name.
+ *
+ * Separate from the Users pane on purpose: renaming yourself affects nobody and
+ * needs no role, while renaming somebody else is administration. Two surfaces
+ * because they answer to different authority, not because the form is different.
+ *
+ * The account id does not change, so watch history, ratings and playlist
+ * membership follow silently — which is the whole reason this is a rename
+ * rather than "delete and make a new one".
+ */
+function DisplayNameForm() {
+  const me = useCurrentUser();
+  const rename = useRenameSelf();
+  const [name, setName] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  // Seeded from the current name once it arrives, rather than left empty: an
+  // empty box beside "Display name" reads as though the name has been lost.
+  useEffect(() => {
+    if (me?.name) setName(me.name);
+  }, [me?.name]);
+
+  const unchanged = !name.trim() || name.trim() === me?.name;
+
+  return (
+    <form
+      className="set-add"
+      onSubmit={(e) => {
+        e.preventDefault();
+        rename.mutate(name.trim(), { onSuccess: () => setSaved(true) });
+      }}
+    >
+      <span className="set-sublabel">Display name</span>
+      <input
+        className="set-input"
+        value={name}
+        maxLength={60}
+        onChange={(e) => {
+          setName(e.target.value);
+          setSaved(false);
+        }}
+        aria-label="Display name"
+      />
+      <button className="set-btn" disabled={unchanged || rename.isPending}>
+        {rename.isPending ? "Saving…" : "Save name"}
+      </button>
+      {saved && <span className="set-note">Saved.</span>}
+      {rename.isError && (
+        <span className="set-error">{(rename.error as Error).message}</span>
+      )}
+    </form>
+  );
+}
+
 function UsersSection() {
   const { data: users } = useUsers();
   const me = useCurrentUser();
@@ -265,6 +391,10 @@ function AccountSection() {
   return (
     <section className="settings__section">
       <span className="section-label">Account</span>
+
+      <DisplayNameForm />
+
+      <span className="set-sublabel">Password</span>
       <form
         className="set-add"
         onSubmit={(e) => {

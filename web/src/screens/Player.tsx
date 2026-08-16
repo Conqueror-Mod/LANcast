@@ -11,6 +11,7 @@ import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
+import { TogetherPanel } from "@/components/TogetherPanel";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -19,6 +20,7 @@ import {
   VolumeGlyph,
   SettingsGlyph,
   QueueGlyph,
+  TogetherGlyph,
   PipGlyph,
   FullscreenGlyph,
   PrevGlyph,
@@ -135,6 +137,7 @@ export function Player() {
       pb.audioIndex !==
         (pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0])?.index);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [togetherOpen, setTogetherOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pipAvailable, setPipAvailable] = useState(false);
 
@@ -495,6 +498,29 @@ export function Player() {
                   >
                     <RepeatGlyph one={pb.repeat === "one"} />
                   </button>
+                  {/* Watch together lives beside the queue: both are "who and
+                      what comes next", and both are panels over the picture.
+                      Video only — a synchronised record is a real idea and not
+                      this one, and offering it on audio would promise something
+                      the panel does not do. */}
+                  {!pb.isAudio && (
+                    <div className="player__menu">
+                      <button
+                        className={
+                          "player__icon" + (togetherOpen ? " is-on" : "")
+                        }
+                        onClick={() => setTogetherOpen((o) => !o)}
+                        aria-label="Watch together"
+                        aria-expanded={togetherOpen}
+                        title="Watch together"
+                      >
+                        <TogetherGlyph />
+                      </button>
+                      {togetherOpen && (
+                        <TogetherPanel onClose={() => setTogetherOpen(false)} />
+                      )}
+                    </div>
+                  )}
                   <div className="player__menu">
                     <button
                       className={"player__icon" + (queueOpen ? " is-on" : "")}

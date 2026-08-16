@@ -23,6 +23,9 @@ import type {
   Plugin,
   PluginCaps,
   Profile,
+  RatedItem,
+  Rating,
+  Role,
   ProbeStatus,
   ReprobeResult,
   ScanStatus,
@@ -1274,5 +1277,74 @@ export function useTrending(libraryID: number | undefined, limit = 12) {
       ),
     enabled: !!libraryID,
     staleTime: 5 * 60_000,
+  });
+}
+
+// -------------------------------------------------------------- ratings
+
+export function useRating(itemID: number | undefined) {
+  return useQuery({
+    queryKey: ["rating", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<{ rating: Rating | null }>(`/api/items/${itemID}/rating`, signal),
+    enabled: !!itemID,
+    staleTime: 30_000,
+  });
+}
+
+export function useSetRating(itemID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { score: number; review?: string }) =>
+      apiSend(`/api/items/${itemID}/rating`, "PUT", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rating", itemID] });
+      qc.invalidateQueries({ queryKey: ["my-ratings"] });
+    },
+  });
+}
+
+// Withdrawing is its own mutation, not a score of zero: "I have not rated this"
+// and "I rated this badly" are different statements and the API keeps them so.
+export function useClearRating(itemID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend(`/api/items/${itemID}/rating`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rating", itemID] });
+      qc.invalidateQueries({ queryKey: ["my-ratings"] });
+    },
+  });
+}
+
+export function useMyRatings(limit = 50) {
+  return useQuery({
+    queryKey: ["my-ratings", limit],
+    queryFn: ({ signal }) =>
+      apiGet<{ ratings: RatedItem[] }>(`/api/profile/ratings?limit=${limit}`, signal),
+    staleTime: 30_000,
+  });
+}
+
+// ------------------------------------------------------------- profile edit
+
+export function useRenameSelf() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => apiSend("/api/profile", "PATCH", { name }),
+    onSuccess: () => {
+      // The name is in the auth status the whole shell reads, so both go.
+      qc.invalidateQueries({ queryKey: ["auth-status"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; name?: string; role?: Role }) =>
+      apiSend(`/api/users/${id}`, "PATCH", patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 }

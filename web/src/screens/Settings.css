@@ -550,3 +550,20 @@
   padding: 0 2px 6px;
   max-width: 620px;
 }
+
+/* A label inside a pane that already has a section label — "Display name" under
+   "Account". Quieter than the section label, so the pane still reads as one
+   thing with parts rather than as two sections. */
+.set-sublabel {
+  flex-basis: 100%;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.set-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
