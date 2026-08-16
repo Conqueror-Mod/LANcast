@@ -3,10 +3,12 @@ package scan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1568,4 +1570,190 @@ func TestAShowSplitAcrossLocationsIsOneShow(t *testing.T) {
 			t.Errorf("episode %q is loose; both locations must group", e.Title)
 		}
 	}
+}
+
+/*
+ * A season per top-level folder is one show, not one show per season.
+ *
+ * The layout that produced this test is the ordinary one for a great many real
+ * libraries — `Show S01`, `Show S02`, … side by side — and it defeated the old
+ * directory keying completely, because a folder counts as a season folder only
+ * when its *entire* name is a season marker. A twenty-season series became
+ * twenty shows, each reading "1 season", each separately matched by the
+ * metadata provider so they even shared a poster (ADR 0037).
+ */
+func TestSeasonPerFolderIsOneShow(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "It's Always Sunny in Philadelphia S01/It's Always Sunny in Philadelphia.S01E01.mkv", 10)
+	writeFile(t, root, "It's Always Sunny in Philadelphia S01/It's Always Sunny in Philadelphia.S01E02.mkv", 10)
+	writeFile(t, root, "It's Always Sunny in Philadelphia S02/It's Always Sunny in Philadelphia.S02E01.mkv", 10)
+	writeFile(t, root, "It's Always Sunny in Philadelphia S03/It's Always Sunny in Philadelphia.S03E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows := itemsOfKind(t, st, lib.ID, "show")
+	if len(shows) != 1 {
+		t.Fatalf("shows = %d, want 1 — one per season folder is the bug", len(shows))
+	}
+	if got := len(itemsOfKind(t, st, lib.ID, "season")); got != 3 {
+		t.Errorf("seasons = %d, want 3", got)
+	}
+
+	// And the library count agrees with the grid, which is the number that was
+	// reading 60 for a handful of series.
+	libs, err := st.ListLibraries(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range libs {
+		if l.ID == lib.ID && l.ItemCount != 1 {
+			t.Errorf("library item count = %d, want 1", l.ItemCount)
+		}
+	}
+}
+
+// The ordinary layout is untouched, and keeps its real directory as the show
+// path — that path is where tvshow.nfo is written, so a fix for the split
+// layout that silently stopped sidecar writing for everybody else would be a
+// bad trade.
+func TestSingleFolderShowKeepsItsDirectoryAsPath(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Andor/Season 01/Andor.S01E01.mkv", 10)
+	writeFile(t, root, "Andor/Season 02/Andor.S02E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows := itemsOfKind(t, st, lib.ID, "show")
+	if len(shows) != 1 {
+		t.Fatalf("shows = %d, want 1", len(shows))
+	}
+	want := filepath.Join(root, "Andor")
+	if shows[0].Path != want {
+		t.Errorf("show path = %q, want the show directory %q", shows[0].Path, want)
+	}
+}
+
+// A series genuinely split across folders has no directory that *is* the show,
+// so its identity is synthetic rather than one of its season folders — writing
+// tvshow.nfo into "Show S01" would put a series-level file inside one season.
+func TestSplitShowGetsASyntheticPath(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Breaking Bad S01/Breaking Bad.S01E01.mkv", 10)
+	writeFile(t, root, "Breaking Bad S02/Breaking Bad.S02E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows := itemsOfKind(t, st, lib.ID, "show")
+	if len(shows) != 1 {
+		t.Fatalf("shows = %d, want 1", len(shows))
+	}
+	if !strings.HasPrefix(shows[0].Path, "lancast:show:") {
+		t.Errorf("path = %q, want a synthetic identity", shows[0].Path)
+	}
+	// And it is stable: a rescan must not renumber or duplicate it.
+	before := shows[0].ID
+	scanAndWait(t, sc, lib)
+	after := itemsOfKind(t, st, lib.ID, "show")
+	if len(after) != 1 || after[0].ID != before {
+		t.Errorf("show identity changed across rescan: %+v", after)
+	}
+}
+
+// Two different series must not merge just because they are grouped by title
+// now. This is the risk the directory keying did not have, so it is pinned.
+func TestDifferentSeriesStaySeparate(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Andor S01/Andor.S01E01.mkv", 10)
+	writeFile(t, root, "Firefly S01/Firefly.S01E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	if got := len(itemsOfKind(t, st, lib.ID, "show")); got != 2 {
+		t.Errorf("shows = %d, want 2 — separate series merged", got)
+	}
+}
+
+/*
+ * An upgrade regroups a library that was already scanned.
+ *
+ * This is the case every existing install is in: the old rows are there, keyed
+ * per folder, with seasons hanging off them. The seasons keep their own
+ * identity (their directory), so they are *found* rather than created — and
+ * without re-parenting them the regrouping does nothing at all for the layout
+ * that has real season folders.
+ */
+func TestRescanRegroupsShowsSplitByAnEarlierBuild(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Andor S01/Season 01/Andor.S01E01.mkv", 10)
+	writeFile(t, root, "Andor S02/Season 02/Andor.S02E01.mkv", 10)
+	scanAndWait(t, sc, lib)
+
+	// Simulate the old build's output: a show per folder, each holding the
+	// season directory that actually sits inside it.
+	ctx := context.Background()
+	for _, s := range []struct {
+		dir, season string
+		num         int
+	}{
+		{"Andor S01", "Season 01", 1},
+		{"Andor S02", "Season 02", 2},
+	} {
+		showID, _, err := st.EnsureShow(ctx, lib.ID, filepath.Join(root, s.dir), "Andor", "andor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := st.EnsureSeason(ctx, lib.ID, showID, s.num,
+			filepath.Join(root, s.dir, s.season),
+			fmt.Sprintf("Season %d", s.num), fmt.Sprintf("season %d", s.num)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanAndWait(t, sc, lib)
+
+	shows := itemsOfKind(t, st, lib.ID, "show")
+	if len(shows) != 1 {
+		t.Fatalf("shows after regrouping rescan = %d, want 1: %+v", len(shows), shows)
+	}
+	// Every season now hangs off the surviving show, and the emptied shows are
+	// swept by PruneEmptyContainers in the same scan.
+	seasons := itemsOfKind(t, st, lib.ID, "season")
+	for _, s := range seasons {
+		if s.ParentID == nil || *s.ParentID != shows[0].ID {
+			t.Errorf("season %q still hangs off the old show (%v)", s.Title, s.ParentID)
+		}
+	}
+}
+
+// An episode whose filename yields no series name has nothing to group on, so
+// it keeps the old directory behaviour rather than being folded in somewhere.
+func TestEpisodeWithNoParsedSeriesFallsBackToItsFolder(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Some Folder/S01E01.mkv", 10)
+
+	scanAndWait(t, sc, lib)
+
+	shows := itemsOfKind(t, st, lib.ID, "show")
+	if len(shows) != 1 {
+		t.Fatalf("shows = %d, want 1", len(shows))
+	}
+	if shows[0].Path != filepath.Join(root, "Some Folder") {
+		t.Errorf("path = %q, want the containing folder", shows[0].Path)
+	}
+}
+
+func itemsOfKind(t *testing.T, st *store.Store, libID int64, kind string) []store.Item {
+	t.Helper()
+	items, _, err := st.ListItems(context.Background(),
+		store.ItemFilter{LibraryID: libID, Kind: kind})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return items
 }

@@ -618,9 +618,18 @@ func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) err
 	if err != nil {
 		return err
 	}
-	shows := map[string]int64{}   // show dir  -> show id
-	seasons := map[string]int64{} // season key -> season id
-
+	/*
+	 * Grouped in two passes, because a show's identity depends on all of its
+	 * episodes and not on the first one seen.
+	 *
+	 * The single pass this replaces keyed shows on the episode's directory, so
+	 * a series stored as `Show S01`, `Show S02`, … — a season per top-level
+	 * folder, which no season-folder pattern can match because the folder name
+	 * is not *only* a season marker — became one show per season. Twenty tiles
+	 * for one series, each reading "1 season" (ADR 0037).
+	 */
+	groups := map[string]*showGroup{}
+	var order []string
 	for _, ep := range episodes {
 		root := rootOf(roots, ep.RootID)
 		if root == "" {
@@ -637,44 +646,145 @@ func (s *Scanner) reconcileHierarchy(ctx context.Context, lib store.Library) err
 			continue
 		}
 
-		showID, ok := shows[showDir]
+		/*
+		 * The parsed series name is the identity; the folder is the fallback.
+		 *
+		 * Where the filename says what series this is, that is a better answer
+		 * than the directory, because it is the one thing that stays the same
+		 * across every layout a series can be stored in. Where it says nothing,
+		 * the directory is all there is, and keying on it preserves exactly the
+		 * old behaviour for that episode rather than inventing a group.
+		 */
+		title := deref(ep.Series)
+		key := media.SortTitle(title)
+		if key == "" {
+			title = filepath.Base(showDir)
+			key = "\x00dir:" + showDir // cannot collide with a normalized title
+		}
+
+		g, ok := groups[key]
 		if !ok {
-			title := deref(ep.Series)
-			if title == "" {
-				title = filepath.Base(showDir)
-			}
-			id, _, err := s.st.EnsureShow(ctx, lib.ID, showDir, title, media.SortTitle(title))
+			g = &showGroup{title: title, sortTitle: media.SortTitle(title)}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.dirs = append(g.dirs, showDir)
+		g.episodes = append(g.episodes, ep)
+	}
+
+	shows := map[string]int64{}   // group key  -> show id
+	seasons := map[string]int64{} // season key -> season id
+
+	for _, key := range order {
+		g := groups[key]
+		showID, ok := shows[key]
+		if !ok {
+			id, _, err := s.st.EnsureShowByTitle(ctx, lib.ID, g.sortTitle, g.title, g.path())
 			if err != nil {
 				return err
 			}
-			shows[showDir] = id
+			shows[key] = id
 			showID = id
 		}
 
-		seasonNum := deref2(ep.Season)
-		seasonPath := media.SeasonDir(ep.Path)
-		if seasonPath == "" {
-			// No "Season N" folder: synthesize a stable identity under the show.
-			seasonPath = fmt.Sprintf("%s::season=%d", showDir, seasonNum)
-		}
-		seasonID, ok := seasons[seasonPath]
-		if !ok {
-			title := fmt.Sprintf("Season %d", seasonNum)
-			if seasonNum == 0 {
-				title = "Specials"
-			}
-			id, _, err := s.st.EnsureSeason(ctx, lib.ID, showID, seasonNum, seasonPath, title, media.SortTitle(title))
-			if err != nil {
+		for _, ep := range g.episodes {
+			if err := s.attachEpisode(ctx, lib, showID, g, ep, seasons); err != nil {
 				return err
 			}
-			seasons[seasonPath] = id
-			seasonID = id
 		}
+	}
+	return nil
+}
 
-		if ep.ParentID == nil || *ep.ParentID != seasonID {
-			if err := s.st.SetParent(ctx, ep.ID, &seasonID); err != nil {
+/*
+ * showGroup is the episodes that turned out to be one series, and the
+ * directories they were found in.
+ *
+ * The directories are kept because the show row's `path` is where `tvshow.nfo`
+ * is written (ADR 0010) — so a series living in one folder must keep that
+ * folder as its path, or sidecar writing silently stops working for the
+ * ordinary layout while fixing the unusual one.
+ */
+type showGroup struct {
+	title     string
+	sortTitle string
+	dirs      []string
+	episodes  []store.Item
+}
+
+/*
+ * path is the directory a sidecar belongs in, or a synthetic identity when
+ * there is no such directory.
+ *
+ * One directory means the ordinary layout, and it is used unchanged. Several
+ * means the series is split across sibling folders, and there is no directory
+ * that *is* the show — writing `tvshow.nfo` into whichever season folder was
+ * scanned first would put a series-level file inside one season of it. So the
+ * identity becomes synthetic, in the same shape collections already use, and
+ * the sidecar writer skips it (a path that is not a filesystem path fails
+ * containment, which is the behaviour that already exists for collections).
+ */
+func (g *showGroup) path() string {
+	first := ""
+	for _, d := range g.dirs {
+		if first == "" || d < first {
+			first = d
+		}
+	}
+	for _, d := range g.dirs {
+		if d != first {
+			// Deterministic, and independent of scan order — the same series
+			// must not change identity because a walk returned folders in a
+			// different sequence.
+			return "lancast:show:" + g.sortTitle
+		}
+	}
+	return first
+}
+
+// attachEpisode files one episode under its season, creating the season when
+// needed. Split out of reconcileHierarchy only because that function now has a
+// grouping pass in front of it and the body was becoming two things at once.
+func (s *Scanner) attachEpisode(ctx context.Context, lib store.Library, showID int64,
+	g *showGroup, ep store.Item, seasons map[string]int64) error {
+
+	seasonNum := deref2(ep.Season)
+	seasonPath := media.SeasonDir(ep.Path)
+	if seasonPath == "" {
+		// No "Season N" folder: synthesize a stable identity under the show.
+		seasonPath = fmt.Sprintf("%s::season=%d", g.path(), seasonNum)
+	}
+	seasonID, ok := seasons[seasonPath]
+	if !ok {
+		title := fmt.Sprintf("Season %d", seasonNum)
+		if seasonNum == 0 {
+			title = "Specials"
+		}
+		id, created, err := s.st.EnsureSeason(ctx, lib.ID, showID, seasonNum, seasonPath, title, media.SortTitle(title))
+		if err != nil {
+			return err
+		}
+		/*
+		 * A season that already existed keeps the parent it was created with,
+		 * because EnsureSeason inserts or does nothing. That is exactly the
+		 * database every upgrade starts from: `Show\Season 01` keeps its season
+		 * directory as its identity, so the row is found rather than made, and
+		 * without this it stays hanging off the *old* per-folder show — the
+		 * regrouping would appear to do nothing for the layout that was already
+		 * correct.
+		 */
+		if !created {
+			if err := s.st.SetParent(ctx, id, &showID); err != nil {
 				return err
 			}
+		}
+		seasons[seasonPath] = id
+		seasonID = id
+	}
+
+	if ep.ParentID == nil || *ep.ParentID != seasonID {
+		if err := s.st.SetParent(ctx, ep.ID, &seasonID); err != nil {
+			return err
 		}
 	}
 	return nil

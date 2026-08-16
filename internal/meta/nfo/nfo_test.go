@@ -500,3 +500,52 @@ func stripMarker(s string) string {
 	}
 	return strings.Join(keep, "\n")
 }
+
+/*
+ * A synthetic identity writes no sidecar and creates nothing.
+ *
+ * `lancast:show:andor` + `/tvshow.nfo` is a *relative* path on Linux, so
+ * without the guard the write lands beside the server's working directory —
+ * silently, since nothing about it looks like an error. Asserted by checking
+ * the working directory is untouched, because that is the actual damage.
+ */
+func TestWriteSkipsSyntheticPaths(t *testing.T) {
+	dir := t.TempDir()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(wd) })
+
+	src := New()
+	for _, p := range []string{"lancast:show:andor", "lancast:collection:tmdb:10"} {
+		if err := src.Write(p, meta.KindShow, &meta.Record{Kind: meta.KindShow}); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a synthetic path wrote into the working directory: %v", entries)
+	}
+}
+
+func TestIsSyntheticPath(t *testing.T) {
+	for path, want := range map[string]bool{
+		"lancast:show:andor":         true,
+		"lancast:collection:tmdb:10": true,
+		`W:\TV\Andor`:                false,
+		"/media/tv/Andor":            false,
+		"":                           false,
+	} {
+		if got := IsSyntheticPath(path); got != want {
+			t.Errorf("IsSyntheticPath(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
