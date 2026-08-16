@@ -204,6 +204,81 @@ func TestChapterOf(t *testing.T) {
 	}
 }
 
+// "Title (Year)/Title.ext" states the year once, on the folder. Reading only the
+// filename loses it, and a missing year is not a weak signal but a cap: it scores
+// half credit, which holds the weighted total strictly under the auto-accept
+// threshold no matter how exact the title. Every film in a library shaped this way
+// then sits in review forever, which is what a real library looked like.
+func TestMovieYearComesFromTheFolderWhenTheFilenameOmitsIt(t *testing.T) {
+	root := filepath.Join("W", "Movies")
+
+	for _, tt := range []struct {
+		name string
+		path string
+		want int
+	}{
+		{
+			name: "bracketed year on the parent",
+			path: filepath.Join("Spiderman (2002)", "Spiderman.mp4"),
+			want: 2002,
+		},
+		{
+			name: "parent year survives an edition suffix",
+			path: filepath.Join("Aliens SE (1986)", "Aliens SE.mp4"),
+			want: 1986,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Parse(root, filepath.Join(root, tt.path), "movie")
+			if got.Year != tt.want {
+				t.Errorf("year = %d, want %d (info: %+v)", got.Year, tt.want, got)
+			}
+		})
+	}
+}
+
+// The filename is the better evidence and keeps precedence: it names this file,
+// where the folder may name a set. A disagreement resolves to the filename.
+func TestFilenameYearBeatsTheFolderYear(t *testing.T) {
+	root := filepath.Join("W", "Movies")
+	path := filepath.Join(root, "Halloween (1978)", "Halloween II 1981.mkv")
+
+	if got := Parse(root, path, "movie"); got.Year != 1981 {
+		t.Errorf("year = %d, want 1981 — the filename states this film's year", got.Year)
+	}
+}
+
+// A collection folder's year belongs to the set, not to any one film in it, and
+// stamping it onto every child would manufacture a wrong year for all of them.
+// Only the immediate parent is read, and a range is not a release year.
+func TestCollectionFolderYearsAreNotInherited(t *testing.T) {
+	root := filepath.Join("X", "Index")
+
+	// A year range names a collection. Nothing in it is a 1986 film by virtue of
+	// sitting there.
+	loose := filepath.Join(root, "Alien(1986-2024)", "Alien.mkv")
+	if got := Parse(root, loose, "movie"); got.Year != 0 {
+		t.Errorf("year = %d, want 0 — a range is a collection, not a release year", got.Year)
+	}
+
+	// Two levels up is a collection even when it does parse as a year. Only the
+	// immediate parent counts.
+	nested := filepath.Join(root, "Marvel (2008)", "Cinematic", "Iron Man.mkv")
+	if got := Parse(root, nested, "movie"); got.Year != 0 {
+		t.Errorf("year = %d, want 0 — only the immediate parent may supply a year", got.Year)
+	}
+}
+
+// The library root names the library. A film sitting loose in "Movies (2024)" is
+// not a 2024 film.
+func TestLibraryRootNeverSuppliesAYear(t *testing.T) {
+	root := filepath.Join("D", "Movies (2024)")
+
+	if got := Parse(root, filepath.Join(root, "Dredd.mp4"), "movie"); got.Year != 0 {
+		t.Errorf("year = %d, want 0 — the root names the library, not the film", got.Year)
+	}
+}
+
 // In a show library a bare episode marker ("Storm of the Century E2") is a TV
 // episode of season 1, so it matches against TMDB TV rather than being taken for
 // a same-named film. In a movie library the identical name stays a film — the

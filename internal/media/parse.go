@@ -298,6 +298,8 @@ func Parse(root, path, libKind string) Info {
 	if year, cut, ok := findYear(name); ok {
 		info.Year = year
 		name = name[:cut]
+	} else if year := yearFromDir(root, path); year != 0 {
+		info.Year = year
 	}
 	// The edition marker comes off after cleaning, so "Alien.DC" has become
 	// "Alien DC" and the suffix is a word rather than a separator away.
@@ -306,6 +308,38 @@ func Parse(root, path, libKind string) Info {
 		info.Title = clean(base)
 	}
 	return info
+}
+
+// yearFromDir reads a release year off the file's immediate parent directory,
+// for the "Title (Year)/Title.ext" layout where the year is stated once — on
+// the folder — and the filename repeats only the title.
+//
+// Without this the year is not merely missing but capping: an absent year
+// scores half credit, which holds the weighted total strictly below the
+// auto-accept threshold however exact the title, so every film in such a
+// library lands in review permanently and no amount of popularity rescues it.
+// See internal/meta.ScoreBreakdown.
+//
+// Only the immediate parent is read. Walking further up reaches collection
+// folders — "Alien(1986-2024)", "Marvel Comics" — where a year belongs to the
+// set rather than to this film, and would be stamped onto every film beneath
+// it. The filename still wins outright when it carries a year of its own.
+func yearFromDir(root, path string) int {
+	dir := filepath.Dir(path)
+
+	// The root itself names the library, not the film. "Movies (2024)/Dredd.mp4"
+	// must not become a 2024 film.
+	rootAbs, rerr := filepath.Abs(root)
+	dirAbs, derr := filepath.Abs(dir)
+	if rerr == nil && derr == nil && rootAbs == dirAbs {
+		return 0
+	}
+
+	year, _, ok := findYear(stripNoise(filepath.Base(dir)))
+	if !ok {
+		return 0
+	}
+	return year
 }
 
 // findYear returns the release year and the index at which the title ends.
