@@ -739,122 +739,120 @@ where that openness gets exercised.
 
 ## What the last pass taught
 
+*Three feature passes on 2026-08-15 — fifteen backlog items, PRs #245, #246 and
+#247. The findings below are from those, and the first one is the finding.*
+
+**Every browser pass found a fault the test suites could not, and all three were
+the same fault.** Not a wrong calculation, not a bad query — a feature that
+worked correctly and could not be reached:
+
+| Pass | The suites said | The browser said |
+|---|---|---|
+| #245 | 112 client tests green | Rebinding a shortcut changed nothing: the customizer stored an override the handlers ignored |
+| #246 | 133 green | The library shape warning vanished on restart, and a no-op rescan erased it |
+| #247 | 142 green | Watch Together had no button on a single film — the case the feature is *for* |
+
+The shape is worth naming, because it is a class rather than a coincidence.
+Every one of those tests asserted **what the code does when called**. None
+asserted **that anything calls it**. A test that queries the state a feature
+writes is not a test that the feature works; the seam between "the logic is
+right" and "a person can get to it" is exactly where all three fell, and it is
+the seam a unit test is structurally unable to see. The keyboard fix is now
+pinned by a test that presses keys at the real shell and asserts the navigation,
+which is the shape the other two would have needed too.
+
+**A rejected promise with no `catch` is a control that does nothing, for ever.**
+Document picture-in-picture can be *present* and still refuse — an embedded
+WebView reports the API and fails `requestWindow` with `InvalidStateError`,
+because there is no window manager behind it. Feature detection cannot see that,
+and there is no way to ask without a user gesture. Worse, the obvious fix is
+also wrong: falling back inside the `catch` fails too, because the failed
+attempt **spends the transient user activation**. The fallback has to be reached
+synchronously from a click, so the first click becomes the probe and the button
+relabels itself for the rest of the session. **Feature detection answers "is
+this implemented", which is not the question "will this work here".**
+
+**Live state has the wrong lifetime for a permanent mistake.** The
+wrong-library-kind warning began on in-memory scan progress, so a library
+scanned on Tuesday looked fine on Wednesday — while the mistake it reported
+(kind is immutable) lasted for ever. Storing it exposed the subtler half:
+*withdrawing* it. The evidence is gathered during the walk, so a rescan that
+changes nothing produces no evidence and no verdict — which is not the same as a
+clean bill of health, and as first written any rescan silently erased a standing
+warning. **A warning may only be withdrawn by something that looked again.**
+
+**A presence check that runs before recording presence deletes the punctual.**
+Watch Together sweeps members who have not polled inside the timeout. Sweeping
+before recording the caller's poll meant a host polling *exactly on the
+interval* — which is when the interval lands — was judged absent and took down
+their own room, mid-film, for being on time. Caught by a unit test with a fake
+clock, because nobody sleeps ninety seconds to prove a timeout.
+
+**Assembling prose in the client is a second rule that will disagree with the
+first.** The client built the wrong-kind warning sentence from
+`episodes_in_movie_library`. That covered one of the two ways a library ends up
+the wrong kind and could not see the other at all — a shows library that
+produced no shows is invisible in every count the client receives. The verdict,
+its sentence and its remedy are the server's now, rendered as given.
+
+**Two numbers that mean different things at different scales must carry their
+scale.** Trending counts *accounts*, not plays, because `playback_state` holds
+one row per item per user. On a single-account server every count is 1 and the
+list is honestly "recently played" — so the API reports how many accounts
+contributed and the shelf names itself from it. Calling one person's history a
+trend would be a small lie told on the home page every day, which is the kind
+that survives longest because nobody bothers to argue with it.
+
+**A guarantee nobody can check is documentation, not a contract.** ADR 0018 had
+stated the versioning policy since M3 and nothing enforced it. The valuable half
+turned out to be the *refusal*: without it a client built against another
+contract discovers the mismatch as a field mysteriously absent three screens
+later, and the report that arrives is "the library page is blank".
+
+**Build order is part of the build.** The client assets are embedded in the Go
+binary at compile time, so `npm run build` alone leaves the running server
+serving the previous bundle — the fix looks like it did nothing, the page hash
+does not change, and a hard reload does not help. Two verification cycles were
+spent on this before the served bundle name was compared with
+`internal/web/dist/index.html`. That comparison is the fastest way to catch it.
+
+### Carried forward from the pass before
+
 **A release step that has never run has never been tested, and cutting the tag
 is the test.** v0.6.2 failed at signing: the artifact path was passed
 positionally as `"${artifact}"` and arrived at the shell empty, because the
 placeholder is substituted where it appears *inside* an argument, not when it is
-the whole of one. `lcsign` refused the empty `-in` and said so, which is the
-behaviour worth having — the alternative is a release that publishes unsigned
-and is discovered by a user whose updater declines to install it. Two things
-made the fix quick rather than a guessing game. It was reproduced locally with a
-snapshot build before anything was changed, and the argv was *printed* rather
-than reasoned about: `0=[] 1=[] 2=[]` ruled out quoting and ruled out a shell
-difference between the runner and this machine in one line, which is where
-reading the config would have sent someone first. The same pass found a second
+the whole of one. Two things made the fix quick rather than a guessing game: it
+was reproduced locally with a snapshot build before anything was changed, and
+the argv was *printed* rather than reasoned about. The same pass found a second
 branch that had never run — the unsigned fallback, which could not have worked
-either, since goreleaser expects the signature file the block declares. **Every
-branch of a release pipeline is untested until a real tag takes it.**
+either. **Every branch of a release pipeline is untested until a real tag takes
+it.**
 
 **A rule derived from reasoning met a library and lost.** The picture decoder
 sent HEIC and HEIF to ffmpeg and nothing else, on the sound-sounding logic that
 those are the formats Go cannot read. The first scan of a real library found
-eight photographs that disprove it — ordinary BMPs, family pictures, that Go's
-decoder rejects and ffmpeg reads without complaint. They were reported as
-failures because `.bmp` was not on a list someone had written from memory. The
-replacement rule needs no list: whatever the in-process decoders refuse is
-offered to ffmpeg. **A list of exceptions is a claim about the world, and the
-world has more cases than the person writing the list.**
+eight ordinary BMPs that Go's decoder rejects and ffmpeg reads without
+complaint. The replacement rule needs no list: whatever the in-process decoders
+refuse is offered to ffmpeg. **A list of exceptions is a claim about the world,
+and the world has more cases than the person writing the list.**
 
 **A new media type is an audit of every assumption the old ones left behind.**
-Adding pictures found a detail page offering to *play* a photograph, a gallery
-offering "Play all" over 779 of them, Fix match offered against a provider that
-will never exist, "recently added" answering with folders, and a library opening
-sorted by UUID. None of those were pictures bugs; they were places where "a leaf
-is something you press play on" had been true for so long it had stopped being
-written down. It also found a real one in music: every rescan re-recorded every
-track, because the reinterpretation check had a default that assumed anything
-unfamiliar was "other". True since v0.5.0, found by a picture test asking a new
-kind an old question.
+Adding pictures found a detail page offering to *play* a photograph, "Play all"
+over 779 of them, Fix match against a provider that will never exist, and a
+library opening sorted by UUID. None were pictures bugs; they were places where
+"a leaf is something you press play on" had been true so long it had stopped
+being written down.
 
-**A fake that is more permissive than the real thing tests nothing.** The
-updater's download was broken from the day it shipped: the release lookup asked
-GitHub's JSON endpoint for octet-stream and got 415. It had tests, and they all
-passed, because the fake releases server accepted any `Accept` header. The fake
-agreed with the code instead of with GitHub, so it could only ever confirm what
-the code already believed. The fix was to make the fake strict on exactly that
-dimension and then reintroduce the bug to watch the suite fail — a regression
-test nobody has seen fail is a regression test nobody has tested. The general
-form: **a test double is a claim about the real system, and an untested claim is
-where the bug hides.**
-
-**The last mile of a release pipeline only runs at the last mile.** The download
-half of the updater could not run against a real release until a signed release
-existed, so it did not, for two releases. The same shape as the signing step
-that failed on the first tag that used it, one week earlier and one layer up.
-Anything that can only execute during a release is untested until a release
-executes it, and both times the cost was one extra version.
-
-**A default on an irreversible choice is a bug with a delay on it.** The
-add-library form pre-selected "Movies" in a dropdown beside a name field, and
-library kind cannot be changed afterwards. A library named "Music", pointed at a
-music folder, was created as a movie library — and then discarded 1,592 tracks
-and reported "0 items · scanned", which reads as an empty folder. Two fixes came
-out of it, and the second is the general one: the skip now has a voice, and the
-field no longer has a default. **Where a choice is permanent, the interface has
-to make it deliberate**; anything selectable by inattention eventually will be.
-
-**A blocker that was never tested blocked a feature for a release.**
-Close-to-tray shipped as a disabled toggle on the belief that the tray and the
-web view both need the main thread's message loop. They do not: Windows message
-queues are per *thread*, and the conflict existed only because both were being
-run from one goroutine. The belief was plausible, written down, and wrong, and
-it cost a shipped option that said "not yet available" while being one goroutine
-away. Then the build of it repeated the lesson one layer down — `PostQuitMessage`
-posts to the *calling* thread's queue, so Quit from the tray quit the tray and
-left the window open, and the interface comment claiming it is safe from a
-background thread is wrong for this backend. Neither fact was reachable by
-reading; both took someone watching the screen.
-
-**A guard written against one platform is a guard against one platform.** The
-self-update staging check used `filepath.Base` to insist on a flat filename, and
-`filepath.Base` is platform-dependent by design: on Linux `..\evil.exe` is one
-legal filename, so it was admitted — and it becomes a path traversal the moment
-that data directory is carried to Windows, into a directory the service writes
-to as LocalSystem. CI found what a Windows-only suite structurally could not.
-The test was right and the code was wrong, which is the good version of this.
-
-**A failure with no voice can be under the floor as easily as in our code.** The
-service-stop test failed one run in five on cleanup, always on a still-locked
-`lancast.db`. Everything observable through `database/sql` was provably clean —
-Opens and Closes 24 to 24, `db.Stats()` all zeros, no server goroutine alive —
-and identical on passing and failing runs, which is precisely what ruled our
-code out. The handle was leaked below us, in the SQLite driver; the fix was a
-dependency bump, measured (5 failures in 24 before, 0 in 48 after) rather than
-asserted. It also is not only a test annoyance: the installer stops a running
-instance before replacing its files, and a stop is likeliest to race startup
-exactly when something is restarting it.
-
-### Carried forward from the pass before
-
-**A stated cost went unchecked for a release.** ADR 0023 priced a webview as
-"CGO in the client, and per-platform client builds", and both were wrong on
-Windows — a pure-Go binding builds with `CGO_ENABLED=0`. Ten minutes of trying
-it deleted two of the three reasons the decision looked expensive. The same
-pass found the reverse: the certificate problem the ADR expected to *soften* was
-worse than described, because a web view does not warn, it refuses. **A cost
-written down and never measured decays in both directions.**
-
-**A capability nobody exercised was the same as a capability that did not
-exist.** `?profile=` shipped, `docs/api.md` said "clients that know better say
-so", and no client ever said so — so every browser in the house was served the
-floor, and HEVC files were re-encoded for a release. The feature was not
-missing; the caller was.
-
-**Two things owning one fact is a bug waiting for a witness.** The mini-player
-regression — clicking one film and getting the previous one — was a URL sync and
-a router both deciding what was playing. It presented as lag, because each
-bounce started another hardware encode. The fix was deleting one of them, not
-arbitrating between them.
+**A fake that is more permissive than the real thing tests nothing**, **a stated
+cost decays in both directions when never measured** (ADR 0023 priced CGO that a
+pure-Go binding did not need, and understated a certificate problem that
+refuses rather than warns), **a capability nobody exercises is the same as one
+that does not exist** (`?profile=` shipped and no client ever sent it, so every
+browser in the house was served the floor), and **two things owning one fact is
+a bug waiting for a witness** (the mini-player played the previous film because
+a URL sync and a router both decided what was playing; the fix was deleting one,
+not arbitrating between them).
 
 ## Amendments to schema revision 1
 
