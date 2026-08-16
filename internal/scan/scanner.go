@@ -39,6 +39,15 @@ type Progress struct {
 	// explains an empty library, and silence here is what let a music library
 	// created as a movie library report "0 items · scanned" over 1,592 tracks.
 	SkippedKind int `json:"skipped_kind"`
+	// SkippedExtras counts trailers, featurettes, deleted scenes and sample
+	// files left out of a video library (ADR 0038).
+	//
+	// Reported for the same reason SkippedKind is, and with more force: this
+	// number is the difference between a library that says 1,381 films and one
+	// that says 1,192, and a person comparing those against another server has
+	// no way to discover where the extra ones came from. Saying "189 extras" is
+	// the whole explanation.
+	SkippedExtras int `json:"skipped_extras"`
 	// EpisodesInMovieLibrary counts files in a `movie` library that parsed as
 	// episodes — S01E02, 1x02, and the rest.
 	//
@@ -433,6 +442,27 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		if ignored[path] {
 			// On the ignore list — present on disk, deliberately kept out of the
 			// library. Not counted as seen, so it is never re-added.
+			return nil
+		}
+		/*
+		 * Extras are not works (ADR 0038).
+		 *
+		 * A trailer, a featurette and a `sample.mkv` are playable video sitting
+		 * in a film's folder, and importing them made each one a film with a
+		 * title, a tile and a line in the count. Video libraries only: the rule
+		 * reads folder names that mean nothing in a music or picture library,
+		 * where "Interviews" is a perfectly ordinary album or album folder.
+		 *
+		 * Not marked seen, so a file that was imported by an earlier build is
+		 * marked *missing* on this scan rather than deleted — the scanner never
+		 * deletes, and a rule that quietly removed rows would be a worse thing
+		 * to be wrong about than the import it is correcting.
+		 */
+		if (lib.Kind == media.LibraryMovie || lib.Kind == media.LibraryShow) &&
+			media.IsExtra(root.Path, path) {
+			s.mu.Lock()
+			p.SkippedExtras++
+			s.mu.Unlock()
 			return nil
 		}
 

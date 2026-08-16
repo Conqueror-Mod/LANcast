@@ -369,7 +369,7 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 ```json
 { "library_id": 1, "state": "running", "files_seen": 318,
   "items_changed": 12, "items_missing": 0, "skipped": 2,
-  "skipped_kind": 0,
+  "skipped_kind": 0, "skipped_extras": 14,
   "episodes_in_movie_library": 0,
   "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
   "started_at": 1753228800 }
@@ -390,6 +390,23 @@ folder were empty.
 
 Only files that are media of the other sort are counted. Artwork, `.nfo`
 sidecars and subtitles are ignored by every library and would bury the signal.
+
+`skipped_extras` counts trailers, featurettes, deleted scenes and sample files
+left out of a video library ([ADR 0038](adr/0038-extras-are-not-works.md)). Also
+not part of `skipped`, and for the same reason: nothing failed, those files are
+simply not works. It is reported because it is the *entire* explanation for a
+count that disagrees with another server's â€” a library holding 1,192 films and
+189 extras used to report 1,381, with nothing anywhere to say where the
+difference came from.
+
+The rule is conventional (the Plex and Kodi layout) with one condition worth
+knowing: a folder named `Trailers` or `Shorts` sitting **directly** inside a
+library root is a category somebody keeps on purpose, not a film's extras, and
+is imported normally. An extras folder must have a film folder above it.
+
+An extra that an older build already imported is **marked missing** on the next
+scan rather than deleted â€” scanning marks missing, never deletes â€” so the counts
+correct themselves while the rows stay recoverable.
 
 `episodes_in_movie_library` is the other half of that warning, and the half that
 is easy to miss. A music library created as a movie library reports an empty
@@ -1910,7 +1927,7 @@ Not cacheable, and no `Content-Length`: this is a stream with no end, and a
 cache holding "the channel" would serve one viewer's minute to everybody who
 asked afterwards.
 
-**Still not built:** hardware tuners (HDHomeRun and friends). The EPG is built —
+**Still not built:** hardware tuners (HDHomeRun and friends). The EPG is built â€”
 see `GET /api/guide` below.
 
 **Known limit:** `EXT-X-KEY` and `EXT-X-MAP` URIs are left pointing upstream
@@ -1937,7 +1954,7 @@ right and the provider down, and deleting it would mean retyping it.
 
 `epg_url` is optional and is an **XMLTV** document, plain or gzipped. It is
 imported in the same request, *after* the channel list, and a guide that fails
-is reported as `epg_error` — separately from `import_error`, because a working
+is reported as `epg_error` â€” separately from `import_error`, because a working
 channel list with no schedule is a usable Live TV and conflating the two makes
 the channels look broken. The response carries `programs`, the number of
 listings stored, which is not the number in the file: a guide covers channels a
@@ -1969,7 +1986,7 @@ have not arrived.
 A refresh imports **channels first and the guide second**, and that ordering is
 load-bearing rather than incidental: replacing channels deletes their rows, and
 `epg_program.channel_id` cascades, so a guide imported first is deleted moments
-later by the channel import — producing an empty guide with no error anywhere to
+later by the channel import â€” producing an empty guide with no error anywhere to
 explain it.
 
 `502 upstream` when the provider cannot be reached or does not return a
@@ -1978,7 +1995,7 @@ guide is reported in `epg_error`.
 
 ### `GET /api/guide`
 
-What is on now and next, for every channel that has listings. Not admin-gated —
+What is on now and next, for every channel that has listings. Not admin-gated â€”
 what is on television tonight is not a secret from the household.
 
 ```json
@@ -1989,11 +2006,11 @@ what is on television tonight is not a secret from the household.
                       "title": "The News", "description": "What happened.",
                       "category": "News", "season": null, "episode": null,
                       "icon_url": null },
-            "next": { "id": 92, "…": "…" } } } }
+            "next": { "id": 92, "â€¦": "â€¦" } } } }
 ```
 
 Keyed by channel id so a client can render a channel grid without joining
-anything — it already holds the channels. `at` is the instant the answer
+anything â€” it already holds the channels. `at` is the instant the answer
 describes, and clients should draw progress from it rather than from their own
 clock, which may be skewed.
 
@@ -2022,7 +2039,7 @@ One channel's schedule.
 ```
 
 `?from=` is a unix timestamp defaulting to now, `?hours=` a window defaulting to
-12 and capped at 336 (a fortnight — more than any guide publishes). Programmes
+12 and capped at 336 (a fortnight â€” more than any guide publishes). Programmes
 are returned if they *overlap* the window rather than fall inside it, because the
 programme that started before the window opened is the one being watched, and a
 schedule that omits it begins with a hole.

@@ -1757,3 +1757,111 @@ func itemsOfKind(t *testing.T, st *store.Store, libID int64, kind string) []stor
 	}
 	return items
 }
+
+/*
+ * Extras do not become films (ADR 0038).
+ *
+ * Every video file in a movie library became a movie, so a film's trailer,
+ * featurette and five-second sample each got a title, a tile and a line in the
+ * count. A real library reported 1,381 films against 1,192.
+ */
+func TestExtrasAreNotImportedAsFilms(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "The Film (2011)/The Film (2011).mkv", 10)
+	writeFile(t, root, "The Film (2011)/Trailers/teaser.mkv", 10)
+	writeFile(t, root, "The Film (2011)/Featurettes/making of.mkv", 10)
+	writeFile(t, root, "The Film (2011)/Behind The Scenes/bts.mkv", 10)
+	writeFile(t, root, "The Film (2011)/sample.mkv", 10)
+	writeFile(t, root, "The Film (2011)/The Film-trailer.mkv", 10)
+
+	p := scanAndWait(t, sc, lib)
+
+	movies := itemsOfKind(t, st, lib.ID, "movie")
+	if len(movies) != 1 {
+		titles := []string{}
+		for _, m := range movies {
+			titles = append(titles, m.Title)
+		}
+		t.Fatalf("movies = %d, want 1: %v", len(movies), titles)
+	}
+	if p.SkippedExtras != 5 {
+		t.Errorf("skipped_extras = %d, want 5", p.SkippedExtras)
+	}
+	// Reported rather than silent: somebody comparing this count against
+	// another server has no other way to find out where the difference went.
+	if p.Skipped != 0 {
+		t.Errorf("skipped = %d — an extra is not a failure", p.Skipped)
+	}
+}
+
+// A `Shorts` or `Trailers` folder directly under the library root is somebody's
+// collection, not a film's extras. Discarding it would be a far worse bug than
+// the one the exclusion fixes.
+func TestTopLevelCategoryFoldersAreStillImported(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "Shorts/Paperman (2012).mkv", 10)
+	writeFile(t, root, "Trailers/coming soon.mkv", 10)
+
+	p := scanAndWait(t, sc, lib)
+
+	if got := len(itemsOfKind(t, st, lib.ID, "movie")); got != 2 {
+		t.Errorf("movies = %d, want 2 — a category folder under the root was discarded", got)
+	}
+	if p.SkippedExtras != 0 {
+		t.Errorf("skipped_extras = %d, want 0", p.SkippedExtras)
+	}
+}
+
+// An extra imported by an earlier build is marked missing on the next scan, not
+// deleted. The scanner never deletes, and a rule that quietly removed rows
+// would be worse to be wrong about than the import it corrects.
+func TestPreviouslyImportedExtrasAreMarkedMissingNotDeleted(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+	writeFile(t, root, "The Film (2011)/The Film (2011).mkv", 10)
+	trailer := writeFile(t, root, "The Film (2011)/Trailers/teaser.mkv", 10)
+
+	ctx := context.Background()
+	roots, err := st.ListRoots(ctx, lib.ID)
+	if err != nil || len(roots) == 0 {
+		t.Fatalf("roots: %v", err)
+	}
+
+	// Stand in for the older build, which imported the trailer as a film.
+	if _, err := st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: lib.ID, RootID: roots[0].ID, Path: trailer,
+		Kind: "movie", Title: "teaser", SortTitle: "teaser", Container: "mkv",
+		SizeBytes: 10, MTime: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	p := scanAndWait(t, sc, lib)
+
+	// TopLevel is what the browse grid asks for, and it is the listing that has
+	// to agree with the library count.
+	items, total, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Title == "teaser" {
+			t.Error("the trailer is still listed as a film")
+		}
+	}
+	libs, err := st.ListLibraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range libs {
+		if l.ID == lib.ID && l.ItemCount != total {
+			t.Errorf("library count %d disagrees with the grid's %d", l.ItemCount, total)
+		}
+	}
+	// Marked, not destroyed — the row is still there, excluded from listings.
+	if p.ItemsMissing != 1 {
+		t.Errorf("items_missing = %d, want 1 — the row was deleted rather than marked", p.ItemsMissing)
+	}
+}

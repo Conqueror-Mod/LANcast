@@ -303,6 +303,10 @@ export interface ScanStatus {
   // music library. Not a failure, which is why it is not part of `skipped`:
   // it answers "why is this library empty", not "what went wrong".
   skipped_kind: number;
+  // Trailers, featurettes, deleted scenes and sample files left out of a video
+  // library (ADR 0038). Not a failure and not part of `skipped`: nothing went
+  // wrong reading them, they are simply not works.
+  skipped_extras: number;
   /** Files that parsed as episodes in a library that says it holds films. */
   episodes_in_movie_library?: number;
   /**
