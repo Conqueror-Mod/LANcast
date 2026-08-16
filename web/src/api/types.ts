@@ -35,6 +35,12 @@ export interface Library {
   created_at: number;
   scanned_at: number | null;
   item_count: number;
+  /**
+   * The last scan's verdict, when it had one. Carried on the library rather
+   * than only in live scan progress, which dies with the server process — a
+   * warning about a kind that cannot be changed needs to outlive a restart.
+   */
+  shape_warning?: ShapeWarning;
 }
 
 export interface Artwork {

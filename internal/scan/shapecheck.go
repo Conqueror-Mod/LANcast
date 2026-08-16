@@ -27,22 +27,10 @@ import (
  * and re-running a table is a cheap argument.
  */
 
-// ShapeWarning is a verdict about a finished scan. Empty Code means no warning.
-type ShapeWarning struct {
-	// Code is stable and machine-readable; the client chooses its own wording
-	// for a code it knows and falls back to Message for one it does not.
-	Code string `json:"code"`
-	// Message is a whole sentence, written server-side, saying what happened
-	// and what it means. The audit log takes the same position for the same
-	// reason: a client that has to assemble prose from a code will assemble it
-	// differently from the next client.
-	Message string `json:"message"`
-	// Remedy is separate from Message because it is the part that is hard to
-	// hear: kind cannot be changed, so the only fix is to remove the library
-	// and add it again. Saying that plainly beats implying a settings toggle
-	// exists.
-	Remedy string `json:"remedy,omitempty"`
-}
+// ShapeWarning is re-exported from store, which owns the type because a
+// library row carries the last one (schema 20) and the scanner would otherwise
+// be imported by the package that stores its output.
+type ShapeWarning = store.ShapeWarning
 
 /*
  * Thresholds, named rather than inlined.

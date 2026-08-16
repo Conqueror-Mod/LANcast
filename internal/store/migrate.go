@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 19
+const CurrentSchemaVersion = 20
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -58,6 +58,7 @@ var migrations = []migration{
 	{version: 17, sql: schemaRevision17},
 	{version: 18, sql: schemaRevision18, rebuildsTable: true},
 	{version: 19, sql: schemaRevision19},
+	{version: 20, sql: schemaRevision20},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -674,4 +675,27 @@ const schemaRevision19 = `
 ALTER TABLE media_stream ADD COLUMN color_transfer TEXT;
 ALTER TABLE media_stream ADD COLUMN color_primaries TEXT;
 ALTER TABLE media_stream ADD COLUMN color_space TEXT;
+`
+
+/*
+ * Revision 20 — the last scan's verdict on a library's shape.
+ *
+ * A nullable column rather than a table: there is exactly one of these per
+ * library, it is replaced wholesale by the next scan, and it has no history
+ * worth keeping — the question it answers is "is this library the kind it says
+ * it is", which has one current answer.
+ *
+ * It has to be stored at all because the warning was previously only in the
+ * scanner's in-memory progress, which is lost on restart. That made a permanent
+ * mistake — kind cannot be changed — announced by a message that survived until
+ * the next time the server stopped. A library scanned on Tuesday and looked at
+ * on Wednesday showed nothing wrong with it.
+ *
+ * JSON in one column rather than three, because the shape of a warning belongs
+ * to the rule that produces it: codes will be added, and a client already has
+ * to handle a code it does not know. Splitting it into columns would make every
+ * new field a migration.
+ */
+const schemaRevision20 = `
+ALTER TABLE library ADD COLUMN shape_warning TEXT;
 `

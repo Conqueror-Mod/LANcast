@@ -59,7 +59,9 @@ export function LibraryRow({ library }: { library: Library }) {
   // the scan looked successful. The wording names both halves: what was
   // ignored, and the setting that ignored it.
   const skippedKind = status?.skipped_kind ?? 0;
-  const warning = status?.shape_warning;
+  // Live progress first, the stored row second: the in-memory one is fresher
+  // during and just after a scan, and the row is what is left after a restart.
+  const warning = status?.shape_warning ?? library.shape_warning;
   const excluded = library.kind === "music" ? "video" : "audio";
 
   // A library always has at least one location; falling back to `path` covers

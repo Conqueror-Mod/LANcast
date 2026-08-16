@@ -78,6 +78,11 @@ type Library struct {
 	CreatedAt int64         `json:"created_at"`
 	ScannedAt *int64        `json:"scanned_at"`
 	ItemCount int           `json:"item_count"`
+	// ShapeWarning is the last scan's verdict, when it had one: this library
+	// does not look like the kind it was created as. Carried on the row rather
+	// than only in live scan progress, because that progress is lost on restart
+	// and the mistake it reports is permanent.
+	ShapeWarning *ShapeWarning `json:"shape_warning,omitempty"`
 }
 
 /*
@@ -166,7 +171,7 @@ const libraryItemCount = `(SELECT COUNT(*) FROM media_item
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`
+		       `+libraryItemCount+`, l.shape_warning
 		FROM library l ORDER BY l.name`)
 	if err != nil {
 		return nil, fmt.Errorf("list libraries: %w", err)
@@ -176,9 +181,11 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	out := []Library{}
 	for rows.Next() {
 		var l Library
-		if err := rows.Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount); err != nil {
+		var warning *string
+		if err := rows.Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount, &warning); err != nil {
 			return nil, fmt.Errorf("list libraries: %w", err)
 		}
+		l.ShapeWarning = parseShapeWarning(warning)
 		out = append(out, l)
 	}
 	if err := rows.Err(); err != nil {
@@ -200,17 +207,19 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 
 func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	var l Library
+	var warning *string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`
+		       `+libraryItemCount+`, l.shape_warning
 		FROM library l WHERE l.id = ?`, id).
-		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount)
+		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt, &l.ItemCount, &warning)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get library: %w", err)
 	}
+	l.ShapeWarning = parseShapeWarning(warning)
 	roots, err := s.ListRoots(ctx, l.ID)
 	if err != nil {
 		return nil, err

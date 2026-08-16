@@ -20,6 +20,14 @@
 .set-row {
   display: flex;
   align-items: center;
+  /*
+   * The actions do not shrink, so on a narrow pane they took the row and left
+   * the name, the path and any note in whatever was left — measured at 112px
+   * of a 494px row, which wraps a path one word per line. Wrapping lets the
+   * button group drop to its own line instead, which costs a row of height in
+   * the case where the alternative was an unreadable column.
+   */
+  flex-wrap: wrap;
   gap: 16px;
   padding: 12px 14px;
   border-radius: var(--radius-tile);
@@ -28,7 +36,9 @@
 }
 
 .set-row__main {
-  flex: 1;
+  /* A basis rather than 0: below this the row wraps rather than compressing
+     the text further. min-width keeps a long unbroken path from widening it. */
+  flex: 1 1 260px;
   min-width: 0;
 }
 

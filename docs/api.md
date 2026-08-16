@@ -392,6 +392,13 @@ skip count can ever fire.
 definition, and reporting "your TV library has no shows in it" because a drive
 went away halfway through would be a false alarm about a permanent mistake.
 
+**Stored on the library row** (schema 20) as well as reported in live progress,
+and also returned by `GET /api/libraries`. Progress is in memory and dies with
+the process, which gave a warning about an unchangeable property a lifetime of
+"until the server restarts" — a library scanned on Tuesday looked fine on
+Wednesday. The next clean scan clears it, because a warning that outlives its
+condition is worse than none.
+
 Thresholds are deliberately forgiving — a shows library with one show in it is
 doing its job, a film library with three episode-shaped names is a box set, and
 a library under five items is not judged at all. A check that cries wolf is a

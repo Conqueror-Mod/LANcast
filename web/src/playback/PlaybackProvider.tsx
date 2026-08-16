@@ -1041,7 +1041,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const [popoutWin, setPopoutWin] = useState<Window | null>(null);
   const [popoutRoot, setPopoutRoot] = useState<HTMLElement | null>(null);
-  const popoutAvailable = popoutSupported();
+  /*
+   * Feature detection answers "does this host implement Document PiP". It does
+   * not answer "will it give me a window", and those come apart: an embedded
+   * WebView reports the API and then fails the call with InvalidStateError,
+   * because there is no window manager behind it.
+   *
+   * There is no way to find that out without asking, and asking requires a user
+   * gesture — so the first click is the probe. When it fails, this remembers,
+   * and every later click takes the browser picture-in-picture path instead.
+   * That path has to be reached *synchronously* from the click: the failed
+   * attempt consumes the transient activation, so a fallback inside the catch
+   * is already too late to open anything.
+   */
+  const [popoutRefused, setPopoutRefused] = useState(false);
+  const popoutAvailable = popoutSupported() && !popoutRefused;
 
   const closePopout = useCallback(() => {
     setPopoutWin((w) => {
@@ -1061,17 +1075,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       v && v.videoWidth > 0 && v.videoHeight > 0
         ? v.videoWidth / v.videoHeight
         : undefined;
-    void openPopout(aspect).then((opened) => {
-      if (!opened) return;
-      // The browser's own close button, and the "return to tab" affordance,
-      // both fire pagehide on the window rather than telling us directly.
-      opened.win.addEventListener("pagehide", () => {
-        setPopoutWin(null);
-        setPopoutRoot(null);
+    void openPopout(aspect)
+      .then((opened) => {
+        if (!opened) return;
+        // The browser's own close button, and the "return to tab" affordance,
+        // both fire pagehide on the window rather than telling us directly.
+        opened.win.addEventListener("pagehide", () => {
+          setPopoutWin(null);
+          setPopoutRoot(null);
+        });
+        setPopoutWin(opened.win);
+        setPopoutRoot(opened.root);
+      })
+      .catch(() => {
+        /*
+         * The window could not be opened. Remember it, so the button stops
+         * offering something this host cannot do and becomes the browser
+         * picture-in-picture control instead — which is a worse pop-out, and
+         * the one the ADR keeps as the fallback for exactly this.
+         *
+         * Found by clicking the button rather than by reasoning about it.
+         * Before this, the rejection was unhandled and the button did nothing
+         * at all, forever: the dead control the ADR says not to ship.
+         */
+        setPopoutRefused(true);
+        // Attempted anyway, because in a host that merely declined this once it
+        // may still work — and if the activation has already been spent, this
+        // fails silently and the next click takes the synchronous path above.
+        const v = videoRef.current;
+        if (v && !isAudio && document.pictureInPictureEnabled) {
+          v.requestPictureInPicture().catch(() => {});
+        }
       });
-      setPopoutWin(opened.win);
-      setPopoutRoot(opened.root);
-    });
   }, [popoutWin, closePopout]);
 
   /*

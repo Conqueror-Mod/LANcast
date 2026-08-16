@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 )
 
@@ -28,6 +29,64 @@ import (
  *
  * A skip count cannot see that. A census of what was produced can.
  */
+
+/*
+ * ShapeWarning is a verdict about a finished scan: the library does not look
+ * like the kind it was created as. Empty Code means no warning.
+ *
+ * It lives here rather than in the scanner because the library row stores the
+ * last one (schema 20). The scanner produces it; the store keeps it; both refer
+ * to one type, so the JSON a client sees cannot depend on which of them
+ * answered.
+ */
+type ShapeWarning struct {
+	// Code is stable and machine-readable; a client renders its own wording for
+	// a code it knows and falls back to Message for one it does not.
+	Code string `json:"code"`
+	// Message is a whole sentence, written server-side. The audit log takes the
+	// same position for the same reason: a client assembling prose from a code
+	// will assemble it differently from the next client.
+	Message string `json:"message"`
+	// Remedy is separate because it is the part that is hard to hear — kind
+	// cannot be changed, so the only fix is to remove the library and add it
+	// again. Saying that plainly beats implying a settings toggle exists.
+	Remedy string `json:"remedy,omitempty"`
+}
+
+// SetShapeWarning stores (or clears, when w is nil) a library's last verdict.
+// Called at the end of every successful scan, including to clear one that a
+// re-scan no longer justifies — a warning that outlives the condition it
+// describes is worse than none.
+func (s *Store) SetShapeWarning(ctx context.Context, libraryID int64, w *ShapeWarning) error {
+	var payload any
+	if w != nil && w.Code != "" {
+		b, err := json.Marshal(w)
+		if err != nil {
+			return fmt.Errorf("set shape warning: %w", err)
+		}
+		payload = string(b)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE library SET shape_warning = ? WHERE id = ?`, payload, libraryID)
+	if err != nil {
+		return fmt.Errorf("set shape warning: %w", err)
+	}
+	return nil
+}
+
+// parseShapeWarning turns the stored column into a value, tolerating anything
+// unreadable: a warning that cannot be parsed is not worth failing a library
+// listing over.
+func parseShapeWarning(raw *string) *ShapeWarning {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var w ShapeWarning
+	if err := json.Unmarshal([]byte(*raw), &w); err != nil || w.Code == "" {
+		return nil
+	}
+	return &w
+}
 
 // LibraryShape counts what a library actually holds, by kind.
 type LibraryShape struct {

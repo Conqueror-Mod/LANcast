@@ -76,6 +76,9 @@
 
 .addons__manage {
   display: inline-block;
+  /* .browse is a flex column, so a stretch-aligned child spans the pane. The
+     link is a button-sized affordance, not a banner. */
+  align-self: flex-start;
   font-size: 13px;
   color: var(--text-secondary);
   text-decoration: none;

@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"lancast/internal/store"
@@ -197,5 +198,49 @@ func TestScanIsQuietAboutARightLookingLibrary(t *testing.T) {
 
 	if p := scanAndWait(t, sc, *lib); p.ShapeWarning != nil {
 		t.Errorf("warned about a healthy film library: %s", p.ShapeWarning.Message)
+	}
+}
+
+/*
+ * A rescan that changes nothing must not withdraw a standing warning.
+ *
+ * Found by running this against real files rather than by reasoning about it.
+ * The episode count is gathered during the walk, so it only counts files the
+ * scan actually processed — a second scan over an unchanged library produces
+ * zero, no verdict, and (as this was first written) a cleared warning. The
+ * library was still exactly as wrong as it had been a minute earlier.
+ */
+func TestARescanThatChangesNothingKeepsTheWarning(t *testing.T) {
+	sc, st := newScanner(t)
+	dir := t.TempDir()
+	for i := 1; i <= 6; i++ {
+		writeFile(t, dir, fmt.Sprintf("Some Show/Season 01/Some.Show.S01E0%d.mkv", i), 1024)
+	}
+
+	lib, err := st.CreateLibrary(context.Background(), "Films", "movie", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p := scanAndWait(t, sc, *lib); p.ShapeWarning == nil {
+		t.Fatal("setup: the first scan did not warn")
+	}
+	stored, err := st.GetLibrary(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ShapeWarning == nil {
+		t.Fatal("the first scan did not store its warning on the row")
+	}
+
+	// Nothing on disk has changed.
+	scanAndWait(t, sc, *lib)
+
+	after, err := st.GetLibrary(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ShapeWarning == nil {
+		t.Error("a rescan that changed nothing withdrew the warning; the library is still the wrong kind")
 	}
 }

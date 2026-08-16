@@ -244,10 +244,20 @@ func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
 		return
 	}
-	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+	lib, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
-	writeJSON(w, http.StatusOK, s.scanner.Status(id))
+
+	status := s.scanner.Status(id)
+	// The stored verdict fills in for a server that has restarted since the
+	// scan. Live progress only exists for as long as the process does, and the
+	// mistake this reports is permanent — so the row is the durable answer and
+	// the in-memory one, when present, is the fresher of the two.
+	if status.ShapeWarning == nil && lib.ShapeWarning != nil {
+		status.ShapeWarning = lib.ShapeWarning
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 // deleteLibrary forgets a library: its rows and everything cascading off them.
