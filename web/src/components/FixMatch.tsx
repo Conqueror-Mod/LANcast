@@ -2,19 +2,27 @@ import { useState } from "react";
 import { useCandidates, useApplyMatch, useUnlockField } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
 import type { Item, MatchCandidate, ScoreBreakdown } from "@/api/types";
+import { scorePct } from "@/lib/format";
 import "./FixMatch.css";
 
 // A labelled meter for one score component, so a candidate's total is explained
 // rather than asserted. The weak component (e.g. a wrong year) reads at a glance.
 function Meter({ label, v, note }: { label: string; v: number; note?: string }) {
-  const pct = Math.round(Math.max(0, Math.min(1, v)) * 100);
+  // The bar is drawn from the exact value and the label is floored: a meter may
+  // fill to its true width, but the number beside it must not round upward into
+  // a confidence the scorer did not have.
+  const clamped = Math.max(0, Math.min(1, v));
+  const pct = scorePct(clamped);
   return (
-    <div className="fixmatch__meter" title={`${label}: ${pct}%`}>
+    <div className="fixmatch__meter" title={`${label}: ${pct}`}>
       <span className="fixmatch__meter-label">{label}</span>
       <span className="fixmatch__meter-track">
-        <span className="fixmatch__meter-fill" style={{ width: `${pct}%` }} />
+        <span
+          className="fixmatch__meter-fill"
+          style={{ width: `${clamped * 100}%` }}
+        />
       </span>
-      <span className="fixmatch__meter-val">{note ?? `${pct}%`}</span>
+      <span className="fixmatch__meter-val">{note ?? pct}</span>
     </div>
   );
 }
@@ -30,7 +38,7 @@ function ScoreBar({
 }) {
   return (
     <div className="fixmatch__break">
-      <span className="fixmatch__total">{Math.round(total * 100)}% match</span>
+      <span className="fixmatch__total">{scorePct(total)} match</span>
       <Meter label="Title" v={breakdown.title} />
       {showYear && (
         <Meter
