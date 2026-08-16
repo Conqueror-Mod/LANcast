@@ -330,18 +330,33 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 	})
 
 	for _, g := range groups {
+		// A track with neither an artist nor an album has nothing to file it
+		// under, and is left top-level rather than filed beneath an invented
+		// one — a decision TestScanLooseTrackStaysTopLevel records.
 		if g.artist == "" && g.album == "" {
 			continue
 		}
 
+		artist := g.artist
+
+		/*
+		 * Keyed case-insensitively.
+		 *
+		 * `9VoltRevolt` and `9voltRevolt` are one band and were two tiles,
+		 * because the key was the raw tag. The same trap as matching an XMLTV
+		 * `tvg-id` case-sensitively (ADR 0036): a difference in spelling that
+		 * nobody means as a difference in identity. The *display* name is
+		 * whichever spelling sorted first, which is deterministic across runs
+		 * because the groups are sorted above.
+		 */
 		var parent *int64
-		if g.artist != "" {
-			key := lib.Path + "::artist=" + g.artist
+		if artist != "" {
+			key := lib.Path + "::artist=" + strings.ToLower(artist)
 			id, ok := artists[key]
 			if !ok {
 				var err error
 				id, err = s.st.EnsureDerivedContainer(ctx, lib.ID, "artist", key,
-					g.artist, media.SortTitle(g.artist), nil)
+					artist, media.SortTitle(artist), nil)
 				if err != nil {
 					return err
 				}
@@ -354,7 +369,8 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 		if g.album != "" {
 			// Scoped by artist: "Greatest Hits" is not one album shared by every
 			// band that made one.
-			key := lib.Path + "::artist=" + g.artist + "::album=" + g.album
+			key := lib.Path + "::artist=" + strings.ToLower(artist) +
+				"::album=" + strings.ToLower(g.album)
 			id, ok := albums[key]
 			if !ok {
 				var err error

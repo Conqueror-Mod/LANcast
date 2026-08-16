@@ -475,3 +475,64 @@ func TestUntaggedTrackInASecondLocationKeepsItsFolderAlbum(t *testing.T) {
 		t.Errorf("album = %v, want Dummy from the folder in the second location", it.Series)
 	}
 }
+
+/*
+ * One band, one tile, whatever the tag's shift key was doing.
+ *
+ * A real library showed "9VoltRevolt" and "9voltRevolt" as two artists with one
+ * album each. The grouping key was the raw tag, so a difference in spelling
+ * became a difference in identity — the same trap as matching an XMLTV tvg-id
+ * case-sensitively.
+ */
+func TestArtistGroupingIsCaseInsensitive(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "one/a.flac", 10)
+	writeFile(t, root, "two/b.flac", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{
+		"a.flac": {Title: "A", Artist: "9VoltRevolt", AlbumArtist: "9VoltRevolt",
+			Album: "First", Track: 1},
+		"b.flac": {Title: "B", Artist: "9voltRevolt", AlbumArtist: "9voltRevolt",
+			Album: "Second", Track: 1},
+	}})
+	scanAndWait(t, sc, lib)
+
+	tops := topLevel(t, st, lib.ID)
+	if len(tops) != 1 {
+		names := []string{}
+		for _, it := range tops {
+			names = append(names, it.Title)
+		}
+		t.Fatalf("top level = %v, want one artist", names)
+	}
+	if got := len(childrenOf(t, st, tops[0].ID)); got != 2 {
+		t.Errorf("albums under the merged artist = %d, want 2", got)
+	}
+}
+
+// The same key, for albums: two spellings of one record are one record.
+func TestAlbumGroupingIsCaseInsensitive(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "x/a.flac", 10)
+	writeFile(t, root, "x/b.flac", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{
+		"a.flac": {Title: "A", Artist: "Band", AlbumArtist: "Band", Album: "Rat Wars", Track: 1},
+		"b.flac": {Title: "B", Artist: "Band", AlbumArtist: "Band", Album: "RAT WARS", Track: 2},
+	}})
+	scanAndWait(t, sc, lib)
+
+	tops := topLevel(t, st, lib.ID)
+	if len(tops) != 1 {
+		t.Fatalf("top level = %+v, want one artist", tops)
+	}
+	albums := childrenOf(t, st, tops[0].ID)
+	if len(albums) != 1 {
+		t.Fatalf("albums = %d, want 1 — one record spelled two ways", len(albums))
+	}
+	if got := len(childrenOf(t, st, albums[0].ID)); got != 2 {
+		t.Errorf("tracks = %d, want 2", got)
+	}
+}
