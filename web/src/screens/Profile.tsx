@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useProfile } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
-import { runtime } from "@/lib/format";
+import { runtime, episodeCode } from "@/lib/format";
 import type { HistoryEntry } from "@/api/types";
 import "./Profile.css";
 
@@ -139,16 +139,10 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
       : 0;
 
   // An episode says which one; a track says its album. Both read from the same
-  // three columns (ADR 0024), and the difference is the library's kind — so the
-  // series line is written once and means whichever it means.
-  const detail = [
-    item.series,
-    item.season != null && item.episode != null
-      ? `S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // three columns (ADR 0024) and the difference is the kind — which this line
+  // used to ignore, so a song showed the disc and track it was written into:
+  // Pearl Jam's *Black* as S00E33. episodeCode makes that check once.
+  const detail = [item.series, episodeCode(item)].filter(Boolean).join(" · ");
 
   return (
     <Link className="profile__row" to={`/item/${item.id}`}>

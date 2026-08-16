@@ -13,7 +13,13 @@ import {
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
-import { runtime, rating, ratingLabel, episodeLabel } from "@/lib/format";
+import {
+  runtime,
+  rating,
+  ratingLabel,
+  episodeLabel,
+  episodeCode,
+} from "@/lib/format";
 import {
   isContainer,
   childLabel,
@@ -120,12 +126,16 @@ function DownloadButton({ item }: { item: Item }) {
 // the client's best guess at the same rule, used for the `download` attribute
 // and for the downloads list, so the two read alike.
 function downloadFilename(item: Item): string {
-  const base =
-    item.series && item.season != null && item.episode != null
-      ? `${item.series} - S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")} - ${item.title}`
-      : item.year
-        ? `${item.title} (${item.year})`
-        : item.title;
+  // Same trap as the tile label: a track carries its album in `series` and its
+  // disc and track number in `season`/`episode`, so building this from "has
+  // numbers" named a downloaded song "Album - S00E14 - Title". episodeCode is
+  // the one place that knows the difference.
+  const code = episodeCode(item);
+  const base = code
+    ? `${item.series ? item.series + " - " : ""}${code} - ${item.title}`
+    : item.year
+      ? `${item.title} (${item.year})`
+      : item.title;
   const ext = item.container ? `.${item.container.toLowerCase()}` : "";
   return base.replace(/[/\:*?"<>|]/g, "-") + ext;
 }
