@@ -1,7 +1,38 @@
 import { useMemo, useRef, useState } from "react";
-import { useChannels } from "@/api/hooks";
-import type { Channel } from "@/api/types";
+import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
+import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
+
+/*
+ * Clock formatting for a schedule.
+ *
+ * Built from the local components of a Date the browser made from a unix
+ * second, never from an ISO string sliced up — an ISO string is UTC, and a
+ * guide rendered in UTC puts the evening's television at the wrong hour for
+ * most of the world and shifts by one more every summer.
+ */
+function clock(unix: number): string {
+  return new Date(unix * 1000).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// How far through a programme we are, 0–1. Live television's only progress bar:
+// there is no position to resume, just how much of this you have missed.
+function progressOf(p: Program, now: number): number {
+  const span = p.stop_at - p.start_at;
+  if (span <= 0) return 0;
+  return Math.min(1, Math.max(0, (now - p.start_at) / span));
+}
+
+function episodeLabel(p: Program): string | null {
+  if (!p.season && !p.episode) return null;
+  if (p.season && p.episode) {
+    return `S${String(p.season).padStart(2, "0")}E${String(p.episode).padStart(2, "0")}`;
+  }
+  return p.episode ? `Episode ${p.episode}` : `Series ${p.season}`;
+}
 
 /*
  * Live TV.
@@ -25,6 +56,16 @@ import "./LiveTV.css";
  */
 export function LiveTV() {
   const { data, isLoading } = useChannels();
+  /*
+   * The guide, for the whole page in one request.
+   *
+   * `now`/`next` for every channel that has listings, keyed by channel id —
+   * which is why a tile can say what is on without the page knowing anything
+   * about schedules. A channel absent from this map has no guide at all, and
+   * that is shown as nothing rather than as "no information": a tile that says
+   * "unknown" six hundred times is noise, and the absence is already legible.
+   */
+  const guide = useGuide();
   const [playing, setPlaying] = useState<Channel | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
@@ -32,6 +73,11 @@ export function LiveTV() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const channels = useMemo(() => data?.channels ?? [], [data]);
+  const nowNext = guide.data?.channels ?? {};
+  // The server's idea of "now", not the browser's. A machine with a skewed
+  // clock would otherwise draw every progress bar in the wrong place, and the
+  // server is the one that decided which programme is current.
+  const at = guide.data?.at ?? Math.floor(Date.now() / 1000);
 
   const groups = useMemo(() => {
     const seen = new Set<string>();
@@ -41,14 +87,28 @@ export function LiveTV() {
     return [...seen];
   }, [channels]);
 
+  /*
+   * Search covers what is on as well as what the channel is called.
+   *
+   * "Is the football on anywhere" is the question a guide exists to answer, and
+   * a search that only reads channel names cannot answer it. Limited to the
+   * current and next programme because that is what the client holds — a search
+   * across the whole fortnight is a server query, and a different feature.
+   */
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return channels.filter(
-      (c) =>
-        (!group || c.group === group) &&
-        (!q || c.name.toLowerCase().includes(q)),
-    );
-  }, [channels, group, query]);
+    return channels.filter((c) => {
+      if (group && c.group !== group) return false;
+      if (!q) return true;
+      if (c.name.toLowerCase().includes(q)) return true;
+      const entry = nowNext[String(c.id)];
+      return (
+        !!entry &&
+        (entry.now.title.toLowerCase().includes(q) ||
+          !!entry.next?.title.toLowerCase().includes(q))
+      );
+    });
+  }, [channels, group, query, nowNext]);
 
   return (
     <div className="browse livetv">
@@ -141,6 +201,7 @@ export function LiveTV() {
               Stop
             </button>
           </div>
+          <ChannelSchedule channel={playing} at={at} />
         </div>
       )}
 
@@ -148,10 +209,10 @@ export function LiveTV() {
         <div className="livetv__filters">
           <input
             className="livetv__search"
-            placeholder="Find a channel"
+            placeholder="Find a channel or programme"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Find a channel"
+            aria-label="Find a channel or programme"
           />
           <div className="livetv__groups">
             <button
@@ -199,8 +260,35 @@ export function LiveTV() {
                 <span aria-hidden="true">{c.name.slice(0, 2).toUpperCase()}</span>
               )}
             </span>
-            <span className="livetv__name">{c.name}</span>
-            {c.group && <span className="livetv__grouptag">{c.group}</span>}
+            <span className="livetv__body">
+              <span className="livetv__name">{c.name}</span>
+              {(() => {
+                const entry = nowNext[String(c.id)];
+              // No listings: nothing, rather than "no information". A tile that
+              // says "unknown" six hundred times is noise, and the absence of a
+              // strapline already reads as absence.
+                if (!entry) {
+                  return c.group ? (
+                    <span className="livetv__grouptag">{c.group}</span>
+                  ) : null;
+                }
+                return (
+                  <>
+                    <span className="livetv__on">{entry.now.title}</span>
+                    <span className="livetv__bar" aria-hidden="true">
+                      <span
+                        className="livetv__barfill"
+                        style={{ width: `${progressOf(entry.now, at) * 100}%` }}
+                      />
+                    </span>
+                    <span className="livetv__times">
+                      {clock(entry.now.start_at)}–{clock(entry.now.stop_at)}
+                      {entry.next && ` · then ${entry.next.title}`}
+                    </span>
+                  </>
+                );
+              })()}
+            </span>
           </button>
         ))}
       </div>
@@ -209,5 +297,77 @@ export function LiveTV() {
         <p className="browse__message">No channels match that.</p>
       )}
     </div>
+  );
+}
+
+/*
+ * The schedule for the channel being watched.
+ *
+ * Under the player rather than in a grid across every channel, and that is the
+ * design decision here. A full EPG grid — channels down, hours across — is what
+ * a television does, and it is the right shape for a remote control and the
+ * wrong one for a browser on a laptop: it needs horizontal scrolling, a time
+ * ruler, and a column width that makes a three-minute news bulletin unreadable.
+ *
+ * What somebody actually asks a guide, in front of a channel they are already
+ * watching, is "what is this, and what is after it". That is a list, and a list
+ * costs one request for one channel rather than a fortnight for six hundred.
+ */
+function ChannelSchedule({ channel, at }: { channel: Channel; at: number }) {
+  /*
+   * Not asked for at all when the channel has no `tvg-id`.
+   *
+   * The hook has to be called — hooks cannot sit behind the early return below
+   * — so the condition goes into its argument instead. Without it the page
+   * requests a schedule it already knows is empty, every time somebody starts a
+   * channel from a playlist that carries no ids, which on a six-hundred channel
+   * list is most of them.
+   */
+  const { data, isLoading } = useChannelSchedule(
+    channel.tvg_id ? channel.id : null,
+  );
+  const programs = data?.programs ?? [];
+
+  // A channel with no tvg-id can never have listings, and saying so is the
+  // difference between a feature that looks broken and one that is explaining
+  // a limit of the playlist.
+  if (!channel.tvg_id) {
+    return (
+      <p className="livetv__nolistings">
+        No listings: this channel carries no <code>tvg-id</code>, so the guide
+        cannot say which channel it is.
+      </p>
+    );
+  }
+  if (isLoading) return null;
+  if (programs.length === 0) {
+    return <p className="livetv__nolistings">No listings for this channel.</p>;
+  }
+
+  return (
+    <ol className="livetv__schedule">
+      {programs.map((p) => {
+        const onNow = p.start_at <= at && p.stop_at > at;
+        const ep = episodeLabel(p);
+        return (
+          <li
+            key={p.id}
+            className={"livetv__slot" + (onNow ? " is-now" : "")}
+            aria-current={onNow ? "true" : undefined}
+          >
+            <span className="livetv__slottime">{clock(p.start_at)}</span>
+            <span className="livetv__slotbody">
+              <span className="livetv__slottitle">
+                {p.title}
+                {ep && <span className="livetv__slotep">{ep}</span>}
+              </span>
+              {p.description && (
+                <span className="livetv__slotdesc">{p.description}</span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

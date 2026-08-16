@@ -16,6 +16,8 @@ import type {
   BrowseResult,
   Channel,
   ChannelSource,
+  Program,
+  GuideNow,
   Person,
   CrashReport,
   Facets,
@@ -1380,11 +1382,14 @@ export function useChannelSources(enabled: boolean) {
 export function useAddChannelSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; url: string }) =>
-      apiPost<{ source: ChannelSource; channels?: number; import_error?: string }>(
-        "/api/channel-sources",
-        body,
-      ),
+    mutationFn: (body: { name: string; url: string; epg_url?: string }) =>
+      apiPost<{
+        source: ChannelSource;
+        channels?: number;
+        programs?: number;
+        import_error?: string;
+        epg_error?: string;
+      }>("/api/channel-sources", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["channel-sources"] });
       qc.invalidateQueries({ queryKey: ["channels"] });
@@ -1411,7 +1416,66 @@ export function useDeleteChannelSource() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["channel-sources"] });
       qc.invalidateQueries({ queryKey: ["channels"] });
+      qc.invalidateQueries({ queryKey: ["guide"] });
     },
+  });
+}
+
+// Setting a guide URL imports it there and then, so the answer carries the
+// count — and the failure, separately from the channel list's.
+export function useSetGuideURL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; epg_url: string }) =>
+      apiPost<{ programs?: number; epg_error?: string }>(
+        `/api/channel-sources/${v.id}`,
+        { epg_url: v.epg_url },
+        "PATCH",
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["channel-sources"] });
+      qc.invalidateQueries({ queryKey: ["guide"] });
+    },
+  });
+}
+
+/*
+ * What is on now, across every channel.
+ *
+ * One request for the whole page rather than one per channel: a six-hundred
+ * channel list would otherwise open with six hundred round trips to fill a
+ * strapline.
+ *
+ * Refetched every five minutes and on window focus. A guide is wrong by the
+ * clock rather than by an event — nothing tells the client that the eight
+ * o'clock programme has started — so the only thing that keeps a strapline
+ * honest is asking again. Five minutes is close enough that a wrong "on now"
+ * is rare and infrequent enough to cost nothing.
+ */
+export function useGuide() {
+  return useQuery({
+    queryKey: ["guide"],
+    queryFn: ({ signal }) =>
+      apiGet<{ at: number; channels: Record<string, GuideNow> }>(
+        "/api/guide",
+        signal,
+      ),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+}
+
+// One channel's schedule, fetched only while somebody is looking at it.
+export function useChannelSchedule(channelID: number | null, hours = 12) {
+  return useQuery({
+    queryKey: ["channel-guide", channelID, hours],
+    queryFn: ({ signal }) =>
+      apiGet<{ programs: Program[] }>(
+        `/api/channels/${channelID}/guide?hours=${hours}`,
+        signal,
+      ),
+    enabled: channelID !== null,
+    staleTime: 5 * 60_000,
   });
 }
 

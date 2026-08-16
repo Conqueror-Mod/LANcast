@@ -539,38 +539,40 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	quit := make(chan struct{})
 	var quitOnce sync.Once
 
+	apiSrv := api.New(api.Deps{
+		LANBound: lanBound, RestartWidens: restartWidens,
+		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
+		Worker: worker, Probes: probes, Covers: covers, Photos: photos,
+		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
+		// Only for installs that are not a service; the service path
+		// restarts through the service manager instead.
+		Relaunch: func() error {
+			if err := scheduleRelaunch(log); err != nil {
+				return err
+			}
+			quitOnce.Do(func() { close(quit) })
+			return nil
+		},
+		Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
+		Updates: updates,
+		Rebuild: func(s config.Settings) {
+			rebuild(s)
+			worker.SetNFOWriter(nfoWriterFor(s))
+			// Takes effect on the next line logged, not the next start:
+			// the moment somebody wants debug output is the moment
+			// something is misbehaving, and a restart throws away the
+			// state they were trying to look at.
+			setLogLevel(s.DebugLogging)
+		},
+		ReloadPlugins: reloadPlugins,
+		Enrich:        enrichSoon,
+		Probe:         probeSoon,
+		Cover:         coverSoon,
+	})
+
 	srv := &http.Server{
-		Addr: listenAddr,
-		Handler: api.New(api.Deps{
-			LANBound: lanBound, RestartWidens: restartWidens,
-			Store: st, Scanner: scanner, Registry: reg, Artwork: art,
-			Worker: worker, Probes: probes, Covers: covers, Photos: photos,
-			ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
-			// Only for installs that are not a service; the service path
-			// restarts through the service manager instead.
-			Relaunch: func() error {
-				if err := scheduleRelaunch(log); err != nil {
-					return err
-				}
-				quitOnce.Do(func() { close(quit) })
-				return nil
-			},
-			Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
-			Updates: updates,
-			Rebuild: func(s config.Settings) {
-				rebuild(s)
-				worker.SetNFOWriter(nfoWriterFor(s))
-				// Takes effect on the next line logged, not the next start:
-				// the moment somebody wants debug output is the moment
-				// something is misbehaving, and a restart throws away the
-				// state they were trying to look at.
-				setLogLevel(s.DebugLogging)
-			},
-			ReloadPlugins: reloadPlugins,
-			Enrich:        enrichSoon,
-			Probe:         probeSoon,
-			Cover:         coverSoon,
-		}).Handler(),
+		Addr:              listenAddr,
+		Handler:           apiSrv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: streaming a film is a legitimately long response.
 	}
@@ -593,6 +595,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	// Periodic library scans, when the operator has asked for them.
 	go periodicScan(ctx, st, scanner, settings, log)
+
+	// Guides go stale by themselves; libraries do not. Always on, and not a
+	// setting, because a server with no channel sources does no work here.
+	go periodicGuideRefresh(ctx, apiSrv)
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
@@ -923,6 +929,39 @@ func scanDue(last, now time.Time, hours int) (time.Time, bool) {
 		return last, false
 	}
 	return now, true
+}
+
+/*
+ * periodicGuideRefresh re-imports XMLTV guides and drops expired listings.
+ *
+ * Unconditional, unlike the library scan, and the asymmetry is deliberate. A
+ * rescan has visible consequences an operator may not want on a timer — items
+ * appearing and disappearing while somebody browses — so it is opt-in. A guide
+ * refresh has the opposite property: doing nothing is what breaks it, because
+ * an unrefreshed guide does not go blank, it goes *wrong*, and confidently says
+ * last Tuesday's programme is on now.
+ *
+ * Twelve hours suits what guides actually are. Providers publish once a day and
+ * carry a week or a fortnight ahead, so the window is never close to empty and
+ * hammering the URL hourly would buy nothing but the provider's attention. The
+ * first pass is immediate, because a server that has been off for a week comes
+ * back with a guide entirely in the past.
+ */
+func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
+	const every = 12 * time.Hour
+
+	srv.RefreshGuides(ctx)
+
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			srv.RefreshGuides(ctx)
+		}
+	}
 }
 
 // periodicScan rescans every library on the configured interval.

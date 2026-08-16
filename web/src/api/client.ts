@@ -53,9 +53,16 @@ export async function apiSend(
 
 // apiPost sends JSON and returns the parsed response body — for writes that
 // answer with data (a created resource), unlike apiSend which discards it.
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+//
+// The method is a parameter because a PATCH can answer with data too, and the
+// alternative was a second copy of this function differing by one string.
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  method: "POST" | "PATCH" | "PUT" = "POST",
+): Promise<T> {
   const res = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });

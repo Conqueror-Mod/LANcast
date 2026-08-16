@@ -41,6 +41,13 @@ type Channel struct {
 	// attribute in the file, because it is the difference between a wall of
 	// channels and a list somebody can find anything in.
 	Group string
+	// TvgID is `tvg-id`, the only join between this list and an XMLTV guide.
+	//
+	// Deliberately not used for channel identity across refreshes — ReplaceChannels
+	// still replaces, because `tvg-id` is optional and frequently absent and a
+	// merge keyed on a mostly-empty column duplicates everything. It is good
+	// enough to attach listings to the channels that have one, and no more.
+	TvgID string
 }
 
 // maxChannels bounds a list. A provider playlist of ten thousand channels is
@@ -137,6 +144,7 @@ func parseExtinf(line string) Channel {
 	c := Channel{Name: strings.TrimSpace(title)}
 	c.LogoURL = attr(head, "tvg-logo")
 	c.Group = attr(head, "group-title")
+	c.TvgID = strings.TrimSpace(attr(head, "tvg-id"))
 	if c.Name == "" {
 		// Some lists carry the name only as tvg-name.
 		c.Name = attr(head, "tvg-name")

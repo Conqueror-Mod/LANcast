@@ -33,6 +33,12 @@ type ChannelSource struct {
 	CreatedAt    int64  `json:"created_at"`
 	RefreshedAt  *int64 `json:"refreshed_at"`
 	ChannelCount int    `json:"channel_count"`
+	// EPGURL is the XMLTV guide for this source, when it has one. Separate from
+	// URL because it is a separate file on a separate cadence: a channel list
+	// changes when the provider adds channels, a guide changes every day.
+	EPGURL         *string `json:"epg_url"`
+	EPGRefreshedAt *int64  `json:"epg_refreshed_at"`
+	ProgramCount   int     `json:"program_count"`
 }
 
 // Channel is one entry.
@@ -43,6 +49,10 @@ type Channel struct {
 	LogoURL  *string `json:"logo_url"`
 	Group    *string `json:"group"`
 	Position int     `json:"position"`
+	// TvgID is the XMLTV id this channel's listings arrive under. Sent to
+	// clients — unlike URL it carries no credential, and a client that wants to
+	// say "this channel has no guide" needs to know it is absent.
+	TvgID *string `json:"tvg_id"`
 	// URL is never sent to clients. A provider playlist is frequently a
 	// credentialed URL — a token in the path, or a username and password in the
 	// query — and publishing it to every browser on the LAN would hand out the
@@ -50,11 +60,14 @@ type Channel struct {
 	URL string `json:"-"`
 }
 
-func (s *Store) CreateChannelSource(ctx context.Context, name, url string) (*ChannelSource, error) {
+// CreateChannelSource records a channel list. epgURL is the XMLTV guide for it
+// and may be empty — most of Live TV works without one, and a source added
+// before the operator has found a guide URL is the ordinary case.
+func (s *Store) CreateChannelSource(ctx context.Context, name, url, epgURL string) (*ChannelSource, error) {
 	now := time.Now().Unix()
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO channel_source (name, url, created_at) VALUES (?, ?, ?)`,
-		name, url, now)
+		`INSERT INTO channel_source (name, url, epg_url, created_at) VALUES (?, ?, ?, ?)`,
+		name, url, nullableStr(epgURL), now)
 	if err != nil {
 		return nil, fmt.Errorf("create channel source: %w", err)
 	}
@@ -62,13 +75,43 @@ func (s *Store) CreateChannelSource(ctx context.Context, name, url string) (*Cha
 	if err != nil {
 		return nil, fmt.Errorf("create channel source: %w", err)
 	}
-	return &ChannelSource{ID: id, Name: name, URL: url, CreatedAt: now}, nil
+	src := &ChannelSource{ID: id, Name: name, URL: url, CreatedAt: now}
+	if epgURL != "" {
+		e := epgURL
+		src.EPGURL = &e
+	}
+	return src, nil
+}
+
+// SetChannelSourceEPGURL points an existing source at a guide, or clears it
+// when epgURL is empty. Clearing does not delete the listings already imported:
+// stale listings expire on their own and a guide that is briefly wrong is
+// better than a guide that is suddenly empty.
+func (s *Store) SetChannelSourceEPGURL(ctx context.Context, id int64, epgURL string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE channel_source SET epg_url = ? WHERE id = ?`, nullableStr(epgURL), id)
+	if err != nil {
+		return fmt.Errorf("set epg url: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+const channelSourceCols = `id, name, url, created_at, refreshed_at, channel_count,
+	 epg_url, epg_refreshed_at, program_count`
+
+func scanChannelSource(sc interface{ Scan(...any) error }) (ChannelSource, error) {
+	var c ChannelSource
+	err := sc.Scan(&c.ID, &c.Name, &c.URL, &c.CreatedAt, &c.RefreshedAt, &c.ChannelCount,
+		&c.EPGURL, &c.EPGRefreshedAt, &c.ProgramCount)
+	return c, err
 }
 
 func (s *Store) ListChannelSources(ctx context.Context) ([]ChannelSource, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, url, created_at, refreshed_at, channel_count
-		 FROM channel_source ORDER BY name`)
+		`SELECT `+channelSourceCols+` FROM channel_source ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list channel sources: %w", err)
 	}
@@ -76,8 +119,8 @@ func (s *Store) ListChannelSources(ctx context.Context) ([]ChannelSource, error)
 
 	out := []ChannelSource{}
 	for rows.Next() {
-		var c ChannelSource
-		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.CreatedAt, &c.RefreshedAt, &c.ChannelCount); err != nil {
+		c, err := scanChannelSource(rows)
+		if err != nil {
 			return nil, fmt.Errorf("list channel sources: %w", err)
 		}
 		out = append(out, c)
@@ -86,11 +129,8 @@ func (s *Store) ListChannelSources(ctx context.Context) ([]ChannelSource, error)
 }
 
 func (s *Store) GetChannelSource(ctx context.Context, id int64) (*ChannelSource, error) {
-	var c ChannelSource
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, url, created_at, refreshed_at, channel_count
-		 FROM channel_source WHERE id = ?`, id).
-		Scan(&c.ID, &c.Name, &c.URL, &c.CreatedAt, &c.RefreshedAt, &c.ChannelCount)
+	c, err := scanChannelSource(s.db.QueryRowContext(ctx,
+		`SELECT `+channelSourceCols+` FROM channel_source WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -114,6 +154,13 @@ func (s *Store) GetChannelSource(ctx context.Context, id int64) (*ChannelSource,
  * The transaction matters because the alternative is a window where a refresh
  * has deleted the old channels and not yet written the new ones, and anybody
  * looking at the page in that moment sees an empty provider.
+ *
+ * **This discards the guide too**, by cascade from `epg_program.channel_id`,
+ * and that is correct rather than incidental: the rows are gone as rows, so
+ * keeping their listings would mean listings attached to channel ids that no
+ * longer exist. A refresh therefore imports the channel list first and the
+ * guide second, and doing it the other way round silently produces an empty
+ * guide. It is the one ordering constraint in Live TV.
  */
 func (s *Store) ReplaceChannels(ctx context.Context, sourceID int64, chans []Channel) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -127,8 +174,8 @@ func (s *Store) ReplaceChannels(ctx context.Context, sourceID int64, chans []Cha
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO channel (source_id, name, url, logo_url, group_name, position)
-		VALUES (?, ?, ?, ?, ?, ?)`)
+		INSERT INTO channel (source_id, name, url, logo_url, group_name, position, tvg_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("replace channels: %w", err)
 	}
@@ -136,7 +183,7 @@ func (s *Store) ReplaceChannels(ctx context.Context, sourceID int64, chans []Cha
 
 	for i, c := range chans {
 		if _, err := stmt.ExecContext(ctx, sourceID, c.Name, c.URL,
-			nullable(c.LogoURL), nullable(c.Group), i); err != nil {
+			nullable(c.LogoURL), nullable(c.Group), i, nullable(c.TvgID)); err != nil {
 			return fmt.Errorf("replace channels: %w", err)
 		}
 	}
@@ -154,7 +201,7 @@ func (s *Store) ReplaceChannels(ctx context.Context, sourceID int64, chans []Cha
 // is meaningful to whoever curated the list, and alphabetical is not an
 // improvement on "the order the channels are on the remote control".
 func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, error) {
-	q := `SELECT id, source_id, name, url, logo_url, group_name, position FROM channel`
+	q := `SELECT id, source_id, name, url, logo_url, group_name, position, tvg_id FROM channel`
 	args := []any{}
 	if sourceID != 0 {
 		q += ` WHERE source_id = ?`
@@ -171,7 +218,7 @@ func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, er
 	out := []Channel{}
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position); err != nil {
+		if err := rows.Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID); err != nil {
 			return nil, fmt.Errorf("list channels: %w", err)
 		}
 		out = append(out, c)
@@ -182,9 +229,9 @@ func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, er
 func (s *Store) GetChannel(ctx context.Context, id int64) (*Channel, error) {
 	var c Channel
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, source_id, name, url, logo_url, group_name, position
+		`SELECT id, source_id, name, url, logo_url, group_name, position, tvg_id
 		 FROM channel WHERE id = ?`, id).
-		Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position)
+		Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -211,4 +258,11 @@ func nullable(s *string) any {
 		return nil
 	}
 	return *s
+}
+
+func nullableStr(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

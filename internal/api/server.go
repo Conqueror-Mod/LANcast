@@ -226,9 +226,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/channels", s.listChannels)
 	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
 	mux.HandleFunc("GET /api/channels/{id}/live", s.channelLive)
+	// The guide is readable by the household, like the channels it describes.
+	mux.HandleFunc("GET /api/guide", s.listGuide)
+	mux.HandleFunc("GET /api/channels/{id}/guide", s.channelGuide)
 	mux.HandleFunc("GET /api/channel-sources", s.adminOnly(s.listChannelSources))
 	mux.HandleFunc("POST /api/channel-sources", s.adminOnly(s.createChannelSource))
 	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.adminOnly(s.refreshChannelSource))
+	mux.HandleFunc("PATCH /api/channel-sources/{id}", s.adminOnly(s.patchChannelSource))
 	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.adminOnly(s.deleteChannelSource))
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	// Editing shared metadata or identity re-litigates the library for everyone,

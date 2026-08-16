@@ -18,6 +18,7 @@ import {
   useAddChannelSource,
   useRefreshChannelSource,
   useDeleteChannelSource,
+  useSetGuideURL,
   useRenameSelf,
   useUpdateUser,
   useCreateUser,
@@ -437,9 +438,19 @@ function LiveTVSection() {
   const add = useAddChannelSource();
   const refresh = useRefreshChannelSource();
   const remove = useDeleteChannelSource();
+  const setGuide = useSetGuideURL();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  // Two guide-URL fields, two states. Sharing one was the first shape and it
+  // leaked: opening a source's guide editor prefilled the *add* form with that
+  // source's URL, so the next list added inherited somebody else's guide.
+  const [epgUrl, setEpgUrl] = useState("");
+  const [newEpgUrl, setNewEpgUrl] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  // Which source's guide field is open. One at a time: this is a rarely-typed
+  // URL, and a row of permanently-visible inputs makes the common case (look at
+  // the list, refresh one) noisier for the sake of the rare one.
+  const [editing, setEditing] = useState<number | null>(null);
 
   const sources = data?.sources ?? [];
 
@@ -450,6 +461,12 @@ function LiveTVSection() {
         A channel list is an M3U — from an IPTV provider, or from a tuner on this
         network. Channels are played through this server, so the list URL and
         anything in it stays here.
+      </p>
+      <p className="set-row__note">
+        A guide is a separate XMLTV file, plain or gzipped. Listings attach to
+        channels by <code>tvg-id</code>, so a channel list that does not carry
+        one gets no guide — there is no reliable way to match by name. Guides
+        refresh by themselves every twelve hours.
       </p>
 
       {sources.map((src) => (
@@ -462,9 +479,24 @@ function LiveTVSection() {
                 {src.refreshed_at
                   ? ` · refreshed ${new Date(src.refreshed_at * 1000).toLocaleDateString()}`
                   : " · never refreshed"}
+                {/* A guide is either configured and working, configured and
+                    empty, or absent — and those want three different next
+                    actions, so they are three different sentences. */}
+                {src.epg_url
+                  ? ` · ${src.program_count.toLocaleString()} listings`
+                  : " · no guide"}
               </div>
             </div>
             <div className="set-row__actions">
+              <button
+                className="set-btn"
+                onClick={() => {
+                  setEditing(editing === src.id ? null : src.id);
+                  setEpgUrl(src.epg_url ?? "");
+                }}
+              >
+                Guide
+              </button>
               <button
                 className="set-btn"
                 disabled={refresh.isPending}
@@ -481,6 +513,42 @@ function LiveTVSection() {
               </button>
             </div>
           </div>
+
+          {editing === src.id && (
+            <form
+              className="set-add"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setNote(null);
+                setGuide.mutate(
+                  { id: src.id, epg_url: epgUrl.trim() },
+                  {
+                    onSuccess: (res) => {
+                      setEditing(null);
+                      setNote(
+                        res.epg_error
+                          ? `The guide could not be read: ${res.epg_error}`
+                          : epgUrl.trim() === ""
+                            ? "Guide removed."
+                            : `Imported ${res.programs ?? 0} listings.`,
+                      );
+                    },
+                  },
+                );
+              }}
+            >
+              <input
+                className="set-input"
+                placeholder="https://…/guide.xml or .xml.gz"
+                value={epgUrl}
+                onChange={(e) => setEpgUrl(e.target.value)}
+                aria-label="XMLTV guide URL"
+              />
+              <button className="set-btn" disabled={setGuide.isPending}>
+                {setGuide.isPending ? "Importing…" : "Save guide"}
+              </button>
+            </form>
+          )}
         </div>
       ))}
 
@@ -490,18 +558,22 @@ function LiveTVSection() {
           e.preventDefault();
           setNote(null);
           add.mutate(
-            { name: name.trim(), url: url.trim() },
+            { name: name.trim(), url: url.trim(), epg_url: newEpgUrl.trim() },
             {
               onSuccess: (res) => {
                 setName("");
                 setUrl("");
+                setNewEpgUrl("");
                 // A source whose import failed is kept, because the URL may be
                 // right and the provider down. Saying which it was is the whole
                 // value of the message.
                 setNote(
                   res.import_error
                     ? `Added, but the list could not be read: ${res.import_error}`
-                    : `Added ${res.channels ?? 0} channels.`,
+                    : res.epg_error
+                      ? `Added ${res.channels ?? 0} channels, but the guide could not be read: ${res.epg_error}`
+                      : `Added ${res.channels ?? 0} channels` +
+                        (res.programs ? ` and ${res.programs} listings.` : "."),
                 );
               },
             },

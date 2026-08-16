@@ -49,6 +49,10 @@ func (s *Server) createChannelSource(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
+		// EPGURL is optional. Live TV works without a guide — it did for a
+		// whole milestone — and requiring one to add a channel list would make
+		// the common case wait on the rarer one.
+		EPGURL string `json:"epg_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -64,8 +68,17 @@ func (s *Server) createChannelSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	epg := strings.TrimSpace(req.EPGURL)
+	if epg != "" {
+		// The same check, because it is the same danger: a guide URL is fetched
+		// by this server exactly as a playlist URL is.
+		if err := checkSourceURL(epg, r.Host); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+	}
 
-	src, err := s.st.CreateChannelSource(r.Context(), name, raw)
+	src, err := s.st.CreateChannelSource(r.Context(), name, raw, epg)
 	if err != nil {
 		s.writeInternal(w, err, "create channel source")
 		return
@@ -86,9 +99,24 @@ func (s *Server) createChannelSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	src.ChannelCount = n
+
+	// The guide is imported second, and it has to be: replacing channels
+	// cascades their listings away, so a guide fetched first is deleted by the
+	// channel import that follows it.
+	progs, epgErr := s.importEPG(r.Context(), src)
+	src.ProgramCount = progs
+
 	s.audit(r, "channels.source_add", "channel_source", fmt.Sprint(src.ID),
 		fmt.Sprintf("added channel source %q with %d channels", name, n), nil)
-	writeJSON(w, http.StatusCreated, map[string]any{"source": src, "channels": n})
+
+	res := map[string]any{"source": src, "channels": n, "programs": progs}
+	if epgErr != nil {
+		// Not fatal, and reported separately from `import_error`. A working
+		// channel list with a broken guide is a usable Live TV; conflating the
+		// two would make it look like the channels failed as well.
+		res["epg_error"] = epgErr.Error()
+	}
+	writeJSON(w, http.StatusCreated, res)
 }
 
 func (s *Server) refreshChannelSource(w http.ResponseWriter, r *http.Request) {
@@ -107,9 +135,74 @@ func (s *Server) refreshChannelSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "upstream", err.Error())
 		return
 	}
+	// Channels first, guide second — the ordering ReplaceChannels' cascade
+	// requires. See importEPG.
+	progs, epgErr := s.importEPG(r.Context(), src)
+
 	s.audit(r, "channels.source_refresh", "channel_source", fmt.Sprint(id),
-		fmt.Sprintf("refreshed %q — %d channels", src.Name, n), nil)
-	writeJSON(w, http.StatusOK, map[string]any{"channels": n})
+		fmt.Sprintf("refreshed %q — %d channels, %d listings", src.Name, n, progs), nil)
+
+	res := map[string]any{"channels": n, "programs": progs}
+	if epgErr != nil {
+		res["epg_error"] = epgErr.Error()
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+/*
+ * patchChannelSource sets or clears a source's guide URL.
+ *
+ * Its own route rather than a field on refresh, because they are different acts:
+ * refresh re-reads what is already configured, this changes the configuration.
+ * Sending an empty string clears the guide; the listings already imported are
+ * left alone, since they expire on their own and a guide that goes suddenly
+ * blank is a worse answer than one that is briefly stale.
+ */
+func (s *Server) patchChannelSource(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid source id")
+		return
+	}
+	var req struct {
+		EPGURL *string `json:"epg_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
+		return
+	}
+	if req.EPGURL == nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "nothing to change")
+		return
+	}
+	src, err := s.st.GetChannelSource(r.Context(), id)
+	if s.notFoundOr(w, err, "get channel source", "no such channel source") {
+		return
+	}
+
+	epg := strings.TrimSpace(*req.EPGURL)
+	if epg != "" {
+		if err := checkSourceURL(epg, r.Host); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+	}
+	if err := s.st.SetChannelSourceEPGURL(r.Context(), id, epg); err != nil {
+		s.writeInternal(w, err, "set guide url")
+		return
+	}
+	s.audit(r, "channels.source_epg", "channel_source", fmt.Sprint(id),
+		fmt.Sprintf("set guide URL for %q", src.Name), nil)
+
+	// Imported immediately for the same reason a channel list is: the moment
+	// somebody sets the URL is the moment they are watching to see if it worked.
+	src.EPGURL = &epg
+	progs, epgErr := s.importEPG(r.Context(), src)
+	res := map[string]any{"programs": progs}
+	if epgErr != nil {
+		res["epg_error"] = epgErr.Error()
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) deleteChannelSource(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +274,10 @@ func (s *Server) importSource(ctx context.Context, src *store.ChannelSource) (in
 	chans := make([]store.Channel, 0, len(parsed))
 	for _, c := range parsed {
 		ch := store.Channel{Name: c.Name, URL: c.URL}
+		if c.TvgID != "" {
+			t := c.TvgID
+			ch.TvgID = &t
+		}
 		if c.LogoURL != "" {
 			logo := c.LogoURL
 			ch.LogoURL = &logo

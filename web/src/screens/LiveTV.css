@@ -189,3 +189,144 @@
   background: var(--space-raised);
   border-top: 1px solid #b8794a;
 }
+
+/* ---------------------------------------------------------------- guide
+
+   A tile with listings is taller than one without, and the grid is allowed to
+   be ragged rather than forcing a uniform height: padding a channel with no
+   guide up to the height of one that has a synopsis wastes a screenful on a
+   list that is already long. The tile stays a row — logo, then a column of
+   name, what is on, and when. */
+
+.livetv__channel {
+  align-items: flex-start;
+}
+
+.livetv__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.livetv__on {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livetv__channel:hover .livetv__on,
+.livetv__channel:focus-visible .livetv__on {
+  color: var(--text-secondary);
+}
+
+/* How far through the programme is, which is the only progress live television
+   has. Not gold: gold means where you are in the interface, and a bar that is
+   gold on every tile at once would say it about six hundred things (design.md). */
+.livetv__bar {
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.livetv__barfill {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.livetv__times {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The schedule under the player. */
+.livetv__schedule {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--space-raised);
+}
+
+.livetv__slot {
+  display: flex;
+  gap: 12px;
+  padding: 7px 12px;
+  /* Items in a scrolling flex column must not shrink, or they collapse to
+     near-zero height with their content invisible (CLAUDE.md). */
+  flex-shrink: 0;
+  border-left: 2px solid transparent;
+}
+
+/* What is on now is where you are in this schedule — the one thing gold means. */
+.livetv__slot.is-now {
+  border-left-color: var(--gold);
+}
+
+.livetv__slot.is-now .livetv__slottitle {
+  color: var(--gold-bright);
+}
+
+.livetv__slottime {
+  flex: none;
+  width: 52px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  padding-top: 1px;
+}
+
+.livetv__slotbody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.livetv__slottitle {
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.livetv__slotep {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.livetv__slotdesc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.livetv__nolistings {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  background: var(--space-raised);
+}
+
+.livetv__nolistings code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
