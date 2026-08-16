@@ -108,6 +108,22 @@ func (s *Source) Read(ctx context.Context, path string, kind meta.Kind) (*meta.R
 // Write saves a record as a sidecar beside path, preserving any elements other
 // tools put there. LANcast is a guest in a file format it did not invent.
 func (s *Source) Write(path string, kind meta.Kind, rec *meta.Record) error {
+	/*
+	 * Synthetic identities have no sidecar, and must not acquire one.
+	 *
+	 * A container whose members live in several directories is identified by a
+	 * `lancast:` path rather than by a folder — a collection has always been
+	 * one, and since ADR 0037 so is a show split across sibling season folders.
+	 * Joining a filename onto that produces `lancast:show:andor/tvshow.nfo`,
+	 * which on Linux is a *relative* path: the write lands next to whatever the
+	 * server's working directory happens to be, which is the last place anybody
+	 * would look for it. Windows rejects the colon instead, so the failure mode
+	 * differs by platform, which is its own reason to stop here rather than at
+	 * the filesystem.
+	 */
+	if IsSyntheticPath(path) {
+		return nil
+	}
 	target := sidecarPath(path, kind)
 
 	root := &node{XMLName: xml.Name{Local: rootElement(kind)}}
@@ -421,6 +437,20 @@ func rootElement(kind meta.Kind) string {
 	default:
 		return "movie"
 	}
+}
+
+/*
+ * IsSyntheticPath reports whether a media_item path is an identity rather than
+ * a location on disk.
+ *
+ * The `lancast:` prefix is the store's own convention for a row that groups
+ * things without being one of them — a collection, and a show whose seasons sit
+ * in sibling folders (ADR 0037). It is exported because the property belongs to
+ * the path, not to this package: anything about to turn a row into a file needs
+ * the same test, and a second spelling of it would eventually disagree.
+ */
+func IsSyntheticPath(path string) bool {
+	return strings.HasPrefix(path, "lancast:")
 }
 
 // sidecarPath is where LANcast writes. For shows, path is the show directory.

@@ -1005,6 +1005,53 @@ func (s *Store) EnsureShow(ctx context.Context, libraryID int64, path, title, so
 	return id, created, nil
 }
 
+/*
+ * EnsureShowByTitle find-or-creates a show identified by its *series title*
+ * rather than by a directory (ADR 0037).
+ *
+ * The lookup is on `sort_title` within the library, which is what lets a series
+ * split across `Show S01`, `Show S02`, … resolve to one show instead of one per
+ * folder. `path` is where a sidecar would be written and is corrected in place
+ * when it changes — deliberately an UPDATE rather than a new row, because the
+ * row carries the show's artwork, its match state and its **locked fields**,
+ * and a re-organisation on disk is not a reason to lose any of them.
+ *
+ * Oldest row wins when a library already holds several shows under one title,
+ * which is the state every existing database is in on first scan after this
+ * change. `ORDER BY id` makes that deterministic rather than whatever the
+ * planner returns; the losers are left childless and swept by
+ * PruneEmptyContainers at the end of the same scan.
+ *
+ * A path collision is tolerated rather than fatal: two titles can want the same
+ * directory (a folder holding two series), and the second keeps the identity it
+ * already has instead of failing the scan over a cosmetic column.
+ *
+ * sortTitle must be normalized by the caller through internal/media.
+ */
+func (s *Store) EnsureShowByTitle(ctx context.Context, libraryID int64, sortTitle, title, path string) (int64, bool, error) {
+	var id int64
+	var existing string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, path FROM media_item
+		WHERE library_id = ? AND kind = 'show' AND sort_title = ?
+		ORDER BY id LIMIT 1`, libraryID, sortTitle).Scan(&id, &existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, fmt.Errorf("ensure show %q: %w", sortTitle, err)
+	}
+	if err == nil {
+		if existing != path {
+			if _, err := s.db.ExecContext(ctx,
+				`UPDATE media_item SET path = ?, updated_at = ? WHERE id = ?`,
+				path, time.Now().Unix(), id); err != nil &&
+				!strings.Contains(err.Error(), "UNIQUE") {
+				return 0, false, fmt.Errorf("ensure show %q: repoint: %w", sortTitle, err)
+			}
+		}
+		return id, false, nil
+	}
+	return s.EnsureShow(ctx, libraryID, path, title, sortTitle)
+}
+
 // EnsureSeason find-or-creates a season under a show. path is the season
 // directory when one exists, else a synthetic identity the caller derives from
 // the show and season number, so it stays UNIQUE either way. A season is
