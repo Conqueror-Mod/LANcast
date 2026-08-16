@@ -294,7 +294,9 @@ func Parse(root, path, libKind string) Info {
 		info.Year = year
 		name = name[:cut]
 	}
-	info.Title = clean(name)
+	// The edition marker comes off after cleaning, so "Alien.DC" has become
+	// "Alien DC" and the suffix is a word rather than a separator away.
+	info.Title = stripEditionSuffix(clean(name))
 	if info.Title == "" {
 		info.Title = clean(base)
 	}
@@ -410,11 +412,74 @@ func stripNoise(s string) string {
 	return s
 }
 
+/*
+ * reEditionSuffix matches an edition marker at the *end* of a title.
+ *
+ * "Alien DC" and "Alien Resurrection SE" are a director's cut and a special
+ * edition, and they were matching nothing — two posterless tiles sorted apart
+ * from the films they are editions of.
+ *
+ * Anchored to the end, and that is not a stylistic choice. `reNoise` strips
+ * from a marker *onward* wherever it appears, and adding `dc` to it would turn
+ * "DC League of Super-Pets" into an empty title — the marker is the first word.
+ * At the end of a title those two letters are an edition; at the front they are
+ * a name. The anchor is the only thing that tells them apart.
+ */
+var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+(` +
+	`dc|se|ee|uncut|theatrical|final cut|ultimate edition|` +
+	`directors cut|director's cut|special edition|extended edition` +
+	`)$`)
+
+/*
+ * stripEditionSuffix removes a trailing edition marker so an edition matches
+ * the work it is an edition of.
+ *
+ * It does **not** group the two — "Alien" and "Alien DC" remain two rows, and
+ * both now match, where before one of them matched nothing. Modelling editions
+ * as one work with several files is a real feature and a larger one; this is
+ * the half that stops the library lying about what the file is.
+ *
+ * Never strips the whole title: a film actually called "Uncut" keeps its name.
+ */
+func stripEditionSuffix(s string) string {
+	out := reEditionSuffix.ReplaceAllString(s, "")
+	if strings.TrimSpace(out) == "" {
+		return s
+	}
+	return out
+}
+
 // clean turns "Some.Movie_Title--" into "Some Movie Title".
 func clean(s string) string {
 	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
 	s = reSpaces.ReplaceAllString(s, " ")
-	return strings.Trim(s, " -[](){}")
+	return stripPairedQuotes(strings.Trim(s, " -[](){}"))
+}
+
+/*
+ * stripPairedQuotes removes quotation marks that wrap the whole title.
+ *
+ * A real library had a film titled `"Wuthering Heights"` — quotes included —
+ * which is not only wrong on the tile but sorts to the very front of the grid,
+ * because a quote character orders before every letter.
+ *
+ * Only a *matching pair* is removed, and that is the whole care in this
+ * function. Trimming quote characters off both ends would turn `'71` — a 2014
+ * film — into `71`, and a leading apostrophe is the one case where the
+ * character is part of the name rather than around it. A pair is evidence
+ * somebody wrapped the title; a single mark is evidence of nothing.
+ */
+func stripPairedQuotes(s string) string {
+	pairs := [][2]string{
+		{`"`, `"`}, {`'`, `'`}, {"“", "”"}, {"‘", "’"},
+	}
+	for _, p := range pairs {
+		if len(s) > len(p[0])+len(p[1]) &&
+			strings.HasPrefix(s, p[0]) && strings.HasSuffix(s, p[1]) {
+			return strings.TrimSpace(s[len(p[0]) : len(s)-len(p[1])])
+		}
+	}
+	return s
 }
 
 // SortTitle normalizes for alphabetical ordering: lowercased, leading article

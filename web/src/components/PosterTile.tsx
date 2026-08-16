@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { containerCountLabel, isSquareArt } from "@/lib/kind";
-import { rating } from "@/lib/format";
+import { episodeLabel, rating } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
@@ -32,6 +32,14 @@ export function PosterTile({
   const pct = progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
   const count = containerCountLabel(item);
+  /*
+   * An episode says which episode it is, in place of the year.
+   *
+   * Everywhere a tile appears outside its own show — Continue Watching, search,
+   * a shelf — the episode title alone is not an identification. "Stray Dog
+   * Strut · 1998" reads as an obscure film; it is Cowboy Bebop S01E02.
+   */
+  const episode = episodeLabel(item);
   const score = rating(item.rating);
 
   return (
@@ -82,6 +90,8 @@ export function PosterTile({
           <span className="poster-tile__title">{item.title}</span>
           {count ? (
             <span className="poster-tile__year">{count}</span>
+          ) : episode ? (
+            <span className="poster-tile__year">{episode}</span>
           ) : (
             item.year && <span className="poster-tile__year">{item.year}</span>
           )}

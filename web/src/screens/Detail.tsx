@@ -13,7 +13,7 @@ import {
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
-import { runtime, rating, ratingLabel } from "@/lib/format";
+import { runtime, rating, ratingLabel, episodeLabel } from "@/lib/format";
 import {
   isContainer,
   childLabel,
@@ -135,12 +135,7 @@ function receiptFor(item: Item, filename: string) {
     itemId: item.id,
     title: item.title,
     filename,
-    detail:
-      item.series && item.season != null && item.episode != null
-        ? `${item.series} · S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`
-        : item.year
-          ? String(item.year)
-          : undefined,
+    detail: episodeLabel(item) ?? (item.year ? String(item.year) : undefined),
     bytes: item.size_bytes ?? undefined,
     at: Date.now(),
   };

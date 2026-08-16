@@ -39,3 +39,28 @@ export function clock(totalSeconds: number): string {
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${ss}`;
   return `${m}:${ss}`;
 }
+
+/*
+ * "S01E02", and the series it belongs to.
+ *
+ * An episode's own title is not enough to identify it anywhere it appears
+ * outside its show. On Continue Watching, "Stray Dog Strut · 1998" reads as a
+ * film nobody has heard of — it is the second episode of Cowboy Bebop, and the
+ * tile said nothing that would tell you so.
+ *
+ * Detail.tsx already built this string twice, for a download filename and a
+ * receipt. A third copy in the tile would be the version that drifts, so it
+ * lives here and all three call it.
+ *
+ * Returns null when the item is not an episode, which is how a caller decides
+ * to fall back to the year.
+ */
+export function episodeLabel(item: {
+  series?: string | null;
+  season?: number | null;
+  episode?: number | null;
+}): string | null {
+  if (item.season == null || item.episode == null) return null;
+  const code = `S${String(item.season).padStart(2, "0")}E${String(item.episode).padStart(2, "0")}`;
+  return item.series ? `${item.series} · ${code}` : code;
+}
