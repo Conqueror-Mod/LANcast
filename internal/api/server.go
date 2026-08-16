@@ -24,6 +24,7 @@ import (
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
+	"lancast/internal/together"
 	"lancast/internal/transcode"
 	"lancast/internal/update"
 )
@@ -134,6 +135,11 @@ type Server struct {
 	// dependency the caller may forget to wire is a crash reporter that is
 	// absent in exactly the builds nobody tested.
 	crashes *crashlog.Recorder
+	// together holds live watch-together rooms. In memory and created here for
+	// the same reason crashes is: it needs nothing from the caller, and a
+	// dependency the caller may forget to wire is a feature that is absent in
+	// exactly the builds nobody tested.
+	together *together.Manager
 }
 
 func New(d Deps) *Server {
@@ -151,6 +157,7 @@ func New(d Deps) *Server {
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 		crashes:  crashlog.New(d.DataDir, Version),
+		together: together.New(),
 	}
 }
 
@@ -199,6 +206,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)
 	mux.HandleFunc("GET /api/profile", s.profile)
+	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
+	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	// Editing shared metadata or identity re-litigates the library for everyone,
 	// so it is an admin action. Watching and progress are not.
@@ -211,6 +220,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/refresh", s.adminOnly(s.refreshItem))
 
 	mux.HandleFunc("GET /api/items/{id}/download", s.download)
+	mux.HandleFunc("GET /api/items/{id}/rating", s.getRating)
+	mux.HandleFunc("PUT /api/items/{id}/rating", s.putRating)
+	mux.HandleFunc("DELETE /api/items/{id}/rating", s.deleteRating)
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
@@ -225,6 +237,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/playlists/{id}/entries", s.setPlaylistEntries)
 	mux.HandleFunc("POST /api/playlists/{id}/entries", s.addPlaylistEntries)
 	mux.HandleFunc("DELETE /api/playlists/{id}/entries/{pos}", s.removePlaylistEntry)
+
+	mux.HandleFunc("GET /api/together", s.listTogether)
+	mux.HandleFunc("POST /api/together", s.createTogether)
+	mux.HandleFunc("POST /api/together/{id}/join", s.joinTogether)
+	mux.HandleFunc("GET /api/together/{id}", s.pollTogether)
+	mux.HandleFunc("PUT /api/together/{id}", s.reportTogether)
+	mux.HandleFunc("DELETE /api/together/{id}", s.leaveTogether)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
@@ -260,6 +279,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
+	mux.HandleFunc("PATCH /api/users/{id}", s.adminOnly(s.patchUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
 
 	// A picture is served by item id like a stream, and for the same reason:
@@ -275,7 +295,10 @@ func (s *Server) Handler() http.Handler {
 	// Outermost after logging: a panic anywhere inside — including in the auth
 	// middleware — is recovered and recorded, and the request that caused it is
 	// already in the log above.
-	return logRequests(s.log, s.recoverPanics(s.requireAuth(mux)))
+	// Version negotiation sits outside auth: a client asking for a contract this
+	// build cannot serve should be told so, not told to sign in first.
+	return logRequests(s.log,
+		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux))))
 }
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
@@ -286,7 +309,13 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": Version, "api_version": APIVersion})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok", "version": Version, "api_version": APIVersion,
+		// Every contract revision this build can serve. A future v2 server is
+		// expected to keep answering v1 for a release (ADR 0018), so "which
+		// versions" is a different question from "which version am I getting".
+		"api_versions": SupportedAPIVersions,
+	})
 }
 
 // ------------------------------------------------------------------ helpers

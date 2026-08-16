@@ -242,3 +242,93 @@ func newUserID() (string, error) {
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
+
+// ErrLastAdmin refuses a change that would leave the server with no
+// administrator. Recovering from that needs `lancastd reset-auth` on the
+// machine itself, which is not a recovery a remote operator has — so it is
+// refused at the store rather than trusted to a check in one handler.
+var ErrLastAdmin = errors.New("this is the only administrator")
+
+// RenameUser changes an account's display name, keeping its id — which is what
+// makes it a rename rather than a new account: sessions, watch history, ratings
+// and playlists all hang off the id and follow it silently.
+func (s *Store) RenameUser(ctx context.Context, id, name string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE user SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrDuplicate
+		}
+		return fmt.Errorf("rename user: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rename user: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+/*
+ * SetUserRole promotes or demotes an account.
+ *
+ * The demotion of the last admin is refused here, in a transaction with the
+ * count, rather than in the handler. Two admins each demoting the other at the
+ * same moment is a race that a check-then-write in a handler loses: both read
+ * "two admins", both write, and the server ends up with none and no way back
+ * except a command line on the host.
+ */
+func (s *Store) SetUserRole(ctx context.Context, id, role string) error {
+	if !ValidRole(role) {
+		return fmt.Errorf("unknown role %q", role)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set role: %w", err)
+	}
+	defer tx.Rollback()
+
+	var current string
+	err = tx.QueryRowContext(ctx, `SELECT role FROM user WHERE id = ?`, id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("set role: %w", err)
+	}
+	if current == role {
+		return nil
+	}
+
+	if current == RoleAdmin {
+		var admins int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM user WHERE role = ?`, RoleAdmin).Scan(&admins); err != nil {
+			return fmt.Errorf("set role: %w", err)
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE user SET role = ? WHERE id = ?`, role, id); err != nil {
+		return fmt.Errorf("set role: %w", err)
+	}
+	return tx.Commit()
+}
+
+// SessionCountFor reports how many live sessions an account has, so the manager
+// can say whether somebody is signed in somewhere before it revokes or renames
+// them.
+func (s *Store) SessionCountFor(ctx context.Context, id string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM session WHERE user_id = ?`, id).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count sessions for user: %w", err)
+	}
+	return n, nil
+}

@@ -30,6 +30,44 @@ The full policy is [ADR 0018](adr/0018-api-contract-and-versioning.md). In short
 
 "Clients are thin" is only true if the contract they are thin against is stable.
 
+### Stating and checking a version
+
+`X-LANcast-API-Version` works in both directions.
+
+**On every `/api` response** the server states the contract it served, so a
+client can log or assert it without a second call to `/health`.
+
+**On a request it is an optional assertion.** Send it to say which contract the
+client was built against. If this server cannot serve that version the request
+is refused immediately:
+
+```json
+{ "error": { "code": "unsupported_api_version",
+             "message": "this server speaks API version 1; the request asked for 2" } }
+```
+
+`400`, not `406`: the request is malformed with respect to this server, and a
+client built for v2 cannot fix it by renegotiating. Switch on the `code`.
+
+Omitting the header means "whatever you have", which is what every existing
+client sends and must keep working - this is an opt-in assertion, not a
+requirement. A header that is not a whole number is a `400 bad_request` rather
+than being ignored: silently serving a malformed assertion hides the fault at
+the exact moment somebody is looking for it.
+
+The refusal is the point. Without it, a client expecting a contract this server
+does not speak discovers the mismatch as a field that is mysteriously absent
+three screens later, and the report that arrives is "the library page is blank".
+
+`GET /api/health` also reports `api_versions`, every revision this build can
+serve - a list, because a future v2 server keeps answering v1 for at least one
+release, so "which versions do you speak" is a different question from "which
+one am I getting".
+
+**This is deliberately not a URL-space rewrite.** Moving every route under a version prefix would break the existing client today to buy a property nobody is
+using yet, and ADR 0018 already promises `/api` never changes meaning - the same
+guarantee at no cost.
+
 ## Authentication
 
 Every endpoint requires a session cookie except `GET /api/health`,
@@ -440,6 +478,47 @@ excluded. A season is not a thing anybody played; it is where the episodes live.
 fact about a shared library; who watched them is a fact about a person, and this
 endpoint deliberately cannot answer the second.
 
+### `GET` / `PUT` / `DELETE /api/items/{id}/rating`
+
+**Your** rating of an item, and an optional note about why.
+
+```json
+{ "rating": { "item_id": 87, "score": 8,
+              "review": "better than I remembered", "updated_at": 1755200000 } }
+```
+
+`PUT` takes `{ "score": 1-10, "review": "..." }`; a score outside that range is
+`400`. `DELETE` withdraws it, which is **not** the same as scoring something 1 -
+"I have not rated this" and "I rated this badly" are different statements, and
+an interface that cannot say the first is one people stop trusting with the
+second. `GET` answers `{ "rating": null }` when you have not rated it, rather
+than `404`: the item exists and your verdict does not.
+
+**A rating is private to the account that wrote it.** There is no household
+average, no count of how many people rated something, and no route that returns
+somebody else's score. The roadmap holds ratings back alongside viewer stats
+because both wait on a decision about who may see whose viewing; this makes the
+smaller half of that decision and leaves the rest unmade. Turning private
+verdicts into visible ones changes what people are willing to write, so it is a
+decision about the product rather than a flag to flip.
+
+That is also why these routes carry no user id: whose rating is always the
+caller's, which makes it impossible to leak one by forgetting a filter.
+
+Distinct from `rating` on the item (TMDB's opinion) and from the external
+ratings of [ADR 0019](adr/0019-external-ratings.md) (IMDb's and Rotten
+Tomatoes'). Three numbers about one film is one too many to leave unlabelled, so
+they are never merged into a single field.
+
+Scores are out of **ten**, not five: a half-star interface then needs no
+migration, and the provider ratings this sits beside are already out of ten.
+
+### `GET /api/profile/ratings`
+
+Everything you have rated, most recent first. `?limit=` defaults to 50 (max
+200). Same privacy rule as above - it is your list, and there is no route to
+anybody else's.
+
 ### `GET /api/items/{id}/photo`
 
 The picture itself, at full resolution. Photos only; anything else is `404`.
@@ -635,6 +714,18 @@ rather than inventing a person.
 The caller's own profile only. There is no per-user variant of this route: "what has
 everyone been watching" needs an answer to who may see it before it needs a
 route.
+
+### `PATCH /api/profile`
+
+Changes your own display name. `{ "name": "Chris" }`, 60 characters or fewer,
+no control characters. `409 duplicate` if the name is taken.
+
+The account **id does not change**, which is what makes this a rename rather
+than a replacement: sessions, watch history, ratings and playlist membership all
+hang off the id and follow silently.
+
+`409 no_account` on an unconfigured loopback server, where there is no account
+to edit.
 
 ### `GET /api/items/{id}`
 
@@ -1630,6 +1721,68 @@ provider's TV endpoint. Omit it to fetch as the item's existing kind.
 ```json
 { "provider": "tmdb", "external_id": "335984", "kind": "movie" }
 ```
+
+### `GET` / `POST /api/together`
+
+Watch-together sessions: several people playing the same thing at the same
+position.
+
+```json
+{ "sessions": [ { "id": "k3f9q2xw7m", "item_id": 87, "host_id": "u_3f9",
+  "position_ms": 1284000, "paused": false, "updated_at": 1755200000,
+  "members": [ { "user_id": "u_3f9", "name": "Chris", "host": true,
+                 "last_seen": 1755200000 } ],
+  "created_at": 1755199000 } ] }
+```
+
+`POST` opens a room around `item_id` (with an optional `position_ms`) and makes
+the caller its host; `201` with the session. A room around an item that does not
+exist is refused, because everybody who joined would sit looking at a player
+that cannot load with nothing to say why.
+
+**The server owns the truth** - what is playing, where it is, whether it is
+paused - and clients converge on it. The alternative, each client broadcasting
+its own position, makes the last writer win, and on a lossy connection that is
+whoever lagged worst.
+
+**Live state, no schema.** A session means nothing after a restart; persisting
+one would resurrect a film nobody is watching and invite a client to rejoin a
+room whose members went home hours ago.
+
+**Polling, not sockets.** Nothing else in this stack streams, and a socket layer
+for one feature is the dependency argument [ADR 0013](adr/0013-transcode-pipeline.md)
+settled. A second of drift is acceptable for "we are watching this together";
+frame accuracy is not the goal and could not be delivered to three devices over
+a LAN anyway.
+
+Any session may use these routes - no particular role. Watching something with
+the people you live with is not an administrative act.
+
+### `POST /api/together/{id}/join`
+
+Adds the caller. Rejoining is not an error and does not duplicate anybody: a
+refresh, a dropped connection and a second tab all arrive here.
+
+### `GET` / `PUT` / `DELETE /api/together/{id}`
+
+`GET` is the follower's whole synchronisation input, and doubles as the signal
+that this member is still present - **nobody presses "leave", they close the
+laptop**, so a room drops members who stop polling for 90 seconds and closes
+when the host goes quiet.
+
+`PUT` is the host reporting `position_ms` and `paused`. **Only the host** -
+`403 forbidden` for anyone else. Two people scrubbing the same film is not
+synchronised playback, it is a fight, and the loser cannot tell it from a bug.
+
+`DELETE` leaves. **The host leaving ends the room** rather than promoting
+somebody: promotion sounds generous and is worse, because the film keeps playing
+in three houses under a driver nobody chose and the person who started it cannot
+stop what they began. `404 not_found` once a room has ended, which is the
+client's cue to stop following.
+
+`updated_at` is when the host last reported, so a follower can work out how far
+the film has moved since - without it every poll would land one interval behind
+and never catch up.
 
 ### `GET /api/review?library_id=`
 

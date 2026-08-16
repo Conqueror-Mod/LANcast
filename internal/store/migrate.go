@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 20
+const CurrentSchemaVersion = 21
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -59,6 +59,7 @@ var migrations = []migration{
 	{version: 18, sql: schemaRevision18, rebuildsTable: true},
 	{version: 19, sql: schemaRevision19},
 	{version: 20, sql: schemaRevision20},
+	{version: 21, sql: schemaRevision21},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -698,4 +699,40 @@ ALTER TABLE media_stream ADD COLUMN color_space TEXT;
  */
 const schemaRevision20 = `
 ALTER TABLE library ADD COLUMN shape_warning TEXT;
+`
+
+/*
+ * Revision 21 — what you thought of it.
+ *
+ * A table rather than columns on media_item, because a rating belongs to a
+ * person and an item, not to an item. The same film is a five for one person in
+ * the house and a two for another, and a column could only hold one of those —
+ * which is how "your rating" quietly becomes "the last person to rate it".
+ *
+ * Keyed on (item_id, user_id) for the same reason playback_state is: one
+ * verdict per person per thing, replaced when they change their mind. There is
+ * no history here, deliberately. "What did I used to think of this" is not a
+ * question anybody has asked, and a rating that accumulated rows would need a
+ * pruning rule nobody wants to design.
+ *
+ * `score` is 1–10 rather than 1–5, so that it can carry a half-star UI without
+ * a migration, and because the provider ratings it sits beside are already out
+ * of ten (TMDB) — one scale in the database beats two and a conversion.
+ *
+ * `review` is nullable and unbounded-ish: a note to yourself about why. It is
+ * the one free-text field a user owns in this system, which is exactly why it
+ * is not shown to anybody else. Sharing ratings across a household is the
+ * decision the roadmap says nobody has made, and this revision does not make it.
+ */
+const schemaRevision21 = `
+CREATE TABLE IF NOT EXISTS user_rating (
+    item_id    INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    user_id    TEXT    NOT NULL,
+    score      INTEGER NOT NULL,
+    review     TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (item_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rating_user ON user_rating(user_id, updated_at);
 `
