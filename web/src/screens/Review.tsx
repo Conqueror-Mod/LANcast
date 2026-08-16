@@ -3,14 +3,14 @@ import { useReview } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { FixMatch } from "@/components/FixMatch";
+import { scorePct } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./Review.css";
 
 function ReviewRow({ item, onFix }: { item: Item; onFix: () => void }) {
   const focusable = useFocusable(onFix);
   const poster = artworkURL(item.artwork?.poster, "thumb");
-  const pct =
-    item.match_score != null ? `${Math.round(item.match_score * 100)}%` : "—";
+  const pct = scorePct(item.match_score);
 
   return (
     <button {...focusable} className="review-row" onClick={onFix}>

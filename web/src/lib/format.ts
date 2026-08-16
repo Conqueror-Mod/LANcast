@@ -29,6 +29,23 @@ export function ratingLabel(source: string): string {
   );
 }
 
+/*
+ * A confidence score (0..1) as a whole-percent string, rounded **down**.
+ *
+ * Flooring is the whole point. The matcher auto-accepts at 0.85 and flags
+ * anything below it as uncertain, so a score of 0.848 rendered with
+ * Math.round reads "85%" — the threshold itself — on a row badged
+ * "Uncertain". The number and the badge then contradict each other, and the
+ * number is the one that looks authoritative.
+ *
+ * Flooring can only ever understate by less than a point, which is the safe
+ * direction: it never claims a confidence the scorer did not have.
+ */
+export function scorePct(v: number | null | undefined): string {
+  if (v == null || !isFinite(v)) return "—";
+  return `${Math.floor(Math.max(0, Math.min(1, v)) * 100)}%`;
+}
+
 // Seconds → clock, "M:SS" under an hour and "H:MM:SS" over. For the player.
 export function clock(totalSeconds: number): string {
   if (!isFinite(totalSeconds) || totalSeconds < 0) totalSeconds = 0;

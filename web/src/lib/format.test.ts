@@ -1,5 +1,36 @@
 import { describe, it, expect } from "vitest";
-import { episodeLabel, episodeCode } from "./format";
+import { episodeLabel, episodeCode, scorePct } from "./format";
+
+/*
+ * The matcher auto-accepts at 0.85 and flags everything below as uncertain, so a
+ * displayed percentage that rounds up can print the threshold itself onto a row
+ * badged "Uncertain". A real library showed "This Is England — Uncertain — best
+ * 85%" for a score of 0.848.
+ */
+describe("scorePct", () => {
+  it("floors rather than rounding, so it never prints the threshold below it", () => {
+    expect(scorePct(0.848)).toBe("84%");
+    expect(scorePct(0.849999)).toBe("84%");
+  });
+
+  it("still shows the threshold when the score has actually reached it", () => {
+    expect(scorePct(0.85)).toBe("85%");
+  });
+
+  it("clamps to the 0..100 range", () => {
+    expect(scorePct(1)).toBe("100%");
+    expect(scorePct(1.4)).toBe("100%");
+    expect(scorePct(-0.2)).toBe("0%");
+  });
+
+  // An unscored item has no number to show, and "0%" would read as a confident
+  // zero rather than an absence.
+  it("renders an em dash when there is no score", () => {
+    expect(scorePct(null)).toBe("—");
+    expect(scorePct(undefined)).toBe("—");
+    expect(scorePct(NaN)).toBe("—");
+  });
+});
 
 /*
  * An episode has to say which episode it is.
