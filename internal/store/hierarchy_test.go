@@ -506,3 +506,66 @@ func TestGroupingKindsMatchTheCountPredicate(t *testing.T) {
 			got/2, len(GroupingKinds))
 	}
 }
+
+/*
+ * Pruning has to reach a fixed point, not run once.
+ *
+ * Found by piloting v0.6.28 after a real rescan: the TV library went *up*, from
+ * 60 rows to 64, and the grid held one correct "It's Always Sunny · 8 seasons"
+ * beside twenty empty shells of the same name — full metadata, poster, cast, no
+ * children at all.
+ *
+ * The regrouping worked. The sweep after it did not. PruneEmptyContainers was a
+ * single DELETE, and at the moment it evaluates, an old show still has its old
+ * *season* rows beneath it — those seasons lost their episodes to the new show,
+ * so they are the empty ones. The statement deletes the seasons and, in the same
+ * pass, judges the shows as still having children. The shows are childless the
+ * instant it commits, and nothing looks again until the next scan.
+ *
+ * A hierarchy is deeper than one level, so a sweep of it cannot be one pass.
+ */
+func TestPruneEmptiesWholeChainsNotOneLevel(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	// The state a regrouping rescan leaves behind: an old show holding an old
+	// season, and the episode that used to be in it now under a new show.
+	oldShow, _, err := st.EnsureShow(ctx, lib.ID, "/tv/Show S01", "Show", "show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.EnsureSeason(ctx, lib.ID, oldShow, 1,
+		"/tv/Show S01/Season 01", "Season 1", "season 1"); err != nil {
+		t.Fatal(err)
+	}
+	newShow, _, err := st.EnsureShow(ctx, lib.ID, "lancast:show:show", "Show", "show")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newSeason, _, err := st.EnsureSeason(ctx, lib.ID, newShow, 1,
+		"lancast:show:show::season=1", "Season 1", "season 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := mkItem(t, st, lib.ID, "episode", "/tv/Show S01/Season 01/e01.mkv", "One")
+	if err := st.SetParent(ctx, ep, &newSeason); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.PruneEmptyContainers(ctx, lib.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	top, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(top)
+	if got[oldShow] {
+		t.Error("the emptied show survived the sweep — one pass cannot clear a chain")
+	}
+	if !got[newShow] {
+		t.Error("the sweep took the show that still has episodes under it")
+	}
+}
