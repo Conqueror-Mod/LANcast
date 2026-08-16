@@ -34,6 +34,7 @@ const library: Library = {
   created_at: 0,
   scanned_at: 0,
   item_count: 40,
+  media_count: 40,
 };
 
 const item = (id: number, title: string): Item =>

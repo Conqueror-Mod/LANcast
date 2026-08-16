@@ -40,6 +40,7 @@ const twoLocations = [
     created_at: 1,
     scanned_at: 2,
     item_count: 412,
+    media_count: 412,
   },
 ];
 

@@ -11,6 +11,7 @@ import {
   useHealth,
 } from "@/api/hooks";
 import { useEffect, useState, type ReactNode } from "react";
+import type { Library } from "@/api/types";
 import { ActivityPanel } from "./ActivityPanel";
 import { KeyHelp } from "./KeyHelp";
 import { plainVersion } from "./UpdateSettings";
@@ -63,6 +64,26 @@ import "./AppShell.css";
  */
 function releaseRail(e: React.MouseEvent<HTMLElement>) {
   if (e.detail > 0) e.currentTarget.blur();
+}
+
+
+/*
+ * What a library is counted in.
+ *
+ * A library's unit is the thing it is *of*: you have 1,209 films, 12,000 songs
+ * and 3,000 photographs. Music and Pictures group their media under artists and
+ * galleries, so the tile count answers a different question from the one the nav
+ * appears to be asking — "Music 1,171" beside "Movies 1,209" reads as a like-for-
+ * like comparison and is a count of performers against a count of films.
+ *
+ * Movies and TV are left on the tile count deliberately: a film *is* a tile, and
+ * a show is what somebody means by "I have 20 shows". Counting a TV library in
+ * episodes would answer a question nobody asked of the nav.
+ */
+function navCount(lib: Library): number {
+  return lib.kind === "music" || lib.kind === "picture"
+    ? lib.media_count
+    : lib.item_count;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -157,7 +178,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {lib.name}
                 </span>
                 <span className="app-shell__lib-count app-shell__label">
-                  {lib.item_count}
+                  {navCount(lib).toLocaleString()}
                 </span>
               </NavLink>
             ))}

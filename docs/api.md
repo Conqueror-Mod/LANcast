@@ -220,6 +220,15 @@ every library that existed before this.
 library is the whole library, and the two are not comparable: the library's
 excludes containers and honours the browse rules, a root's is a plain row count.
 
+`media_count` is the number of **files** in the library — songs, photos, films,
+episodes — as against `item_count`, which is tiles. The two differ wherever a
+library groups its media: a music library of 1,171 artists holds tens of
+thousands of songs, and a picture library of 67 galleries holds thousands of
+photographs. Both are true and they answer different questions, which is why
+both are reported rather than one being redefined; our own client shows
+`media_count` for music and picture libraries and `item_count` for the rest,
+because a library's unit is the thing it is *of*.
+
 **The library's `item_count` is what the browse grid shows**, and that is a
 promise rather than a description. It counts top-level, present rows and
 excludes the kinds that *group* items rather than being them — `collection` and
