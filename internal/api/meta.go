@@ -9,6 +9,7 @@ import (
 
 	"lancast/internal/media"
 	"lancast/internal/meta"
+	"lancast/internal/scan"
 	"lancast/internal/store"
 )
 
@@ -399,6 +400,46 @@ func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	s.enrichSoon()
 	w.WriteHeader(http.StatusAccepted)
+}
+
+/*
+ * reparseLibrary re-runs the filename heuristics over a library's uncertain
+ * rows. Admin only.
+ *
+ * Distinct from refresh, and the distinction is the whole point: refresh asks
+ * the provider the same question again, where this corrects the question. A
+ * film whose year lived only in its folder name searched with no year at all,
+ * and no number of refreshes would have changed that answer.
+ *
+ * Only 'review' and 'unmatched' rows are touched, locked fields are skipped
+ * per field, and rows that already agree with their filename are not requeued
+ * — so this is safe to run twice.
+ */
+func (s *Server) reparseLibrary(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	lib, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+
+	res, err := scan.Reparse(r.Context(), s.st, id)
+	if err != nil {
+		s.writeInternal(w, err, "reparse library")
+		return
+	}
+
+	if res.Changed > 0 {
+		s.audit(r, "library.reparse", "library", fmt.Sprint(id),
+			fmt.Sprintf("Re-parsed %q — %d of %d uncertain items changed and were requeued",
+				lib.Name, res.Changed, res.Examined),
+			map[string]any{"examined": res.Examined, "changed": res.Changed})
+		s.enrichSoon()
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // enrichStatus reports background enrichment progress.

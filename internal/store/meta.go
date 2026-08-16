@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -284,6 +285,156 @@ func (s *Store) ClearMetadataStamp(ctx context.Context, libraryID int64, itemID 
 		return fmt.Errorf("clear metadata stamp: %w", err)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- re-parsing
+
+// ReparseTarget is one row a re-parse may rewrite, carrying everything the
+// filename heuristics need: the file, the root it was found under, and the
+// owning library's kind.
+type ReparseTarget struct {
+	ItemID  int64
+	Path    string
+	Root    string
+	LibKind string
+}
+
+// Guess is what re-running the filename heuristics produced for a row. It is
+// deliberately only the *identity* fields — a guess has no opinion about
+// overview, rating or artwork, and must not be able to clear them.
+type Guess struct {
+	Title     string
+	SortTitle string
+	Year      int
+	Series    string
+	Season    int
+	Episode   int
+}
+
+/*
+ * ReparseTargets lists the items a re-parse is allowed to touch.
+ *
+ * Only 'review' and 'unmatched' rows qualify, and that restriction is the
+ * safety of the whole operation rather than a performance shortcut. A
+ * 'matched' row's title came from a provider, which is better evidence than
+ * any filename; rewriting it with a guess would trade a thousand correct
+ * titles for a chance at a hundred uncertain ones.
+ *
+ * 'locked' and 'local' fall outside the same clause, for the reasons they
+ * always do: a locked identity is never re-litigated, and a local one is what
+ * the user already said this is (CLAUDE.md, ADR 0008).
+ */
+func (s *Store) ReparseTargets(ctx context.Context, libraryID int64) ([]ReparseTarget, error) {
+	args := []any{}
+	where := ` WHERE i.missing = 0 AND i.match_state IN ('review','unmatched')`
+	if libraryID != 0 {
+		where += ` AND i.library_id = ?`
+		args = append(args, libraryID)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT i.id, i.path, COALESCE(r.path, ''), l.kind
+		  FROM media_item i
+		  JOIN library l ON l.id = i.library_id
+		  LEFT JOIN library_root r ON r.id = i.root_id`+where, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reparse targets: %w", err)
+	}
+	defer rows.Close()
+
+	out := []ReparseTarget{}
+	for rows.Next() {
+		var t ReparseTarget
+		if err := rows.Scan(&t.ItemID, &t.Path, &t.Root, &t.LibKind); err != nil {
+			return nil, fmt.Errorf("reparse targets: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+/*
+ * ApplyGuess writes re-parsed identity fields over a row and requeues it for
+ * enrichment, returning whether anything actually changed.
+ *
+ * Locked fields are skipped individually, not as a group: an item whose title
+ * a person corrected still has its year re-parsed, because the lock says "I
+ * own the title", not "stop looking at this file".
+ *
+ * A row that already agrees with its filename is left alone entirely — no
+ * write, no requeue. Re-parsing is meant to be safe to run twice, and a
+ * version that requeued the whole library every time would turn a repair into
+ * a provider-quota event.
+ */
+func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, error) {
+	locked, err := s.LockedFields(ctx, itemID)
+	if err != nil {
+		return false, err
+	}
+	isLocked := func(f string) bool {
+		for _, l := range locked {
+			if l == f {
+				return true
+			}
+		}
+		return false
+	}
+
+	var cur Guess
+	var year, season, episode sql.NullInt64
+	var series sql.NullString
+	err = s.db.QueryRowContext(ctx,
+		`SELECT title, year, series, season, episode FROM media_item WHERE id = ?`, itemID).
+		Scan(&cur.Title, &year, &series, &season, &episode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("apply guess: %w", err)
+	}
+	cur.Year, cur.Series = int(year.Int64), series.String
+	cur.Season, cur.Episode = int(season.Int64), int(episode.Int64)
+
+	set := []string{}
+	args := []any{}
+	add := func(col string, val any) {
+		set = append(set, col+" = ?")
+		args = append(args, val)
+	}
+
+	// An empty guess is not an answer. The parser returning nothing for a field
+	// means it could not tell, which is never a reason to erase what is there.
+	if g.Title != "" && g.Title != cur.Title && !isLocked("title") {
+		add("title", g.Title)
+		add("sort_title", g.SortTitle)
+	}
+	if g.Year != 0 && g.Year != cur.Year && !isLocked("year") {
+		add("year", g.Year)
+	}
+	if g.Series != "" && g.Series != cur.Series && !isLocked("series") {
+		add("series", g.Series)
+	}
+	if g.Season != 0 && g.Season != cur.Season && !isLocked("season") {
+		add("season", g.Season)
+	}
+	if g.Episode != 0 && g.Episode != cur.Episode && !isLocked("episode") {
+		add("episode", g.Episode)
+	}
+	if len(set) == 0 {
+		return false, nil
+	}
+
+	// Clearing the stamp is what puts the row back in the enrichment queue, so
+	// the corrected guess is actually searched against a provider. Without it
+	// this writes a better question and never asks it.
+	set = append(set, "metadata_updated_at = NULL", "updated_at = ?")
+	args = append(args, time.Now().Unix(), itemID)
+
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE media_item SET `+strings.Join(set, ", ")+` WHERE id = ?`, args...); err != nil {
+		return false, fmt.Errorf("apply guess: %w", err)
+	}
+	return true, nil
 }
 
 // ReviewQueue returns items whose identity is uncertain. Applying a
