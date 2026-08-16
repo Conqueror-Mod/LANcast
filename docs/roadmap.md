@@ -416,15 +416,34 @@ group is not priority.
   rather than merges, because the file carries no id worth trusting across
   versions and merging duplicates every channel each time the guess is wrong.
 
-  **What is not built: playback of the common case.** Most IPTV channels are HLS
-  carrying MPEG-TS, and Chromium decodes neither — `canPlayType("video/mp2t")`
-  is empty — while [ADR 0013](adr/0013-transcode-pipeline.md) refuses to vendor
-  hls.js. So today this plays what a browser already understands, and says so
-  when it cannot. The fix is to route channels through the ffmpeg pipeline that
-  already produces progressive fMP4 for exactly this reason; it is the obvious
-  next step and it is deliberately not disguised as done. Hardware tuners
-  (HDHomeRun and friends) are also untouched — there was no device to build
-  against.
+  **Playback now works in any browser.** `GET /api/channels/{id}/live` routes a
+  channel through the ffmpeg pipeline that already produces progressive fMP4 for
+  files, which is what makes an MPEG-TS channel playable in Chromium at all —
+  `canPlayType("video/mp2t")` is empty, and [ADR 0013](adr/0013-transcode-pipeline.md)
+  refuses to vendor hls.js. Verified end to end: a real transport stream
+  decoding at 640×360 in the browser, buffered and advancing.
+
+  Usually a **remux**, not a transcode — nearly every channel is H.264, which
+  fMP4 takes as-is. Audio is treated the opposite way, and the asymmetry is the
+  design: a video encode costs a core per viewer and an audio encode costs a few
+  percent, so video gets the benefit of the doubt and audio does not. Audio is
+  copied only when it is *known* to be AAC and re-encoded otherwise, because
+  guessing wrong about audio produces a working picture with silence — the
+  failure that looks like success.
+
+  The bug that found: **AAC inside MPEG-TS carries ADTS framing MP4 refuses.**
+  Without `-bsf:a aac_adtstoasc`, ffmpeg emits a valid `ftyp` box, rejects the
+  first audio packet and exits — 16 KB where the fix produces 1.05 MB on the
+  same source, and a browser showing one frame before stopping. The most common
+  live format in existence, failing in the way hardest to attribute.
+
+  ffmpeg's lifetime is the request's, tested against a real process: a live
+  source never ends, so nothing else would ever stop it and a leak pulls a
+  stream at full rate for ever.
+
+  **Still not built:** hardware tuners (HDHomeRun and friends — no device to
+  build against) and an EPG. A channel list carries names and logos, not a
+  schedule.
 
 ### Metadata, ratings and discovery
 
