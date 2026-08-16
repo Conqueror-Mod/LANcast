@@ -415,3 +415,85 @@ func TestLeadingWordSurvivesWhenTheFolderDoesNotAgree(t *testing.T) {
 		t.Errorf("Title = %q, want the name untouched", got.Title)
 	}
 }
+
+/*
+ * Quotes around a whole title are not part of it.
+ *
+ * A real library showed a film called `"Wuthering Heights"` — quotes included —
+ * sorted to the very front of the grid, because a quote character orders before
+ * every letter.
+ */
+func TestQuotedTitleLosesItsQuotes(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{`"Wuthering Heights" (2026).mkv`, "Wuthering Heights"},
+		{`'The Thing' (1982).mkv`, "The Thing"},
+		{`“Nosferatu” (2024).mkv`, "Nosferatu"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+/*
+ * A leading apostrophe that is part of the name stays.
+ *
+ * `'71` is a 2014 film. Trimming quote characters off both ends rather than
+ * removing a matched pair would rename it to "71", which is the reason this is
+ * a pair rule and not a trim.
+ */
+func TestUnpairedQuoteIsPartOfTheTitle(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"'71 (2014).mkv", "'71"},
+		{"Rock 'n' Roll High School (1979).mkv", "Rock 'n' Roll High School"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+// An edition marker at the end of a title is an edition, not a name, so the
+// file matches the work it is an edition of instead of matching nothing.
+func TestEditionSuffixIsStripped(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"Alien DC.mkv", "Alien"},
+		{"Alien Resurrection SE.mkv", "Alien Resurrection"},
+		{"Blade Runner - Final Cut.mkv", "Blade Runner"},
+		{"Apocalypse Now Uncut.mkv", "Apocalypse Now"},
+		{"Aliens Special Edition.mkv", "Aliens"},
+		{"Watchmen Director's Cut.mkv", "Watchmen"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+/*
+ * The same two letters at the *front* of a title are a name.
+ *
+ * This is why the rule is anchored to the end rather than added to reNoise,
+ * which strips from a marker onward wherever it appears: "DC League of
+ * Super-Pets" would have become an empty title.
+ */
+func TestEditionMarkerAtTheFrontIsATitle(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"DC League of Super-Pets (2022).mkv", "DC League of Super Pets"},
+		{"SE7EN (1995).mkv", "SE7EN"},
+		// A film actually called "Uncut" keeps its name rather than emptying.
+		{"Uncut.mkv", "Uncut"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+// editionRoot is a library root for the title-parsing cases above; the files
+// sit directly in it, so nothing above them influences the parse.
+var editionRoot = filepath.Join("R", "Movies")
