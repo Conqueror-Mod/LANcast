@@ -104,12 +104,23 @@ export function LibraryView({
     decades: decades.map(Number),
     contentRatings,
     unwatched,
-    // Collections are not in the grid. They group films rather than being them,
-    // and a franchise tile beside its own members made a curated shelf read as
-    // an unsorted one. They have their own page — except while searching, where
-    // hiding a matching collection would be the search lying about what is
-    // here.
-    excludeKind: library.kind === "movie" && !q ? "collection" : undefined,
+    /*
+     * Containers that group items are not in the grid.
+     *
+     * They group things rather than being them, and a franchise tile beside its
+     * own members made a curated shelf read as an unsorted one. Each has its own
+     * page.
+     *
+     * Playlists were missing from this list and it showed: every `.m3u` a scene
+     * release ships was imported, and every one of them stood in the *artist*
+     * grid as a tile with a release-folder name, beside the artists whose tracks
+     * were on it. Not restricted to movie libraries any more either, which is
+     * how a music library came to be the one place this rule did not apply.
+     *
+     * Except while searching, where hiding a matching collection or playlist
+     * would be the search lying about what is here.
+     */
+    excludeKind: q ? undefined : "collection,playlist",
     initial: initial || undefined,
   });
 

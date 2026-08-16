@@ -371,3 +371,69 @@ func TestCollectionMembersAreStillListed(t *testing.T) {
 		t.Errorf("members = %d, want 2", len(members))
 	}
 }
+
+/*
+ * A playlist is not an artist, and the music grid was full of them.
+ *
+ * Found by piloting a real library: tiles named `00-health-rat_wars-16bit-web-
+ * flac-2023` sat among the artists. They were the `.m3u` files scene releases
+ * ship beside the audio — imported correctly, listed in the wrong place, one
+ * tile per release. `exclude_kind` took a single kind, so the second one had
+ * nowhere to go.
+ */
+func TestExcludeKindsDropsSeveralKinds(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	artist := mkItem(t, st, lib.ID, "artist", "/a/health", "HEALTH")
+	playlist := mkItem(t, st, lib.ID, "playlist", "/p/rat_wars.m3u", "00-health-rat_wars")
+	film := mkItem(t, st, lib.ID, "movie", "/m/A.mkv", "A Film")
+	b := mkItem(t, st, lib.ID, "movie", "/m/B.mkv", "B Film")
+	coll := mkItem(t, st, lib.ID, "collection", "/c/ab", "AB Collection")
+	for i, id := range []int64{film, b} {
+		if err := st.AddToCollection(ctx, id, coll, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	items, _, err := st.ListItems(ctx, ItemFilter{
+		LibraryID:    lib.ID,
+		TopLevel:     true,
+		ExcludeKinds: []string{"collection", "playlist"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(items)
+	if got[playlist] {
+		t.Error("a playlist is in the grid — it groups tracks rather than being one")
+	}
+	if got[coll] {
+		t.Error("a collection is in the grid")
+	}
+	if !got[artist] || !got[film] {
+		t.Error("excluding container kinds took real items with it")
+	}
+}
+
+// One kind still works: the parameter grew a list without changing what a
+// single value means, so a client written against the old contract is fine.
+func TestExcludeKindsAcceptsOne(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	artist := mkItem(t, st, lib.ID, "artist", "/a/health", "HEALTH")
+	playlist := mkItem(t, st, lib.ID, "playlist", "/p/x.m3u", "X")
+
+	items, _, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib.ID, TopLevel: true, ExcludeKinds: []string{"playlist"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(items)
+	if got[playlist] || !got[artist] {
+		t.Errorf("single-kind exclusion changed meaning: %+v", items)
+	}
+}

@@ -245,6 +245,21 @@ func parseDecades(vs []string) ([]int, bool) {
 	return out, true
 }
 
+// splitCSV reads a comma-separated query value, dropping empties so a trailing
+// comma or a bare "," cannot turn into a filter on the empty kind.
+func splitCSV(v string) []string {
+	if v == "" {
+		return nil
+	}
+	out := []string{}
+	for _, part := range strings.Split(v, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -297,10 +312,12 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
 		Kind:      q.Get("kind"),
-		// The browse grid passes exclude_kind=collection: a franchise tile
-		// sitting beside the films it groups answers a different question from
-		// the grid it is in, and collections have their own page.
-		ExcludeKind: q.Get("exclude_kind"),
+		// The browse grid passes exclude_kind=collection,playlist: a franchise
+		// tile beside the films it groups, or a playlist tile beside the artists
+		// whose tracks are on it, answers a different question from the grid it
+		// is in. Both have their own page. Comma-separated because it was one
+		// kind and the second had nowhere to go.
+		ExcludeKinds: splitCSV(q.Get("exclude_kind")),
 		// The A–Z rail: one letter, or "#" for titles starting with anything
 		// that is not a Latin letter.
 		Initial:        q.Get("initial"),

@@ -626,14 +626,18 @@ type ItemFilter struct {
 	// server for the S items is the same gesture with an answer that exists.
 	Initial string
 
-	// ExcludeKind drops one kind from a listing.
+	// ExcludeKinds drops kinds from a listing.
 	//
-	// For the browse grid, where collections were mixed in among the films they
-	// group: a franchise tile beside its own members, sorted by a title nobody
-	// chose, in a grid whose job is "what have I got". They are a different
-	// question — "what belongs together" — and they get their own page. Empty
-	// means no exclusion, which is every other caller.
-	ExcludeKind string
+	// For the browse grid, where containers that *group* items were mixed in
+	// among the items themselves: a franchise tile beside its own films, sorted
+	// by a title nobody chose, in a grid whose job is "what have I got". A
+	// playlist is the same thing in a music library — and on a library of scene
+	// releases, which ship an `.m3u` beside the audio, that is one tile per
+	// release standing among the artists.
+	//
+	// A list rather than one kind, because it was one kind and the second had
+	// nowhere to go. Empty means no exclusion, which is every other caller.
+	ExcludeKinds []string
 
 	// TopLevel restricts the listing to rows with no parent — the browse-grid
 	// default. Children (seasons, episodes, parts, chapters) have a parent_id
@@ -745,9 +749,11 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
 	}
-	if f.ExcludeKind != "" {
-		where += ` AND kind != ?`
-		args = append(args, f.ExcludeKind)
+	if len(f.ExcludeKinds) > 0 {
+		where += ` AND kind NOT IN (` + placeholders(len(f.ExcludeKinds)) + `)`
+		for _, k := range f.ExcludeKinds {
+			args = append(args, k)
+		}
 	}
 	if f.Initial != "" {
 		if f.Initial == "#" {
