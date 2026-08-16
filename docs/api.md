@@ -1868,22 +1868,50 @@ absolute reference, or one that would change host, is `400`. There is no
 parameter that changes the destination, which is what keeps this from being an
 open relay inside somebody's network.
 
-**No transcoding, and that is a limitation as much as a choice.** A live stream
-re-encoded per viewer is a CPU cost this project has not agreed to — but the
-consequence is sharper than "most providers serve something a browser plays",
-which was the original claim here and is wrong.
+**This route does not transcode.** It relays the provider's bytes untouched,
+which plays in Safari and nowhere else: most IPTV channels are HLS carrying
+MPEG-TS, and Chromium decodes neither — `canPlayType("video/mp2t")` answers with
+an empty string, and [ADR 0013](adr/0013-transcode-pipeline.md) refuses to
+vendor hls.js.
 
-Most IPTV channels are HLS carrying MPEG-TS segments, and **Chromium decodes
-neither natively**: `canPlayType("video/mp2t")` answers with an empty string.
-Safari plays HLS; nothing else does without hls.js, which
-[ADR 0013](adr/0013-transcode-pipeline.md) deliberately refuses to vendor. So
-today this route serves a channel a browser can already decode — a plain MP4 or
-WebM feed, or anything on Safari — and the client says so plainly when the
-element fails rather than showing a black rectangle.
+Use `GET /api/channels/{id}/live` for a channel a browser can play. This route
+remains for Safari, for a client with its own demuxer, and for a source already
+in a browser-friendly format.
 
-Closing that gap means putting live channels through the existing ffmpeg
-pipeline, which already produces progressive fMP4 from arbitrary input for
-exactly this reason. That is the obvious next step and it is not built.
+### `GET /api/channels/{id}/live`
+
+The same channel, converted for the browser: **fragmented MP4**, produced by the
+ffmpeg pipeline the file path already uses.
+
+**Usually not a transcode.** Nearly every channel is H.264 video with AAC audio,
+which fMP4 accepts as-is — so ffmpeg rewrites the container and copies both
+streams, costing a few percent of a core rather than a whole one. That is what
+makes this affordable per viewer, and the copy-or-encode decision comes from the
+same `probe.Decide` the file path uses rather than from a second set of codec
+rules that would eventually disagree with the first.
+
+The channel is **probed first**, briefly (6 seconds), and a failed probe falls
+through to copying rather than refusing. Knowing the codecs matters: an AC-3
+channel needs its audio re-encoded, and copying it produces a working picture
+with silence — the worst failure available, because it looks like it nearly
+worked.
+
+**ffmpeg stops when the request ends.** A live source never finishes, so nothing
+else would ever stop it: a leaked session does not idle, it pulls a stream at
+full rate for ever for somebody who closed the tab. The process lifetime is tied
+to the HTTP request.
+
+`503 no_ffmpeg` when ffmpeg is not installed — named, because the fix is
+installing it. `503 busy` when the server is already running its maximum number
+of concurrent streams; live sessions count against the same ceiling as file
+transcodes, since they are the same kind of process on the same machine.
+
+Not cacheable, and no `Content-Length`: this is a stream with no end, and a
+cache holding "the channel" would serve one viewer's minute to everybody who
+asked afterwards.
+
+**Still not built:** hardware tuners (HDHomeRun and friends), and an EPG. A
+channel list has names and logos, not a schedule.
 
 **Known limit:** `EXT-X-KEY` and `EXT-X-MAP` URIs are left pointing upstream
 rather than half-rewritten. A client that can reach the provider still plays;

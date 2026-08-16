@@ -70,7 +70,18 @@ export function LiveTV() {
           <video
             ref={videoRef}
             className="livetv__video"
-            src={`/api/channels/${playing.id}/stream`}
+            /*
+             * The ffmpeg route, not the raw relay.
+             *
+             * `/stream` hands the provider's bytes through untouched, which
+             * plays in Safari and nowhere else: most channels are HLS carrying
+             * MPEG-TS and Chromium decodes neither. `/live` puts the same
+             * source through the pipeline that already exists for files and
+             * emits fragmented MP4, which every browser plays — usually by
+             * copying both streams rather than re-encoding them, because
+             * nearly every channel is already H.264 and AAC.
+             */
+            src={`/api/channels/${playing.id}/live`}
             autoPlay
             controls
             playsInline
@@ -89,10 +100,26 @@ export function LiveTV() {
              */
             onError={() =>
               setPlayError(
-                "This browser could not play that channel. Most live channels are HLS, which only Safari plays without extra code — a stream this browser understands directly (a plain MP4 or WebM feed) will work here.",
+                "That channel could not be played. The server converts channels for the browser, so this usually means the source is unreachable, the subscription has lapsed, or ffmpeg is missing.",
               )
             }
             onLoadedData={() => setPlayError(null)}
+            /*
+             * Start it, rather than trusting `autoplay`.
+             *
+             * The attribute alone loses a race here: the element is mounted
+             * with a src that produces nothing until ffmpeg has muxed its first
+             * fragment, and by the time data arrives the autoplay moment has
+             * passed — the picture appears, paused, on a channel somebody just
+             * chose. Calling play() when it is playable takes the click that
+             * selected the channel as the gesture that started it.
+             *
+             * A rejection is left alone: a browser refusing autoplay is a
+             * policy decision, and the controls are right there.
+             */
+            onCanPlay={(e) => {
+              void e.currentTarget.play().catch(() => {});
+            }}
           />
           {playError && (
             <p className="livetv__error" role="alert">
