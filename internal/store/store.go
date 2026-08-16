@@ -1424,19 +1424,47 @@ func (s *Store) IgnoredPaths(ctx context.Context, libraryID int64) (map[string]b
 // the importer creates one deliberately when none of its lines resolve, so that
 // a person can see it exists and find out why it is empty, rather than watching
 // their .m3u vanish in silence. "Empty" is not "orphaned" for this kind.
+/*
+ * Repeated to a fixed point, because a hierarchy is deeper than one level.
+ *
+ * As a single DELETE this cleared exactly one layer per scan, and a real
+ * regrouping needs two. After the show-identity change, an old show still held
+ * its old *season* rows at the moment the statement evaluated — the seasons were
+ * the empty ones, having lost their episodes to the new show. The statement
+ * deleted the seasons and, in the same pass, judged the shows as still having
+ * children. The shows were childless the instant it committed, and nothing
+ * looked again until the next scan.
+ *
+ * That is what a real library showed: TV went *up*, from 60 rows to 64, with one
+ * correct "It's Always Sunny · 8 seasons" beside twenty empty shells of the same
+ * name — full metadata, poster, cast, no children at all.
+ *
+ * Bounded rather than `for {}`: show → season → episode is three levels and
+ * nothing here nests deeply, so an iteration count that keeps climbing means a
+ * bug in the predicate rather than a deep library, and spinning on it would turn
+ * that into a hung scan.
+ */
 func (s *Store) PruneEmptyContainers(ctx context.Context, libraryID int64) (int, error) {
-	res, err := s.db.ExecContext(ctx, `
-		DELETE FROM media_item
-		WHERE library_id = ? AND container IS NULL
-		  AND kind != 'playlist'
-		  AND NOT EXISTS (SELECT 1 FROM media_item c WHERE c.parent_id = media_item.id)
-		  AND NOT EXISTS (SELECT 1 FROM item_collection ic WHERE ic.collection_id = media_item.id)`,
-		libraryID)
-	if err != nil {
-		return 0, fmt.Errorf("prune empty containers: %w", err)
+	const maxPasses = 8
+	total := 0
+	for pass := 0; pass < maxPasses; pass++ {
+		res, err := s.db.ExecContext(ctx, `
+			DELETE FROM media_item
+			WHERE library_id = ? AND container IS NULL
+			  AND kind != 'playlist'
+			  AND NOT EXISTS (SELECT 1 FROM media_item c WHERE c.parent_id = media_item.id)
+			  AND NOT EXISTS (SELECT 1 FROM item_collection ic WHERE ic.collection_id = media_item.id)`,
+			libraryID)
+		if err != nil {
+			return total, fmt.Errorf("prune empty containers: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+		if n == 0 {
+			break
+		}
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	return total, nil
 }
 
 // AttachChildCounts fills ChildCount for each item, so a caller can tell a
