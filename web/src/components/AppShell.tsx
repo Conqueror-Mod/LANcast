@@ -80,7 +80,7 @@ function releaseRail(e: React.MouseEvent<HTMLElement>) {
  * a show is what somebody means by "I have 20 shows". Counting a TV library in
  * episodes would answer a question nobody asked of the nav.
  */
-function navCount(lib: Library): number {
+export function navCount(lib: Library): number {
   return lib.kind === "music" || lib.kind === "picture"
     ? lib.media_count
     : lib.item_count;

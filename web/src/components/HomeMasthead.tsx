@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useCurrentUser } from "@/api/hooks";
 import { LibraryIcon } from "./LibraryIcon";
+import { navCount } from "./AppShell";
 import type { Library } from "@/api/types";
 import "./HomeMasthead.css";
 
@@ -37,7 +38,7 @@ export function HomeMasthead({
 }) {
   const user = useCurrentUser();
   const libs = libraries ?? [];
-  const total = libs.reduce((n, l) => n + l.item_count, 0);
+  const total = libs.reduce((n, l) => n + navCount(l), 0);
 
   return (
     <header className={"masthead" + (hasHero ? " masthead--compact" : "")}>
@@ -65,7 +66,7 @@ export function HomeMasthead({
               </span>
               <span className="masthead__libname">{lib.name}</span>
               <span className="masthead__libcount">
-                {lib.item_count.toLocaleString()}
+                {navCount(lib).toLocaleString()}
               </span>
             </Link>
           ))}
