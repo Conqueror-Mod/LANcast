@@ -111,3 +111,33 @@ describe("the settings shell", () => {
     expect(host.querySelectorAll(".settings__navitem.is-active").length).toBe(1);
   });
 });
+
+/*
+ * The panes added in later passes are reachable.
+ *
+ * This is the failure that has recurred in three consecutive feature passes and
+ * every time it was invisible to the suites: a shortcut whose handlers ignored
+ * it, a warning that never survived a restart, a button hidden inside the wrong
+ * conditional. Each time the logic was right and nothing could get to it.
+ *
+ * Asserting the category *exists and switches* is the cheapest possible guard
+ * against the same shape here — a pane registered in one list and not the other
+ * renders nothing, and no unit test of its contents would notice.
+ */
+describe("panes added after the shell was built", () => {
+  it("lists Display, Keyboard and Sharing's home among the categories", () => {
+    render();
+    const labels = navItems().map((b) => b.textContent);
+    for (const label of ["Account", "Display", "Keyboard"]) {
+      expect(labels).toContain(label);
+    }
+  });
+
+  it("switches to Display and renders it", () => {
+    render();
+    click("Display");
+    expect(activeItem()).toBe("Display");
+    // Bigscreen is the pane's only control, and it renders without a server.
+    expect(host.textContent).toContain("Bigscreen");
+  });
+});

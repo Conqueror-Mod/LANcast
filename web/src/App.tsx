@@ -12,6 +12,8 @@ import { Review } from "@/screens/Review";
 import { Profile } from "@/screens/Profile";
 import { Downloads } from "@/screens/Downloads";
 import { Addons } from "@/screens/Addons";
+import { LiveTV } from "@/screens/LiveTV";
+import { People } from "@/screens/People";
 import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -53,6 +55,8 @@ export function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/addons" element={<Addons />} />
+          <Route path="/live" element={<LiveTV />} />
+          <Route path="/people" element={<People />} />
           <Route path="/settings" element={<Settings />} />
           <Route
             path="*"

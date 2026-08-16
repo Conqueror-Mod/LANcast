@@ -604,3 +604,36 @@ export interface ManagedUser {
   created_at: number;
   sessions: number;
 }
+
+// GET /api/channels — Live TV. A channel is deliberately not an Item: it has no
+// duration, no file and no identity a provider could match. The upstream URL is
+// never sent to clients, because channel lists are routinely credentialed.
+export interface Channel {
+  id: number;
+  source_id: number;
+  name: string;
+  logo_url: string | null;
+  group: string | null;
+  position: number;
+}
+
+export interface ChannelSource {
+  id: number;
+  name: string;
+  url: string;
+  created_at: number;
+  refreshed_at: number | null;
+  channel_count: number;
+}
+
+// GET /api/people — the other accounts on this server (ADR 0035). `sharing` is
+// reported even when false, so a page can say "has not shared" rather than
+// showing an empty list that reads as "watches nothing".
+export interface Person {
+  id: string;
+  name: string;
+  role: Role;
+  sharing: boolean;
+  watched: number;
+  joined_at: number;
+}

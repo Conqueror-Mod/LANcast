@@ -23,6 +23,8 @@ import {
   SearchGlyph,
   AddonIcon,
   DownloadIcon,
+  LiveIcon,
+  PeopleIcon,
   AccountIcon,
   SignOutIcon,
 } from "./LibraryIcon";
@@ -190,6 +192,24 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </NavLink>
             )}
+            {/* Live TV is a place with contents, like a library — and unlike a
+                library it is the same list for everybody, so it sits below them
+                rather than among them. Shown to everyone: adding a channel
+                source is an admin act, watching is not. */}
+            <NavLink
+              to="/live"
+              title="Live TV"
+              onClick={releaseRail}
+              className={({ isActive }) =>
+                "app-shell__lib" + (isActive ? " is-active" : "")
+              }
+            >
+              <LiveIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                Live TV
+              </span>
+            </NavLink>
+
             {/* Downloads is a place too, and unlike Add-ons it is one every
                 account has: the receipts are per device, so there is nothing
                 here to gate on a role. It sits after the libraries because it
@@ -208,6 +228,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </NavLink>
           </nav>
+
+          {/* People sits at the foot rather than among the libraries: it is
+              about who is here, not about what there is to watch. */}
+          <div className="app-shell__foot">
+            <NavLink
+              to="/people"
+              title="People"
+              onClick={releaseRail}
+              className={({ isActive }) =>
+                "app-shell__lib" + (isActive ? " is-active" : "")
+              }
+            >
+              <PeopleIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                People
+              </span>
+            </NavLink>
+          </div>
 
           {/* The foot of the rail. `margin-top: auto` puts it against the
               bottom edge however many libraries there are, and it collapses to

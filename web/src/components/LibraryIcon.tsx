@@ -189,3 +189,28 @@ export function DownloadIcon() {
     </RailGlyph>
   );
 }
+
+// Live TV: a screen on a stand with a signal above it. The two arcs are what
+// separate it from the monitor glyph a shows library uses — at 20px the stand
+// alone is not enough of a difference to read.
+export function LiveIcon() {
+  return (
+    <RailGlyph>
+      <rect x="3" y="7.5" width="14" height="9" rx="1.4" />
+      <path d="M7.5 4.2 10 6.6l2.5-2.4" />
+    </RailGlyph>
+  );
+}
+
+// People: two heads, the second offset behind the first. Same idea as the
+// player's watch-together glyph, drawn on the rail's own box.
+export function PeopleIcon() {
+  return (
+    <RailGlyph>
+      <circle cx="8" cy="7.2" r="2.6" />
+      <path d="M3.4 16.2c0-2.5 2-4 4.6-4s4.6 1.5 4.6 4" />
+      <circle cx="14.6" cy="6.4" r="2" />
+      <path d="M13.2 12.4c2.2-.1 3.8 1.3 3.8 3.4" />
+    </RailGlyph>
+  );
+}

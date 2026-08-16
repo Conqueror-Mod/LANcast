@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 21
+const CurrentSchemaVersion = 23
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -60,6 +60,8 @@ var migrations = []migration{
 	{version: 19, sql: schemaRevision19},
 	{version: 20, sql: schemaRevision20},
 	{version: 21, sql: schemaRevision21},
+	{version: 22, sql: schemaRevision22},
+	{version: 23, sql: schemaRevision23},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -735,4 +737,64 @@ CREATE TABLE IF NOT EXISTS user_rating (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rating_user ON user_rating(user_id, updated_at);
+`
+
+/*
+ * Revision 22 — whether an account shares what it has watched (ADR 0035).
+ *
+ * One nullable-by-default column rather than a settings table, because it is
+ * one boolean per account and the account row is where "facts about this
+ * person" already live.
+ *
+ * **Defaults to 0, and that is the whole point.** A server upgraded into this
+ * shares nothing until somebody deliberately turns it on: no existing history
+ * becomes visible as a side effect of an update, which is the one failure here
+ * that could not be taken back. You cannot un-show a history.
+ */
+const schemaRevision22 = `
+ALTER TABLE user ADD COLUMN share_activity INTEGER NOT NULL DEFAULT 0;
+`
+
+/*
+ * Revision 23 — Live TV channels.
+ *
+ * A channel is **not** a media_item, and that is the modelling decision rather
+ * than a convenience. media_item is the widest table in the system and every
+ * column on it describes a *work*: a title that a provider could match, a
+ * duration, a file on disk, a position you stopped at. A channel has none of
+ * those. It is a name, a logo and a URL that is different every time you look
+ * at it.
+ *
+ * Putting it on media_item would mean six more nullable columns, a new `kind`
+ * that every listing has to learn to exclude, and a row that answers "how long
+ * is it" with nothing. ADR 0002 chose one wide table for things that are works;
+ * this is the case that is not one.
+ *
+ * `source_id` groups channels by where they came from, so re-importing a
+ * playlist can replace exactly that source's channels without touching another.
+ * `position` preserves the order the source listed them in — channel order is
+ * meaningful to the person who curated the list, and alphabetical is not an
+ * improvement on it.
+ */
+const schemaRevision23 = `
+CREATE TABLE IF NOT EXISTS channel_source (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT    NOT NULL,
+    url          TEXT    NOT NULL,
+    created_at   INTEGER NOT NULL,
+    refreshed_at INTEGER,
+    channel_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS channel (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id  INTEGER NOT NULL REFERENCES channel_source(id) ON DELETE CASCADE,
+    name       TEXT    NOT NULL,
+    url        TEXT    NOT NULL,
+    logo_url   TEXT,
+    group_name TEXT,
+    position   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_source ON channel(source_id, position);
 `

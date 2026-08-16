@@ -12,6 +12,12 @@ import {
   useCurrentUser,
   useIsAdmin,
   useUsers,
+  usePeople,
+  useSetSharing,
+  useChannelSources,
+  useAddChannelSource,
+  useRefreshChannelSource,
+  useDeleteChannelSource,
   useRenameSelf,
   useUpdateUser,
   useCreateUser,
@@ -366,6 +372,168 @@ function DisplayNameForm() {
   );
 }
 
+/*
+ * Whether other people on this server can see what you have watched (ADR 0035).
+ *
+ * In Account rather than in Users because it is *yours*: an administrator may
+ * run the server, and a switch somebody else can flip on your behalf is not
+ * consent. There is no admin-facing version of this control, and the server has
+ * no route that would allow one.
+ *
+ * The wording says what is shared and what is not, because "share activity" on
+ * its own invites people to assume the worst — or, worse, the best.
+ */
+function SharingToggle() {
+  const people = usePeople();
+  const set = useSetSharing();
+  const me = useCurrentUser();
+  const mine = people.data?.people.find((p) => p.id === me?.id);
+  // The people list excludes the caller, so it cannot report the caller's own
+  // setting. Held locally and seeded from the mutation, which is the only place
+  // this value changes.
+  const [share, setShare] = useState<boolean | null>(null);
+  const on = share ?? mine?.sharing ?? false;
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Sharing</span>
+      <label className="set-toggle set-toggle--described">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => {
+            setShare(e.target.checked);
+            set.mutate(e.target.checked);
+          }}
+        />
+        <span>
+          <strong>Let others here see what I have watched</strong>
+          <span className="set-toggle__desc">
+            Shares the titles you have <em>finished</em>, and when — with the
+            other people on this server, on the People page. It does not share
+            your ratings or notes, which stay private always, or where you have
+            got to in something. Off unless you turn it on, and turning it off
+            hides what you already shared.
+          </span>
+        </span>
+      </label>
+      {set.isError && (
+        <span className="set-error">{(set.error as Error).message}</span>
+      )}
+    </section>
+  );
+}
+
+/*
+ * Live TV channel sources.
+ *
+ * Admin-gated for a stronger reason than most panes here: adding a source makes
+ * *the server* fetch a URL somebody typed, which is server-side request forgery
+ * in miniature. The server refuses its own address; everything else on the
+ * network is allowed, because a tuner on the same machine is the ordinary case.
+ */
+function LiveTVSection() {
+  const { data } = useChannelSources(true);
+  const add = useAddChannelSource();
+  const refresh = useRefreshChannelSource();
+  const remove = useDeleteChannelSource();
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+
+  const sources = data?.sources ?? [];
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Live TV</span>
+      <p className="set-row__note">
+        A channel list is an M3U — from an IPTV provider, or from a tuner on this
+        network. Channels are played through this server, so the list URL and
+        anything in it stays here.
+      </p>
+
+      {sources.map((src) => (
+        <div className="set-lib" key={src.id}>
+          <div className="set-row">
+            <div className="set-row__main">
+              <div className="set-row__title">{src.name}</div>
+              <div className="set-row__sub">
+                {src.channel_count.toLocaleString()} channels
+                {src.refreshed_at
+                  ? ` · refreshed ${new Date(src.refreshed_at * 1000).toLocaleDateString()}`
+                  : " · never refreshed"}
+              </div>
+            </div>
+            <div className="set-row__actions">
+              <button
+                className="set-btn"
+                disabled={refresh.isPending}
+                onClick={() => refresh.mutate(src.id)}
+              >
+                {refresh.isPending ? "Refreshing…" : "Refresh"}
+              </button>
+              <button
+                className="set-btn set-btn--danger"
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(src.id)}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <form
+        className="set-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setNote(null);
+          add.mutate(
+            { name: name.trim(), url: url.trim() },
+            {
+              onSuccess: (res) => {
+                setName("");
+                setUrl("");
+                // A source whose import failed is kept, because the URL may be
+                // right and the provider down. Saying which it was is the whole
+                // value of the message.
+                setNote(
+                  res.import_error
+                    ? `Added, but the list could not be read: ${res.import_error}`
+                    : `Added ${res.channels ?? 0} channels.`,
+                );
+              },
+            },
+          );
+        }}
+      >
+        <input
+          className="set-input"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <input
+          className="set-input"
+          placeholder="https://…/playlist.m3u"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          required
+        />
+        <button className="set-btn" disabled={add.isPending}>
+          {add.isPending ? "Importing…" : "Add channel list"}
+        </button>
+      </form>
+      {note && <span className="set-note">{note}</span>}
+      {add.isError && (
+        <span className="set-error">{(add.error as Error).message}</span>
+      )}
+    </section>
+  );
+}
+
 function UsersSection() {
   const { data: users } = useUsers();
   const me = useCurrentUser();
@@ -393,6 +561,8 @@ function AccountSection() {
       <span className="section-label">Account</span>
 
       <DisplayNameForm />
+
+      <SharingToggle />
 
       <span className="set-sublabel">Password</span>
       <form
@@ -1295,6 +1465,7 @@ const SERVER_PANES: Pane[] = [
   { id: "metadata", label: "Metadata", admin: true },
   { id: "playback", label: "Playback", admin: true },
   { id: "users", label: "Users", admin: true },
+  { id: "livetv", label: "Live TV", admin: true },
   { id: "addons", label: "Add-ons", admin: true },
   { id: "updates", label: "Updates", admin: true },
   { id: "activity", label: "Activity", admin: true },
@@ -1383,6 +1554,7 @@ export function Settings() {
               <AdminSections pane={pane} />
               {pane === "metadata" && <RateLimitSection />}
               {pane === "users" && <UsersSection />}
+              {pane === "livetv" && <LiveTVSection />}
               {pane === "addons" && <AddonsSection />}
               {pane === "updates" && (
                 <>

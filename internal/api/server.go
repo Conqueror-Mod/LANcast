@@ -208,6 +208,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile", s.profile)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
+	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
+
+	mux.HandleFunc("GET /api/people", s.listPeople)
+	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
+
+	mux.HandleFunc("GET /api/channels", s.listChannels)
+	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
+	mux.HandleFunc("GET /api/channel-sources", s.adminOnly(s.listChannelSources))
+	mux.HandleFunc("POST /api/channel-sources", s.adminOnly(s.createChannelSource))
+	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.adminOnly(s.refreshChannelSource))
+	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.adminOnly(s.deleteChannelSource))
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	// Editing shared metadata or identity re-litigates the library for everyone,
 	// so it is an admin action. Watching and progress are not.
@@ -290,6 +301,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)
 	mux.HandleFunc("GET /api/stream/{id}/hls/{session}/{name}", s.hlsSegment)
 	mux.HandleFunc("GET /api/transcode", s.transcodeSessions)
+
+	/*
+	 * Anything under /api that matched no route is a 404 in the documented
+	 * error shape — not the client.
+	 *
+	 * Without this, an unknown API path fell through to the SPA fallback below
+	 * and answered **200 with an HTML page**. A browser never notices, because
+	 * a browser never asks for a route that does not exist; a third-party
+	 * client asking for a mistyped or newer endpoint got a success and a
+	 * document, which is the least debuggable answer available.
+	 *
+	 * It also quietly contradicted the version contract: ADR 0018 promises that
+	 * a client can tell what this server supports, and a 200 for every path is
+	 * a server that claims to support everything. Found by trying an endpoint
+	 * that was never built.
+	 *
+	 * Go 1.22 routing prefers the more specific pattern, so every registered
+	 * route still wins over this.
+	 */
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "not_found",
+			"no such endpoint: "+r.Method+" "+r.URL.Path)
+	})
 
 	mux.Handle("/", s.web)
 	// Outermost after logging: a panic anywhere inside — including in the auth

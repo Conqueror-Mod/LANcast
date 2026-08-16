@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -118,5 +119,57 @@ func TestHealthListsSupportedVersions(t *testing.T) {
 	}
 	if len(body.APIVersions) == 0 {
 		t.Error("api_versions is empty; a client cannot tell what else this build speaks")
+	}
+}
+
+/*
+ * An unknown API path is a 404 in the documented shape, not the client.
+ *
+ * This shipped for a long time as **200 with an HTML page**: unmatched /api
+ * paths fell through to the single-page-app fallback. A browser never notices,
+ * because a browser never asks for a route that does not exist — but a
+ * third-party client asking for a mistyped or newer endpoint got a success and
+ * a document, which is the least debuggable answer there is.
+ *
+ * It also quietly contradicted the version contract this file exists to test: a
+ * server that answers 200 for every path is a server claiming to support
+ * everything.
+ */
+func TestUnknownAPIPathIs404JSON(t *testing.T) {
+	h := newHarness(t)
+
+	for _, path := range []string{
+		"/api/this-was-never-built",
+		"/api/users/someone/sharing",
+		"/api/v2/items",
+	} {
+		resp := h.do(t, "GET", path, nil)
+		if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+			t.Errorf("%s: content-type = %q, want JSON", path, got)
+		}
+		resp.Body.Close()
+
+		wantError(t, h.do(t, "GET", path, nil), http.StatusNotFound, "not_found")
+	}
+}
+
+/*
+ * The API 404 must not swallow client routes, or every deep link into the app
+ * stops loading.
+ *
+ * Asserted as "this did not come from the API handler" rather than as a 200:
+ * the harness wires no web assets, so a client path legitimately 404s here and
+ * a status check would be testing the harness. What matters is that the request
+ * reached the fallback instead of being answered by the API error envelope.
+ */
+func TestTheAPI404DoesNotSwallowClientRoutes(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "GET", "/library/1", nil)
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Content-Type"); strings.HasPrefix(got, "application/json") {
+		t.Errorf("a client route was answered by the API 404 (content-type %q)", got)
+	}
+	if got := resp.Header.Get(APIVersionHeader); got != "" {
+		t.Errorf("a client route carried %s = %q", APIVersionHeader, got)
 	}
 }
