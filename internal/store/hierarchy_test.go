@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -435,5 +436,73 @@ func TestExcludeKindsAcceptsOne(t *testing.T) {
 	got := ids(items)
 	if got[playlist] || !got[artist] {
 		t.Errorf("single-kind exclusion changed meaning: %+v", items)
+	}
+}
+
+/*
+ * The sidebar count and the grid have to answer the same question.
+ *
+ * They did not, and this was the original report: a real library's sidebar read
+ * 1,381 beside a grid that said 1,211 — the difference exactly its 170
+ * collections — and the music sidebar read 1,177 beside a grid of 1,171, the
+ * difference exactly its 6 imported `.m3u` playlists.
+ *
+ * It survived three separate fixes to the grid, because each one changed what
+ * the grid *showed* and none changed what the count *counted*.
+ */
+func TestLibraryCountMatchesTheGrid(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	a := mkItem(t, st, lib.ID, "movie", "/m/A.mkv", "A Film")
+	b := mkItem(t, st, lib.ID, "movie", "/m/B.mkv", "B Film")
+	coll := mkItem(t, st, lib.ID, "collection", "/c/ab", "AB Collection")
+	for i, id := range []int64{a, b} {
+		if err := st.AddToCollection(ctx, id, coll, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkItem(t, st, lib.ID, "playlist", "/p/mix.m3u", "A Mix")
+
+	_, gridTotal, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib.ID, TopLevel: true, ExcludeKinds: GroupingKinds,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	libs, err := st.ListLibraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	for _, l := range libs {
+		if l.ID == lib.ID {
+			count = l.ItemCount
+		}
+	}
+
+	if count != gridTotal {
+		t.Errorf("library count = %d, grid total = %d — the sidebar and the grid disagree",
+			count, gridTotal)
+	}
+	if gridTotal != 2 {
+		t.Errorf("grid total = %d, want 2 films", gridTotal)
+	}
+}
+
+// The SQL predicate is hand-written for the same reason its neighbours are, so
+// this is what stops it drifting from the list the API hands to clients.
+func TestGroupingKindsMatchTheCountPredicate(t *testing.T) {
+	for _, k := range GroupingKinds {
+		if !strings.Contains(notAGroupingKind, "'"+k+"'") {
+			t.Errorf("GroupingKinds has %q but the count predicate does not exclude it", k)
+		}
+	}
+	// And nothing extra hides in the predicate that the API would not exclude.
+	if got := strings.Count(notAGroupingKind, "'"); got != len(GroupingKinds)*2 {
+		t.Errorf("the predicate names %d kinds, GroupingKinds has %d",
+			got/2, len(GroupingKinds))
 	}
 }

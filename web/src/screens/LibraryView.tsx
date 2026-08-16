@@ -120,6 +120,10 @@ export function LibraryView({
      * Except while searching, where hiding a matching collection or playlist
      * would be the search lying about what is here.
      */
+    // Must stay the same set the server's library count excludes
+    // (store.GroupingKinds), or the sidebar number and this grid describe
+    // different things — which is exactly what "1,381 items" beside a grid of
+    // 1,211 was.
     excludeKind: q ? undefined : "collection,playlist",
     initial: initial || undefined,
   });
