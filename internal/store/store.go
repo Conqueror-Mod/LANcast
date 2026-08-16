@@ -154,9 +154,18 @@ func (s *Store) CreateLibrary(ctx context.Context, name, kind, path string) (*Li
 // "21 items" beside a grid holding three tiles. Any second copy of this rule
 // drifts from the first the same way.
 //
+// `missing = 0` is part of the predicate rather than of its callers, and that
+// is the second half of the same lesson. The count had it and the grid did not,
+// so a library with unreachable files listed tiles it did not count — the exact
+// disagreement this constant exists to prevent, surviving in the one place
+// nobody looked because the duplication had been removed everywhere else. A
+// missing row is a file the server cannot open; offering it as a tile is
+// offering something that cannot play.
+//
 // References `media_item` unqualified, so a query using it must not alias the
 // table.
 const topLevelPredicate = `parent_id IS NULL
+	AND missing = 0
 	AND (kind != 'collection' OR (
 		SELECT COUNT(*) FROM item_collection ic
 		JOIN media_item m2 ON m2.id = ic.item_id

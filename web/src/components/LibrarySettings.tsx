@@ -59,6 +59,7 @@ export function LibraryRow({ library }: { library: Library }) {
   // the scan looked successful. The wording names both halves: what was
   // ignored, and the setting that ignored it.
   const skippedKind = status?.skipped_kind ?? 0;
+  const skippedExtras = status?.skipped_extras ?? 0;
   // Live progress first, the stored row second: the in-memory one is fresher
   // during and just after a scan, and the row is what is left after a restart.
   const warning = status?.shape_warning ?? library.shape_warning;
@@ -134,6 +135,22 @@ export function LibraryRow({ library }: { library: Library }) {
               {roots.length === 1 ? "" : "s"} scanned — could not read{" "}
               {skippedRoots.map((r) => r.path).join(", ")}. Items there were
               left alone, not marked missing.
+            </div>
+          )}
+          {/*
+            Extras left out of the library (ADR 0038).
+
+            Stated rather than silent, and for a reason the other notes share:
+            this number is the difference between a library that says 1,381
+            films and one that says 1,192, and somebody comparing this server
+            against another has no way at all to find out where the difference
+            went. "189 extras" is the entire explanation.
+          */}
+          {!running && skippedExtras > 0 && (
+            <div className="set-row__note">
+              {skippedExtras.toLocaleString()} extra
+              {skippedExtras === 1 ? "" : "s"} not imported — trailers,
+              featurettes, deleted scenes and sample files are not works.
             </div>
           )}
           {!running && skippedKind > 0 && (
