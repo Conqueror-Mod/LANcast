@@ -493,3 +493,172 @@ func TestAFileGetsNoLiveStartIndex(t *testing.T) {
 		}
 	}
 }
+
+// ---- HDR to SDR (ADR 0033) --------------------------------------------------
+
+func encodeHDR() probe.Decision {
+	return probe.Decision{
+		Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy",
+		TargetFormat: "mp4", TonemapHDR: true,
+	}
+}
+
+// hdrArgs builds the command line for an HDR source under a given build's
+// capabilities.
+func hdrArgs(tonemap, tagSDR bool) []string {
+	return Args(Options{
+		Input: "in.mkv", Output: Progressive, Decision: encodeHDR(), AudioIndex: -1,
+		CanTonemap: tonemap, CanTagSDR: tagSDR,
+	})
+}
+
+func hasColourTags(args []string) bool {
+	return hasSequence(args, "-colorspace", "bt709") &&
+		hasSequence(args, "-color_primaries", "bt709") &&
+		hasSequence(args, "-color_trc", "bt709")
+}
+
+func TestTonemapFilterOnHDRSource(t *testing.T) {
+	vf := argValue(hdrArgs(true, true), "-vf")
+	for _, want := range []string{
+		"zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
+		"tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv",
+	} {
+		if !strings.Contains(vf, want) {
+			t.Errorf("-vf %q missing %q", vf, want)
+		}
+	}
+}
+
+/*
+ * The half of ADR 0033 that must not regress with the other half, asserted
+ * separately from the filter chain for exactly that reason.
+ *
+ * ffmpeg copies the source's colour metadata to the output by default, so
+ * without these an 8-bit H.264 file goes out claiming smpte2084/bt2020 —
+ * asserting a transfer function its contents do not have.
+ */
+func TestConvertedHDROutputIsTaggedSDR(t *testing.T) {
+	if !hasColourTags(hdrArgs(true, true)) {
+		t.Error("a tonemapped output is not tagged bt709")
+	}
+}
+
+// An ffmpeg without zscale must produce a flat picture, never a dead stream: an
+// unrecognised filter makes ffmpeg exit before the first frame.
+func TestNoTonemapFilterWhenTheBuildCannot(t *testing.T) {
+	vf := argValue(hdrArgs(false, true), "-vf")
+	if strings.Contains(vf, "tonemap") || strings.Contains(vf, "zscale") {
+		t.Errorf("-vf %q uses filters this build does not have", vf)
+	}
+}
+
+/*
+ * Without the conversion, the labels are still made coherent — and the relabel
+ * filter is what makes that work.
+ *
+ * Measured against a real HDR10 clip through LANcast's own arguments: x264 writes
+ * its VUI from the frame properties it is handed, so the output flags alone
+ * produced bt709 / smpte2084 / bt2020 — a file whose matrix and transfer
+ * disagree. setparams forces the frame properties so all three agree.
+ */
+func TestRelabelWhenTheBuildCannotTonemap(t *testing.T) {
+	a := hdrArgs(false, true)
+	if vf := argValue(a, "-vf"); !strings.Contains(vf, "setparams=") {
+		t.Errorf("-vf %q does not relabel the frame colour properties", vf)
+	}
+	if !hasColourTags(a) {
+		t.Error("relabelled output is not tagged bt709")
+	}
+}
+
+/*
+ * The third state, and the one worth being deliberate about: a build that can
+ * neither convert nor relabel leaves the output exactly as it is today.
+ *
+ * Emitting the tags alone is what produces the incoherent file above, which is
+ * worse than the self-consistent HDR tags that ship now. Doing nothing is the
+ * least wrong option available, not an oversight.
+ */
+func TestNoColourTagsWhenNothingCanBeMadeCoherent(t *testing.T) {
+	a := hdrArgs(false, false)
+	if argIndex(a, "-vf") >= 0 {
+		t.Errorf("-vf %q present with no usable colour filter", argValue(a, "-vf"))
+	}
+	if argIndex(a, "-colorspace") >= 0 || argIndex(a, "-color_trc") >= 0 {
+		t.Error("tags emitted without the frame properties to back them; that is the hybrid file")
+	}
+}
+
+// An SDR source must be left entirely alone — no filter, and no re-tagging of
+// colour metadata that was already correct.
+func TestSDRSourceIsNotTonemappedOrRetagged(t *testing.T) {
+	d := encodeHDR()
+	d.TonemapHDR = false
+	a := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d,
+		AudioIndex: -1, CanTonemap: true, CanTagSDR: true})
+
+	if vf := argValue(a, "-vf"); strings.Contains(vf, "tonemap") || strings.Contains(vf, "setparams") {
+		t.Errorf("-vf %q touches an SDR source", vf)
+	}
+	if argIndex(a, "-colorspace") >= 0 || argIndex(a, "-color_trc") >= 0 {
+		t.Error("SDR source had its colour metadata rewritten")
+	}
+}
+
+/*
+ * Scale and tonemap must arrive as one -vf.
+ *
+ * ffmpeg takes the last -vf and silently discards the others, so two flags would
+ * not stack — the tonemap would replace the scale, and a quality ceiling would
+ * stop being honoured with nothing in the output to say why. Scale comes first
+ * because tone mapping is per-pixel work and doing it after the downscale is the
+ * same conversion on fewer pixels.
+ */
+func TestScaleAndTonemapComposeIntoOneFilterFlag(t *testing.T) {
+	d := encodeHDR()
+	d.TargetHeight = 720
+
+	a := Args(Options{Input: "in.mkv", Output: Progressive, Decision: d,
+		AudioIndex: -1, CanTonemap: true, CanTagSDR: true})
+
+	var vfCount int
+	for _, arg := range a {
+		if arg == "-vf" {
+			vfCount++
+		}
+	}
+	if vfCount != 1 {
+		t.Fatalf("%d -vf flags, want exactly 1 — ffmpeg keeps only the last", vfCount)
+	}
+
+	vf := argValue(a, "-vf")
+	scale := strings.Index(vf, "scale=-2:720")
+	tone := strings.Index(vf, "tonemap=")
+	switch {
+	case scale < 0:
+		t.Errorf("-vf %q lost the quality ceiling", vf)
+	case tone < 0:
+		t.Errorf("-vf %q lost the tonemap", vf)
+	case scale > tone:
+		t.Errorf("-vf %q tone maps before scaling; that is the same work on more pixels", vf)
+	}
+}
+
+// A copy has no filter chain and no encoder to tag. The decision never sets
+// TonemapHDR on a copy (asserted in probe), and Args must not invent one.
+func TestCopiedVideoGetsNoColourArgs(t *testing.T) {
+	a := Args(Options{Input: "in.mkv", Output: Progressive, AudioIndex: -1,
+		CanTonemap: true, CanTagSDR: true,
+		Decision: probe.Decision{
+			Method: probe.Remux, VideoAction: "copy", AudioAction: "copy",
+			TargetFormat: "mp4",
+		}})
+
+	if argIndex(a, "-vf") >= 0 {
+		t.Error("a remux carries a filter chain")
+	}
+	if argIndex(a, "-colorspace") >= 0 {
+		t.Error("a remux rewrites colour metadata")
+	}
+}

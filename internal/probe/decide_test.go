@@ -723,3 +723,78 @@ func TestUnprobedColourIsNotHDR(t *testing.T) {
 		t.Error("nil reported as HDR")
 	}
 }
+
+// ---- HDR on the decision (ADR 0033) -----------------------------------------
+
+// hdrVideo is an HDR10 stream: HEVC Main10, PQ transfer, BT.2020 primaries.
+// Exactly what an HDR file in a real library reports.
+func hdrVideo(h int) Stream {
+	s := video("hevc", h)
+	s.PixFmt = "yuv420p10le"
+	s.ColorTransfer = "smpte2084"
+	s.ColorPrimaries = "bt2020"
+	s.ColorSpace = "bt2020nc"
+	return s
+}
+
+// The common path, not an edge case: HDR content is HEVC Main10, the browser
+// profile excludes HEVC, so every HDR file re-encodes for a browser. There is no
+// configuration in which a browser gets an HDR file and this flag is not needed.
+func TestHDRSourceEncodingCarriesTheTonemapFlag(t *testing.T) {
+	d := Decide(result("matroska", hdrVideo(2160), audio("eac3", 6)), BrowserProfile())
+	if d.VideoAction != "encode" {
+		t.Fatalf("VideoAction = %q (%s), want encode", d.VideoAction, d.Reason)
+	}
+	if !d.TonemapHDR {
+		t.Error("TonemapHDR = false on an HDR source being re-encoded")
+	}
+}
+
+// A copy delivers the source's own video bytes, which are HDR and are correctly
+// described as HDR. Flagging one would have the command line tag a passthrough
+// stream bt709 — producing the misdescribed file the flag exists to prevent.
+func TestCopiedHDRIsNotTonemapped(t *testing.T) {
+	// A profile that can take HEVC in mp4, so the video is copyable and only
+	// the container forces work.
+	p := BrowserProfile()
+	p.VideoCodecs = append(p.VideoCodecs, "hevc")
+	p.AudioCodecs = append(p.AudioCodecs, "eac3")
+
+	d := Decide(result("matroska", hdrVideo(2160), audio("eac3", 6)), p)
+	if d.VideoAction != "copy" {
+		t.Fatalf("VideoAction = %q (%s), want copy", d.VideoAction, d.Reason)
+	}
+	if d.TonemapHDR {
+		t.Error("TonemapHDR = true on a video copy; nothing re-encodes those bytes")
+	}
+}
+
+// The trap, at the decision level rather than in IsHDR. A 10-bit SDR file
+// re-encoding must not be tone mapped: the conversion would damage it exactly as
+// surely as skipping it damages an HDR file.
+func TestTenBitSDREncodingIsNotTonemapped(t *testing.T) {
+	v := video("hevc", 1080)
+	v.PixFmt = "yuv420p10le"
+	v.ColorTransfer = "bt709"
+
+	d := Decide(result("matroska", v, audio("eac3", 6)), BrowserProfile())
+	if d.VideoAction != "encode" {
+		t.Fatalf("VideoAction = %q (%s), want encode", d.VideoAction, d.Reason)
+	}
+	if d.TonemapHDR {
+		t.Error("TonemapHDR = true on 10-bit SDR")
+	}
+}
+
+// Every row predates the probe change that records colour until it is
+// re-probed. Guessing HDR from a blank field would tone map a whole library on
+// no evidence.
+func TestUnprobedColourEncodingIsNotTonemapped(t *testing.T) {
+	d := Decide(result("matroska", video("hevc", 1080), audio("eac3", 6)), BrowserProfile())
+	if d.VideoAction != "encode" {
+		t.Fatalf("VideoAction = %q (%s), want encode", d.VideoAction, d.Reason)
+	}
+	if d.TonemapHDR {
+		t.Error("TonemapHDR = true with no recorded transfer function")
+	}
+}

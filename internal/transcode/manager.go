@@ -39,6 +39,10 @@ type Manager struct {
 	encMu     sync.RWMutex
 	available []Encoder
 	selected  Encoder
+	// colour is what this ffmpeg can do about HDR — a property of the build, not
+	// of a job. Detected alongside the encoders and guarded by the same lock
+	// because the same call refreshes both (ADR 0033).
+	colour ColourCaps
 
 	mu       sync.Mutex
 	sessions map[string]*Session
@@ -74,9 +78,10 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 func (m *Manager) DetectHardware(ctx context.Context, preference string) {
 	available := DetectEncoders(ctx, m.bin, m.log)
 	selected := SelectEncoder(available, preference, m.log)
+	colour := DetectColourCaps(ctx, m.bin, m.log)
 
 	m.encMu.Lock()
-	m.available, m.selected = available, selected
+	m.available, m.selected, m.colour = available, selected, colour
 	m.encMu.Unlock()
 
 	m.log.Info("video encoder selected", "encoder", selected.Name,
@@ -88,6 +93,20 @@ func (m *Manager) Encoder() Encoder {
 	m.encMu.RLock()
 	defer m.encMu.RUnlock()
 	return m.selected
+}
+
+// colourFor unpacks the colour capabilities into the two Options fields, so the
+// call site reads as what it sets rather than as a struct copy.
+func (m *Manager) colourFor() (tonemap, tagSDR bool) {
+	c := m.ColourCaps()
+	return c.Tonemap, c.TagSDR
+}
+
+// ColourCaps reports what this ffmpeg build can do about HDR (ADR 0033).
+func (m *Manager) ColourCaps() ColourCaps {
+	m.encMu.RLock()
+	defer m.encMu.RUnlock()
+	return m.colour
 }
 
 // AvailableEncoders returns every verified encoder, best first.
@@ -218,6 +237,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, o Options) (io.
 
 	o.Output = Progressive
 	o.Encoder = m.Encoder()
+	o.CanTonemap, o.CanTagSDR = m.colourFor()
 	s, stdout, err := startProgressive(ctx, m.bin, o)
 	if err != nil {
 		m.release()
@@ -262,6 +282,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Sess
 	id := newID()
 	o.Output = HLS
 	o.Encoder = m.Encoder()
+	o.CanTonemap, o.CanTagSDR = m.colourFor()
 	o.OutputDir = filepath.Join(m.root, id)
 
 	s, err := startHLS(ctx, m.bin, o)

@@ -1,6 +1,6 @@
 # ADR 0033 — HDR, and a file that lies about what it contains
 
-Date: 2026-08-13 · Status: **proposed**
+Date: 2026-08-13 · Status: accepted · Amended 2026-08-17 on implementation
 
 ## Context
 
@@ -143,6 +143,75 @@ in particular is not PQ and will not be detected by the rule above. Treating it
 as SDR is what happens today and will continue to; getting it right needs
 dynamic-metadata handling that is a much larger piece of work, and pretending
 otherwise in this ADR would be scope that never gets built.
+
+## Amendment, 2026-08-17 — tagging alone is not achievable, and is harmful
+
+This ADR said the output tagging is "cheaper than the tonemap, independently
+correct", and should therefore happen whether or not the conversion runs.
+Implementation measured that and the second half is wrong.
+
+`-colorspace` / `-color_primaries` / `-color_trc` are not sufficient on their
+own. x264 writes its VUI from the **frame properties** it is handed, which the
+decoder sets from the source, and those flags do not override them. Running
+LANcast's own arguments against a real HDR10 clip, reading the result back with
+ffprobe:
+
+| Path | `color_space` / `color_transfer` / `color_primaries` |
+| --- | --- |
+| Tone mapped | `bt709` / `bt709` / `bt709` |
+| Tags only | `bt709` / **`smpte2084`** / **`bt2020`** |
+| Untouched (before this work) | `bt2020nc` / `smpte2084` / `bt2020` |
+
+The middle row is not a correctly-labelled file. It is one whose matrix and
+transfer disagree — a *third* wrong state, and the most incoherent of the three,
+in a decision whose whole purpose was to stop the output being differently wrong
+on different displays.
+
+So the tagging is not independent of the conversion after all. It is independent
+of the *tonemap*, but it requires something to rewrite the frame properties.
+`setparams` does exactly that and nothing else: core libavfilter, no libzimg, so
+it is available in builds where `zscale` is not.
+
+**There are therefore three states, not two:**
+
+| ffmpeg build | Output |
+| --- | --- |
+| `zscale` + `tonemap` | converted, tagged `bt709` |
+| `setparams` only | not converted, tagged `bt709` — coherent, flat |
+| neither | left exactly as before this work |
+
+The third is deliberate. Emitting the tags with nothing to back them produces
+the middle row above, which is worse than the self-consistent HDR tags that
+shipped before. Where coherence is unreachable, the least wrong action is none.
+
+Relabelling without converting is still a claim about pixels that were never
+converted, and that is accepted knowingly: every client then renders the picture
+the same flat way, where the hybrid renders differently on each. A consistently
+disappointing picture is a quality complaint; an incoherent file is a bug report
+nobody can reproduce.
+
+### Also settled on implementation
+
+**The tension with [ADR 0032](0032-hardware-decode.md) did not arise.** That ADR
+was read as putting frames on the GPU, but nothing decodes on the GPU today —
+`EncoderArgs` states it outright, and there is no `-hwaccel` anywhere in the
+package. Frames are already in system memory, so the CPU tonemap is a plain
+filter insertion rather than the download this ADR warned it might cost. The
+tension returns whenever GPU-resident decode does.
+
+**The filter chain had to become a single `-vf`.** ffmpeg keeps only the last
+`-vf` and silently discards the others, so a tonemap added as a second flag
+would have replaced the quality-ceiling scale rather than composing with it — a
+cap that stops being honoured with nothing in the output to say why. Scale is
+emitted before the tonemap: the same conversion on fewer pixels.
+
+**Verified on real HDR content**, as step 5 required. A 4-second clip from a
+2160p HDR10 file through LANcast's own arguments: `SATAVG` 2.6 → 4.0 and `YAVG`
+40.6 → 35.0, with highlights visibly better controlled and colour restored in a
+side-by-side frame comparison. The direction and the visible result are
+confirmed; the magnitudes differ from the 28.3 → 105.1 measured in the Context
+above, which was a different sample and scene, and the two should not be read as
+the same measurement repeated.
 
 ## Work breakdown
 
