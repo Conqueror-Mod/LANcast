@@ -646,6 +646,31 @@ func (s *Store) PutArtwork(ctx context.Context, itemID int64, hash, kind, source
 		hash, kind, sourceURL, w, h, size, time.Now().Unix()); err != nil {
 		return fmt.Errorf("put artwork: %w", err)
 	}
+	/*
+	 * A new image of this kind *replaces* the previous selection rather than
+	 * joining it.
+	 *
+	 * The primary key is (item_id, artwork_id, kind), so INSERT OR REPLACE only
+	 * replaces when the artwork_id is the same — and a different image has a
+	 * different hash, so it inserts a second row instead. That is precisely what
+	 * correcting a match produces: the new poster arrives, the old one stays,
+	 * and both carry selected = 1 for the same kind.
+	 *
+	 * Every reader then assigns in row order with no ORDER BY —
+	 * `art.Poster = hash` in both ItemArtwork and AttachArtwork — so which image
+	 * wins is whatever SQLite happens to return last, and the grid and the
+	 * detail page can disagree. Reported from the desktop app as a corrected
+	 * match that kept its old thumbnail.
+	 *
+	 * Deselecting rather than deleting: the bytes are content-addressed and
+	 * shared, the row is cheap, and keeping it leaves a record of what this item
+	 * used to show for anything that later wants to offer a choice of artwork.
+	 */
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE item_artwork SET selected = 0 WHERE item_id = ? AND kind = ?`,
+		itemID, kind); err != nil {
+		return fmt.Errorf("put artwork: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO item_artwork (item_id, artwork_id, kind, selected)
 		VALUES (?, (SELECT id FROM artwork WHERE hash = ?), ?, 1)`,
