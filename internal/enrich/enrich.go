@@ -149,6 +149,9 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.stats.Running = false
 		if err == nil {
 			w.stats.Remaining = remaining
+			// The final figure has to agree with itself too: a run that enriched
+			// more than it was sized for must not sign off saying "682 of 449".
+			w.stats.Total = growTotal(w.stats.Total, w.stats.Enriched, remaining)
 		}
 		w.stats.UpdatedAt = time.Now().Unix()
 		w.mu.Unlock()
@@ -198,9 +201,39 @@ func (w *Worker) Run(ctx context.Context) error {
 		if remaining, err := w.st.PendingCount(ctx); err == nil {
 			w.mu.Lock()
 			w.stats.Remaining = remaining
+			w.stats.Total = growTotal(w.stats.Total, w.stats.Enriched, remaining)
 			w.mu.Unlock()
 		}
 	}
+}
+
+/*
+ * growTotal keeps the reported total at least as big as the job turned out to be.
+ *
+ * Total was sized once, when the run began, and never revised — so anything that
+ * joined the queue mid-run marched progress straight past it. The activity panel
+ * read **"682 of 449"**, which is not a rounding error but a bar that has lost
+ * its meaning: the work was real, the denominator was from several minutes ago.
+ *
+ * Requeueing mid-run is ordinary rather than exceptional. A scan adds rows while
+ * enrichment is already going, `refresh` clears the stamp on a whole library, and
+ * `reparse` requeues everything it corrected — the queue is a query, and a query
+ * answers differently when the data changes underneath it.
+ *
+ * Done plus outstanding, and never allowed to shrink. Monotonic because a
+ * progress bar that jumps backwards reads as a fault in the thing it is
+ * measuring, and callers watching `Total` should see an estimate that improves
+ * rather than one that oscillates.
+ *
+ * Failures are deliberately not added on top: a failed item stays pending and is
+ * retried, so it is already inside `remaining`, and counting it twice would
+ * inflate the total by every transient provider error.
+ */
+func growTotal(prev, enriched, remaining int) int {
+	if n := enriched + remaining; n > prev {
+		return n
+	}
+	return prev
 }
 
 // processBatch enriches items concurrently and reports how many advanced.
