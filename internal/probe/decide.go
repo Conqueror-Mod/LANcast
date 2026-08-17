@@ -46,6 +46,21 @@ type Decision struct {
 	// cap applied that never reached a pixel.
 	TargetHeight       int   `json:"target_height,omitempty"`
 	TargetVideoBitRate int64 `json:"target_video_bitrate,omitempty"`
+
+	/*
+	 * TonemapHDR marks a re-encode whose source is HDR and whose output is not
+	 * (ADR 0033). It rides on the decision for the reason the fields above do:
+	 * the decision is the only thing that has seen the stream's colour
+	 * metadata, and ffmpeg is built from the decision rather than from the
+	 * probe.
+	 *
+	 * Set only when VideoAction is "encode". A copy delivers the source's own
+	 * video bytes, which are HDR and are correctly described as HDR — there is
+	 * no conversion to perform and nothing to re-tag. Claiming otherwise would
+	 * have the command line tag a passthrough stream bt709 and produce exactly
+	 * the misdescribed file this flag exists to prevent.
+	 */
+	TonemapHDR bool `json:"tonemap_hdr,omitempty"`
 }
 
 // Profile describes what a client can play.
@@ -372,6 +387,11 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		// costs bandwidth. Same for bitrate: capping a 3 Mbps file at 8 Mbps is
 		// a rate control constraint that can only ever be slack.
 		if video != nil {
+			// Every encode this package produces is 8-bit H.264 SDR, so an HDR
+			// source being re-encoded is always an HDR-to-SDR conversion. There
+			// is no configuration in which it is not (ADR 0033).
+			d.TonemapHDR = IsHDR(video)
+
 			if p.MaxHeight > 0 && video.Height > p.MaxHeight {
 				d.TargetHeight = p.MaxHeight
 			}

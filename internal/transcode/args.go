@@ -8,6 +8,7 @@ package transcode
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"lancast/internal/probe"
 )
@@ -95,7 +96,100 @@ type Options struct {
 	 * working channel into a dead one.
 	 */
 	HLSInput bool
+
+	/*
+	 * CanTonemap and CanTagSDR report what this ffmpeg build can do about HDR.
+	 * They are properties of the build, not of the job, and are set by the
+	 * Manager from a real capability probe the same way Encoder is — so Args
+	 * stays pure.
+	 *
+	 * CanTonemap means `zscale` and `tonemap` are both present. `zscale` needs
+	 * libzimg and LANcast runs whatever ffmpeg is on the machine (ADR 0016), so
+	 * it is not guaranteed. An unrecognised filter is not degraded output:
+	 * ffmpeg exits before the first frame, so a missing filter must cost a flat
+	 * picture and never a dead stream.
+	 *
+	 * CanTagSDR means `setparams` is present, which relabels frame colour
+	 * properties without converting anything. It is core libavfilter and needs
+	 * no external library, so it is available in builds where `zscale` is not.
+	 */
+	CanTonemap bool
+	CanTagSDR  bool
 }
+
+/*
+ * tonemapFilters converts HDR to SDR on the CPU (ADR 0033).
+ *
+ * Read as a pipeline: to linear light, to a float format with the headroom to
+ * be scaled in, to BT.709 primaries, tone map, back to a BT.709 transfer with
+ * BT.709 matrix and TV range, and finally to the 8-bit 4:2:0 the encoder wants.
+ *
+ * `hable` is the operator the ADR chose and is not configurable: it preserves
+ * midtone contrast, which is where faces are. `desat=0` turns off the filter's
+ * default highlight desaturation — the complaint that opened ADR 0033 was a
+ * washed-out picture measured at 3.7x saturation loss, and desaturating on
+ * purpose on the way out would give some of that back.
+ *
+ * `npl=100` is the nominal peak luminance of the SDR target, in nits.
+ *
+ * CPU rather than GPU because there is no `tonemap_cuda` in stock ffmpeg, and
+ * because nothing here decodes on the GPU anyway: frames are already in system
+ * memory (see EncoderArgs), so this is a plain filter insertion rather than the
+ * download ADR 0033 warned it might cost.
+ */
+var tonemapFilters = []string{
+	"zscale=t=linear:npl=100",
+	"format=gbrpf32le",
+	"zscale=p=bt709",
+	"tonemap=hable:desat=0",
+	"zscale=t=bt709:m=bt709:r=tv",
+	"format=yuv420p",
+}
+
+/*
+ * sdrTags state the output's colour, and are the half of ADR 0033 that must
+ * never regress with the other.
+ *
+ * ffmpeg copies the source's colour metadata to the output by default, so
+ * without these an 8-bit H.264 file goes out claiming `smpte2084`/`bt2020` —
+ * asserting a transfer function its contents do not have. A client that ignores
+ * the tags renders it flat; one that honours them applies a PQ curve to values
+ * that were never PQ-encoded. That inconsistency is what makes the bug
+ * irreproducible across displays.
+ */
+var sdrTags = []string{
+	"-colorspace", "bt709",
+	"-color_primaries", "bt709",
+	"-color_trc", "bt709",
+}
+
+/*
+ * sdrRelabel forces the frame colour properties to BT.709 without converting a
+ * pixel, and it is required for sdrTags to actually work.
+ *
+ * Measured, because the flags alone are not enough: x264 writes its VUI from the
+ * *frame* properties it is handed, which the decoder set from the source, and
+ * `-color_trc`/`-color_primaries` do not override them. Running LANcast's own
+ * arguments against a real HDR10 clip:
+ *
+ *	tonemapped:        bt709     / bt709     / bt709      ← zscale rewrote them
+ *	tags only:         bt709     / smpte2084 / bt2020     ← hybrid
+ *	untouched (today): bt2020nc  / smpte2084 / bt2020
+ *
+ * The middle row is the trap. It is not "tagged honestly" — it is a file whose
+ * matrix and transfer disagree, which is worse than either consistent state and
+ * is precisely the differently-wrong-per-display bug ADR 0033 was written to
+ * remove. So on a build that cannot tone map, the labels are only rewritten
+ * where they can be rewritten *consistently*; where they cannot, the output is
+ * left exactly as it is today rather than made incoherent.
+ *
+ * Relabelling without converting is still a claim about pixels that were never
+ * converted. It is the better claim: every client then renders the picture the
+ * same flat way, where the hybrid renders differently on each. A consistently
+ * disappointing picture is a quality complaint; an incoherent file is a bug
+ * report nobody can reproduce.
+ */
+const sdrRelabel = "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709"
 
 // withDefaults fills in the values most callers do not care about.
 func (o Options) withDefaults() Options {
@@ -184,6 +278,20 @@ func Args(o Options) []string {
 		// level stated or it defaults to something browsers refuse.
 		a = append(a, o.Encoder.EncoderArgs(o.CRF)...)
 
+		/*
+		 * The video filter chain: one -vf, built from every filter this job
+		 * needs.
+		 *
+		 * ffmpeg takes the *last* -vf and silently discards the others, so
+		 * these must compose into a single flag. Two flags would not stack —
+		 * the second would replace the first, and a quality ceiling would stop
+		 * being honoured with nothing in the output to say why.
+		 *
+		 * Scale before tone map: tone mapping is per-pixel work, so doing it
+		 * after the downscale is the same conversion on fewer pixels.
+		 */
+		var filters []string
+
 		// The quality ceiling, if the decision carries one.
 		//
 		// -2 rather than -1 on the width: the height is fixed and the width is
@@ -192,8 +300,38 @@ func Args(o Options) []string {
 		// ordinary aspect ratios, where the encoder does not round — it exits.
 		// -2 asks for the same computation constrained to a multiple of two.
 		if o.Decision.TargetHeight > 0 {
-			a = append(a, "-vf",
+			filters = append(filters,
 				fmt.Sprintf("scale=-2:%d", o.Decision.TargetHeight))
+		}
+		/*
+		 * HDR to SDR, in whichever of the three states this build allows.
+		 *
+		 * Convert if the filters exist. Otherwise relabel, so the output is at
+		 * least coherent about what it is. Otherwise leave it alone: the tags
+		 * cannot be made consistent without touching the frame properties, and
+		 * a half-relabelled file is worse than the one that ships today. See
+		 * sdrRelabel for the measurements.
+		 */
+		colourFixed := false
+		switch {
+		case !o.Decision.TonemapHDR:
+			// Not HDR. Its colour metadata is already right; rewriting it would
+			// be inventing a conversion that did not happen.
+		case o.CanTonemap:
+			filters = append(filters, tonemapFilters...)
+			colourFixed = true
+		case o.CanTagSDR:
+			filters = append(filters, sdrRelabel)
+			colourFixed = true
+		}
+
+		if len(filters) > 0 {
+			a = append(a, "-vf", strings.Join(filters, ","))
+		}
+		// Asserted separately from the filter chain, because the two halves of
+		// ADR 0033 must not be able to regress together.
+		if colourFixed {
+			a = append(a, sdrTags...)
 		}
 		// A ceiling, not a target: -maxrate with -bufsize is rate *limiting* on
 		// top of the quality-based encode above, so a scene that compresses well

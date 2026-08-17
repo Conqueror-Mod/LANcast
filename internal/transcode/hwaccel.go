@@ -171,3 +171,81 @@ func SelectEncoder(available []Encoder, preference string, log *slog.Logger) Enc
 		return Software
 	}
 }
+
+/*
+ * ColourCaps is what an ffmpeg build can do about HDR (ADR 0033).
+ *
+ * Two capabilities rather than one, because they fail independently and the
+ * fallback matters. Tonemap needs `zscale` (libzimg) and `tonemap`, neither
+ * guaranteed in a build LANcast did not choose (ADR 0016). TagSDR needs only
+ * `setparams`, which is core libavfilter — so the relabel path survives in
+ * builds where the conversion does not.
+ */
+type ColourCaps struct {
+	// Tonemap: the full HDR-to-SDR conversion can run.
+	Tonemap bool
+	// TagSDR: frame colour properties can be relabelled without converting.
+	// Required for the output tags to be coherent — see sdrRelabel.
+	TagSDR bool
+}
+
+/*
+ * DetectColourCaps probes what this ffmpeg can do about HDR.
+ *
+ * A filter listing is enough here, unlike the encoder probe above. That one
+ * runs a real test encode because ffmpeg advertises encoders the machine cannot
+ * run — h264_nvenc is listed with no NVIDIA card present and fails at playback
+ * time. A filter has no hardware behind it to be absent, so being listed and
+ * being usable are the same thing.
+ */
+func DetectColourCaps(ctx context.Context, bin string, log *slog.Logger) ColourCaps {
+	if bin == "" {
+		return ColourCaps{}
+	}
+	filters := listFilters(ctx, bin)
+	caps := ColourCaps{
+		Tonemap: filters["tonemap"] && filters["zscale"],
+		TagSDR:  filters["setparams"],
+	}
+
+	// Worth saying once at startup rather than leaving someone to wonder why HDR
+	// still looks flat, and worth distinguishing the two degraded states: one
+	// ships a coherent SDR file, the other cannot and leaves the output as it
+	// has always been.
+	switch {
+	case caps.Tonemap:
+	case caps.TagSDR:
+		log.Info("hdr tonemapping unavailable; HDR output will be labelled SDR but not converted",
+			"zscale", filters["zscale"], "tonemap", filters["tonemap"])
+	default:
+		log.Warn("this ffmpeg can neither tone map nor relabel HDR; HDR output keeps the source's colour tags",
+			"zscale", filters["zscale"], "tonemap", filters["tonemap"],
+			"setparams", filters["setparams"])
+	}
+	return caps
+}
+
+// listFilters returns the filter names this ffmpeg advertises.
+//
+// `-filters` prints a flags column first, so the name is the second field —
+// the same shape as `-encoders`, and parsed the same way.
+func listFilters(ctx context.Context, bin string) map[string]bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, bin, "-hide_banner", "-filters")
+	childproc.Hide(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	found := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			found[fields[1]] = true
+		}
+	}
+	return found
+}

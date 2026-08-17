@@ -1060,6 +1060,19 @@ They are what the re-encode will come in under. A copy carries neither: nothing
 re-encodes, so no ceiling reached a pixel, and reporting one would have a client
 believe a cap applied that did not.
 
+`tonemap_hdr` is present and `true` when the source is HDR — PQ or HLG by its
+transfer function — and the re-encode will convert it to SDR (ADR 0033). Like
+the targets above it appears only on `video_action: "encode"`: a copy delivers
+the source's own video bytes, which are HDR and are correctly described as such,
+so there is nothing to convert and nothing to re-label.
+
+A client should not read this as "the output is HDR". It means the opposite: the
+delivered stream is BT.709 SDR and is tagged as BT.709 throughout. Whether the
+conversion itself runs depends on the ffmpeg build on the server — the CPU
+tonemap needs `zscale`, which is not present in every build — and a server that
+cannot convert still labels the output consistently rather than emitting a file
+whose colour tags disagree with each other.
+
 Takes the same `?profile=`, `?audio=`, `?max_height=` and `?max_bitrate=`
 parameters as the stream endpoints, and echoes the resolved profile back. Call
 it with the parameters you intend to stream with: an explanation of a decision
