@@ -211,6 +211,51 @@ func TestNewItemsDefaultToUnmatched(t *testing.T) {
 	}
 }
 
+/*
+ * A season is not something a person can fix.
+ *
+ * Its name is "Season 1" — a position within a show, not the name of a work —
+ * so a provider search for it fails at 0%, on every season in the library, for
+ * ever. A real TV library listed 55 of them, each with a Fix button leading to
+ * a search that cannot succeed. A queue asking for 55 decisions that do not
+ * exist is worse than one honest about having fewer.
+ *
+ * Shows stay: a show's title is a real title, a wrong match on one is worth
+ * correcting, and a person can actually do it — which is the test for belonging
+ * in this queue.
+ */
+func TestSeasonsAreNotOfferedForReview(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	season := mkItem(t, st, lib.ID, "season", `C:\tv\Show\Season 1`, "Season 1")
+	show := mkItem(t, st, lib.ID, "show", `C:\tv\Show`, "Some Show")
+	episode := mkItem(t, st, lib.ID, "episode", `C:\tv\Show\Season 1\e1.mkv`, "Pilot")
+
+	for _, id := range []int64{season, show, episode} {
+		st.SetMatch(ctx, id, "tmdb", "", "unmatched", 0)
+		if err := st.UpdateItemMetadata(ctx, id, ItemMetadata{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	queue, err := st.ReviewQueue(ctx, lib.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(queue)
+	if got[season] {
+		t.Error("a season was offered for review — there is no match for it to have")
+	}
+	if !got[show] {
+		t.Error("a show was withheld — its title is real and a wrong match is worth fixing")
+	}
+	if !got[episode] {
+		t.Error("an episode was withheld from the review queue")
+	}
+}
+
 // A freshly scanned library must not report every title as needing review.
 // Nothing has looked at them yet, and "not attempted" is not "no match found".
 func TestUnenrichedItemsAreNotInReviewQueue(t *testing.T) {

@@ -460,6 +460,27 @@ func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, er
 	return changed, nil
 }
 
+/*
+ * notReviewable excludes seasons from the review queue.
+ *
+ * A season has no identity of its own. Its name is "Season 1" — a position
+ * within a show, not the name of a work — so searching a provider for it can
+ * only ever fail, and it fails at 0% on every season in the library. A real TV
+ * library reported 55 of them, each offering a Fix button leading to a search
+ * that cannot succeed and a human decision that does not exist.
+ *
+ * `meta.Caps.Supports` routes KindSeason to the show providers, which is why
+ * these reach a provider at all rather than being skipped as unsupported. That
+ * routing is right for *fetching* a known season, and wrong for searching one
+ * by name — but the queue is where the cost lands on a person, so this is where
+ * it is stopped.
+ *
+ * Shows are deliberately still listed. A show's title is a real title, a wrong
+ * match on one is worth correcting, and a person can do it — which is the test
+ * for belonging here.
+ */
+const notReviewable = `kind != 'season'`
+
 // ReviewQueue returns items whose identity is uncertain. Applying a
 // low-confidence match is a good default, but it is recorded as uncertain
 // rather than presented as fact.
@@ -475,7 +496,7 @@ func (s *Store) ReviewQueue(ctx context.Context, libraryID int64, limit int) ([]
 	}
 	args := []any{}
 	where := ` WHERE match_state IN ('review','unmatched') AND missing = 0
-		AND metadata_updated_at IS NOT NULL`
+		AND metadata_updated_at IS NOT NULL AND ` + notReviewable
 	if libraryID != 0 {
 		where += ` AND library_id = ?`
 		args = append(args, libraryID)

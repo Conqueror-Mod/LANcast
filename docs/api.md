@@ -2084,6 +2084,13 @@ the films it listed yesterday, which is why scanning is opt-in and this is not.
 The review queue: items in `review` or `unmatched` state, with the parsed
 filename alongside the proposed match so the two can be compared directly.
 
+**Seasons are excluded.** A season has no identity of its own — its name is
+"Season 1", a position within a show rather than the name of a work — so a
+provider search for it fails at 0% on every season in the library, for ever. A
+real TV library listed 55 of them, each offering a Fix button leading to a
+search that cannot succeed. Shows are still listed: a show's title is a real
+title, and a wrong match on one is worth correcting.
+
 ### `POST /api/items/{id}/refresh` · `POST /api/libraries/{id}/refresh`
 
 Re-fetch metadata, honoring all field locks. Returns `202`.
