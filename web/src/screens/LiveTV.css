@@ -330,3 +330,14 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* Shown only while a channel is building its head start. Neutral rather than an
+   error colour: waiting is the normal opening state of a live stream, not a
+   fault, and colouring it as one would train the eye to ignore real faults. */
+.livetv__buffering {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--space-raised);
+}
