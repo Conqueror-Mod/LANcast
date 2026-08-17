@@ -8,6 +8,14 @@
   max-width: 62ch;
 }
 
+/* The shared empty state is padded for a grid, where it stands alone on an
+   otherwise empty screen. Here it follows a paragraph, so that padding becomes a
+   gap between two sentences that belong together. */
+.downloads__empty {
+  padding-top: 0;
+  max-width: 62ch;
+}
+
 .downloads__list {
   display: flex;
   flex-direction: column;

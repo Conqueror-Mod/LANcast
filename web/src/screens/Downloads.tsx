@@ -36,14 +36,25 @@ export function Downloads() {
         the transfer.
       </p>
 
+      {/*
+        The empty state sits with the note above it rather than floating in the
+        middle of the page. `browse__message` carries 40px of vertical padding,
+        which is right in a grid where it stands alone on an otherwise empty
+        screen and wrong here, directly beneath a paragraph that is already
+        saying something — the two together read as one explanation with a hole
+        punched through it.
+      */}
       {list.length === 0 && (
-        <p className="browse__message">
+        <p className="browse__message downloads__empty">
           Nothing yet. Any film, episode or track has a <strong>Download</strong>{" "}
           button on its page, which hands you the original file — never a
           re-encoded copy.
         </p>
       )}
 
+      {/* Rendered only when it holds something: an empty list still carries its
+          own padding, which is invisible dead space under the empty state. */}
+      {list.length > 0 && (
       <div className="downloads__list">
         {list.map((r) => (
           <div className="downloads__row" key={r.itemId}>
@@ -73,6 +84,7 @@ export function Downloads() {
           </div>
         ))}
       </div>
+      )}
 
       {list.length > 0 && (
         <button className="downloads__clear" onClick={clear}>
