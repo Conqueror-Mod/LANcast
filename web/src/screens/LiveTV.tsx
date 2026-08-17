@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
+import { bufferedAhead, shouldStartPlayback } from "@/lib/preroll";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -68,9 +69,43 @@ export function LiveTV() {
   const guide = useGuide();
   const [playing, setPlaying] = useState<Channel | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
+  const [buffering, setBuffering] = useState(false);
   const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  /*
+   * Hold playback until there is a head start.
+   *
+   * Polled rather than driven by `progress` events: those fire on the source's
+   * schedule, and the source here goes silent for seconds at a time — which is
+   * exactly when the deadline needs to be able to fire. A quarter-second timer
+   * is cheap and cannot be starved by the thing it is measuring.
+   */
+  useEffect(() => {
+    if (!playing) {
+      setBuffering(false);
+      return;
+    }
+    setBuffering(true);
+    const startedAt = Date.now();
+    let started = false;
+
+    const id = window.setInterval(() => {
+      const el = videoRef.current;
+      if (!el || started) return;
+      if (!shouldStartPlayback(bufferedAhead(el), Date.now() - startedAt)) return;
+
+      started = true;
+      setBuffering(false);
+      // A rejection is left alone: a browser refusing autoplay is a policy
+      // decision, and the controls are right there.
+      void el.play().catch(() => {});
+      window.clearInterval(id);
+    }, 250);
+
+    return () => window.clearInterval(id);
+  }, [playing]);
 
   const channels = useMemo(() => data?.channels ?? [], [data]);
   const nowNext = guide.data?.channels ?? {};
@@ -142,7 +177,18 @@ export function LiveTV() {
              * nearly every channel is already H.264 and AAC.
              */
             src={`/api/channels/${playing.id}/live`}
-            autoPlay
+            /*
+             * No `autoPlay`, and no play() on `canplay`.
+             *
+             * `canplay` fires at HAVE_FUTURE_DATA, which on a bursty live source
+             * means only "the first burst arrived" — so playback began with
+             * under a second in hand and ran dry at the next silence. A real
+             * source measured five-second gaps between bursts (see
+             * lib/preroll.ts), which is HLS segment pacing arriving verbatim.
+             *
+             * The effect below waits for a head start instead.
+             */
+            preload="auto"
             controls
             playsInline
             /*
@@ -164,23 +210,12 @@ export function LiveTV() {
               )
             }
             onLoadedData={() => setPlayError(null)}
-            /*
-             * Start it, rather than trusting `autoplay`.
-             *
-             * The attribute alone loses a race here: the element is mounted
-             * with a src that produces nothing until ffmpeg has muxed its first
-             * fragment, and by the time data arrives the autoplay moment has
-             * passed — the picture appears, paused, on a channel somebody just
-             * chose. Calling play() when it is playable takes the click that
-             * selected the channel as the gesture that started it.
-             *
-             * A rejection is left alone: a browser refusing autoplay is a
-             * policy decision, and the controls are right there.
-             */
-            onCanPlay={(e) => {
-              void e.currentTarget.play().catch(() => {});
-            }}
           />
+          {buffering && (
+            <p className="livetv__buffering" role="status">
+              Buffering…
+            </p>
+          )}
           {playError && (
             <p className="livetv__error" role="alert">
               {playError}
