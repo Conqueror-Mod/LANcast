@@ -308,6 +308,19 @@ group is not priority.
 
 ### Pages and navigation
 
+- **Organising a large channel list** — designed, not built:
+  [ADR 0039](adr/0039-organising-a-large-channel-list.md). A real server now
+  carries **1,862 channels from one provider** with a second playlist beside it,
+  merged onto one page with no way to ask for one and not the other; the ~60
+  group chips wrap to five rows before a single channel is visible, so the
+  filter row is taller than what it filters. Four changes in cost order: a
+  `source_id` filter on `/api/channels` with a selector that appears only when a
+  second playlist exists, groups that open rather than filter, per-device hidden
+  and favourite channels, and a guide-first grid **deferred** — ADR 0036 already
+  refused the grid for the schedule strip, and it would render 1,862 rows of "no
+  listings" while no provider in use publishes XMLTV. Virtualising the tiles is
+  named and rejected: the ask is not to be shown 1,862 tiles, not to scroll them
+  faster.
 - ~~**More branded, thematic home page** — beyond functional shelves.~~ —
   **built**: a masthead that greets by name and by local hour, states the size
   of the collection, and puts the libraries in reach as destinations with their
