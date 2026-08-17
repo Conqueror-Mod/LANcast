@@ -33,7 +33,7 @@ type ReparseResult struct {
 
 // ReparseStore is the persistence surface a re-parse needs.
 type ReparseStore interface {
-	ReparseTargets(ctx context.Context, libraryID int64) ([]store.ReparseTarget, error)
+	ReparseTargets(ctx context.Context, libraryID int64, force bool) ([]store.ReparseTarget, error)
 	ApplyGuess(ctx context.Context, itemID int64, g store.Guess) (bool, error)
 }
 
@@ -50,9 +50,14 @@ type ReparseStore interface {
  * A failure on one row does not stop the run. The rows are independent, and an
  * operator who asked to repair a library is worse served by a run that stops at
  * the first odd path than by one that fixes the rest and says how many.
+ *
+ * force re-offers rows that have already been re-parsed. The default excludes
+ * them, which is what makes a second run free: enrichment writes the provider's
+ * answer back over the guess for anything still uncertain, so without the stamp
+ * every run would rewrite the same rows and re-ask the same question.
  */
-func Reparse(ctx context.Context, st ReparseStore, libraryID int64) (ReparseResult, error) {
-	targets, err := st.ReparseTargets(ctx, libraryID)
+func Reparse(ctx context.Context, st ReparseStore, libraryID int64, force bool) (ReparseResult, error) {
+	targets, err := st.ReparseTargets(ctx, libraryID, force)
 	if err != nil {
 		return ReparseResult{}, fmt.Errorf("reparse: %w", err)
 	}

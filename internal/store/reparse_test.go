@@ -133,6 +133,76 @@ func TestApplyGuessIsIdempotent(t *testing.T) {
 }
 
 /*
+ * The regression this exists for, found by running the action against a real
+ * library rather than by reading it.
+ *
+ * Enrichment writes the provider's answer back over the guess for any row that
+ * stays uncertain. Comparing the guess against the *current* title therefore
+ * cannot tell a row that was never re-parsed from one re-parsed a minute ago —
+ * it disagrees with the filename either way — so every run rewrote the same
+ * rows and asked the provider the same question again. Thirty-two rows flipped
+ * back and forth on every press.
+ *
+ * A re-parsed row is stamped and not offered again, whether or not it changed.
+ */
+func TestAReParsedRowIsNotOfferedAgain(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `X:\Aliens SE (1986)\Aliens SE.mp4`)
+	review(t, st, id, "Alien Sexting", 2020)
+
+	if _, err := st.ApplyGuess(ctx, id, Guess{Title: "Aliens", SortTitle: "aliens", Year: 1986}); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := st.ReparseTargets(ctx, lib.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 0 {
+		t.Errorf("targets = %d after a re-parse, want 0", len(targets))
+	}
+
+	// Enrichment writes the provider's answer back. The row still must not be
+	// re-offered — this is precisely the state that used to look identical to
+	// "never re-parsed".
+	back := "Alien Sexting"
+	if err := st.UpdateItemMetadata(ctx, id, ItemMetadata{Title: &back}); err != nil {
+		t.Fatal(err)
+	}
+	targets, _ = st.ReparseTargets(ctx, lib.ID, false)
+	if len(targets) != 0 {
+		t.Errorf("targets = %d after enrichment wrote back, want 0 — the ping-pong is back", len(targets))
+	}
+
+	// force is the escape hatch for the one thing the stamp cannot see: the
+	// parser itself improving.
+	targets, _ = st.ReparseTargets(ctx, lib.ID, true)
+	if len(targets) != 1 {
+		t.Errorf("forced targets = %d, want 1", len(targets))
+	}
+}
+
+// A row the parser already agrees with is stamped too. Leaving it unstamped
+// would re-examine it on every run for ever.
+func TestAnUnchangedRowIsStillStamped(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `X:\Dredd (2012)\Dredd.mkv`)
+	review(t, st, id, "Dredd", 2012)
+
+	if _, err := st.ApplyGuess(ctx, id, Guess{Title: "Dredd", SortTitle: "dredd", Year: 2012}); err != nil {
+		t.Fatal(err)
+	}
+	targets, _ := st.ReparseTargets(ctx, lib.ID, false)
+	if len(targets) != 0 {
+		t.Errorf("targets = %d, want 0 — an unchanged row was left unstamped", len(targets))
+	}
+}
+
+/*
  * Scope is the safety of the whole operation. A matched row's title came from a
  * provider, which is better evidence than any filename — offering it to a
  * re-parse would trade a thousand correct titles for a chance at a hundred
@@ -159,7 +229,7 @@ func TestReparseTargetsOnlyOffersUncertainRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	targets, err := st.ReparseTargets(ctx, lib.ID)
+	targets, err := st.ReparseTargets(ctx, lib.ID, false)
 	if err != nil {
 		t.Fatalf("ReparseTargets: %v", err)
 	}
