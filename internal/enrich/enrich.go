@@ -26,6 +26,7 @@ type Store interface {
 	PendingCount(ctx context.Context) (int, error)
 	GetLibrary(ctx context.Context, id int64) (*store.Library, error)
 	LockedFields(ctx context.Context, itemID int64) ([]string, error)
+	ParentIdentity(ctx context.Context, itemID int64) (provider, externalID string, ok bool, err error)
 	UpdateItemMetadata(ctx context.Context, itemID int64, m store.ItemMetadata) error
 	SaveRatings(ctx context.Context, itemID int64, ratings []store.ItemRating) error
 	ReplaceGenres(ctx context.Context, itemID int64, names []string) error
@@ -343,9 +344,13 @@ func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, ex
 		return fmt.Errorf("unknown provider %q", providerID)
 	}
 	ref := meta.Ref{Kind: matchKind, ExternalID: externalID}
-	if matchKind == meta.KindEpisode {
+	switch matchKind {
+	case meta.KindEpisode:
 		ref.Season = derefInt(item.Season)
 		ref.Episode = derefInt(item.Episode)
+	case meta.KindSeason:
+		// The chosen id is a show's; the season number selects within it.
+		ref.Season = derefInt(item.Season)
 	}
 	rec, err := provider.Fetch(ctx, ref)
 	if err != nil {
@@ -397,6 +402,16 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		if merged.Fields.Series != nil && *merged.Fields.Series != "" {
 			s = media.SortTitle(*merged.Fields.Series)
 		}
+		upd.SortTitle = &s
+	}
+	// A season sorts by its number, not by its name.
+	//
+	// The default listing order leads with sort_title, and a season's name is
+	// "Season 10" — which sorts before "Season 2" as text. Zero-padding is not a
+	// title-normalization opinion competing with internal/media (CLAUDE.md); it
+	// is a numeric key for a row whose name *is* a number.
+	if kind == meta.KindSeason && item.Season != nil && !lockedSet[meta.FieldSortTitle] {
+		s := fmt.Sprintf("season %03d", *item.Season)
 		upd.SortTitle = &s
 	}
 	if merged.ExternalID != "" {
@@ -487,6 +502,11 @@ func (w *Worker) fetchRemote(ctx context.Context, item store.Item, kind meta.Kin
 		return nil, 0, ""
 	}
 
+	// A season is resolved from its show, never searched for by name.
+	if kind == meta.KindSeason {
+		return w.fetchSeason(ctx, item)
+	}
+
 	q := meta.Query{
 		Kind:  kind,
 		Title: item.Title,
@@ -538,6 +558,62 @@ func (w *Worker) fetchRemote(ctx context.Context, item store.Item, kind meta.Kin
 		return nil, best.Score, state
 	}
 	return []meta.Record{*rec}, best.Score, state
+}
+
+// fetchSeason resolves a season through the show that owns it.
+//
+// A season has no identity of its own. Its name is "Season 2" — a position,
+// not the name of a work — so a name search cannot succeed, and when it does
+// appear to succeed it has found a real show that merely has that phrase in its
+// title. Those hits normalize to an exact title match and clear the auto-apply
+// threshold, and because the query depends only on the season number the *same*
+// wrong show wins for every show in the library. That is precisely how season 2
+// of nine unrelated series came to share one poster.
+//
+// So the season number is looked up exactly against the parent's id rather than
+// scored. There is nothing to be uncertain about: either the show is matched and
+// the season is that show's season n, or the show is not and the season stays
+// unmatched until it is. It is never sent to the review queue, which is the
+// other half of the rule store.notReviewable already states.
+func (w *Worker) fetchSeason(ctx context.Context, item store.Item) ([]meta.Record, float64, string) {
+	if item.Season == nil {
+		return nil, 0, meta.StateUnmatched
+	}
+
+	providerID, externalID, ok, err := w.st.ParentIdentity(ctx, item.ID)
+	if err != nil {
+		w.log.Debug("season parent lookup failed", "item", item.ID, "error", err)
+		return nil, 0, ""
+	}
+	if !ok {
+		// The show is not matched yet. Leave the season pending rather than
+		// recording a verdict, so enriching the show later brings its seasons
+		// along instead of stranding them at "unmatched" for ever.
+		return nil, 0, ""
+	}
+
+	provider, found := w.reg.Provider(providerID)
+	if !found {
+		return nil, 0, ""
+	}
+
+	rec, err := provider.Fetch(ctx, meta.Ref{
+		Kind:       meta.KindSeason,
+		ExternalID: externalID,
+		Season:     *item.Season,
+	})
+	if err != nil || rec == nil {
+		if err != nil {
+			w.log.Debug("season fetch failed", "item", item.ID, "error", err)
+			return nil, 0, ""
+		}
+		// The show is matched and has no such season — the numbering is wrong,
+		// which is a real answer and not a provider failure.
+		return nil, 0, meta.StateUnmatched
+	}
+	// Confidence is not a scale here: the show's id was already established and
+	// the season number is an exact lookup, so this is as matched as it gets.
+	return []meta.Record{*rec}, 1, meta.StateMatched
 }
 
 // ingestCollection links an item into the franchise or series a provider says

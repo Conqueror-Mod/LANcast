@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 25
+const CurrentSchemaVersion = 26
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -64,6 +64,7 @@ var migrations = []migration{
 	{version: 23, sql: schemaRevision23},
 	{version: 24, sql: schemaRevision24},
 	{version: 25, sql: schemaRevision25},
+	{version: 26, sql: schemaRevision26},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -863,4 +864,66 @@ CREATE INDEX IF NOT EXISTS idx_epg_window  ON epg_program(start_at);
  */
 const schemaRevision25 = `
 ALTER TABLE media_item ADD COLUMN reparsed_at INTEGER;
+`
+
+/*
+ * Revision 26 undoes the seasons that were matched by name.
+ *
+ * Until this revision a season was searched for like any other item, using its
+ * own title — which is "Season 2", a position inside a show and not the name of
+ * a work. TMDB answers such a query with real shows that happen to carry the
+ * phrase in their title; those normalize to an exact title match, clear the
+ * 0.85 auto-apply threshold, and are written over the season: title, year,
+ * overview, poster and fanart. Because the query depends only on the season
+ * number, the same wrong show won for every show in the library — one Thai
+ * drama became the poster for season 2 of nine unrelated series.
+ *
+ * The search is gone (see tmdb.Search and enrich.fetchSeason), but the rows it
+ * wrote are still in the database and nothing would revisit them: they are
+ * stamped matched, so they are not pending, and seasons are excluded from the
+ * review queue, so no human is offered them either. They would sit there
+ * looking correct for ever.
+ *
+ * So the provider verdict is stripped and metadata_updated_at cleared, which is
+ * what puts a row back in the enrichment queue to be resolved properly from its
+ * parent show. Locked fields are left alone — a season a person has edited is
+ * their decision, and a cleanup is still a rescan-class event, which does not
+ * re-litigate decisions.
+ *
+ * The title is reset to "Season N" rather than recovered from the folder name.
+ * The folder name is not the season's title — "S02 480p Bluray" never was — and
+ * rebuilding it here would put filename guessing in a SQL string, which is
+ * exactly what internal/media exists to prevent (CLAUDE.md). "Season N" is what
+ * the row actually is, and the re-enrichment that follows replaces it with the
+ * provider's own name for that season.
+ *
+ * The season number itself is the scanner's, not the provider's, and was never
+ * wrong — so it is what the reset title is built from.
+ */
+const schemaRevision26 = `
+DELETE FROM item_artwork
+WHERE item_id IN (
+  SELECT id FROM media_item
+  WHERE kind = 'season'
+    AND provider IS NOT NULL
+    AND id NOT IN (SELECT item_id FROM item_lock WHERE field = 'artwork')
+);
+
+UPDATE media_item
+SET title = 'Season ' || season,
+    sort_title = printf('season %03d', season),
+    year = NULL,
+    overview = NULL,
+    rating = NULL,
+    released_at = NULL,
+    imdb_id = NULL,
+    series = NULL,
+    provider = NULL,
+    external_id = NULL,
+    match_state = 'unmatched',
+    match_score = 0,
+    metadata_updated_at = NULL
+WHERE kind = 'season'
+  AND provider IS NOT NULL
+  AND id NOT IN (SELECT item_id FROM item_lock);
 `

@@ -285,6 +285,67 @@ func TestFetchEpisode(t *testing.T) {
 	}
 }
 
+func TestFetchSeasonUsesTheShowID(t *testing.T) {
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tv/31497/season/2" {
+			t.Errorf("path = %q, want the exact season path", r.URL.Path)
+		}
+		w.Write([]byte(`{"name":"Season 2","overview":"The second season.","air_date":"2010-09-16","vote_average":7.4,"poster_path":"/s2.jpg"}`))
+	})
+
+	rec, err := newClient(t, srv).Fetch(context.Background(),
+		meta.Ref{Kind: meta.KindSeason, ExternalID: "31497", Season: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Kind != meta.KindSeason {
+		t.Errorf("Kind = %q, want season", rec.Kind)
+	}
+	if *rec.Fields.Title != "Season 2" {
+		t.Errorf("Title = %q, want the season's own name", *rec.Fields.Title)
+	}
+	if *rec.Fields.Season != 2 {
+		t.Errorf("Season = %d, want 2", *rec.Fields.Season)
+	}
+	// The season's poster, not the show's, and no fanart of its own.
+	if len(rec.Artwork) != 1 || rec.Artwork[0].Kind != meta.ArtPoster {
+		t.Fatalf("Artwork = %+v, want exactly one poster", rec.Artwork)
+	}
+	// A season is a position inside a show. Claiming the show's name as this
+	// row's series is what let a season masquerade as its parent in a grid.
+	if rec.Fields.Series != nil {
+		t.Errorf("Series = %q, want nothing", *rec.Fields.Series)
+	}
+}
+
+// A season's name is a position, not a title. Searching for one returns real
+// shows that merely contain "Season 2" in their names, and those score as exact
+// title matches — which is how one Thai drama became the poster for season 2 of
+// nine unrelated series. The query must never leave the process.
+func TestSeasonIsNeverSearchedByName(t *testing.T) {
+	var called int32
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&called, 1)
+		w.Write([]byte(`{"results":[]}`))
+	})
+
+	for _, q := range []meta.Query{
+		{Kind: meta.KindSeason, Title: "Season 2", Season: 2},
+		{Kind: meta.KindSeason, Title: "The League S02", Series: "The League", Season: 2},
+	} {
+		cands, err := newClient(t, srv).Search(context.Background(), q)
+		if err != nil {
+			t.Fatalf("Search(%+v): %v", q, err)
+		}
+		if len(cands) != 0 {
+			t.Errorf("Search(%+v) returned %d candidates, want none", q, len(cands))
+		}
+	}
+	if n := atomic.LoadInt32(&called); n != 0 {
+		t.Errorf("provider was called %d times for a season search, want 0", n)
+	}
+}
+
 // LANcast must be fully usable with no key. An unconfigured provider reports
 // that fact rather than producing an error to show the user.
 func TestUnconfiguredClient(t *testing.T) {
