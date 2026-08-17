@@ -34,6 +34,7 @@ import type {
   Role,
   ProbeStatus,
   ReprobeResult,
+  ReparseResult,
   ScanStatus,
   ServerLog,
   UpdateStatus,
@@ -329,6 +330,31 @@ export function useRefreshLibrary() {
   return useMutation({
     mutationFn: (libraryID: number) =>
       apiSend(`/api/libraries/${libraryID}/refresh`, "POST"),
+  });
+}
+
+/*
+ * Re-parse is not refresh, and the button says so because the difference is not
+ * obvious from either name: refresh asks the provider the same question again,
+ * where this corrects the question from the filename first.
+ *
+ * It answers with counts rather than 202, so the caller can say what happened —
+ * "98 of 160 re-parsed" is the only feedback distinguishing a run that fixed a
+ * library from one that found nothing to do. Both look identical otherwise.
+ *
+ * The review queue is invalidated on success: requeued rows leave it as
+ * enrichment resolves them, and a stale count is the one number a person
+ * pressed this button to change.
+ */
+export function useReparseLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (libraryID: number) =>
+      apiPost<ReparseResult>(`/api/libraries/${libraryID}/reparse`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["review"] });
+      qc.invalidateQueries({ queryKey: ["libraries"] });
+    },
   });
 }
 

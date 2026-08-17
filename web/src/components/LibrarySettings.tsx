@@ -22,6 +22,7 @@ import {
   useScanStatus,
   useStartScan,
   useRefreshLibrary,
+  useReparseLibrary,
   useDeleteLibrary,
   useUpdateLibrary,
   useCreateLibrary,
@@ -31,7 +32,7 @@ import {
 } from "@/api/hooks";
 import { LIBRARY_KINDS, kindLabel } from "@/screens/libraryConfig";
 import { DirectoryPicker } from "./DirectoryPicker";
-import type { Library, LibraryRoot } from "@/api/types";
+import type { Library, LibraryRoot, ReparseResult } from "@/api/types";
 import "./LibrarySettings.css";
 
 function whenScanned(ts: number | null): string {
@@ -39,10 +40,46 @@ function whenScanned(ts: number | null): string {
   return "scanned " + new Date(ts * 1000).toLocaleDateString();
 }
 
+/*
+ * What a re-parse did, in the three cases that are genuinely different.
+ *
+ * "0 changed" and "nothing left to examine" are the same sentence if only
+ * `changed` is reported, and they mean opposite things: the first says the
+ * filenames disagree with nothing, the second says every row has already been
+ * re-read. A button whose success state is indistinguishable from its no-op
+ * state is the failure this project keeps finding in its own UI.
+ */
+function ReparseOutcome({ result }: { result: ReparseResult }) {
+  if (result.examined === 0) {
+    return (
+      <p className="set-note">
+        Every item has already been re-read. Nothing to do.
+      </p>
+    );
+  }
+  if (result.changed === 0) {
+    return (
+      <p className="set-note">
+        Re-read {result.examined.toLocaleString()} uncertain{" "}
+        {result.examined === 1 ? "item" : "items"} — all already matched their
+        filenames.
+      </p>
+    );
+  }
+  return (
+    <p className="set-note">
+      Re-read {result.examined.toLocaleString()} uncertain{" "}
+      {result.examined === 1 ? "item" : "items"} and corrected{" "}
+      {result.changed.toLocaleString()}. Those are being matched again now.
+    </p>
+  );
+}
+
 export function LibraryRow({ library }: { library: Library }) {
   const { data: status } = useScanStatus(library.id);
   const scan = useStartScan();
   const refresh = useRefreshLibrary();
+  const reparse = useReparseLibrary();
   const del = useDeleteLibrary();
   const running = status?.state === "running";
   const [showIssues, setShowIssues] = useState(false);
@@ -188,6 +225,13 @@ export function LibraryRow({ library }: { library: Library }) {
           >
             Refresh metadata
           </button>
+          <button
+            className="set-btn"
+            disabled={running || reparse.isPending}
+            onClick={() => reparse.mutate(library.id)}
+          >
+            {reparse.isPending ? "Re-reading…" : "Re-read filenames"}
+          </button>
           {confirming ? (
             <>
               <span className="set-confirm">Remove?</span>
@@ -214,6 +258,12 @@ export function LibraryRow({ library }: { library: Library }) {
           )}
         </div>
       </div>
+      {reparse.isSuccess && <ReparseOutcome result={reparse.data} />}
+      {reparse.isError && (
+        <p className="set-error">
+          Could not re-read filenames: {(reparse.error as Error).message}
+        </p>
+      )}
       {editing && (
         <LibraryEditor
           library={library}

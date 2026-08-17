@@ -417,6 +417,17 @@ export interface ReprobeResult {
   queued: number;
 }
 
+/*
+ * What a re-parse did. Both numbers are needed to say anything useful: a run
+ * that examined 160 rows and changed 98 repaired a library, and one that
+ * examined 0 found nothing left to do. Reporting only `changed` makes those two
+ * outcomes read identically as "0".
+ */
+export interface ReparseResult {
+  examined: number;
+  changed: number;
+}
+
 // One thing the server is doing right now (GET /api/activity). Every worker —
 // scan, enrich, probe, coverart, transcode — reports this one shape, so the
 // activity panel renders a list rather than five special cases.
