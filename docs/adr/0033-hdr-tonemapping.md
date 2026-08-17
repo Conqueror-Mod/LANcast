@@ -1,6 +1,6 @@
 # ADR 0033 — HDR, and a file that lies about what it contains
 
-Date: 2026-08-13 · Status: accepted · Amended 2026-08-17 on implementation
+Date: 2026-08-13 · Status: accepted · shipped in v0.6.44 · Amended 2026-08-17 on implementation
 
 ## Context
 
