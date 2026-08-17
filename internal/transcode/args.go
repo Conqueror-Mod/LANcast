@@ -71,6 +71,30 @@ type Options struct {
 	 * progressive fMP4, and the two decisions do not belong in one field.
 	 */
 	Live bool
+
+	/*
+	 * HLSInput marks a live source that is an HLS playlist, which changes where
+	 * ffmpeg starts reading.
+	 *
+	 * The HLS demuxer defaults to `live_start_index -3`: three segments back
+	 * from the live edge. Those segments already exist, so ffmpeg fetches them
+	 * as fast as the server will serve them — and everything downstream
+	 * receives media faster than real time until the backlog is drained.
+	 *
+	 * Measured against a real channel, running LANcast's own arguments for
+	 * twenty seconds of wall clock:
+	 *
+	 *	default (-3):            29.97s of media   → 1.50x real time
+	 *	live_start_index -1:     19.97s of media   → 1.00x real time
+	 *
+	 * A separate flag rather than something inferred inside Args, because the
+	 * answer comes from the probe and Args is pure. And conditional rather than
+	 * unconditional because `-live_start_index` belongs to the HLS demuxer:
+	 * given a plain transport stream ffmpeg does not ignore it, it refuses the
+	 * input outright with "Option live_start_index not found" — turning a
+	 * working channel into a dead one.
+	 */
+	HLSInput bool
 }
 
 // withDefaults fills in the values most callers do not care about.
@@ -113,6 +137,12 @@ func Args(o Options) []string {
 
 	if o.Live {
 		a = append(a, liveInputArgs()...)
+		if o.HLSInput {
+			// Start one segment from the live edge rather than the default
+			// three, so there is no backlog to drain at full speed. See
+			// Options.HLSInput for the measurement.
+			a = append(a, "-live_start_index", "-1")
+		}
 	}
 
 	a = append(a, "-i", o.Input)

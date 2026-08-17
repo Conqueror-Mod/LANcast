@@ -62,11 +62,16 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	 * live source costs a connection and a few seconds, so it is bounded and a
 	 * failure falls through to copying rather than refusing.
 	 */
-	decision := transcode.LiveDecision(s.probeChannel(r, ch.URL), clientProfile(r), s.log)
+	probed := s.probeChannel(r, ch.URL)
+	decision := transcode.LiveDecision(probed, clientProfile(r), s.log)
 
 	stream, err := s.trans.Live(r.Context(), id, transcode.LiveOptions{
 		URL:      ch.URL,
 		Decision: decision,
+		// Where ffmpeg starts reading an HLS playlist. The probe is the only
+		// thing that knows the container, and an unprobed channel deliberately
+		// keeps the old behaviour rather than risking a refused input.
+		HLS: transcode.IsHLS(probed),
 	})
 	if err != nil {
 		switch {

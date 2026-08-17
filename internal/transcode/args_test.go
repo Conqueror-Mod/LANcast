@@ -438,3 +438,58 @@ func TestLiveEncodedAudioNeedsNoFilter(t *testing.T) {
 		t.Errorf("audio is not being encoded to AAC: %s", got)
 	}
 }
+
+/*
+ * An HLS live source starts at the live edge.
+ *
+ * The HLS demuxer defaults to three segments back, and those segments already
+ * exist — so ffmpeg fetches them as fast as the server serves them and
+ * everything downstream receives media faster than real time until the backlog
+ * drains. Measured on a real channel with LANcast's own arguments, over twenty
+ * seconds of wall clock: 29.97s of media produced (1.50x) by default, 19.97s
+ * (1.00x) with this flag.
+ */
+func TestHLSLiveStartsAtTheEdge(t *testing.T) {
+	got := Args(Options{
+		Input: "https://example.invalid/master.m3u8", Output: Progressive,
+		Live: true, HLSInput: true,
+		Decision: remuxDecision(),
+	})
+	if !hasArgPair(got, "-live_start_index", "-1") {
+		t.Errorf("no -live_start_index -1 for an HLS live source:\n%v", got)
+	}
+}
+
+/*
+ * And a live source that is not HLS must not get it.
+ *
+ * Not a tidiness point: `-live_start_index` belongs to the HLS demuxer, and
+ * against a plain transport stream ffmpeg does not ignore it — it refuses the
+ * input with "Option live_start_index not found" and produces nothing. Applying
+ * it unconditionally would turn every non-HLS channel into a dead one.
+ */
+func TestANonHLSLiveSourceGetsNoHLSOption(t *testing.T) {
+	got := Args(Options{
+		Input: "http://tuner.invalid:9981/stream/channel/1", Output: Progressive,
+		Live: true, HLSInput: false,
+		Decision: remuxDecision(),
+	})
+	for _, a := range got {
+		if a == "-live_start_index" {
+			t.Errorf("an HLS-only option reached a plain stream:\n%v", got)
+		}
+	}
+}
+
+// A file is not live and gets neither.
+func TestAFileGetsNoLiveStartIndex(t *testing.T) {
+	got := Args(Options{
+		Input: `C:\m\film.mkv`, Output: Progressive, HLSInput: true,
+		Decision: remuxDecision(),
+	})
+	for _, a := range got {
+		if a == "-live_start_index" {
+			t.Errorf("a file got a live option:\n%v", got)
+		}
+	}
+}
