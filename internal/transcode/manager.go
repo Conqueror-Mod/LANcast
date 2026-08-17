@@ -402,6 +402,11 @@ func (r *sessionReader) Close() error {
 	return err
 }
 
+// Stderr exposes what ffmpeg complained about to the caller holding the stream.
+// A handler that got no bytes needs to say *why* to the person watching, and the
+// answer is in the session it cannot otherwise reach.
+func (r *sessionReader) Stderr() string { return r.s.Stderr() }
+
 // sameOffset treats nearby start points as the same session. A seek of under a
 // segment lands inside what is already being produced, and restarting ffmpeg
 // for it would be slower than letting the player buffer.

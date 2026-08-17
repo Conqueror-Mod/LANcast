@@ -90,6 +90,33 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	 */
 	defer stream.Close()
 
+	/*
+	 * Wait for the first byte before committing to 200.
+	 *
+	 * A channel list from a provider carries dead entries, and a source that
+	 * 404s is ordinary rather than exceptional. Writing the header first meant
+	 * the response was already a successful video stream by the time ffmpeg
+	 * failed — so an empty body reached the browser, which reported
+	 * `DEMUXER_ERROR_COULD_NOT_OPEN`, and a dead channel read as a broken
+	 * application. The server knew the real answer the whole time.
+	 *
+	 * Once one byte exists there is a stream, and every later failure is an
+	 * interruption of something that was working — which is a different thing,
+	 * correctly reported by the connection ending rather than by a status code
+	 * that can no longer be sent.
+	 */
+	buf := make([]byte, 64<<10)
+	n, rerr := firstBytes(stream, buf)
+	if n == 0 {
+		reason := transcode.FailureReason(stderrOf(stream))
+		// The upstream URL is in that stderr and never leaves this process:
+		// channel URLs are routinely credentialed, and publishing one hands out
+		// the subscription. Only the classification goes out.
+		s.log.Warn("channel produced no video", "channel", id, "reason", reason)
+		writeError(w, http.StatusBadGateway, "channel_unavailable", reason)
+		return
+	}
+
 	w.Header().Set("Content-Type", "video/mp4")
 	// No length, and explicitly not cacheable: this is a stream with no end,
 	// and a cache holding "the channel" would serve one viewer's minute to
@@ -102,9 +129,7 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	// delivers the stream in chunks, which on live content is latency the
 	// viewer feels directly.
 	flusher, _ := w.(http.Flusher)
-	buf := make([]byte, 64<<10)
 	for {
-		n, err := stream.Read(buf)
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				// The client has gone. Ordinary, and the reason the deferred
@@ -115,13 +140,34 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			}
 		}
-		if err != nil {
-			if err != io.EOF {
-				s.log.Debug("live stream ended", "channel", id, "error", err)
+		if rerr != nil {
+			if rerr != io.EOF {
+				s.log.Debug("live stream ended", "channel", id, "error", rerr)
 			}
 			return
 		}
+		n, rerr = stream.Read(buf)
 	}
+}
+
+// firstBytes reads until the stream produces something or gives up. A read
+// returning (0, nil) is legal and means "nothing yet", which on a live source
+// starting up is normal rather than a failure.
+func firstBytes(r io.Reader, buf []byte) (int, error) {
+	for {
+		n, err := r.Read(buf)
+		if n > 0 || err != nil {
+			return n, err
+		}
+	}
+}
+
+// stderrOf asks a stream what ffmpeg complained about, when it can answer.
+func stderrOf(stream io.ReadCloser) string {
+	if s, ok := stream.(interface{ Stderr() string }); ok {
+		return s.Stderr()
+	}
+	return ""
 }
 
 /*

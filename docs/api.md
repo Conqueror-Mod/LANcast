@@ -1949,6 +1949,25 @@ installing it. `503 busy` when the server is already running its maximum number
 of concurrent streams; live sessions count against the same ceiling as file
 transcodes, since they are the same kind of process on the same machine.
 
+**`502 channel_unavailable` when the source produces nothing**, with a message
+saying why: `the channel's source is gone (HTTP 404) — the provider's list may be
+out of date`.
+
+The status is only sent because **the header is not written until the first byte
+of video exists**. Committing to `200` first meant a dead source produced an
+empty but successful video stream, and the browser reported
+`DEMUXER_ERROR_COULD_NOT_OPEN` — so a stale entry in a provider's list read as a
+broken application. A list of 1,862 channels will contain dead ones; that is
+ordinary, and it should say so.
+
+Once one byte has been sent there is a stream, and any later failure ends the
+connection rather than changing the status — an interruption of something that
+was working is a different event, and no status code can be sent by then anyway.
+
+**The message never contains the upstream URL.** ffmpeg writes the full URL into
+its stderr, and channel URLs are routinely credentialed; only a classification
+derived from that text is returned, never the text itself.
+
 Not cacheable, and no `Content-Length`: this is a stream with no end, and a
 cache holding "the channel" would serve one viewer's minute to everybody who
 asked afterwards.
