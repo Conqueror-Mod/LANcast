@@ -331,6 +331,66 @@ func TestASeasonFolderAtTheRootIsTheShow(t *testing.T) {
 	}
 }
 
+/*
+ * An episode marker behind a quality tag is still an episode marker.
+ *
+ * From a real television library:
+ *
+ *	Storm.Of.The.Century.[1999].DVDRip.XviD.EP2-BLiTZKRiEG.avi
+ *
+ * `stripNoise` cuts everything from the first quality marker onward, which is
+ * right for a title and wrong for a marker that sits after one — `EP2` went
+ * with `DVDRip`. A three-part miniseries became three *films* in a television
+ * library, each searched against TMDB's movie data and each landing in the
+ * review queue with nothing a person could fix.
+ */
+func TestAnEpisodeMarkerAfterAQualityTagIsFound(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	dir := filepath.Join(root, "Storm Of the Century (1999)")
+
+	for _, tt := range []struct {
+		file string
+		want int
+	}{
+		{"Storm.Of.The.Century.[1999].DVDRip.XviD.EP2-BLiTZKRiEG.avi", 2},
+		{"Storm.Of.The.Century.[1999].DVDRip.XviD.EP3-BLiTZKRiEG.avi", 3},
+	} {
+		t.Run(tt.file, func(t *testing.T) {
+			got := Parse(root, filepath.Join(dir, tt.file), "show")
+			if got.Kind != KindEpisode {
+				t.Fatalf("kind = %q, want episode — a miniseries part became a film", got.Kind)
+			}
+			if got.Episode != tt.want {
+				t.Errorf("episode = %d, want %d", got.Episode, tt.want)
+			}
+			if got.Series != "Storm Of The Century" {
+				t.Errorf("series = %q, want the work title without the release tags", got.Series)
+			}
+		})
+	}
+}
+
+/*
+ * The tidied name is still searched first, so nothing that resolves today
+ * resolves differently.
+ *
+ * The raw name is only consulted when the tidied one yields nothing, which is
+ * what keeps a release tag that happens to look like an ordinal from changing
+ * an answer that already works.
+ */
+func TestTheMarkerInTheTitleStillWins(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+
+	// The marker before the noise is found in the tidied name, as before.
+	got := Parse(root, filepath.Join(root, "Some Show", "Some Show Part 2 1080p BluRay x264.mkv"), "show")
+	if got.Kind != KindEpisode || got.Episode != 2 {
+		t.Errorf("got %+v, want episode 2", got)
+	}
+	if got.Series != "Some Show" {
+		t.Errorf("series = %q, want Some Show", got.Series)
+	}
+}
+
 // A show whose name merely ends in a number keeps it. "Terminator 2" is a name;
 // "S3rvant" is a name. Only a marker behind a separator is a season.
 func TestANumberInAShowNameIsNotASeason(t *testing.T) {
