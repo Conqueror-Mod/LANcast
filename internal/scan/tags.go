@@ -340,7 +340,7 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 		artist := g.artist
 
 		/*
-		 * Keyed case-insensitively.
+		 * Keyed on letters and digits alone.
 		 *
 		 * `9VoltRevolt` and `9voltRevolt` are one band and were two tiles,
 		 * because the key was the raw tag. The same trap as matching an XMLTV
@@ -348,10 +348,19 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 		 * nobody means as a difference in identity. The *display* name is
 		 * whichever spelling sorted first, which is deterministic across runs
 		 * because the groups are sorted above.
+		 *
+		 * Case was the first form of that trap and not the last. The same
+		 * library also held `t.A.T.u` beside `t.A.T.u.`, `Blut Engel` beside
+		 * `Blutengel`, `Box Car Racer` beside `Boxcar Racer`, and — the one
+		 * that settles the argument — `alt-J` beside `alt‐J`, which differ only
+		 * by U+002D against U+2010 and are *visually identical*. No amount of
+		 * care while tagging catches that one. `media.MergeKey` folds all of
+		 * them together; it is deliberately not `SortTitle`, which drops
+		 * leading articles and would key a band called "The The" as "the".
 		 */
 		var parent *int64
 		if artist != "" {
-			key := lib.Path + "::artist=" + strings.ToLower(artist)
+			key := lib.Path + "::artist=" + media.MergeKey(artist)
 			id, ok := artists[key]
 			if !ok {
 				var err error
@@ -369,8 +378,8 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 		if g.album != "" {
 			// Scoped by artist: "Greatest Hits" is not one album shared by every
 			// band that made one.
-			key := lib.Path + "::artist=" + strings.ToLower(artist) +
-				"::album=" + strings.ToLower(g.album)
+			key := lib.Path + "::artist=" + media.MergeKey(artist) +
+				"::album=" + media.MergeKey(g.album)
 			id, ok := albums[key]
 			if !ok {
 				var err error
