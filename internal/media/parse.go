@@ -129,8 +129,22 @@ func IsScannable(path, libKind string) bool {
 }
 
 var (
-	// S01E02, s1e2, S01.E02, 1x02
-	reSeasonEp = regexp.MustCompile(`(?i)(?:s(?:eason)?[\s._-]*(\d{1,2})[\s._-]*(?:e|ep|episode|x)[\s._-]*(\d{1,3})|\b(\d{1,2})x(\d{1,3})\b)`)
+	/*
+	 * S01E02, s1e2, S01.E02, 1x02.
+	 *
+	 * `\b` before the marker is load-bearing, not tidiness. Without it the `s9`
+	 * inside **ds9** matched: `star.trek.ds9.e099.apocalypse.rising.mkv` read as
+	 * *season 9, episode 99* of a series called "star trek d" — the series name
+	 * truncated at the false marker. Every show abbreviated to letters ending in
+	 * s + a digit hits this, and it fails silently, producing a confident wrong
+	 * answer rather than no answer.
+	 *
+	 * The optional trailing range consumes the second half of a double episode
+	 * so it does not land in the title. `S01E01-E02 - Emissary` was titled
+	 * "E02 Emissary", and `s01e001-002.emissary` before that was "002 emissary".
+	 * Non-capturing, so the submatch indices the caller reads stay put.
+	 */
+	reSeasonEp = regexp.MustCompile(`(?i)(?:\bs(?:eason)?[\s._-]*(\d{1,2})[\s._-]*(?:e|ep|episode|x)[\s._-]*(\d{1,3})|\b(\d{1,2})x(\d{1,3})\b)(?:[\s._-]*[-–][\s._-]*(?:e|ep)?\d{1,3})?`)
 	// Years are matched by two separate patterns, deliberately. A bracketed year
 	// is an explicit statement and always wins; Go's regexp is leftmost-match
 	// rather than alternation-priority, so a single combined pattern would read
@@ -145,7 +159,24 @@ var (
 	// letter fails the match and falls through to being treated as the show
 	// folder itself, which is what stopped this from matching at all before.
 	reSeasonDir = regexp.MustCompile(`(?i)^(?:season|series|s)[\s._-]*(\d{1,2})(?:[\s._-]+.*)?$`)
-	reSpaces    = regexp.MustCompile(`\s+`)
+	/*
+	 * The same marker at the *end* of a folder or series name: "BMS S01",
+	 * "Spider-Noir Season 1".
+	 *
+	 * A real library had both. `Blue Mountain State/BMS S01/S01E01 …mkv` put the
+	 * show under a series called "BMS S01" — the filename has nothing before its
+	 * marker, so the series came from the folder, and the folder was not
+	 * recognised as a season. The show's other two seasons, whose filenames do
+	 * carry the show name, grouped correctly under "Blue Mountain State", so one
+	 * show appeared twice under two names.
+	 *
+	 * A separator before the marker is required, so "S3rvant" and "Terminator 2"
+	 * are untouched, and at least one character has to precede it or a plain
+	 * "Season 1" folder would be read as a *name* ending in a marker rather than
+	 * as the season folder it is — that case belongs to reSeasonDir above.
+	 */
+	reSeasonSuffix = regexp.MustCompile(`(?i)^(.+?)[\s._-]+(?:season|series|s)[\s._-]*(\d{1,2})$`)
+	reSpaces       = regexp.MustCompile(`\s+`)
 	// Explicit grouping markers. Deliberately narrow — no roman numerals
 	// (ambiguous with sequels: "Part II" vs a second film), no "Vol"/"CD" (a
 	// different concept — one work split for size, which plays as a single item
@@ -268,6 +299,9 @@ func Parse(root, path, libKind string) Info {
 		if info.Series == "" {
 			info.Series = seriesFromDirs(root, path)
 		}
+		// Whichever source it came from, the series is the show — not the show
+		// plus the season it happens to be in.
+		info.Series = stripSeasonSuffix(info.Series)
 		if info.Title == "" {
 			info.Title = "Episode " + strconv.Itoa(info.Episode)
 		}
@@ -386,26 +420,70 @@ func ShowDir(root, path string) string {
 // synthesizes a season identity instead.
 func SeasonDir(path string) string {
 	dir := filepath.Dir(path)
-	if reSeasonDir.MatchString(filepath.Base(dir)) {
+	if isSeasonDir(filepath.Base(dir)) {
 		return dir
 	}
 	return ""
 }
 
+// isSeasonDir reports whether a folder name is a season folder, in either of the
+// two shapes a real library uses: the marker leading ("Season 1 - Show Name") or
+// trailing ("BMS S01"). One predicate so the walk and SeasonDir cannot disagree
+// about what a season folder is — two answers to that question is how a show
+// ends up listed twice under two names.
+func isSeasonDir(name string) bool {
+	return reSeasonDir.MatchString(name) || reSeasonSuffix.MatchString(name)
+}
+
+/*
+ * stripSeasonSuffix removes a trailing season marker from a *series* name.
+ *
+ * The series is often read from the filename text before the episode marker,
+ * and a release named `Spider-Noir.Season.1.S01E01.1080p…` leaves
+ * "Spider Noir Season 1" — which searches a provider as a show by that name and
+ * finds nothing. The season is already known from the marker that followed it;
+ * repeating it in the title is noise, not information.
+ *
+ * Never strips the whole name: a folder called exactly "Season 1" is a season
+ * folder, handled above, and a series name that is nothing but a marker is not
+ * improved by becoming empty.
+ */
+func stripSeasonSuffix(series string) string {
+	if m := reSeasonSuffix.FindStringSubmatch(series); m != nil {
+		if trimmed := strings.TrimSpace(m[1]); trimmed != "" {
+			return trimmed
+		}
+	}
+	return series
+}
+
 func showDirWalk(root, path string) string {
 	dir := filepath.Dir(path)
 	rootAbs := filepath.Clean(root)
+
+	// The last season-marked folder passed on the way up. When the walk reaches
+	// the root without finding a plain folder, that one *is* the show: the
+	// `Show S01`, `Show S02` layout sitting directly under the library root has
+	// no folder above it to name the series, and treating it as a season with
+	// no show produced no show at all (ADR 0037 — a twenty-season series became
+	// twenty shows before, and zero shows if this falls back to nothing).
+	//
+	// The season marker still comes off the *name* via stripSeasonSuffix, so
+	// "Show S01" and "Show S02" resolve to one series either way.
+	lastSeason := ""
+
 	for i := 0; i < 4; i++ {
 		if filepath.Clean(dir) == rootAbs || dir == filepath.Dir(dir) {
 			break
 		}
 		name := filepath.Base(dir)
-		if !reSeasonDir.MatchString(name) {
+		if !isSeasonDir(name) {
 			return dir
 		}
+		lastSeason = dir
 		dir = filepath.Dir(dir)
 	}
-	return ""
+	return lastSeason
 }
 
 /*
