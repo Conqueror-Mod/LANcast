@@ -209,7 +209,18 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 // This is also what makes the remaining count mean something. With music in the
 // queue it read 2,198 forever — a number that never falls, indistinguishable
 // from a stuck backlog, for work that was never going to happen.
-const enrichableKinds = `kind NOT IN ('track', 'album', 'artist')`
+//
+// Pictures are the same case and were missed when this list was written. A
+// photo is its filename verbatim (ADR 0028) and `meta.Caps.Supports` answers
+// false for both photo and gallery, so no provider will ever match one. On the
+// real library that left **4,238 photos** permanently pending, which is why the
+// activity readout said "of 5,492" no matter which library was being scanned:
+// the total was dominated by rows that could never move, and adding a film to
+// it changed the figure by less than a tenth of a percent.
+//
+// The lesson the music entry already paid for, repeated: the test is not "did
+// we forget a kind" but "can a provider ever answer for this kind".
+const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery')`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.

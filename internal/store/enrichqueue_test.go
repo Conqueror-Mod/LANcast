@@ -75,6 +75,52 @@ func TestPendingCountExcludesWhatCannotBeEnriched(t *testing.T) {
 	}
 }
 
+/*
+ * Pictures are the same permanent case as music, and were missed when the
+ * filter was written.
+ *
+ * A photo is its filename verbatim (ADR 0028) and meta.Caps.Supports answers
+ * false for photo and gallery, so no provider will ever match one. On the real
+ * library that left 4,238 photos pending for ever, which is why the activity
+ * readout said "of 5,492" whichever library was being scanned: the total was
+ * dominated by rows that could never move, so scanning anything else barely
+ * changed it.
+ */
+func TestPicturesAreNotQueuedForEnrichment(t *testing.T) {
+	st := queueStore(t)
+	ctx := context.Background()
+
+	lib, err := st.CreateLibrary(ctx, "Photos", "picture", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, k := range []string{"gallery", "photo", "photo", "photo"} {
+		seedPending(t, st, lib.ID, k, filepath.Join("p", k+string(rune('a'+i))+".jpg"), k)
+	}
+	film := seedPending(t, st, lib.ID, "movie", "A Film (1999).mkv", "A Film")
+
+	pending, err := st.PendingEnrichment(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range pending {
+		if it.Kind == "photo" || it.Kind == "gallery" {
+			t.Errorf("%s %q is queued; no provider can ever match it", it.Kind, it.Title)
+		}
+	}
+
+	n, err := st.PendingCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("PendingCount = %d, want 1 — only the film can be enriched", n)
+	}
+	if len(pending) != 1 || pending[0].ID != film {
+		t.Errorf("pending = %+v, want only the film", pending)
+	}
+}
+
 // Containers that are not music stay in the queue. A collection has no provider
 // today either, but that is a gap rather than a permanent fact, and excluding it
 // here would hide it — the filter names what can never be matched, not what
