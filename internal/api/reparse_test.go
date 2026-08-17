@@ -62,9 +62,14 @@ func TestReparseRecoversAFolderYearAndRequeues(t *testing.T) {
 	}
 }
 
-// Safe to run twice: the second pass finds the row already agreeing with its
-// filename, changes nothing, and does not requeue the library.
-func TestReparseIsIdempotent(t *testing.T) {
+/*
+ * Safe to run twice — including after enrichment has written the provider's
+ * answer back over the guess, which is the case that made the first version of
+ * this wrong. Found by running the action against a real library: 32 rows
+ * flipped back and forth on every press, because a re-parsed row and a
+ * never-re-parsed one both disagree with their filename.
+ */
+func TestReparseIsIdempotentEvenAfterEnrichmentWritesBack(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 
@@ -72,21 +77,33 @@ func TestReparseIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := h.addFile(t, filepath.Join("Dredd (2012)", "Dredd.mkv"), make([]byte, 16))
-	h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{})
+	wrong := "Judge Minty"
+	h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{Title: &wrong})
 	h.st.SetMatch(ctx, id, "stub", "9", meta.StateReview, 0.61)
 
 	h.do(t, "POST", "/api/libraries/"+itoa(h.lib.ID)+"/reparse", nil)
 	after := h.enriched
 
+	// Enrichment re-applies the provider's title to a row that stayed uncertain.
+	h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{Title: &wrong})
+	h.st.SetMatch(ctx, id, "stub", "9", meta.StateReview, 0.61)
+
 	var res struct {
-		Changed int `json:"changed"`
+		Examined int `json:"examined"`
+		Changed  int `json:"changed"`
 	}
 	decode(t, h.do(t, "POST", "/api/libraries/"+itoa(h.lib.ID)+"/reparse", nil), &res)
-	if res.Changed != 0 {
-		t.Errorf("changed = %d on a second run, want 0", res.Changed)
+	if res.Examined != 0 || res.Changed != 0 {
+		t.Errorf("second run = %+v, want 0/0 — the row is being re-parsed repeatedly", res)
 	}
 	if h.enriched != after {
 		t.Error("a no-op re-parse still nudged enrichment")
+	}
+
+	// force re-offers it, for when the parser itself has improved.
+	decode(t, h.do(t, "POST", "/api/libraries/"+itoa(h.lib.ID)+"/reparse?force=true", nil), &res)
+	if res.Examined != 1 {
+		t.Errorf("forced examined = %d, want 1", res.Examined)
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 24
+const CurrentSchemaVersion = 25
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -63,6 +63,7 @@ var migrations = []migration{
 	{version: 22, sql: schemaRevision22},
 	{version: 23, sql: schemaRevision23},
 	{version: 24, sql: schemaRevision24},
+	{version: 25, sql: schemaRevision25},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -845,4 +846,21 @@ CREATE TABLE IF NOT EXISTS epg_program (
 
 CREATE INDEX IF NOT EXISTS idx_epg_channel ON epg_program(channel_id, start_at);
 CREATE INDEX IF NOT EXISTS idx_epg_window  ON epg_program(start_at);
+`
+
+/*
+ * Revision 25 records when a row was last re-parsed.
+ *
+ * Without it a re-parse cannot tell "this row has never been re-parsed" from
+ * "this row was re-parsed and enrichment has since written the provider's
+ * answer back over the guess". Those look identical — the stored title differs
+ * from the filename either way — so every run rewrote the same rows and asked
+ * the provider the same question again. Measured on a real library: 32 rows
+ * flipped back and forth on every run, indefinitely.
+ *
+ * A nullable column rather than a new table: this is one fact about a row, and
+ * the shape of the data model does not change.
+ */
+const schemaRevision25 = `
+ALTER TABLE media_item ADD COLUMN reparsed_at INTEGER;
 `

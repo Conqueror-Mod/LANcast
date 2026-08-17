@@ -411,9 +411,11 @@ func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
  * film whose year lived only in its folder name searched with no year at all,
  * and no number of refreshes would have changed that answer.
  *
- * Only 'review' and 'unmatched' rows are touched, locked fields are skipped
- * per field, and rows that already agree with their filename are not requeued
- * — so this is safe to run twice.
+ * Only 'review' and 'unmatched' rows are touched and locked fields are skipped
+ * per field. A row is re-parsed once: enrichment writes the provider's answer
+ * back over the guess for anything that stays uncertain, so a version without
+ * that memory rewrote the same rows and re-asked the same question on every
+ * run. `?force=true` re-offers them, for when the parser itself has improved.
  */
 func (s *Server) reparseLibrary(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
@@ -426,7 +428,8 @@ func (s *Server) reparseLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := scan.Reparse(r.Context(), s.st, id)
+	force := r.URL.Query().Get("force") == "true"
+	res, err := scan.Reparse(r.Context(), s.st, id, force)
 	if err != nil {
 		s.writeInternal(w, err, "reparse library")
 		return

@@ -324,9 +324,26 @@ type Guess struct {
  * always do: a locked identity is never re-litigated, and a local one is what
  * the user already said this is (CLAUDE.md, ADR 0008).
  */
-func (s *Store) ReparseTargets(ctx context.Context, libraryID int64) ([]ReparseTarget, error) {
+func (s *Store) ReparseTargets(ctx context.Context, libraryID int64, force bool) ([]ReparseTarget, error) {
 	args := []any{}
 	where := ` WHERE i.missing = 0 AND i.match_state IN ('review','unmatched')`
+
+	// A row that has already been re-parsed is not offered again, and this is
+	// what makes re-running the action free.
+	//
+	// Without it a re-parse cannot tell a row it has never seen from one it
+	// re-parsed a minute ago, because enrichment writes the provider's answer
+	// back over the guess for anything that stays uncertain — so the stored
+	// title disagrees with the filename either way. Every run then rewrote the
+	// same rows and asked the provider the same question again. On a real
+	// library that was 32 rows flipping back and forth on every press.
+	//
+	// force is the escape hatch for the case the stamp cannot see: the parser
+	// itself improving, where rows re-parsed under the old heuristics deserve
+	// another pass.
+	if !force {
+		where += ` AND i.reparsed_at IS NULL`
+	}
 	if libraryID != 0 {
 		where += ` AND i.library_id = ?`
 		args = append(args, libraryID)
@@ -420,21 +437,27 @@ func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, er
 	if g.Episode != 0 && g.Episode != cur.Episode && !isLocked("episode") {
 		add("episode", g.Episode)
 	}
-	if len(set) == 0 {
-		return false, nil
-	}
+	now := time.Now().Unix()
 
-	// Clearing the stamp is what puts the row back in the enrichment queue, so
-	// the corrected guess is actually searched against a provider. Without it
-	// this writes a better question and never asks it.
-	set = append(set, "metadata_updated_at = NULL", "updated_at = ?")
-	args = append(args, time.Now().Unix(), itemID)
+	// Stamped whether or not anything changed. A row the parser already agrees
+	// with has been re-parsed just as truly as one that moved, and leaving it
+	// unstamped would offer it again on every run for ever.
+	changed := len(set) > 0
+	if changed {
+		// Clearing the metadata stamp is what puts the row back in the
+		// enrichment queue, so the corrected guess is actually searched against
+		// a provider. Without it this writes a better question and never asks
+		// it.
+		set = append(set, "metadata_updated_at = NULL")
+	}
+	set = append(set, "reparsed_at = ?", "updated_at = ?")
+	args = append(args, now, now, itemID)
 
 	if _, err := s.db.ExecContext(ctx,
 		`UPDATE media_item SET `+strings.Join(set, ", ")+` WHERE id = ?`, args...); err != nil {
 		return false, fmt.Errorf("apply guess: %w", err)
 	}
-	return true, nil
+	return changed, nil
 }
 
 // ReviewQueue returns items whose identity is uncertain. Applying a

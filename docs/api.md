@@ -2112,8 +2112,20 @@ Scope is deliberately narrow:
   corrected still has its year re-parsed.
 - An empty guess never clears a populated field.
 
-Rows that already agree with their filename are neither rewritten nor requeued,
-so running it twice is free and the second call reports `"changed": 0`.
+**A row is re-parsed once.** Each row examined is stamped, whether or not it
+changed, and stamped rows are not offered again — that is what makes a second
+call free, reporting `{"examined": 0, "changed": 0}`.
+
+The stamp is load-bearing rather than an optimization. Enrichment writes the
+provider's answer back over the guess for any row that stays uncertain, so
+"never re-parsed" and "re-parsed a minute ago" both disagree with their
+filename and cannot be told apart by comparing titles. Without the stamp every
+call rewrote the same rows and asked the provider the same question again —
+measured on a real library, 32 rows flipping back and forth on every press.
+
+`?force=true` re-offers rows that have already been re-parsed. It exists for the
+one thing the stamp cannot see: the filename heuristics themselves improving, so
+rows parsed under the old rules deserve another pass.
 
 `404` when there is no such library.
 
