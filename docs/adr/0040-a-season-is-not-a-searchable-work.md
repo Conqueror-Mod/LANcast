@@ -1,6 +1,6 @@
 # ADR 0040 — A season is not a searchable work
 
-Date: 2026-08-17 · Status: proposed
+Date: 2026-08-17 · Status: accepted · shipped in v0.6.43
 
 ## Context
 

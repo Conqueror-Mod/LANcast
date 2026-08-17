@@ -1,6 +1,6 @@
 # ADR 0015 — Multi-user accounts
 
-Date: 2026-07-26 · Status: proposed
+Date: 2026-07-26 · Status: accepted · shipped by v0.3.2
 
 ## Context
 

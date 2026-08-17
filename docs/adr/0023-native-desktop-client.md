@@ -1,6 +1,6 @@
 # ADR 0023 — A native desktop client
 
-Date: 2026-08-02 · Status: proposed · **amends [ADR 0022](0022-client-and-server-executables.md)**
+Date: 2026-08-02 · Status: accepted · shipped by v0.3.2 · **amends [ADR 0022](0022-client-and-server-executables.md)**
 
 ## Context
 

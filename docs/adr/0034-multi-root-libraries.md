@@ -1,6 +1,6 @@
 # ADR 0034 — A library in more than one place
 
-Date: 2026-08-13 · Status: **proposed**
+Date: 2026-08-13 · Status: accepted · shipped in v0.6.25
 
 ## Context
 

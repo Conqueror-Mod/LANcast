@@ -1,6 +1,6 @@
 # ADR 0026 — Audit log
 
-Date: 2026-08-08 · Status: proposed
+Date: 2026-08-08 · Status: accepted · shipped in v0.6.1
 
 ## Context
 

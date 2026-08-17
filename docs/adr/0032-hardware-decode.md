@@ -1,6 +1,6 @@
 # ADR 0032 — Hardware decode, and where the cost actually is
 
-Date: 2026-08-13 · Status: **proposed** · Amended 2026-08-13 after measurement
+Date: 2026-08-13 · Status: accepted · shipped by v0.3.2 · Amended 2026-08-13 after measurement
 
 > **Amendment note.** This ADR was first written proposing a two-stage rollout
 > with decode-only shipping first. It was measured before any code was written,

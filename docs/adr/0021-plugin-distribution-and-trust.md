@@ -1,6 +1,6 @@
 # ADR 0021 — Plugin distribution and trust
 
-Date: 2026-08-01 · Status: proposed
+Date: 2026-08-01 · Status: accepted · shipped by v0.3.2
 
 ## Context
 
