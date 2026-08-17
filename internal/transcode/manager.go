@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -165,6 +166,10 @@ func (m *Manager) reap() {
 	for _, s := range dead {
 		m.log.Debug("reaping idle transcode", "session", s.ID, "item", s.ItemID)
 		s.Stop()
+		// A session can go idle *because* ffmpeg stopped producing. Whatever it
+		// said on the way out is the explanation, and this is the other path a
+		// session ends by.
+		m.reportStderr(s)
 	}
 }
 
@@ -338,7 +343,39 @@ func (m *Manager) Stop(id string) {
 	m.mu.Unlock()
 	if s != nil {
 		s.Stop()
+		m.reportStderr(s)
 	}
+}
+
+/*
+ * reportStderr logs what ffmpeg complained about, once, when a session ends.
+ *
+ * It was already captured — every session gives ffmpeg a bounded ring buffer for
+ * stderr — and then nothing ever read it for a stream. So a channel that failed
+ * left "live transcode started" in the log, no other line, and the reason sitting
+ * in memory until the process exited.
+ *
+ * That is not a small gap on the live path. A browser reports a failed channel as
+ * `DEMUXER_ERROR_COULD_NOT_OPEN`, which says only that what arrived was not
+ * openable; ffmpeg knows whether the source refused the connection, sent a codec
+ * the mux rejected, or died three seconds in, and it had already written that
+ * down. Diagnosing live playback without it is inference over a silent log.
+ *
+ * ffmpeg runs at `-loglevel error`, so anything here is worth a line — this does
+ * not need a level or a filter to stay quiet on a healthy stream. A viewer who
+ * simply closes the tab produces nothing, because being killed is not an error
+ * ffmpeg reports.
+ */
+func (m *Manager) reportStderr(s *Session) {
+	if m.log == nil {
+		return
+	}
+	msg := strings.TrimSpace(s.Stderr())
+	if msg == "" {
+		return
+	}
+	m.log.Warn("ffmpeg reported errors", "session", s.ID, "item", s.ItemID, "output", s.Output,
+		"stderr", msg)
 }
 
 // sessionReader ties the lifetime of a progressive stream to its session, so
