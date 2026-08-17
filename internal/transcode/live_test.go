@@ -83,3 +83,21 @@ func TestLiveDecisionIsNeverDirectPlay(t *testing.T) {
 		t.Errorf("method = %q; the container is being rewritten regardless", d.Method)
 	}
 }
+
+// IsHLS is what decides whether the live-edge option is safe to pass, so its
+// nil case matters: an unprobed channel must read as "not HLS" rather than
+// panicking or guessing, because the wrong guess refuses the input outright.
+func TestIsHLS(t *testing.T) {
+	if IsHLS(nil) {
+		t.Error("a failed probe read as HLS; an unprobed channel must keep the safe path")
+	}
+	if !IsHLS(&probe.Result{Container: "hls"}) {
+		t.Error("an HLS playlist was not recognised")
+	}
+	if !IsHLS(&probe.Result{Container: "HLS"}) {
+		t.Error("container matching must not be case-sensitive")
+	}
+	if IsHLS(&probe.Result{Container: "mpegts"}) {
+		t.Error("a transport stream read as HLS")
+	}
+}

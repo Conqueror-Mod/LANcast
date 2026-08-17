@@ -35,6 +35,23 @@ type LiveOptions struct {
 	// everything", which is the right default for the overwhelmingly common
 	// case and the cheapest thing that can be tried.
 	Decision probe.Decision
+	/*
+	 * HLS marks the source as an HLS playlist, which decides where ffmpeg
+	 * starts reading it.
+	 *
+	 * False when the channel could not be probed, which is the safe direction:
+	 * `-live_start_index` belongs to the HLS demuxer and makes ffmpeg refuse a
+	 * plain transport stream outright, so an unprobed channel keeps the
+	 * behaviour it has always had rather than risking a dead one.
+	 */
+	HLS bool
+}
+
+// IsHLS reports whether a probe found an HLS playlist. Nil-safe, because a
+// failed probe is ordinary on a live source and every caller would otherwise
+// repeat the same check.
+func IsHLS(r *probe.Result) bool {
+	return r != nil && strings.EqualFold(r.Container, "hls")
 }
 
 /*
@@ -73,6 +90,7 @@ func (m *Manager) Live(ctx context.Context, channelID int64, o LiveOptions) (io.
 		Input:      o.URL,
 		Output:     Progressive,
 		Live:       true,
+		HLSInput:   o.HLS,
 		Decision:   decision,
 		AudioIndex: -1,
 		Encoder:    m.Encoder(),
