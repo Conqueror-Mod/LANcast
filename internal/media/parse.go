@@ -223,11 +223,39 @@ func ChapterOf(path string) (work string, chapter int, ok bool) {
 // and splits off the work title before it. Shared by PartOf and ChapterOf so the
 // two cannot drift in how they parse a number or trim a title.
 func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
-	base := stripNoise(strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
-	loc := re.FindStringSubmatchIndex(base)
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+
+	/*
+	 * The marker is looked for in the tidied name first, and in the raw name
+	 * only if that finds nothing.
+	 *
+	 * `stripNoise` cuts everything from the first quality marker onward, which
+	 * is right for a title and wrong for a marker that sits *after* one. Scene
+	 * names routinely put it there:
+	 *
+	 *	Storm.Of.The.Century.[1999].DVDRip.XviD.EP2-BLiTZKRiEG
+	 *
+	 * cut at `DVDRip`, taking `EP2` with it — so a three-part miniseries became
+	 * three films in a television library, each separately matched against
+	 * TMDB's *movie* data, and each landing in the review queue with nothing to
+	 * fix. Found on a real library.
+	 *
+	 * Ordered as a fallback rather than searching the raw name outright,
+	 * because that is strictly additive: every name that resolves today
+	 * resolves identically, and only the ones that currently find nothing get a
+	 * second look. A release tag containing something the pattern would read as
+	 * an ordinal therefore cannot change an answer that already works.
+	 */
+	search := stripNoise(base)
+	loc := re.FindStringSubmatchIndex(search)
+	if loc == nil {
+		search = base
+		loc = re.FindStringSubmatchIndex(search)
+	}
 	if loc == nil {
 		return "", 0, false
 	}
+	base = search
 	token := strings.ToLower(base[loc[2]:loc[3]])
 	if n, err := strconv.Atoi(token); err == nil {
 		num = n
@@ -241,7 +269,13 @@ func markerOf(path string, re *regexp.Regexp) (work string, num int, ok bool) {
 	// Drop a trailing bracketed or bare year so "Movie (2020) Part 1" and
 	// "Movie (2020) Part 2" group under the same work title. Done before clean,
 	// which would otherwise strip the brackets the year detector keys on.
-	raw := base[:loc[0]]
+	//
+	// Noise is stripped here rather than only up front, because on the fallback
+	// path above the name still carries it: the work title of
+	// "…[1999].DVDRip.XviD.EP2" is "Storm Of The Century", not "Storm Of The
+	// Century DVDRip XviD". A second call is free on the ordinary path, where
+	// the text has already been through it.
+	raw := stripNoise(base[:loc[0]])
 	if _, cut, hasYear := findYear(raw); hasYear {
 		raw = raw[:cut]
 	}
