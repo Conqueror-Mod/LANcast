@@ -824,6 +824,107 @@ func TestEditionMarkerAtTheFrontIsATitle(t *testing.T) {
 	}
 }
 
+/*
+ * A parenthetical before the year keeps both of its brackets.
+ *
+ * The year is stripped first, leaving `Film (Alternate Cut) `, and clean's Trim
+ * — whose cutset carries `)` for the `[2018]`-style leftovers it was written for
+ * — then took the *inner* group's closing bracket along with the trailing space.
+ * The surviving `Film (Alternate Cut` is not merely wrong on a tile: the title is
+ * what goes to the provider as a search query, and TMDB returned zero results
+ * for it where the same query without the fragment returned the right film first.
+ *
+ * General rather than an edition-marker quirk — the cause is the group's
+ * position, not its contents.
+ */
+func TestParentheticalBeforeTheYearStaysBalanced(t *testing.T) {
+	// A group that is *not* an edition marker survives intact — the edition
+	// vocabulary removes those, and this rule is about the bracket, not the
+	// contents.
+	for _, c := range []struct{ in, want string }{
+		{"Some Film (Japanese) (2000).mkv", "Some Film (Japanese)"},
+		{"Some Film (Part 1) (2001).mkv", "Some Film (Part 1)"},
+		{"Some Film (Criterion) (1998).mkv", "Some Film (Criterion)"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+/*
+ * The bracket is restored, not the group discarded.
+ *
+ * Discarding looks tempting because such a group is usually a qualifier, but
+ * `Birdman or (The Unexpected Virtue of Ignorance)` is a real title whose
+ * brackets are part of its name and which arrives in exactly the same shape. A
+ * rule that dropped the group would fix the file above by corrupting this one —
+ * which an earlier attempt at this fix did, turning it into "Birdman or".
+ */
+func TestBracketsThatAreTheTitleSurvive(t *testing.T) {
+	const in = "Birdman or (The Unexpected Virtue of Ignorance) (2014).mkv"
+	const want = "Birdman or (The Unexpected Virtue of Ignorance)"
+
+	got := Parse(editionRoot, filepath.Join(editionRoot, in), "movie")
+	if got.Title != want {
+		t.Errorf("Parse(%q).Title = %q, want %q", in, got.Title, want)
+	}
+	if got.Year != 2014 {
+		t.Errorf("Year = %d, want 2014", got.Year)
+	}
+}
+
+/*
+ * An edition marker in brackets is still an edition.
+ *
+ * The suffix rule was anchored to a bare marker at the end, so
+ * `(Alternate Cut)` slipped past it twice over: the vocabulary did not carry the
+ * phrase, and the closing bracket meant the marker was not last even when it did.
+ *
+ * This is the one that cost a real library a match. From its provider cache:
+ *
+ *	query=Spider+Man+Into+the+Spider+Verse+%28Alternate+Cut   0 results
+ *	query=Spider+Man+Into+the+Spider+Verse                    the right film, first
+ */
+func TestBracketedEditionMarkerIsStripped(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"Spider-Man Into the Spider-Verse (Alternate Cut) (2018).mkv",
+			"Spider Man Into the Spider Verse"},
+		{"Some Film (Uncut) (1999).mkv", "Some Film"},
+		{"Some Film [Director's Cut] (1999).mkv", "Some Film"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
+/*
+ * A title that *ends* with a vocabulary word keeps it.
+ *
+ * "The Final Cut" is a 2004 film and `final cut` is in the vocabulary, so the
+ * rule reduced it to "The" — a title matching nothing, sorted into the Ts. The
+ * empty-string guard could not catch it, because "The" is not empty.
+ *
+ * The guard is on what survives rather than on the vocabulary: an article with
+ * no noun behind it is not a title anybody has, so its appearance is proof the
+ * marker was part of the name.
+ */
+func TestEditionStripNeverLeavesOnlyAnArticle(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"The Final Cut (2004).mkv", "The Final Cut"},
+		{"Uncut Gems (2019).mkv", "Uncut Gems"},
+		{"DC League of Super-Pets (2022).mkv", "DC League of Super Pets"},
+	} {
+		got := Parse(editionRoot, filepath.Join(editionRoot, c.in), "movie")
+		if got.Title != c.want {
+			t.Errorf("Parse(%q).Title = %q, want %q", c.in, got.Title, c.want)
+		}
+	}
+}
+
 // editionRoot is a library root for the title-parsing cases above; the files
 // sit directly in it, so nothing above them influences the parse.
 var editionRoot = filepath.Join("R", "Movies")

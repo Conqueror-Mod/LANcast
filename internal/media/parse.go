@@ -576,10 +576,10 @@ func stripNoise(s string) string {
  * At the end of a title those two letters are an edition; at the front they are
  * a name. The anchor is the only thing that tells them apart.
  */
-var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+(` +
-	`dc|se|ee|uncut|theatrical|final cut|ultimate edition|` +
+var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+[\(\[]?(` +
+	`dc|se|ee|uncut|theatrical|final cut|alternate cut|ultimate edition|` +
 	`directors cut|director's cut|special edition|extended edition` +
-	`)$`)
+	`)[\)\]]?$`)
 
 /*
  * stripEditionSuffix removes a trailing edition marker so an edition matches
@@ -590,21 +590,91 @@ var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+(` +
  * as one work with several files is a real feature and a larger one; this is
  * the half that stops the library lying about what the file is.
  *
- * Never strips the whole title: a film actually called "Uncut" keeps its name.
+ * Never strips the whole title: a film actually called "Uncut" keeps its name,
+ * and neither does it strip down to an article — see below.
  */
 func stripEditionSuffix(s string) string {
-	out := reEditionSuffix.ReplaceAllString(s, "")
-	if strings.TrimSpace(out) == "" {
+	out := strings.TrimSpace(reEditionSuffix.ReplaceAllString(s, ""))
+	if out == "" || isArticleOnly(out) {
 		return s
 	}
 	return out
+}
+
+/*
+ * isArticleOnly reports whether nothing but an article survived the strip.
+ *
+ * "The Final Cut" is a 2004 film, and `final cut` is in the vocabulary above, so
+ * the rule reduced it to "The" — a title that matches nothing and sorts into the
+ * Ts. The existing empty-string guard could not catch it because "The" is not
+ * empty.
+ *
+ * An article with no noun behind it is not a title anybody has, so its
+ * appearance is proof the marker was part of the name rather than appended to
+ * it. Cheaper and more certain than trying to decide which vocabulary entries
+ * are also real titles: the check is on what is *left*, which is the thing that
+ * actually went wrong.
+ */
+func isArticleOnly(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "the", "a", "an":
+		return true
+	}
+	return false
 }
 
 // clean turns "Some.Movie_Title--" into "Some Movie Title".
 func clean(s string) string {
 	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
 	s = reSpaces.ReplaceAllString(s, " ")
-	return stripPairedQuotes(strings.Trim(s, " -[](){}"))
+	return closeDanglingBracket(stripPairedQuotes(strings.Trim(s, " -[](){}")))
+}
+
+/*
+ * closeDanglingBracket puts back a closing bracket the Trim above ate.
+ *
+ * `Film (Alternate Cut) (2018).mkv` loses its year first, leaving
+ * `Film (Alternate Cut) ` — and the Trim, whose cutset carries `)` for the
+ * `[2018]`-style leftovers it was written for, then takes the *inner* group's
+ * closing bracket along with the trailing space. What survives is
+ * `Film (Alternate Cut`, which is not merely ugly on a tile: the title is what
+ * goes to the provider as a search query.
+ *
+ * The bracket is restored rather than the group discarded, and that is the
+ * whole care in this function. Discarding looks tempting because the group is
+ * usually a qualifier — but `Birdman or (The Unexpected Virtue of Ignorance)`
+ * is a real title whose brackets are part of its name, and it arrives here in
+ * exactly the same shape. A rule that dropped the group would fix the first
+ * file by corrupting the second. Restoring is correct for both: it returns the
+ * string the filename actually said.
+ *
+ * This does not by itself make a qualifier-bearing file *match*. Measured
+ * against TMDB, from this library's own provider cache:
+ *
+ *	query=Spider+Man+Into+the+Spider+Verse+%28Alternate+Cut   0 results
+ *	query=Spider+Man+Into+the+Spider+Verse                    Spider-Man: Into
+ *	                                                          the Spider-Verse, top hit
+ *
+ * Balancing the bracket does not remove it from the query, so that file still
+ * needs a human. Telling a display title from a search query is a larger
+ * decision than this function, and deliberately not made here.
+ */
+func closeDanglingBracket(s string) string {
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	if depth == 0 {
+		return s
+	}
+	return s + strings.Repeat(")", depth)
 }
 
 /*
