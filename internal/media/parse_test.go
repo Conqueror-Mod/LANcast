@@ -204,6 +204,170 @@ func TestChapterOf(t *testing.T) {
 	}
 }
 
+/*
+ * "ds9" is not season 9.
+ *
+ * The season marker matched the `s9` inside **ds9**, so
+ * `star.trek.ds9.e099.apocalypse.rising.mkv` read as season 9 episode 99 of a
+ * series called "star trek d" — the name truncated at the false marker. It
+ * fails silently and confidently, which is the worst shape a parse bug takes:
+ * no error, a plausible-looking answer, and 78 episodes filed under a season
+ * that does not exist.
+ *
+ * Any show abbreviated to letters ending in s + a digit hits this.
+ */
+func TestAnAbbreviationIsNotASeasonMarker(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+
+	for _, name := range []string{
+		"star.trek.ds9.e099.apocalypse.rising.mkv",
+		"ds9.e100.the.ship.mkv",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := Parse(root, filepath.Join(root, "Star Trek Deep Space Nine", name), "show")
+			if got.Season == 9 {
+				t.Errorf("season 9 from %q — the marker matched inside an abbreviation", name)
+			}
+			if got.Series == "star trek d" || got.Series == "ds" {
+				t.Errorf("series = %q — truncated at a false marker", got.Series)
+			}
+		})
+	}
+
+	// A real marker still works, including at the very start of a name.
+	got := Parse(root, filepath.Join(root, "Show", "Season 01", "S01E02.mkv"), "show")
+	if got.Kind != KindEpisode || got.Season != 1 || got.Episode != 2 {
+		t.Errorf("got %+v, want episode S01E02", got)
+	}
+}
+
+/*
+ * A season marker at the end of a folder name still marks a season.
+ *
+ * From a real library: `Blue Mountain State/BMS S01/S01E01 …mkv`. The filename
+ * has nothing before its marker, so the series comes from the folder — and
+ * "BMS S01" was not recognised as a season folder, so it became the show. The
+ * same show's other seasons, whose filenames carry the show name, grouped
+ * correctly under "Blue Mountain State", so one show appeared twice.
+ *
+ * Both of that library's naming conventions are checked here, because they have
+ * to converge on one series: season 1 carries episode titles and no show name,
+ * seasons 2 and 3 carry the show name and no titles.
+ */
+func TestTwoNamingConventionsInOneShowStillGroupTogether(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	show := filepath.Join(root, "Blue Mountain State")
+
+	first := Parse(root, filepath.Join(show, "BMS S01", "S01E01 It's Called Hazing, Look it up.mkv"), "show")
+	if first.Series != "Blue Mountain State" {
+		t.Errorf("series = %q, want Blue Mountain State — the season folder became the show", first.Series)
+	}
+	if first.Season != 1 || first.Episode != 1 {
+		t.Errorf("got S%dE%d, want S1E1", first.Season, first.Episode)
+	}
+	if first.Title != "It's Called Hazing, Look it up" {
+		t.Errorf("title = %q, want the episode title kept", first.Title)
+	}
+
+	later := Parse(root, filepath.Join(show, "BMS S02",
+		"Blue Mountain State S02E01 WEBRip 1080p AAC2.0 H265-d3g.mkv"), "show")
+	if later.Series != "Blue Mountain State" {
+		t.Errorf("series = %q, want Blue Mountain State", later.Series)
+	}
+	if later.Season != 2 || later.Episode != 1 {
+		t.Errorf("got S%dE%d, want S2E1", later.Season, later.Episode)
+	}
+
+	if first.Series != later.Series {
+		t.Errorf("the two conventions produced %q and %q — one show, two names",
+			first.Series, later.Series)
+	}
+}
+
+// A season marker trailing the *series* name is noise: the season is already
+// known from the marker that followed it. `Spider-Noir.Season.1.S01E01…` left a
+// series called "Spider Noir Season 1", which matches no show anywhere.
+func TestATrailingSeasonMarkerLeavesTheSeriesName(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	dir := "Spider-Noir Season 1 S01 1080p AMZN WEB-DL MULTi DDP5 1 H 264-MQ"
+	file := "Spider-Noir.Season.1.S01E01.1080p.AMZN.WEB-DL.MULTi.DDP5.1.H.264-MQ.mkv"
+
+	got := Parse(root, filepath.Join(root, dir, file), "show")
+	if got.Series != "Spider Noir" {
+		t.Errorf("series = %q, want Spider Noir", got.Series)
+	}
+	if got.Season != 1 || got.Episode != 1 {
+		t.Errorf("got S%dE%d, want S1E1", got.Season, got.Episode)
+	}
+}
+
+/*
+ * `Show S01` sitting directly under the library root *is* the show folder.
+ *
+ * The near-miss when trailing markers were first recognised: the walk skipped
+ * the folder as a season, found the library root above it, and returned no show
+ * dir at all — so a layout ADR 0037 had already fixed produced zero shows
+ * instead of twenty. There is nothing above it to name the series, so it names
+ * itself, and the marker comes off the name rather than off the folder.
+ */
+func TestASeasonFolderAtTheRootIsTheShow(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+
+	first := Parse(root, filepath.Join(root, "It's Always Sunny in Philadelphia S01",
+		"It's Always Sunny in Philadelphia.S01E01.mkv"), "show")
+	second := Parse(root, filepath.Join(root, "It's Always Sunny in Philadelphia S02",
+		"It's Always Sunny in Philadelphia.S02E01.mkv"), "show")
+
+	if first.Series != "It's Always Sunny in Philadelphia" {
+		t.Errorf("series = %q, want the show without its season marker", first.Series)
+	}
+	if first.Series != second.Series {
+		t.Errorf("seasons resolved to %q and %q — one show, two names",
+			first.Series, second.Series)
+	}
+	if ShowDir(root, filepath.Join(root, "It's Always Sunny in Philadelphia S01",
+		"It's Always Sunny in Philadelphia.S01E01.mkv")) == "" {
+		t.Error("no show directory — the folder was skipped as a season with nothing above it")
+	}
+}
+
+// A show whose name merely ends in a number keeps it. "Terminator 2" is a name;
+// "S3rvant" is a name. Only a marker behind a separator is a season.
+func TestANumberInAShowNameIsNotASeason(t *testing.T) {
+	for _, name := range []string{"Terminator 2", "S3rvant", "Season", "Blake's 7"} {
+		if reSeasonSuffix.MatchString(name) {
+			t.Errorf("%q was read as ending in a season marker", name)
+		}
+	}
+	for _, name := range []string{"BMS S01", "Spider-Noir Season 1", "Some Show - Series 2"} {
+		if !reSeasonSuffix.MatchString(name) {
+			t.Errorf("%q was not read as ending in a season marker", name)
+		}
+	}
+}
+
+// The second half of a double episode belongs to neither the number nor the
+// title. `S01E01-E02 - Emissary` was titled "E02 Emissary".
+func TestADoubleEpisodeRangeDoesNotLeakIntoTheTitle(t *testing.T) {
+	root := filepath.Join("Y", "TV Shows")
+	show := filepath.Join(root, "Star Trek Deep Space Nine")
+
+	for _, tt := range []struct{ file, want string }{
+		{"Star Trek Deep Space Nine - S01E01-E02 - Emissary.mkv", "Emissary"},
+		{"s01e001-002.emissary.mkv", "emissary"},
+	} {
+		t.Run(tt.file, func(t *testing.T) {
+			got := Parse(root, filepath.Join(show, "Season 01", tt.file), "show")
+			if got.Episode != 1 {
+				t.Errorf("episode = %d, want 1 (the first of the pair)", got.Episode)
+			}
+			if got.Title != tt.want {
+				t.Errorf("title = %q, want %q", got.Title, tt.want)
+			}
+		})
+	}
+}
+
 // "Title (Year)/Title.ext" states the year once, on the folder. Reading only the
 // filename loses it, and a missing year is not a weak signal but a cap: it scores
 // half credit, which holds the weighted total strictly under the auto-accept
