@@ -79,6 +79,80 @@ func TestScanAppliesTagsOverFilename(t *testing.T) {
 	}
 }
 
+/*
+ * Two spellings of one band are one artist.
+ *
+ * From a real library: `alt-J` and `alt‐J` sat beside each other in the grid,
+ * differing only by U+002D against U+2010 — *visually identical* — each holding
+ * one album, neither showing the discography. The same library also had
+ * `t.A.T.u` beside `t.A.T.u.` and `Blut Engel` beside `Blutengel`.
+ *
+ * End to end rather than only against MergeKey, because the unit test passes
+ * whether or not the key is actually wired into the scanner — which is the half
+ * that was broken.
+ */
+func TestTwoSpellingsOfOneBandAreOneArtist(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "A/one.mp3", 10)
+	writeFile(t, root, "B/two.mp3", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{
+		// U+002D in the first, U+2010 in the second.
+		"one.mp3": {Title: "Breezeblocks", Artist: "alt-J", AlbumArtist: "alt-J", Album: "An Awesome Wave"},
+		"two.mp3": {Title: "Left Hand Free", Artist: "alt‐J", AlbumArtist: "alt‐J", Album: "This Is All Yours"},
+	}})
+	scanAndWait(t, sc, lib)
+
+	artists, _, err := st.ListItems(context.Background(), store.ItemFilter{
+		LibraryID: lib.ID, Kind: "artist",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(artists) != 1 {
+		names := make([]string, 0, len(artists))
+		for _, a := range artists {
+			names = append(names, a.Title)
+		}
+		t.Fatalf("artists = %v, want one — the two spellings are the same band", names)
+	}
+
+	albums, _, err := st.ListItems(context.Background(), store.ItemFilter{
+		LibraryID: lib.ID, Kind: "album",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(albums) != 2 {
+		t.Errorf("albums = %d, want 2 — both records belong to the one artist", len(albums))
+	}
+}
+
+// Different acts stay apart through the whole scan, not only in the key.
+func TestDifferentBandsStaySeparateArtists(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "A/one.mp3", 10)
+	writeFile(t, root, "B/two.mp3", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{
+		"one.mp3": {Title: "Say It Ain't So", Artist: "Weezer", AlbumArtist: "Weezer", Album: "Blue"},
+		"two.mp3": {Title: "Sublime Song", Artist: "Sublime", AlbumArtist: "Sublime", Album: "40oz"},
+	}})
+	scanAndWait(t, sc, lib)
+
+	artists, _, err := st.ListItems(context.Background(), store.ItemFilter{
+		LibraryID: lib.ID, Kind: "artist",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(artists) != 2 {
+		t.Errorf("artists = %d, want 2 — two different bands were merged", len(artists))
+	}
+}
+
 // An untagged file keeps what its folder and filename gave it, and the scan
 // says so rather than leaving a library that silently looks wrong.
 func TestScanUntaggedTrackKeepsFilenameAndIsReported(t *testing.T) {
