@@ -40,6 +40,39 @@ func TestTrendingEmpty(t *testing.T) {
 	}
 }
 
+/*
+ * The shelf has to arrive with its posters.
+ *
+ * Every other list endpoint attaches artwork — the grid, continue watching, the
+ * review queue — and this one was written without it. On a real library that
+ * rendered "Recently Played" as ten blank rectangles for ten films whose
+ * posters were on screen a few hundred pixels above, in a shelf that had
+ * attached them.
+ *
+ * The omission is a line that is not there, which is why it survived review and
+ * why the assertion belongs here rather than in a reading of the handler.
+ */
+func TestTrendingArrivesWithArtwork(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	film := h.addFile(t, "Popular.mkv", []byte("x"))
+
+	if err := h.st.PutArtwork(ctx, film, "poster-hash", "poster",
+		"http://example.invalid/p.jpg", 10, 15, 100); err != nil {
+		t.Fatal(err)
+	}
+	h.played(t, film, "u1", 1000, true)
+
+	body := h.trending(t, "")
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	art := body.Items[0].Item.Artwork
+	if art == nil || art.Poster != "poster-hash" {
+		t.Errorf("artwork = %+v, want the poster attached — the shelf renders blank tiles without it", art)
+	}
+}
+
 // The ranking claim: more distinct accounts is higher, and the count is
 // accounts rather than plays.
 func TestTrendingRanksByViewers(t *testing.T) {

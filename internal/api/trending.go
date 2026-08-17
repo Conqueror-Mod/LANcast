@@ -55,6 +55,32 @@ func (s *Server) libraryTrending(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "trending")
 		return
 	}
+	/*
+	 * Without this the shelf renders posterless tiles.
+	 *
+	 * Every other list endpoint attaches artwork — the grid, continue watching,
+	 * the review queue — and this one was written without it, so "Recently
+	 * Played" showed ten blank rectangles for ten films whose posters were on
+	 * screen a few hundred pixels above, in a shelf that had attached them.
+	 * The bug is invisible in code review precisely because the omission is a
+	 * line that is not there.
+	 */
+	//
+	// Unwrapped into a slice of Item and written back, because a TrendingItem
+	// carries its Item by value: attaching to a copy would succeed silently and
+	// change nothing, which is the same shape of bug as the omission itself.
+	inner := make([]store.Item, len(items))
+	for i := range items {
+		inner[i] = items[i].Item
+	}
+	if err := s.st.AttachArtwork(r.Context(), inner); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
+	for i := range items {
+		items[i].Item = inner[i]
+	}
+
 	contributors, err := s.st.TrendingContributors(r.Context(), id, now)
 	if err != nil {
 		s.writeInternal(w, err, "trending contributors")

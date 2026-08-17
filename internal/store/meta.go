@@ -795,7 +795,13 @@ func (s *Store) AttachArtwork(ctx context.Context, items []Item) error {
 	if err := s.inheritArtistPosters(ctx, items); err != nil {
 		return err
 	}
-	return s.inheritGalleryPosters(ctx, items)
+	if err := s.inheritGalleryPosters(ctx, items); err != nil {
+		return err
+	}
+	// And the other direction: a track wears its album's sleeve. Last, so a
+	// container that just borrowed from a child is itself available to its
+	// children rather than depending on the order rows arrived in.
+	return s.inheritParentPosters(ctx, items)
 }
 
 // ArtworkExists reports whether a hash is already stored, so a download can be
