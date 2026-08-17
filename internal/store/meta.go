@@ -337,7 +337,12 @@ type Guess struct {
  */
 func (s *Store) ReparseTargets(ctx context.Context, libraryID int64, force bool) ([]ReparseTarget, error) {
 	args := []any{}
-	where := ` WHERE i.missing = 0 AND i.match_state IN ('review','unmatched')`
+	// Seasons are excluded for the same reason notReviewable excludes them: a
+	// season's title is a position inside a show, so a filename guess has
+	// nothing better to offer than "S02 480p Bluray" — and re-parsing one
+	// clears its metadata stamp, which is what puts a row nothing should be
+	// searching for back into the enrichment queue.
+	where := ` WHERE i.missing = 0 AND i.kind != 'season' AND i.match_state IN ('review','unmatched')`
 
 	// A row that has already been re-parsed is not offered again, and this is
 	// what makes re-running the action free.
@@ -689,6 +694,33 @@ func (s *Store) PutArtwork(ctx context.Context, itemID int64, hash, kind, source
 		return fmt.Errorf("put artwork: %w", err)
 	}
 	return tx.Commit()
+}
+
+// ParentIdentity returns the provider and external id of an item's parent, and
+// whether the parent has one at all.
+//
+// This exists for seasons. A season has no identity of its own to search for —
+// it is a position inside a show — so the only way to resolve one is through
+// the show that owns it. A season whose show is unmatched stays unmatched;
+// guessing from the season's own name is what produced nine libraries' worth of
+// wrong posters.
+func (s *Store) ParentIdentity(ctx context.Context, itemID int64) (provider, externalID string, ok bool, err error) {
+	var p, e sql.NullString
+	err = s.db.QueryRowContext(ctx, `
+		SELECT parent.provider, parent.external_id
+		FROM media_item child
+		JOIN media_item parent ON parent.id = child.parent_id
+		WHERE child.id = ?`, itemID).Scan(&p, &e)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return "", "", false, nil
+	case err != nil:
+		return "", "", false, fmt.Errorf("parent identity: %w", err)
+	}
+	if !p.Valid || !e.Valid || p.String == "" || e.String == "" {
+		return "", "", false, nil
+	}
+	return p.String, e.String, true, nil
 }
 
 // ItemArtwork returns the selected image hashes for an item.

@@ -93,10 +93,23 @@ func (c *Client) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, er
 		return nil, ErrNotConfigured
 	}
 
+	// A season is never searchable by name.
+	//
+	// Its name is a position within a show — "Season 2" — not the name of a
+	// work, so /search/tv returns whatever real show happens to have that
+	// phrase in its title. Those hits score as exact title matches and land
+	// above the auto-apply threshold, which is how a Thai drama named
+	// "... season 2" became the poster for season 2 of nine unrelated shows.
+	// Seasons are resolved by fetching /tv/{show}/season/{n} from the parent
+	// show's id instead — see Fetch and the season branch in enrich.
+	if q.Kind == meta.KindSeason {
+		return nil, nil
+	}
+
 	title := q.Title
 	path := "/search/movie"
 	kind := meta.KindMovie
-	if q.Kind == meta.KindShow || q.Kind == meta.KindEpisode || q.Kind == meta.KindSeason {
+	if q.Kind == meta.KindShow || q.Kind == meta.KindEpisode {
 		path = "/search/tv"
 		kind = meta.KindShow
 		if q.Series != "" {
@@ -148,8 +161,10 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 	switch ref.Kind {
 	case meta.KindMovie:
 		return c.fetchMovie(ctx, ref.ExternalID)
-	case meta.KindShow, meta.KindSeason:
+	case meta.KindShow:
 		return c.fetchShow(ctx, ref.ExternalID)
+	case meta.KindSeason:
+		return c.fetchSeason(ctx, ref)
 	case meta.KindEpisode:
 		return c.fetchEpisode(ctx, ref)
 	}
@@ -216,6 +231,40 @@ func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error)
 	rec.Genres = genreNames(s.Genres)
 	rec.Credits = convertCredits(s.Credits)
 	rec.Artwork = artRefs(s.PosterPath, s.BackdropPath)
+	return rec, nil
+}
+
+// fetchSeason retrieves one season of a known show. ref.ExternalID is the
+// *show's* id — a season has no id of its own in this system, only a position —
+// so the record it returns is the season's own name, overview and poster, never
+// the show's. Applying the show's poster to every season is how a season stops
+// being distinguishable from its parent in a grid.
+func (c *Client) fetchSeason(ctx context.Context, ref meta.Ref) (*meta.Record, error) {
+	path := fmt.Sprintf("/tv/%s/season/%d", ref.ExternalID, ref.Season)
+	var s seasonDetail
+	if err := c.get(ctx, path, nil, &s); err != nil {
+		return nil, err
+	}
+
+	rec := &meta.Record{Source: ID, ExternalID: ref.ExternalID, Kind: meta.KindSeason}
+	if s.Name != "" {
+		rec.Fields.Title = meta.S(s.Name)
+	}
+	rec.Fields.Season = meta.I(ref.Season)
+	if s.Overview != "" {
+		rec.Fields.Overview = meta.S(s.Overview)
+	}
+	if y := yearOf(s.AirDate); y > 0 {
+		rec.Fields.Year = meta.I(y)
+		if ts, ok := parseDate(s.AirDate); ok {
+			rec.Fields.ReleasedAt = meta.I64(ts)
+		}
+	}
+	if s.VoteAverage > 0 {
+		rec.Fields.Rating = meta.F(s.VoteAverage)
+	}
+	// Seasons have a poster and no backdrop of their own; artRefs skips empties.
+	rec.Artwork = artRefs(s.PosterPath, "")
 	return rec, nil
 }
 
@@ -477,6 +526,14 @@ type showDetail struct {
 // Only the imdb id is used today (ADR 0019).
 type externalIDs struct {
 	IMDbID string `json:"imdb_id"`
+}
+
+type seasonDetail struct {
+	Name        string  `json:"name"`
+	Overview    string  `json:"overview"`
+	AirDate     string  `json:"air_date"`
+	VoteAverage float64 `json:"vote_average"`
+	PosterPath  string  `json:"poster_path"`
 }
 
 type episodeDetail struct {

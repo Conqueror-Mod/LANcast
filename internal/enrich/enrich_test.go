@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"lancast/internal/meta"
@@ -20,12 +21,21 @@ type fakeProvider struct {
 	fetchN    int
 	lastFetch meta.Ref
 	err       error
+
+	// queries records every search the worker actually issued, so a test can
+	// assert on what was asked rather than only on how often. The worker runs
+	// several items concurrently, hence the lock.
+	mu      sync.Mutex
+	queries []meta.Query
 }
 
 func (f *fakeProvider) ID() string      { return f.id }
 func (f *fakeProvider) Caps() meta.Caps { return meta.Caps{Movie: true, Show: true, Episode: true} }
 
 func (f *fakeProvider) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, error) {
+	f.mu.Lock()
+	f.queries = append(f.queries, q)
+	f.mu.Unlock()
 	f.searchN++
 	if f.err != nil {
 		return nil, f.err
@@ -692,5 +702,161 @@ func TestApplyMatchCrossKind(t *testing.T) {
 	}
 	if got.MatchState != meta.StateLocked {
 		t.Errorf("match state = %q, want locked", got.MatchState)
+	}
+}
+
+// ---------------------------------------------------------------- seasons
+
+// seasonHarness builds a show with one season under it, and returns both ids.
+// matched controls whether the show carries a provider identity, which is the
+// only thing a season's own identity can be derived from.
+func seasonHarness(t *testing.T, st *store.Store, lib *store.Library, seasonNum int, matched bool) (showID, seasonID int64) {
+	t.Helper()
+	ctx := context.Background()
+
+	showID, _, err := st.EnsureShow(ctx, lib.ID, `C:\tv\The League`, "The League", "league")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if matched {
+		state, score := meta.StateMatched, 1.0
+		provider, external := "fake", "31497"
+		if err := st.UpdateItemMetadata(ctx, showID, store.ItemMetadata{
+			Provider: &provider, ExternalID: &external,
+			MatchState: &state, MatchScore: &score,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The folder name a real library actually carries, which is exactly the
+	// string that used to be sent to the provider as a search query.
+	title := "The League S0" + string(rune('0'+seasonNum))
+	seasonID, _, err = st.EnsureSeason(ctx, lib.ID, showID, seasonNum,
+		`C:\tv\The League\`+title, title, title)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// EnsureSeason stamps a season resolved at birth so it never queues, which
+	// is why this bug needed a trigger to surface at all: refreshing a
+	// library's metadata clears every stamp in it, seasons included, and hands
+	// them to the worker. That is the real path, so the test uses it.
+	if err := st.ClearMetadataStamp(ctx, lib.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	return showID, seasonID
+}
+
+// assertNoSeasonSearch fails if any search the worker issued was for a season.
+// The show in the same library is searched normally; only the season must not
+// be.
+func assertNoSeasonSearch(t *testing.T, p *fakeProvider) {
+	t.Helper()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, q := range p.queries {
+		if q.Kind == meta.KindSeason {
+			t.Errorf("a season was searched for by name: %+v", q)
+		}
+	}
+}
+
+// The regression this whole path exists for. A season's name is a position
+// inside a show, so searching for it returns whatever real show happens to
+// carry "Season 2" in its title — an exact normalized title match that clears
+// the auto-apply threshold. Because the query depends only on the season
+// number, the same wrong show won for every show in the library: one Thai
+// drama became the poster for season 2 of nine unrelated series.
+func TestSeasonIsResolvedFromItsShowNeverSearched(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	_, seasonID := seasonHarness(t, st, lib, 2, true)
+
+	p := &fakeProvider{
+		id: "fake",
+		// What a name search would have returned. If any of it lands on the
+		// season row, the search happened.
+		cands: []meta.Candidate{{
+			Provider: "fake", ExternalID: "92299", Kind: meta.KindShow,
+			Title: "Some Drama season 2", Year: 2019, Popularity: 1.1,
+		}},
+		record: &meta.Record{
+			Source: "fake", ExternalID: "31497", Kind: meta.KindSeason,
+			Fields: meta.Fields{
+				Title:  meta.S("Season 2"),
+				Season: meta.I(2),
+			},
+			Artwork: []meta.ArtRef{{Kind: meta.ArtPoster, URL: "https://img/s2.jpg"}},
+		},
+	}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+
+	if err := New(st, reg, &fakeArt{}, quietLog()).Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertNoSeasonSearch(t, p)
+	if p.lastFetch.Kind != meta.KindSeason {
+		t.Errorf("fetch kind = %q, want season", p.lastFetch.Kind)
+	}
+	// The show's id with the season number applied to it — not an id a search
+	// picked.
+	if p.lastFetch.ExternalID != "31497" || p.lastFetch.Season != 2 {
+		t.Errorf("fetch ref = %+v, want the show 31497 season 2", p.lastFetch)
+	}
+
+	it, err := st.GetItem(ctx, seasonID, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Title != "Season 2" {
+		t.Errorf("Title = %q, want the season's own name", it.Title)
+	}
+	if it.ExternalID == nil || *it.ExternalID != "31497" {
+		t.Errorf("ExternalID = %v, want the show's", it.ExternalID)
+	}
+	if it.MatchState != meta.StateMatched {
+		t.Errorf("MatchState = %q, want matched", it.MatchState)
+	}
+}
+
+// A season under an unmatched show has nothing to be resolved from. It must
+// stay pending rather than be stamped with a verdict — enriching the show later
+// is what brings its seasons along, and recording "unmatched" here would strand
+// them permanently.
+func TestSeasonUnderUnmatchedShowStaysPending(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	_, seasonID := seasonHarness(t, st, lib, 2, false)
+
+	p := &fakeProvider{id: "fake", record: &meta.Record{
+		Source: "fake", ExternalID: "31497", Kind: meta.KindSeason,
+		Fields: meta.Fields{Title: meta.S("Season 2")},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+
+	if err := New(st, reg, &fakeArt{}, quietLog()).Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertNoSeasonSearch(t, p)
+	if p.fetchN != 0 {
+		t.Errorf("provider fetched %d times with no show id, want 0", p.fetchN)
+	}
+
+	pending, err := st.PendingEnrichment(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, it := range pending {
+		if it.ID == seasonID {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("season left the pending queue; it must wait for its show")
 	}
 }
