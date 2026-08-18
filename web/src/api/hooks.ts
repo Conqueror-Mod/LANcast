@@ -708,6 +708,10 @@ export interface ItemQuery {
   actors?: number[];
   /** Person ids restricted to directing credits. */
   directors?: number[];
+  /** Collection ids; membership, not parenthood. */
+  collections?: number[];
+  /** Rated at least this highly, out of ten. Unrated items are excluded. */
+  minRating?: number;
   /** in_progress | unmatched. Single-valued; the two cannot be combined. */
   status?: string;
   /** Drop one kind from the listing — the grid uses it for collections. */
@@ -734,6 +738,8 @@ function itemsParams({
   people = [],
   actors = [],
   directors = [],
+  collections = [],
+  minRating = 0,
   status,
   excludeKind,
   initial,
@@ -759,6 +765,8 @@ function itemsParams({
   for (const p of people) params.append("person", String(p));
   for (const a of actors) params.append("actor", String(a));
   for (const d of directors) params.append("director", String(d));
+  for (const c of collections) params.append("collection", String(c));
+  if (minRating > 0) params.set("min_rating", String(minRating));
   if (status) params.set("status", status);
   if (unwatched) params.set("watched", "false");
   return params;

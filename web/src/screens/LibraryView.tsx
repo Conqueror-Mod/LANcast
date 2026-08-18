@@ -53,6 +53,8 @@ export function LibraryView({
   const people = params.getAll("person");
   const actors = params.getAll("actor");
   const directors = params.getAll("director");
+  const collections = params.getAll("collection");
+  const minRating = Number(params.get("min_rating") ?? 0);
   const status = params.get("status") ?? "";
   const unwatched = params.get("watched") === "false";
   // The A–Z rail's selection lives in the URL like every other control here, so
@@ -120,6 +122,8 @@ export function LibraryView({
     people: people.map(Number),
     actors: actors.map(Number),
     directors: directors.map(Number),
+    collections: collections.map(Number),
+    minRating,
     status,
     /*
      * Containers that group items are not in the grid.
@@ -238,6 +242,8 @@ export function LibraryView({
     people.length > 0 ||
     actors.length > 0 ||
     directors.length > 0 ||
+    collections.length > 0 ||
+    minRating > 0 ||
     !!status ||
     unwatched;
 

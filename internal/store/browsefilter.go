@@ -169,3 +169,20 @@ func (s *Store) CastNames(ctx context.Context, ids []int64) (map[int64]string, e
 	}
 	return out, rows.Err()
 }
+
+// CollectionFacet is one collection a library can be filtered by, with how many
+// items it holds — the number that tells a two-film pairing from a franchise.
+type CollectionFacet struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Members int    `json:"members"`
+}
+
+/*
+ * RatingThresholds are the "rated at least" steps the client offers.
+ *
+ * Whole and half points from 5, because below five a rating filter stops
+ * separating anything — almost nothing in a curated library rates under it, so
+ * the lower steps would all return the same grid and read as broken controls.
+ */
+var RatingThresholds = []float64{9, 8.5, 8, 7.5, 7, 6.5, 6, 5}

@@ -442,6 +442,15 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid director")
 		return
 	}
+	collections, ok := parseInt64s(q["collection"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid collection")
+		return
+	}
+	// An unparseable rating widens rather than 400s: it is a threshold typed
+	// into a URL, not an id, and showing the library is a better answer than an
+	// error page.
+	minRating, _ := strconv.ParseFloat(q.Get("min_rating"), 64)
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
 		Kind:      q.Get("kind"),
@@ -468,10 +477,12 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// clause in the store rather than a 400: these arrive from a bookmarked
 		// query string, and a tier that has been renamed should widen the grid
 		// back to everything rather than break the page.
-		Resolutions: nonEmpty(q["resolution"]),
-		PersonIDs:   people,
-		ActorIDs:    actors,
-		DirectorIDs: directors,
+		Resolutions:   nonEmpty(q["resolution"]),
+		PersonIDs:     people,
+		ActorIDs:      actors,
+		DirectorIDs:   directors,
+		CollectionIDs: collections,
+		MinRating:     minRating,
 		// status is a single value rather than a set. The two are not
 		// combinable in any useful way -- an item cannot be both unmatched and
 		// in progress in the same breath as a question -- and offering an AND

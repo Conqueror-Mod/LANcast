@@ -684,6 +684,23 @@ type ItemFilter struct {
 	ActorIDs    []int64
 	DirectorIDs []int64
 
+	// CollectionIDs restricts to members of a collection. A collection is
+	// itself a media_item, so this is the membership table rather than
+	// parent_id: a film belongs to a franchise without being inside it, which
+	// is the whole reason ADR 0017 gave collections their own table.
+	CollectionIDs []int64
+
+	/*
+	 * MinRating restricts to items rated at least this highly, out of ten.
+	 *
+	 * A floor rather than a range, because that is the question people ask of a
+	 * library — "show me the good ones" — and a two-ended range needs two
+	 * controls to express what one does. Unrated items are excluded: a film with
+	 * no rating is not a film rated zero, and sweeping them into the bottom of
+	 * every filter would quietly hide the unmatched half of a library.
+	 */
+	MinRating float64
+
 	// Unwatched restricts to items the user has not finished. It is keyed by
 	// UserID, which must be set when Unwatched is true. Watched state lives on the
 	// leaf's own playback row, so this filters movies and episodes; a container
@@ -935,6 +952,19 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			args = append(args, role)
 		}
 	}
+	if len(f.CollectionIDs) > 0 {
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_collection ic
+			WHERE ic.item_id = media_item.id
+				AND ic.collection_id IN (` + placeholders(len(f.CollectionIDs)) + `))`
+		for _, id := range f.CollectionIDs {
+			args = append(args, id)
+		}
+	}
+	if f.MinRating > 0 {
+		where += ` AND rating IS NOT NULL AND rating >= ?`
+		args = append(args, f.MinRating)
+	}
 	credited(f.PersonIDs, "")
 	credited(f.ActorIDs, "actor")
 	credited(f.DirectorIDs, "director")
@@ -1033,6 +1063,16 @@ type Facets struct {
 	// same table the filter matches on.
 	Resolutions []ResolutionBucket `json:"resolutions"`
 
+	// Collections in this library, most-populated first — the same ordering
+	// principle as the cast list, and for the same reason: the franchises
+	// somebody actually has are more useful at the top than the alphabet is.
+	Collections []CollectionFacet `json:"collections"`
+
+	// The highest rating present, so the client offers only thresholds that can
+	// return something. A library topping out at 8.4 has no business showing a
+	// 9+ filter that is guaranteed to be empty.
+	MaxRating float64 `json:"max_rating"`
+
 	// Whether the status filters have anything to remove. A toggle that cannot
 	// change the grid is a control that lies about what it does, which is the
 	// same rule HasWatched already follows.
@@ -1054,6 +1094,7 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 	f := Facets{
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
+		Collections: []CollectionFacet{},
 	}
 
 	// The initials present, computed the same way InitialFilter selects on so
@@ -1231,6 +1272,37 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 				AND (match_state IS NULL OR match_state = 'unmatched'))`,
 		libraryID).Scan(&f.HasUnmatched); err != nil {
 		return f, fmt.Errorf("library facets (unmatched): %w", err)
+	}
+
+	crows2, err := s.db.QueryContext(ctx, `
+		SELECT c.id, c.title, COUNT(ic.item_id) AS members
+		FROM media_item c
+		JOIN item_collection ic ON ic.collection_id = c.id
+		WHERE c.library_id = ? AND c.kind = 'collection' AND c.missing = 0
+		GROUP BY c.id, c.title
+		ORDER BY members DESC, c.title`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (collections): %w", err)
+	}
+	defer crows2.Close()
+	for crows2.Next() {
+		var c CollectionFacet
+		if err := crows2.Scan(&c.ID, &c.Name, &c.Members); err != nil {
+			return f, fmt.Errorf("library facets (collections): %w", err)
+		}
+		f.Collections = append(f.Collections, c)
+	}
+	if err := crows2.Err(); err != nil {
+		return f, err
+	}
+
+	// COALESCE so a library with no ratings answers 0 rather than NULL, which
+	// the client reads as "offer no rating filter at all".
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(rating), 0) FROM media_item
+		WHERE library_id = ? AND missing = 0 AND rating IS NOT NULL`,
+		libraryID).Scan(&f.MaxRating); err != nil {
+		return f, fmt.Errorf("library facets (max rating): %w", err)
 	}
 
 	// Whether the unwatched-only toggle is worth offering: true when this user
