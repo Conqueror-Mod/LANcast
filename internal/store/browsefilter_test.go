@@ -1,0 +1,246 @@
+package store
+
+/*
+ * The browse filters added for the filter-shell work: resolution, year, cast
+ * and status.
+ *
+ * The resolution cases are the ones worth having. A tier is a bucket over a
+ * width, and the boundaries are chosen against how real files are actually
+ * encoded rather than against the nominal number — so the tests that matter are
+ * the off-nominal ones, because those are the files a library is full of.
+ */
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+)
+
+func TestResolutionBucketsCoverRealWidths(t *testing.T) {
+	cases := []struct {
+		width int
+		want  string
+		why   string
+	}{
+		{3840, "uhd", "nominal 4K"},
+		{4096, "uhd", "DCI 4K is wider than UHD and is still 4K"},
+		{1920, "hd1080", "nominal 1080p"},
+		{1912, "hd1080", "1080p cropped by a few pixels is still 1080p"},
+		{1280, "hd720", "nominal 720p"},
+		{720, "sd", "PAL DVD"},
+		{640, "sd", "an old rip"},
+	}
+	for _, c := range cases {
+		b, ok := resolutionBucket(c.width)
+		if !ok {
+			t.Errorf("width %d (%s): no bucket", c.width, c.why)
+			continue
+		}
+		if b.Key != c.want {
+			t.Errorf("width %d (%s) = %s, want %s", c.width, c.why, b.Key, c.want)
+		}
+	}
+}
+
+/*
+ * A scope film at 4K is 3840x1608 rather than 3840x2160 — same format, height
+ * 550px lower. Bucketing on height would file it as 1080p, which is the whole
+ * reason the rule reads width.
+ */
+func TestScopeFilmIsNotDemotedATier(t *testing.T) {
+	b, ok := resolutionBucket(3840)
+	if !ok || b.Key != "uhd" {
+		t.Fatalf("3840 wide = %v (%v), want uhd", b.Key, ok)
+	}
+}
+
+// An unprobed file has no width, and "no width" is not SD — it is unknown. A
+// file filed under a resolution it never claimed is worse than one left out.
+func TestUnprobedWidthHasNoBucket(t *testing.T) {
+	if b, ok := resolutionBucket(0); ok {
+		t.Errorf("width 0 = %s, want no bucket", b.Key)
+	}
+}
+
+func TestBucketKeysAreUniqueAndOrdered(t *testing.T) {
+	seen := map[string]bool{}
+	last := 1 << 30
+	for _, b := range ResolutionBuckets {
+		if seen[b.Key] {
+			t.Errorf("duplicate bucket key %q", b.Key)
+		}
+		seen[b.Key] = true
+		// Widest first, so a facet list emitted in table order reads the way a
+		// person expects without the caller sorting it.
+		if b.MinWidth > last {
+			t.Errorf("bucket %q is wider than the one before it", b.Key)
+		}
+		last = b.MinWidth
+	}
+}
+
+// seedLibrary makes a library with two films: one 4K from 1994 and one SD from
+// 2003, the second credited to a person the first is not.
+func seedLibrary(t *testing.T, st *Store) (libID, uhdID, sdID, personFilm int64) {
+	t.Helper()
+	ctx := context.Background()
+	lib, err := st.CreateLibrary(ctx, "Movies", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(name, title string, year, width int) int64 {
+		y := year
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: filepath.Join(lib.Path, name), Kind: "movie",
+			Title: title, SortTitle: title, Year: &y,
+			Container: "mkv", SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.db.ExecContext(ctx,
+			`UPDATE media_item SET width = ? WHERE id = ?`, width, id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	uhd := mk("big.mkv", "Big", 1994, 3840)
+	sd := mk("small.mkv", "Small", 2003, 720)
+
+	if err := st.ReplaceCredits(ctx, sd, "tmdb", []Credit{
+		{Name: "Ada Vance", Role: "actor", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return lib.ID, uhd, sd, sd
+}
+
+func TestResolutionFilterSelectsTheTier(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+
+	items, total, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib, Resolutions: []string{"uhd"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != uhd {
+		t.Fatalf("uhd filter returned %d items (total %d), want just the 4K one", len(items), total)
+	}
+}
+
+/*
+ * A resolution key that no longer exists widens rather than errors. These
+ * arrive from bookmarked query strings, and a renamed tier should show the
+ * library again rather than break the page.
+ */
+func TestUnknownResolutionKeyDoesNotNarrow(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, _, _, _ := seedLibrary(t, st)
+
+	_, total, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib, Resolutions: []string{"betamax"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 {
+		t.Errorf("unknown resolution key returned %d, want the whole library (2)", total)
+	}
+}
+
+func TestYearFilterIsExact(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+
+	_, total, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, Years: []int{1994}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 {
+		t.Fatalf("year 1994 = %d items, want 1", total)
+	}
+	// And the decade filter still means the decade, not the year.
+	_, dtotal, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, Decades: []int{1990}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dtotal != 1 {
+		t.Errorf("decade 1990 = %d items, want 1", dtotal)
+	}
+	_ = uhd
+}
+
+func TestCastFilterAndSearch(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, _, sd, _ := seedLibrary(t, st)
+
+	people, err := st.SearchCast(ctx, lib, "ada", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(people) != 1 || people[0].Name != "Ada Vance" {
+		t.Fatalf("cast search = %+v, want Ada Vance", people)
+	}
+	if people[0].Items != 1 {
+		t.Errorf("Ada is in %d items, want 1", people[0].Items)
+	}
+
+	items, total, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib, PersonIDs: []int64{people[0].ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != sd {
+		t.Fatalf("person filter returned %d items, want the one they are in", total)
+	}
+}
+
+// Surname search: somebody typing "vance" means the person, and a prefix-only
+// match on the full name would find nobody.
+func TestCastSearchMatchesASurname(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, _, _, _ := seedLibrary(t, st)
+
+	people, err := st.SearchCast(ctx, lib, "vance", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(people) != 1 {
+		t.Fatalf("surname search = %d people, want 1", len(people))
+	}
+}
+
+func TestFacetsOfferOnlyWhatIsPresent(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, _, _, _ := seedLibrary(t, st)
+
+	f, err := st.LibraryFacets(ctx, lib, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Years) != 2 || f.Years[0] != 2003 {
+		t.Errorf("years = %v, want [2003 1994] newest first", f.Years)
+	}
+	// Two tiers present, widest first, and nothing between them offered.
+	if len(f.Resolutions) != 2 || f.Resolutions[0].Key != "uhd" || f.Resolutions[1].Key != "sd" {
+		t.Errorf("resolutions = %+v, want uhd then sd", f.Resolutions)
+	}
+	// Nothing has been played, so neither status filter has anything to remove.
+	if f.HasInProgress {
+		t.Error("HasInProgress on a library nobody has watched")
+	}
+	// Both films were scanned, never matched, so the tidy-up filter is worth
+	// offering.
+	if !f.HasUnmatched {
+		t.Error("HasUnmatched false with two unmatched films")
+	}
+}

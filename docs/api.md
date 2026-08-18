@@ -586,15 +586,50 @@ undifferentiated block.
 
 ### `GET /api/libraries/{id}/facets`
 
-The filter values a library's browse view offers — genres, decades, and content
-ratings actually present among its top-level items, so a chosen filter never
-yields an empty grid. Genres and content ratings are sorted; decades are
-newest-first.
+The filter values a library's browse view offers — only values actually present,
+so a chosen filter never yields an empty grid. Genres and content ratings are
+sorted; decades, years and resolutions are widest/newest-first.
 
 ```json
 { "genres": ["Comedy", "Drama", "Science Fiction"], "decades": [2010, 1990],
-  "content_ratings": ["PG", "PG-13", "R"], "has_watched": true }
+  "content_ratings": ["PG", "PG-13", "R"], "has_watched": true,
+  "years": [2019, 2003, 1994],
+  "resolutions": [{ "key": "uhd", "label": "4K", "min_width": 3000, "max_width": 0 },
+                  { "key": "hd1080", "label": "1080p", "min_width": 1700, "max_width": 2999 }],
+  "has_in_progress": true, "has_unmatched": false }
 ```
+
+`years` is offered **alongside** `decades`, not instead of it: a decade is how
+you browse and a year is how you find. A library spanning a century has too many
+years for a row of chips and exactly the right number for a searchable list.
+
+`resolutions` are **buckets over the probed width**, not a stored field —
+nothing in the database says "4K". Bucketed on width because height is what
+varies: a 2.39:1 film at 4K is 3840×1608 and a 16:9 one is 3840×2160, heights
+550px apart, and a height rule files every scope film a tier too low. The
+boundaries sit below the nominal widths for the same reason — real 1080p is
+often 1912 after cropping. A file with no width has **not been probed** and is
+absent from every tier rather than counted as SD.
+
+`has_in_progress` and `has_unmatched` follow the `has_watched` rule: a status
+toggle is offered only when it has something to remove.
+
+### `GET /api/libraries/{id}/cast`
+
+The people credited in one library, for the Cast filter's type-ahead. `q` is a
+prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too;
+`limit` defaults to 50 and caps at 200.
+
+```json
+{ "people": [{ "id": 12, "name": "Ada Vance", "role": "actor", "items": 9 }] }
+```
+
+A search endpoint rather than another array on `/facets`, because the two differ
+by three orders of magnitude: a library has a dozen genres and thousands of
+credited people, and shipping all of them on every browse load would be a
+megabyte of JSON populating a control most visits never open. Ordered by how
+much of the library each person is in, then by name — a total order, so a list
+re-fetched as you type cannot appear to shuffle itself.
 
 `has_watched` is true when the calling user has finished at least one top-level
 item in the library, so the client offers the unwatched-only toggle only when it
@@ -621,6 +656,10 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
+| `year` | Restrict to this exact release year. **Repeatable**; a non-numeric value is `400` |
+| `resolution` | Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. **Repeatable**. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page |
+| `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
+| `status` | `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
 | `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `track` (disc then track number — see Music items) |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
