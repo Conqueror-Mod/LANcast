@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -268,7 +269,16 @@ func unpack(archive, dir string) error {
 
 	found := map[string]string{}
 	for _, f := range zr.File {
-		base := filepath.Base(f.Name)
+		/*
+		 * Zip entry names are slash-delimited by the format's own spec, whatever
+		 * platform wrote them — so `path.Base` after normalising backslashes,
+		 * not `filepath.Base`. On Linux a backslash is an ordinary filename
+		 * character, so filepath.Base of a Windows-style entry returns the whole
+		 * string: the binary is not recognised, and the install fails claiming
+		 * the archive lacks ffprobe. Found by the zip-slip test failing on the
+		 * Linux runner while passing on Windows.
+		 */
+		base := path.Base(strings.ReplaceAll(f.Name, `\`, "/"))
 		for _, w := range wanted {
 			if !strings.EqualFold(base, exeName(w)) {
 				continue

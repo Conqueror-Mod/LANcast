@@ -268,3 +268,30 @@ func TestSourceForHostIsPinnedAndDescribed(t *testing.T) {
 		t.Error("the pinned URL follows a moving target")
 	}
 }
+
+/*
+ * An archive written with Windows separators unpacks on any platform.
+ *
+ * Zip entry names are slash-delimited by the format's spec, but archives in the
+ * wild are not always written that way -- and on Linux a backslash is an
+ * ordinary filename character, so filepath.Base of "bin\\ffprobe.exe" is the
+ * whole string and matches nothing. The install then fails claiming the archive
+ * lacks ffprobe, which is a confusing way to describe a separator.
+ *
+ * Caught by the Linux runner while Windows passed, which is why it is a test of
+ * its own rather than a line in the zip-slip one.
+ */
+func TestBackslashEntriesAreRecognisedOnEveryPlatform(t *testing.T) {
+	src, _ := serve(t, zipWith(t, map[string]string{
+		`ffmpeg-build\bin\` + exeName("ffmpeg"):  "FFMPEG-BODY",
+		`ffmpeg-build\bin\` + exeName("ffprobe"): "FFPROBE-BODY",
+	}))
+	dir := t.TempDir()
+
+	if err := Install(context.Background(), src, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !hasProbe(dir) {
+		t.Error("a Windows-separated archive did not install")
+	}
+}
