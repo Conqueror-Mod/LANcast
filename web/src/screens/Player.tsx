@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { clock } from "@/lib/format";
+import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
@@ -533,8 +534,13 @@ export function Player() {
                   change, and it is the one thing in the panel frequent enough
                   that two clicks and a scan of a list would be felt. It stays
                   a video affordance: a menu that can only ever say "None" is a
-                  control promising something a song cannot give. */}
-              {!pb.isAudio && (
+                  control promising something a song cannot give.
+
+                  Which is also why it is gated on there being a track to cycle
+                  to. `cycleSub` walks `[null, ...available]`, so with nothing
+                  available the click lands and nothing happens — the same empty
+                  promise, made by a button instead of a menu. */}
+              {showsSubtitleButton(pb.isAudio, pb.subtitles) && (
                 <div className="player__subs">
                   <button
                     className={"player__icon" + (pb.activeSub ? " is-on" : "")}
