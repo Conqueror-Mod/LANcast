@@ -659,6 +659,19 @@ type ItemFilter struct {
 	Genres         []string // exact genre names
 	Decades        []int    // e.g. 1990 restricts to 1990–1999
 	ContentRatings []string // exact content-rating labels (PG, R, TV-MA…)
+	Years          []int    // exact release years
+	Resolutions    []string // bucket keys: uhd | hd1080 | hd720 | sd
+
+	// PersonIDs restricts to items a chosen person is credited on, in any role.
+	//
+	// By id rather than by name, because two people share a name often enough
+	// that a name filter is a different question from the one the user asked:
+	// they picked a row from a list, and that row was a person. Any role rather
+	// than actor-only for the same reason a viewer would give — somebody
+	// searching Eastwood means the films he is in *and* the ones he directed,
+	// and splitting them behind an invisible role toggle answers a question
+	// nobody asked.
+	PersonIDs []int64
 
 	// Unwatched restricts to items the user has not finished. It is keyed by
 	// UserID, which must be set when Unwatched is true. Watched state lives on the
@@ -666,6 +679,17 @@ type ItemFilter struct {
 	// (a show) carries no watched flag and is unaffected.
 	Unwatched bool
 	UserID    string
+
+	// InProgress restricts to items this user has started and not finished.
+	// Also keyed by UserID. The complement of Unwatched rather than its
+	// opposite: an unfinished item is in both, because "not watched" and
+	// "half watched" are both true of it.
+	InProgress bool
+
+	// Unmatched restricts to items no provider claimed with confidence. A
+	// library-tidying filter rather than a browsing one, which is why it sits
+	// with the status filters and not with the facets.
+	Unmatched bool
 
 	// Initial restricts to items whose sort_title starts with this letter, or
 	// with anything that is not a Latin letter when it is "#". The A–Z rail.
@@ -849,6 +873,62 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			WHERE ps.item_id = media_item.id AND ps.user_id = ? AND ps.watched = 1)`
 		args = append(args, f.UserID)
 	}
+	if len(f.Years) > 0 {
+		where += ` AND year IN (` + placeholders(len(f.Years)) + `)`
+		for _, y := range f.Years {
+			args = append(args, y)
+		}
+	}
+	if len(f.Resolutions) > 0 {
+		// Built from the same bucket table the facet list is built from, so a
+		// tier can never be offered by one and unknown to the other. An
+		// unrecognised key contributes no clause and is not an error: it came
+		// from a query string, and a stale bookmark should widen to everything
+		// rather than 400.
+		parts := []string{}
+		for _, key := range f.Resolutions {
+			b, ok := bucketByKey(key)
+			if !ok {
+				continue
+			}
+			if b.MaxWidth == 0 {
+				parts = append(parts, `(width >= ?)`)
+				args = append(args, b.MinWidth)
+			} else {
+				parts = append(parts, `(width >= ? AND width <= ?)`)
+				args = append(args, b.MinWidth, b.MaxWidth)
+			}
+		}
+		if len(parts) > 0 {
+			where += ` AND (` + strings.Join(parts, " OR ") + `)`
+		}
+	}
+	if len(f.PersonIDs) > 0 {
+		// EXISTS for the same reason the genre clause uses it: a person credited
+		// twice on one item (actor and director) must not duplicate the row or
+		// double the total.
+		where += ` AND EXISTS (
+			SELECT 1 FROM credit c
+			WHERE c.item_id = media_item.id AND c.person_id IN (` + placeholders(len(f.PersonIDs)) + `))`
+		for _, id := range f.PersonIDs {
+			args = append(args, id)
+		}
+	}
+	if f.InProgress {
+		// Started and not finished: a position past the start with the watched
+		// flag still clear. Position alone would include a film opened for two
+		// seconds and abandoned, which is not what continue-watching means.
+		where += ` AND EXISTS (
+			SELECT 1 FROM playback_state ps
+			WHERE ps.item_id = media_item.id AND ps.user_id = ?
+				AND ps.watched = 0 AND ps.position_ms > 0)`
+		args = append(args, f.UserID)
+	}
+	if f.Unmatched {
+		// 'unmatched' is meta.StateUnmatched; spelled literally because store
+		// owns its SQL and does not import the matcher.
+		where += ` AND (match_state IS NULL OR match_state = 'unmatched')`
+	}
 
 	var total int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_item`+where, args...).Scan(&total); err != nil {
@@ -918,6 +998,22 @@ type Facets struct {
 	Decades        []int    `json:"decades"`
 	ContentRatings []string `json:"content_ratings"`
 	HasWatched     bool     `json:"has_watched"`
+
+	// Years present, newest first. Offered alongside decades rather than
+	// instead of them: a decade is how you browse and a year is how you find,
+	// and a library spanning a century has too many years to be a row of chips
+	// but exactly the right number to be a searchable list.
+	Years []int `json:"years"`
+
+	// Resolution tiers actually present, widest first. Labels come from the
+	// same table the filter matches on.
+	Resolutions []ResolutionBucket `json:"resolutions"`
+
+	// Whether the status filters have anything to remove. A toggle that cannot
+	// change the grid is a control that lies about what it does, which is the
+	// same rule HasWatched already follows.
+	HasInProgress bool `json:"has_in_progress"`
+	HasUnmatched  bool `json:"has_unmatched"`
 	// Initials are the first letters present among this library's top-level
 	// items, for the A–Z rail. Uppercase letters, plus "#" for everything that
 	// does not start with one — a number, a bracket, a non-Latin script.
@@ -931,7 +1027,10 @@ type Facets struct {
 // LibraryFacets returns the filter values present among a library's top-level
 // items, and whether this user has watched any of them.
 func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID string) (Facets, error) {
-	f := Facets{Genres: []string{}, Decades: []int{}, ContentRatings: []string{}, Initials: []string{}}
+	f := Facets{
+		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
+		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
+	}
 
 	// The initials present, computed the same way InitialFilter selects on so
 	// the rail can never offer a letter the filter then finds nothing for.
@@ -1026,6 +1125,88 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 	}
 	if err := crows.Err(); err != nil {
 		return f, err
+	}
+
+	yrows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT year FROM media_item
+		WHERE library_id = ? AND parent_id IS NULL AND missing = 0
+			AND year IS NOT NULL AND year > 0
+		ORDER BY year DESC`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (years): %w", err)
+	}
+	defer yrows.Close()
+	for yrows.Next() {
+		var y int
+		if err := yrows.Scan(&y); err != nil {
+			return f, fmt.Errorf("library facets (years): %w", err)
+		}
+		f.Years = append(f.Years, y)
+	}
+	if err := yrows.Err(); err != nil {
+		return f, err
+	}
+
+	/*
+	 * Resolution tiers present.
+	 *
+	 * The widths are bucketed in Go rather than in SQL — a CASE expression here
+	 * would be a second copy of the boundaries in browsefilter.go, and two
+	 * copies of a threshold is how a library offers "4K" that the filter then
+	 * cannot find. Unprobed rows have no width and are skipped rather than
+	 * counted as SD.
+	 *
+	 * Episodes carry the file, so this deliberately does not restrict to
+	 * top-level items the way the other facets do: a show's own row has no
+	 * width, and filtering a show library by resolution has to mean "has an
+	 * episode at this resolution".
+	 */
+	wrows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT width FROM media_item
+		WHERE library_id = ? AND missing = 0 AND width IS NOT NULL AND width > 0`,
+		libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (resolutions): %w", err)
+	}
+	defer wrows.Close()
+	present := map[string]bool{}
+	for wrows.Next() {
+		var w int
+		if err := wrows.Scan(&w); err != nil {
+			return f, fmt.Errorf("library facets (resolutions): %w", err)
+		}
+		if b, ok := resolutionBucket(w); ok {
+			present[b.Key] = true
+		}
+	}
+	if err := wrows.Err(); err != nil {
+		return f, err
+	}
+	// Emitted in table order, so the tiers read widest-first however the widths
+	// happened to come back.
+	for _, b := range ResolutionBuckets {
+		if present[b.Key] {
+			f.Resolutions = append(f.Resolutions, b)
+		}
+	}
+
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM media_item m
+			JOIN playback_state ps ON ps.item_id = m.id
+			WHERE m.library_id = ? AND m.missing = 0
+				AND ps.user_id = ? AND ps.watched = 0 AND ps.position_ms > 0)`,
+		libraryID, userID).Scan(&f.HasInProgress); err != nil {
+		return f, fmt.Errorf("library facets (in progress): %w", err)
+	}
+
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM media_item
+			WHERE library_id = ? AND parent_id IS NULL AND missing = 0
+				AND (match_state IS NULL OR match_state = 'unmatched'))`,
+		libraryID).Scan(&f.HasUnmatched); err != nil {
+		return f, fmt.Errorf("library facets (unmatched): %w", err)
 	}
 
 	// Whether the unwatched-only toggle is worth offering: true when this user

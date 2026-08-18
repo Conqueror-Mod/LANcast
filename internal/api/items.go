@@ -209,6 +209,36 @@ func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, facets)
 }
 
+/*
+ * libraryCast answers the type-ahead behind the Cast filter.
+ *
+ * A search endpoint rather than another array on /facets, because the two
+ * differ by three orders of magnitude: a library has a dozen genres and
+ * thousands of credited people, and shipping all of them on every browse load
+ * would be a megabyte of JSON to populate a control most visits never open.
+ *
+ * Not admin-gated. It reads names already visible on every item detail page of
+ * a library the caller can browse, and the containment check that matters here
+ * is the library id, which GetLibrary performs.
+ */
+func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	people, err := s.st.SearchCast(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("q")),
+		queryInt(r, "limit"))
+	if err != nil {
+		s.writeInternal(w, err, "library cast")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"people": people})
+}
+
 // nonEmpty drops blank entries from a repeated query parameter, so a stray
 // "&genre=" never becomes a filter for the empty string.
 func nonEmpty(vs []string) []string {
@@ -222,6 +252,46 @@ func nonEmpty(vs []string) []string {
 		return nil
 	}
 	return out
+}
+
+// parseInts parses a repeatable integer parameter. Blank entries are skipped,
+// so a trailing "&year=" widens nothing; a non-numeric one is an error, because
+// silently dropping it would show a library the caller did not ask for.
+func parseInts(vs []string) ([]int, bool) {
+	out := make([]int, 0, len(vs))
+	for _, v := range vs {
+		if v == "" {
+			continue
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, true
+	}
+	return out, true
+}
+
+// parseInt64s is parseInts for row ids.
+func parseInt64s(vs []string) ([]int64, bool) {
+	out := make([]int64, 0, len(vs))
+	for _, v := range vs {
+		if v == "" {
+			continue
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, true
+	}
+	return out, true
 }
 
 // parseDecades parses the repeatable decade parameter. A blank entry is skipped;
@@ -309,6 +379,20 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid decade")
 		return
 	}
+	years, ok := parseInts(q["year"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid year")
+		return
+	}
+	// A person filter that cannot be parsed is an error rather than a widening,
+	// unlike a resolution key: an id is machine-generated, so a malformed one
+	// means the caller is confused, and silently showing the whole library
+	// would look like the person matched everything.
+	people, ok := parseInt64s(q["person"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid person")
+		return
+	}
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
 		Kind:      q.Get("kind"),
@@ -330,8 +414,21 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// is not a browse affordance today, so any value but "false" is ignored.
 		Unwatched: q.Get("watched") == "false",
 		UserID:    s.userID(r),
-		Limit:     queryInt(r, "limit"),
-		Offset:    queryInt(r, "offset"),
+		Years:     years,
+		// Resolution keys are not validated here. An unknown one contributes no
+		// clause in the store rather than a 400: these arrive from a bookmarked
+		// query string, and a tier that has been renamed should widen the grid
+		// back to everything rather than break the page.
+		Resolutions: nonEmpty(q["resolution"]),
+		PersonIDs:   people,
+		// status is a single value rather than a set. The two are not
+		// combinable in any useful way -- an item cannot be both unmatched and
+		// in progress in the same breath as a question -- and offering an AND
+		// that always yields nothing is worse than not offering it.
+		InProgress: q.Get("status") == "in_progress",
+		Unmatched:  q.Get("status") == "unmatched",
+		Limit:      queryInt(r, "limit"),
+		Offset:     queryInt(r, "offset"),
 	}
 	// parent_id fetches the children of one item — a show's episodes, a work's
 	// parts. Otherwise the grid shows top-level entries only, so a container's
