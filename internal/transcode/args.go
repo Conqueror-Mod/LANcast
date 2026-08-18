@@ -217,6 +217,55 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
+/*
+ * Fragmented-MP4 muxer flags, and the one that took a bug report to find.
+ *
+ * `empty_moov` writes the moov atom up front so the stream can start before the
+ * file is finished — the whole point of progressive fMP4. But the MP4 muxer
+ * cannot describe AC-3 or E-AC-3 until it has parsed a packet, because the
+ * `dac3`/`dec3` box is built from the bitstream, so writing the moov first is a
+ * contradiction and ffmpeg refuses:
+ *
+ *	Cannot write moov atom before EAC3 packets parsed.
+ *	Could not write header (incorrect codec parameters ?): Invalid argument
+ *
+ * That is a *dead stream*, not degraded audio. ffmpeg exits before the first
+ * byte, and the client — already committed to a 200 with a spinner — waits for
+ * media that will never arrive.
+ *
+ * `delay_moov` holds the moov back until the first packets have been parsed,
+ * which satisfies both constraints. Measured against real files, ten seconds
+ * copied out of each:
+ *
+ *	                        empty_moov       + delay_moov
+ *	E-AC-3 5.1 (mkv)        946 bytes, dead  8,029,116 bytes
+ *	AC-3 (mkv)              946 bytes, dead  3,343,714 bytes
+ *	AAC (mp4)               worked           worked, unchanged
+ *
+ * It is not a dual-audio bug, which is only how it surfaced: picking a
+ * non-default track forces a remux where the default track would have
+ * direct-played, so the failure appears the moment a track is chosen and hides
+ * whenever one is not. Any AC-3 file that cannot direct-play hits it.
+ *
+ * `probe.mp4CarriesAudio` was right all along that MP4 carries these codecs.
+ * The muxer flags were what made the claim false.
+ *
+ * HLS is unaffected and deliberately not changed: that muxer writes its own
+ * init segment after parsing, and copying AC-3 through it already worked.
+ */
+const (
+	// fragFileFlags stream a file that already exists.
+	fragFileFlags = "frag_keyframe+empty_moov+delay_moov+default_base_moof"
+	/*
+	 * fragLiveFlags stream a source that never ends.
+	 *
+	 * `frag_every_frame` rather than `frag_keyframe`: fragmenting on keyframes
+	 * means the browser waits for the first one, which on a channel with a long
+	 * GOP can be several seconds of blank screen that reads as a broken stream.
+	 */
+	fragLiveFlags = "frag_every_frame+empty_moov+delay_moov+default_base_moof"
+)
+
 // Args builds the ffmpeg command line.
 func Args(o Options) []string {
 	o = o.withDefaults()
@@ -412,7 +461,7 @@ func Args(o Options) []string {
 			 * that arrives in bursts behind whatever the buffer holds.
 			 */
 			a = append(a,
-				"-movflags", "frag_every_frame+empty_moov+default_base_moof",
+				"-movflags", fragLiveFlags,
 				"-flush_packets", "1",
 				"-f", "mp4",
 				"pipe:1",
@@ -420,7 +469,7 @@ func Args(o Options) []string {
 			break
 		}
 		a = append(a,
-			"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+			"-movflags", fragFileFlags,
 			"-f", "mp4",
 			"pipe:1",
 		)

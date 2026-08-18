@@ -662,3 +662,63 @@ func TestCopiedVideoGetsNoColourArgs(t *testing.T) {
 		t.Error("a remux rewrites colour metadata")
 	}
 }
+
+// ---- AC-3 in fragmented MP4 --------------------------------------------------
+
+/*
+ * The muxer must be able to describe AC-3, or the stream is dead before it
+ * starts.
+ *
+ * `empty_moov` writes the moov atom up front, but the MP4 muxer builds the
+ * `dac3`/`dec3` box from a parsed packet, so it cannot describe AC-3 or E-AC-3
+ * yet — and ffmpeg refuses outright rather than degrading:
+ *
+ *	Cannot write moov atom before EAC3 packets parsed.
+ *	Could not write header (incorrect codec parameters ?): Invalid argument
+ *
+ * ffmpeg exits before the first byte while the client sits on a committed 200
+ * with a spinner. Measured on real files, ten seconds copied out of each:
+ * E-AC-3 946 bytes and dead, 8,029,116 with delay_moov; AC-3 946 bytes and
+ * dead, 3,343,714 with it; AAC unchanged either way.
+ */
+func TestFragmentedOutputCanDescribeAC3(t *testing.T) {
+	for _, o := range []Options{
+		{Input: "in.mkv", Output: Progressive, AudioIndex: -1},
+		{Input: "in.ts", Output: Progressive, AudioIndex: -1, Live: true},
+	} {
+		flags := argValue(Args(o), "-movflags")
+		if !strings.Contains(flags, "delay_moov") {
+			t.Errorf("live=%v: -movflags %q cannot carry AC-3", o.Live, flags)
+		}
+		// delay_moov replaces neither of the flags that make it a *stream*.
+		if !strings.Contains(flags, "empty_moov") {
+			t.Errorf("live=%v: -movflags %q lost empty_moov", o.Live, flags)
+		}
+		if !strings.Contains(flags, "default_base_moof") {
+			t.Errorf("live=%v: -movflags %q lost default_base_moof", o.Live, flags)
+		}
+	}
+}
+
+// Live still fragments on every frame: fragmenting on keyframes makes the
+// browser wait for the first one, which on a long GOP is seconds of blank
+// screen that reads as a broken channel.
+func TestLiveStillFragmentsEveryFrame(t *testing.T) {
+	flags := argValue(Args(Options{Input: "in.ts", Output: Progressive, AudioIndex: -1, Live: true}), "-movflags")
+	if !strings.Contains(flags, "frag_every_frame") {
+		t.Errorf("-movflags %q, want frag_every_frame for live", flags)
+	}
+	file := argValue(Args(Options{Input: "in.mkv", Output: Progressive, AudioIndex: -1}), "-movflags")
+	if !strings.Contains(file, "frag_keyframe") {
+		t.Errorf("-movflags %q, want frag_keyframe for a file", file)
+	}
+}
+
+// HLS writes its own init segment after parsing, so it never had this problem
+// and must not grow MP4 muxer flags it does not use.
+func TestHLSCarriesNoMovflags(t *testing.T) {
+	a := Args(Options{Input: "in.mkv", Output: HLS, OutputDir: "/tmp/x", AudioIndex: -1})
+	if argIndex(a, "-movflags") >= 0 {
+		t.Errorf("HLS output carries -movflags %q", argValue(a, "-movflags"))
+	}
+}
