@@ -81,6 +81,26 @@ describe("active filter pills", () => {
     expect(named).toEqual([{ key: "person", value: "12", label: "Ada Vance" }]);
   });
 
+  /*
+   * Acting and directing are separate filters, so their pills must be separate
+   * words. Two pills reading "Ada Vance" would be indistinguishable, and
+   * removing one would look like removing the other.
+   */
+  it("tells an acting credit from a directing one", () => {
+    const p = new URLSearchParams("actor=12&director=12");
+    const names = new Map([["12", "Ada Vance"]]);
+    expect(activePills(p, { facets, castNames: names }).map((x) => x.label)).toEqual([
+      "Ada Vance",
+      "Ada Vance (director)",
+    ]);
+  });
+
+  it("counts the two credit categories separately", () => {
+    const p = new URLSearchParams("actor=12&actor=13&director=12");
+    expect(activeCount(p, "actor")).toBe(2);
+    expect(activeCount(p, "director")).toBe(1);
+  });
+
   it("ignores a status value it cannot name", () => {
     const p = new URLSearchParams("status=banana");
     expect(activePills(p, { facets })).toHaveLength(0);

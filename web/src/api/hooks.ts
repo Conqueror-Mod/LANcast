@@ -704,6 +704,10 @@ export interface ItemQuery {
   resolutions?: string[];
   /** Person ids from /cast. Matches any credited role. */
   people?: number[];
+  /** Person ids restricted to acting credits. */
+  actors?: number[];
+  /** Person ids restricted to directing credits. */
+  directors?: number[];
   /** in_progress | unmatched. Single-valued; the two cannot be combined. */
   status?: string;
   /** Drop one kind from the listing — the grid uses it for collections. */
@@ -728,6 +732,8 @@ function itemsParams({
   years = [],
   resolutions = [],
   people = [],
+  actors = [],
+  directors = [],
   status,
   excludeKind,
   initial,
@@ -751,6 +757,8 @@ function itemsParams({
   for (const y of years) params.append("year", String(y));
   for (const r of resolutions) params.append("resolution", r);
   for (const p of people) params.append("person", String(p));
+  for (const a of actors) params.append("actor", String(a));
+  for (const d of directors) params.append("director", String(d));
   if (status) params.set("status", status);
   if (unwatched) params.set("watched", "false");
   return params;
@@ -821,12 +829,13 @@ export function useFacets(libraryID: number) {
  * asking again. `keepPreviousData` is deliberate: without it the list empties
  * between keystrokes and the panel flickers through blank on every letter.
  */
-export function useCast(libraryID: number, query: string) {
+export function useCast(libraryID: number, query: string, role = "") {
   return useQuery({
-    queryKey: ["cast", libraryID, query],
+    queryKey: ["cast", libraryID, query, role],
     queryFn: ({ signal }) =>
       apiGet<{ people: CastMember[] }>(
-        `/api/libraries/${libraryID}/cast?q=${encodeURIComponent(query)}`,
+        `/api/libraries/${libraryID}/cast?q=${encodeURIComponent(query)}` +
+          (role ? `&role=${encodeURIComponent(role)}` : ""),
         signal,
       ),
     enabled: libraryID > 0,

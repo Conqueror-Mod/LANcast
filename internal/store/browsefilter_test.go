@@ -180,7 +180,7 @@ func TestCastFilterAndSearch(t *testing.T) {
 	ctx := context.Background()
 	lib, _, sd, _ := seedLibrary(t, st)
 
-	people, err := st.SearchCast(ctx, lib, "ada", 10)
+	people, err := st.SearchCast(ctx, lib, "ada", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCastSearchMatchesASurname(t *testing.T) {
 	ctx := context.Background()
 	lib, _, _, _ := seedLibrary(t, st)
 
-	people, err := st.SearchCast(ctx, lib, "vance", 10)
+	people, err := st.SearchCast(ctx, lib, "vance", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,5 +242,88 @@ func TestFacetsOfferOnlyWhatIsPresent(t *testing.T) {
 	// offering.
 	if !f.HasUnmatched {
 		t.Error("HasUnmatched false with two unmatched films")
+	}
+}
+
+/*
+ * Acting and directing are different questions.
+ *
+ * The case that decides the split: one person who acts in one film and directs
+ * another. An any-role filter answers "both", which is not what either question
+ * asked, and there is no way to tell from the result which was meant.
+ */
+func TestActorAndDirectorAreSeparateQuestions(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, sd, _ := seedLibrary(t, st)
+
+	// Ada acts in the SD film (seeded) and directs the 4K one.
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Ada Vance", Role: "director", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	people, err := st.SearchCast(ctx, lib, "ada", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(people) != 1 {
+		t.Fatalf("one person credited twice = %d rows, want 1", len(people))
+	}
+	ada := people[0].ID
+
+	acted, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, ActorIDs: []int64{ada}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acted) != 1 || acted[0].ID != sd {
+		t.Errorf("acted in = %d items, want just the one she is in", len(acted))
+	}
+
+	directed, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, DirectorIDs: []int64{ada}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(directed) != 1 || directed[0].ID != uhd {
+		t.Errorf("directed = %d items, want just the one she directed", len(directed))
+	}
+
+	// And the any-role form still answers both, which is why it is kept.
+	both, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, PersonIDs: []int64{ada}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(both) != 2 {
+		t.Errorf("any-role = %d items, want both", len(both))
+	}
+}
+
+// A role-scoped search lists only that side of the camera.
+func TestCastSearchScopesToARole(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Bo Reyes", Role: "director", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	directors, err := st.SearchCast(ctx, lib, "", "director", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(directors) != 1 || directors[0].Name != "Bo Reyes" {
+		t.Fatalf("directors = %+v, want only Bo Reyes", directors)
+	}
+
+	actors, err := st.SearchCast(ctx, lib, "", "actor", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range actors {
+		if a.Name == "Bo Reyes" {
+			t.Error("a director appeared in the actor list")
+		}
 	}
 }

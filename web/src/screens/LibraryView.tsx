@@ -51,6 +51,8 @@ export function LibraryView({
   const years = params.getAll("year");
   const resolutions = params.getAll("resolution");
   const people = params.getAll("person");
+  const actors = params.getAll("actor");
+  const directors = params.getAll("director");
   const status = params.get("status") ?? "";
   const unwatched = params.get("watched") === "false";
   // The A–Z rail's selection lives in the URL like every other control here, so
@@ -116,6 +118,8 @@ export function LibraryView({
     years: years.map(Number),
     resolutions,
     people: people.map(Number),
+    actors: actors.map(Number),
+    directors: directors.map(Number),
     status,
     /*
      * Containers that group items are not in the grid.
@@ -213,7 +217,11 @@ export function LibraryView({
    * has to say a name -- and on a bookmarked URL the id arrives with nothing
    * attached, having never passed through the search panel that knew it.
    */
-  const castLookup = useCastByIDs(libraryID, people);
+  const castLookup = useCastByIDs(libraryID, [
+    ...people,
+    ...actors,
+    ...directors,
+  ]);
   const castNames = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of castLookup.data?.people ?? []) m.set(String(p.id), p.name);
@@ -228,6 +236,8 @@ export function LibraryView({
     years.length > 0 ||
     resolutions.length > 0 ||
     people.length > 0 ||
+    actors.length > 0 ||
+    directors.length > 0 ||
     !!status ||
     unwatched;
 

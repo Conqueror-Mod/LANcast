@@ -261,8 +261,16 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/*
+	 * `role` scopes the search to one side of the camera.
+	 *
+	 * Unvalidated on purpose: an unknown role matches nobody and returns an
+	 * empty list, which is the truthful answer to "who directed this, filtered
+	 * to gaffers". Rejecting it would turn a filter nobody can satisfy into an
+	 * error page.
+	 */
 	people, err := s.st.SearchCast(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("q")),
-		queryInt(r, "limit"))
+		r.URL.Query().Get("role"), queryInt(r, "limit"))
 	if err != nil {
 		s.writeInternal(w, err, "library cast")
 		return
@@ -424,6 +432,16 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid person")
 		return
 	}
+	actors, ok := parseInt64s(q["actor"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid actor")
+		return
+	}
+	directors, ok := parseInt64s(q["director"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid director")
+		return
+	}
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
 		Kind:      q.Get("kind"),
@@ -452,6 +470,8 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// back to everything rather than break the page.
 		Resolutions: nonEmpty(q["resolution"]),
 		PersonIDs:   people,
+		ActorIDs:    actors,
+		DirectorIDs: directors,
 		// status is a single value rather than a set. The two are not
 		// combinable in any useful way -- an item cannot be both unmatched and
 		// in progress in the same breath as a question -- and offering an AND

@@ -624,6 +624,11 @@ prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too;
 { "people": [{ "id": 12, "name": "Ada Vance", "role": "actor", "items": 9 }] }
 ```
 
+`role` scopes the search to one side of the camera (`actor`, `director`).
+Unvalidated on purpose: an unknown role matches nobody and returns an empty
+list, which is the truthful answer — rejecting it would turn a filter nobody can
+satisfy into an error page.
+
 `id` is repeatable and resolves specific people **instead of** searching, which
 is what lets a filter pill render a name. Filter state lives in the URL, so a
 bookmarked `?person=12` arrives with an id and nothing else, and a pill reading
@@ -666,6 +671,7 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `year` | Restrict to this exact release year. **Repeatable**; a non-numeric value is `400` |
 | `resolution` | Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. **Repeatable**. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page |
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
+| `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
 | `status` | `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
 | `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `track` (disc then track number — see Music items) |

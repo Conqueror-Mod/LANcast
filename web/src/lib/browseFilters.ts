@@ -26,6 +26,8 @@ export interface FilterCategory {
   mode: "chips" | "search";
   /** Single-valued categories replace rather than accumulate. */
   single?: boolean;
+  /** Credit role this category searches within, for the two cast categories. */
+  role?: string;
 }
 
 /*
@@ -40,7 +42,16 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
   { key: "genre", label: "Genre", mode: "chips" },
   { key: "decade", label: "Decade", mode: "chips" },
   { key: "year", label: "Year", mode: "search" },
-  { key: "person", label: "Cast", mode: "search" },
+  /*
+   * Two categories, not one "Cast".
+   *
+   * "Who is in this" and "who made this" are different questions, and an
+   * any-role filter answers both without saying which was meant. Somebody
+   * looking for films Eastwood directed does not want the ones he only acted
+   * in. A person who does both simply appears under both, once in each.
+   */
+  { key: "actor", label: "Actor", mode: "search", role: "actor" },
+  { key: "director", label: "Director", mode: "search", role: "director" },
   { key: "content_rating", label: "Rating", mode: "chips" },
   { key: "resolution", label: "Format", mode: "chips" },
   { key: "status", label: "Status", mode: "chips", single: true },
@@ -97,9 +108,20 @@ export function activePills(
   for (const d of params.getAll("decade")) push("decade", d, `${d}s`);
   for (const y of params.getAll("year")) push("year", y, y);
 
-  for (const id of params.getAll("person")) {
-    const name = ctx.castNames?.get(id);
-    if (name) push("person", id, name);
+  /*
+   * Credit pills, held back until the name arrives.
+   *
+   * An id is not a name, and a pill reading "person 12" that becomes "Ada
+   * Vance" under the cursor is worse than one that appears a moment late. The
+   * role is on the pill because Ada acting and Ada directing are two different
+   * filters that would otherwise be one indistinguishable word twice over.
+   */
+  for (const key of ["person", "actor", "director"]) {
+    for (const id of params.getAll(key)) {
+      const name = ctx.castNames?.get(id);
+      if (!name) continue;
+      push(key, id, key === "director" ? `${name} (director)` : name);
+    }
   }
 
   for (const c of params.getAll("content_rating")) push("content_rating", c, c);

@@ -98,7 +98,8 @@ export function FilterBar({
           facets?.has_unmatched ||
           facets?.has_watched
         );
-      case "person":
+      case "actor":
+      case "director":
         return true;
       default:
         return false;
@@ -214,7 +215,9 @@ function FilterPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
-            category.key === "person" ? "Search cast" : "Search years"
+            category.mode === "search" && category.key !== "year"
+              ? `Search ${category.label.toLowerCase()}s`
+              : "Search years"
           }
           aria-label={`Search ${category.label}`}
         />
@@ -256,10 +259,12 @@ function FilterPanel({
           <StatusOptions params={params} facets={facets} onSet={onSet} />
         )}
 
-        {category.key === "person" && (
+        {(category.key === "actor" || category.key === "director") && (
           <CastOptions
             libraryID={libraryID}
             query={query}
+            role={category.role ?? ""}
+            paramKey={category.key}
             selected={selected}
             onToggle={onToggle}
           />
@@ -333,15 +338,19 @@ function StatusOptions({
 function CastOptions({
   libraryID,
   query,
+  role,
+  paramKey,
   selected,
   onToggle,
 }: {
   libraryID: number;
   query: string;
+  role: string;
+  paramKey: string;
   selected: Set<string>;
   onToggle: (key: string, value: string) => void;
 }) {
-  const cast = useCast(libraryID, query);
+  const cast = useCast(libraryID, query, role);
   const people = cast.data?.people ?? [];
 
   if (cast.isLoading && people.length === 0) {
@@ -358,7 +367,7 @@ function CastOptions({
       <p className="fbar__note">
         {query
           ? `Nobody here matching ${query}.`
-          : "No cast recorded yet — this library needs metadata."}
+          : `No ${role}s recorded yet — this library needs metadata.`}
       </p>
     );
   }
@@ -372,7 +381,7 @@ function CastOptions({
             type="button"
             className={"fbar__person" + (on ? " is-on" : "")}
             aria-pressed={on}
-            onClick={() => onToggle("person", String(p.id))}
+            onClick={() => onToggle(paramKey, String(p.id))}
           >
             <span className="fbar__personname">{p.name}</span>
             {/* How much of the library they are in — what makes one row worth
