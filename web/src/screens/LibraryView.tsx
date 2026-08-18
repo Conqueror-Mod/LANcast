@@ -274,12 +274,20 @@ export function LibraryView({
         <div className="browse__heading">
           <span className="section-label">{library.name}</span>
           <span className="browse__rule" />
+          {/* The library's size, not how much of it has arrived.
+                "120 of 1,198" was the v0.3.2 fix for a grid that genuinely
+                truncated at one page under a count claiming the full total.
+                Paging removed the truncation; the label outlived it, and what
+                it says at rest is that a 1,198-film library holds 120 -- a
+                number that then creeps upward as you scroll, which reads as a
+                counter that cannot make its mind up.
+
+                Nothing is lost by dropping it: how much has loaded is already
+                said where it matters, by the "Loading more" strip at the bottom
+                edge of the grid, which is where somebody waiting for more items
+                is actually looking. */}
           {data && (
-            <span className="browse__count">
-              {items.length < total
-                ? `${items.length.toLocaleString()} of ${total.toLocaleString()}`
-                : total.toLocaleString()}
-            </span>
+            <span className="browse__count">{total.toLocaleString()}</span>
           )}
         </div>
         <input
