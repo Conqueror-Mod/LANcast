@@ -1,6 +1,6 @@
 # ADR 0043 — Media tools are fetched on request, not bundled
 
-Date: 2026-08-18 · Status: proposed
+Date: 2026-08-18 · Status: accepted · built
 
 Amends [ADR 0016](0016-packaging-and-distribution.md), which decided ffmpeg is
 "documented, not bundled" and left the door open in the same breath: *if
@@ -152,7 +152,10 @@ support conversation about a codec that was already supported.
   stale pin fails loudly with a checksum mismatch or a 404, and neither silently
   changes what playback does.
 - The download is large enough to need progress and cancellation, so this is a
-  visible operation with a running report, not a spinner.
+  visible operation with a running report, not a spinner. Measured on the
+  pinned build: **160MB compressed**, and `ffmpeg.exe` alone is **144MB**
+  unpacked — which is also the retroactive argument against bundling, since
+  the estimate in this ADR's alternatives was low.
 - Windows first. Linux and macOS have package managers that do this better than
   we will, and the lookup already covers what they install.
 - The Media Tools row in Settings becomes the one place that answers "can this
