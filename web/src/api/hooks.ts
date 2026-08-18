@@ -317,20 +317,51 @@ export function useDeleteLibrary() {
   });
 }
 
-// A scan (and a metadata refresh) run in the background; the caller then polls
-// useScanStatus to show progress.
-export function useStartScan() {
+/*
+ * Starting background work has to *say* it started.
+ *
+ * A scan and a metadata refresh both return 202 and run in the background, and
+ * both used to return without touching the cache. Nothing then knew anything
+ * had changed until the activity poll came round on its own, which when idle is
+ * every 8 seconds — so pressing Scan produced no visible reaction at all, and
+ * pressing it again looked like the first press had been missed.
+ *
+ * Worse, a small library finishes inside that window. The activity poll only
+ * refreshes the nav's item counts when it *sees* work go from active to idle,
+ * so a scan that began and ended between two polls was never observed running,
+ * the transition never happened, and the sidebar kept a count from before the
+ * scan — indefinitely, since nothing else invalidates it.
+ *
+ * So the mutation marks activity active itself. It is not a guess: Scanner.Start
+ * sets the state to running before the 202 is written, so by the time this runs
+ * the work really is in progress. Claiming it here means the next poll sees a
+ * true active-to-idle edge whether the scan takes eight seconds or one, and the
+ * counts refresh either way.
+ */
+function useBackgroundLibraryJob(path: (libraryID: number) => string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (libraryID: number) =>
-      apiSend(`/api/libraries/${libraryID}/scan`, "POST"),
+    mutationFn: (libraryID: number) => apiSend(path(libraryID), "POST"),
+    onSuccess: (_res, libraryID) => {
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
+        active: true,
+        tasks: prev?.tasks ?? [],
+      }));
+      // Refetch both now rather than waiting out the idle interval: the panel
+      // starts showing progress, and the per-library status query starts its
+      // own faster poll.
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["scan", libraryID] });
+    },
   });
 }
 
+export function useStartScan() {
+  return useBackgroundLibraryJob((id) => `/api/libraries/${id}/scan`);
+}
+
 export function useRefreshLibrary() {
-  return useMutation({
-    mutationFn: (libraryID: number) =>
-      apiSend(`/api/libraries/${libraryID}/refresh`, "POST"),
-  });
+  return useBackgroundLibraryJob((id) => `/api/libraries/${id}/refresh`);
 }
 
 /*
