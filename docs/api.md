@@ -973,6 +973,55 @@ success, `404` if unknown, `400` if `mode` is missing or invalid.
 > M3. Format classification, conversion, and matching live in
 > `internal/subtitle`.
 
+### `GET /api/items/{id}/continue`
+
+Where a show should resume for the calling user. **Never cached** — the response
+carries `Cache-Control: no-store`, and that is the feature rather than a
+precaution.
+
+```json
+{ "episode": { "id": 412, "season": 2, "episode": 5, "progress": { "position_ms": 0 } },
+  "resume": false, "exhausted": false }
+```
+
+The rule, in order:
+
+1. **An episode in progress wins**, most recently touched first — that is what
+   was being watched, whatever the numbering says. `resume` is true and the
+   episode carries its saved position.
+2. Otherwise, **the first unwatched episode after the furthest one watched**.
+   Deliberately *not* "the earliest unwatched": skip episode 5, watch through 13,
+   and earliest-unwatched sends you back to 5 on every press. Progress through a
+   series only moves forward.
+3. Nothing watched: the first episode.
+4. Everything watched: `exhausted`, with no `episode`, so a client offers to
+   start again rather than silently replaying the finale.
+
+Progress is per user, so one person finishing a season does not move anybody
+else's place in it.
+
+The no-store header is doing real work: a proxy or browser holding this answer
+for thirty seconds reproduces exactly the bug the rule exists to avoid — press
+continue, land on an episode already watched — and does it intermittently, which
+is the hardest kind to believe.
+
+### `GET /api/items/{id}/episodes`
+
+A show's episodes in playing order — season, then episode, then row id so the
+order is total. Progress is attached, so a list can show what has been watched
+without a request per episode.
+
+Behind **Play** and **Randomize**, which are this list handed over in order or
+with the player's own shuffle turned on. Ordered identically to `/continue`, so
+"next" and "the queue" cannot disagree about what follows what. Also `no-store`:
+this is what Randomize queues, and a cached copy would shuffle episodes whose
+watched flags are out of date.
+
+A route of its own rather than `/api/items?parent_id=`, because episodes hang
+off seasons rather than off the show — the obvious call returns the seasons, and
+every client would otherwise reimplement the walk and get the loose-episode case
+wrong.
+
 ### `GET /api/items/{id}/subtitles`
 
 Every track for an item — embedded and external, in one list.
