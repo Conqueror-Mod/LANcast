@@ -119,17 +119,19 @@ type Server struct {
 	updates        *update.Checker
 	subs           *subtitle.Extractor
 	settings       *config.SettingsStore
-	dataDir        string
-	log            *slog.Logger
-	web            http.Handler
-	rebuild        func(config.Settings)
-	reloadPlugins  func() error
-	enrich         func()
-	probe          func()
-	coversSoon     func()
-	lanBound       bool
-	restartWidens  bool
-	throttle       *auth.Throttle
+	// tools is the one media-tools install that may be running (ADR 0043).
+	tools         toolsJob
+	dataDir       string
+	log           *slog.Logger
+	web           http.Handler
+	rebuild       func(config.Settings)
+	reloadPlugins func() error
+	enrich        func()
+	probe         func()
+	coversSoon    func()
+	lanBound      bool
+	restartWidens bool
+	throttle      *auth.Throttle
 	// crashes records recovered panics as reports beside the database. Created
 	// here rather than injected: it needs only the data directory, and a
 	// dependency the caller may forget to wire is a crash reporter that is
@@ -211,6 +213,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
 	mux.HandleFunc("GET /api/libraries/{id}/cast", s.libraryCast)
+
+	// Media tools. Admin-only: this makes the server download a binary and then
+	// execute it (ADR 0043). The URL is pinned in mediatools, never a parameter.
+	mux.HandleFunc("GET /api/media-tools", s.adminOnly(s.mediaToolsStatus))
+	mux.HandleFunc("POST /api/media-tools/install", s.adminOnly(s.installMediaTools))
+	mux.HandleFunc("POST /api/media-tools/install/cancel", s.adminOnly(s.cancelMediaToolsInstall))
 	mux.HandleFunc("GET /api/libraries/{id}/trending", s.libraryTrending)
 	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.adminOnly(s.refreshLibrary))
 	mux.HandleFunc("POST /api/libraries/{id}/reparse", s.adminOnly(s.reparseLibrary))

@@ -721,3 +721,28 @@ export interface Person {
   watched: number;
   joined_at: number;
 }
+
+/** A pinned media-tools build, as offered before it is downloaded. A download
+ *  the user cannot identify is not consent, so this is shown, not implied. */
+export interface MediaToolsSource {
+  version: string;
+  licence: string;
+  licence_url: string;
+  size_bytes: number;
+  url: string;
+}
+
+/** The state of fetching ffmpeg (ADR 0043). */
+export interface MediaToolsState {
+  running: boolean;
+  stage: "" | "downloading" | "verifying" | "installing";
+  bytes_done: number;
+  bytes_total: number;
+  error?: string;
+  finished_at?: number;
+  probe_available: boolean;
+  transcode_available: boolean;
+  directory?: string;
+  /** Absent where there is no pinned build for the platform. */
+  available_source?: MediaToolsSource;
+}

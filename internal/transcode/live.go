@@ -96,7 +96,7 @@ func (m *Manager) Live(ctx context.Context, channelID int64, o LiveOptions) (io.
 		Encoder:    m.Encoder(),
 	}
 
-	s, stdout, err := startProgressive(ctx, m.bin, opts)
+	s, stdout, err := startProgressive(ctx, m.binary(), opts)
 	if err != nil {
 		m.release()
 		return nil, err

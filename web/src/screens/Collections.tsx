@@ -87,9 +87,7 @@ export function Collections() {
         <span className="browse__count">
           {initial
             ? items.length.toLocaleString()
-            : all.length < total
-              ? `${all.length.toLocaleString()} of ${total.toLocaleString()}`
-              : total.toLocaleString() || ""}
+            : total.toLocaleString() || ""}
         </span>
       </div>
 

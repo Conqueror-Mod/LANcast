@@ -43,12 +43,28 @@ func Ensure(dir string) bool {
 	return true
 }
 
-// Detect returns the directory containing ffprobe, or "" if it cannot be found.
-// It checks PATH first, then the machine-wide locations a service can actually
-// see. Per-user install dirs are deliberately not guessed at here: the service
-// account's home is not the installing user's, so the install-time record is what
-// covers that case.
+/*
+ * Detect returns the directory containing ffprobe, or "" if it cannot be found.
+ *
+ * Beside this executable first, then PATH, then the machine-wide locations a
+ * service can actually see. Per-user install dirs are deliberately not guessed
+ * at: the service account's home is not the installing user's, so the
+ * install-time record is what covers that case.
+ *
+ * Ours-first is the deliberate part. Tools sitting next to the server, or in a
+ * `tools` directory beside it, are there because LANcast put them there — a
+ * known, pinned build — and a stale copy earlier on somebody's PATH should not
+ * win over one we installed on purpose. It also sidesteps the failure this
+ * package exists for entirely: a directory found relative to os.Executable()
+ * needs no PATH at all, so a service running as LocalSystem resolves it exactly
+ * as a desktop process does.
+ */
 func Detect() string {
+	for _, dir := range selfDirs() {
+		if hasProbe(dir) {
+			return dir
+		}
+	}
 	if p, err := exec.LookPath(binary); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
 			return filepath.Dir(abs)
@@ -61,6 +77,28 @@ func Detect() string {
 		}
 	}
 	return ""
+}
+
+/*
+ * selfDirs are the places beside this executable worth looking.
+ *
+ * The executable's own directory covers a bundled or hand-dropped copy; a
+ * `tools` subdirectory covers a managed install that would rather not scatter
+ * two more binaries next to the ones the installer wrote.
+ *
+ * Symlinks are resolved so a server reached through one does not look beside
+ * the link instead of beside the binary.
+ */
+func selfDirs() []string {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	dir := filepath.Dir(exe)
+	return []string{dir, filepath.Join(dir, "tools")}
 }
 
 // hasProbe reports whether dir contains an ffprobe executable.
