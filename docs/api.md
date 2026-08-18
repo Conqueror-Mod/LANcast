@@ -1317,6 +1317,59 @@ Background probing progress.
 `available` is false when ffprobe is not installed. That is a supported
 configuration, not an error: playback decisions fall back to direct play.
 
+### `GET /api/media-tools` · `POST /api/media-tools/install` · `POST /api/media-tools/install/cancel`
+
+Fetching ffmpeg and ffprobe from inside the app ([ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md)).
+**Admin only**, and for a stronger reason than most admin gates here: this makes
+the server download a binary and then execute it.
+
+**There is no URL parameter.** The build is pinned in `internal/mediatools` with
+a SHA-256 checked before anything is unpacked. A server that fetched an address
+the caller chose would be the server-side request forgery the channel-source and
+guide endpoints already refuse, and here the payload is an executable rather than
+a playlist. A version bump is therefore a code change, deliberately: a server
+following a "latest" pointer is one whose playback behaviour changes without a
+LANcast release.
+
+Nothing here runs automatically — not on first start, not when a probe fails. A
+media server that contacts the internet without being asked has broken
+*no phone-home*.
+
+`GET` reports the current state, whether or not an install is running:
+
+```json
+{ "running": true, "stage": "downloading", "bytes_done": 41943040,
+  "bytes_total": 168274317,
+  "probe_available": false, "transcode_available": false,
+  "directory": "C:\ProgramData\LANcast\tools",
+  "available_source": { "version": "8.1.2 (n8.1.2-44-g7c533d0f86, win64 gpl static)",
+                        "licence": "GPL v3", "licence_url": "https://www.gnu.org/licenses/gpl-3.0.html",
+                        "size_bytes": 168274317, "url": "https://github.com/BtbN/..." } }
+```
+
+`available_source` is what a caller is consenting to, returned *before* they
+consent: a download the user cannot identify is not consent. It is absent where
+there is nothing pinned for the platform.
+
+`stage` is `downloading`, `verifying` or `installing`. A finished install adds
+`finished_at`; a failed one adds `error`.
+
+`POST /install` answers `202` and runs in the background — 160MB held open on a
+request would make a client timeout look like a failed install. `409` if one is
+already running; **`501`** where no build is pinned for the platform, whose
+message names the package manager instead, because Linux and macOS install
+ffmpeg better than this code will and put it somewhere the lookup already
+searches.
+
+`POST /install/cancel` stops it and answers `409` when nothing is running. A
+cancelled install leaves nothing behind, and a partial one reports as **absent**
+rather than as installed: `ffprobe` is moved into place last, and the tools are
+detected by looking for `ffprobe`.
+
+On success the running server picks the tools up **without a restart** — the
+directory goes on the process PATH, the transcode manager re-resolves its binary,
+and the location is persisted the way the service config already records one.
+
 ### `POST /api/probe/refresh`
 
 Queues already-probed items to be probed again, and starts a pass. Admin only.

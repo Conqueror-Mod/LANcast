@@ -30,10 +30,42 @@ import { useLocation, useNavigationType } from "react-router-dom";
  * cold one.
  */
 
-// Long enough to cover a fetch that resolves quickly and a couple of layout
-// passes; short enough that it cannot fight a user who scrolls immediately.
-// Any scroll of their own cancels it — see the listener below.
-const RESTORE_FRAMES = 12;
+/*
+ * How long to keep trying, in milliseconds.
+ *
+ * This was twelve animation frames — about 200ms — and that is the bug it now
+ * exists to fix. Twelve frames is plenty for a detail page and nowhere near
+ * enough for a browse grid: returning to a library scrolled into the Z's, the
+ * document is one page of posters tall for far longer than 200ms, `scrollTo`
+ * is clamped against a short document, the loop gives up, and the grid is left
+ * at the top. It looked like the paging had reset, because landing back in the
+ * A's is what a reset looks like — and it got worse the larger the library,
+ * which is the opposite of what a timing-independent cache bug would do.
+ *
+ * Three seconds is long enough for a large grid to render and its images to
+ * lay out, and costs nothing when the position is reached on the first frame,
+ * which is the common case. A scroll of the user's own ends it immediately, so
+ * a budget this long cannot turn into the page fighting somebody.
+ */
+export const RESTORE_BUDGET_MS = 3000;
+
+/*
+ * Whether to keep trying to restore.
+ *
+ * Pure, because the rule is the part worth testing and the requestAnimationFrame
+ * loop is the part worth reading. It deliberately does not stop when the
+ * document has "stopped growing": a grid that pauses between a page arriving
+ * and its images laying out has stopped growing several times before it is
+ * finished, and every one of those pauses used to be a reason to give up.
+ */
+export function shouldKeepTrying(o: {
+  reached: boolean;
+  cancelled: boolean;
+  elapsedMs: number;
+}): boolean {
+  if (o.cancelled || o.reached) return false;
+  return o.elapsedMs < RESTORE_BUDGET_MS;
+}
 
 export function useScrollRestoration() {
   const location = useLocation();
@@ -54,7 +86,7 @@ export function useScrollRestoration() {
     const saved = positions.current.get(key) ?? 0;
     const target = navigationType === "POP" ? saved : 0;
 
-    let frame = 0;
+    const startedAt = Date.now();
     let cancelled = false;
 
     // A scroll the user performs themselves ends the restore attempt. Without
@@ -67,16 +99,27 @@ export function useScrollRestoration() {
     const step = () => {
       if (cancelled) return;
       window.scrollTo(0, target);
-      // Done when the document agrees, or when it cannot: a page genuinely
-      // shorter than the saved offset will never reach it, and retrying
-      // forever would be a spin.
-      if (Math.abs(window.scrollY - target) < 1 || frame >= RESTORE_FRAMES) {
+      /*
+       * Keep going until the document agrees, or the budget runs out.
+       *
+       * A page genuinely shorter than the saved offset never reaches it and
+       * simply costs the budget — harmless, because scrollTo clamps and the
+       * user's own scroll cancels. The alternative, giving up as soon as the
+       * position is unreachable, is what left a large grid at the top: at the
+       * moment it is asked, the position is always unreachable.
+       */
+      if (
+        !shouldKeepTrying({
+          reached: Math.abs(window.scrollY - target) < 1,
+          cancelled,
+          elapsedMs: Date.now() - startedAt,
+        })
+      ) {
         window.removeEventListener("wheel", stopOnUserScroll);
         window.removeEventListener("touchstart", stopOnUserScroll);
         window.removeEventListener("keydown", stopOnUserScroll);
         return;
       }
-      frame += 1;
       requestAnimationFrame(step);
     };
 

@@ -21,6 +21,7 @@ import type {
   Person,
   CastMember,
   CrashReport,
+  MediaToolsState,
   Facets,
   HistoryEntry,
   Item,
@@ -874,6 +875,43 @@ export function useCastByIDs(libraryID: number, ids: string[]) {
   });
 }
 
+/*
+ * Fetching ffmpeg (ADR 0043).
+ *
+ * Polled while an install runs and left alone when it is not: this is a
+ * two-minute download whose progress a spinner cannot express, and a status
+ * nobody is watching is not worth a request every second.
+ */
+export function useMediaTools(enabled: boolean) {
+  return useQuery({
+    queryKey: ["media-tools"],
+    queryFn: ({ signal }) => apiGet<MediaToolsState>("/api/media-tools", signal),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.running ? 1000 : false),
+  });
+}
+
+export function useInstallMediaTools() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/media-tools/install", "POST"),
+    // Invalidate both: the install changes what the server can do, which the
+    // settings payload reports separately from this job's progress.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["media-tools"] });
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+export function useCancelMediaToolsInstall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/media-tools/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["media-tools"] }),
+  });
+}
+
 // ------------------------------------------------------------------ plugins (admin)
 
 // Installed plugins with their signer, enabled state, and requested vs granted
@@ -1183,6 +1221,7 @@ export async function fetchArtistQueue(
 export async function fetchLibraryTracks(
   qc: QueryClient,
   libraryID: number,
+  kind: PlayableKind = "track",
 ): Promise<number[]> {
   const PAGE = 500;
   const ids: number[] = [];
@@ -1190,13 +1229,16 @@ export async function fetchLibraryTracks(
   for (;;) {
     const params = new URLSearchParams({
       library_id: String(libraryID),
-      kind: "track",
+      kind,
+      // Title order for everything, which for episodes means the server's
+      // sort_title, season, episode — a show library queued in the order it is
+      // meant to be watched rather than alphabetically by episode name.
       sort: "title",
       limit: String(PAGE),
       offset: String(offset),
     });
     const page = await qc.fetchQuery({
-      queryKey: ["library-tracks", libraryID, offset],
+      queryKey: ["library-tracks", libraryID, kind, offset],
       queryFn: () => apiGet<ItemsPage>(`/api/items?${params.toString()}`),
     });
     ids.push(...page.items.map((t) => t.id));
@@ -1207,6 +1249,31 @@ export async function fetchLibraryTracks(
     if (page.items.length === 0 || offset >= page.total) break;
   }
   return ids;
+}
+
+/*
+ * The leaf kind a library's "play all" queues.
+ *
+ * A show library queues **episodes**, not shows: a queue of containers is not
+ * something a player can advance through, and "play all" over a show library
+ * means the episodes in order. Pictures are deliberately absent — a slideshow is
+ * a different control with a different pace, and pretending it is a queue would
+ * ship the wrong thing quickly.
+ */
+export type PlayableKind = "track" | "movie" | "episode";
+
+export function playableKindFor(libraryKind: string | undefined): PlayableKind | null {
+  switch (libraryKind) {
+    case "music":
+      return "track";
+    case "show":
+      return "episode";
+    case "picture":
+    case "other":
+      return null;
+    default:
+      return "movie";
+  }
 }
 
 /*
@@ -1231,6 +1298,7 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
   const res = await apiGet<{ episodes: Item[] }>(`/api/items/${showID}/episodes`);
   return res.episodes ?? [];
 }
+
 
 // Server identity. /api/health has always returned this and nothing has ever
 // asked — so the settings page could not say which version it was talking to.

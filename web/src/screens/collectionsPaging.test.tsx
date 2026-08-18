@@ -135,12 +135,23 @@ describe("collections paging", () => {
     expect(offsets).toContain("120");
   });
 
-  it("reports the server's total, not the number loaded", async () => {
+  /*
+   * The count is the library's size, full stop.
+   *
+   * It used to read "120 of 170" until everything had loaded, which was the fix
+   * for a grid that really did stop at one page. Paging fixed that, and the
+   * label then said a 170-collection library held 120 — a number that crept up
+   * as you scrolled and read as a counter that could not make its mind up. How
+   * much has arrived is said by the "Loading more" strip instead, where someone
+   * waiting for it is looking.
+   */
+  it("reports the server's total, and only the total", async () => {
     await render();
     const count = host.querySelector(".browse__count")?.textContent ?? "";
-    // Either "120 of 170" while the rest loads, or "170" once it has — never a
-    // bare "120", which is the paging bug wearing a number.
-    expect(count).toMatch(/170/);
+    expect(count).toBe("170");
+    // Never a bare "120" (the paging bug wearing a number) and never the
+    // progress form that made a working grid look truncated.
+    expect(count).not.toContain(" of ");
   });
 
   it("asks the server only for collections", async () => {

@@ -7,6 +7,8 @@ import {
   useCastByIDs,
   useRecentPhotos,
   fetchLibraryTracks,
+  playableKindFor,
+  type PlayableKind,
 } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
@@ -78,14 +80,22 @@ export function LibraryView({
    */
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const isMusic = library.kind === "music";
+  /*
+   * What "play all" queues here, or null where it means nothing.
+   *
+   * Music queues tracks, films queue films, a show library queues **episodes** —
+   * a queue of containers is not something a player can advance through.
+   * Pictures are excluded on purpose: a slideshow has a pace and a control of
+   * its own, and dressing it up as a queue would ship the wrong thing quickly.
+   */
+  const playKind = playableKindFor(library.kind);
   const [gathering, setGathering] = useState<"play" | "shuffle" | null>(null);
 
   const playEverything = async (shuffle: boolean) => {
     if (gathering) return;
     setGathering(shuffle ? "shuffle" : "play");
     try {
-      const ids = await fetchLibraryTracks(qc, libraryID);
+      const ids = await fetchLibraryTracks(qc, libraryID, playKind ?? "track");
       if (ids.length === 0) return;
       // Always the first track. Shuffle does the randomising, and it moves
       // whatever is playing to the front of its order — so picking a random
@@ -274,12 +284,20 @@ export function LibraryView({
         <div className="browse__heading">
           <span className="section-label">{library.name}</span>
           <span className="browse__rule" />
+          {/* The library's size, not how much of it has arrived.
+                "120 of 1,198" was the v0.3.2 fix for a grid that genuinely
+                truncated at one page under a count claiming the full total.
+                Paging removed the truncation; the label outlived it, and what
+                it says at rest is that a 1,198-film library holds 120 -- a
+                number that then creeps upward as you scroll, which reads as a
+                counter that cannot make its mind up.
+
+                Nothing is lost by dropping it: how much has loaded is already
+                said where it matters, by the "Loading more" strip at the bottom
+                edge of the grid, which is where somebody waiting for more items
+                is actually looking. */}
           {data && (
-            <span className="browse__count">
-              {items.length < total
-                ? `${items.length.toLocaleString()} of ${total.toLocaleString()}`
-                : total.toLocaleString()}
-            </span>
+            <span className="browse__count">{total.toLocaleString()}</span>
           )}
         </div>
         <input
@@ -302,9 +320,9 @@ export function LibraryView({
       )}
 
       <div className="browse__filters">
-        {/* Music only. "Play all" over a film library is not a thing anybody
-            wants, and over a picture library it is nonsense. */}
-        {isMusic && (
+        {/* Every library whose contents are a queue. Pictures are the
+            exception and stay one until a slideshow exists to put here. */}
+        {playKind && (
           <div className="browse__playall">
             <button
               className="browse__playall-btn"
@@ -320,7 +338,7 @@ export function LibraryView({
               disabled={gathering !== null}
             >
               <ShuffleGlyph size={15} />{" "}
-              {gathering === "shuffle" ? "Gathering…" : "Shuffle"}
+              {gathering === "shuffle" ? "Gathering…" : shuffleLabel(playKind)}
             </button>
           </div>
         )}
@@ -424,3 +442,15 @@ function shuffle(items: Item[]): Item[] {
   return out;
 }
 
+
+/*
+ * What the shuffle button is called.
+ *
+ * "Shuffle" is the word for music and has been since the mini-player shipped.
+ * For films and episodes the same action is more naturally read as randomising
+ * the library, and calling it Shuffle there invites the question of whether it
+ * shuffles within a show. It does not: it randomises the whole queue.
+ */
+function shuffleLabel(kind: PlayableKind): string {
+  return kind === "track" ? "Shuffle" : "Randomize all";
+}
