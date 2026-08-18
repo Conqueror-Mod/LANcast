@@ -1276,6 +1276,30 @@ export function playableKindFor(libraryKind: string | undefined): PlayableKind |
   }
 }
 
+/*
+ * A show's play actions, fetched on the press rather than held in a cache.
+ *
+ * Plain functions, not useQuery, and that is the design rather than laziness.
+ * The bug this feature exists to avoid is a stale read — pressing continue and
+ * being sent to an episode already watched — and a react-query cache is exactly
+ * the thing that would reintroduce it, intermittently, on whatever staleTime it
+ * happened to be given. The server says no-store; the client does not keep it
+ * either.
+ */
+export async function fetchShowContinue(showID: number): Promise<{
+  episode?: Item;
+  resume: boolean;
+  exhausted: boolean;
+}> {
+  return apiGet(`/api/items/${showID}/continue`);
+}
+
+export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
+  const res = await apiGet<{ episodes: Item[] }>(`/api/items/${showID}/episodes`);
+  return res.episodes ?? [];
+}
+
+
 // Server identity. /api/health has always returned this and nothing has ever
 // asked — so the settings page could not say which version it was talking to.
 export function useHealth(watch = false) {

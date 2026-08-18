@@ -10,6 +10,8 @@ import {
   fetchArtistQueue,
   usePlaylistEntries,
   useDeletePlaylist,
+  fetchShowContinue,
+  fetchShowEpisodes,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
@@ -327,6 +329,67 @@ export function Detail() {
     (c) => !isContainer(c) && !isPicture(c),
   );
 
+  /*
+   * A show's three actions.
+   *
+   * A show's children are seasons, so the rule above finds nothing playable and
+   * offered nothing at all — you had to drill into a season. But "put this
+   * programme on" is the most ordinary thing anybody asks of a show, and it
+   * splits into three different questions: start it, carry on with it, or play
+   * something at random from it.
+   *
+   * Every one of them asks the server at the moment it is pressed. Nothing here
+   * is cached, because the bug being designed against is a stale read: continue
+   * landing on an episode already watched.
+   */
+  const isShow = item?.kind === "show";
+  const [showBusy, setShowBusy] = useState<null | "continue" | "play" | "random">(null);
+  const [showNote, setShowNote] = useState<string | null>(null);
+
+  const continueShow = async () => {
+    if (!item || showBusy) return;
+    setShowBusy("continue");
+    setShowNote(null);
+    try {
+      const next = await fetchShowContinue(item.id);
+      if (next.exhausted) {
+        // Said rather than silently replayed. Finishing a show is an outcome,
+        // and a button that quietly restarts the finale is one nobody trusts
+        // afterwards.
+        setShowNote("You have watched every episode. Use Play to start again.");
+        return;
+      }
+      if (!next.episode) {
+        setShowNote("This show has no episodes yet.");
+        return;
+      }
+      navigate(`/watch/${next.episode.id}`);
+    } finally {
+      setShowBusy(null);
+    }
+  };
+
+  const playShow = async (shuffle: boolean) => {
+    if (!item || showBusy) return;
+    setShowBusy(shuffle ? "random" : "play");
+    setShowNote(null);
+    try {
+      const eps = await fetchShowEpisodes(item.id);
+      if (eps.length === 0) {
+        setShowNote("This show has no episodes yet.");
+        return;
+      }
+      // The queue goes in history state rather than the URL: a long-running
+      // show is far too many ids for a query string, and the player already
+      // takes it this way from a library's Play all.
+      navigate(`/watch/${eps[0].id}`, {
+        state: { queue: eps.map((e) => e.id), shuffle },
+      });
+    } finally {
+      setShowBusy(null);
+    }
+  };
+
   const meta = [
     // An album's artist belongs on the line that says what this is, ahead of
     // the year — "Between the Buried and Me · 2021", the way a record is named.
@@ -432,6 +495,37 @@ export function Detail() {
                   )}
                 <FixMatchButton onOpen={() => setFixOpen(true)} />
               </div>
+            )}
+
+            {/* A show: start it, carry on with it, or play it at random.
+                Continue leads, because on a show you have started it is the
+                only one of the three anybody presses. */}
+            {isShow && (
+              <div className="detail__actions">
+                <PlayButton
+                  label={showBusy === "continue" ? "Finding…" : "Continue watching"}
+                  onPlay={() => void continueShow()}
+                />
+                <button
+                  className="detail__play detail__play--secondary"
+                  onClick={() => void playShow(false)}
+                  disabled={showBusy !== null}
+                >
+                  {showBusy === "play" ? "Gathering…" : "Play from start"}
+                </button>
+                <button
+                  className="detail__play detail__play--secondary"
+                  onClick={() => void playShow(true)}
+                  disabled={showBusy !== null}
+                >
+                  {showBusy === "random" ? "Gathering…" : "Randomize episodes"}
+                </button>
+              </div>
+            )}
+            {showNote && (
+              <p className="detail__note" role="status">
+                {showNote}
+              </p>
             )}
 
             {/* A leaf plays itself. A container whose children are themselves

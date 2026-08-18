@@ -261,6 +261,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/items/{id}/rating", s.deleteRating)
 	mux.HandleFunc("GET /api/items/{id}/playback", s.playback)
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
+	// A show's play actions. Not admin-gated: they read what the caller may
+	// already browse, and Continue is per-user by construction.
+	mux.HandleFunc("GET /api/items/{id}/continue", s.continueShow)
+	mux.HandleFunc("GET /api/items/{id}/episodes", s.showEpisodes)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
 	mux.HandleFunc("GET /api/items/{id}/subtitles/search", s.searchSubtitles)
 	mux.HandleFunc("POST /api/items/{id}/subtitles/download", s.downloadSubtitle)

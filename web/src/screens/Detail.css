@@ -271,6 +271,38 @@
   box-shadow: 0 0 0 4px var(--gold-ring);
 }
 
+/* The two secondary show actions beside Continue.
+
+   Quieter than the primary: the gold border says "this is the action", and
+   three of them shouting equally would say nothing. Same shape and height so
+   the row reads as one control group rather than a button and two links. */
+.detail__play--secondary {
+  border-color: var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.6);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.detail__play--secondary:hover,
+.detail__play--secondary:focus-visible {
+  color: var(--text-primary);
+  background: rgba(10, 15, 34, 0.85);
+}
+
+.detail__play--secondary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* What happened when an action had nothing to do — a finished show, or one with
+   no episodes yet. A sentence rather than a disabled button, because "why is
+   this greyed out" is a worse question than a plain answer. */
+.detail__note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
 .detail__play-icon {
   font-size: 12px;
   color: var(--gold-bright);
