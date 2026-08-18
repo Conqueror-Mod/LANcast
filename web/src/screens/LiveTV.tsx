@@ -75,36 +75,74 @@ export function LiveTV() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   /*
-   * Hold playback until there is a head start.
+   * Hold playback until there is a head start — at the start, and again every
+   * time the stream runs dry.
    *
    * Polled rather than driven by `progress` events: those fire on the source's
    * schedule, and the source here goes silent for seconds at a time — which is
    * exactly when the deadline needs to be able to fire. A quarter-second timer
    * is cheap and cannot be starved by the thing it is measuring.
+   *
+   * The re-arm on `waiting` is the half that is easy to leave out, and leaving
+   * it out is why a channel stutters for ever once it has stuttered once. The
+   * cushion is spent, not borrowed: playback runs at the rate the source
+   * arrives, so nothing rebuilds it. Chromium resumes on its own at
+   * HAVE_FUTURE_DATA — the exact "first burst arrived" condition preroll.ts
+   * measured as too little — and every later gap then reaches the decoder,
+   * which reads as judder rather than as buffering because no spinner appears.
+   *
+   * Pausing while it refills is load-bearing. An element left playing drains
+   * the little it has, fires `waiting` again, and holds against a buffer that
+   * the play head is eating as fast as it fills.
    */
   useEffect(() => {
     if (!playing) {
       setBuffering(false);
       return;
     }
-    setBuffering(true);
-    const startedAt = Date.now();
-    let started = false;
+    const el = videoRef.current;
+    if (!el) return;
 
-    const id = window.setInterval(() => {
-      const el = videoRef.current;
-      if (!el || started) return;
-      if (!shouldStartPlayback(bufferedAhead(el), Date.now() - startedAt)) return;
+    let timer: number | null = null;
 
-      started = true;
+    const release = () => {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
       setBuffering(false);
-      // A rejection is left alone: a browser refusing autoplay is a policy
-      // decision, and the controls are right there.
-      void el.play().catch(() => {});
-      window.clearInterval(id);
-    }, 250);
+    };
 
-    return () => window.clearInterval(id);
+    /*
+     * hold waits for the cushion, then plays.
+     *
+     * Re-entrant by design: `waiting` can fire while a hold is already running,
+     * and restarting the clock then would push the deadline out for ever on a
+     * channel that keeps stalling.
+     */
+    const hold = () => {
+      if (timer !== null) return;
+      setBuffering(true);
+      el.pause();
+      const startedAt = Date.now();
+      timer = window.setInterval(() => {
+        if (!shouldStartPlayback(bufferedAhead(el), Date.now() - startedAt)) {
+          return;
+        }
+        release();
+        // A rejection is left alone: a browser refusing autoplay is a policy
+        // decision, and the controls are right there.
+        void el.play().catch(() => {});
+      }, 250);
+    };
+
+    hold();
+    el.addEventListener("waiting", hold);
+
+    return () => {
+      el.removeEventListener("waiting", hold);
+      if (timer !== null) window.clearInterval(timer);
+    };
   }, [playing]);
 
   const channels = useMemo(() => data?.channels ?? [], [data]);
