@@ -6,9 +6,12 @@ import {
   activeCount,
   activePills,
   castRowLabel,
+  matchCollections,
   matchYears,
+  ratingSteps,
   type FilterCategory,
 } from "@/lib/browseFilters";
+import { RATING_THRESHOLDS } from "@/lib/browseFilters";
 import "./FilterBar.css";
 
 /*
@@ -90,6 +93,10 @@ export function FilterBar({
         return (facets?.years?.length ?? 0) > 0;
       case "content_rating":
         return (facets?.content_ratings?.length ?? 0) > 0;
+      case "collection":
+        return (facets?.collections?.length ?? 0) > 0;
+      case "min_rating":
+        return ratingSteps(RATING_THRESHOLDS, facets?.max_rating ?? 0).length > 0;
       case "resolution":
         return (facets?.resolutions?.length ?? 0) > 0;
       case "status":
@@ -214,11 +221,7 @@ function FilterPanel({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            category.mode === "search" && category.key !== "year"
-              ? `Search ${category.label.toLowerCase()}s`
-              : "Search years"
-          }
+          placeholder={`Search ${category.label.toLowerCase()}`}
           aria-label={`Search ${category.label}`}
         />
       )}
@@ -254,6 +257,28 @@ function FilterPanel({
               onToggle("year", String(y)),
             ),
           )}
+
+        {category.key === "collection" &&
+          matchCollections(facets?.collections ?? [], query).map((c) =>
+            chip(
+              String(c.id),
+              // The member count separates a franchise from a two-film pairing,
+              // which is the whole question when picking one from a list.
+              `${c.name} (${c.members})`,
+              selected.has(String(c.id)),
+              () => onToggle("collection", String(c.id)),
+            ),
+          )}
+
+        {category.key === "min_rating" &&
+          ratingSteps(RATING_THRESHOLDS, facets?.max_rating ?? 0).map((t) => {
+            const on = params.get("min_rating") === String(t);
+            // Single-valued: picking a threshold replaces the last one, and
+            // picking the one already on clears it.
+            return chip(String(t), `${t}+`, on, () =>
+              onSet("min_rating", on ? "" : String(t)),
+            );
+          })}
 
         {category.key === "status" && (
           <StatusOptions params={params} facets={facets} onSet={onSet} />

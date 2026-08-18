@@ -52,7 +52,12 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
    */
   { key: "actor", label: "Actor", mode: "search", role: "actor" },
   { key: "director", label: "Director", mode: "search", role: "director" },
-  { key: "content_rating", label: "Rating", mode: "chips" },
+  { key: "collection", label: "Collection", mode: "search" },
+  // "Content rating" and "Rating" in full, because one is an age certificate
+  // and the other is a score, and a bar with two buttons both reading "Rating"
+  // is a bar nobody can use.
+  { key: "content_rating", label: "Content rating", mode: "chips" },
+  { key: "min_rating", label: "Rating", mode: "chips", single: true },
   { key: "resolution", label: "Format", mode: "chips" },
   { key: "status", label: "Status", mode: "chips", single: true },
 ];
@@ -126,6 +131,16 @@ export function activePills(
 
   for (const c of params.getAll("content_rating")) push("content_rating", c, c);
 
+  for (const id of params.getAll("collection")) {
+    // Named from the facets, which arrived with the page — so unlike a person,
+    // a collection pill never has to wait for a second request.
+    const col = ctx.facets?.collections?.find((c) => String(c.id) === id);
+    if (col) push("collection", id, col.name);
+  }
+
+  const min = params.get("min_rating");
+  if (min) push("min_rating", min, `${min}+`);
+
   for (const r of params.getAll("resolution")) {
     // The label comes from the server's bucket table rather than a copy here,
     // so a tier cannot be called "4K" in one place and "UHD" in another.
@@ -147,7 +162,8 @@ export function activePills(
 
 /** How many values a category currently has set — the number on its button. */
 export function activeCount(params: URLSearchParams, key: string): number {
-  if (key === "status") return params.get("status") ? 1 : 0;
+  // Single-valued categories are one or none however they are spelled.
+  if (key === "status" || key === "min_rating") return params.get(key) ? 1 : 0;
   return params.getAll(key).length;
 }
 
@@ -177,4 +193,37 @@ export function matchYears(years: number[], query: string): number[] {
  *  are in, which is what makes one Ada Vance distinguishable from another. */
 export function castRowLabel(p: CastMember): string {
   return p.items === 1 ? "1 title" : `${p.items} titles`;
+}
+
+/*
+ * The steps the Rating filter offers, mirroring store.RatingThresholds.
+ *
+ * Whole and half points down to 5: below that a rating filter stops separating
+ * anything in a curated library, so the lower steps would all return the same
+ * grid and read as broken controls.
+ */
+export const RATING_THRESHOLDS = [9, 8.5, 8, 7.5, 7, 6.5, 6, 5];
+
+/*
+ * The rating thresholds worth offering, given what the library actually holds.
+ *
+ * A step above the library's ceiling is a control guaranteed to return nothing,
+ * which is the same "lies about what it does" failure the empty facets already
+ * avoid. One step above the maximum is kept deliberately — a library topping
+ * out at 8.4 still offers 8, which is the useful filter; it is 9 that goes.
+ */
+export function ratingSteps(thresholds: number[], maxRating: number): number[] {
+  if (!maxRating) return [];
+  return thresholds.filter((t) => t <= maxRating);
+}
+
+/** Collections narrowed by what has been typed, matched anywhere in the name —
+ *  a franchise is as often remembered by its second word as its first. */
+export function matchCollections<T extends { name: string }>(
+  collections: T[],
+  query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return collections;
+  return collections.filter((c) => c.name.toLowerCase().includes(q));
 }

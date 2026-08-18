@@ -593,6 +593,8 @@ sorted; decades, years and resolutions are widest/newest-first.
 ```json
 { "genres": ["Comedy", "Drama", "Science Fiction"], "decades": [2010, 1990],
   "content_ratings": ["PG", "PG-13", "R"], "has_watched": true,
+  "collections": [{ "id": 7, "name": "A Franchise", "members": 4 }],
+  "max_rating": 8.4,
   "years": [2019, 2003, 1994],
   "resolutions": [{ "key": "uhd", "label": "4K", "min_width": 3000, "max_width": 0 },
                   { "key": "hd1080", "label": "1080p", "min_width": 1700, "max_width": 2999 }],
@@ -610,6 +612,14 @@ varies: a 2.39:1 film at 4K is 3840×1608 and a 16:9 one is 3840×2160, heights
 boundaries sit below the nominal widths for the same reason — real 1080p is
 often 1912 after cropping. A file with no width has **not been probed** and is
 absent from every tier rather than counted as SD.
+
+`collections` lists the library's collections most-populated first, with member
+counts — the number that separates a franchise from a two-film pairing when
+picking one from a list.
+
+`max_rating` is the highest rating present, so a client offers only thresholds
+that can match: a library topping out at 8.4 has no business showing a 9+ filter
+guaranteed to return nothing.
 
 `has_in_progress` and `has_unmatched` follow the `has_watched` rule: a status
 toggle is offered only when it has something to remove.
@@ -673,6 +683,8 @@ would actually remove something rather than being a silent no-op. `genres`,
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
 | `status` | `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined |
+| `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| `min_rating` | Rated at least this highly, out of ten. **Unrated items are excluded, not sunk**: a film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
 | `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `track` (disc then track number — see Music items) |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |

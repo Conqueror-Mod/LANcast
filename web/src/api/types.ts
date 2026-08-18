@@ -232,6 +232,16 @@ export interface Facets {
   resolutions: ResolutionBucket[];
   has_in_progress: boolean;
   has_unmatched: boolean;
+  /** Collections in this library, most-populated first. */
+  collections: CollectionFacet[];
+  /** The highest rating present, so no threshold is offered that cannot match. */
+  max_rating: number;
+}
+
+export interface CollectionFacet {
+  id: number;
+  name: string;
+  members: number;
 }
 
 export interface ResolutionBucket {

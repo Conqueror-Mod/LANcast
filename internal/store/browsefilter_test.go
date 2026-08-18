@@ -327,3 +327,104 @@ func TestCastSearchScopesToARole(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * Collection membership is not parenthood.
+ *
+ * A film belongs to a franchise without being inside it — that is why ADR 0017
+ * gave collections their own table — so the filter reads item_collection and
+ * not parent_id. A test because the two are one keystroke apart in SQL and the
+ * wrong one silently returns nothing.
+ */
+func TestCollectionFilterReadsMembership(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, sd, _ := seedLibrary(t, st)
+
+	col, err := st.UpsertItem(ctx, ScanFile{
+		LibraryID: lib, Path: "/collections/franchise", Kind: "collection",
+		Title: "A Franchise", SortTitle: "a franchise", Container: "", SizeBytes: 0, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx,
+		`INSERT INTO item_collection (item_id, collection_id, ord) VALUES (?, ?, 0)`,
+		uhd, col); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err := st.ListItems(ctx, ItemFilter{
+		LibraryID: lib, CollectionIDs: []int64{col},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != uhd {
+		t.Fatalf("collection filter = %d items, want the one member", len(items))
+	}
+	_ = sd
+
+	f, err := st.LibraryFacets(ctx, lib, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Collections) != 1 || f.Collections[0].Members != 1 {
+		t.Errorf("collection facet = %+v, want one collection with one member", f.Collections)
+	}
+}
+
+/*
+ * An unrated film is not a film rated zero.
+ *
+ * The case that matters: sweeping unrated items into the bottom of every rating
+ * filter would quietly hide the unmatched half of a library behind a control
+ * that says nothing about matching.
+ */
+func TestRatingFloorExcludesUnratedRatherThanSinkingThem(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, sd, _ := seedLibrary(t, st)
+
+	if _, err := st.db.ExecContext(ctx,
+		`UPDATE media_item SET rating = 8.4 WHERE id = ?`, uhd); err != nil {
+		t.Fatal(err)
+	}
+	// sd is left unrated on purpose.
+
+	rated, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, MinRating: 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rated) != 1 || rated[0].ID != uhd {
+		t.Fatalf("8+ = %d items, want the 8.4 one", len(rated))
+	}
+
+	// Above what anything scores: empty, not "everything unrated".
+	none, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, MinRating: 9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Errorf("9+ = %d items, want none", len(none))
+	}
+
+	// And a threshold of zero is no filter at all rather than "unrated only".
+	all, _, err := st.ListItems(ctx, ItemFilter{LibraryID: lib, MinRating: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Errorf("no threshold = %d items, want the whole library", len(all))
+	}
+
+	f, err := st.LibraryFacets(ctx, lib, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The ceiling is what stops the client offering a 9+ that cannot match.
+	if f.MaxRating != 8.4 {
+		t.Errorf("max rating = %v, want 8.4", f.MaxRating)
+	}
+	_ = sd
+}

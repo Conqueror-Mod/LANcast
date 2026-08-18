@@ -11,9 +11,12 @@ import { describe, it, expect } from "vitest";
 import {
   FILTER_CATEGORIES,
   FILTER_PARAM_KEYS,
+  RATING_THRESHOLDS,
   activeCount,
   activePills,
+  matchCollections,
   matchYears,
+  ratingSteps,
 } from "./browseFilters";
 import type { Facets } from "@/api/types";
 
@@ -29,6 +32,11 @@ const facets: Facets = {
   ],
   has_in_progress: true,
   has_unmatched: false,
+  collections: [
+    { id: 7, name: "A Franchise", members: 4 },
+    { id: 8, name: "A Pairing", members: 2 },
+  ],
+  max_rating: 8.4,
 };
 
 describe("active filter pills", () => {
@@ -159,5 +167,46 @@ describe("searching years", () => {
 
   it("returns nothing rather than everything for a year not present", () => {
     expect(matchYears(facets.years, "1975")).toEqual([]);
+  });
+});
+
+describe("rating thresholds", () => {
+  /*
+   * The case this exists for. A library topping out at 8.4 must not offer 9+,
+   * which is a control guaranteed to return an empty grid — the same "lies
+   * about what it does" failure the empty facets already avoid.
+   */
+  it("drops steps the library cannot reach, and keeps the one below", () => {
+    const steps = ratingSteps(RATING_THRESHOLDS, 8.4);
+    expect(steps).not.toContain(9);
+    expect(steps[0]).toBe(8);
+  });
+
+  it("offers nothing at all when nothing is rated", () => {
+    expect(ratingSteps(RATING_THRESHOLDS, 0)).toEqual([]);
+  });
+
+  it("shows a rating pill as a floor", () => {
+    const p = new URLSearchParams("min_rating=8");
+    expect(activePills(p, { facets })[0].label).toBe("8+");
+  });
+
+  // Single-valued, like status: one threshold or none.
+  it("counts a rating as at most one", () => {
+    expect(activeCount(new URLSearchParams("min_rating=8"), "min_rating")).toBe(1);
+  });
+});
+
+describe("collections", () => {
+  it("names a collection pill from the facets, with no second request", () => {
+    const p = new URLSearchParams("collection=7");
+    expect(activePills(p, { facets })[0].label).toBe("A Franchise");
+  });
+
+  // Matched anywhere in the name: a franchise is as often remembered by its
+  // second word as its first.
+  it("matches a word inside the name", () => {
+    expect(matchCollections(facets.collections, "franch")).toHaveLength(1);
+    expect(matchCollections(facets.collections, "a ")).toHaveLength(2);
   });
 });
