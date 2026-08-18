@@ -1221,6 +1221,7 @@ export async function fetchArtistQueue(
 export async function fetchLibraryTracks(
   qc: QueryClient,
   libraryID: number,
+  kind: PlayableKind = "track",
 ): Promise<number[]> {
   const PAGE = 500;
   const ids: number[] = [];
@@ -1228,13 +1229,16 @@ export async function fetchLibraryTracks(
   for (;;) {
     const params = new URLSearchParams({
       library_id: String(libraryID),
-      kind: "track",
+      kind,
+      // Title order for everything, which for episodes means the server's
+      // sort_title, season, episode — a show library queued in the order it is
+      // meant to be watched rather than alphabetically by episode name.
       sort: "title",
       limit: String(PAGE),
       offset: String(offset),
     });
     const page = await qc.fetchQuery({
-      queryKey: ["library-tracks", libraryID, offset],
+      queryKey: ["library-tracks", libraryID, kind, offset],
       queryFn: () => apiGet<ItemsPage>(`/api/items?${params.toString()}`),
     });
     ids.push(...page.items.map((t) => t.id));
@@ -1245,6 +1249,31 @@ export async function fetchLibraryTracks(
     if (page.items.length === 0 || offset >= page.total) break;
   }
   return ids;
+}
+
+/*
+ * The leaf kind a library's "play all" queues.
+ *
+ * A show library queues **episodes**, not shows: a queue of containers is not
+ * something a player can advance through, and "play all" over a show library
+ * means the episodes in order. Pictures are deliberately absent — a slideshow is
+ * a different control with a different pace, and pretending it is a queue would
+ * ship the wrong thing quickly.
+ */
+export type PlayableKind = "track" | "movie" | "episode";
+
+export function playableKindFor(libraryKind: string | undefined): PlayableKind | null {
+  switch (libraryKind) {
+    case "music":
+      return "track";
+    case "show":
+      return "episode";
+    case "picture":
+    case "other":
+      return null;
+    default:
+      return "movie";
+  }
 }
 
 // Server identity. /api/health has always returned this and nothing has ever
