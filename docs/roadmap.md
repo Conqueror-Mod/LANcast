@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-12 · **v0.6.9 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-17 · **v0.6.46 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -57,7 +57,7 @@ executables, a goreleaser matrix and a Windows installer
 and has been since v0.3.2.
 
 A **feature backlog is captured below.** With M4 built, what remains is breadth
-(finishing music, a Pictures library, more plugin kinds, more client surfaces)
+(finishing music, more plugin kinds, more client surfaces)
 rather than foundational milestones.
 
 ## Releases
@@ -435,9 +435,10 @@ group is not priority.
 - ~~**Music library.**~~ — **done**, end to end: server-side in v0.5.0, client
   UI and mini-player in v0.6.0.
 - ~~**Photo library** with a built-in **image viewer**~~ — **built** in v0.6.5 ([ADR 0028](adr/0028-pictures-library.md), [plan](pictures-plan.md)). Folders become galleries, because a filename like `openart-f81b76…_raw.jpg` says nothing and there is no provider to ask. Thumbnails run in their own worker through the existing content-addressed cache; HEIC decodes through the ffmpeg already required, because a phone backup is mostly HEIC and a wall of placeholders would be a feature that looks finished and is useless. EXIF orientation and date-taken only — **GPS deliberately unread**, since the safest way never to leak location data is never to load it.
-- **Live TV** — a tuner page and function. **Channels are built; playback is
-  half-built and the gap is named.** A channel source is an M3U — from an IPTV
-  provider or from a tuner on the network — and a channel is deliberately **not
+- **Live TV** — a tuner page and function. **Channels, playback and the EPG
+  are built; what is not right is how the picture is paced.** A channel
+  source is an M3U — from an IPTV provider or from a tuner on the network —
+  and a channel is deliberately **not
   a `media_item`**: that table describes works, and a channel has no duration,
   no file, no position and no identity a provider could match, so it would have
   meant six nullable columns and a `kind` every listing must exclude
@@ -848,11 +849,19 @@ where that openness gets exercised.
     the release pipeline had never signed anything, so the signing step had
     never run.
 13. **Nothing foundational remains.** What's next is breadth, from the feature
-    backlog: a Pictures library (its own ADR — ADR 0024 deferred photos
-    deliberately), more client surfaces (TV/mobile), more plugin kinds as real
-    plugins need them, theme music if OST identification lands, crash reporting,
-    and debug-level logging from the UI. Each is planned immediately before it
-    is built.
+    backlog: more client surfaces (TV/mobile), more plugin kinds as real
+    plugins need them, and theme music if OST identification lands. Each is
+    planned immediately before it is built.
+
+    Ahead of any of it: **Live TV plays at the wrong speed**, reported from a
+    real install as channels running either far too slow or far too fast. The
+    picture arrives and keeps arriving, so this is pacing rather than delivery
+    — which makes it a timestamp question, and the first suspect is the
+    unconditional `-fflags +genpts` in `liveInputArgs()`: generating
+    presentation timestamps for a stream that already carries valid ones is a
+    way to invent a frame rate. v0.6.42 fixed an HLS channel playing at 1.5×,
+    which suggests the same family rather than the same bug. Undiagnosed as of
+    v0.6.46 and not yet reproduced from the command line.
 
 ## What the last pass taught
 
