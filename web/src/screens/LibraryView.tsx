@@ -4,15 +4,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useInfiniteItems,
   useFacets,
+  useCastByIDs,
   useRecentPhotos,
   fetchLibraryTracks,
 } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
-import { FilterChips } from "@/components/FilterChips";
+import { FilterBar } from "@/components/FilterBar";
 import { AlphabetRail } from "@/components/AlphabetRail";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
+import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
@@ -20,7 +22,10 @@ import "./Browse.css";
 
 // The facet params that live in the URL as repeated keys. Search, sort, and the
 // watched toggle are single-valued and handled separately.
-const FACET_KEYS = ["genre", "decade", "content_rating"] as const;
+// Every filter parameter the bar owns. Kept as one list so "Clear all" cannot
+// drift from what the bar can set -- a clear that misses a key leaves a grid
+// filtered by something with no visible control.
+const FACET_KEYS = FILTER_PARAM_KEYS;
 
 // The shared browse shell — header, count, search, filter row, and grid. The
 // per-kind differences (sort options, copy) come in as `config`, so a movie
@@ -43,6 +48,12 @@ export function LibraryView({
   const genres = params.getAll("genre");
   const decades = params.getAll("decade");
   const contentRatings = params.getAll("content_rating");
+  const years = params.getAll("year");
+  const resolutions = params.getAll("resolution");
+  const people = params.getAll("person");
+  const actors = params.getAll("actor");
+  const directors = params.getAll("director");
+  const status = params.get("status") ?? "";
   const unwatched = params.get("watched") === "false";
   // The A–Z rail's selection lives in the URL like every other control here, so
   // "the S films" is a link, survives a reload, and comes back with Back.
@@ -104,6 +115,12 @@ export function LibraryView({
     decades: decades.map(Number),
     contentRatings,
     unwatched,
+    years: years.map(Number),
+    resolutions,
+    people: people.map(Number),
+    actors: actors.map(Number),
+    directors: directors.map(Number),
+    status,
     /*
      * Containers that group items are not in the grid.
      *
@@ -161,7 +178,7 @@ export function LibraryView({
   const clearFilters = () => {
     setParams(
       (prev) => {
-        for (const k of [...FACET_KEYS, "q", "watched"]) prev.delete(k);
+        for (const k of [...FACET_KEYS, "q"]) prev.delete(k);
         return prev;
       },
       { replace: true },
@@ -193,11 +210,35 @@ export function LibraryView({
 
   const items = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
+  /*
+   * Names for the people currently filtered on.
+   *
+   * The filter is by id because that is what identifies a person, but a pill
+   * has to say a name -- and on a bookmarked URL the id arrives with nothing
+   * attached, having never passed through the search panel that knew it.
+   */
+  const castLookup = useCastByIDs(libraryID, [
+    ...people,
+    ...actors,
+    ...directors,
+  ]);
+  const castNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of castLookup.data?.people ?? []) m.set(String(p.id), p.name);
+    return m;
+  }, [castLookup.data]);
+
   const filtered =
     !!q ||
     genres.length > 0 ||
     decades.length > 0 ||
     contentRatings.length > 0 ||
+    years.length > 0 ||
+    resolutions.length > 0 ||
+    people.length > 0 ||
+    actors.length > 0 ||
+    directors.length > 0 ||
+    !!status ||
     unwatched;
 
   return (
@@ -315,48 +356,15 @@ export function LibraryView({
           </select>
         </label>
 
-        <FilterChips
-          label="Genre"
-          options={(facets?.genres ?? []).map((g) => ({ value: g, label: g }))}
-          selected={new Set(genres)}
-          onToggle={(v) => toggleParam("genre", v)}
+        <FilterBar
+          libraryID={libraryID}
+          facets={facets}
+          params={params}
+          castNames={castNames}
+          onToggle={toggleParam}
+          onSet={setParam}
+          onClear={clearFilters}
         />
-
-        <FilterChips
-          label="Decade"
-          options={(facets?.decades ?? []).map((d) => ({
-            value: String(d),
-            label: `${d}s`,
-          }))}
-          selected={new Set(decades)}
-          onToggle={(v) => toggleParam("decade", v)}
-        />
-
-        <FilterChips
-          label="Rating"
-          options={(facets?.content_ratings ?? []).map((c) => ({
-            value: c,
-            label: c,
-          }))}
-          selected={new Set(contentRatings)}
-          onToggle={(v) => toggleParam("content_rating", v)}
-        />
-
-        {facets?.has_watched && (
-          <div className="chips">
-            <span className="chips__label">Status</span>
-            <div className="chips__row">
-              <button
-                type="button"
-                className={"chip" + (unwatched ? " is-on" : "")}
-                aria-pressed={unwatched}
-                onClick={() => setParam("watched", unwatched ? "" : "false")}
-              >
-                Unwatched
-              </button>
-            </div>
-          </div>
-        )}
 
         {filtered && (
           <button className="browse__clear" onClick={clearFilters}>

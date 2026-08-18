@@ -95,12 +95,19 @@ type CastMember struct {
  * same number of films must not swap places between requests, or a list that
  * is re-fetched as you type appears to shuffle itself.
  */
-func (s *Store) SearchCast(ctx context.Context, libraryID int64, query string, limit int) ([]CastMember, error) {
+func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role string, limit int) ([]CastMember, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	args := []any{libraryID}
 	where := ""
+	if role != "" {
+		// Scoped to one role, because "who is in this" and "who made this" are
+		// different questions with different answers, and an actor-director
+		// appears under both — correctly, once in each.
+		where += ` AND c.role = ?`
+		args = append(args, role)
+	}
 	if query != "" {
 		// Prefix-or-word match: "ford" finds Harrison Ford, and "harrison f"
 		// finds him too. LIKE is case-insensitive for ASCII in SQLite, which is

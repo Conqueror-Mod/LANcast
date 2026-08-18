@@ -19,6 +19,7 @@ import type {
   Program,
   GuideNow,
   Person,
+  CastMember,
   CrashReport,
   Facets,
   HistoryEntry,
@@ -698,6 +699,17 @@ export interface ItemQuery {
   decades?: number[];
   contentRatings?: string[];
   unwatched?: boolean;
+  years?: number[];
+  /** Resolution bucket keys — uhd | hd1080 | hd720 | sd. */
+  resolutions?: string[];
+  /** Person ids from /cast. Matches any credited role. */
+  people?: number[];
+  /** Person ids restricted to acting credits. */
+  actors?: number[];
+  /** Person ids restricted to directing credits. */
+  directors?: number[];
+  /** in_progress | unmatched. Single-valued; the two cannot be combined. */
+  status?: string;
   /** Drop one kind from the listing — the grid uses it for collections. */
   excludeKind?: string;
   /** A–Z rail: one letter, or "#" for everything that starts with anything else. */
@@ -717,6 +729,12 @@ function itemsParams({
   decades = [],
   contentRatings = [],
   unwatched = false,
+  years = [],
+  resolutions = [],
+  people = [],
+  actors = [],
+  directors = [],
+  status,
   excludeKind,
   initial,
   limit = 120,
@@ -736,6 +754,12 @@ function itemsParams({
   for (const g of genres) params.append("genre", g);
   for (const d of decades) params.append("decade", String(d));
   for (const c of contentRatings) params.append("content_rating", c);
+  for (const y of years) params.append("year", String(y));
+  for (const r of resolutions) params.append("resolution", r);
+  for (const p of people) params.append("person", String(p));
+  for (const a of actors) params.append("actor", String(a));
+  for (const d of directors) params.append("director", String(d));
+  if (status) params.set("status", status);
   if (unwatched) params.set("watched", "false");
   return params;
 }
@@ -794,6 +818,51 @@ export function useFacets(libraryID: number) {
       apiGet<Facets>(`/api/libraries/${libraryID}/facets`, signal),
     enabled: libraryID > 0,
     staleTime: 30_000,
+  });
+}
+
+/*
+ * The Cast filter's type-ahead.
+ *
+ * Keyed on the query so each distinct search is cached separately — typing
+ * back to something already asked for is answered from memory rather than by
+ * asking again. `keepPreviousData` is deliberate: without it the list empties
+ * between keystrokes and the panel flickers through blank on every letter.
+ */
+export function useCast(libraryID: number, query: string, role = "") {
+  return useQuery({
+    queryKey: ["cast", libraryID, query, role],
+    queryFn: ({ signal }) =>
+      apiGet<{ people: CastMember[] }>(
+        `/api/libraries/${libraryID}/cast?q=${encodeURIComponent(query)}` +
+          (role ? `&role=${encodeURIComponent(role)}` : ""),
+        signal,
+      ),
+    enabled: libraryID > 0,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+}
+
+/*
+ * The people behind an active filter, by id.
+ *
+ * Needed because filter state lives in the URL: a bookmarked `?person=12` has
+ * an id and no name, and a pill reading "person 12" is not a filter anybody can
+ * read. Fetched separately from the search so a pill survives a reload without
+ * the search panel ever having been opened.
+ */
+export function useCastByIDs(libraryID: number, ids: string[]) {
+  const key = ids.join(",");
+  return useQuery({
+    queryKey: ["cast-by-id", libraryID, key],
+    queryFn: ({ signal }) =>
+      apiGet<{ people: CastMember[] }>(
+        `/api/libraries/${libraryID}/cast?` + ids.map((i) => `id=${i}`).join("&"),
+        signal,
+      ),
+    enabled: libraryID > 0 && ids.length > 0,
+    staleTime: 300_000,
   });
 }
 

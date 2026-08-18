@@ -662,16 +662,27 @@ type ItemFilter struct {
 	Years          []int    // exact release years
 	Resolutions    []string // bucket keys: uhd | hd1080 | hd720 | sd
 
-	// PersonIDs restricts to items a chosen person is credited on, in any role.
-	//
-	// By id rather than by name, because two people share a name often enough
-	// that a name filter is a different question from the one the user asked:
-	// they picked a row from a list, and that row was a person. Any role rather
-	// than actor-only for the same reason a viewer would give — somebody
-	// searching Eastwood means the films he is in *and* the ones he directed,
-	// and splitting them behind an invisible role toggle answers a question
-	// nobody asked.
-	PersonIDs []int64
+	/*
+	 * Credit filters, by person id rather than by name.
+	 *
+	 * By id because two people share a name often enough that a name filter is
+	 * a different question from the one the user asked: they picked a row from
+	 * a list, and that row was a person.
+	 *
+	 * Split by role because "who is in this" and "who made this" are different
+	 * questions. Eastwood acts in some of his films and directs others, and a
+	 * single any-role filter cannot express which was meant — it silently
+	 * answers both. An actor-director simply appears under both categories,
+	 * once in each, which is the truthful shape.
+	 *
+	 * PersonIDs is kept as the any-role form: it is what the API shipped with,
+	 * so a bookmark holding `?person=` still resolves, and it remains the right
+	 * query for a client that does not care which side of the camera somebody
+	 * was on.
+	 */
+	PersonIDs   []int64
+	ActorIDs    []int64
+	DirectorIDs []int64
 
 	// Unwatched restricts to items the user has not finished. It is keyed by
 	// UserID, which must be set when Unwatched is true. Watched state lives on the
@@ -903,17 +914,30 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			where += ` AND (` + strings.Join(parts, " OR ") + `)`
 		}
 	}
-	if len(f.PersonIDs) > 0 {
-		// EXISTS for the same reason the genre clause uses it: a person credited
-		// twice on one item (actor and director) must not duplicate the row or
-		// double the total.
-		where += ` AND EXISTS (
+	// EXISTS for the same reason the genre clause uses it: a person credited
+	// twice on one item (acting in it and directing it) must not duplicate the
+	// row or double the total.
+	credited := func(ids []int64, role string) {
+		if len(ids) == 0 {
+			return
+		}
+		clause := ` AND EXISTS (
 			SELECT 1 FROM credit c
-			WHERE c.item_id = media_item.id AND c.person_id IN (` + placeholders(len(f.PersonIDs)) + `))`
-		for _, id := range f.PersonIDs {
+			WHERE c.item_id = media_item.id AND c.person_id IN (` + placeholders(len(ids)) + `)`
+		if role != "" {
+			clause += ` AND c.role = ?`
+		}
+		where += clause + `)`
+		for _, id := range ids {
 			args = append(args, id)
 		}
+		if role != "" {
+			args = append(args, role)
+		}
 	}
+	credited(f.PersonIDs, "")
+	credited(f.ActorIDs, "actor")
+	credited(f.DirectorIDs, "director")
 	if f.InProgress {
 		// Started and not finished: a position past the start with the watched
 		// flag still clear. Position alone would include a film opened for two
