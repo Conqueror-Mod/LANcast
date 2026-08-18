@@ -36,6 +36,11 @@ type Manager struct {
 	// does not tell the server it has gone.
 	IdleTimeout time.Duration
 
+	// binMu guards bin, which is no longer written only at construction: the
+	// media-tools installer can put ffmpeg on this machine while the server is
+	// running, and requiring a restart to notice would make a working install
+	// look like a failed one.
+	binMu     sync.RWMutex
 	encMu     sync.RWMutex
 	available []Encoder
 	selected  Encoder
@@ -63,10 +68,34 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 		available:   []Encoder{Software},
 		selected:    Software,
 	}
-	if bin, err := exec.LookPath("ffmpeg"); err == nil {
-		m.bin = bin
-	}
+	m.Rescan()
 	return m
+}
+
+/*
+ * Rescan re-resolves ffmpeg, and reports whether it is now available.
+ *
+ * Called at construction and again after the media-tools installer finishes.
+ * Prober does this on every call and so needs no equivalent; the transcode
+ * manager resolves once and holds the path, because every session start would
+ * otherwise pay for a PATH walk.
+ */
+func (m *Manager) Rescan() bool {
+	found, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		found = ""
+	}
+	m.binMu.Lock()
+	m.bin = found
+	m.binMu.Unlock()
+	return found != ""
+}
+
+// binary returns the resolved ffmpeg path, empty when there is none.
+func (m *Manager) binary() string {
+	m.binMu.RLock()
+	defer m.binMu.RUnlock()
+	return m.bin
 }
 
 // DetectHardware probes for usable encoders and applies a preference.
@@ -76,9 +105,10 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 // rather than discovering at playback time that the encoder ffmpeg advertised
 // does not work on this machine.
 func (m *Manager) DetectHardware(ctx context.Context, preference string) {
-	available := DetectEncoders(ctx, m.bin, m.log)
+	bin := m.binary()
+	available := DetectEncoders(ctx, bin, m.log)
 	selected := SelectEncoder(available, preference, m.log)
-	colour := DetectColourCaps(ctx, m.bin, m.log)
+	colour := DetectColourCaps(ctx, bin, m.log)
 
 	m.encMu.Lock()
 	m.available, m.selected, m.colour = available, selected, colour
@@ -119,7 +149,7 @@ func (m *Manager) AvailableEncoders() []Encoder {
 }
 
 // Available reports whether transcoding is possible.
-func (m *Manager) Available() bool { return m.bin != "" }
+func (m *Manager) Available() bool { return m.binary() != "" }
 
 // Start begins reaping idle sessions. Cancelling ctx stops everything.
 func (m *Manager) Start(ctx context.Context) {
@@ -238,7 +268,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, o Options) (io.
 	o.Output = Progressive
 	o.Encoder = m.Encoder()
 	o.CanTonemap, o.CanTagSDR = m.colourFor()
-	s, stdout, err := startProgressive(ctx, m.bin, o)
+	s, stdout, err := startProgressive(ctx, m.binary(), o)
 	if err != nil {
 		m.release()
 		return nil, err
@@ -285,7 +315,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Sess
 	o.CanTonemap, o.CanTagSDR = m.colourFor()
 	o.OutputDir = filepath.Join(m.root, id)
 
-	s, err := startHLS(ctx, m.bin, o)
+	s, err := startHLS(ctx, m.binary(), o)
 	if err != nil {
 		m.release()
 		return nil, err

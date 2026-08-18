@@ -21,6 +21,7 @@ import type {
   Person,
   CastMember,
   CrashReport,
+  MediaToolsState,
   Facets,
   HistoryEntry,
   Item,
@@ -871,6 +872,43 @@ export function useCastByIDs(libraryID: number, ids: string[]) {
       ),
     enabled: libraryID > 0 && ids.length > 0,
     staleTime: 300_000,
+  });
+}
+
+/*
+ * Fetching ffmpeg (ADR 0043).
+ *
+ * Polled while an install runs and left alone when it is not: this is a
+ * two-minute download whose progress a spinner cannot express, and a status
+ * nobody is watching is not worth a request every second.
+ */
+export function useMediaTools(enabled: boolean) {
+  return useQuery({
+    queryKey: ["media-tools"],
+    queryFn: ({ signal }) => apiGet<MediaToolsState>("/api/media-tools", signal),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.running ? 1000 : false),
+  });
+}
+
+export function useInstallMediaTools() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/media-tools/install", "POST"),
+    // Invalidate both: the install changes what the server can do, which the
+    // settings payload reports separately from this job's progress.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["media-tools"] });
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+export function useCancelMediaToolsInstall() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/media-tools/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["media-tools"] }),
   });
 }
 
