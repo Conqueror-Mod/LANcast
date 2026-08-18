@@ -225,6 +225,28 @@ export interface Facets {
   decades: number[];
   content_ratings: string[];
   has_watched: boolean;
+  /** Exact years present, newest first. Searchable rather than chipped. */
+  years: number[];
+  /** Resolution tiers present, widest first. Labels come from the server so
+   *  the client never invents a name for a bucket it did not define. */
+  resolutions: ResolutionBucket[];
+  has_in_progress: boolean;
+  has_unmatched: boolean;
+}
+
+export interface ResolutionBucket {
+  key: string;
+  label: string;
+  min_width: number;
+  max_width: number;
+}
+
+/** One credited person, with how much of the library they are in. */
+export interface CastMember {
+  id: number;
+  name: string;
+  role: string;
+  items: number;
 }
 
 export interface Encoder {

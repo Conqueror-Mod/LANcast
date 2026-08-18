@@ -624,6 +624,13 @@ prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too;
 { "people": [{ "id": 12, "name": "Ada Vance", "role": "actor", "items": 9 }] }
 ```
 
+`id` is repeatable and resolves specific people **instead of** searching, which
+is what lets a filter pill render a name. Filter state lives in the URL, so a
+bookmarked `?person=12` arrives with an id and nothing else, and a pill reading
+"person 12" is not a filter anybody can read. Answers in the order asked for, so
+pills do not reorder between reloads; an id with no row is skipped rather than
+returned blank.
+
 A search endpoint rather than another array on `/facets`, because the two differ
 by three orders of magnitude: a library has a dozen genres and thousands of
 credited people, and shipping all of them on every browse load would be a

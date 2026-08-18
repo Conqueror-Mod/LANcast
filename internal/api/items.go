@@ -230,6 +230,37 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
+	/*
+	 * `id` resolves specific people instead of searching.
+	 *
+	 * Filter state lives in the URL, so a bookmarked `?person=12` arrives with
+	 * an id and no name — and a filter pill reading "person 12" is not one
+	 * anybody can read. Answering by id lets the pill render without the search
+	 * panel ever having been opened.
+	 */
+	if ids, ok := parseInt64s(r.URL.Query()["id"]); len(ids) > 0 {
+		if !ok {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid id")
+			return
+		}
+		names, err := s.st.CastNames(r.Context(), ids)
+		if err != nil {
+			s.writeInternal(w, err, "cast names")
+			return
+		}
+		// Emitted in the order asked for, so pills do not reorder themselves
+		// between reloads. A missing id is skipped rather than rendered as a
+		// blank pill: the person was deleted with their last item.
+		people := make([]store.CastMember, 0, len(ids))
+		for _, pid := range ids {
+			if name, ok := names[pid]; ok {
+				people = append(people, store.CastMember{ID: pid, Name: name})
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"people": people})
+		return
+	}
+
 	people, err := s.st.SearchCast(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("q")),
 		queryInt(r, "limit"))
 	if err != nil {
