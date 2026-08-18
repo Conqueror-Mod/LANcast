@@ -31,6 +31,9 @@ import {
   useSetPluginEnabled,
   useRemovePlugin,
   useServerLog,
+  useMediaTools,
+  useInstallMediaTools,
+  useCancelMediaToolsInstall,
 } from "@/api/hooks";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
@@ -1016,6 +1019,23 @@ function MediaToolsRow({
   const tools = settings.media_tools;
   const ok = tools?.probe_available;
   const [value, setValue] = useState("");
+  /*
+   * The install job, polled only while it matters.
+   *
+   * Enabled when the tools are missing or a job is running: once ffmpeg is
+   * present there is nothing to watch, and a settings page that polls forever
+   * for a finished download is a page that costs a request a second for nothing.
+   */
+  const job = useMediaTools(!ok);
+  const install = useInstallMediaTools();
+  const cancel = useCancelMediaToolsInstall();
+  const state = job.data;
+  const src = state?.available_source;
+  const running = !!state?.running;
+  const pct =
+    state && state.bytes_total > 0
+      ? Math.min(100, Math.round((state.bytes_done / state.bytes_total) * 100))
+      : 0;
   return (
     <div className="set-row">
       <div className="set-row__main">
@@ -1028,10 +1048,60 @@ function MediaToolsRow({
         <div className="set-row__sub">
           {ok
             ? `ffmpeg and ffprobe available${tools.directory ? " · " + tools.directory : " on PATH"}`
-            : "Without ffmpeg, LANcast cannot inspect or convert media — files play only if your browser already supports them. Install ffmpeg, or set the folder containing it here."}
+            : "Without ffmpeg, LANcast cannot inspect or convert media — files play only if your browser already supports them. Download it below, or set the folder containing it here."}
         </div>
+
+        {/* What is about to be downloaded, before it is: version, size and
+            licence. A download the user cannot identify is not consent, and the
+            licence is GPL, which is worth saying out loud rather than burying in
+            an ADR. */}
+        {!ok && src && !running && (
+          <div className="set-row__sub">
+            {`${(src.size_bytes / 1_000_000).toFixed(0)} MB · ffmpeg ${src.version} · `}
+            <a href={src.licence_url} target="_blank" rel="noreferrer">
+              {src.licence}
+            </a>
+            {" · fetched from GitHub, checksum verified before it is unpacked"}
+          </div>
+        )}
+
+        {running && (
+          <div className="set-row__sub" role="status">
+            {state?.stage === "downloading"
+              ? `Downloading… ${pct}% of ${(state.bytes_total / 1_000_000).toFixed(0)} MB`
+              : state?.stage === "verifying"
+                ? "Verifying the checksum…"
+                : "Installing…"}
+          </div>
+        )}
+
+        {/* A failed install says why and stays failed until something is done
+            about it, rather than reverting to a bare "missing" that looks like
+            nothing was ever attempted. */}
+        {!running && state?.error && (
+          <div className="set-row__sub" role="alert">
+            {`That install did not finish: ${state.error}`}
+          </div>
+        )}
       </div>
       <div className="set-row__actions">
+        {/* Downloading it is offered first, because typing a path presupposes
+            having already installed ffmpeg somewhere — the step this exists to
+            remove. The folder box stays for anyone who has. */}
+        {!ok && src && !running && (
+          <button
+            className="set-btn"
+            disabled={install.isPending}
+            onClick={() => install.mutate()}
+          >
+            {install.isPending ? "Starting…" : "Download ffmpeg"}
+          </button>
+        )}
+        {running && (
+          <button className="set-btn" onClick={() => cancel.mutate()}>
+            Cancel
+          </button>
+        )}
         <input
           className="set-input set-input--wide"
           type="text"
