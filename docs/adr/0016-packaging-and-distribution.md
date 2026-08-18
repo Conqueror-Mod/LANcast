@@ -2,6 +2,12 @@
 
 Date: 2026-07-26 · Status: **superseded by [ADR 0022](0022-client-and-server-executables.md)** (two executables, no terminal) · the packaging decided here was never built
 
+> **The ffmpeg half is amended by
+> [ADR 0043](0043-media-tools-are-fetched-not-bundled.md)**: still not bundled,
+> but no longer only documented — the app fetches the tools when asked. This
+> ADR invited that revisit "once there is demand"; a second install that could
+> not play most of its library was the demand.
+
 > **Deferred, decisions recorded.** The build is not being done yet — branding
 > came first. The open questions were settled so the work can start cold later:
 > service management is **built into the binary**; **macOS is dropped** for now
