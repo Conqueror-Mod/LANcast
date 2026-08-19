@@ -141,11 +141,20 @@ describe("the episode list", () => {
     expect(host.querySelector(".eprow__still img")).toBeNull();
   });
 
-  // And gets out of the way once there is one, without the row changing shape.
-  it("renders the still when one exists", () => {
-    render([episode({ artwork: { thumb: "/api/artwork/abc.jpg" } })]);
+  /*
+   * And gets out of the way once there is one, without the row changing shape.
+   *
+   * The src is built from the hash rather than being the hash. The first version
+   * of this row used the raw value, which is truthy — so it took the image
+   * branch and rendered a broken image instead of falling back to the number,
+   * on the 993 episodes that already had stills stored.
+   */
+  it("builds the still's URL from its hash", () => {
+    render([episode({ artwork: { thumb: "847b43c1" } })]);
 
-    expect(host.querySelector(".eprow__still img")).not.toBeNull();
+    const img = host.querySelector<HTMLImageElement>(".eprow__still img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("/api/artwork/847b43c1?size=poster");
     expect(host.querySelector(".eprow__still--empty")).toBeNull();
   });
 

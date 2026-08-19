@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
 import { useSetWatched } from "@/api/hooks";
+import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./EpisodeList.css";
@@ -173,7 +174,20 @@ function EpisodeRow({
  * episode artwork is stored at all — today every row takes this path.
  */
 function EpisodeStill({ episode }: { episode: Item }) {
-  const still = episode.artwork?.thumb;
+  /*
+   * A hash is not a URL.
+   *
+   * The item's artwork fields carry content-addressed hashes, and every other
+   * screen turns them into URLs through artworkURL. The first version of this
+   * row put the hash straight into `src`, which is worse than having no image:
+   * the value is truthy, so the row took the image branch and rendered a broken
+   * one instead of the number it falls back to.
+   *
+   * `poster` (342px) rather than `thumb` (185px) because the still box is 200px
+   * wide and 185 is soft on a high-density display — the size names describe
+   * widths, not roles.
+   */
+  const still = artworkURL(episode.artwork?.thumb, "poster");
   if (still) {
     return (
       <span className="eprow__still">
