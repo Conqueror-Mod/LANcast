@@ -7,10 +7,11 @@
  * those throw; they just make the screen look broken in a way that reads as
  * missing data.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FocusProvider } from "@/focus/FocusController";
 import { EpisodeList } from "./EpisodeList";
 import type { Item } from "@/api/types";
@@ -51,13 +52,21 @@ function episode(over: Partial<Item> = {}): Item {
 }
 
 function render(episodes: Item[]) {
+  // The list marks episodes watched through a mutation, so it needs a client.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   act(() => {
     root.render(
-      <FocusProvider>
-        <MemoryRouter>
-          <EpisodeList episodes={episodes} queue={episodes.map((e) => e.id)} />
-        </MemoryRouter>
-      </FocusProvider>,
+      <QueryClientProvider client={qc}>
+        <FocusProvider>
+          <MemoryRouter>
+            <EpisodeList
+              episodes={episodes}
+              queue={episodes.map((e) => e.id)}
+              parentID={99}
+            />
+          </MemoryRouter>
+        </FocusProvider>
+      </QueryClientProvider>,
     );
   });
 }
@@ -78,11 +87,22 @@ describe("the episode list", () => {
   });
 
   /*
-   * The synopsis is the reason a season page exists — it is what the poster
-   * grid had nowhere to put.
+   * The synopsis is the reason a season page exists — it is what the poster grid
+   * had nowhere to put.
+   *
+   * Watched, because the spoiler rule now hides the synopsis of an episode
+   * nobody has started (see the spoiler tests below). This test predates that
+   * rule and is updated rather than worked around: an episode you have seen is
+   * the case where "does the synopsis render at all" is the question being
+   * asked.
    */
   it("shows the synopsis", () => {
-    render([episode({ overview: "Fry is cryogenically frozen." })]);
+    render([
+      episode({
+        overview: "Fry is cryogenically frozen.",
+        progress: { position_ms: 0, watched: true },
+      }),
+    ]);
     expect(host.textContent).toContain("Fry is cryogenically frozen.");
   });
 
@@ -103,7 +123,7 @@ describe("the episode list", () => {
 
     expect(bars()).toHaveLength(0);
     expect(rows()[0].className).toContain("eprow--watched");
-    expect(host.querySelector(".eprow__watched")).not.toBeNull();
+    expect(host.querySelector(".eprow__mark.is-on")).not.toBeNull();
   });
 
   it("draws a bar only for an episode part way through", () => {
@@ -132,11 +152,20 @@ describe("the episode list", () => {
     expect(host.querySelector(".eprow__still img")).toBeNull();
   });
 
-  // And gets out of the way once there is one, without the row changing shape.
-  it("renders the still when one exists", () => {
-    render([episode({ artwork: { thumb: "/api/artwork/abc.jpg" } })]);
+  /*
+   * And gets out of the way once there is one, without the row changing shape.
+   *
+   * The src is built from the hash rather than being the hash. The first version
+   * of this row used the raw value, which is truthy — so it took the image
+   * branch and rendered a broken image instead of falling back to the number,
+   * on the 993 episodes that already had stills stored.
+   */
+  it("builds the still's URL from its hash", () => {
+    render([episode({ artwork: { thumb: "847b43c1" } })]);
 
-    expect(host.querySelector(".eprow__still img")).not.toBeNull();
+    const img = host.querySelector<HTMLImageElement>(".eprow__still img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("/api/artwork/847b43c1?size=poster");
     expect(host.querySelector(".eprow__still--empty")).toBeNull();
   });
 
@@ -144,6 +173,128 @@ describe("the episode list", () => {
   // it.
   it("labels each row as a play action", () => {
     render([episode({ episode: 3, title: "I, Roommate" })]);
-    expect(rows()[0].getAttribute("aria-label")).toBe("Play episode 3, I, Roommate");
+    expect(
+      host.querySelector(".eprow__play")?.getAttribute("aria-label"),
+    ).toBe("Play episode 3, I, Roommate");
+  });
+});
+
+describe("marking an episode watched", () => {
+  function stubFetch() {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+        return new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    return calls;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("marks an unwatched episode watched", async () => {
+    const calls = stubFetch();
+    render([episode({ id: 12 })]);
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".eprow__mark")!.click();
+      await Promise.resolve();
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("/api/items/12/progress");
+    expect(calls[0].body).toEqual({ position_ms: 0, watched: true });
+  });
+
+  /*
+   * Clearing it sends a position of zero as well. Leaving the position behind
+   * would put the episode straight back on the Continue shelf, which is the
+   * opposite of what "I have not seen this" means.
+   */
+  it("clears the position when marking unwatched", async () => {
+    const calls = stubFetch();
+    render([
+      episode({ id: 12, progress: { position_ms: 900_000, watched: true } }),
+    ]);
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".eprow__mark")!.click();
+      await Promise.resolve();
+    });
+
+    expect(calls[0].body).toEqual({ position_ms: 0, watched: false });
+  });
+
+  // The control says which way it goes, since a tick alone does not tell a
+  // screen-reader user whether pressing it sets or clears.
+  it("labels the control by what pressing it does", () => {
+    render([episode({ title: "I, Roommate" })]);
+    expect(
+      host.querySelector(".eprow__mark")?.getAttribute("aria-label"),
+    ).toBe("Mark I, Roommate watched");
+
+    render([
+      episode({ title: "I, Roommate", progress: { position_ms: 0, watched: true } }),
+    ]);
+    expect(
+      host.querySelector(".eprow__mark")?.getAttribute("aria-label"),
+    ).toBe("Mark I, Roommate unwatched");
+  });
+});
+
+/*
+ * Spoiler protection, as the list applies it.
+ *
+ * The rule itself is tested in lib/spoilers.test.ts; these assert the list obeys
+ * it, and that hiding a synopsis says so rather than leaving a gap — silence
+ * would read as missing metadata, which is the failure this screen was built to
+ * stop looking like.
+ *
+ * Default mode, since these render without touching the device setting.
+ */
+describe("spoilers on the list", () => {
+  it("hides the synopsis of an episode nobody has started, and says so", () => {
+    render([episode({ overview: "Leela learns who her parents are." })]);
+
+    expect(host.textContent).not.toContain("Leela learns");
+    expect(host.textContent).toContain("Synopsis hidden until watched");
+  });
+
+  // Two minutes in, the guard gets out of the way.
+  it("shows the synopsis once an episode has been started", () => {
+    render([
+      episode({
+        overview: "Leela learns who her parents are.",
+        progress: { position_ms: 120_000, watched: false },
+      }),
+    ]);
+
+    expect(host.textContent).toContain("Leela learns");
+    expect(host.textContent).not.toContain("Synopsis hidden");
+  });
+
+  it("shows the synopsis of a watched episode", () => {
+    render([
+      episode({
+        overview: "Leela learns who her parents are.",
+        progress: { position_ms: 0, watched: true },
+      }),
+    ]);
+
+    expect(host.textContent).toContain("Leela learns");
+  });
+
+  /*
+   * The still survives the default setting: a frame rarely gives a plot away,
+   * and it is what makes a row identifiable at a glance.
+   */
+  it("keeps the still on an unstarted episode at the default setting", () => {
+    render([episode({ artwork: { thumb: "847b43c1" } })]);
+    expect(host.querySelector(".eprow__still img")).not.toBeNull();
   });
 });

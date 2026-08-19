@@ -11,29 +11,44 @@
   gap: 8px;
 }
 
+/* The row is a container holding two controls: the play area, which is
+   everything you read, and the mark control at the end. A button inside a
+   button is invalid, so they are siblings and the row is a plain div. */
 .eprow {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
   padding: 10px;
   border-radius: var(--radius-tile);
-  border: 1px solid transparent;
   background: rgba(10, 15, 34, 0.45);
   color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) ease,
-    border-color var(--dur-fast) ease,
-    box-shadow var(--dur-fast) ease;
+  transition: background var(--dur-fast) ease;
 }
 
 .eprow:hover {
   background: rgba(10, 15, 34, 0.75);
 }
 
-.eprow:focus-visible {
+.eprow__play {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.eprow__play:focus-visible {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 0 4px var(--gold-ring);
@@ -140,6 +155,15 @@
   color: var(--text-muted);
 }
 
+/* A withheld synopsis is stated, not left blank: silence reads as missing
+   metadata, which is the failure this screen was built to stop looking like.
+   Italic and fainter so it is legible as a note about the row rather than as
+   the row's own text. */
+.eprow__synopsis--hidden {
+  font-style: italic;
+  color: var(--text-faint);
+}
+
 .eprow__progress {
   display: flex;
   align-items: center;
@@ -168,11 +192,45 @@
   color: var(--text-faint);
 }
 
-.eprow__watched {
+/* Watched, and the way back from it.
+
+   Faint until it means something, then nebula-blue — never gold, which means
+   where you are and nothing else. It stays visible when off rather than
+   appearing on hover: a control that only exists while the mouse is over it is
+   a control a remote cannot find. */
+.eprow__mark {
   flex-shrink: 0;
   align-self: center;
-  font-size: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.6);
   color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.eprow__mark:hover {
+  color: var(--text-primary);
+}
+
+.eprow__mark:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.eprow__mark.is-on {
+  background: var(--nebula-blue);
+  border-color: var(--nebula-blue);
+  color: var(--text-primary);
 }
 
 /* Narrow windows: the still shrinks rather than the text disappearing, because

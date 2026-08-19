@@ -1,6 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
+import { useSetWatched } from "@/api/hooks";
+import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";
+import { spoilerState, useSpoilerMode } from "@/lib/spoilers";
 import type { Item } from "@/api/types";
 import "./EpisodeList.css";
 
@@ -21,23 +24,49 @@ import "./EpisodeList.css";
 export function EpisodeList({
   episodes,
   queue,
+  parentID,
 }: {
   episodes: Item[];
   /** Playing an episode queues the rest of the season from it, so a season
    *  keeps playing after the row that was pressed. */
   queue: number[];
+  /** The container being listed, so marking an episode watched can refresh the
+   *  list it is in. */
+  parentID: number;
 }) {
+  const setWatched = useSetWatched(parentID);
+  // Read once for the list rather than per row: it is one device setting, and a
+  // hook per row would read the same value twenty-six times.
+  const [spoilerMode] = useSpoilerMode();
   if (episodes.length === 0) return null;
   return (
     <div className="eplist">
       {episodes.map((ep) => (
-        <EpisodeRow key={ep.id} episode={ep} queue={queue} />
+        <EpisodeRow
+          key={ep.id}
+          episode={ep}
+          queue={queue}
+          spoilers={spoilerState(spoilerMode, ep)}
+          onSetWatched={(watched) =>
+            setWatched.mutate({ itemID: ep.id, watched })
+          }
+        />
       ))}
     </div>
   );
 }
 
-function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
+function EpisodeRow({
+  episode,
+  queue,
+  spoilers,
+  onSetWatched,
+}: {
+  episode: Item;
+  queue: number[];
+  spoilers: { hideSynopsis: boolean; hideStill: boolean };
+  onSetWatched: (watched: boolean) => void;
+}) {
   const navigate = useNavigate();
   const play = () =>
     navigate(`/watch/${episode.id}`, { state: { queue } });
@@ -45,6 +74,8 @@ function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
   // spatial navigation covers a season list without a second idea of what
   // focus means (ADR 0004).
   const focusable = useFocusable(play);
+  const watched = !!episode.progress?.watched;
+  const markFocusable = useFocusable(() => onSetWatched(!watched));
 
   const progress = episode.progress;
   const duration = episode.duration_ms ?? 0;
@@ -61,55 +92,97 @@ function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
       : 0;
   const left = pct > 0 ? runtime(duration - (progress?.position_ms ?? 0)) : "";
 
+  /*
+   * The row is a container holding two controls, not one button holding
+   * another. A button inside a button is invalid, and the browser's recovery
+   * from it is to drop one — so the mark control sits beside the play area
+   * rather than inside it.
+   */
   return (
-    <button
-      {...focusable}
-      className={"eprow" + (progress?.watched ? " eprow--watched" : "")}
-      onClick={play}
-      // The row is the play control, so it says so. "4 · I, Roommate" read on
-      // its own does not tell a screen-reader user that pressing it plays.
-      aria-label={`Play ${episode.episode ? `episode ${episode.episode}, ` : ""}${episode.title}`}
-    >
-      <EpisodeStill episode={episode} />
+    <div className={"eprow" + (watched ? " eprow--watched" : "")}>
+      <button
+        {...focusable}
+        className="eprow__play"
+        onClick={play}
+        // The row is the play control, so it says so. "4 · I, Roommate" read on
+        // its own does not tell a screen-reader user that pressing it plays.
+        aria-label={`Play ${episode.episode ? `episode ${episode.episode}, ` : ""}${episode.title}`}
+      >
+        <EpisodeStill episode={episode} hidden={spoilers.hideStill} />
 
-      <span className="eprow__body">
-        <span className="eprow__head">
-          <span className="eprow__title">
-            {episode.episode != null && (
-              <span className="eprow__num">{episode.episode}</span>
-            )}
-            {episode.title}
-          </span>
-          <span className="eprow__meta">
-            {duration > 0 && <span>{runtime(duration)}</span>}
-            {episode.released_at ? <span>{airDate(episode.released_at)}</span> : null}
-            {episode.rating ? <span>★ {episode.rating.toFixed(1)}</span> : null}
-          </span>
-        </span>
-
-        {/* The reason a season page exists at all: the grid had nowhere to put
-            this. Clamped to two lines so a long synopsis cannot make one row
-            taller than the three around it. */}
-        {episode.overview && (
-          <span className="eprow__synopsis">{episode.overview}</span>
-        )}
-
-        {pct > 0 && (
-          <span className="eprow__progress">
-            <span className="eprow__bar">
-              <span className="eprow__bar-fill" style={{ width: `${pct}%` }} />
+        <span className="eprow__body">
+          <span className="eprow__head">
+            <span className="eprow__title">
+              {episode.episode != null && (
+                <span className="eprow__num">{episode.episode}</span>
+              )}
+              {episode.title}
             </span>
-            <span className="eprow__left">{left} left</span>
+            <span className="eprow__meta">
+              {duration > 0 && <span>{runtime(duration)}</span>}
+              {episode.released_at ? (
+                <span>{airDate(episode.released_at)}</span>
+              ) : null}
+              {episode.rating ? <span>★ {episode.rating.toFixed(1)}</span> : null}
+            </span>
           </span>
-        )}
-      </span>
 
-      {progress?.watched && (
-        <span className="eprow__watched" aria-label="Watched">
-          ✓
+          {/* The reason a season page exists at all: the grid had nowhere to put
+              this. Clamped to two lines so a long synopsis cannot make one row
+              taller than the three around it. */}
+          {/*
+             * A synopsis, or a line saying why there is not one.
+             *
+             * Silence would read as missing metadata, which is the failure this
+             * whole screen was built to stop looking like. Saying it is hidden
+             * on purpose is shorter than a synopsis and answers the question
+             * somebody would otherwise ask.
+             */}
+          {spoilers.hideSynopsis ? (
+            <span className="eprow__synopsis eprow__synopsis--hidden">
+              Synopsis hidden until watched
+            </span>
+          ) : (
+            episode.overview && (
+              <span className="eprow__synopsis">{episode.overview}</span>
+            )
+          )}
+
+          {pct > 0 && (
+            <span className="eprow__progress">
+              <span className="eprow__bar">
+                <span className="eprow__bar-fill" style={{ width: `${pct}%` }} />
+              </span>
+              <span className="eprow__left">{left} left</span>
+            </span>
+          )}
         </span>
-      )}
-    </button>
+      </button>
+
+      {/*
+       * Watched, and the way back from it.
+       *
+       * The tick was a label; it is a control now, because a season page is
+       * where somebody corrects this — an episode watched on the television,
+       * or one the player marked finished while it walked a queue. Marking
+       * unwatched sends a position of zero as well, since leaving the position
+       * behind would put the row straight back on the Continue shelf.
+       */}
+      <button
+        {...markFocusable}
+        className={"eprow__mark" + (watched ? " is-on" : "")}
+        onClick={() => onSetWatched(!watched)}
+        aria-pressed={watched}
+        aria-label={
+          watched
+            ? `Mark ${episode.title} unwatched`
+            : `Mark ${episode.title} watched`
+        }
+        title={watched ? "Mark unwatched" : "Mark watched"}
+      >
+        ✓
+      </button>
+    </div>
   );
 }
 
@@ -121,8 +194,30 @@ function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
  * as a number reads as a design. It is also why this screen could ship before
  * episode artwork is stored at all — today every row takes this path.
  */
-function EpisodeStill({ episode }: { episode: Item }) {
-  const still = episode.artwork?.thumb;
+function EpisodeStill({
+  episode,
+  hidden,
+}: {
+  episode: Item;
+  /** Spoiler protection at its strongest setting: the still is withheld and the
+   *  number takes its place, which is the state a missing still already uses —
+   *  so hiding one costs no new design. */
+  hidden?: boolean;
+}) {
+  /*
+   * A hash is not a URL.
+   *
+   * The item's artwork fields carry content-addressed hashes, and every other
+   * screen turns them into URLs through artworkURL. The first version of this
+   * row put the hash straight into `src`, which is worse than having no image:
+   * the value is truthy, so the row took the image branch and rendered a broken
+   * one instead of the number it falls back to.
+   *
+   * `poster` (342px) rather than `thumb` (185px) because the still box is 200px
+   * wide and 185 is soft on a high-density display — the size names describe
+   * widths, not roles.
+   */
+  const still = hidden ? undefined : artworkURL(episode.artwork?.thumb, "poster");
   if (still) {
     return (
       <span className="eprow__still">

@@ -25,27 +25,41 @@ something with a spine.
   spatial navigation ([ADR 0004](adr/0004-spatial-focus-model.md)) covers it. A
   season list is that component's shape with a still on the left.
 
-## 1. The stills are already being fetched, and thrown away
+## 1. The stills were already there — this section was wrong
 
-`tmdb.go` maps every episode's `still_path` onto the record:
+Written as "fetched and thrown away", on the strength of a grep that missed the
+place they are read. **Corrected against the running library:**
 
-```go
-rec.Artwork = []meta.ArtRef{{Kind: meta.ArtThumb, URL: imageURL(e.StillPath)}}
+```
+artwork kinds stored:  fanart 1819 · poster 8055 · thumb 993
+Futurama S01E01 … S01E04:  thumb, all four, hashes present
 ```
 
-Nothing downstream consumes `meta.ArtThumb`. The artwork cache stores posters
-and backdrops; the thumb is dropped on the floor on every enrichment pass.
+The whole path already worked. `tmdb.go` maps `still_path` to `meta.ArtThumb`,
+`storeArtwork` persists any kind it is handed, and both `ItemArtwork` and
+`AttachArtwork` map `thumb` onto the item's artwork — which the API serialises
+like every other image. Nothing needed building.
 
-So the imagery for this screen already arrives, for free, from work the server
-is doing anyway. **Generating scene thumbnails with ffmpeg is the fallback, not
-the plan** — it costs a decode per episode, it picks its frame blind (a black
-frame, a title card, the credits), and the result is worse than the one a human
-chose. Worth keeping in mind for libraries with no provider match, and not
-before.
+What was actually missing was two lines in the client: the `Artwork` type had no
+`thumb` field, so nothing could read it, and the poster grid asked for
+`artwork.poster` — which an episode does not have. **That is why the tiles were
+blank.** Not missing data: a screen asking for the wrong image.
 
-Work: persist `ArtThumb` through the enrichment path into the existing
-content-addressed cache, and serve it the way posters are served. The cache is
-content-addressed already, so an episode still costs nothing new architecturally.
+And one bug of this plan's own making, found the same way. The row's first
+version put the artwork **hash** straight into `src`, where every other screen
+passes it through `artworkURL`. A hash is truthy, so the row took the image
+branch and rendered a broken image on all 993 episodes that had a still —
+strictly worse than the number it was supposed to fall back to. Fixed with the
+step-2 work.
+
+**Generating scene thumbnails with ffmpeg remains the fallback, not the plan** —
+it costs a decode per episode, picks its frame blind (a black frame, a title
+card, the credits), and produces something worse than the frame a human chose.
+For libraries with no provider match, and not before.
+
+The lesson worth keeping: a grep across `internal/` for a constant found the
+producer and not the consumers, and I wrote a section of a plan on it. Checking
+the database took thirty seconds and disagreed.
 
 ## 2. Structure: a list, not a grid
 
@@ -122,11 +136,28 @@ plot away; a synopsis routinely does, because it is written as a summary rather
 than a tease. Doing nothing here is itself a choice, and the wrong one to make
 by accident.
 
+**Built as proposed**, with one refinement that came out of writing it:
+protection applies only to an episode with **no progress at all**. Two minutes
+into something you have already met whatever the first scene gives away, so
+hiding its synopsis is the guard getting in the way of the person it is for —
+which is how a spoiler setting ends up switched off. Started or watched shows
+everything.
+
+A withheld synopsis says *"Synopsis hidden until watched"* rather than leaving
+the line blank, because silence reads as missing metadata — the exact failure
+this screen was built to stop looking like. The strongest setting withholds the
+still too, replaced by the typographic state from §3, so it needed no new design.
+
+The setting is per device, following bigscreen: there is no per-user preference
+store on the server, and inventing one for a checkbox would be a schema decision
+made by a checkbox. If per-user preferences ever arrive, this is one of the
+settings that should move.
+
 ## Data required
 
 | Piece | Source | Status |
 | --- | --- | --- |
-| Episode still | TMDB `still_path` → `ArtThumb` | fetched, discarded — §1 |
+| Episode still | TMDB `still_path` → `ArtThumb` | **stored and served all along** — §1 |
 | Synopsis | TMDB `overview` | stored |
 | Runtime | probe `duration_ms` | stored |
 | Air date | TMDB `air_date` → `released_at` | stored |
@@ -146,8 +177,13 @@ pass.
    commits to neither answer and none of the work is lost.
 2. **Watched state, progress and per-episode actions.** Reads what is already
    stored.
-3. **Persist episode stills** through enrichment, and the rows fill in.
-4. **The spoiler rule**, once there is something to hide.
+3. ~~**Persist episode stills** through enrichment~~ — **not needed.** They were
+   already stored and served; the client simply never read them, and then read
+   them wrongly. See §1. What remains under this heading is only the ffmpeg
+   fallback for libraries with no provider match, which is a separate decision
+   rather than a step of this plan.
+4. ~~**The spoiler rule**~~ — **built.** §5 records what shipped and the one
+   refinement that emerged: an episode already started is not protected.
 
 Explicitly not in scope: extracting frames with ffmpeg, hover previews, and a
 season-level hero image. The first is a fallback for libraries without a

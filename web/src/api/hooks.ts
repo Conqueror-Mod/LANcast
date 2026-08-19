@@ -1300,6 +1300,41 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
 }
 
 
+/*
+ * Marking an episode watched, or putting it back.
+ *
+ * The server already takes both through `PUT /api/items/{id}/progress`, and
+ * applies its own rule on the way in: `watched := req.Watched || past the
+ * threshold`. So marking watched is `watched: true`, and clearing it is
+ * `position_ms: 0` with `watched: false` — a position of zero is the only
+ * honest way to say "I have not seen this", because leaving the position
+ * behind would put the row straight back on the Continue shelf.
+ *
+ * Invalidates the children list and the item, which is what redraws the row and
+ * anything else showing that episode's state. Continue is deliberately *not*
+ * invalidated: it is never cached (ADR-less by design, see showplay.go), so
+ * there is nothing to clear.
+ */
+export function useSetWatched(parentID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { itemID: number; watched: boolean }) =>
+      apiSend(`/api/items/${args.itemID}/progress`, "PUT", {
+        position_ms: 0,
+        watched: args.watched,
+      }),
+    onSuccess: (_data, args) => {
+      qc.invalidateQueries({ queryKey: ["children", parentID] });
+      qc.invalidateQueries({ queryKey: ["item", args.itemID] });
+      // The Continue Watching shelf reads the same state, and a season page is
+      // exactly where somebody corrects it after watching an episode elsewhere.
+      // The key matches useContinueWatching's, which is ["continue", limit] —
+      // a prefix invalidation covers every limit in play.
+      qc.invalidateQueries({ queryKey: ["continue"] });
+    },
+  });
+}
+
 // Server identity. /api/health has always returned this and nothing has ever
 // asked — so the settings page could not say which version it was talking to.
 export function useHealth(watch = false) {
