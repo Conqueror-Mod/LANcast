@@ -329,14 +329,33 @@ than left to be assumed.
 Two tiers, and the second one is somebody's diary appointment rather than a
 machine, so what depends on it should be known in advance.
 
-**Tier 1 — two machines, one network, joined over the overlay.** Always
-available, and enough for almost all of the build: pairing, identity, the roster
+**Tier 1 — two machines on one network, addressed directly.** Plain LAN
+addresses. **Do not put the overlay in the path here**: between two machines on
+one wire it supplies nothing — reachability is what an overlay is for, and there
+is nothing to reach across — while adding an encrypted userspace hop, several
+milliseconds and visible jitter. Measured on the first setup: 4–11ms between two
+machines that should be well under 1ms, with dropped frames in playback and a
+UI that felt heavy on menus and artwork alone. The owner reports the same
+frame-rate cost from using the same overlay for gaming.
+
+The deeper reason is in [ADR 0044](adr/0044-server-identity-and-peering.md): *an
+identity is an identity over any transport*. The overlay is outside LANcast's
+boundary by design, so testing over it proves nothing about LANcast that a LAN
+address does not — while making every slow or flaky result a question about
+which layer caused it.
+
+This tier is enough for almost all of the build: pairing, identity, the roster
 exchange, presence, guest admission, the room crossing the boundary, and every
 capability boundary in ADR 0046. If it is a rule about *who may do what*, it can
 be proved here.
 
-**Tier 2 — a third party on a genuinely different network.** Required for
-anything that is a claim about *the link*:
+**Tier 2 — a third party on a genuinely different network.** Here the overlay
+is **not** a confound and must be present: the README prescribes exactly this
+deployment, so an overlay's own cost is part of the condition being measured
+rather than noise in it. A number gathered without one would describe a
+deployment nobody has.
+
+Required for anything that is a claim about *the link*:
 
 - **[ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md) in its
   entirety.** The remote cap is invisible on a LAN: a 40 Mbps direct play works
