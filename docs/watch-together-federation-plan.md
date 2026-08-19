@@ -147,7 +147,8 @@ the exact attack TLS is here to stop") is the reasoning federation needs too.
 Federation pins peers the way the desktop window already pins its own server.
 
 - `GET /api/identity` → fingerprint, display name. No peer concept yet.
-- ADR 0044 — server identity and peering.
+- [ADR 0044](adr/0044-server-identity-and-peering.md) — server identity and
+  peering. **Written.**
 
 ### Phase 2 — Peers: pairing and reachability
 
