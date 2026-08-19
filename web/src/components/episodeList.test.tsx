@@ -7,10 +7,11 @@
  * those throw; they just make the screen look broken in a way that reads as
  * missing data.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FocusProvider } from "@/focus/FocusController";
 import { EpisodeList } from "./EpisodeList";
 import type { Item } from "@/api/types";
@@ -51,13 +52,21 @@ function episode(over: Partial<Item> = {}): Item {
 }
 
 function render(episodes: Item[]) {
+  // The list marks episodes watched through a mutation, so it needs a client.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   act(() => {
     root.render(
-      <FocusProvider>
-        <MemoryRouter>
-          <EpisodeList episodes={episodes} queue={episodes.map((e) => e.id)} />
-        </MemoryRouter>
-      </FocusProvider>,
+      <QueryClientProvider client={qc}>
+        <FocusProvider>
+          <MemoryRouter>
+            <EpisodeList
+              episodes={episodes}
+              queue={episodes.map((e) => e.id)}
+              parentID={99}
+            />
+          </MemoryRouter>
+        </FocusProvider>
+      </QueryClientProvider>,
     );
   });
 }
@@ -103,7 +112,7 @@ describe("the episode list", () => {
 
     expect(bars()).toHaveLength(0);
     expect(rows()[0].className).toContain("eprow--watched");
-    expect(host.querySelector(".eprow__watched")).not.toBeNull();
+    expect(host.querySelector(".eprow__mark.is-on")).not.toBeNull();
   });
 
   it("draws a bar only for an episode part way through", () => {
@@ -144,6 +153,76 @@ describe("the episode list", () => {
   // it.
   it("labels each row as a play action", () => {
     render([episode({ episode: 3, title: "I, Roommate" })]);
-    expect(rows()[0].getAttribute("aria-label")).toBe("Play episode 3, I, Roommate");
+    expect(
+      host.querySelector(".eprow__play")?.getAttribute("aria-label"),
+    ).toBe("Play episode 3, I, Roommate");
+  });
+});
+
+describe("marking an episode watched", () => {
+  function stubFetch() {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+        return new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    return calls;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("marks an unwatched episode watched", async () => {
+    const calls = stubFetch();
+    render([episode({ id: 12 })]);
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".eprow__mark")!.click();
+      await Promise.resolve();
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("/api/items/12/progress");
+    expect(calls[0].body).toEqual({ position_ms: 0, watched: true });
+  });
+
+  /*
+   * Clearing it sends a position of zero as well. Leaving the position behind
+   * would put the episode straight back on the Continue shelf, which is the
+   * opposite of what "I have not seen this" means.
+   */
+  it("clears the position when marking unwatched", async () => {
+    const calls = stubFetch();
+    render([
+      episode({ id: 12, progress: { position_ms: 900_000, watched: true } }),
+    ]);
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".eprow__mark")!.click();
+      await Promise.resolve();
+    });
+
+    expect(calls[0].body).toEqual({ position_ms: 0, watched: false });
+  });
+
+  // The control says which way it goes, since a tick alone does not tell a
+  // screen-reader user whether pressing it sets or clears.
+  it("labels the control by what pressing it does", () => {
+    render([episode({ title: "I, Roommate" })]);
+    expect(
+      host.querySelector(".eprow__mark")?.getAttribute("aria-label"),
+    ).toBe("Mark I, Roommate watched");
+
+    render([
+      episode({ title: "I, Roommate", progress: { position_ms: 0, watched: true } }),
+    ]);
+    expect(
+      host.querySelector(".eprow__mark")?.getAttribute("aria-label"),
+    ).toBe("Mark I, Roommate unwatched");
   });
 });

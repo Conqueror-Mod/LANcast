@@ -563,10 +563,24 @@ export function Detail() {
               {!container && !isPicture(item) && (
                 <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
               )}
-              {container && playableChildren.length > 0 && (
+              {/*
+                * A season leads with Continue, matching the show page so the
+                * two do not disagree about what a season offers. It asks the
+                * same endpoint: the query matches episodes by their parent, so
+                * a season id answers with that season's next episode rather
+                * than the show's.
+                */}
+              {isEpisodeList && (
                 <PlayButton
+                  label={showBusy === "continue" ? "Finding…" : "Continue"}
+                  onPlay={() => void continueShow()}
+                />
+              )}
+              {container && playableChildren.length > 0 && (
+                <SecondaryButton
                   label="Play all"
-                  onPlay={() =>
+                  className={isEpisodeList ? "detail__play detail__play--secondary" : "detail__play"}
+                  onPress={() =>
                     navigate(
                       `/watch/${playableChildren[0].id}?queue=${playableChildren
                         .map((c) => c.id)
@@ -705,6 +719,7 @@ export function Detail() {
               <EpisodeList
                 episodes={playableChildren}
                 queue={playableChildren.map((c) => c.id)}
+                parentID={item.id}
               />
             ) : isAlbum || isPlaylist ? (
               // A playlist is a numbered list for the same reason a record is,

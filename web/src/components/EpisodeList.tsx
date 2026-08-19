@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
+import { useSetWatched } from "@/api/hooks";
 import { runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./EpisodeList.css";
@@ -21,23 +22,43 @@ import "./EpisodeList.css";
 export function EpisodeList({
   episodes,
   queue,
+  parentID,
 }: {
   episodes: Item[];
   /** Playing an episode queues the rest of the season from it, so a season
    *  keeps playing after the row that was pressed. */
   queue: number[];
+  /** The container being listed, so marking an episode watched can refresh the
+   *  list it is in. */
+  parentID: number;
 }) {
+  const setWatched = useSetWatched(parentID);
   if (episodes.length === 0) return null;
   return (
     <div className="eplist">
       {episodes.map((ep) => (
-        <EpisodeRow key={ep.id} episode={ep} queue={queue} />
+        <EpisodeRow
+          key={ep.id}
+          episode={ep}
+          queue={queue}
+          onSetWatched={(watched) =>
+            setWatched.mutate({ itemID: ep.id, watched })
+          }
+        />
       ))}
     </div>
   );
 }
 
-function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
+function EpisodeRow({
+  episode,
+  queue,
+  onSetWatched,
+}: {
+  episode: Item;
+  queue: number[];
+  onSetWatched: (watched: boolean) => void;
+}) {
   const navigate = useNavigate();
   const play = () =>
     navigate(`/watch/${episode.id}`, { state: { queue } });
@@ -45,6 +66,8 @@ function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
   // spatial navigation covers a season list without a second idea of what
   // focus means (ADR 0004).
   const focusable = useFocusable(play);
+  const watched = !!episode.progress?.watched;
+  const markFocusable = useFocusable(() => onSetWatched(!watched));
 
   const progress = episode.progress;
   const duration = episode.duration_ms ?? 0;
@@ -61,55 +84,83 @@ function EpisodeRow({ episode, queue }: { episode: Item; queue: number[] }) {
       : 0;
   const left = pct > 0 ? runtime(duration - (progress?.position_ms ?? 0)) : "";
 
+  /*
+   * The row is a container holding two controls, not one button holding
+   * another. A button inside a button is invalid, and the browser's recovery
+   * from it is to drop one — so the mark control sits beside the play area
+   * rather than inside it.
+   */
   return (
-    <button
-      {...focusable}
-      className={"eprow" + (progress?.watched ? " eprow--watched" : "")}
-      onClick={play}
-      // The row is the play control, so it says so. "4 · I, Roommate" read on
-      // its own does not tell a screen-reader user that pressing it plays.
-      aria-label={`Play ${episode.episode ? `episode ${episode.episode}, ` : ""}${episode.title}`}
-    >
-      <EpisodeStill episode={episode} />
+    <div className={"eprow" + (watched ? " eprow--watched" : "")}>
+      <button
+        {...focusable}
+        className="eprow__play"
+        onClick={play}
+        // The row is the play control, so it says so. "4 · I, Roommate" read on
+        // its own does not tell a screen-reader user that pressing it plays.
+        aria-label={`Play ${episode.episode ? `episode ${episode.episode}, ` : ""}${episode.title}`}
+      >
+        <EpisodeStill episode={episode} />
 
-      <span className="eprow__body">
-        <span className="eprow__head">
-          <span className="eprow__title">
-            {episode.episode != null && (
-              <span className="eprow__num">{episode.episode}</span>
-            )}
-            {episode.title}
-          </span>
-          <span className="eprow__meta">
-            {duration > 0 && <span>{runtime(duration)}</span>}
-            {episode.released_at ? <span>{airDate(episode.released_at)}</span> : null}
-            {episode.rating ? <span>★ {episode.rating.toFixed(1)}</span> : null}
-          </span>
-        </span>
-
-        {/* The reason a season page exists at all: the grid had nowhere to put
-            this. Clamped to two lines so a long synopsis cannot make one row
-            taller than the three around it. */}
-        {episode.overview && (
-          <span className="eprow__synopsis">{episode.overview}</span>
-        )}
-
-        {pct > 0 && (
-          <span className="eprow__progress">
-            <span className="eprow__bar">
-              <span className="eprow__bar-fill" style={{ width: `${pct}%` }} />
+        <span className="eprow__body">
+          <span className="eprow__head">
+            <span className="eprow__title">
+              {episode.episode != null && (
+                <span className="eprow__num">{episode.episode}</span>
+              )}
+              {episode.title}
             </span>
-            <span className="eprow__left">{left} left</span>
+            <span className="eprow__meta">
+              {duration > 0 && <span>{runtime(duration)}</span>}
+              {episode.released_at ? (
+                <span>{airDate(episode.released_at)}</span>
+              ) : null}
+              {episode.rating ? <span>★ {episode.rating.toFixed(1)}</span> : null}
+            </span>
           </span>
-        )}
-      </span>
 
-      {progress?.watched && (
-        <span className="eprow__watched" aria-label="Watched">
-          ✓
+          {/* The reason a season page exists at all: the grid had nowhere to put
+              this. Clamped to two lines so a long synopsis cannot make one row
+              taller than the three around it. */}
+          {episode.overview && (
+            <span className="eprow__synopsis">{episode.overview}</span>
+          )}
+
+          {pct > 0 && (
+            <span className="eprow__progress">
+              <span className="eprow__bar">
+                <span className="eprow__bar-fill" style={{ width: `${pct}%` }} />
+              </span>
+              <span className="eprow__left">{left} left</span>
+            </span>
+          )}
         </span>
-      )}
-    </button>
+      </button>
+
+      {/*
+       * Watched, and the way back from it.
+       *
+       * The tick was a label; it is a control now, because a season page is
+       * where somebody corrects this — an episode watched on the television,
+       * or one the player marked finished while it walked a queue. Marking
+       * unwatched sends a position of zero as well, since leaving the position
+       * behind would put the row straight back on the Continue shelf.
+       */}
+      <button
+        {...markFocusable}
+        className={"eprow__mark" + (watched ? " is-on" : "")}
+        onClick={() => onSetWatched(!watched)}
+        aria-pressed={watched}
+        aria-label={
+          watched
+            ? `Mark ${episode.title} unwatched`
+            : `Mark ${episode.title} watched`
+        }
+        title={watched ? "Mark unwatched" : "Mark watched"}
+      >
+        ✓
+      </button>
+    </div>
   );
 }
 
