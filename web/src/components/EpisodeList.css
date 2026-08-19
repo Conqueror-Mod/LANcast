@@ -155,6 +155,15 @@
   color: var(--text-muted);
 }
 
+/* A withheld synopsis is stated, not left blank: silence reads as missing
+   metadata, which is the failure this screen was built to stop looking like.
+   Italic and fainter so it is legible as a note about the row rather than as
+   the row's own text. */
+.eprow__synopsis--hidden {
+  font-style: italic;
+  color: var(--text-faint);
+}
+
 .eprow__progress {
   display: flex;
   align-items: center;

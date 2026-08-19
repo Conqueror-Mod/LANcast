@@ -38,6 +38,7 @@ import {
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { useBigscreen } from "@/lib/bigscreen";
+import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { AuditLog } from "@/components/AuditLog";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
@@ -979,6 +980,7 @@ function RuleNumber({
  */
 function DisplaySection() {
   const [bigscreen, setBigscreen] = useBigscreen();
+  const [spoilers, setSpoilers] = useSpoilerMode();
 
   return (
     <section className="settings__section">
@@ -1000,6 +1002,36 @@ function DisplaySection() {
             can get back out without finding this page again.
           </span>
         </span>
+      </label>
+
+      {/*
+        * Spoilers, in the device pane for the same reason bigscreen is: there is
+        * no per-user preference store on the server, and inventing one for a
+        * checkbox would be a schema decision made by a checkbox. Somebody who
+        * watches on two machines sets it twice, which is honest and small.
+        */}
+      <label className="set-row set-row--stacked">
+        <div className="set-row__main">
+          <div className="set-row__title">Spoilers on a season page</div>
+          <div className="set-row__sub">
+            An episode's synopsis is written as a summary, not a tease, so the
+            next one down the list can give away what you were about to watch.
+            This applies only to episodes you have not started — two minutes in,
+            you have already met whatever the first scene gives away.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <select
+            className="set-input"
+            value={spoilers}
+            onChange={(e) => setSpoilers(e.target.value as SpoilerMode)}
+            aria-label="Spoilers on a season page"
+          >
+            <option value="synopsis">Hide the synopsis</option>
+            <option value="all">Hide the synopsis and the still</option>
+            <option value="show">Show everything</option>
+          </select>
+        </div>
       </label>
     </section>
   );

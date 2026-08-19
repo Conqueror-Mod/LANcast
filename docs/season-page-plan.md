@@ -136,6 +136,23 @@ plot away; a synopsis routinely does, because it is written as a summary rather
 than a tease. Doing nothing here is itself a choice, and the wrong one to make
 by accident.
 
+**Built as proposed**, with one refinement that came out of writing it:
+protection applies only to an episode with **no progress at all**. Two minutes
+into something you have already met whatever the first scene gives away, so
+hiding its synopsis is the guard getting in the way of the person it is for —
+which is how a spoiler setting ends up switched off. Started or watched shows
+everything.
+
+A withheld synopsis says *"Synopsis hidden until watched"* rather than leaving
+the line blank, because silence reads as missing metadata — the exact failure
+this screen was built to stop looking like. The strongest setting withholds the
+still too, replaced by the typographic state from §3, so it needed no new design.
+
+The setting is per device, following bigscreen: there is no per-user preference
+store on the server, and inventing one for a checkbox would be a schema decision
+made by a checkbox. If per-user preferences ever arrive, this is one of the
+settings that should move.
+
 ## Data required
 
 | Piece | Source | Status |
@@ -165,7 +182,8 @@ pass.
    them wrongly. See §1. What remains under this heading is only the ffmpeg
    fallback for libraries with no provider match, which is a separate decision
    rather than a step of this plan.
-4. **The spoiler rule**, now that there is something to hide — §5. This is next.
+4. ~~**The spoiler rule**~~ — **built.** §5 records what shipped and the one
+   refinement that emerged: an episode already started is not protected.
 
 Explicitly not in scope: extracting frames with ffmpeg, hover previews, and a
 season-level hero image. The first is a fallback for libraries without a

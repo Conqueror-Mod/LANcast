@@ -3,6 +3,7 @@ import { useFocusable } from "@/focus/FocusController";
 import { useSetWatched } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";
+import { spoilerState, useSpoilerMode } from "@/lib/spoilers";
 import type { Item } from "@/api/types";
 import "./EpisodeList.css";
 
@@ -34,6 +35,9 @@ export function EpisodeList({
   parentID: number;
 }) {
   const setWatched = useSetWatched(parentID);
+  // Read once for the list rather than per row: it is one device setting, and a
+  // hook per row would read the same value twenty-six times.
+  const [spoilerMode] = useSpoilerMode();
   if (episodes.length === 0) return null;
   return (
     <div className="eplist">
@@ -42,6 +46,7 @@ export function EpisodeList({
           key={ep.id}
           episode={ep}
           queue={queue}
+          spoilers={spoilerState(spoilerMode, ep)}
           onSetWatched={(watched) =>
             setWatched.mutate({ itemID: ep.id, watched })
           }
@@ -54,10 +59,12 @@ export function EpisodeList({
 function EpisodeRow({
   episode,
   queue,
+  spoilers,
   onSetWatched,
 }: {
   episode: Item;
   queue: number[];
+  spoilers: { hideSynopsis: boolean; hideStill: boolean };
   onSetWatched: (watched: boolean) => void;
 }) {
   const navigate = useNavigate();
@@ -101,7 +108,7 @@ function EpisodeRow({
         // its own does not tell a screen-reader user that pressing it plays.
         aria-label={`Play ${episode.episode ? `episode ${episode.episode}, ` : ""}${episode.title}`}
       >
-        <EpisodeStill episode={episode} />
+        <EpisodeStill episode={episode} hidden={spoilers.hideStill} />
 
         <span className="eprow__body">
           <span className="eprow__head">
@@ -123,8 +130,22 @@ function EpisodeRow({
           {/* The reason a season page exists at all: the grid had nowhere to put
               this. Clamped to two lines so a long synopsis cannot make one row
               taller than the three around it. */}
-          {episode.overview && (
-            <span className="eprow__synopsis">{episode.overview}</span>
+          {/*
+             * A synopsis, or a line saying why there is not one.
+             *
+             * Silence would read as missing metadata, which is the failure this
+             * whole screen was built to stop looking like. Saying it is hidden
+             * on purpose is shorter than a synopsis and answers the question
+             * somebody would otherwise ask.
+             */}
+          {spoilers.hideSynopsis ? (
+            <span className="eprow__synopsis eprow__synopsis--hidden">
+              Synopsis hidden until watched
+            </span>
+          ) : (
+            episode.overview && (
+              <span className="eprow__synopsis">{episode.overview}</span>
+            )
           )}
 
           {pct > 0 && (
@@ -173,7 +194,16 @@ function EpisodeRow({
  * as a number reads as a design. It is also why this screen could ship before
  * episode artwork is stored at all — today every row takes this path.
  */
-function EpisodeStill({ episode }: { episode: Item }) {
+function EpisodeStill({
+  episode,
+  hidden,
+}: {
+  episode: Item;
+  /** Spoiler protection at its strongest setting: the still is withheld and the
+   *  number takes its place, which is the state a missing still already uses —
+   *  so hiding one costs no new design. */
+  hidden?: boolean;
+}) {
   /*
    * A hash is not a URL.
    *
@@ -187,7 +217,7 @@ function EpisodeStill({ episode }: { episode: Item }) {
    * wide and 185 is soft on a high-density display — the size names describe
    * widths, not roles.
    */
-  const still = artworkURL(episode.artwork?.thumb, "poster");
+  const still = hidden ? undefined : artworkURL(episode.artwork?.thumb, "poster");
   if (still) {
     return (
       <span className="eprow__still">

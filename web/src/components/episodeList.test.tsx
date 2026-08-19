@@ -87,11 +87,22 @@ describe("the episode list", () => {
   });
 
   /*
-   * The synopsis is the reason a season page exists — it is what the poster
-   * grid had nowhere to put.
+   * The synopsis is the reason a season page exists — it is what the poster grid
+   * had nowhere to put.
+   *
+   * Watched, because the spoiler rule now hides the synopsis of an episode
+   * nobody has started (see the spoiler tests below). This test predates that
+   * rule and is updated rather than worked around: an episode you have seen is
+   * the case where "does the synopsis render at all" is the question being
+   * asked.
    */
   it("shows the synopsis", () => {
-    render([episode({ overview: "Fry is cryogenically frozen." })]);
+    render([
+      episode({
+        overview: "Fry is cryogenically frozen.",
+        progress: { position_ms: 0, watched: true },
+      }),
+    ]);
     expect(host.textContent).toContain("Fry is cryogenically frozen.");
   });
 
@@ -233,5 +244,57 @@ describe("marking an episode watched", () => {
     expect(
       host.querySelector(".eprow__mark")?.getAttribute("aria-label"),
     ).toBe("Mark I, Roommate unwatched");
+  });
+});
+
+/*
+ * Spoiler protection, as the list applies it.
+ *
+ * The rule itself is tested in lib/spoilers.test.ts; these assert the list obeys
+ * it, and that hiding a synopsis says so rather than leaving a gap — silence
+ * would read as missing metadata, which is the failure this screen was built to
+ * stop looking like.
+ *
+ * Default mode, since these render without touching the device setting.
+ */
+describe("spoilers on the list", () => {
+  it("hides the synopsis of an episode nobody has started, and says so", () => {
+    render([episode({ overview: "Leela learns who her parents are." })]);
+
+    expect(host.textContent).not.toContain("Leela learns");
+    expect(host.textContent).toContain("Synopsis hidden until watched");
+  });
+
+  // Two minutes in, the guard gets out of the way.
+  it("shows the synopsis once an episode has been started", () => {
+    render([
+      episode({
+        overview: "Leela learns who her parents are.",
+        progress: { position_ms: 120_000, watched: false },
+      }),
+    ]);
+
+    expect(host.textContent).toContain("Leela learns");
+    expect(host.textContent).not.toContain("Synopsis hidden");
+  });
+
+  it("shows the synopsis of a watched episode", () => {
+    render([
+      episode({
+        overview: "Leela learns who her parents are.",
+        progress: { position_ms: 0, watched: true },
+      }),
+    ]);
+
+    expect(host.textContent).toContain("Leela learns");
+  });
+
+  /*
+   * The still survives the default setting: a frame rarely gives a plot away,
+   * and it is what makes a row identifiable at a glance.
+   */
+  it("keeps the still on an unstarted episode at the default setting", () => {
+    render([episode({ artwork: { thumb: "847b43c1" } })]);
+    expect(host.querySelector(".eprow__still img")).not.toBeNull();
   });
 });
