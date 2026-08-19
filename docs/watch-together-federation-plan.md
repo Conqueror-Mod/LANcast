@@ -34,8 +34,16 @@ person become a member of it.
 
 Settled in planning, 2026-08-19. Each becomes an ADR before its phase starts.
 
-**1. The servers reach each other over an overlay network you own** — Tailscale
-or WireGuard. A peer address is just an address on your tailnet.
+**1. The servers reach each other over an overlay network you own** — ZeroTier,
+Tailscale, or WireGuard. A peer address is just an address on that network.
+
+Which one is not LANcast's business, and the distinction is worth stating
+because it is easy to mistake: **no phone-home constrains LANcast, not the
+network underneath it.** The README already names Tailscale, which has a hosted
+coordination plane. The rule is that *LANcast* requires nothing external in
+order to work; what carries its packets is chosen by the person running it and
+sits outside the boundary entirely. Every one of these can be self-hosted by
+somebody who wants that, and none of them has to be.
 
 This is not a compromise, it is the README's existing promise: *"Remote access
 is opt-in and self-owned (WireGuard, Tailscale, your own reverse proxy) — never
@@ -288,6 +296,30 @@ documentation failure in this project.
 
 **6. `GOOS=linux go vet ./...` before pushing** anything that touches a
 `_windows.go` file. CI builds on Linux.
+
+**7. The TLS certificate does not learn about an interface added later.** The
+self-signed certificate covers the interfaces that existed *when it was
+generated*: `LoadOrGenerate` is handed `LocalIPs()` once, and `loadValid`
+thereafter checks only that the certificate parses and has not expired — never
+whether the host list still matches. Validity is ten years.
+
+So a server whose certificate predates the overlay network does not cover its
+overlay address, and never will. Observed on the first real setup: a certificate
+issued 2026-08-02 covering `localhost`, `127.0.0.1`, `::1` and the LAN address,
+with the ZeroTier address absent. The fix is to delete `<data>/tls/cert.pem` and
+`key.pem` and restart with the interface up.
+
+This bites the **manual** test — a browser pointed at the overlay address — and
+not the peer path, which pins the identity key and ignores hostname validation
+by design (ADR 0044). Do not read a certificate warning during setup as evidence
+that the federation design is wrong; they are different paths, and only one of
+them is doing hostname validation at all.
+
+**8. Two machines behind one NAT is not a two-network test.** Worth checking
+what public address each peer reports before drawing conclusions from a
+successful connection: same public address and single-digit latency means the
+overlay is carrying LAN traffic. That is fine for building phases 1 and 2 and
+proves nothing about phase 3 onward.
 
 ## What this plan does not decide
 
