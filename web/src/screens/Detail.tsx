@@ -256,6 +256,22 @@ export function Detail() {
   // in a frameless window and does not reliably give it back).
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
+
+  /*
+   * A show's action state, declared here with the other hooks rather than beside
+   * the handlers that use it.
+   *
+   * These were originally written next to the show buttons, which sits *below*
+   * the `if (isLoading) return` above — so the first render registered two fewer
+   * hooks than the second, React refused to reconcile, and the whole screen
+   * unmounted into a blank window with no way back. It only showed on shows,
+   * because a film opened from the grid is usually already cached and never has
+   * a loading render to differ from.
+   */
+  const [showBusy, setShowBusy] = useState<null | "continue" | "play" | "random">(
+    null,
+  );
+  const [showNote, setShowNote] = useState<string | null>(null);
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
   const back = useCallback(() => navigate(-1), [navigate]);
@@ -343,8 +359,6 @@ export function Detail() {
    * landing on an episode already watched.
    */
   const isShow = item?.kind === "show";
-  const [showBusy, setShowBusy] = useState<null | "continue" | "play" | "random">(null);
-  const [showNote, setShowNote] = useState<string | null>(null);
 
   const continueShow = async () => {
     if (!item || showBusy) return;
