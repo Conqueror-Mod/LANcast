@@ -13,6 +13,7 @@ import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
+import { resumeSeconds } from "./resumePoint";
 import {
   shuffledStartingWith,
   queueAfterEntry,
@@ -515,12 +516,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
      * item, and the saved one is for arriving at it.
      */
     const live = livePos.current;
+    /*
+     * A finished item starts again rather than resuming past its own end.
+     *
+     * The saved position of a watched episode lands *after* the final frame, so
+     * resuming there fired `ended` on the first tick and the queue advanced —
+     * press play on episode one of a show you are part way through and episode
+     * three played, having walked through the finished ones too fast to see.
+     */
     startedFrom.current =
       live.id === item.id && live.at > 0
         ? live.at
-        : item.progress?.position_ms
-          ? item.progress.position_ms / 1000
-          : 0;
+        : resumeSeconds({
+            positionMs: item.progress?.position_ms,
+            watched: item.progress?.watched,
+            durationMs: item.duration_ms,
+          });
 
     (async () => {
       try {
