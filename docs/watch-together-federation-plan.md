@@ -34,8 +34,16 @@ person become a member of it.
 
 Settled in planning, 2026-08-19. Each becomes an ADR before its phase starts.
 
-**1. The servers reach each other over an overlay network you own** — Tailscale
-or WireGuard. A peer address is just an address on your tailnet.
+**1. The servers reach each other over an overlay network you own** — ZeroTier,
+Tailscale, or WireGuard. A peer address is just an address on that network.
+
+Which one is not LANcast's business, and the distinction is worth stating
+because it is easy to mistake: **no phone-home constrains LANcast, not the
+network underneath it.** The README already names Tailscale, which has a hosted
+coordination plane. The rule is that *LANcast* requires nothing external in
+order to work; what carries its packets is chosen by the person running it and
+sits outside the boundary entirely. Every one of these can be self-hosted by
+somebody who wants that, and none of them has to be.
 
 This is not a compromise, it is the README's existing promise: *"Remote access
 is opt-in and self-owned (WireGuard, Tailscale, your own reverse proxy) — never
@@ -298,6 +306,85 @@ documentation failure in this project.
 
 **6. `GOOS=linux go vet ./...` before pushing** anything that touches a
 `_windows.go` file. CI builds on Linux.
+
+**7. The TLS certificate does not learn about an interface added later.** The
+self-signed certificate covers the interfaces that existed *when it was
+generated*: `LoadOrGenerate` is handed `LocalIPs()` once, and `loadValid`
+thereafter checks only that the certificate parses and has not expired — never
+whether the host list still matches. Validity is ten years.
+
+So a server whose certificate predates the overlay network does not cover its
+overlay address, and never will. Observed on the first real setup: a certificate
+issued 2026-08-02 covering `localhost`, `127.0.0.1`, `::1` and the LAN address,
+with the ZeroTier address absent. The fix is to delete `<data>/tls/cert.pem` and
+`key.pem` and restart with the interface up.
+
+This bites the **manual** test — a browser pointed at the overlay address — and
+not the peer path, which pins the identity key and ignores hostname validation
+by design (ADR 0044). Do not read a certificate warning during setup as evidence
+that the federation design is wrong; they are different paths, and only one of
+them is doing hostname validation at all.
+
+**8. Two machines behind one NAT is not a two-network test.** Worth checking
+what public address each peer reports before drawing conclusions from a
+successful connection: same public address and single-digit latency means the
+overlay is carrying LAN traffic.
+
+That is the arrangement most of this will be built on, deliberately — it is the
+one always available — so what it can and cannot prove is set out below rather
+than left to be assumed.
+
+## Testing topology
+
+Two tiers, and the second one is somebody's diary appointment rather than a
+machine, so what depends on it should be known in advance.
+
+**Tier 1 — two machines on one network, addressed directly.** Plain LAN
+addresses. **Do not put the overlay in the path here**: between two machines on
+one wire it supplies nothing — reachability is what an overlay is for, and there
+is nothing to reach across — while adding an encrypted userspace hop, several
+milliseconds and visible jitter. Measured on the first setup: 4–11ms between two
+machines that should be well under 1ms, with dropped frames in playback and a
+UI that felt heavy on menus and artwork alone. The owner reports the same
+frame-rate cost from using the same overlay for gaming.
+
+The deeper reason is in [ADR 0044](adr/0044-server-identity-and-peering.md): *an
+identity is an identity over any transport*. The overlay is outside LANcast's
+boundary by design, so testing over it proves nothing about LANcast that a LAN
+address does not — while making every slow or flaky result a question about
+which layer caused it.
+
+This tier is enough for almost all of the build: pairing, identity, the roster
+exchange, presence, guest admission, the room crossing the boundary, and every
+capability boundary in ADR 0046. If it is a rule about *who may do what*, it can
+be proved here.
+
+**Tier 2 — a third party on a genuinely different network.** Here the overlay
+is **not** a confound and must be present: the README prescribes exactly this
+deployment, so an overlay's own cost is part of the condition being measured
+rather than noise in it. A number gathered without one would describe a
+deployment nobody has.
+
+Required for anything that is a claim about *the link*:
+
+- **[ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md) in its
+  entirety.** The remote cap is invisible on a LAN: a 40 Mbps direct play works
+  beautifully at 7ms, so the mechanism protecting the host's uplink is never
+  once exercised. Nothing about the cap should be believed until this tier.
+- **The seek stall**, named in 0047's consequences — a host seeking restarts the
+  guest's transcode at a new offset, which is barely noticeable locally and is
+  the whole question remotely.
+- **Room convergence under real latency and jitter.** The follower snaps when
+  more than about 1.5s out. At 7ms everything converges instantly and the
+  threshold is never tested.
+- **Whether the overlay traverses NAT or falls back to relaying**, which is a
+  bandwidth fact and therefore an ADR 0047 fact.
+
+**A third party is a substitute in tier 2, not an addition.** Georgia plus a
+friend is *three peers*, and three peers is listed below as something nothing
+here has thought through. Keep the remote test to two unless three-peer support
+is being adopted as a requirement — in which case it is a decision, not a test
+setup.
 
 ## What this plan does not decide
 
