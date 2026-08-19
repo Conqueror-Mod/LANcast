@@ -54,7 +54,15 @@
    * off-screen makes the home page a landing page, and the shelves are the part
    * people actually use. Raising this is one edit; the rows are what pay for it.
    */
-  --hero-height: clamp(280px, 31vh, 380px);
+  /*
+   * Width matters as much as height. Sized only against vh, the hero on a wide
+   * window is a ~5:1 letterbox, and a 16:9 backdrop dropped into that keeps a
+   * 40% horizontal band of itself -- which is why every hero looked like a
+   * close-up of the middle of something. `max()` takes whichever of the two
+   * constraints is larger, so a tall window still gets the height it always
+   * had and a wide one gets a box the artwork can survive.
+   */
+  --hero-height: clamp(300px, max(31vh, 23vw), 520px);
 
   /*
    * The navigation rail's two widths. Collapsed it shows icons; expanded it
@@ -127,5 +135,5 @@
  * here rather than left to look like a deliberately bigger hero.
  */
 :root[data-bigscreen] {
-  --hero-height: clamp(193px, 21vh, 262px);
+  --hero-height: clamp(207px, max(21vh, 16vw), 359px);
 }
