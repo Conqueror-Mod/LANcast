@@ -27,12 +27,20 @@
  */
 .hero__art {
   position: absolute;
-  inset: -12% 0 0;
+  inset: -10% 0 0;
   background-size: cover;
-  background-position: center 22%;
-  /* Held well back so it reads as the room's far wall rather than as a
-     photograph pinned to the front of the screen. */
-  opacity: 0.56;
+  /*
+   * Framed off the top third, not the middle. A 16:9 still cropped to a hero
+   * band keeps only part of its height whatever we do, and the part worth
+   * keeping is where a frame puts its subject -- centring the crop is how you
+   * end up looking at somebody's chin. 30% clears the very top edge (which the
+   * parallax translation exposes) without falling to the middle.
+   */
+  background-position: center 30%;
+  /* Held back so it reads as the room's far wall rather than as a photograph
+     pinned to the front of the screen -- but not so far back that the subject
+     stops being identifiable, which is the hero's whole job. */
+  opacity: 0.64;
   transform: translate3d(0, var(--parallax, 0px), 0);
 }
 
@@ -103,8 +111,8 @@
   background: linear-gradient(
     to right,
     rgba(5, 7, 15, 0.82) 0%,
-    rgba(5, 7, 15, 0.46) 36%,
-    transparent 70%
+    rgba(5, 7, 15, 0.46) 44%,
+    transparent 80%
   );
 }
 
@@ -126,7 +134,11 @@
  */
 .hero__poster {
   flex: none;
-  width: 150px;
+  /* Scales with the hero it stands in. Left at a fixed 150px it shrank
+     visually every time the hero grew, which is the "sized awkwardly" half of
+     the problem -- the poster is the block's anchor and an anchor that does not
+     keep pace with its container reads as a thumbnail that failed to load. */
+  width: clamp(150px, 10.5vw, 220px);
   aspect-ratio: 2 / 3;
   border-radius: var(--radius-panel);
   overflow: hidden;
@@ -147,9 +159,16 @@
   display: block;
 }
 
+/*
+ * The type column. 52ch on a 1920 window put every word inside the left third
+ * and left the remaining 60% as empty scrim -- the block read as a caption
+ * pinned to the corner of a picture rather than as the page's subject. It grows
+ * with the window now, capped in ch so a line never gets long enough to be hard
+ * to track back from.
+ */
 .hero__text {
   min-width: 0;
-  max-width: 52ch;
+  max-width: min(72ch, 58%);
   padding-bottom: 4px;
 }
 
@@ -165,7 +184,7 @@
  */
 .hero__title {
   margin: 0 0 8px;
-  font-size: clamp(26px, 2.7vw, 40px);
+  font-size: clamp(28px, 3.1vw, 52px);
   line-height: 1.05;
   font-weight: 600;
   color: var(--text-primary);
@@ -197,13 +216,18 @@
   vertical-align: middle;
 }
 
+/*
+ * Three lines, not two. A synopsis is written as a paragraph and two lines cuts
+ * essentially all of them mid-sentence; the third is what lets most of them
+ * finish a thought before the ellipsis.
+ */
 .hero__overview {
   margin: 0 0 14px;
-  font-size: 14px;
+  font-size: clamp(14px, 0.85vw, 17px);
   line-height: 1.6;
   color: var(--text-secondary);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -211,7 +235,7 @@
 /* The same gold bar the continue-watching tiles carry, at hero scale. */
 .hero__progress {
   height: 3px;
-  width: min(320px, 100%);
+  width: min(420px, 100%);
   border-radius: 999px;
   background: rgba(242, 245, 251, 0.16);
   margin-bottom: 14px;
@@ -297,7 +321,7 @@
 @media (max-width: 860px) {
   .hero {
     margin: -8px -20px 22px;
-    min-height: clamp(280px, 34vh, 380px);
+    min-height: clamp(280px, max(34vh, 40vw), 420px);
   }
 
   .hero__poster {

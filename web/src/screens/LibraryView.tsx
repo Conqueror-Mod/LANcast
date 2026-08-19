@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,7 +15,9 @@ import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterBar } from "@/components/FilterBar";
 import { AlphabetRail } from "@/components/AlphabetRail";
+import { TileSizeSlider } from "@/components/TileSizeSlider";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
+import { tileWidth, useTileSize } from "@/lib/tileSize";
 import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
@@ -41,6 +43,7 @@ export function LibraryView({
   config: LibraryKindConfig;
 }) {
   const libraryID = library.id;
+  const [tileStep] = useTileSize();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   // The default comes from the kind rather than being "title" for everyone: a
@@ -308,6 +311,7 @@ export function LibraryView({
           onChange={(e) => setParam("q", e.target.value)}
           aria-label={config.searchPlaceholder}
         />
+        <TileSizeSlider />
       </div>
 
       <div className="browse__controls">
@@ -412,7 +416,18 @@ export function LibraryView({
         </p>
       )}
 
-      <div className="browse__grid">
+      {/*
+        The tile size is written as a custom property on the grid rather than on
+        the document root. A root-level write is a global that outlives the
+        screen that set it: every other grid in the app reads the same token,
+        and a size chosen in a movie library would silently follow you into
+        playlists and search. Scoped here, the slider changes the grid it sits
+        above and nothing else.
+      */}
+      <div
+        className="browse__grid"
+        style={{ "--tile-grid": tileWidth(tileStep) } as CSSProperties}
+      >
         {items.map((item) => (
           <PosterTile key={item.id} item={item} />
         ))}

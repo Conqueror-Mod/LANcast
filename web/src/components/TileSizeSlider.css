@@ -1,0 +1,91 @@
+/*
+ * Gold discipline (design.md): the track and thumb are structural at rest and
+ * take full gold only when the control is hovered or focused. The thumb is not
+ * gold-at-rest just because it is "selected" — gold means where you are, and a
+ * slider sitting in the corner of every library page is not where you are.
+ */
+.tile-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.tile-size__glyph {
+  display: block;
+  border-radius: 2px;
+  background: var(--text-faint);
+  flex: none;
+}
+
+.tile-size__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 104px;
+  height: 16px;
+  background: none;
+  cursor: pointer;
+}
+
+.tile-size__range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(242, 245, 251, 0.16);
+}
+
+.tile-size__range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(242, 245, 251, 0.16);
+}
+
+.tile-size__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  border: 1px solid var(--gold-dormant);
+  box-shadow: var(--elev-1);
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.tile-size__range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  border: 1px solid var(--gold-dormant);
+  box-shadow: var(--elev-1);
+}
+
+.tile-size__range:hover::-webkit-slider-thumb,
+.tile-size__range:focus::-webkit-slider-thumb {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: var(--elev-1), 0 0 0 4px var(--gold-ring);
+}
+
+.tile-size__range:hover::-moz-range-thumb,
+.tile-size__range:focus::-moz-range-thumb {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: var(--elev-1), 0 0 0 4px var(--gold-ring);
+}
+
+.tile-size__range:focus {
+  outline: none;
+}
+
+/* Narrow: the header is already carrying a name, a count and a search field,
+   and the slider is the one thing on that line nobody needs to reach. */
+@media (max-width: 720px) {
+  .tile-size {
+    display: none;
+  }
+}
