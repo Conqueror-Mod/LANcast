@@ -84,7 +84,7 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}` |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}`; `user` carries `sharing` |
 | `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
 | `POST /api/auth/logout` | Ends this session |
@@ -93,6 +93,12 @@ non-browser clients work normally.
 When a session is active, `status`, `setup`, and `login` include
 `user: {id, name, role}`. A wrong username and a wrong password are reported
 identically as `401 unauthorized`.
+
+`GET /api/auth/status` additionally carries **`user.sharing`** — this account's
+own ADR 0035 activity-sharing choice. It is here because there is nowhere else
+it could be: `GET /api/people` excludes the caller by design, so a client had no
+way to read back a setting it could write. It reports only the caller's own
+value, and is absent (rather than false) if the server could not read it.
 
 `restart_required` is returned by both `status` and `setup`, and is true only
 when restarting would actually bind wider than the server is bound right now —

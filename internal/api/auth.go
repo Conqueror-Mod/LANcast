@@ -156,7 +156,30 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if sess, ok := s.session(r); ok {
 		resp["authenticated"] = true
-		resp["user"] = userJSON(sess.UserID, sess.Name, sess.Role)
+		u := userJSON(sess.UserID, sess.Name, sess.Role)
+		/*
+		 * The caller's own sharing choice (ADR 0035), reported here because
+		 * there was nowhere else it could come from.
+		 *
+		 * `/api/people` deliberately excludes the caller — a row for yourself
+		 * in a list of other people is noise — so the settings toggle had no
+		 * source for its own value and fell back to off on every mount,
+		 * whatever the database held. It rendered unticked for somebody who
+		 * had opted in, which for a privacy control is the worst direction to
+		 * be wrong in: it invites you to turn on something already on, and
+		 * says you are private when you are not.
+		 *
+		 * On the caller's own record only. Whether anybody else shares is
+		 * already public on the People page; this adds nothing about them.
+		 */
+		if sharing, err := s.st.SharesActivity(r.Context(), sess.UserID); err != nil {
+			// Not fatal: the shell reads this route constantly and must not
+			// lose its session over one optional field.
+			s.log.Error("read share activity", "error", err)
+		} else {
+			u["sharing"] = sharing
+		}
+		resp["user"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
