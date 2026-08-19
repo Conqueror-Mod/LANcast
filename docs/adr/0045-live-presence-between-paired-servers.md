@@ -154,15 +154,46 @@ Consistent with ADR 0035 throughout. An admin cannot grant presence on somebody
 else's behalf — a switch an admin can flip is not consent — cannot see presence
 not granted to them, and gains nothing by being the person who owns the disk.
 
-### 7. Being seen is not being joinable
+### 7. A presence grant carries the right to ask, and the host answers in the moment
 
-Presence says what somebody is watching. It does not offer to let anybody in.
-Room visibility is a separate act by the host (federation plan, Phase 5).
+Somebody you have granted presence to may **request to join** what they can see
+you watching. They do not thereby get in: the host accepts or declines, then,
+while it is happening.
 
-The converse is worth stating because it is where consent actually lives:
+This replaces an earlier draft of this rule, which made room visibility a second
+standing opt-in on top of the presence grant. That was over-cautious and it got
+the consent in the wrong place. Three reasons it is wrong:
+
+- **It priced consent by the switch.** The model already costs four settings for
+  two people to see each other (§2); a fifth to make what you can see actionable
+  is the point at which somebody stops reading them and turns everything on.
+- **The second switch was answering a question the first had already asked.**
+  "May Georgia see that I am watching this" and "may Georgia ask to watch it
+  with me" are not meaningfully different disclosures. The title is already out;
+  what remains is whether the film is watched alone, which is not a privacy
+  question.
+- **A standing switch is the weaker consent of the two available.** This ADR
+  already said so in its own next breath, about invitations: a decision made in
+  the moment, about this person and this film, beats one set months ago and
+  forgotten. Requiring the switch *and* offering no moment was choosing the
+  weaker mechanism and then adding friction to it.
+
+So the principle behind the old rule survives — **being seen is still not being
+joinable** — and it is now carried by the host's answer rather than by a
+setting. Nobody arrives in a room because a toggle was left on.
+
+The converse still holds, and it is the same reasoning from the other side:
 **inviting somebody into a room discloses the title to them regardless of any
-standing grant.** That is not a loophole — a deliberate invitation, made in the
-moment, is consent of a stronger kind than a switch set months ago.
+standing grant.** A deliberate invitation is consent of a stronger kind than a
+switch, which is exactly why the accept can carry the weight the switch was
+carrying.
+
+Two consequences for whoever builds Phase 5. A request is **not** a
+notification-and-timeout that defaults to yes — an unanswered request is
+declined, because a host who is asleep has not agreed to anything. And declining
+is **silent to the asker beyond "not now"**: a decline that explains itself
+invites a negotiation about why, which is the thing a host reaches for the
+decline in order to avoid.
 
 ### 8. The "libraries the reader can see" rule does not carry over
 
