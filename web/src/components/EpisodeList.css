@@ -1,0 +1,187 @@
+/* A season as a list of wide rows.
+
+   The still leads because it is the only part that identifies an episode at a
+   glance; everything else is text that has to be read. Gold appears only on
+   focus — watched state is a tick and a dimmed row, never gold, because gold
+   means where you are and nothing else (design.md). */
+
+.eplist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eprow {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid transparent;
+  background: rgba(10, 15, 34, 0.45);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.eprow:hover {
+  background: rgba(10, 15, 34, 0.75);
+}
+
+.eprow:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+/* A watched episode recedes rather than disappearing: still readable, clearly
+   behind you. */
+.eprow--watched .eprow__title,
+.eprow--watched .eprow__synopsis {
+  color: var(--text-muted);
+}
+
+.eprow__still {
+  position: relative;
+  flex-shrink: 0;
+  width: 200px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(4, 8, 20, 0.8);
+}
+
+.eprow__still img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* The no-artwork state: the episode number, large, occupying the space the
+   still will take. A number drawn as a number reads as a design; a grey
+   rectangle reads as a broken image. */
+.eprow__still--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    150deg,
+    rgba(28, 40, 82, 0.75),
+    rgba(10, 15, 34, 0.9)
+  );
+}
+
+.eprow__stillnum {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.eprow__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* min-width lets the flex child actually shrink, which is what allows the
+     synopsis to ellipsise instead of forcing the row wider than the page. */
+  min-width: 0;
+  flex: 1;
+}
+
+.eprow__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eprow__title {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The number leads because it is how anybody refers to an episode. Tabular
+   figures so a column of them lines up. */
+.eprow__num {
+  margin-right: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.eprow__meta {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Two lines, then ellipsis: a long synopsis must not make one row taller than
+   the three around it. */
+.eprow__synopsis {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.eprow__progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.eprow__bar {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.eprow__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--nebula-blue);
+}
+
+.eprow__left {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.eprow__watched {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 14px;
+  color: var(--text-faint);
+}
+
+/* Narrow windows: the still shrinks rather than the text disappearing, because
+   the title and synopsis are what the row is for. */
+@media (max-width: 720px) {
+  .eprow__still {
+    width: 128px;
+  }
+  .eprow__meta {
+    display: none;
+  }
+}
