@@ -59,6 +59,16 @@ jobs:
         run: npm ci
         working-directory: web
 
+      # Before the build, because it is the cheapest step and it catches the one
+      # class of fault the other two are blind to. v0.6.48 shipped two useState
+      # calls below an early return: TypeScript type-checked it, the tests
+      # passed, and every detail page blanked the app until a restart. The
+      # config is scoped to react-hooks rules only — a style pass would bury
+      # that rule under hundreds of findings nobody asked for.
+      - name: lint
+        run: npm run lint
+        working-directory: web
+
       - name: type-check + build
         run: npm run build
         working-directory: web
