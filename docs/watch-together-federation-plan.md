@@ -248,9 +248,11 @@ for.
 - `together.Member` carries where it came from. Names are already frozen at join
   time (the audit-log pattern), so a remote member displays correctly without
   reaching across the network to render a list.
-- Room visibility to a paired peer is the **host's** opt-in, separate again from
-  presence — being seen to watch something is not the same as offering to be
-  joined.
+- A presence grant carries the **right to ask**, and the host accepts or
+  declines in the moment ([ADR 0045](adr/0045-live-presence-between-paired-servers.md)
+  §7). Not a second standing opt-in: being seen is still not being joinable, but
+  the host's answer carries that rather than a setting. An unanswered request is
+  declined.
 - Join from the peers section of People.
 - **The host still drives, and a remote guest never gets transport control.**
   Unchanged, and the existing reasoning holds harder across a WAN: two people
