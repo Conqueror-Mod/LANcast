@@ -65,6 +65,26 @@ in it. Revisit if WAN streaming proves too painful in practice.
 **4. Presence reveals that a peer is online and what they are watching**, by
 name of title. This one requires amending an accepted ADR — see below.
 
+**5. Presence is granted to a person, not to a server.** "Georgia may see me",
+not "anybody on Georgia's server may see me". This matches ADR 0035, where the
+unit of consent is a person throughout, and it is the answer that stays correct
+when her server grows a second account.
+
+It costs an ordering change, recorded here because it is easy to get wrong: a
+grant naming Georgia requires Georgia to *exist* on this server, and the obvious
+reading puts remote people in Phase 4 with the authentication that lets them in.
+So the two are split. **Phase 2 establishes who exists; Phase 4 establishes who
+may get in.** Pairing exchanges a roster of the accounts on each side that have
+chosen to take part, each stored locally as a remote person with a stable id.
+Presence consent in Phase 3 is then granted against a row that is already there,
+and Phase 4 adds only ticketing and sessions — not the existence of the people
+it authenticates.
+
+The roster exchange is itself a disclosure ("these are the accounts on my
+server"), so it takes its own per-account opt-in, defaulting off, in the same
+spirit as everything else here. A person who has not opted in is not in the
+roster and cannot be named by anybody's grant.
+
 ## The blocker nobody had flagged
 
 **[ADR 0035](adr/0035-who-may-see-whose-viewing.md) does not permit this
@@ -134,7 +154,12 @@ Federation pins peers the way the desktop window already pins its own server.
 **Medium-large. The first half of the stated test lands here.**
 
 - Schema revision 27: a `peer` table — fingerprint, display name, address, when
-  added, state.
+  added, state — and a `remote_person` table, rows owned by a peer, each with a
+  stable id and display name.
+- **Per-account `visible_to_peers`, default off.** Being listed in the roster
+  the two servers exchange is a disclosure and gets its own opt-in. It is also
+  the precondition for anybody granting you anything: an invisible account
+  cannot be named.
 - **Pairing is an out-of-band invite blob**: a copyable string carrying
   fingerprint, name and address. Georgia pastes Chris's; Chris pastes hers.
   Syncthing's model, and it is the only introduction mechanism compatible with
@@ -144,6 +169,8 @@ Federation pins peers the way the desktop window already pins its own server.
 - Server-to-server calls are mTLS with **the peer's key pinned**. Every other
   certificate validates normally.
 - A reachability poll, so "online" is a fact rather than an assumption.
+- A roster exchange on pair and on refresh, populating `remote_person`. This is
+  what lets Phase 3 grant presence to a named person rather than to a machine.
 - Routes: list, add-by-invite, remove. Removal is the revocation mechanism for
   everything in later phases, so it has to be complete rather than cosmetic.
 
@@ -155,7 +182,10 @@ Federation pins peers the way the desktop window already pins its own server.
 
 **Medium. Gated on the ADR 0035 amendment. Do not start it early.**
 
-- Schema revision 28: `user.share_presence`, and the per-peer grant.
+- Schema revision 28: the grant table — one row per (local account, remote
+  person) pair. **Not a `share_presence` boolean.** A single switch is a grant
+  to everybody, which is the per-server answer this project explicitly did not
+  choose, wearing a per-account disguise.
 - An in-memory active-playback tracker with a sweep, exactly parallel to the
   room's member sweep — and see the traps below, because this is a bug this
   project has already shipped once.
@@ -243,10 +273,10 @@ not. **The host's server stays the sole clock** — never compute a position fro
 a guest's local time. This one is silent when it breaks: everybody just drifts.
 
 **3. You cannot test this on one machine.** LANcast holds a single-instance lock
-per machine, and a different port or data directory does not help. Phases 2
-onward need two machines, or a deliberate dev-build relaxation of the lock.
-Settle this **before** Phase 2, or the first federation test is blocked on
-infrastructure at exactly the moment you want to be debugging protocol.
+per machine, and a different port or data directory does not help. **Resolved:
+a second machine runs the other instance.** No dev-build relaxation of the lock
+is planned, and none should be added quietly — the lock is a real invariant and
+a build tag that disables it is a build tag that eventually ships.
 
 **4. Testing needs Georgia.** Phases 1 and 2 are the only ones fully provable
 solo. Everything from Phase 3 needs a second person on a second network at the
