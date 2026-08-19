@@ -318,8 +318,44 @@ them is doing hostname validation at all.
 **8. Two machines behind one NAT is not a two-network test.** Worth checking
 what public address each peer reports before drawing conclusions from a
 successful connection: same public address and single-digit latency means the
-overlay is carrying LAN traffic. That is fine for building phases 1 and 2 and
-proves nothing about phase 3 onward.
+overlay is carrying LAN traffic.
+
+That is the arrangement most of this will be built on, deliberately — it is the
+one always available — so what it can and cannot prove is set out below rather
+than left to be assumed.
+
+## Testing topology
+
+Two tiers, and the second one is somebody's diary appointment rather than a
+machine, so what depends on it should be known in advance.
+
+**Tier 1 — two machines, one network, joined over the overlay.** Always
+available, and enough for almost all of the build: pairing, identity, the roster
+exchange, presence, guest admission, the room crossing the boundary, and every
+capability boundary in ADR 0046. If it is a rule about *who may do what*, it can
+be proved here.
+
+**Tier 2 — a third party on a genuinely different network.** Required for
+anything that is a claim about *the link*:
+
+- **[ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md) in its
+  entirety.** The remote cap is invisible on a LAN: a 40 Mbps direct play works
+  beautifully at 7ms, so the mechanism protecting the host's uplink is never
+  once exercised. Nothing about the cap should be believed until this tier.
+- **The seek stall**, named in 0047's consequences — a host seeking restarts the
+  guest's transcode at a new offset, which is barely noticeable locally and is
+  the whole question remotely.
+- **Room convergence under real latency and jitter.** The follower snaps when
+  more than about 1.5s out. At 7ms everything converges instantly and the
+  threshold is never tested.
+- **Whether the overlay traverses NAT or falls back to relaying**, which is a
+  bandwidth fact and therefore an ADR 0047 fact.
+
+**A third party is a substitute in tier 2, not an addition.** Georgia plus a
+friend is *three peers*, and three peers is listed below as something nothing
+here has thought through. Keep the remote test to two unless three-peer support
+is being adopted as a requirement — in which case it is a decision, not a test
+setup.
 
 ## What this plan does not decide
 
