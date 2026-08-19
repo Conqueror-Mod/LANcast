@@ -116,6 +116,18 @@ func (s *Server) installMediaTools(w http.ResponseWriter, r *http.Request) {
 
 // runToolsInstall performs the install and records the outcome.
 func (s *Server) runToolsInstall(ctx context.Context, src mediatools.Source, dir string) {
+	/*
+	 * Logged on the way in, not only on the way out.
+	 *
+	 * The first report of this feature was "it hangs at 0%", and the log had
+	 * nothing to say about it — there was no line until the install finished or
+	 * failed, so a stall was indistinguishable from never having started. An
+	 * operation that takes minutes says when it begins.
+	 */
+	started := time.Now()
+	s.log.Info("media tools install started",
+		"dir", dir, "version", src.Version, "size_bytes", src.SizeBytes, "url", src.URL)
+
 	err := mediatools.Install(ctx, src, dir, func(p mediatools.Progress) {
 		s.tools.mu.Lock()
 		s.tools.stage, s.tools.done, s.tools.total = p.Stage, p.BytesDone, p.BytesTotal
@@ -140,9 +152,14 @@ func (s *Server) runToolsInstall(ctx context.Context, src mediatools.Source, dir
 				s.log.Warn("could not record the media tools location", "error", serr)
 			}
 		}
-		s.log.Info("media tools installed", "dir", dir, "version", src.Version)
+		s.log.Info("media tools installed",
+			"dir", dir, "version", src.Version, "took", time.Since(started).Round(time.Second))
 	} else {
-		s.log.Warn("media tools install failed", "error", err)
+		// Warn with the elapsed time: a failure after four seconds is a refusal,
+		// and one after a minute is the stall watchdog, and the two want
+		// different next steps.
+		s.log.Warn("media tools install failed",
+			"error", err, "after", time.Since(started).Round(time.Second))
 	}
 
 	s.tools.mu.Lock()
@@ -158,6 +175,20 @@ func (s *Server) runToolsInstall(ctx context.Context, src mediatools.Source, dir
 // mediaToolsStatus reports the install's progress. Polled, so it is cheap and
 // says nothing a caller has to interpret.
 func (s *Server) mediaToolsStatus(w http.ResponseWriter, r *http.Request) {
+	/*
+	 * Never cached, and this is the bug it fixes rather than a precaution.
+	 *
+	 * The first report was a progress bar frozen at 0% while the install ran to
+	 * completion underneath it. Every poll is a GET of the same URL with no
+	 * cache-buster, and with no cache headers a browser may heuristically reuse
+	 * the first response — so the client asked once, was answered "0 bytes", and
+	 * was handed that same answer for the rest of the download.
+	 *
+	 * The same mistake as a stale continue-watching read, in a different place:
+	 * a value that changes every second must say so.
+	 */
+	w.Header().Set("Cache-Control", "no-store")
+
 	out := s.tools.snapshot()
 	out["probe_available"] = s.probes.Available()
 	out["transcode_available"] = s.trans.Available()

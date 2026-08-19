@@ -22,6 +22,15 @@ func (s *Server) continueShow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
 		return
 	}
+	/*
+	 * Set before the answer is known, not after.
+	 *
+	 * Every response from this path is uncacheable, including the failures: the
+	 * one a proxy is most likely to keep is the one that went out without a
+	 * header, and a cached "no such item" is its own confusing bug.
+	 */
+	w.Header().Set("Cache-Control", "no-store")
+
 	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
@@ -31,16 +40,6 @@ func (s *Server) continueShow(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "continue show")
 		return
 	}
-
-	/*
-	 * Never cached, by anybody.
-	 *
-	 * This is the whole feature. A conditional request, a proxy, or a browser
-	 * holding this for thirty seconds reproduces exactly the bug it exists to
-	 * avoid — pressing continue and being sent to an episode already watched —
-	 * and it would do so intermittently, which is the hardest kind to believe.
-	 */
-	w.Header().Set("Cache-Control", "no-store")
 
 	out := map[string]any{
 		"resume":    next.Resume,
