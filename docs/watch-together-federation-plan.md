@@ -228,7 +228,10 @@ here — every handler turning a row into a filesystem path re-verifies
 containment. A remote principal is exactly the boundary that rule was written
 for.
 
-- ADR 0046 — remote guests.
+- [ADR 0046](adr/0046-remote-guests.md) — remote guests. **Written**, and it
+  tightens this phase: the guest session is default-deny in middleware, the item
+  check is object-level rather than route-level, the credential is a bearer
+  token rather than a cookie, and the guest writes no state at all.
 
 ### Phase 5 — The room crosses the boundary
 
