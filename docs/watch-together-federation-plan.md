@@ -245,9 +245,13 @@ for.
 
 ### Phase 6 — Remote streaming
 
-**Medium, with a hardware reality attached.**
+**Smaller than medium, once ADR 0047 was written — see below. A hardware
+reality is still attached.**
 
-- ADR 0047 — remote streaming quality.
+- [ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md) — remote
+  streaming is capped by the host. **Written, and it shrinks this phase**: ADR
+  0031 already built the ceiling mechanism, so the cap is expressed in the
+  profile and `decide.go` does not change at all. Mostly configuration.
 - The direct-play/remux/transcode decision gains a *remote* input. Today it
   reasons about codec and container only, which over a WAN will cheerfully
   choose to direct-play a 40 Mbps remux down a domestic uplink.
