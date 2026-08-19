@@ -601,6 +601,14 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 		} else if n > 0 {
 			s.log.Info("pruned empty containers", "library", lib.ID, "count", n)
 		}
+		// A gallery empties the same way a season does — the folder is deleted
+		// and its photographs are marked missing, leaving a tile over nothing.
+		if marked, restored, err := s.st.ReconcileMissingContainers(ctx, lib.ID); err != nil {
+			s.log.Warn("reconciling empty galleries failed", "library", lib.ID, "error", err)
+		} else if marked > 0 || restored > 0 {
+			s.log.Info("galleries followed their photographs",
+				"library", lib.ID, "now_missing", marked, "restored", restored)
+		}
 		return s.st.TouchLibraryScanned(ctx, lib.ID)
 	}
 
@@ -623,6 +631,27 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 		s.log.Warn("pruning empty containers failed", "library", lib.ID, "error", err)
 	} else if n > 0 {
 		s.log.Info("pruned empty containers", "library", lib.ID, "count", n)
+	}
+
+	/*
+	 * A container whose children have all gone offline goes with them.
+	 *
+	 * PruneEmptyContainers above only removes a container with *no* children;
+	 * one holding eight missing episodes keeps them, and so keeps its own tile.
+	 * A show reorganised on disk therefore accumulated a season per old folder
+	 * layout — reported as a duplicated season, which is what it looks like when
+	 * the extra one describes a directory that no longer exists.
+	 *
+	 * Marked rather than deleted, because parent_id cascades: deleting the
+	 * season would delete the missing episodes under it, and scanning marks
+	 * missing precisely so that an unmounted drive costs nothing. Reversible for
+	 * the same reason — remount, rescan, and the season is a season again.
+	 */
+	if marked, restored, err := s.st.ReconcileMissingContainers(ctx, lib.ID); err != nil {
+		s.log.Warn("reconciling empty containers failed", "library", lib.ID, "error", err)
+	} else if marked > 0 || restored > 0 {
+		s.log.Info("containers followed their children",
+			"library", lib.ID, "now_missing", marked, "restored", restored)
 	}
 
 	return s.st.TouchLibraryScanned(ctx, lib.ID)
