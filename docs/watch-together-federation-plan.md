@@ -181,7 +181,9 @@ Federation pins peers the way the desktop window already pins its own server.
 
 ### Phase 3 — Presence
 
-**Medium. Gated on the ADR 0035 amendment. Do not start it early.**
+**Medium. Gated on the ADR 0035 amendment —
+[ADR 0045](adr/0045-live-presence-between-paired-servers.md), written. Do not
+start this phase ahead of reading it.**
 
 - Schema revision 28: the grant table — one row per (local account, remote
   person) pair. **Not a `share_presence` boolean.** A single switch is a grant

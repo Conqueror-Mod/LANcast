@@ -2,6 +2,16 @@
 
 Date: 2026-08-15 · Status: accepted
 
+> **Amended by [ADR 0045](0045-live-presence-between-paired-servers.md)**, which
+> adds live presence across a paired server. Two halves, and only one of them
+> was invited: sharing with *a named person rather than everybody* is the
+> granularity parked below under "What this does not decide" and named first
+> under "Revisit when", now asked for. Disclosing what somebody is watching
+> **right now** is not — it is stronger than the resume position excluded by
+> name below, and 0045 says plainly that this ADR would not have permitted it.
+> The distinction 0045 rests on is drawn from the reasoning here: the harm named
+> below is a record that *accumulates*, and presence is never written down.
+
 ## Context
 
 Three features have now been built around a question nobody had answered, and
