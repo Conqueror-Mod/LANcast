@@ -1,6 +1,9 @@
 package probe
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func result(container string, streams ...Stream) *Result {
 	return &Result{Container: container, DurationMS: 1000, Streams: streams}
@@ -796,5 +799,70 @@ func TestUnprobedColourEncodingIsNotTonemapped(t *testing.T) {
 	}
 	if d.TonemapHDR {
 		t.Error("TonemapHDR = true with no recorded transfer function")
+	}
+}
+
+// tenBitVideo is Main 10 without the HDR signalling — which is what the film
+// that produced this bug actually is. 10-bit is correlated with HDR and does not
+// mean it, and the rule here is about the bit depth alone.
+func tenBitVideo(codec string, h int) Stream {
+	s := video(codec, h)
+	s.PixFmt = "yuv420p10le"
+	return s
+}
+
+/*
+ * 10-bit HEVC, and the claim that does not cover it.
+ *
+ * Found on a real film: Main 10 in MP4 direct-played with perfect audio and a
+ * picture that stuttered. The client had claimed "hevc" from an 8-bit
+ * `hvc1.1.6` probe and the server read it as covering Main 10 as well.
+ *
+ * The worst shape this bug comes in is that nothing fails. A direct play that
+ * *errors* records the claim and stops making it; this one played, badly, and
+ * no code anywhere can tell a smooth picture from a glitching one.
+ */
+func TestClaimedHEVCDoesNotCoverTenBit(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"hevc"})
+
+	// 8-bit HEVC is what the claim was actually about, and still direct-plays.
+	if d := Decide(result("mp4", video("hevc", 1080), audio("aac", 2)), p); d.VideoAction != "copy" {
+		t.Errorf("8-bit HEVC = %q (%s), want copy", d.VideoAction, d.Reason)
+	}
+
+	// Main 10 does not.
+	d := Decide(result("mp4", tenBitVideo("hevc", 1080), audio("aac", 2)), p)
+	if d.VideoAction != "encode" {
+		t.Fatalf("10-bit HEVC = %q (%s), want encode", d.VideoAction, d.Reason)
+	}
+	if !strings.Contains(d.Reason, "10-bit HEVC") {
+		t.Errorf("reason = %q, want it to name the bit depth", d.Reason)
+	}
+}
+
+// A client that answered for Main 10 specifically gets it direct-played, which
+// is the whole point of asking the engine rather than guessing.
+func TestClaimedTenBitHEVCIsDirectPlayed(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"hevc", "hevc10"})
+
+	d := Decide(result("mp4", tenBitVideo("hevc", 1080), audio("aac", 2)), p)
+	if d.VideoAction != "copy" {
+		t.Errorf("VideoAction = %q (%s), want copy", d.VideoAction, d.Reason)
+	}
+}
+
+/*
+ * The distrust belongs to the guess, not to the profile.
+ *
+ * `tv` and `safari` list HEVC natively because they are device classes known to
+ * decode Main 10 in hardware. Demanding a claim from them would re-encode HDR
+ * for exactly the clients that handle it best.
+ */
+func TestNativeHEVCProfilesStillTakeTenBit(t *testing.T) {
+	for _, p := range []Profile{TVProfile(), SafariProfile()} {
+		d := Decide(result("mp4", tenBitVideo("hevc", 2160), audio("aac", 6)), p)
+		if d.VideoAction != "copy" {
+			t.Errorf("%s: 10-bit HEVC = %q (%s), want copy", p.Name, d.VideoAction, d.Reason)
+		}
 	}
 }

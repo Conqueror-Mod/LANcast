@@ -13,7 +13,23 @@
 // Capabilities the server understands. Sending something outside this set is
 // harmless — unknown claims are ignored — but there is no reason to.
 const PROBES: Record<string, string> = {
+  // Main profile, 8-bit.
   hevc: 'video/mp4; codecs="hvc1.1.6.L93.B0"',
+  /*
+   * Main 10, asked separately because it is a separate question.
+   *
+   * The 8-bit string above was being taken as covering both, and it does not:
+   * on Windows the engine can answer "probably" for Main and still decode Main
+   * 10 badly enough to glitch. Reported as a film that direct-played with
+   * perfect audio and a stuttering picture — which is the worst shape of this
+   * bug, because nothing fails. The safety net that records a failed claim and
+   * stops making it never fires, since playback technically worked.
+   *
+   * `hvc1.2.4.L120.B0`: profile 2 (Main 10), level 4.0. The server treats it as
+   * permission for a bit depth rather than a codec, so a client that cannot
+   * answer for it gets the file transcoded instead.
+   */
+  hevc10: 'video/mp4; codecs="hvc1.2.4.L120.B0"',
   ac3: 'audio/mp4; codecs="ac-3"',
   eac3: 'audio/mp4; codecs="ec-3"',
 };

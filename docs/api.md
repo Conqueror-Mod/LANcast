@@ -1224,9 +1224,23 @@ GET /api/items/87/playback?can=hevc,ac3
 
 | Claim | Adds |
 | --- | --- |
-| `hevc` | HEVC video, and the `matroska` container it usually arrives in |
+| `hevc` | HEVC video **at 8 bits**, and the `matroska` container it usually arrives in |
+| `hevc10` | permission for **10-bit** HEVC (Main 10). Adds no codec of its own |
 | `ac3`, `eac3`, `dts` | that audio codec |
 | `matroska` | the container alone, for a client with a real demuxer |
+
+`hevc` and `hevc10` are separate because they are separate questions and the
+answers differ: a browser can answer "probably" for Main profile and still
+decode Main 10 badly. That was found on a real film — direct-played with perfect
+audio and a stuttering picture, from a client that had probed
+`hvc1.1.6` (8-bit) and been read as covering Main 10 too. A client should probe
+`hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for
+it; without it, 10-bit HEVC is transcoded.
+
+The distinction applies **only to claims**. A profile that lists HEVC natively —
+`tv`, `safari` — is a device class known to decode Main 10 in hardware, and
+demanding a claim from it would re-encode HDR for the clients that handle it
+best.
 
 **It only ever widens.** A claim cannot remove anything the profile already
 allows, an unrecognised claim is ignored rather than refused, and an absent

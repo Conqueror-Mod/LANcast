@@ -82,6 +82,17 @@ type Profile struct {
 	// MaxAudioChannels of 0 means no limit. Set it to force a downmix, not to
 	// express what the client can decode.
 	MaxAudioChannels int `json:"max_audio_channels,omitempty"`
+
+	/*
+	 * Claims are the capability names the client sent, recorded as well as
+	 * applied.
+	 *
+	 * Most claims widen a codec list and nothing else needs to know they
+	 * happened. Some are permissions rather than codecs — "hevc10" authorises a
+	 * bit depth of a codec that is already playable — and those can only be
+	 * asked for by name.
+	 */
+	Claims []string `json:"claims,omitempty"`
 }
 
 // BrowserProfile is what a modern desktop browser reliably plays.
@@ -194,6 +205,23 @@ var knownCapabilities = map[string]struct {
 	// conditional (docs/api.md), which is exactly the sort of thing the client
 	// can check and the server cannot.
 	"hevc": {video: []string{"hevc"}, containers: []string{"matroska"}},
+	/*
+	 * 10-bit HEVC is a separate claim from HEVC, because it is a separate
+	 * question and the answers differ.
+	 *
+	 * A browser answers `canPlayType` for Main profile 8-bit and for Main 10
+	 * independently, and on Windows the first can be yes while the second is
+	 * decoded badly enough to glitch. Reported exactly that way: a Main 10 film
+	 * direct-played with perfect audio and a picture that stuttered, because the
+	 * client had claimed "hevc" from an 8-bit probe and the server took it as
+	 * covering both.
+	 *
+	 * It adds no codec of its own. It is permission for a bit depth, checked in
+	 * canDirectPlay, and a client that does not send it gets the file
+	 * transcoded — which is the behaviour that was correct all along for a
+	 * decoder that cannot really manage it.
+	 */
+	"hevc10": {},
 	// AC-3 and E-AC-3 in MP4: a large slice of a real library, and an audio
 	// re-encode on every file that has it.
 	"ac3":  {audio: []string{"ac3"}},
@@ -202,6 +230,22 @@ var knownCapabilities = map[string]struct {
 	// A container claim on its own — a client with a real demuxer rather than a
 	// browser's narrow one.
 	"matroska": {containers: []string{"matroska"}},
+}
+
+/*
+ * Allows reports whether a claim was made.
+ *
+ * Kept alongside the widened codec lists because some claims are permissions
+ * rather than codecs: "hevc10" adds nothing to play, it authorises a bit depth
+ * of something already playable.
+ */
+func (p Profile) Allows(claim string) bool {
+	for _, c := range p.Claims {
+		if strings.EqualFold(c, claim) {
+			return true
+		}
+	}
+	return false
 }
 
 // WithCapabilities returns p widened by what a client says it can also play.
@@ -223,10 +267,15 @@ func WithCapabilities(p Profile, claims []string) Profile {
 	out.Containers = append([]string(nil), p.Containers...)
 
 	for _, raw := range claims {
-		cap, ok := knownCapabilities[strings.ToLower(strings.TrimSpace(raw))]
+		name := strings.ToLower(strings.TrimSpace(raw))
+		cap, ok := knownCapabilities[name]
 		if !ok {
 			continue
 		}
+		// Recorded as well as applied: a claim that grants a permission rather
+		// than a codec has nothing to append, and canDirectPlay asks for it by
+		// name.
+		out.Claims = appendMissing(out.Claims, name)
 		out.VideoCodecs = appendMissing(out.VideoCodecs, cap.video...)
 		out.AudioCodecs = appendMissing(out.AudioCodecs, cap.audio...)
 		out.Containers = appendMissing(out.Containers, cap.containers...)
@@ -453,9 +502,33 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	}
 	// 10-bit H.264 is a real trap: the codec name matches, browsers advertise
 	// H.264 support, and playback still fails. High 10 is not in any browser's
-	// baseline. HEVC, VP9 and AV1 carry 10-bit fine, so the rule is H.264 only.
+	// baseline.
 	if strings.EqualFold(s.Codec, "h264") && isTenBit(s) {
 		return false, "10-bit H.264 is not supported by browsers"
+	}
+	/*
+	 * 10-bit HEVC is the same trap one codec along, and it took a real film to
+	 * find it: Main 10 direct-played with perfect audio and a stuttering
+	 * picture, because "hevc" had been claimed from an 8-bit `hvc1.1.6` probe
+	 * and read as covering Main 10 too.
+	 *
+	 * A *claim* of "hevc" now means 8-bit; ten-bit needs `hevc10`, which the
+	 * client only sends when the engine answered for Main 10 specifically.
+	 *
+	 * Scoped to claims deliberately. A profile that lists HEVC natively — `tv`,
+	 * `safari` — is a device class known to decode Main 10 in hardware, and
+	 * demanding a claim from it would re-encode HDR for exactly the clients that
+	 * handle it best. The distrust belongs to the guess, not to the profile.
+	 *
+	 * Worth noting why the existing safety net did not catch it: a failed
+	 * direct play records the claim and stops making it, but this did not fail.
+	 * It played. Badly. Nothing in the system can see the difference between a
+	 * smooth picture and a glitching one, which is why the question has to be
+	 * asked accurately rather than recovered from afterwards.
+	 */
+	if strings.EqualFold(s.Codec, "hevc") && isTenBit(s) &&
+		p.Allows("hevc") && !p.Allows("hevc10") {
+		return false, "10-bit HEVC needs a decoder this client did not claim"
 	}
 	return true, ""
 }
