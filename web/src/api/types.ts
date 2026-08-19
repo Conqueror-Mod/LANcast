@@ -52,6 +52,16 @@ export interface Library {
 export interface Artwork {
   poster?: string;
   fanart?: string;
+  /*
+   * An episode still, 16:9.
+   *
+   * Declared before it is served on purpose. TMDB already returns `still_path`
+   * for every episode and the provider already maps it to a thumb, which is
+   * then discarded — persisting it is step 3 of season-page-plan.md, and the
+   * episode row is built to fill in without changing shape when it lands.
+   * Until then this is absent and every row draws its number instead.
+   */
+  thumb?: string;
 }
 
 export interface Progress {

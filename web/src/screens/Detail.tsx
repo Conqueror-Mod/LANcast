@@ -37,6 +37,7 @@ import { PosterTile } from "@/components/PosterTile";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
+import { EpisodeList } from "@/components/EpisodeList";
 import { TrailerModal } from "@/components/TrailerModal";
 import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
@@ -359,6 +360,17 @@ export function Detail() {
    * landing on an episode already watched.
    */
   const isShow = item?.kind === "show";
+  /*
+   * Whether the children are episodes, whatever their container calls itself.
+   *
+   * Keyed on what the children *are* rather than on the parent being a season:
+   * a show whose episodes hang directly off it (the loose shape `shapecheck`
+   * allows) gets the same list, and a season that somehow holds something else
+   * does not.
+   */
+  const isEpisodeList =
+    (children ?? []).length > 0 &&
+    (children ?? []).every((c) => c.kind === "episode");
 
   const continueShow = async () => {
     if (!item || showBusy) return;
@@ -680,7 +692,21 @@ export function Detail() {
                 its length. The album's `artist` is the album artist, so a
                 per-track performer shows only where it differs — the
                 compilation case (ADR 0024). */}
-            {isAlbum || isPlaylist ? (
+            {isEpisodeList ? (
+              /*
+               * A season is a list, not a grid.
+               *
+               * The same correction this file already makes for an album one
+               * branch down: a leaf that is not a poster should not be drawn
+               * with the poster grid. Episodes were 2:3 tiles with no room for
+               * a synopsis, which is the one thing a season page is for
+               * (season-page-plan.md).
+               */
+              <EpisodeList
+                episodes={playableChildren}
+                queue={playableChildren.map((c) => c.id)}
+              />
+            ) : isAlbum || isPlaylist ? (
               // A playlist is a numbered list for the same reason a record is,
               // and more so: its tracks come from everywhere, so the performer
               // shows on every row rather than only where it differs from an
