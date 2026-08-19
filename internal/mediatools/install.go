@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
 /*
@@ -127,6 +129,36 @@ type Progress struct {
 var wanted = []string{"ffmpeg", "ffprobe"}
 
 /*
+ * stallTimeout is how long the download may deliver nothing before it is
+ * abandoned.
+ *
+ * There is no *total* timeout, and there must not be: 160MB over a slow line is
+ * legitimately several minutes, and a wall clock cannot tell that from a hang.
+ * What it can tell is silence. A connection that has delivered no bytes at all
+ * for a minute is not slow, it is stuck, and the honest thing is to say so.
+ *
+ * Without this the failure was indefinite: http.DefaultClient has no timeout of
+ * any kind, so a stalled fetch sat at 0% for ever, with nothing in the log to
+ * say whether it had even started.
+ */
+const stallTimeout = 60 * time.Second
+
+/*
+ * downloadClient is used instead of http.DefaultClient.
+ *
+ * DefaultClient has no timeouts whatsoever. These cover the two failures that
+ * are not covered by the stall watchdog: a TLS handshake that never completes,
+ * and a server that accepts the connection and never sends headers.
+ */
+var downloadClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		TLSHandshakeTimeout:   20 * time.Second,
+		ResponseHeaderTimeout: 45 * time.Second,
+	},
+}
+
+/*
  * Install downloads, verifies and unpacks the tools into dir.
  *
  * The ordering is the interesting part, and it is what makes a partial install
@@ -163,11 +195,25 @@ func Install(ctx context.Context, src Source, dir string, report func(Progress))
 // download fetches the archive to a temporary file beside its destination,
 // verifying the checksum as the bytes arrive rather than reading 160MB twice.
 func download(ctx context.Context, src Source, dir string, report func(Progress)) (string, error) {
+	/*
+	 * A watchdog, not a deadline. Reset on every chunk that arrives, so a slow
+	 * download runs as long as it needs and a silent one is abandoned after a
+	 * minute with an error naming what happened.
+	 */
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(stallTimeout, func() {
+		stalled.Store(true)
+		cancel()
+	})
+	defer watchdog.Stop()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
 	if err != nil {
 		return "", fmt.Errorf("could not request the download: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("could not reach the download: %w", err)
 	}
@@ -195,9 +241,16 @@ func download(ctx context.Context, src Source, dir string, report func(Progress)
 		total = resp.ContentLength
 	}
 	sum := sha256.New()
-	written, err := copyWithProgress(tmp, io.TeeReader(resp.Body, sum), total, report)
+	written, err := copyWithProgress(tmp, io.TeeReader(resp.Body, sum), total, report, func() {
+		watchdog.Reset(stallTimeout)
+	})
 	if err != nil {
 		cleanup()
+		if stalled.Load() {
+			// Named rather than surfaced as "context canceled", which reads like
+			// something the user did.
+			return "", fmt.Errorf("the download stopped sending data for %s and was abandoned", stallTimeout)
+		}
 		return "", err
 	}
 	if err := tmp.Close(); err != nil {
@@ -217,20 +270,28 @@ func download(ctx context.Context, src Source, dir string, report func(Progress)
 // copyWithProgress streams the body, reporting as it goes and honouring
 // cancellation between chunks. A 160MB download that cannot be cancelled is a
 // button nobody should press.
-func copyWithProgress(dst io.Writer, src io.Reader, total int64, report func(Progress)) (int64, error) {
+func copyWithProgress(dst io.Writer, src io.Reader, total int64, report func(Progress), alive func()) (int64, error) {
 	buf := make([]byte, 1<<20)
 	var done int64
 	var lastReported int64
+	// Report once before any bytes arrive, so a UI shows a real total and a
+	// stage immediately rather than sitting on an empty state that cannot be
+	// told apart from a hang.
+	report(Progress{Stage: StageDownloading, BytesDone: 0, BytesTotal: total})
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
+			alive()
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return done, fmt.Errorf("could not write the download: %w", werr)
 			}
 			done += int64(n)
-			// Every few megabytes rather than every chunk: this is a polled
-			// status, and 160 reports a second is noise the UI cannot use.
-			if done-lastReported >= 4<<20 {
+			// Every megabyte rather than every chunk: this is a polled status,
+			// and 160 reports a second is noise the UI cannot use. A megabyte
+			// is frequent enough that the first movement appears within a second
+			// or two of a working download, which is what tells a slow one from
+			// a stuck one at a glance.
+			if done-lastReported >= 1<<20 {
 				lastReported = done
 				report(Progress{Stage: StageDownloading, BytesDone: done, BytesTotal: total})
 			}

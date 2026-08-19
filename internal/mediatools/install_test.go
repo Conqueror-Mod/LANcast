@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 /*
@@ -293,5 +294,83 @@ func TestBackslashEntriesAreRecognisedOnEveryPlatform(t *testing.T) {
 	}
 	if !hasProbe(dir) {
 		t.Error("a Windows-separated archive did not install")
+	}
+}
+
+/*
+ * A download that goes silent is abandoned, not waited on for ever.
+ *
+ * The reported symptom was "it hangs at 0%", and http.DefaultClient is why:
+ * it has no timeout of any kind, so a connection that accepts the request and
+ * then sends nothing sits there indefinitely with nothing in the log. There is
+ * deliberately no *total* timeout -- 160MB over a slow line is legitimately
+ * minutes, and a wall clock cannot tell that from a hang -- so what is detected
+ * is silence.
+ */
+func TestAStalledDownloadIsAbandonedWithAnError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the stall watchdog")
+	}
+	// A server that sends a byte and then nothing, holding the connection open.
+	held := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000000")
+		w.Write([]byte("x"))
+		w.(http.Flusher).Flush()
+		<-held
+	}))
+	/*
+	 * Cleanups run last-registered-first, so the release of the handler must be
+	 * registered *after* the server: httptest.Server.Close waits for handlers to
+	 * return, and closing it while this one is parked on `held` deadlocks the
+	 * test binary. Learned by hanging a ten-minute test run.
+	 */
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(held) })
+
+	src := Source{URL: srv.URL, SHA256: strings.Repeat("0", 64), SizeBytes: 1000000}
+
+	// The watchdog's own timeout is a minute, which is too long for a test, so
+	// this asserts the wiring by cancelling instead: the same path, the same
+	// cleanup, and no 160MB left behind.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	dir := t.TempDir()
+	err := Install(ctx, src, dir, nil)
+	if err == nil {
+		t.Fatal("a stalled download reported success")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("a stalled download left %v behind", entries)
+	}
+}
+
+// The watchdog has to be long enough that a slow but working download is never
+// killed. A minute of complete silence is stuck; ten seconds is a bad line.
+func TestStallTimeoutIsGenerous(t *testing.T) {
+	if stallTimeout < 30*time.Second {
+		t.Errorf("stall timeout %s is short enough to kill a slow download", stallTimeout)
+	}
+}
+
+// Progress is reported before any bytes arrive, so a UI can show a total and a
+// stage immediately -- an empty state cannot be told apart from a hang.
+func TestProgressIsReportedBeforeTheFirstByte(t *testing.T) {
+	src, _ := serve(t, zipWith(t, realLayout()))
+	dir := t.TempDir()
+
+	var first Progress
+	seen := false
+	if err := Install(context.Background(), src, dir, func(p Progress) {
+		if !seen {
+			first, seen = p, true
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !seen || first.BytesDone != 0 || first.BytesTotal == 0 {
+		t.Errorf("first report = %+v, want a zeroed one carrying the total", first)
 	}
 }
