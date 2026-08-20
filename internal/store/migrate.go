@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 26
+const CurrentSchemaVersion = 27
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -65,6 +65,7 @@ var migrations = []migration{
 	{version: 24, sql: schemaRevision24},
 	{version: 25, sql: schemaRevision25},
 	{version: 26, sql: schemaRevision26},
+	{version: 27, sql: schemaRevision27},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -926,4 +927,69 @@ SET title = 'Season ' || season,
 WHERE kind = 'season'
   AND provider IS NOT NULL
   AND id NOT IN (SELECT item_id FROM item_lock);
+`
+
+/*
+ * Revision 27 — peers, the people on them, and who is willing to be seen.
+ *
+ * Federation's storage ([ADR 0044](../../docs/adr/0044-server-identity-and-peering.md)
+ * and the phase 2 half of the federation plan). Three things, and the shape of
+ * each is a decision rather than a default.
+ *
+ * **The fingerprint is the primary key.** Not a surrogate id with the
+ * fingerprint beside it. ADR 0044 §5 says the address is a hint and the
+ * fingerprint is the identity, and a table keyed that way cannot express the
+ * thing that would contradict it — two rows for one peer that moved. A peer
+ * that changes address keeps its row because it never stopped being the same
+ * peer.
+ *
+ * **Addresses are a side table, ordered.** They are plural because a machine on
+ * an overlay network has more than one way to be reached and because a peer
+ * that moves is still the same peer. `ord` preserves the sender's order, which
+ * carries real information: the first is the one they expect to work. The same
+ * shape item_collection uses, for the same reason — a list that belongs to a
+ * row and is replaced wholesale.
+ *
+ * **remote_person cascades from peer, and that is the revocation mechanism.**
+ * ADR 0046 makes unpairing the single act that revokes everything, "immediately,
+ * with no per-person cleanup". This is what makes that true rather than
+ * aspirational: delete the peer and the people it vouched for go with it, so no
+ * grant can name somebody who is no longer reachable through anybody. A grant
+ * table added in phase 3 will cascade from here in turn.
+ *
+ * The person's `id` is assigned by the *owning* server and is meaningless here
+ * beyond being stable — it is how "Georgia" survives being renamed. It is also
+ * a stranger's string, so nothing may assume its shape.
+ *
+ * **visible_to_peers defaults to 0**, exactly as share_activity did in revision
+ * 22 and for the same reason: appearing in a roster one server hands another is
+ * a disclosure, and no upgrade may make somebody visible as a side effect. An
+ * account that has not opted in cannot be named by anybody's grant, in either
+ * direction.
+ */
+const schemaRevision27 = `
+CREATE TABLE IF NOT EXISTS peer (
+    fingerprint TEXT    PRIMARY KEY,
+    name        TEXT    NOT NULL,
+    state       TEXT    NOT NULL,          -- added | paired
+    added_at    INTEGER NOT NULL,
+    last_seen   INTEGER                    -- NULL until it has ever answered
+);
+
+CREATE TABLE IF NOT EXISTS peer_address (
+    fingerprint TEXT    NOT NULL REFERENCES peer(fingerprint) ON DELETE CASCADE,
+    ord         INTEGER NOT NULL,
+    addr        TEXT    NOT NULL,
+    PRIMARY KEY (fingerprint, ord)
+);
+
+CREATE TABLE IF NOT EXISTS remote_person (
+    fingerprint TEXT    NOT NULL REFERENCES peer(fingerprint) ON DELETE CASCADE,
+    id          TEXT    NOT NULL,
+    name        TEXT    NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (fingerprint, id)
+);
+
+ALTER TABLE user ADD COLUMN visible_to_peers INTEGER NOT NULL DEFAULT 0;
 `
