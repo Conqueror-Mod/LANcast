@@ -18,6 +18,7 @@ import (
 	"lancast/internal/coverart"
 	"lancast/internal/crashlog"
 	"lancast/internal/enrich"
+	"lancast/internal/identity"
 	"lancast/internal/meta"
 	"lancast/internal/photo"
 	"lancast/internal/probe"
@@ -80,6 +81,11 @@ type Deps struct {
 	Log     *slog.Logger
 	Web     http.Handler
 
+	// Identity is this server's own keypair (ADR 0044). Held so GET
+	// /api/identity can report the fingerprint, and so the peer work in Phase 2
+	// has one place to get it from rather than re-reading the key file.
+	Identity identity.Identity
+
 	// Rebuild reconfigures providers after a settings change, so a newly
 	// entered API key takes effect without a restart.
 	Rebuild func(config.Settings)
@@ -105,6 +111,7 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	ident          identity.Identity
 	st             *store.Store
 	scanner        *scan.Scanner
 	reg            *meta.Registry
@@ -163,6 +170,7 @@ func New(d Deps) *Server {
 		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
+		ident:   d.Identity,
 		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
@@ -229,6 +237,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
+
+	// Who this server is (ADR 0044). Reports an identity; grants nothing.
+	mux.HandleFunc("GET /api/identity", s.identity)
 
 	mux.HandleFunc("GET /api/people", s.listPeople)
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)

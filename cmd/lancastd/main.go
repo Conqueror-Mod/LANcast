@@ -26,6 +26,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
+	"lancast/internal/identity"
 	"lancast/internal/mediatools"
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
@@ -532,6 +533,28 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	/*
+	 * The server's own identity (ADR 0044). Generated on first run and stable
+	 * for the life of this data directory.
+	 *
+	 * A failure here stops the server, which is deliberate and is the opposite
+	 * of how the TLS certificate is treated a few hundred lines down. That one
+	 * regenerates on a bad read so a server never dies of one file. This must
+	 * not: generating a replacement would mean coming back as a *different*
+	 * peer, and every server that had pinned this one would refuse it with
+	 * nothing to explain why. Refusing to start is recoverable — somebody
+	 * restores the key or accepts a new identity on purpose. Starting with the
+	 * wrong one is not.
+	 */
+	ident, err := identity.LoadOrCreate(cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("server identity: %w", err)
+	}
+	// The fingerprint, not the key. This line is the thing an operator reads to
+	// check what a peer pasted, so it has to be here; the private half never
+	// reaches a log, the API, or a crash report.
+	log.Info("server identity ready", "fingerprint", ident.Grouped())
+
 	// Closed by the relaunch path below to bring this process down from the
 	// inside. A channel rather than a second cancel func so the reason is
 	// legible at the select: signals mean "stop", this means "stop, something
@@ -554,7 +577,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			return nil
 		},
 		Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
-		Updates: updates,
+		Identity: ident,
+		Updates:  updates,
 		Rebuild: func(s config.Settings) {
 			rebuild(s)
 			worker.SetNFOWriter(nfoWriterFor(s))

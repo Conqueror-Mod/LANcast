@@ -115,6 +115,37 @@ to a loopback address is also `false`, and stays plain HTTP: TLS turns on when
 the server becomes reachable by someone else, which is the same boundary that
 gates LAN binding ([ADR 0014](adr/0014-transport-security.md)).
 
+### Server identity
+
+| Route | Purpose |
+|---|---|
+| `GET /api/identity` | `{fingerprint, fingerprint_display, name}` — who this server is |
+
+This server's own cryptographic identity
+([ADR 0044](adr/0044-server-identity-and-peering.md)): an Ed25519 keypair
+generated on first run and stable for the life of the data directory. The
+private half never leaves the server — not through this route, a log line, or a
+crash report.
+
+`fingerprint` is canonical: SHA-256 over the raw public key, base32, uppercase
+and unpadded — **52 characters**, never truncated. It is what any comparison is
+made against.
+
+`fingerprint_display` is the same value with a separator every four characters,
+so a client shows the readable form without inventing its own grouping. Two
+clients disagreeing about where the separators go is how two screens end up
+disagreeing about whether a fingerprint matched. Never parse the display form;
+strip separators, spaces, colons and case to recover the canonical one.
+
+`name` is what a peer would see this server called. Today it is the machine's
+hostname.
+
+**This route reports an identity and grants nothing.** There is no peer, no
+pairing and no access decision behind it. It is session-gated because the
+fingerprint travels to the people who need it *out of band*, in an invite — a
+route anybody could read would be a directory of one, which is exactly what
+ADR 0044 declines to build.
+
 ### Roles
 
 Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).
