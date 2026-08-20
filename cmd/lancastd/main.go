@@ -577,8 +577,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			return nil
 		},
 		Settings: settings, DataDir: cfg.DataDir, Log: log, Web: web.Handler(),
-		Identity: ident,
-		Updates:  updates,
+		Identity: ident, ListenAddr: listenAddr,
+		Updates: updates,
 		Rebuild: func(s config.Settings) {
 			rebuild(s)
 			worker.SetNFOWriter(nfoWriterFor(s))

@@ -76,7 +76,8 @@ func newHarness(t *testing.T) *harness {
 		Trans:    transcode.NewManager(filepath.Join(dataDir, "transcode"), log),
 		Updates:  update.New(Version),
 		Settings: settings, Log: log, DataDir: dataDir, Identity: ident,
-		Enrich: func() { h.enriched++ },
+		ListenAddr: ":8080",
+		Enrich:     func() { h.enriched++ },
 	})
 
 	h.srvAPI = api

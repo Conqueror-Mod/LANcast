@@ -179,6 +179,19 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		} else {
 			u["sharing"] = sharing
 		}
+		/*
+		 * And whether this account appears in the roster handed to peers
+		 * (ADR 0044). Here for exactly the reason `sharing` is, learned the
+		 * expensive way: a control that can write a setting and cannot read it
+		 * back renders off for somebody who turned it on, which for a privacy
+		 * switch is the worst direction to be wrong in. Both settings are the
+		 * caller's own, and this is the only route that reports them.
+		 */
+		if visible, err := s.st.VisibleToPeers(r.Context(), sess.UserID); err != nil {
+			s.log.Error("read peer visibility", "error", err)
+		} else {
+			u["visible_to_peers"] = visible
+		}
 		resp["user"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)

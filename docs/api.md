@@ -94,8 +94,9 @@ When a session is active, `status`, `setup`, and `login` include
 `user: {id, name, role}`. A wrong username and a wrong password are reported
 identically as `401 unauthorized`.
 
-`GET /api/auth/status` additionally carries **`user.sharing`** — this account's
-own ADR 0035 activity-sharing choice. It is here because there is nowhere else
+`GET /api/auth/status` additionally carries **`user.sharing`** and
+**`user.visible_to_peers`** — this account's own ADR 0035 activity-sharing
+choice, and whether it appears in the roster handed to paired servers. It is here because there is nowhere else
 it could be: `GET /api/people` excludes the caller by design, so a client had no
 way to read back a setting it could write. It reports only the caller's own
 value, and is absent (rather than false) if the server could not read it.
@@ -145,6 +146,45 @@ pairing and no access decision behind it. It is session-gated because the
 fingerprint travels to the people who need it *out of band*, in an invite — a
 route anybody could read would be a directory of one, which is exactly what
 ADR 0044 declines to build.
+
+### Peers
+
+| Route | Purpose |
+|---|---|
+| `GET /api/peers` | `{peers: [...]}` — the servers this one has been introduced to. **Admin** |
+| `POST /api/peers` | `{invite}` → adds a peer from a pasted invite. **Admin** |
+| `GET /api/peers/invite` | `{invite, fingerprint, fingerprint_display, name, addrs}` — this server's own invite, to hand out. **Admin** |
+| `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
+| `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
+
+Pairing is administrative and granting is not, which is why the first four are
+admin-gated and the last is not. Adding a peer opens a network relationship for
+the whole server — the same class of operational power as adding a library, so
+it is gated on the server rather than hidden in the client
+([ADR 0015](adr/0015-multi-user-accounts.md)). Choosing to appear in a roster is
+one account's own decision about itself, and there is deliberately no
+admin-facing version of it: a switch somebody else can flip is not consent.
+
+A peer carries `fingerprint` and `fingerprint_display` for the same reason
+`/api/identity` does — one is compared, the other is read. `state` is `added`
+until the far side is confirmed to hold us too, and only the transport can move
+it to `paired`: **accepting an invite is not a pairing**
+([ADR 0044](adr/0044-server-identity-and-peering.md) §3, introduction is
+mutual). `last_seen` is 0 for a peer that has never answered, which is a
+different statement from one that answered three days ago.
+
+`DELETE` accepts the fingerprint in either form. It is the revocation
+mechanism: the peer's addresses and roster go with it through the schema's
+cascade, and in later phases so does every grant naming one of its people
+([ADR 0046](adr/0046-remote-guests.md)).
+
+`POST /api/peers` refuses this server's own invite with `self`, and refuses a
+damaged one with `bad_invite` and a message written for the person holding the
+paste. `GET /api/peers/invite` answers `409 not_reachable` on a server with no
+address another machine could reach — it cannot introduce itself.
+
+**A pairing permits nothing.** It records that two servers know who each other
+are, and every later capability is granted separately.
 
 ### Roles
 

@@ -183,6 +183,20 @@ Federation pins peers the way the desktop window already pins its own server.
 - Routes: list, add-by-invite, remove. Removal is the revocation mechanism for
   everything in later phases, so it has to be complete rather than cosmetic.
 
+**Pairing lives in Settings; granting and joining live in People.** Two places,
+decided deliberately, and it settles the authorization rather than complicating
+it. Adding a peer opens a network relationship for the whole server — an
+operational power of the same class as adding a library, so it is admin-gated
+(ADR 0015). Granting a named person something is one account's own decision
+about its own viewing, it is self-service, and it never touches a peer route. So
+a member never lists peers; they list *people*, which is a different route
+reading a different table.
+
+The one setting that crosses over is a person's own `visible_to_peers`, which is
+a personal decision that happens to be about federation. It sits beside the
+other thing an account decides about itself, and there is deliberately no
+admin-facing version.
+
 > **Test milestone:** Georgia's server appears in Chris's peer list, marked
 > online, and his in hers. This is half the goal, and it is reachable without
 > touching presence, auth or streaming.
