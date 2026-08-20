@@ -427,6 +427,10 @@ export interface AuthUser {
   id: string;
   name: string;
   role: Role;
+  /** This account's own ADR 0035 sharing choice. Absent only if the server
+   *  could not read it — `/api/people` cannot answer this, because it excludes
+   *  the caller. */
+  sharing?: boolean;
 }
 
 // GET /api/auth/status. `user` is present only when a session is active.

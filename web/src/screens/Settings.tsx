@@ -12,7 +12,6 @@ import {
   useCurrentUser,
   useIsAdmin,
   useUsers,
-  usePeople,
   useSetSharing,
   useChannelSources,
   useAddChannelSource,
@@ -389,15 +388,26 @@ function DisplayNameForm() {
  * its own invites people to assume the worst — or, worse, the best.
  */
 function SharingToggle() {
-  const people = usePeople();
   const set = useSetSharing();
   const me = useCurrentUser();
-  const mine = people.data?.people.find((p) => p.id === me?.id);
-  // The people list excludes the caller, so it cannot report the caller's own
-  // setting. Held locally and seeded from the mutation, which is the only place
-  // this value changes.
-  const [share, setShare] = useState<boolean | null>(null);
-  const on = share ?? mine?.sharing ?? false;
+  /*
+   * The stored value comes from auth status, which is the only route that
+   * reports the caller's own setting — `/api/people` excludes the caller by
+   * design, so the previous version of this looked for itself in a list that
+   * structurally could not contain it, found nothing, and fell back to `false`
+   * on every mount. The toggle read as off for somebody who had opted in.
+   *
+   * The local override is still here, but only to keep the checkbox responsive
+   * between the click and the refetch. It is cleared as soon as the server's
+   * answer changes, so the server stays the thing being displayed rather than
+   * a guess that happens to agree with it.
+   */
+  const stored = me?.sharing ?? false;
+  const [pending, setPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    setPending(null);
+  }, [stored]);
+  const on = pending ?? stored;
 
   return (
     <section className="settings__section">
@@ -407,7 +417,7 @@ function SharingToggle() {
           type="checkbox"
           checked={on}
           onChange={(e) => {
-            setShare(e.target.checked);
+            setPending(e.target.checked);
             set.mutate(e.target.checked);
           }}
         />

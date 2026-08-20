@@ -130,3 +130,52 @@ func TestSharingIsSetByTheAccountItself(t *testing.T) {
 		t.Error("sharing could not be turned off")
 	}
 }
+
+/*
+ * The account can read its own sharing choice back.
+ *
+ * This is the round trip TestSharingIsSetByTheAccountItself does not make. That
+ * test puts the setting and then asserts the *database*, which passed happily
+ * while the only thing a client could actually see said otherwise: `/api/people`
+ * excludes the caller by design, nothing else reported the value, and the
+ * settings toggle fell back to off on every mount. Somebody who had opted in was
+ * shown a control saying they had not — the worst direction for a privacy
+ * control to be wrong in.
+ *
+ * So this asserts the wire, not the column.
+ */
+func TestAuthStatusReportsMyOwnSharing(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+
+	var st struct {
+		User struct {
+			Sharing bool `json:"sharing"`
+		} `json:"user"`
+	}
+
+	// Off is the default (ADR 0035) and must be reported as such rather than
+	// simply omitted.
+	decode(t, h.authed(t, "GET", "/api/auth/status", nil), &st)
+	if st.User.Sharing {
+		t.Fatal("a new account reports sharing on; the default is off")
+	}
+
+	h.authed(t, "PUT", "/api/profile/sharing", map[string]any{"share": true}).Body.Close()
+
+	st.User.Sharing = false
+	decode(t, h.authed(t, "GET", "/api/auth/status", nil), &st)
+	if !st.User.Sharing {
+		t.Error("after opting in, auth status still reports sharing off")
+	}
+
+	// And back, because a switch that cannot be seen to turn off is the same
+	// bug in the other direction.
+	h.authed(t, "PUT", "/api/profile/sharing", map[string]any{"share": false}).Body.Close()
+
+	st.User.Sharing = true
+	decode(t, h.authed(t, "GET", "/api/auth/status", nil), &st)
+	if st.User.Sharing {
+		t.Error("after opting out, auth status still reports sharing on")
+	}
+}
