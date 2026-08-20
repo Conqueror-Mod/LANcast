@@ -15,6 +15,7 @@ import (
 	"lancast/internal/artwork"
 	"lancast/internal/config"
 	"lancast/internal/enrich"
+	"lancast/internal/identity"
 	"lancast/internal/meta"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
@@ -56,6 +57,14 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// A real identity from the harness's own data directory, rather than a
+	// zero value: the server always has one in production (main.go refuses to
+	// start otherwise), and a test server without one would be a shape that
+	// cannot occur, quietly passing tests for handlers that would panic.
+	ident, err := identity.LoadOrCreate(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	art := artwork.New(filepath.Join(dataDir, "artwork"))
 	reg := meta.NewRegistry()
 	h := &harness{st: st, art: art, reg: reg, settings: settings, dataDir: dataDir}
@@ -66,7 +75,7 @@ func newHarness(t *testing.T) *harness {
 		Probes:   probe.NewWorker(st, probe.New(), log),
 		Trans:    transcode.NewManager(filepath.Join(dataDir, "transcode"), log),
 		Updates:  update.New(Version),
-		Settings: settings, Log: log, DataDir: dataDir,
+		Settings: settings, Log: log, DataDir: dataDir, Identity: ident,
 		Enrich: func() { h.enriched++ },
 	})
 
