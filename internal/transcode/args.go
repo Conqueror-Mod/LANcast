@@ -132,10 +132,29 @@ type Options struct {
  *
  * `npl=100` is the nominal peak luminance of the SDR target, in nits.
  *
- * CPU rather than GPU because there is no `tonemap_cuda` in stock ffmpeg, and
- * because nothing here decodes on the GPU anyway: frames are already in system
- * memory (see EncoderArgs), so this is a plain filter insertion rather than the
- * download ADR 0033 warned it might cost.
+ * CPU rather than GPU because there is no `tonemap_cuda` in stock ffmpeg.
+ *
+ * This used to add "and because nothing here decodes on the GPU anyway", which
+ * stopped being true when `-hwaccel auto` was added above. It still costs
+ * nothing, but for a different reason and one worth writing down: `-hwaccel` is
+ * set without `-hwaccel_output_format`, so ffmpeg brings frames back to system
+ * memory after decoding and this remains a plain filter insertion rather than
+ * the download ADR 0033 warned it might cost.
+ *
+ * Measured rather than reasoned, because ADR 0033 exists on account of a
+ * shipped colour bug that was hard to reproduce. LANcast's own arguments over a
+ * real HDR10 source (Casino Royale, HEVC 10-bit, smpte2084), five seconds, with
+ * and without the flag:
+ *
+ *	                 colour out            SSIM vs the other
+ *	software decode  bt709/bt709/bt709     —
+ *	-hwaccel auto    bt709/bt709/bt709     0.9957
+ *
+ * Identical tags and a difference consistent with NVENC's own run-to-run
+ * variance. Worth knowing too: hardware decode buys almost nothing on a
+ * tonemapped file — 28.1s of CPU against 26.8s — because this filter chain, not
+ * the decode, is the expensive half. The gain is on the ordinary HEVC re-encode
+ * that does not tone map.
  */
 var tonemapFilters = []string{
 	"zscale=t=linear:npl=100",
