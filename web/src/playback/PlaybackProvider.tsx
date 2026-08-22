@@ -208,6 +208,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // slow talker and the next episode undoes it.
   const [speed, setSpeedState] = useState(1);
   const [shuffle, setShuffle] = useState(false);
+  /*
+   * Which randomisation this is.
+   *
+   * The shuffled order is memoised on the queue and the shuffle flag, which is
+   * right for "next must mean the same thing on every press" — and wrong for
+   * "Randomize all", pressed twice. That hands over the *same* library in the
+   * *same* order with shuffle already on, so neither dependency changes, the
+   * memo is reused, and the button produces the identical running order every
+   * time it is pressed. It looked like one randomisation baked in at startup.
+   *
+   * The epoch is the missing dependency: asking for shuffle bumps it, so a
+   * fresh request reshuffles while nothing else does.
+   */
+  const [shuffleEpoch, setShuffleEpoch] = useState(0);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
   // The audio track to ask the server for, null meaning "whatever the file
   // leads with". Cleared when the item changes: a stream index is only
@@ -404,7 +418,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // would make "next" mean something different on each press. The order is
     // fixed when shuffle is turned on, or when the queue itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shuffle, queue.join(",")]);
+  }, [shuffle, shuffleEpoch, queue.join(",")]);
 
   const idxInOrder = resolvePos(order, pos, itemID);
   const hasNext = repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null;
@@ -466,8 +480,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setItemID(id);
   }, []);
 
-  const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
-  const setShuffleMode = useCallback((on: boolean) => setShuffle(on), []);
+  // Turning shuffle *on* is a new randomisation; turning it off is not, and
+  // bumping the epoch there would only reshuffle an order nobody is using.
+  const toggleShuffle = useCallback(() => {
+    setShuffle((v) => {
+      if (!v) setShuffleEpoch((n) => n + 1);
+      return !v;
+    });
+  }, []);
+  // Always a new randomisation, including when shuffle is already on: this is
+  // the path "Randomize all" takes, and pressing it is a request for a
+  // different order, not a request for the state it is already in.
+  const setShuffleMode = useCallback((on: boolean) => {
+    setShuffle(on);
+    if (on) setShuffleEpoch((n) => n + 1);
+  }, []);
   const cycleRepeat = useCallback(
     () => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")),
     [],
