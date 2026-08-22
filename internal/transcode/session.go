@@ -14,8 +14,12 @@ import (
 
 // Session is one running ffmpeg process.
 type Session struct {
-	ID      string
-	ItemID  int64
+	ID     string
+	ItemID int64
+	// Owner is the account this session was started for. It is what makes
+	// "the same player asking again" distinguishable from "somebody else
+	// watching the same film" — see Manager.Progressive.
+	Owner   string
 	Output  Output
 	StartAt float64
 	Dir     string // HLS only

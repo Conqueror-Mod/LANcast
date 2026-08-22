@@ -48,7 +48,7 @@ func TestManagerReportsUnavailable(t *testing.T) {
 	if m.Available() {
 		t.Error("Available() is true with no ffmpeg binary")
 	}
-	if _, err := m.Progressive(context.Background(), 1, Options{Decision: remux()}); err != ErrNotInstalled {
+	if _, err := m.Progressive(context.Background(), 1, "u1", Options{Decision: remux()}); err != ErrNotInstalled {
 		t.Errorf("error = %v, want ErrNotInstalled", err)
 	}
 }
@@ -57,7 +57,7 @@ func TestProgressiveStreamsOutput(t *testing.T) {
 	bin := fakeFFmpeg(t, `printf 'FAKEMP4DATA'; exit 0`)
 	m := newManager(t, bin)
 
-	rc, err := m.Progressive(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	rc, err := m.Progressive(context.Background(), 1, "u1", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatalf("Progressive: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestClosingReaderEndsSession(t *testing.T) {
 	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
 	m := newManager(t, bin)
 
-	rc, err := m.Progressive(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	rc, err := m.Progressive(context.Background(), 1, "u1", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestConcurrencyLimit(t *testing.T) {
 
 	var readers []io.ReadCloser
 	for i := 0; i < 2; i++ {
-		rc, err := m.Progressive(context.Background(), int64(i), Options{Input: "x.mkv", Decision: remux()})
+		rc, err := m.Progressive(context.Background(), int64(i), "u1", Options{Input: "x.mkv", Decision: remux()})
 		if err != nil {
 			t.Fatalf("session %d: %v", i, err)
 		}
@@ -119,8 +119,80 @@ func TestConcurrencyLimit(t *testing.T) {
 		}
 	})
 
-	if _, err := m.Progressive(context.Background(), 99, Options{Input: "x.mkv", Decision: remux()}); err != ErrTooManySessions {
+	if _, err := m.Progressive(context.Background(), 99, "u1", Options{Input: "x.mkv", Decision: remux()}); err != ErrTooManySessions {
 		t.Errorf("error = %v, want ErrTooManySessions past the limit", err)
+	}
+}
+
+/*
+ * Seeking a transcode re-requests the stream, and the replaced one must go.
+ *
+ * Without this, each seek left its predecessor running until the reaper
+ * noticed, so seeking around one film filled MaxSessions with encodes of that
+ * same film and the machine decoded it several times over.
+ */
+func TestProgressiveSupersedesSameOwnersStream(t *testing.T) {
+	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
+	m := newManager(t, bin)
+
+	first, err := m.Progressive(context.Background(), 7, "chris", Options{Input: "x.mkv", Decision: remux()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	first.Read(make([]byte, 1))
+
+	second, err := m.Progressive(context.Background(), 7, "chris", Options{Input: "x.mkv", Decision: remux()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	second.Read(make([]byte, 1))
+
+	if n := len(m.Sessions()); n != 1 {
+		t.Errorf("sessions = %d, want 1 — the seek should replace the stream it re-requested, not join it", n)
+	}
+}
+
+// Two people watching the same film at once is a thing a media server must do.
+// Superseding on the item alone would have them ending each other's playback on
+// every seek, which is a worse bug than the one it fixes.
+func TestProgressiveLeavesOtherViewersAlone(t *testing.T) {
+	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
+	m := newManager(t, bin)
+
+	for _, who := range []string{"chris", "georgia"} {
+		rc, err := m.Progressive(context.Background(), 7, who, Options{Input: "x.mkv", Decision: remux()})
+		if err != nil {
+			t.Fatalf("%s: %v", who, err)
+		}
+		defer rc.Close()
+		rc.Read(make([]byte, 1))
+	}
+
+	if n := len(m.Sessions()); n != 2 {
+		t.Errorf("sessions = %d, want 2 — one viewer starting must not end another's stream", n)
+	}
+}
+
+// The unconfigured loopback state has no accounts, so every request is
+// anonymous. Collapsing those together would let a second viewer end the
+// first one's film.
+func TestProgressiveDoesNotCollapseAnonymousStreams(t *testing.T) {
+	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
+	m := newManager(t, bin)
+
+	for i := 0; i < 2; i++ {
+		rc, err := m.Progressive(context.Background(), 7, "", Options{Input: "x.mkv", Decision: remux()})
+		if err != nil {
+			t.Fatalf("session %d: %v", i, err)
+		}
+		defer rc.Close()
+		rc.Read(make([]byte, 1))
+	}
+
+	if n := len(m.Sessions()); n != 2 {
+		t.Errorf("sessions = %d, want 2 — anonymous callers are not one player", n)
 	}
 }
 

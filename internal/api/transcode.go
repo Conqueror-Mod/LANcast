@@ -36,7 +36,10 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 		AudioIndex: t.audioIndex,
 	}
 
-	stream, err := s.trans.Progressive(r.Context(), it.ID, opts)
+	// The caller's account, so a seek replaces this viewer's own stream for
+	// this film rather than starting a second one beside it (and rather than
+	// disturbing anyone else watching the same film).
+	stream, err := s.trans.Progressive(r.Context(), it.ID, s.userID(r), opts)
 	if err != nil {
 		s.writeTranscodeError(w, err)
 		return
