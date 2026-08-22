@@ -86,9 +86,20 @@ export function PosterTile({
       // Only where a surface supplied actions. Everywhere else the browser's
       // own menu is left alone, because suppressing it to show nothing is a
       // worse answer than not intervening.
+      /*
+       * Only where this item has actions — which is not the same as the surface
+       * having supplied a function.
+       *
+       * A library grid holds shows, albums and photographs beside films, and
+       * "Play" or "Mark as watched" means nothing on a folder or a picture. So
+       * the surface answers per item and an item with nothing to offer opens no
+       * menu at all, leaving the browser's own alone. Suppressing that to show
+       * an empty box would be a worse answer than not intervening.
+       */
       onContextMenu={
         actions
           ? (e) => {
+              if (actions(item).length === 0) return;
               e.preventDefault();
               setMenuAt({ x: e.clientX, y: e.clientY });
             }

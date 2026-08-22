@@ -12,7 +12,7 @@ import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeMasthead } from "@/components/HomeMasthead";
 import { TrendingShelf } from "@/components/TrendingShelf";
-import { isMusic, isPicture } from "@/lib/kind";
+import { isMusic, isPicture, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import "./Home.css";
 
@@ -103,7 +103,7 @@ export function Home() {
     const audio = isMusic(item);
     return [
       {
-        label: audio ? "Mark as played" : "Mark as watched",
+        label: `Mark as ${watchedVerb(item).past}`,
         onSelect: () => setWatched.mutate({ itemID: item.id, watched: true }),
       },
       {

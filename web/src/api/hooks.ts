@@ -1410,6 +1410,19 @@ export function useSetWatchedByID() {
       // A tile leaving the Continue shelf changes what the hero shows, and the
       // hero is drawn from the same list.
       qc.invalidateQueries({ queryKey: ["recently-added"] });
+      /*
+       * And the browse grid, which is where this is now called from.
+       *
+       * Marking something watched clears its saved position, so the progress
+       * bar on its tile should go — and on a grid filtered to unwatched, the
+       * tile itself should. Neither happens without this: the grid's key is
+       * ["items", "infinite", …] and nothing else here reaches it.
+       *
+       * This is the same shape as the bug that kept a deleted film on screen
+       * for a whole release. Worth naming, because the failure is quiet: the
+       * write succeeds, the server is right, and only the picture is stale.
+       */
+      qc.invalidateQueries({ queryKey: ["items"] });
     },
   });
 }
