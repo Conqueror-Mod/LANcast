@@ -212,6 +212,24 @@ describe("the Continue shelf menu", () => {
     expect(labels).toContain("Remove from Continue Watching");
   });
 
+  /*
+   * Escape closes it, through the central back handler rather than a listener
+   * of its own — FocusController says so outright ("resolved centrally so no
+   * screen wires its own key"). The private listener the first version used did
+   * not work at all in the running app, and nothing here noticed, because the
+   * test never pressed Escape.
+   */
+  it("closes on Escape", async () => {
+    mount();
+    await render();
+    rightClick(tile("A Film"));
+    expect(menuItems().length).toBeGreaterThan(0);
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(menuItems().length).toBe(0);
+  });
+
   // A menu item that also opened the thing it was acting on would be a tile
   // whose every action navigates away from the result.
   it("does not open the item when a menu item is chosen", async () => {

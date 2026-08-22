@@ -19,6 +19,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
+import { FocusProvider } from "@/focus/FocusController";
 import { Settings } from "./Settings";
 
 declare global {
@@ -107,9 +108,11 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/settings?pane=libraries"]}>
-          <Settings />
-        </MemoryRouter>
+        <FocusProvider>
+          <MemoryRouter initialEntries={["/settings?pane=libraries"]}>
+            <Settings />
+          </MemoryRouter>
+        </FocusProvider>
       </QueryClientProvider>,
     );
   });
