@@ -1386,6 +1386,47 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
  * invalidated: it is never cached (ADR-less by design, see showplay.go), so
  * there is nothing to clear.
  */
+/*
+ * The same two writes, for a caller with no parent to invalidate.
+ *
+ * A Continue Watching tile is not inside a season — it is a film, or an episode
+ * a long way from the show page it belongs to — so `["children", parentID]` is
+ * a key it cannot supply and would not want cleared. Everything else about the
+ * two operations is identical, which is why this delegates rather than
+ * restating them: two copies of "position_ms: 0, watched: false" would be two
+ * places to get the meaning of *unwatched* wrong.
+ */
+export function useSetWatchedByID() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { itemID: number; watched: boolean }) =>
+      apiSend(`/api/items/${args.itemID}/progress`, "PUT", {
+        position_ms: 0,
+        watched: args.watched,
+      }),
+    onSuccess: (_data, args) => {
+      qc.invalidateQueries({ queryKey: ["item", args.itemID] });
+      qc.invalidateQueries({ queryKey: ["continue"] });
+      // A tile leaving the Continue shelf changes what the hero shows, and the
+      // hero is drawn from the same list.
+      qc.invalidateQueries({ queryKey: ["recently-added"] });
+      /*
+       * And the browse grid, which is where this is now called from.
+       *
+       * Marking something watched clears its saved position, so the progress
+       * bar on its tile should go — and on a grid filtered to unwatched, the
+       * tile itself should. Neither happens without this: the grid's key is
+       * ["items", "infinite", …] and nothing else here reaches it.
+       *
+       * This is the same shape as the bug that kept a deleted film on screen
+       * for a whole release. Worth naming, because the failure is quiet: the
+       * write succeeds, the server is right, and only the picture is stale.
+       */
+      qc.invalidateQueries({ queryKey: ["items"] });
+    },
+  });
+}
+
 export function useSetWatched(parentID: number) {
   const qc = useQueryClient();
   return useMutation({

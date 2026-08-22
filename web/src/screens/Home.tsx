@@ -4,12 +4,15 @@ import {
   useRecentlyAdded,
   useRecentPhotos,
   useItems,
+  useSetWatchedByID,
 } from "@/api/hooks";
+import { useNavigate } from "react-router-dom";
 import { Shelf } from "@/components/Shelf";
+import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeMasthead } from "@/components/HomeMasthead";
 import { TrendingShelf } from "@/components/TrendingShelf";
-import { isMusic, isPicture } from "@/lib/kind";
+import { isMusic, isPicture, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import "./Home.css";
 
@@ -69,6 +72,53 @@ export function Home() {
   // are looking at photographs.
   const { data: recentPhotos } = useRecentPhotos(20);
 
+  const setWatched = useSetWatchedByID();
+  const navigate = useNavigate();
+
+  /*
+   * What a right-click offers on a Continue shelf.
+   *
+   * Two ways off the shelf, and they are not the same thing said twice. An item
+   * is on it because a position was saved and the watched flag is not set, so
+   * it leaves either by admitting it was finished or by forgetting the
+   * position — and those disagree about whether you have seen it.
+   *
+   * A single "Remove" would have to pick one silently. For a film abandoned
+   * twenty minutes in, marking it watched is a lie the library then repeats
+   * every time it filters by unwatched; for one finished on another device,
+   * forgetting the position throws away the fact you watched it. Both are
+   * offered because both are things people mean.
+   *
+   * The wording carries the difference rather than a tooltip: one says what it
+   * records, the other names the shelf and claims nothing about whether it was
+   * seen.
+   *
+   * And it says *watched* or *played* to match what the thing is. The same two
+   * writes serve an album track and a film, but "Mark as watched" on a song and
+   * "Remove from Continue Watching" on the Continue Listening shelf are both
+   * the interface reading from the wrong half of itself — small, and exactly
+   * the kind of small that makes a feature feel bolted on.
+   */
+  const continueActions = (item: Item): MenuAction[] => {
+    const audio = isMusic(item);
+    return [
+      {
+        label: `Mark as ${watchedVerb(item).past}`,
+        onSelect: () => setWatched.mutate({ itemID: item.id, watched: true }),
+      },
+      {
+        label: audio
+          ? "Remove from Continue Listening"
+          : "Remove from Continue Watching",
+        onSelect: () => setWatched.mutate({ itemID: item.id, watched: false }),
+      },
+      {
+        label: "Go to details",
+        onSelect: () => navigate(`/item/${item.id}`),
+      },
+    ];
+  };
+
   const hero = pickHero(continueWatching, recentlyAdded);
 
   // The hero already shows this item at full size. Repeating it as the first
@@ -111,8 +161,16 @@ export function Home() {
       <HomeMasthead libraries={libraries} hasHero={!!hero} />
       {hero && <HomeHero item={hero.item} resuming={hero.resuming} />}
       <div className="home__shelves">
-        <Shelf title="Continue Watching" items={continueVideo} />
-        <Shelf title="Continue Listening" items={continueAudio} />
+        <Shelf
+          title="Continue Watching"
+          items={continueVideo}
+          itemActions={continueActions}
+        />
+        <Shelf
+          title="Continue Listening"
+          items={continueAudio}
+          itemActions={continueActions}
+        />
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />
         <Shelf title="Recently Added Photos" items={recentPictures} />

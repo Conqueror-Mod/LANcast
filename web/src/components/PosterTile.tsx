@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
+import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
 import { containerCountLabel, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
@@ -17,16 +19,41 @@ function progressPct(item: Item): number {
 // itself into the banner above rather than navigating: a photograph has no
 // detail page worth visiting — no synopsis, no cast, no year — and sending
 // someone to one would be a worse answer than showing them the picture.
+//
+/*
+ * `actions` gives this tile a right-click menu, and is opt-in per surface.
+ *
+ * A tile appears in the library grid, in every shelf, and in search results,
+ * and what you would want to do to one is not the same in each — "Remove from
+ * Continue Watching" is meaningless on a grid poster that was never started.
+ * So the tile knows how to *show* a menu and nothing about what is in it, and
+ * a surface that passes nothing gets no menu at all rather than a wrong one.
+ *
+ * A function of the item rather than a list, because the sensible actions
+ * depend on the item: an unwatched film and a half-watched one differ.
+ *
+ * **This is reachable by pointer only.** There is no keyboard route to opening
+ * it, which means it does not exist in bigscreen mode — the ten-foot layout is
+ * driven by arrow keys for a remote that has no right button, and ADR 0004
+ * built that model precisely so the television client would be a restyle
+ * rather than a rewrite. Adding a binding is additive from here: the focus
+ * controller already carries an onSelect per element and a menu would sit
+ * beside it. It is not done yet, and until it is, anything that becomes *only*
+ * available in here is unavailable on a television.
+ */
 export function PosterTile({
   item,
   onOpen,
+  actions,
 }: {
   item: Item;
   onOpen?: () => void;
+  actions?: (item: Item) => MenuAction[];
 }) {
   const navigate = useNavigate();
   const open = onOpen ?? (() => navigate(`/item/${item.id}`));
   const focusable = useFocusable(open);
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
 
   const poster = artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
@@ -43,10 +70,41 @@ export function PosterTile({
   const score = rating(item.rating);
 
   return (
+    /*
+     * The menu is a sibling of the tile, not a child of it.
+     *
+     * The tile is a <button>, and a button may not contain buttons — the markup
+     * is invalid and, worse, every click on a menu item would bubble straight
+     * into the tile's own onClick and open the thing you were trying to act on.
+     * PointMenu is fixed to the viewport, so sitting outside costs it nothing.
+     */
+    <>
     <button
       {...focusable}
       className="poster-tile"
       onClick={open}
+      // Only where a surface supplied actions. Everywhere else the browser's
+      // own menu is left alone, because suppressing it to show nothing is a
+      // worse answer than not intervening.
+      /*
+       * Only where this item has actions — which is not the same as the surface
+       * having supplied a function.
+       *
+       * A library grid holds shows, albums and photographs beside films, and
+       * "Play" or "Mark as watched" means nothing on a folder or a picture. So
+       * the surface answers per item and an item with nothing to offer opens no
+       * menu at all, leaving the browser's own alone. Suppressing that to show
+       * an empty box would be a worse answer than not intervening.
+       */
+      onContextMenu={
+        actions
+          ? (e) => {
+              if (actions(item).length === 0) return;
+              e.preventDefault();
+              setMenuAt({ x: e.clientX, y: e.clientY });
+            }
+          : undefined
+      }
       title={item.title}
       aria-label={item.title}
     >
@@ -98,5 +156,13 @@ export function PosterTile({
         </div>
       )}
     </button>
+    {menuAt && actions && (
+      <PointMenu
+        at={menuAt}
+        actions={actions(item)}
+        onClose={() => setMenuAt(null)}
+      />
+    )}
+    </>
   );
 }

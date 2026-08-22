@@ -1,0 +1,96 @@
+/* Menu — the shared popover behind the libraries pane's row actions and the
+   context menu on a tile.
+
+   Moved here from LibrarySettings.css when a second caller arrived. The rules
+   did not change; the `set-` prefix did, because they are no longer a settings
+   screen's private business. */
+.menu {
+  position: relative;
+  display: inline-block;
+}
+
+/* Squared off so the trigger reads as a sibling of Scan rather than a
+   different kind of control. The character is a glyph, not an icon font. */
+.menu__trigger {
+  min-width: 34px;
+  padding-inline: 10px;
+  line-height: 1;
+}
+
+.menu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  background: var(--space-raised);
+  box-shadow: var(--elev-2);
+}
+
+.menu__item {
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  padding: 7px 10px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.menu__item:hover:not(:disabled),
+.menu__item:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.menu__item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* Separated from the actions above it, because the gap is what stops a pointer
+   travelling down the list from landing on Remove.
+
+   Muted at rest and red only under the pointer, which is what .set-btn--danger
+   already does on this screen. A destructive control that is red all the time
+   is a warning nobody reads by the third visit; one that reddens as you arrive
+   on it is a warning delivered at the only moment it can still change the
+   outcome. */
+.menu__item--danger {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0 0 4px 4px;
+  padding-top: 9px;
+  color: var(--text-muted);
+}
+
+.menu__item--danger:hover:not(:disabled),
+.menu__item--danger:focus-visible {
+  background: rgba(166, 88, 76, 0.16);
+  color: #e79080;
+}
+
+/* A menu opened where the pointer was.
+
+   `fixed`, not absolute: a shelf scrolls horizontally and clips its overflow,
+   so a menu positioned inside one would be cut off by the container it belongs
+   to. Fixed takes it out of that entirely, and PointMenu measures itself
+   against the viewport so an edge tile does not open a menu half off-screen.
+
+   The z-index sits above the shelves and the masthead and below the player
+   chrome, which is the only thing that should ever cover a menu. */
+.menu__list--point {
+  position: fixed;
+  z-index: 60;
+}

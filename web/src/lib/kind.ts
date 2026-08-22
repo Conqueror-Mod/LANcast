@@ -115,6 +115,25 @@ export function isMusic(item: Item): boolean {
   return MUSIC_KINDS.has(item.kind);
 }
 
+/*
+ * What "seen it" is called for this kind of thing.
+ *
+ * The server stores one flag — `watched` — for a film, an episode and a song
+ * alike, and it is right to: the state is identical and a second column called
+ * `played` would be the same fact under two names. The *word* is not identical,
+ * though, and "Mark as watched" on a song reads as a bug in the same way
+ * "Remove from Continue Watching" does on the listening shelf.
+ *
+ * Here rather than at each call site because there are two of them now — the
+ * Continue shelves and the library grid — and a second place that decides this
+ * is a second place to decide it differently.
+ */
+export function watchedVerb(item: Item): { past: string; negated: string } {
+  return isMusic(item)
+    ? { past: "played", negated: "unplayed" }
+    : { past: "watched", negated: "unwatched" };
+}
+
 // The picture kinds (ADR 0028). Home keeps them in their own row for the reason
 // music has one: a photograph among films is not a film that failed to load,
 // and a square crop beside a 2:3 poster is a row with no shared baseline.
