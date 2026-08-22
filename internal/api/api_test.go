@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"lancast/internal/artwork"
 	"lancast/internal/config"
@@ -252,6 +253,43 @@ func TestCreateAndListLibraries(t *testing.T) {
 	}
 }
 
+/*
+ * Adding a library scans it, which Settings has always claimed and creation
+ * never did. A new library that stays at "0 items" is indistinguishable from
+ * one pointed at the wrong folder.
+ *
+ * The scan is asynchronous, so this waits for the item rather than asserting
+ * immediately — what matters is that creation started it, not that it finished
+ * inside the request.
+ */
+func TestCreatingALibraryScansIt(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Some Film (2011).mkv"), make([]byte, 32), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.do(t, "POST", "/api/libraries", map[string]any{"name": "Films", "kind": "movie", "path": dir})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var created store.Library
+	decode(t, resp, &created)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var libs []store.Library
+		decode(t, h.do(t, "GET", "/api/libraries", nil), &libs)
+		for _, l := range libs {
+			if l.ID == created.ID && l.ItemCount > 0 {
+				return
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Error("a newly added library was never scanned; it still holds no items")
+}
+
 func TestScanLifecycle(t *testing.T) {
 	h := newHarness(t)
 	os.WriteFile(filepath.Join(h.dir, "movie.mkv"), make([]byte, 32), 0o644)
@@ -266,6 +304,49 @@ func TestScanLifecycle(t *testing.T) {
 	resp = h.do(t, "GET", "/api/libraries/1/scan", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("scan status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+/*
+ * Scanning everything at once. The periodic timer has always done this; a
+ * person could only ever ask one library at a time.
+ */
+func TestScanAllStartsEveryLibrary(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	decode(t, h.do(t, "POST", "/api/libraries",
+		map[string]any{"name": "Second", "kind": "movie", "path": dir}), &store.Library{})
+
+	resp := h.do(t, "POST", "/api/libraries/scan", nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+	var got struct {
+		Started []scan.Progress `json:"started"`
+		Busy    []int64         `json:"busy"`
+	}
+	decode(t, resp, &got)
+
+	var libs []store.Library
+	decode(t, h.do(t, "GET", "/api/libraries", nil), &libs)
+	if len(got.Started)+len(got.Busy) != len(libs) {
+		t.Errorf("accounted for %d of %d libraries (started %d, busy %d)",
+			len(got.Started)+len(got.Busy), len(libs), len(got.Started), len(got.Busy))
+	}
+}
+
+// A library already scanning is reported, not refused. Asking for everything
+// while some are mid-scan should start the rest.
+func TestScanAllReportsBusyRatherThanFailing(t *testing.T) {
+	h := newHarness(t)
+	// Start one directly so it is running when the sweep arrives.
+	resp := h.do(t, "POST", "/api/libraries/1/scan", nil)
+	resp.Body.Close()
+
+	resp = h.do(t, "POST", "/api/libraries/scan", nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 even with a scan in flight", resp.StatusCode)
 	}
 	resp.Body.Close()
 }

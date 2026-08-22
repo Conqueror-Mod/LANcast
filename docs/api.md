@@ -337,6 +337,13 @@ under [ADR 0018](adr/0018-api-contract-and-versioning.md).
 Returns `201` with the created library. Returns `conflict` if any path is
 already registered, or overlaps a location that is — see the overlap rule below.
 
+**Creating a library starts a scan of it.** The `201` is written first and the
+scan runs in the background, so poll `GET /api/libraries/{id}/scan` for its
+progress exactly as for one started by hand. A library that could not begin
+scanning is still created and still returns `201` — the failure is logged, not
+returned, because turning a successful create into an error would leave the
+caller believing nothing happened while a library sits on disk.
+
 ### `PATCH /api/libraries/{id}`
 
 Edits a library. **Admin only.** Returns the updated library.
@@ -441,14 +448,43 @@ state, and subtitles. **Never deletes media from disk** — LANcast only ever
 stored paths, so this is "stop tracking this folder", not a destroy. `204` on
 success, `404` if unknown, `409` if a scan is running for it.
 
+### `POST /api/libraries/scan`
+
+Starts a scan of **every** library. Admin only. Always `202`.
+
+```json
+{ "started": [ { "library_id": 1, "state": "running", "started_at": 1753228800 } ],
+  "busy": [ 3 ] }
+```
+
+Libraries already scanning are listed in `busy` rather than refused, and the
+rest still start — asking for everything while two of five are mid-scan should
+start the other three, not fail because the request could not be carried out in
+full. This is also what the rescan timer does, which skips a busy library and
+never queues behind it.
+
+Never `409`, unlike the single-library form below: there the caller named one
+library and a conflict is the whole answer, where here the body says which
+libraries did what.
+
+A library is also scanned automatically when it is created, so this is for
+"check everything for new media" rather than for setup.
+
 ### `POST /api/libraries/{id}/scan`
 
-Starts an asynchronous scan and returns `202` immediately. Returns `conflict`
-if a scan is already running for that library — scans are not queued.
+Starts an asynchronous scan and returns `202` immediately.
 
 ```json
 { "library_id": 1, "state": "running", "started_at": 1753228800 }
 ```
+
+If a scan is already running for that library the status is `409` and the body
+is **the running scan's progress, in the same shape as the `202`** — not the
+`{ "error": … }` envelope every other failure uses. That is deliberate and worth
+stating plainly, because a client parsing it as an error finds no code and no
+message: the useful answer to "start a scan" when one is already going is *how
+far that one has got*, and this endpoint gives it. Branch on the status, not on
+the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, everything else video — and

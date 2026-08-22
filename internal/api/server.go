@@ -225,6 +225,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.patchRoot))
 	mux.HandleFunc("DELETE /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.removeRoot))
 
+	// Before the {id} form only for readability; the patterns do not overlap.
+	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
