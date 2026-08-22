@@ -112,6 +112,33 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "library.create", "library", auditID(lib.ID),
 		fmt.Sprintf("Added %s library %q at %s", lib.Kind, lib.Name, strings.Join(abs, ", ")),
 		map[string]any{"path": abs[0], "roots": abs, "kind": lib.Kind})
+
+	/*
+	 * Adding a library scans it.
+	 *
+	 * Settings has always said so — "LANcast scans when you ask it to and when
+	 * a library is added" — and it was not true: creation wrote rows, returned
+	 * 201, and left the library reading "0 items · never scanned" until
+	 * somebody found the Scan button. A library with no items in it is
+	 * indistinguishable from a library pointed at the wrong folder, so the one
+	 * moment a person most needs to know they got the path right was the moment
+	 * this told them nothing.
+	 *
+	 * After the roots, because a scan walks them and the second location would
+	 * otherwise be missed by the very scan meant to cover it. After the audit
+	 * too: the record is that the library was created, and it should not depend
+	 * on what the scan then did.
+	 *
+	 * A failure to start is logged and not returned. The library was created —
+	 * that is what 201 means here — and turning a successful create into an
+	 * error because the scan could not begin would leave the caller believing
+	 * nothing happened while a library sits on disk.
+	 */
+	if _, err := s.scanner.Start(*created); err != nil {
+		s.log.Warn("could not scan a newly added library",
+			"library", created.ID, "error", err)
+	}
+
 	writeJSON(w, http.StatusCreated, created)
 }
 

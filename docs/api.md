@@ -337,6 +337,13 @@ under [ADR 0018](adr/0018-api-contract-and-versioning.md).
 Returns `201` with the created library. Returns `conflict` if any path is
 already registered, or overlaps a location that is — see the overlap rule below.
 
+**Creating a library starts a scan of it.** The `201` is written first and the
+scan runs in the background, so poll `GET /api/libraries/{id}/scan` for its
+progress exactly as for one started by hand. A library that could not begin
+scanning is still created and still returns `201` — the failure is logged, not
+returned, because turning a successful create into an error would leave the
+caller believing nothing happened while a library sits on disk.
+
 ### `PATCH /api/libraries/{id}`
 
 Edits a library. **Admin only.** Returns the updated library.

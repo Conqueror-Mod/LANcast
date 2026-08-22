@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"lancast/internal/artwork"
 	"lancast/internal/config"
@@ -250,6 +251,43 @@ func TestCreateAndListLibraries(t *testing.T) {
 	if len(libs) != 2 {
 		t.Errorf("got %d libraries, want 2", len(libs))
 	}
+}
+
+/*
+ * Adding a library scans it, which Settings has always claimed and creation
+ * never did. A new library that stays at "0 items" is indistinguishable from
+ * one pointed at the wrong folder.
+ *
+ * The scan is asynchronous, so this waits for the item rather than asserting
+ * immediately — what matters is that creation started it, not that it finished
+ * inside the request.
+ */
+func TestCreatingALibraryScansIt(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Some Film (2011).mkv"), make([]byte, 32), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.do(t, "POST", "/api/libraries", map[string]any{"name": "Films", "kind": "movie", "path": dir})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var created store.Library
+	decode(t, resp, &created)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var libs []store.Library
+		decode(t, h.do(t, "GET", "/api/libraries", nil), &libs)
+		for _, l := range libs {
+			if l.ID == created.ID && l.ItemCount > 0 {
+				return
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Error("a newly added library was never scanned; it still holds no items")
 }
 
 func TestScanLifecycle(t *testing.T) {
