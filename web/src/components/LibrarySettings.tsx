@@ -17,7 +17,8 @@
  * Follows the pattern already in this directory: AuditLog, UpdateSettings,
  * DesktopSettings and PlaybackSettings are each a component and its own CSS.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ApiFailure } from "@/api/client";
 import {
   useScanStatus,
   useStartScan,
@@ -75,6 +76,210 @@ function ReparseOutcome({ result }: { result: ReparseResult }) {
   );
 }
 
+/*
+ * The row's overflow menu.
+ *
+ * Every library carried five buttons — Edit, Scan, Refresh metadata, Re-read
+ * filenames, Remove — so a five-library server put twenty-five controls on one
+ * screen, and the four that are not Scan were repeated in every row at equal
+ * weight. Weighting them equally is what made the pane read as unfinished:
+ * scanning is the thing people come here to do, and the rest are occasional.
+ *
+ * So Scan stays a button and the other four move one level down. Nothing is
+ * hidden — a menu is one click, and the alternative on offer was a row that
+ * grows another button every time the server learns a new trick.
+ *
+ * Local to this file on purpose. One consumer is not a component library, and
+ * a shared Menu extracted before a second caller exists is a guess about what
+ * the second caller will need.
+ */
+function RowMenu({
+  label,
+  disabled,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  /*
+   * Closing puts focus back on the trigger.
+   *
+   * Without it the menu is a keyboard dead end, which docs/design.md names as a
+   * bug outright: the items are real buttons, so Tab walks into them, and when
+   * the menu unmounts underneath the focused item focus falls to <body>. On a
+   * pane holding a row per library that means tabbing from the top of the
+   * screen again to get back to where you were.
+   *
+   * Only when focus is actually inside the menu — restoring it after an
+   * outside click would yank the caret out of whatever the person just clicked
+   * on instead.
+   */
+  const restoreFocus = () => {
+    if (ref.current?.contains(document.activeElement)) trigger.current?.focus();
+    setOpen(false);
+  };
+
+  // Close on an outside click or Escape, the same way the activity popover
+  // does. A menu that traps you is worse than no menu.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") restoreFocus();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  return (
+    <div className="set-menu" ref={ref}>
+      <button
+        type="button"
+        ref={trigger}
+        className="set-btn set-menu__trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {/* Three dots, not an icon font: this client ships no icon dependency. */}
+        ⋯
+      </button>
+      {open && (
+        <div className="set-menu__list" role="menu">
+          {children(restoreFocus)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({
+  onClick,
+  disabled,
+  danger,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className={"set-menu__item" + (danger ? " set-menu__item--danger" : "")}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/*
+ * One place a row answers from, whichever action was asked.
+ *
+ * `reported` names the last action rather than the component guessing from
+ * three mutation states at once. Guessing would mean deciding what to show when
+ * two have finished, and the honest answer — the one you just asked for — is
+ * something only the click site knows.
+ *
+ * Refresh metadata is the reason this exists. It was the one action with no
+ * feedback at all: it answers 202 and wakes the enrich worker, so the only
+ * evidence it had worked was the activity dot in the nav, which says the server
+ * is busy but not with what, and not with *this* library.
+ */
+function RowFeedback({
+  reported,
+  scan,
+  refresh,
+  reparse,
+}: {
+  reported: "scan" | "refresh" | "reparse" | null;
+  scan: { isError: boolean; error: unknown };
+  refresh: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown };
+  reparse: { isSuccess: boolean; isError: boolean; error: unknown; data?: ReparseResult };
+}) {
+  if (reported === "scan" && scan.isError) {
+    /*
+     * A scan that was already running.
+     *
+     * The server answers 409 with the running scan's progress rather than the
+     * error envelope every other failure uses, so there is no code and no
+     * message to read — parsed as an error it says only "Conflict". The status
+     * is the whole signal, which is why this branches on it (see docs/api.md).
+     *
+     * Mostly unreachable behind a disabled button, and not entirely: two
+     * admins, or the timer starting a scan between the render and the click.
+     */
+    const failure = scan.error instanceof ApiFailure ? scan.error : null;
+    if (failure?.status === 409) {
+      return (
+        <p className="set-note">
+          Already scanning — the scan in progress was left to finish.
+        </p>
+      );
+    }
+    return (
+      <p className="set-error">
+        Could not start a scan: {(scan.error as Error).message}
+      </p>
+    );
+  }
+
+  if (reported === "refresh") {
+    if (refresh.isPending) return <p className="set-note">Asking again…</p>;
+    if (refresh.isError) {
+      return (
+        <p className="set-error">
+          Could not refresh metadata: {(refresh.error as Error).message}
+        </p>
+      );
+    }
+    if (refresh.isSuccess) {
+      // Deliberately says what will happen rather than what has: the request
+      // only clears the stamps and wakes the worker, and claiming the metadata
+      // was refreshed would be a lie told at the moment the work starts.
+      return (
+        <p className="set-note">
+          Queued — every item will be matched against its provider again. Progress
+          shows in the activity indicator.
+        </p>
+      );
+    }
+  }
+
+  if (reported === "reparse") {
+    if (reparse.isError) {
+      return (
+        <p className="set-error">
+          Could not re-read filenames: {(reparse.error as Error).message}
+        </p>
+      );
+    }
+    if (reparse.isSuccess && reparse.data) {
+      return <ReparseOutcome result={reparse.data} />;
+    }
+  }
+
+  return null;
+}
+
 export function LibraryRow({ library }: { library: Library }) {
   const { data: status } = useScanStatus(library.id);
   const scan = useStartScan();
@@ -86,6 +291,26 @@ export function LibraryRow({ library }: { library: Library }) {
   const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(false);
   const edit = useUpdateLibrary();
+  /*
+   * Which action this row should be reporting on.
+   *
+   * The three jobs used to report in three different places, or not at all:
+   * scan wrote into the subtitle, re-read filenames appended its own block
+   * below the row, and refresh metadata said nothing whatsoever — it fires a
+   * 202 and wakes the enrich worker, so the only sign it had worked was the
+   * activity dot in the nav, which is easy to miss and says nothing about
+   * *this* library.
+   *
+   * They are genuinely different underneath — scan is a long job with
+   * progress, refresh is a trigger for a worker that reports centrally, and
+   * re-read is a fast bounded pass that returns a real count — and forcing them
+   * into one protocol would have made the good ones worse. What they can share
+   * is where they answer. This names the last one asked, so the row has exactly
+   * one place to look.
+   */
+  const [reported, setReported] = useState<"scan" | "refresh" | "reparse" | null>(
+    null,
+  );
 
   const skipped = status?.skipped ?? 0;
   const issues = status?.issues ?? [];
@@ -201,37 +426,21 @@ export function LibraryRow({ library }: { library: Library }) {
           )}
         </div>
         <div className="set-row__actions">
+          {/* Scan stays a button. It is what this pane is for, and burying the
+              common action to tidy the uncommon ones would be the wrong trade. */}
           <button
             className="set-btn"
             disabled={running || scan.isPending}
             onClick={() => {
-              edit.reset();
-              setEditing((v) => !v);
+              setReported("scan");
+              scan.mutate(library.id);
             }}
-          >
-            {editing ? "Cancel" : "Edit"}
-          </button>
-          <button
-            className="set-btn"
-            disabled={running || scan.isPending}
-            onClick={() => scan.mutate(library.id)}
           >
             {running ? "Scanning…" : "Scan"}
           </button>
-          <button
-            className="set-btn"
-            disabled={refresh.isPending}
-            onClick={() => refresh.mutate(library.id)}
-          >
-            Refresh metadata
-          </button>
-          <button
-            className="set-btn"
-            disabled={running || reparse.isPending}
-            onClick={() => reparse.mutate(library.id)}
-          >
-            {reparse.isPending ? "Re-reading…" : "Re-read filenames"}
-          </button>
+          {/* Confirmation stays in the row rather than inside the menu: a
+              destructive step should not be one that a stray click outside the
+              menu can dismiss halfway through. */}
           {confirming ? (
             <>
               <span className="set-confirm">Remove?</span>
@@ -247,23 +456,65 @@ export function LibraryRow({ library }: { library: Library }) {
               </button>
             </>
           ) : (
-            <button
-              className="set-btn set-btn--danger"
-              disabled={running}
-              title={running ? "Wait for the scan to finish" : undefined}
-              onClick={() => setConfirming(true)}
-            >
-              Remove
-            </button>
+            <RowMenu label={`More actions for ${library.name}`}>
+              {(close) => (
+                <>
+                  <MenuItem
+                    disabled={running || scan.isPending}
+                    onClick={() => {
+                      edit.reset();
+                      setEditing((v) => !v);
+                      close();
+                    }}
+                  >
+                    {editing ? "Stop editing" : "Edit"}
+                  </MenuItem>
+                  {/* Re-read filenames above Refresh metadata, in the order a
+                      person would try them: correct the question from the
+                      filename first, then ask the provider again. Refreshing
+                      first re-asks the same wrong question. */}
+                  <MenuItem
+                    disabled={running || reparse.isPending}
+                    onClick={() => {
+                      setReported("reparse");
+                      reparse.mutate(library.id);
+                      close();
+                    }}
+                  >
+                    {reparse.isPending ? "Re-reading…" : "Re-read filenames"}
+                  </MenuItem>
+                  <MenuItem
+                    disabled={refresh.isPending}
+                    onClick={() => {
+                      setReported("refresh");
+                      refresh.mutate(library.id);
+                      close();
+                    }}
+                  >
+                    Refresh metadata
+                  </MenuItem>
+                  <MenuItem
+                    danger
+                    disabled={running}
+                    onClick={() => {
+                      setConfirming(true);
+                      close();
+                    }}
+                  >
+                    Remove
+                  </MenuItem>
+                </>
+              )}
+            </RowMenu>
           )}
         </div>
       </div>
-      {reparse.isSuccess && <ReparseOutcome result={reparse.data} />}
-      {reparse.isError && (
-        <p className="set-error">
-          Could not re-read filenames: {(reparse.error as Error).message}
-        </p>
-      )}
+      <RowFeedback
+        reported={reported}
+        scan={scan}
+        refresh={refresh}
+        reparse={reparse}
+      />
       {editing && (
         <LibraryEditor
           library={library}

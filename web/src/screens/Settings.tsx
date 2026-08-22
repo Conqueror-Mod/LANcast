@@ -33,6 +33,7 @@ import {
   useMediaTools,
   useInstallMediaTools,
   useCancelMediaToolsInstall,
+  useScanAllLibraries,
 } from "@/api/hooks";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
@@ -710,6 +711,7 @@ function AdminSections({ pane }: { pane: string }) {
           <LibraryRow key={lib.id} library={lib} />
         ))}
         <AddLibrary />
+        <ScanEverything />
 
         {settings && (
           <>
@@ -883,6 +885,83 @@ function AdminSections({ pane }: { pane: string }) {
  * range (weeks, items) the field is a number and the server validates it —
  * these are the ones where the list *is* the vocabulary.
  */
+/*
+ * Scanning every library, in one press.
+ *
+ * The capability was never missing — the rescan timer has always looped every
+ * library — it was only ever unreachable by hand. On a five-library server
+ * "check for new media" meant pressing Scan five times, which is the kind of
+ * chore people quietly stop doing, and then wonder why nothing new appears.
+ *
+ * It sits with the timer rather than above the library list because it belongs
+ * to the same idea: this is the whole-server half of scanning, and the timer is
+ * the automatic version of exactly this button.
+ *
+ * The result says both halves. A sweep that started nothing because every
+ * library was already scanning is indistinguishable from a sweep that did
+ * nothing at all, and "Nothing to do" is the wrong answer to both.
+ */
+function ScanEverything() {
+  const scanAll = useScanAllLibraries();
+  /*
+   * Both lists defaulted rather than trusted.
+   *
+   * A settings pane that throws takes the whole screen with it, and the thing
+   * it would be throwing over is a 202 whose body did not arrive in the shape
+   * this component assumed. Reading "no libraries to scan" from an odd answer
+   * is wrong in a way somebody can recover from; a white screen is not.
+   */
+  const started = scanAll.data?.started ?? [];
+  const busy = scanAll.data?.busy ?? [];
+  const answered = scanAll.isSuccess;
+
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">Scan every library</div>
+        <div className="set-row__sub">
+          Walks every location for new, changed and missing files — the same
+          thing the timer below does, when you would rather not wait for it.
+        </div>
+        {scanAll.isError && (
+          <p className="set-error">
+            Could not start: {(scanAll.error as Error).message}
+          </p>
+        )}
+        {answered && (
+          <p className="set-note">
+            {started.length > 0 && (
+              <>
+                Scanning {started.length}{" "}
+                {started.length === 1 ? "library" : "libraries"}.
+              </>
+            )}
+            {started.length > 0 && busy.length > 0 && " "}
+            {busy.length > 0 && (
+              <>
+                {busy.length} {busy.length === 1 ? "was" : "were"} already
+                scanning and {busy.length === 1 ? "was" : "were"} left to finish.
+              </>
+            )}
+            {started.length === 0 && busy.length === 0 && (
+              <>There are no libraries to scan yet.</>
+            )}
+          </p>
+        )}
+      </div>
+      <div className="set-row__actions">
+        <button
+          className="set-btn"
+          disabled={scanAll.isPending}
+          onClick={() => scanAll.mutate()}
+        >
+          {scanAll.isPending ? "Starting…" : "Scan all"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RuleSelect({
   title,
   sub,

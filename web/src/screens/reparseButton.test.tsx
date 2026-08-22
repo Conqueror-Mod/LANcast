@@ -113,7 +113,23 @@ function buttons(label: string): HTMLButtonElement[] {
   ) as HTMLButtonElement[];
 }
 
+
+/*
+ * Edit, Re-read filenames, Refresh metadata and Remove moved into the row's
+ * overflow menu — five buttons per library put twenty-five controls on this
+ * pane. Opening the menu is the only step these tests gained; what they assert
+ * afterwards is unchanged, which is the point of routing it through one helper.
+ */
+function openRowMenu(): void {
+  const trigger = [...host.querySelectorAll("button")].find(
+    (b) => b.getAttribute("aria-haspopup") === "menu",
+  );
+  if (!trigger) throw new Error("no overflow menu on the library row");
+  act(() => trigger.click());
+}
+
 async function pressReparse() {
+  openRowMenu();
   const b = buttons("Re-read filenames")[0];
   if (!b) throw new Error("no re-read filenames button on the libraries pane");
   act(() => b.click());
