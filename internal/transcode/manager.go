@@ -447,12 +447,70 @@ func (m *Manager) supersede(owner string, itemID int64) {
 	}
 }
 
+/*
+ * EvictionGrace is how long a session must have gone unread before a new
+ * viewer may take its slot.
+ *
+ * It is the old IdleTimeout, and that is not a coincidence: 90 seconds was
+ * already the project's answer to "long enough that nothing still playing could
+ * look idle", and nothing about that judgement changed when the timeout grew.
+ */
+const EvictionGrace = 90 * time.Second
+
+/*
+ * reserve takes a session slot, evicting one that is merely being held.
+ *
+ * Raising IdleTimeout to ten minutes so a paused film keeps its ffmpeg had a
+ * cost that refusing outright made worse: three paused films hold every slot,
+ * and a fourth viewer was told "too many transcodes are already running; try
+ * again shortly" where shortly had quietly become ten minutes. Before the
+ * timeout grew that resolved itself in ninety seconds. The message was true
+ * and had stopped being.
+ *
+ * So a slot that is only being *held* is yielded to somebody who wants to
+ * *use* it. The longest-idle session goes, and only if it has been unread for
+ * EvictionGrace — a session still feeding a player is never taken for a new
+ * one, which is the whole distinction that matters.
+ *
+ * This is only safe because a cut progressive stream is now recoverable: the
+ * client detects the truncation, re-requests from where it stopped, and the
+ * viewer sees a reload rather than a film that ends early. Evicting a paused
+ * session before that would have skipped to the next title, which is the bug
+ * the recovery was written for.
+ *
+ * Stop() blocks for up to three seconds, so the victim is removed under the
+ * lock and stopped outside it — the same order reap() uses, and for the same
+ * reason.
+ */
 func (m *Manager) reserve() error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.sessions) >= m.MaxSessions {
+	if len(m.sessions) < m.MaxSessions {
+		m.mu.Unlock()
+		return nil
+	}
+
+	var victim *Session
+	for _, s := range m.sessions {
+		if s.Idle() < EvictionGrace {
+			continue
+		}
+		if victim == nil || s.Idle() > victim.Idle() {
+			victim = s
+		}
+	}
+	if victim == nil {
+		// Every slot is feeding a player. This is the case the ceiling exists
+		// for, and refusing is the right answer to it.
+		m.mu.Unlock()
 		return ErrTooManySessions
 	}
+	delete(m.sessions, victim.ID)
+	m.mu.Unlock()
+
+	m.log.Info("evicting an idle transcode to free a slot",
+		"session", victim.ID, "item", victim.ItemID,
+		"idle_seconds", int(victim.Idle().Seconds()))
+	victim.Stop()
 	return nil
 }
 

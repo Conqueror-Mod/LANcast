@@ -196,6 +196,166 @@ func TestProgressiveDoesNotCollapseAnonymousStreams(t *testing.T) {
 	}
 }
 
+/*
+ * The eviction rule itself, without a process anywhere near it.
+ *
+ * The two tests below drive it through Progressive, which needs the fake ffmpeg
+ * and so skips on Windows — and this is the transcode lifecycle, the part of
+ * the codebase most likely to be edited on a Windows machine with no way to run
+ * its own tests. reserve() is manager bookkeeping, and Stop() on a session that
+ * never had a process is safe and instant, so the decision can be checked
+ * directly and everywhere.
+ */
+func TestReserveEvictionRule(t *testing.T) {
+	held := func(idle time.Duration) *Session {
+		s := &Session{ID: newID()}
+		s.lastTouch = time.Now().Add(-idle)
+		return s
+	}
+
+	cases := []struct {
+		name    string
+		idle    []time.Duration
+		wantErr error
+		// The session that should be gone afterwards, by index into idle.
+		evicted int
+	}{
+		{
+			name:    "every slot freshly read, so nothing may be taken",
+			idle:    []time.Duration{time.Second, time.Second},
+			wantErr: ErrTooManySessions,
+			evicted: -1,
+		},
+		{
+			name:    "one slot merely held, so it yields",
+			idle:    []time.Duration{time.Second, 5 * time.Minute},
+			evicted: 1,
+		},
+		{
+			name:    "the longest idle goes, not merely an idle one",
+			idle:    []time.Duration{10 * time.Minute, 2 * time.Minute},
+			evicted: 0,
+		},
+		{
+			name:    "idle but inside the grace period is still in use",
+			idle:    []time.Duration{EvictionGrace - time.Second, EvictionGrace - time.Second},
+			wantErr: ErrTooManySessions,
+			evicted: -1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manager{
+				log: quiet(), sessions: map[string]*Session{},
+				MaxSessions: len(tc.idle),
+			}
+			ids := make([]string, len(tc.idle))
+			for i, d := range tc.idle {
+				s := held(d)
+				ids[i] = s.ID
+				m.sessions[s.ID] = s
+			}
+
+			err := m.reserve()
+			if err != tc.wantErr {
+				t.Fatalf("reserve() error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.evicted < 0 {
+				if len(m.sessions) != len(tc.idle) {
+					t.Errorf("sessions = %d, want %d — nothing should have been taken",
+						len(m.sessions), len(tc.idle))
+				}
+				return
+			}
+			if _, still := m.sessions[ids[tc.evicted]]; still {
+				t.Errorf("session %d was not evicted", tc.evicted)
+			}
+			if len(m.sessions) != len(tc.idle)-1 {
+				t.Errorf("sessions = %d, want %d — exactly one slot should be freed",
+					len(m.sessions), len(tc.idle)-1)
+			}
+		})
+	}
+}
+
+/*
+ * A slot being held is not a slot in use.
+ *
+ * Three paused films hold every slot for the whole ten-minute idle timeout, and
+ * refusing a fourth viewer for that long is worse than taking a slot back from
+ * a stream nobody is reading. A cut progressive stream is recoverable now, so
+ * the evicted viewer gets a reload rather than a film that ends early.
+ */
+func TestReserveEvictsAnIdleSessionRatherThanRefusing(t *testing.T) {
+	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
+	m := newManager(t, bin)
+	m.MaxSessions = 2
+
+	var readers []io.ReadCloser
+	for i := 0; i < 2; i++ {
+		rc, err := m.Progressive(context.Background(), int64(i), "u1", Options{Input: "x.mkv", Decision: remux()})
+		if err != nil {
+			t.Fatalf("session %d: %v", i, err)
+		}
+		rc.Read(make([]byte, 1))
+		readers = append(readers, rc)
+	}
+	t.Cleanup(func() {
+		for _, rc := range readers {
+			rc.Close()
+		}
+	})
+
+	// Age both past the grace period without waiting for it: what "idle" means
+	// here is "not read since", and the clock is the only thing being faked.
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		s.mu.Lock()
+		s.lastTouch = time.Now().Add(-2 * EvictionGrace)
+		s.mu.Unlock()
+	}
+	m.mu.Unlock()
+
+	rc, err := m.Progressive(context.Background(), 99, "u2", Options{Input: "x.mkv", Decision: remux()})
+	if err != nil {
+		t.Fatalf("a third viewer was refused while two slots sat idle: %v", err)
+	}
+	defer rc.Close()
+
+	if n := len(m.Sessions()); n > m.MaxSessions {
+		t.Errorf("sessions = %d, want no more than the ceiling of %d", n, m.MaxSessions)
+	}
+}
+
+// A session still feeding a player is never taken for a new one. This is the
+// case the ceiling exists for, and refusing is the right answer to it.
+func TestReserveStillRefusesWhenEverySlotIsBeingRead(t *testing.T) {
+	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
+	m := newManager(t, bin)
+	m.MaxSessions = 2
+
+	var readers []io.ReadCloser
+	for i := 0; i < 2; i++ {
+		rc, err := m.Progressive(context.Background(), int64(i), "u1", Options{Input: "x.mkv", Decision: remux()})
+		if err != nil {
+			t.Fatalf("session %d: %v", i, err)
+		}
+		rc.Read(make([]byte, 1))
+		readers = append(readers, rc)
+	}
+	t.Cleanup(func() {
+		for _, rc := range readers {
+			rc.Close()
+		}
+	})
+
+	// Freshly read, so nothing is evictable.
+	if _, err := m.Progressive(context.Background(), 99, "u2", Options{Input: "x.mkv", Decision: remux()}); err != ErrTooManySessions {
+		t.Errorf("error = %v, want ErrTooManySessions when every slot is in use", err)
+	}
+}
+
 func TestEnsureHLSReusesSession(t *testing.T) {
 	// Produce a playlist and one segment, then idle so the session stays alive.
 	bin := fakeFFmpeg(t, `
