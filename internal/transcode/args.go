@@ -278,6 +278,35 @@ func Args(o Options) []string {
 		a = append(a, "-ss", strconv.FormatFloat(o.StartAt, 'f', 3, 64))
 	}
 
+	/*
+	 * Hardware *decode*, which is the half that was missing.
+	 *
+	 * The encoder was already being chosen from a real capability probe, so a
+	 * re-encode ran on NVENC and looked accelerated. Decoding was still
+	 * software every time, and decoding 1080p HEVC in software is the expensive
+	 * half of the job — the GPU sat mostly idle while a CPU core did the work
+	 * that made the machine lag.
+	 *
+	 * `auto` and not a named device: ffmpeg tries what the build supports and
+	 * silently falls back to software for a codec or profile the card cannot
+	 * decode, which is the behaviour a home server wants. Naming a device turns
+	 * "this one file is unusual" into "this one file will not play".
+	 *
+	 * Deliberately without `-hwaccel_output_format`. Leaving it unset brings
+	 * frames back to system memory after decoding, so the filter chain and the
+	 * encoder see ordinary frames and nothing downstream has to change — in
+	 * particular the tonemap filter, which has no CUDA equivalent in stock
+	 * ffmpeg and must run on the CPU regardless (see the filter chain below).
+	 * The copy back costs a little bandwidth and buys the whole decode.
+	 *
+	 * Only when re-encoding on a hardware encoder. A stream copy decodes
+	 * nothing, and pulling hardware init into a job that never touches a pixel
+	 * is cost with no work to pay for it.
+	 */
+	if o.Encoder.Hardware && !o.Decision.AudioOnly && o.Decision.VideoAction != "copy" {
+		a = append(a, "-hwaccel", "auto")
+	}
+
 	if o.Live {
 		a = append(a, liveInputArgs()...)
 		if o.HLSInput {
