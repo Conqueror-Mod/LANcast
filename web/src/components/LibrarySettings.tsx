@@ -17,8 +17,9 @@
  * Follows the pattern already in this directory: AuditLog, UpdateSettings,
  * DesktopSettings and PlaybackSettings are each a component and its own CSS.
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ApiFailure } from "@/api/client";
+import { ButtonMenu } from "./Menu";
 import {
   useScanStatus,
   useStartScan,
@@ -73,121 +74,6 @@ function ReparseOutcome({ result }: { result: ReparseResult }) {
       {result.examined === 1 ? "item" : "items"} and corrected{" "}
       {result.changed.toLocaleString()}. Those are being matched again now.
     </p>
-  );
-}
-
-/*
- * The row's overflow menu.
- *
- * Every library carried five buttons — Edit, Scan, Refresh metadata, Re-read
- * filenames, Remove — so a five-library server put twenty-five controls on one
- * screen, and the four that are not Scan were repeated in every row at equal
- * weight. Weighting them equally is what made the pane read as unfinished:
- * scanning is the thing people come here to do, and the rest are occasional.
- *
- * So Scan stays a button and the other four move one level down. Nothing is
- * hidden — a menu is one click, and the alternative on offer was a row that
- * grows another button every time the server learns a new trick.
- *
- * Local to this file on purpose. One consumer is not a component library, and
- * a shared Menu extracted before a second caller exists is a guess about what
- * the second caller will need.
- */
-function RowMenu({
-  label,
-  disabled,
-  children,
-}: {
-  label: string;
-  disabled?: boolean;
-  children: (close: () => void) => React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-
-  /*
-   * Closing puts focus back on the trigger.
-   *
-   * Without it the menu is a keyboard dead end, which docs/design.md names as a
-   * bug outright: the items are real buttons, so Tab walks into them, and when
-   * the menu unmounts underneath the focused item focus falls to <body>. On a
-   * pane holding a row per library that means tabbing from the top of the
-   * screen again to get back to where you were.
-   *
-   * Only when focus is actually inside the menu — restoring it after an
-   * outside click would yank the caret out of whatever the person just clicked
-   * on instead.
-   */
-  const restoreFocus = () => {
-    if (ref.current?.contains(document.activeElement)) trigger.current?.focus();
-    setOpen(false);
-  };
-
-  // Close on an outside click or Escape, the same way the activity popover
-  // does. A menu that traps you is worse than no menu.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") restoreFocus();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  return (
-    <div className="set-menu" ref={ref}>
-      <button
-        type="button"
-        ref={trigger}
-        className="set-btn set-menu__trigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {/* Three dots, not an icon font: this client ships no icon dependency. */}
-        ⋯
-      </button>
-      {open && (
-        <div className="set-menu__list" role="menu">
-          {children(restoreFocus)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MenuItem({
-  onClick,
-  disabled,
-  danger,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      className={"set-menu__item" + (danger ? " set-menu__item--danger" : "")}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -456,56 +342,46 @@ export function LibraryRow({ library }: { library: Library }) {
               </button>
             </>
           ) : (
-            <RowMenu label={`More actions for ${library.name}`}>
-              {(close) => (
-                <>
-                  <MenuItem
-                    disabled={running || scan.isPending}
-                    onClick={() => {
-                      edit.reset();
-                      setEditing((v) => !v);
-                      close();
-                    }}
-                  >
-                    {editing ? "Stop editing" : "Edit"}
-                  </MenuItem>
-                  {/* Re-read filenames above Refresh metadata, in the order a
-                      person would try them: correct the question from the
-                      filename first, then ask the provider again. Refreshing
-                      first re-asks the same wrong question. */}
-                  <MenuItem
-                    disabled={running || reparse.isPending}
-                    onClick={() => {
-                      setReported("reparse");
-                      reparse.mutate(library.id);
-                      close();
-                    }}
-                  >
-                    {reparse.isPending ? "Re-reading…" : "Re-read filenames"}
-                  </MenuItem>
-                  <MenuItem
-                    disabled={refresh.isPending}
-                    onClick={() => {
-                      setReported("refresh");
-                      refresh.mutate(library.id);
-                      close();
-                    }}
-                  >
-                    Refresh metadata
-                  </MenuItem>
-                  <MenuItem
-                    danger
-                    disabled={running}
-                    onClick={() => {
-                      setConfirming(true);
-                      close();
-                    }}
-                  >
-                    Remove
-                  </MenuItem>
-                </>
-              )}
-            </RowMenu>
+            <ButtonMenu
+              label={`More actions for ${library.name}`}
+              className="set-btn"
+              actions={[
+                {
+                  label: editing ? "Stop editing" : "Edit",
+                  disabled: running || scan.isPending,
+                  onSelect: () => {
+                    edit.reset();
+                    setEditing((v) => !v);
+                  },
+                },
+                // Re-read filenames above Refresh metadata, in the order a
+                // person would try them: correct the question from the filename
+                // first, then ask the provider again. Refreshing first re-asks
+                // the same wrong question.
+                {
+                  label: reparse.isPending ? "Re-reading…" : "Re-read filenames",
+                  disabled: running || reparse.isPending,
+                  onSelect: () => {
+                    setReported("reparse");
+                    reparse.mutate(library.id);
+                  },
+                },
+                {
+                  label: "Refresh metadata",
+                  disabled: refresh.isPending,
+                  onSelect: () => {
+                    setReported("refresh");
+                    refresh.mutate(library.id);
+                  },
+                },
+                {
+                  label: "Remove",
+                  danger: true,
+                  disabled: running,
+                  onSelect: () => setConfirming(true),
+                },
+              ]}
+            />
           )}
         </div>
       </div>
