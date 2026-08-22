@@ -32,8 +32,22 @@ type Manager struct {
 	// process; without a ceiling, a handful of clients can bring a home server
 	// to its knees and every stream stutters instead of one being refused.
 	MaxSessions int
-	// IdleTimeout reaps sessions nobody is reading from. A closed browser tab
-	// does not tell the server it has gone.
+	/*
+	 * IdleTimeout reaps sessions nobody is reading from. A closed browser tab
+	 * does not tell the server it has gone.
+	 *
+	 * It cannot tell a closed tab from a paused film, though, and at 90 seconds
+	 * it did not need to: pausing a progressive stream applies backpressure,
+	 * the session stops being read, and a minute and a half later ffmpeg was
+	 * killed underneath a viewer who was still sitting there. The client
+	 * recovers from that now, but recovering is a reload, and a reload is not
+	 * what pressing pause should cost.
+	 *
+	 * Ten minutes because a paused session is nearly free — ffmpeg is blocked
+	 * writing into a pipe nobody is draining, so it holds a process and a
+	 * session slot and burns no CPU. The slot is the real cost, and it is the
+	 * one MaxSessions bounds.
+	 */
 	IdleTimeout time.Duration
 
 	// binMu guards bin, which is no longer written only at construction: the
@@ -62,7 +76,7 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 		root:        dir,
 		log:         log,
 		MaxSessions: 3,
-		IdleTimeout: 90 * time.Second,
+		IdleTimeout: 10 * time.Minute,
 		sessions:    map[string]*Session{},
 		stopped:     make(chan struct{}),
 		available:   []Encoder{Software},
