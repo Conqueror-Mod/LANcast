@@ -93,4 +93,20 @@
 .menu__list--point {
   position: fixed;
   z-index: 60;
+  /* Both of these are inherited from .menu__list, where they anchor the list
+     under a trigger button, and both are actively wrong here.
+
+     `right: 0` is the one that bites. It is a different property from the
+     inline `left`, so it does not lose to it — it applies as well, pinning the
+     list to the viewport's right edge while `left` pins it wherever the pointer
+     was. The box is then stretched between the two, `min-width` overflows
+     whatever is left, and a menu opened near the right of the window runs off
+     it with its longest label cut in half. PointMenu's measure-and-clamp cannot
+     save it, because the width it measures is one the stylesheet has already
+     decided.
+
+     `top` is overridden by the inline style on every render, so it is reset
+     only so this rule does not depend on that staying true. */
+  right: auto;
+  bottom: auto;
 }
