@@ -86,6 +86,12 @@ type Deps struct {
 	// has one place to get it from rather than re-reading the key file.
 	Identity identity.Identity
 
+	// ListenAddr is the address actually bound, so an invite can name a port
+	// somebody could really reach. The port is the part that matters — the host
+	// half is usually a wildcard, and the addresses in an invite come from
+	// enumerating interfaces rather than from this.
+	ListenAddr string
+
 	// Rebuild reconfigures providers after a settings change, so a newly
 	// entered API key takes effect without a restart.
 	Rebuild func(config.Settings)
@@ -112,6 +118,7 @@ type Deps struct {
 // Server holds the API dependencies.
 type Server struct {
 	ident          identity.Identity
+	listenAddr     string
 	st             *store.Store
 	scanner        *scan.Scanner
 	reg            *meta.Registry
@@ -170,8 +177,9 @@ func New(d Deps) *Server {
 		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
-		ident:   d.Identity,
-		rebuild: d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
+		ident:      d.Identity,
+		listenAddr: d.ListenAddr,
+		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
@@ -240,6 +248,24 @@ func (s *Server) Handler() http.Handler {
 
 	// Who this server is (ADR 0044). Reports an identity; grants nothing.
 	mux.HandleFunc("GET /api/identity", s.identity)
+
+	/*
+	 * Peers (ADR 0044). Admin, because pairing opens a network relationship for
+	 * the whole server — the same class of operational power as adding a
+	 * library, and gated on the server rather than hidden in the client.
+	 *
+	 * Granting a named person something is not here and is not admin: that is
+	 * one account's own decision, it lives on the People page, and it reads a
+	 * different table. Settings pairs servers; People grants and joins.
+	 */
+	mux.HandleFunc("GET /api/peers", s.adminOnly(s.listPeers))
+	mux.HandleFunc("POST /api/peers", s.adminOnly(s.addPeer))
+	mux.HandleFunc("GET /api/peers/invite", s.adminOnly(s.ourInvite))
+	mux.HandleFunc("DELETE /api/peers/{fingerprint}", s.adminOnly(s.removePeer))
+
+	// Personal, not administrative: whether this account appears in the roster
+	// handed to peers. Beside the other thing an account decides about itself.
+	mux.HandleFunc("PUT /api/profile/peer-visibility", s.putPeerVisibility)
 
 	mux.HandleFunc("GET /api/people", s.listPeople)
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)

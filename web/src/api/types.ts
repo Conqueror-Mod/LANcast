@@ -431,6 +431,10 @@ export interface AuthUser {
    *  could not read it — `/api/people` cannot answer this, because it excludes
    *  the caller. */
   sharing?: boolean;
+  /** Whether this account appears in the roster handed to paired servers
+   *  (ADR 0044). Reported here for the same reason `sharing` is: nothing else
+   *  can tell a client its own setting. */
+  visible_to_peers?: boolean;
 }
 
 // GET /api/auth/status. `user` is present only when a session is active.
