@@ -26,6 +26,43 @@ type Encoder struct {
 	presetValue string
 }
 
+/*
+ * decodeAccel is the -hwaccel this encoder's driver stack can be trusted with,
+ * or "" for software decoding.
+ *
+ * It exists because `-hwaccel auto` shipped in v0.8.0 and broke HEVC playback
+ * outright. `auto` chose DXVA2, DXVA2 needs a Direct3D device, and **LANcast
+ * runs as a Windows service in session 0**, which has no desktop and no D3D. It
+ * did not fall back — ffmpeg exited with "Failed to create Direct3D device"
+ * before producing a byte, so the film span forever on a spinner.
+ *
+ * The lesson is in where it was tested. Every measurement behind that change
+ * launched ffmpeg from an interactive user session, where DXVA2 works fine. The
+ * one environment never exercised was the one that ships.
+ *
+ * So the decoder is tied to the encoder rather than guessed. The encoder is
+ * already chosen by a real encode in this process — if NVENC ran here, the
+ * NVIDIA driver stack is present and usable *in this session*, and CUDA/NVDEC
+ * is the same stack with no D3D dependency. QSV and VideoToolbox are paired the
+ * same way.
+ *
+ * AMF is deliberately left on software decode: its decode path on Windows is
+ * D3D-backed, which is the thing that broke, and there is no AMD machine here
+ * to prove otherwise on. An unverified guess is what caused this.
+ */
+func (e Encoder) decodeAccel() string {
+	switch e.Name {
+	case "h264_nvenc":
+		return "cuda"
+	case "h264_qsv":
+		return "qsv"
+	case "h264_videotoolbox":
+		return "videotoolbox"
+	default:
+		return ""
+	}
+}
+
 // Software is the always-available fallback.
 var Software = Encoder{
 	Name: "libx264", Label: "CPU (libx264)", Hardware: false,

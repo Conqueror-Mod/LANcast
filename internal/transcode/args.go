@@ -306,10 +306,14 @@ func Args(o Options) []string {
 	 * half of the job — the GPU sat mostly idle while a CPU core did the work
 	 * that made the machine lag.
 	 *
-	 * `auto` and not a named device: ffmpeg tries what the build supports and
-	 * silently falls back to software for a codec or profile the card cannot
-	 * decode, which is the behaviour a home server wants. Naming a device turns
-	 * "this one file is unusual" into "this one file will not play".
+	 * Named after the encoder's own driver stack, never `auto`.
+	 *
+	 * `auto` shipped in v0.8.0 and broke HEVC playback: it chose DXVA2, DXVA2
+	 * needs a Direct3D device, and the server runs as a Windows service in
+	 * session 0 where there is no desktop and no D3D. ffmpeg did not fall back
+	 * the way that comment claimed it would — it exited before the first byte.
+	 * See Encoder.decodeAccel, which is where that reasoning now lives and
+	 * where the empty case means software.
 	 *
 	 * Deliberately without `-hwaccel_output_format`. Leaving it unset brings
 	 * frames back to system memory after decoding, so the filter chain and the
@@ -322,8 +326,9 @@ func Args(o Options) []string {
 	 * nothing, and pulling hardware init into a job that never touches a pixel
 	 * is cost with no work to pay for it.
 	 */
-	if o.Encoder.Hardware && !o.Decision.AudioOnly && o.Decision.VideoAction != "copy" {
-		a = append(a, "-hwaccel", "auto")
+	if accel := o.Encoder.decodeAccel(); accel != "" &&
+		!o.Decision.AudioOnly && o.Decision.VideoAction != "copy" {
+		a = append(a, "-hwaccel", accel)
 	}
 
 	if o.Live {
