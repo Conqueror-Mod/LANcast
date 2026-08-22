@@ -448,6 +448,28 @@ state, and subtitles. **Never deletes media from disk** — LANcast only ever
 stored paths, so this is "stop tracking this folder", not a destroy. `204` on
 success, `404` if unknown, `409` if a scan is running for it.
 
+### `POST /api/libraries/scan`
+
+Starts a scan of **every** library. Admin only. Always `202`.
+
+```json
+{ "started": [ { "library_id": 1, "state": "running", "started_at": 1753228800 } ],
+  "busy": [ 3 ] }
+```
+
+Libraries already scanning are listed in `busy` rather than refused, and the
+rest still start — asking for everything while two of five are mid-scan should
+start the other three, not fail because the request could not be carried out in
+full. This is also what the rescan timer does, which skips a busy library and
+never queues behind it.
+
+Never `409`, unlike the single-library form below: there the caller named one
+library and a conflict is the whole answer, where here the body says which
+libraries did what.
+
+A library is also scanned automatically when it is created, so this is for
+"check everything for new media" rather than for setup.
+
 ### `POST /api/libraries/{id}/scan`
 
 Starts an asynchronous scan and returns `202` immediately. Returns `conflict`

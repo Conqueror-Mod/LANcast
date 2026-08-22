@@ -308,6 +308,49 @@ func TestScanLifecycle(t *testing.T) {
 	resp.Body.Close()
 }
 
+/*
+ * Scanning everything at once. The periodic timer has always done this; a
+ * person could only ever ask one library at a time.
+ */
+func TestScanAllStartsEveryLibrary(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	decode(t, h.do(t, "POST", "/api/libraries",
+		map[string]any{"name": "Second", "kind": "movie", "path": dir}), &store.Library{})
+
+	resp := h.do(t, "POST", "/api/libraries/scan", nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+	var got struct {
+		Started []scan.Progress `json:"started"`
+		Busy    []int64         `json:"busy"`
+	}
+	decode(t, resp, &got)
+
+	var libs []store.Library
+	decode(t, h.do(t, "GET", "/api/libraries", nil), &libs)
+	if len(got.Started)+len(got.Busy) != len(libs) {
+		t.Errorf("accounted for %d of %d libraries (started %d, busy %d)",
+			len(got.Started)+len(got.Busy), len(libs), len(got.Started), len(got.Busy))
+	}
+}
+
+// A library already scanning is reported, not refused. Asking for everything
+// while some are mid-scan should start the rest.
+func TestScanAllReportsBusyRatherThanFailing(t *testing.T) {
+	h := newHarness(t)
+	// Start one directly so it is running when the sweep arrives.
+	resp := h.do(t, "POST", "/api/libraries/1/scan", nil)
+	resp.Body.Close()
+
+	resp = h.do(t, "POST", "/api/libraries/scan", nil)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 even with a scan in flight", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
 func TestScanUnknownLibrary(t *testing.T) {
 	h := newHarness(t)
 	wantError(t, h.do(t, "POST", "/api/libraries/9999/scan", nil), 404, "not_found")

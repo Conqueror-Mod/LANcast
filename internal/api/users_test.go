@@ -85,6 +85,9 @@ func TestMemberIsDeniedAdminPowers(t *testing.T) {
 		// Re-probing a library is hours of ffprobe. A member must not be able
 		// to start it.
 		{"POST", "/api/probe/refresh", nil},
+		// Nor scanning every library at once, which is the same power the
+		// per-library endpoint has and rather more of it.
+		{"POST", "/api/libraries/scan", nil},
 	}
 	for _, tc := range adminOnly {
 		resp := h.doAs(t, member, tc.method, tc.path, tc.body)

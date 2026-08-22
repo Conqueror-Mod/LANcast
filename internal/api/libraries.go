@@ -265,6 +265,62 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, p)
 }
 
+/*
+ * scanAll starts a scan of every library. Admin-only.
+ *
+ * The capability already existed and was simply unreachable by hand: the
+ * periodic timer has always looped every library and started each one, so a
+ * server set to rescan daily did this once a day while a person could only ask
+ * one library at a time. On a five-library server "check everything for new
+ * media" was five clicks that had to be repeated, which is the kind of thing
+ * people stop doing.
+ *
+ * Libraries already scanning are reported rather than refused. A partial answer
+ * is the honest one here: asking for everything when two of five are mid-scan
+ * should start the other three, not fail because the request could not be
+ * carried out in full. That also matches the timer, which skips a busy library
+ * and never queues behind it.
+ *
+ * Always 202, never 409 — unlike the single-library endpoint, where the caller
+ * named one library and a conflict is the whole answer. Here the body carries
+ * which libraries did what.
+ */
+func (s *Server) scanAll(w http.ResponseWriter, r *http.Request) {
+	libs, err := s.st.ListLibraries(r.Context())
+	if err != nil {
+		s.writeInternal(w, err, "list libraries")
+		return
+	}
+
+	started := make([]scan.Progress, 0, len(libs))
+	busy := make([]int64, 0)
+	for _, lib := range libs {
+		p, err := s.scanner.Start(lib)
+		switch {
+		case errors.Is(err, scan.ErrBusy):
+			busy = append(busy, lib.ID)
+		case err != nil:
+			// One library failing to start is not a reason to abandon the
+			// rest; it is logged and the others still go.
+			s.log.Warn("could not start a scan", "library", lib.ID, "error", err)
+		default:
+			started = append(started, p)
+		}
+	}
+
+	if len(started) > 0 {
+		s.audit(r, "library.scan_all", "library", "",
+			fmt.Sprintf("Started a scan of %d librar%s", len(started),
+				map[bool]string{true: "y", false: "ies"}[len(started) == 1]),
+			map[string]any{"started": len(started), "busy": len(busy)})
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"started": started,
+		"busy":    busy,
+	})
+}
+
 func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
