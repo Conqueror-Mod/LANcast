@@ -6,11 +6,13 @@ import {
   useItem,
   useRemovePlaylistEntry,
   useSetPlaylistEntries,
+  useSetWatchedByID,
 } from "@/api/hooks";
 import { clock } from "@/lib/format";
 import type { Item } from "@/api/types";
 import { RemoveDialog } from "./RemoveDialog";
 import { AddToPlaylist } from "./AddToPlaylist";
+import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import "./TrackList.css";
 
 // A record is a numbered list, not a grid. Rendering an album's tracks as
@@ -124,6 +126,8 @@ function TrackRow({
     track.artist && track.artist !== albumArtist ? track.artist : null;
 
   const played = track.progress?.watched ?? false;
+  const setPlayed = useSetWatchedByID();
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
 
   /*
    * A row is a line containing a play button and, for an admin, a remove
@@ -135,8 +139,60 @@ function TrackRow({
    * Same shape as the subtitle menu's rows (.submenu__line), for the same
    * reason and deliberately not a second pattern.
    */
+  /*
+   * The row's right-click menu, which only ever *adds*.
+   *
+   * Every control on this row stays exactly where it is. The reordering arrows
+   * are two buttons rather than a drag handle because this list is driven by a
+   * remote as well as a mouse (see the comment on them), and there is no
+   * keyboard route into a context menu — so moving anything in here would take
+   * it away from the d-pad entirely. This file already carries two comments
+   * about capabilities that shipped unreachable; a third would be a pattern
+   * rather than an accident.
+   *
+   * What it genuinely adds is the played flag. A track had no way to be marked
+   * heard anywhere in the client: there is no poster tile for one and nothing
+   * navigates to its page, so the state existed and only playback could set it.
+   *
+   * The rest mirror controls already on the row. That is worth the duplication
+   * — right-click is where people look, and a menu that offered one item on a
+   * row carrying four buttons would read as broken rather than restrained.
+   */
+  const actions: MenuAction[] = [
+    { label: "Play", onSelect: play },
+    {
+      label: played ? "Mark as unplayed" : "Mark as played",
+      onSelect: () => setPlayed.mutate({ itemID: track.id, watched: !played }),
+    },
+    { label: "Add to playlist", onSelect: () => onAddToPlaylist(track) },
+    ...(edits
+      ? [
+          {
+            label: "Remove from this playlist",
+            disabled: edits.busy,
+            onSelect: () => edits.onRemoveEntry(),
+          },
+        ]
+      : []),
+    ...(onRemove
+      ? [
+          {
+            label: "Remove from library…",
+            danger: true,
+            onSelect: () => onRemove(track),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="track-line">
+    <div
+      className="track-line"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuAt({ x: e.clientX, y: e.clientY });
+      }}
+    >
     <button
       {...focusable}
       className={
@@ -235,6 +291,13 @@ function TrackRow({
         >
           ×
         </button>
+      )}
+      {menuAt && (
+        <PointMenu
+          at={menuAt}
+          actions={actions}
+          onClose={() => setMenuAt(null)}
+        />
       )}
     </div>
   );
