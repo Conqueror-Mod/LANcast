@@ -37,6 +37,7 @@ import type {
   ProbeStatus,
   ReprobeResult,
   ReparseResult,
+  ScanAllResult,
   ScanStatus,
   ServerLog,
   UpdateStatus,
@@ -386,6 +387,35 @@ const workFinishedKeys = [
 
 export function useStartScan() {
   return useBackgroundLibraryJob((id) => `/api/libraries/${id}/scan`);
+}
+
+/*
+ * Scan every library at once.
+ *
+ * The same optimistic activity claim useBackgroundLibraryJob makes, and for the
+ * same reason: the sweep answers 202 the moment the scans are started, so
+ * without this the next poll might not see any active-to-idle edge and the
+ * counts would never refresh. It cannot reuse that hook because it takes no
+ * library id — there is no per-library scan status to invalidate, there are
+ * several.
+ *
+ * The answer says which libraries started and which were already busy, and the
+ * caller is expected to say so. "Nothing happened" and "all five were already
+ * scanning" look identical otherwise.
+ */
+export function useScanAllLibraries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<ScanAllResult>("/api/libraries/scan", {}),
+    onSuccess: () => {
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
+        active: true,
+        tasks: prev?.tasks ?? [],
+      }));
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["scan"] });
+    },
+  });
 }
 
 export function useRefreshLibrary() {

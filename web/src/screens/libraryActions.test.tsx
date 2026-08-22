@@ -66,6 +66,12 @@ function mount(opts: { scanConflict?: boolean } = {}) {
       if (method !== "GET") {
         writes.push({ url, method });
         if (url.includes("/reparse")) return json({ examined: 0, changed: 0 });
+        if (url.endsWith("/api/libraries/scan")) {
+          return json({
+            started: [{ library_id: 7, state: "running", files_seen: 0 }],
+            busy: [],
+          });
+        }
         if (url.endsWith("/scan") && opts.scanConflict) {
           // What the server really sends: the running scan's progress, with a
           // 409 and no error envelope at all. See docs/api.md.
@@ -227,5 +233,23 @@ describe("the library row's actions", () => {
     // A menu left standing over the answer it just produced hides the thing you
     // pressed it for.
     expect(buttons("Refresh metadata").length).toBe(0);
+  });
+});
+
+describe("scanning every library", () => {
+  it("posts the sweep and reports what it started", async () => {
+    mount();
+    await render();
+    const all = buttons("Scan all")[0];
+    expect(all, "no Scan all control on the libraries pane").toBeTruthy();
+    act(() => all.click());
+    await settle();
+
+    const sweep = writes.find((w) => w.url.endsWith("/api/libraries/scan"));
+    expect(sweep, "the sweep did not post to /api/libraries/scan").toBeTruthy();
+    expect(sweep?.method).toBe("POST");
+    // Saying how many started is the whole point: "nothing happened" and "all
+    // of them were already scanning" are different answers.
+    expect(text()).toContain("Scanning 1 library");
   });
 });

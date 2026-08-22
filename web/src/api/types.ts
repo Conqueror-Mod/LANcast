@@ -340,6 +340,19 @@ export interface ShapeWarning {
   remedy?: string;
 }
 
+/**
+ * What scanning every library at once answered.
+ *
+ * Both halves matter to the caller. A sweep that started nothing because every
+ * library was already scanning is indistinguishable from a sweep that did
+ * nothing at all, unless `busy` is reported alongside `started`.
+ */
+export interface ScanAllResult {
+  started: ScanStatus[];
+  /** Library ids that were already scanning and were left to finish. */
+  busy: number[];
+}
+
 export interface ScanStatus {
   library_id: number;
   state: string; // idle | running | complete | failed
