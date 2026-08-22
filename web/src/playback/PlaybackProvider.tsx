@@ -47,6 +47,17 @@ interface Decision {
 // natively. A transcode has no length and cannot be range-served: seeking means
 // restarting ffmpeg at a new offset, and the displayed time is that offset plus
 // the element's own clock.
+/*
+ * How near the probed runtime counts as "the end".
+ *
+ * A transcode's own timeline and the probed duration disagree by a little —
+ * container rounding, a trailing partial fragment — so a genuine end lands a
+ * second or two short of the number. Ten seconds is comfortably past that and
+ * still far short of a pause, which cuts the stream wherever the viewer left
+ * it. It doubles as the tolerance for "cut at the same place twice".
+ */
+const TRUNCATION_SLACK = 10;
+
 function sourceURL(
   id: number,
   method: Decision["method"],
@@ -208,6 +219,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // slow talker and the next episode undoes it.
   const [speed, setSpeedState] = useState(1);
   const [shuffle, setShuffle] = useState(false);
+  /*
+   * Which randomisation this is.
+   *
+   * The shuffled order is memoised on the queue and the shuffle flag, which is
+   * right for "next must mean the same thing on every press" — and wrong for
+   * "Randomize all", pressed twice. That hands over the *same* library in the
+   * *same* order with shuffle already on, so neither dependency changes, the
+   * memo is reused, and the button produces the identical running order every
+   * time it is pressed. It looked like one randomisation baked in at startup.
+   *
+   * The epoch is the missing dependency: asking for shuffle bumps it, so a
+   * fresh request reshuffles while nothing else does.
+   */
+  const [shuffleEpoch, setShuffleEpoch] = useState(0);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
   // The audio track to ask the server for, null meaning "whatever the file
   // leads with". Cleared when the item changes: a stream index is only
@@ -262,6 +287,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // For a transcode, the element's clock is relative to this offset.
   const offset = useRef(0);
   const startedFrom = useRef(0);
+  /*
+   * Where the last truncation recovery was attempted, so it cannot loop.
+   *
+   * Recovery re-requests the transcode at the position the stream was cut at.
+   * If the new stream is cut at the same place — a file ffmpeg genuinely cannot
+   * get past — repeating that is an infinite reload rather than playback, so
+   * the second attempt at the same spot gives up and lets the queue advance.
+   */
+  const recoveredAt = useRef<number | null>(null);
 
   /*
    * Where in the order we are, as a position rather than an id.
@@ -404,7 +438,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // would make "next" mean something different on each press. The order is
     // fixed when shuffle is turned on, or when the queue itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shuffle, queue.join(",")]);
+  }, [shuffle, shuffleEpoch, queue.join(",")]);
 
   const idxInOrder = resolvePos(order, pos, itemID);
   const hasNext = repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null;
@@ -466,8 +500,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setItemID(id);
   }, []);
 
-  const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
-  const setShuffleMode = useCallback((on: boolean) => setShuffle(on), []);
+  // Turning shuffle *on* is a new randomisation; turning it off is not, and
+  // bumping the epoch there would only reshuffle an order nobody is using.
+  const toggleShuffle = useCallback(() => {
+    setShuffle((v) => {
+      if (!v) setShuffleEpoch((n) => n + 1);
+      return !v;
+    });
+  }, []);
+  // Always a new randomisation, including when shuffle is already on: this is
+  // the path "Randomize all" takes, and pressing it is a request for a
+  // different order, not a request for the state it is already in.
+  const setShuffleMode = useCallback((on: boolean) => {
+    setShuffle(on);
+    if (on) setShuffleEpoch((n) => n + 1);
+  }, []);
   const cycleRepeat = useCallback(
     () => setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off")),
     [],
@@ -524,6 +571,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
      * press play on episode one of a show you are part way through and episode
      * three played, having walked through the finished ones too fast to see.
      */
+    // A new source is a new stream; whatever the last one was cut at says
+    // nothing about this one.
+    recoveredAt.current = null;
     startedFrom.current =
       live.id === item.id && live.at > 0
         ? live.at
@@ -1329,6 +1379,47 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             }}
             onEnded={() => {
               saveProgress(true);
+              /*
+               * A stream that was cut is not a film that ended.
+               *
+               * A progressive fMP4 has no duration in it — the element learns
+               * how long the film is only by reaching the end of the bytes. So
+               * when the server stops sending, for any reason, the browser
+               * fires `ended`, exactly as it would at the real end. This handler
+               * believed it and rolled on to the next title.
+               *
+               * The reason it stops is the idle reaper. Pausing a progressive
+               * stream applies backpressure, the session stops being read, and
+               * nothing distinguishes "paused" from "gone" — so a film paused
+               * longer than the idle timeout had its ffmpeg killed underneath
+               * it, and pressing play skipped to the next film. It only ever
+               * happened to convertible codecs, because direct play serves a
+               * real file whose duration is known up front.
+               *
+               * The probed runtime is the authority on where the end actually
+               * is, so short of it means cut. seekTo re-requests the transcode
+               * from there, which is the same thing a seek already does.
+               */
+              if (
+                transcoding.current &&
+                totalDuration > 0 &&
+                displayTime < totalDuration - TRUNCATION_SLACK
+              ) {
+                const at = displayTime;
+                const looping =
+                  recoveredAt.current !== null &&
+                  Math.abs(recoveredAt.current - at) < TRUNCATION_SLACK;
+                if (!looping) {
+                  recoveredAt.current = at;
+                  setNote("Reconnecting…");
+                  setLoading(true);
+                  seekTo(at);
+                  return;
+                }
+                // Cut twice at the same spot. Recovering again would reload for
+                // ever, so fall through and treat it as the end.
+              }
+              recoveredAt.current = null;
               // Repeat one reseeks rather than reloading: the source is already
               // the right file, and re-requesting it would restart a transcode
               // that is already running.

@@ -150,6 +150,60 @@ func TestFullTranscodeEncodesBoth(t *testing.T) {
 	}
 }
 
+/*
+ * Hardware decode, one case per shape — the encoder was accelerated and the
+ * decoder was not, which left the expensive half of a 1080p HEVC re-encode on
+ * the CPU while the GPU idled.
+ */
+func TestHardwareEncodeAlsoDecodesInHardware(t *testing.T) {
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive,
+		Decision: fullDecision(), Encoder: candidates[0],
+	})
+	if !hasSequence(args, "-hwaccel", "auto") {
+		t.Error("no -hwaccel: the decode is still running in software")
+	}
+	// An input option. After -i it applies to the output and does nothing.
+	if h, i := argIndex(args, "-hwaccel"), argIndex(args, "-i"); h > i {
+		t.Errorf("-hwaccel at %d is after -i at %d; it must be an input option", h, i)
+	}
+}
+
+// A stream copy decodes nothing, so hardware init is cost with no work to pay
+// for it.
+func TestNoHardwareDecodeOnAVideoCopy(t *testing.T) {
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive,
+		Decision: audioEncodeDecision(), Encoder: candidates[0],
+	})
+	if argIndex(args, "-hwaccel") >= 0 {
+		t.Error("-hwaccel on a video copy, which decodes no video at all")
+	}
+}
+
+// Content with no picture must not pull a GPU into the job.
+func TestNoHardwareDecodeOnAudioOnly(t *testing.T) {
+	args := Args(Options{
+		Input: "in.m4a", Output: Progressive,
+		Decision: audioOnlyDecision(), Encoder: candidates[0],
+	})
+	if argIndex(args, "-hwaccel") >= 0 {
+		t.Error("-hwaccel on audio-only content")
+	}
+}
+
+// The software encoder is chosen when no hardware was found, so asking for
+// hardware decode alongside it is asking for a device that is not there.
+func TestNoHardwareDecodeWithSoftwareEncoder(t *testing.T) {
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive,
+		Decision: fullDecision(), Encoder: Software,
+	})
+	if argIndex(args, "-hwaccel") >= 0 {
+		t.Error("-hwaccel alongside libx264")
+	}
+}
+
 // Explicit stream mapping. ffmpeg's default picks one stream per type by its
 // own rules, which selects the wrong audio on files with several tracks.
 func TestExplicitStreamMapping(t *testing.T) {

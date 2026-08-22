@@ -358,6 +358,32 @@ function useBackgroundLibraryJob(path: (libraryID: number) => string) {
   });
 }
 
+/*
+ * What a finished scan changes.
+ *
+ * Both poll loops below used to refresh ["libraries"] alone, on the reasoning
+ * that a scan changes counts and the "last scanned" stamp. It changes rather
+ * more than that: a scan is the thing that marks a deleted file missing, and
+ * every list here filters missing rows out on the server. Refreshing only the
+ * counts meant the sidebar learned the film was gone while the grid beside it
+ * went on showing the poster — indefinitely, because nothing else invalidates a
+ * browse page and the deleted title never comes back to invalidate it.
+ *
+ * That is the whole of the "I Heart Huckabee's is still in the library" report:
+ * the row was already missing = 1 in the database, and the client was reading
+ * its own cache.
+ */
+const workFinishedKeys = [
+  "libraries",
+  "items",
+  "item",
+  "facets",
+  "recently-added",
+  "continue",
+  "review",
+  "children",
+];
+
 export function useStartScan() {
   return useBackgroundLibraryJob((id) => `/api/libraries/${id}/scan`);
 }
@@ -403,7 +429,9 @@ export function useScanStatus(libraryID: number) {
         signal,
       );
       if (s.state !== "running") {
-        qc.invalidateQueries({ queryKey: ["libraries"] });
+        for (const key of workFinishedKeys) {
+          qc.invalidateQueries({ queryKey: [key] });
+        }
       }
       return s;
     },
@@ -475,19 +503,14 @@ export function useDeleteItem(id: number) {
       apiSend(`/api/items/${id}?mode=${mode}`, "DELETE"),
     onSuccess: () => {
       /*
-       * "items" does not match the grid, and that is the trap in this list.
-       *
-       * The browse grid's key is ["items-infinite", …], and invalidating
-       * ["items"] matches by key *prefix* — "items-infinite" is a different
-       * string, not a child of "items", so the grid kept its cached pages.
        * "libraries" was missing outright, which is what left the nav reading
        * 1,212 beside a grid that had moved on to 1,209 after three files were
        * removed. The comment above claimed every list was refreshed; it was
-       * three short.
+       * not. The grid needed naming separately too, until its key became a
+       * child of ["items"] — see useInfiniteItems.
        */
       for (const key of [
         "items",
-        "items-infinite",
         "libraries",
         "facets",
         "recently-added",
@@ -982,7 +1005,23 @@ const BROWSE_PAGE_SIZE = 120;
 export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
   const base = itemsParams({ ...query, limit: BROWSE_PAGE_SIZE, offset: 0 });
   return useInfiniteQuery({
-    queryKey: ["items-infinite", base.toString()],
+    /*
+     * A child of ["items"], not a sibling.
+     *
+     * This key was ["items-infinite", …]. React Query matches by key *prefix*,
+     * and "items-infinite" is a different string from "items" rather than a
+     * child of it — so every `invalidateQueries({ queryKey: ["items"] })` in
+     * this file sailed straight past the browse grid. Editing a title, deleting
+     * a file, finishing a scan: the grid kept its cached pages through all of
+     * it, which is how a deleted film stayed on screen after the scan had
+     * already marked it missing in the database.
+     *
+     * One call site had noticed and listed both strings by hand. The rest had
+     * not, and a convention that has to be remembered at every call site is a
+     * convention that will be forgotten at the next one. Nesting it makes the
+     * obvious invalidation the correct one.
+     */
+    queryKey: ["items", "infinite", base.toString()],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
       const params = itemsParams({
@@ -1020,7 +1059,9 @@ export function useActivity() {
       // Work finishing changes item counts, so the nav is refreshed once here
       // rather than every poll.
       if (!s.active && qc.getQueryData<ActivityStatus>(["activity"])?.active) {
-        qc.invalidateQueries({ queryKey: ["libraries"] });
+        for (const key of workFinishedKeys) {
+          qc.invalidateQueries({ queryKey: [key] });
+        }
       }
       return s;
     },

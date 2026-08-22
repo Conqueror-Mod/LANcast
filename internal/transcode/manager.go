@@ -32,8 +32,22 @@ type Manager struct {
 	// process; without a ceiling, a handful of clients can bring a home server
 	// to its knees and every stream stutters instead of one being refused.
 	MaxSessions int
-	// IdleTimeout reaps sessions nobody is reading from. A closed browser tab
-	// does not tell the server it has gone.
+	/*
+	 * IdleTimeout reaps sessions nobody is reading from. A closed browser tab
+	 * does not tell the server it has gone.
+	 *
+	 * It cannot tell a closed tab from a paused film, though, and at 90 seconds
+	 * it did not need to: pausing a progressive stream applies backpressure,
+	 * the session stops being read, and a minute and a half later ffmpeg was
+	 * killed underneath a viewer who was still sitting there. The client
+	 * recovers from that now, but recovering is a reload, and a reload is not
+	 * what pressing pause should cost.
+	 *
+	 * Ten minutes because a paused session is nearly free — ffmpeg is blocked
+	 * writing into a pipe nobody is draining, so it holds a process and a
+	 * session slot and burns no CPU. The slot is the real cost, and it is the
+	 * one MaxSessions bounds.
+	 */
 	IdleTimeout time.Duration
 
 	// binMu guards bin, which is no longer written only at construction: the
@@ -62,7 +76,7 @@ func NewManager(dir string, log *slog.Logger) *Manager {
 		root:        dir,
 		log:         log,
 		MaxSessions: 3,
-		IdleTimeout: 90 * time.Second,
+		IdleTimeout: 10 * time.Minute,
 		sessions:    map[string]*Session{},
 		stopped:     make(chan struct{}),
 		available:   []Encoder{Software},
@@ -255,12 +269,46 @@ type SessionInfo struct {
 	Error          string  `json:"error,omitempty"`
 }
 
-// Progressive starts a transcode streaming fragmented MP4 to the returned
-// reader. The caller must close it, which stops ffmpeg.
-func (m *Manager) Progressive(ctx context.Context, itemID int64, o Options) (io.ReadCloser, error) {
+/*
+ * Progressive starts a transcode streaming fragmented MP4 to the returned
+ * reader. The caller must close it, which stops ffmpeg.
+ *
+ * Superseding: a backstop, not a hot path.
+ *
+ * EnsureHLS reuses a session for the same item and offset; this has no
+ * equivalent, so every request starts a fresh ffmpeg.
+ *
+ * On the ordinary seek path that costs nothing, and it is worth being exact
+ * about why, because the obvious reading is wrong. Seeking a transcode
+ * re-requests the stream, but the client aborts the request it is replacing,
+ * the response body closes, and sessionReader.Close stops ffmpeg immediately.
+ * Measured in the running app: six sessions started across four seeks, one
+ * ffmpeg process alive at the end, and this function found nothing to stop on
+ * any of them.
+ *
+ * What it covers is the case where that teardown does not happen — two requests
+ * for the same item arriving together, neither yet aborted. That is not
+ * hypothetical: the server log has two starts on one item six milliseconds
+ * apart, which no sequence of seeks can produce. Both would then be live
+ * against a MaxSessions of 3, and duplicates of the film being watched are the
+ * worst possible thing to spend the ceiling on.
+ *
+ * So this makes "one progressive stream per viewer per item" a guarantee rather
+ * than something the client's abort behaviour happens to provide. Keyed on
+ * (owner, item) and not on item alone, because two people watching the same
+ * film at once is a thing a media server must do — superseding by item would
+ * have them killing each other's playback. One account re-requesting one film
+ * is a player replacing its own stream, which is the case worth collapsing.
+ */
+func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o Options) (io.ReadCloser, error) {
 	if !m.Available() {
 		return nil, ErrNotInstalled
 	}
+
+	// Before reserve, so replacing a stream cannot fail on a ceiling that the
+	// stream being replaced is what filled.
+	m.supersede(owner, itemID)
+
 	if err := m.reserve(); err != nil {
 		return nil, err
 	}
@@ -273,7 +321,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, o Options) (io.
 		m.release()
 		return nil, err
 	}
-	s.ID, s.ItemID = newID(), itemID
+	s.ID, s.ItemID, s.Owner = newID(), itemID, owner
 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
@@ -365,6 +413,37 @@ func (m *Manager) WaitForFile(ctx context.Context, s *Session, name string, time
 			return "", ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
+	}
+}
+
+/*
+ * supersede stops this owner's existing progressive session for this item.
+ *
+ * Only progressive: HLS is segment-addressed and already reuses its session by
+ * offset, so a second HLS request for the same item is the same player asking
+ * for the next segment, not a replacement.
+ *
+ * An owner of "" is not collapsed. That is the unconfigured loopback state
+ * where every request is anonymous, and treating those as one player would let
+ * a second viewer end the first one's film.
+ */
+func (m *Manager) supersede(owner string, itemID int64) {
+	if owner == "" {
+		return
+	}
+	m.mu.Lock()
+	var dead []*Session
+	for id, s := range m.sessions {
+		if s.Output == Progressive && s.ItemID == itemID && s.Owner == owner {
+			dead = append(dead, s)
+			delete(m.sessions, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, s := range dead {
+		m.log.Debug("superseding transcode", "session", s.ID, "item", itemID)
+		s.Stop()
 	}
 }
 
