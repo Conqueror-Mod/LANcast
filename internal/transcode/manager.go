@@ -273,22 +273,32 @@ type SessionInfo struct {
  * Progressive starts a transcode streaming fragmented MP4 to the returned
  * reader. The caller must close it, which stops ffmpeg.
  *
- * Superseding, and why it is keyed on the owner rather than the item.
+ * Superseding: a backstop, not a hot path.
  *
- * EnsureHLS reuses a session for the same item and offset; this had no
- * equivalent, so every request started a fresh ffmpeg. A progressive stream is
- * re-requested on every seek — that is how seeking a transcode works — and the
- * one it replaces only dies when the reaper notices. Seeking around one film
- * therefore stacked encodes of that same film: the log has three live sessions
- * on one 1080p HEVC title within two minutes, against a MaxSessions of 3. The
- * ceiling filled with duplicates of the thing being watched, and the machine
- * spent its CPU decoding the same file three times over.
+ * EnsureHLS reuses a session for the same item and offset; this has no
+ * equivalent, so every request starts a fresh ffmpeg.
  *
- * So a new stream supersedes the old one. Keyed on (owner, item) and not on
- * item alone, because two people watching the same film at once is a thing a
- * media server must do — superseding by item would have them killing each
- * other's playback on every seek. One account re-requesting one film is the
- * player replacing its own stream, which is exactly the case worth collapsing.
+ * On the ordinary seek path that costs nothing, and it is worth being exact
+ * about why, because the obvious reading is wrong. Seeking a transcode
+ * re-requests the stream, but the client aborts the request it is replacing,
+ * the response body closes, and sessionReader.Close stops ffmpeg immediately.
+ * Measured in the running app: six sessions started across four seeks, one
+ * ffmpeg process alive at the end, and this function found nothing to stop on
+ * any of them.
+ *
+ * What it covers is the case where that teardown does not happen — two requests
+ * for the same item arriving together, neither yet aborted. That is not
+ * hypothetical: the server log has two starts on one item six milliseconds
+ * apart, which no sequence of seeks can produce. Both would then be live
+ * against a MaxSessions of 3, and duplicates of the film being watched are the
+ * worst possible thing to spend the ceiling on.
+ *
+ * So this makes "one progressive stream per viewer per item" a guarantee rather
+ * than something the client's abort behaviour happens to provide. Keyed on
+ * (owner, item) and not on item alone, because two people watching the same
+ * film at once is a thing a media server must do — superseding by item would
+ * have them killing each other's playback. One account re-requesting one film
+ * is a player replacing its own stream, which is the case worth collapsing.
  */
 func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o Options) (io.ReadCloser, error) {
 	if !m.Available() {
