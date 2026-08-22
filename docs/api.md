@@ -472,12 +472,19 @@ A library is also scanned automatically when it is created, so this is for
 
 ### `POST /api/libraries/{id}/scan`
 
-Starts an asynchronous scan and returns `202` immediately. Returns `conflict`
-if a scan is already running for that library — scans are not queued.
+Starts an asynchronous scan and returns `202` immediately.
 
 ```json
 { "library_id": 1, "state": "running", "started_at": 1753228800 }
 ```
+
+If a scan is already running for that library the status is `409` and the body
+is **the running scan's progress, in the same shape as the `202`** — not the
+`{ "error": … }` envelope every other failure uses. That is deliberate and worth
+stating plainly, because a client parsing it as an error finds no code and no
+message: the useful answer to "start a scan" when one is already going is *how
+far that one has got*, and this endpoint gives it. Branch on the status, not on
+the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, everything else video — and
