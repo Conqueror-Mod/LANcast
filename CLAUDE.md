@@ -92,6 +92,25 @@ require a live process makes dozens of codec cases untestable in milliseconds.
 The same split is why probing runs in its own worker rather than inside
 enrichment.
 
+**A write that changes what a list holds must invalidate that list.** This is
+the most-repeated bug in the project and it is always quiet: the request
+succeeds, the server is right, and only the picture is stale — so nothing fails
+and nobody notices until somebody says "it is still showing X".
+
+It has shipped four times. A deleted film stayed on screen for a release
+because the browse grid's key was `["items", "infinite", …]` and every
+`invalidateQueries(["items"])` in the file matched by prefix and missed it. A
+finished scan refreshed the counts and not the grid the scan had just changed.
+Marking something watched cleared its progress and left the bar drawn. The
+sharing toggle read its own value out of a list that excludes the caller, so it
+answered `undefined` for ever.
+
+Two habits kill it. When adding a mutation, ask what a person could be *looking
+at* that this changes — not what it writes. And do not let a query key be a
+sibling of the thing callers invalidate: `["items", "infinite"]` is reached by
+`["items"]`, `["items-infinite"]` is not, and the difference is invisible at
+every call site.
+
 **Progressive fMP4 is the default output, and hls.js is deliberately not
 vendored.** The server produces HLS too, but browsers cannot play it without a
 ~300KB third-party library that this build will not ship unaudited — that is a
@@ -134,17 +153,24 @@ sessions — everything else is repeatable.
 ## Before claiming done
 
 ```bash
-go test ./...          # ~757 test funcs
+go test ./...          # ~1,270 test funcs
 go build ./...
-npm --prefix web test  # ~38 client tests, vitest + jsdom
+npm --prefix web test  # ~317 client tests, vitest + jsdom
 ```
 
 All three must pass. The client suite is newer than the rest of this file: it
 exists because the picture-in-picture work needed to know whether a media
 element survives being moved between documents, and it has since caught things
 no Go test could — a settings shell whose panes were not wired to its buttons,
-and a queue whose shuffle could not be told apart from a broken one by reading
-it. `npm run build` in `web/` type-checks as a side effect. If a test fails, say so with the output — do not describe
+a queue whose shuffle could not be told apart from a broken one by reading it,
+and a context menu whose two items emptied the same shelf while recording
+opposite things about whether you had watched it.
+
+**It cannot see layout.** jsdom performs none, so anything about position,
+size or overflow is invisible to it: a menu that opened half off the screen
+passed every assertion, because they were all about which items it held. What
+the suite proves is wiring and behaviour. Looking at the thing is still the only
+way to know it is on screen. `npm run build` in `web/` type-checks as a side effect. If a test fails, say so with the output — do not describe
 partial work as finished.
 
 Narrowing while iterating:

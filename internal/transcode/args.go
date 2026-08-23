@@ -326,9 +326,39 @@ func Args(o Options) []string {
 	 * nothing, and pulling hardware init into a job that never touches a pixel
 	 * is cost with no work to pay for it.
 	 */
-	if accel := o.Encoder.decodeAccel(); accel != "" &&
-		!o.Decision.AudioOnly && o.Decision.VideoAction != "copy" {
+	/*
+	 * Whether the decoded frames stay on the card.
+	 *
+	 * They can only stay there if nothing downstream needs to touch a pixel in
+	 * system memory, and two things do: the tone map (zscale and tonemap are
+	 * CPU filters with no CUDA equivalent in stock ffmpeg, which ADR 0033
+	 * already records) and a resolution cap (`scale` likewise; `scale_cuda`
+	 * exists but takes different arguments and does not accept the `-2` this
+	 * uses to keep widths even). Either of those, and the frames come back.
+	 *
+	 * Worth the condition, because the download is not free and on a 10-bit
+	 * source it is the dominant cost. Measured over sixty seconds of a 1080p
+	 * HEVC Main 10 file, encoding on NVENC either way:
+	 *
+	 *	software decode        7.11 cores, 10.5x realtime
+	 *	cuda, frames copied    2.66 cores,  8.2x realtime
+	 *	cuda, frames stay      0.67 cores, 18.2x realtime
+	 *
+	 * The middle row is the one that shipped, and it is *slower in wall time
+	 * than decoding in software* — NVDEC hands back p010, every frame is copied
+	 * off the card, and a CPU swscale converts it to 8-bit for the encoder. The
+	 * copy and the conversion serialise what the card had already finished.
+	 */
+	accel := o.Encoder.decodeAccel()
+	decoding := !o.Decision.AudioOnly && o.Decision.VideoAction != "copy"
+	framesOnGPU := decoding && accel == "cuda" &&
+		!o.Decision.TonemapHDR && o.Decision.TargetHeight == 0
+
+	if accel != "" && decoding {
 		a = append(a, "-hwaccel", accel)
+		if framesOnGPU {
+			a = append(a, "-hwaccel_output_format", "cuda")
+		}
 	}
 
 	if o.Live {
@@ -378,7 +408,7 @@ func Args(o Options) []string {
 		// x264 wants -crf, NVENC -cq, QSV -global_quality, AMF -qp_i. Same
 		// intent, four spellings, and each hardware encoder needs profile and
 		// level stated or it defaults to something browsers refuse.
-		a = append(a, o.Encoder.EncoderArgs(o.CRF)...)
+		a = append(a, o.Encoder.EncoderArgs(o.CRF, framesOnGPU)...)
 
 		/*
 		 * The video filter chain: one -vf, built from every filter this job
@@ -393,6 +423,17 @@ func Args(o Options) []string {
 		 * after the downscale is the same conversion on fewer pixels.
 		 */
 		var filters []string
+
+		/*
+		 * The 10-bit to 8-bit conversion, done where the frames already are.
+		 *
+		 * This is what -pix_fmt yuv420p does when the frames are in system
+		 * memory, and it is the reason they no longer have to be. Only reached
+		 * when nothing else in this chain needs a CPU filter — see framesOnGPU.
+		 */
+		if framesOnGPU {
+			filters = append(filters, "scale_cuda=format=yuv420p")
+		}
 
 		// The quality ceiling, if the decision carries one.
 		//
