@@ -168,6 +168,8 @@ interface PlaybackState {
   playNextUp: (id: number) => void;
   /** Queue an item behind anything already queued by hand. */
   addToQueue: (id: number) => void;
+  /** Drop one entry from the hand-queued lane, by position. */
+  removeFromUpNext: (at: number) => void;
   playPrev: () => void;
   /** `at` is the row's position, which is the only way to tell two copies of
    *  the same track apart in a playlist. */
@@ -616,6 +618,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     },
     [itemID],
   );
+  /*
+   * Take something back off the lane.
+   *
+   * By position, not by id: the lane can hold the same track twice, on purpose
+   * — queueing a song again is a thing people do — and removing "the one with
+   * that id" would take the wrong copy. The same reasoning ADR 0030 forced on
+   * playlists.
+   *
+   * Only the lane. Removing from `queue` itself would change its contents and
+   * so rebuild the shuffled order, reordering everything else as a side effect
+   * of dropping one row — the same reason inserting into it was rejected.
+   */
+  const removeFromUpNext = useCallback((at: number) => {
+    setUpNext((u) => u.filter((_, i) => i !== at));
+  }, []);
+
   const playNextUp = useCallback((id: number) => enqueue(id, "next"), [enqueue]);
   const addToQueue = useCallback((id: number) => enqueue(id, "last"), [enqueue]);
 
@@ -1367,6 +1385,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     upNext,
     playNextUp,
     addToQueue,
+    removeFromUpNext,
     playPrev,
     playFromQueue,
     prefs,

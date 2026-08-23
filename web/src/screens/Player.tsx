@@ -518,6 +518,12 @@ export function Player() {
                         // what is coming next.
                         ids={pb.playOrder}
                         currentID={pb.itemID}
+                        // Queued by hand, which is not in playOrder and never
+                        // will be — it is a lane beside the queue. Without this
+                        // the panel showed the queue a queued track was not
+                        // part of, so nothing on screen said it had worked.
+                        upNext={pb.upNext}
+                        onDrop={pb.removeFromUpNext}
                         onPick={(id, at) => {
                           pb.playFromQueue(id, at);
                           setQueueOpen(false);

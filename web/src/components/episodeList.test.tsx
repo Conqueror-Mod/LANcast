@@ -13,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { EpisodeList } from "./EpisodeList";
 import type { Item } from "@/api/types";
 
@@ -58,13 +59,15 @@ function render(episodes: Item[]) {
     root.render(
       <QueryClientProvider client={qc}>
         <FocusProvider>
-          <MemoryRouter>
-            <EpisodeList
-              episodes={episodes}
-              queue={episodes.map((e) => e.id)}
-              parentID={99}
-            />
-          </MemoryRouter>
+          <PlaybackProvider>
+            <MemoryRouter>
+              <EpisodeList
+                episodes={episodes}
+                queue={episodes.map((e) => e.id)}
+                parentID={99}
+              />
+            </MemoryRouter>
+          </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
     );

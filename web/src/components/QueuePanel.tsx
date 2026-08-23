@@ -14,10 +14,24 @@ export function QueuePanel({
   ids,
   currentID,
   onPick,
+  upNext = [],
+  onDrop,
 }: {
   ids: number[];
   currentID: number;
   onPick: (id: number, at: number) => void;
+  /**
+   * Items queued by hand, which play before the queue resumes.
+   *
+   * Shown in a section of their own because they are not in `ids` and never
+   * will be — they are a lane beside the queue, not an insertion into it. Until
+   * this existed, queueing something put it somewhere invisible: the panel
+   * showed the queue it was not part of, so the only evidence it had worked was
+   * the track eventually playing.
+   */
+  upNext?: number[];
+  /** Drops one entry from that lane, by position. */
+  onDrop?: (at: number) => void;
 }) {
   /*
    * Open the panel on the track that is playing, not on the top of the list.
@@ -41,6 +55,29 @@ export function QueuePanel({
 
   return (
     <div className="queue" role="menu" aria-label="Queue">
+      {upNext.length > 0 && (
+        <>
+          <div className="queue__head">
+            <span className="section-label">Up next</span>
+            <span className="queue__count">{upNext.length}</span>
+          </div>
+          <div className="queue__list">
+            {upNext.map((id, i) => (
+              <QueueRow
+                // Position, not id: the lane can hold the same track twice on
+                // purpose, and keying on id would collapse the pair into one
+                // row — silently shortening the list somebody is reading.
+                key={`${id}@${i}`}
+                id={id}
+                position={i + 1}
+                current={false}
+                onPick={() => onPick(id, -1)}
+                onDrop={onDrop && (() => onDrop(i))}
+              />
+            ))}
+          </div>
+        </>
+      )}
       <div className="queue__head">
         <span className="section-label">Queue</span>
         <span className="queue__count">{ids.length}</span>
@@ -70,15 +107,24 @@ function QueueRow({
   current,
   rowRef,
   onPick,
+  onDrop,
 }: {
   id: number;
   position: number;
   current: boolean;
   rowRef?: React.RefObject<HTMLButtonElement>;
   onPick: () => void;
+  /** Present only on the hand-queued lane, where taking one back off is safe. */
+  onDrop?: () => void;
 }) {
   const { data: item } = useItem(id);
-  return (
+  /*
+   * The drop control sits beside the row rather than inside it, for the reason
+   * TrackList records: a button cannot contain a button, and the browser's
+   * recovery is to drop one — so a × inside the jump target would either not
+   * work or would jump to the track it was meant to remove.
+   */
+  const row = (
     <button
       role="menuitem"
       ref={rowRef}
@@ -95,6 +141,21 @@ function QueueRow({
       </span>
       {item?.artist && <span className="queue__sub">{item.artist}</span>}
     </button>
+  );
+
+  if (!onDrop) return row;
+  return (
+    <div className="queue__line">
+      {row}
+      <button
+        className="queue__drop"
+        onClick={onDrop}
+        aria-label={`Remove ${item?.title ?? `item ${position}`} from up next`}
+        title="Remove from up next"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 

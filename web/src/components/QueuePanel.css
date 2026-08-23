@@ -99,3 +99,43 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A lane row and its drop control, side by side.
+
+   The × is a sibling of the jump target rather than inside it: a button cannot
+   contain a button, and the browser's recovery from that is to drop one — so a
+   nested control would either not work or would jump to the track it was meant
+   to remove. Same shape as a track row's controls, deliberately. */
+.queue__line {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.queue__line .queue__row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.queue__drop {
+  flex: 0 0 auto;
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0 10px;
+  font: inherit;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+/* Muted at rest, and only under the pointer does it read as removal — the
+   discipline .set-btn--danger already sets on this client. */
+.queue__drop:hover,
+.queue__drop:focus-visible {
+  background: rgba(166, 88, 76, 0.16);
+  color: #e79080;
+  outline: none;
+}
