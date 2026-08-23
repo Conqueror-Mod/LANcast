@@ -156,6 +156,9 @@ type Server struct {
 	// it describes this process, not the pairing.
 	rosterMu sync.Mutex
 	rosterAt map[string]time.Time
+	// goodAddr is the address that last answered for each peer, so a host with
+	// several advertised interfaces is not re-discovered on every call.
+	goodAddr map[string]string
 	// crashes records recovered panics as reports beside the database. Created
 	// here rather than injected: it needs only the data directory, and a
 	// dependency the caller may forget to wire is a crash reporter that is
@@ -191,6 +194,7 @@ func New(d Deps) *Server {
 		listenAddr: d.ListenAddr,
 		presence:   presence.New(),
 		rosterAt:   map[string]time.Time{},
+		goodAddr:   map[string]string{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,

@@ -263,10 +263,15 @@ function PeerPersonRow({
       )}
 
       <label className="people__grant">
+        {/*
+         * Not disabled while the write is in flight. The cache is corrected
+         * optimistically, so the box already shows the new answer; disabling it
+         * would only make a decision somebody has already made feel like it had
+         * not registered.
+         */}
         <input
           type="checkbox"
           checked={person.granted}
-          disabled={grant.isPending}
           onChange={(e) =>
             grant.mutate({
               fingerprint,

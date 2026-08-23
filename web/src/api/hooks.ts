@@ -1924,14 +1924,24 @@ export function usePeerPresence() {
 }
 
 /*
- * Granting is a decision about yourself, so the switch answers immediately and
- * the presence list is refetched behind it.
+ * Granting is a decision about yourself, so the switch answers immediately.
  *
- * Both keys, deliberately. The grant lives in `peer-presence`, and a person
- * reading Settings → Account wants the count of who they share with to agree
- * with what they just clicked — a write that changes what a list holds must
- * invalidate that list, and "what a person could be looking at" is the question,
- * not "what it writes".
+ * **Optimistically, and that is not a polish detail.** The write itself takes
+ * about ten milliseconds — it sets one local row. But the list it changes is
+ * built by calling every paired server, which costs two seconds when they
+ * answer and six when one of them does not. Invalidating and waiting therefore
+ * put a round trip to *somebody else's machine* between a person and their own
+ * consent, and the tick sat unmoved for long enough to be clicked again.
+ *
+ * A grant is local truth the moment it is written, so the cache is corrected
+ * here and the refetch happens behind it. `onError` puts the previous value
+ * back: the one thing worse than a slow switch is one that shows a permission
+ * that was never granted.
+ *
+ * Both keys, deliberately. A person reading Settings → Account wants the count
+ * of who they share with to agree with what they just clicked — a write that
+ * changes what a list holds must invalidate that list, and the question is what
+ * somebody could be *looking at*, not what the write touched.
  */
 export function useGrantPresence() {
   const qc = useQueryClient();
@@ -1942,7 +1952,34 @@ export function useGrantPresence() {
         "PUT",
         { on: v.on },
       ),
-    onSuccess: () => {
+    onMutate: async (v) => {
+      // Stop an in-flight read from landing after this and undoing it.
+      await qc.cancelQueries({ queryKey: ["peer-presence"] });
+      const previous = qc.getQueryData<{ peers: PeerPresence[] }>([
+        "peer-presence",
+      ]);
+      if (previous) {
+        qc.setQueryData<{ peers: PeerPresence[] }>(["peer-presence"], {
+          peers: previous.peers.map((peer) =>
+            peer.fingerprint !== v.fingerprint
+              ? peer
+              : {
+                  ...peer,
+                  people: peer.people.map((person) =>
+                    person.id === v.person
+                      ? { ...person, granted: v.on }
+                      : person,
+                  ),
+                },
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(["peer-presence"], ctx.previous);
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["peer-presence"] });
       void qc.invalidateQueries({ queryKey: ["profile"] });
     },

@@ -237,6 +237,69 @@ describe("people on paired servers", () => {
     expect(puts[0].body).toEqual({ on: true });
   });
 
+  /*
+   * The switch answers now, not when another server does.
+   *
+   * Reported from use as "a lot of initial lag" on the tick box, and the
+   * measurement was unambiguous: the PUT that records the decision takes about
+   * ten milliseconds, while the list it invalidates is built by calling every
+   * paired server — two seconds when they answer, six when one does not. So a
+   * person clicking their own consent waited on somebody else's machine, and
+   * the box sat unmoved long enough to be clicked a second time.
+   *
+   * This asserts the tick flips before any refetch could possibly have
+   * returned. The server here never answers the reload at all, which is the
+   * strongest form of the case: even then, the switch must show the decision.
+   */
+  it("shows your decision without waiting for a refetch", async () => {
+    let reloads = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "PUT") return new Response(null, { status: 204 });
+        if (url.includes("/api/people/peers")) {
+          reloads += 1;
+          // The first read answers; every later one hangs, standing in for a
+          // peer that has been switched off.
+          if (reloads > 1) return new Promise<Response>(() => {});
+          return new Response(
+            JSON.stringify({
+              peers: onePeer([
+                {
+                  id: "g-1",
+                  name: "Georgia",
+                  granted: false,
+                  shares: false,
+                },
+              ]),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ people: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    await render();
+
+    const box = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(box.checked).toBe(false);
+
+    await act(async () => {
+      box.click();
+    });
+
+    const after = host.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )!;
+    expect(after.checked).toBe(true);
+    // And it must stay usable: disabling it while the write is in flight makes
+    // a decision somebody already made feel like it did not register.
+    expect(after.disabled).toBe(false);
+  });
+
   // Nothing to show is not the same as a section saying there is nothing. A
   // server with no peers should not grow an empty heading.
   it("stays out of the way when there are no peers", async () => {

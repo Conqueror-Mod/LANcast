@@ -320,11 +320,17 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	// One budget for the whole attempt, not one per address: a peer with three
+	// recorded addresses that has been switched off should cost the page a
+	// short wait, not three of them. Everything asked over this connection is a
+	// question about *now*, and a slow answer to that is not a late answer but
+	// a wrong one — so failing quickly and saying "not answering" beats
+	// succeeding eventually.
+	ctx, cancel := context.WithTimeout(ctx, peerDeadline)
 	defer cancel()
 
 	var lastErr error
-	for _, addr := range p.Addrs {
+	for _, addr := range s.addressOrder(p) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+path, nil)
 		if err != nil {
 			lastErr = err
@@ -346,6 +352,11 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 			lastErr = err
 			continue
 		}
+		// Remember what answered, so the next call starts here.
+		s.rosterMu.Lock()
+		s.goodAddr[p.Fingerprint] = addr
+		s.rosterMu.Unlock()
+
 		// Best effort: reaching a peer must not fail over bookkeeping.
 		_ = s.st.MarkPeerSeen(context.WithoutCancel(ctx), p.Fingerprint, time.Now())
 		return nil
@@ -362,6 +373,42 @@ func (s *Server) askPeerPresence(ctx context.Context, p store.Peer, asAs string)
 	}
 	err := s.callPeer(ctx, p, "/api/federation/presence?person="+url.QueryEscape(asAs), &body)
 	return body.People, err
+}
+
+/*
+ * addressOrder puts the address that last answered first.
+ *
+ * ADR 0044 §5 makes the address a hint and the fingerprint the identity, which
+ * means the *order* of the hints carries no authority — and trying them in the
+ * order they arrived turns out to be expensive in the ordinary case rather than
+ * a rare one. A machine with several adapters advertises all of them: measured
+ * here, a host with a VPN interface, a LAN interface and a virtual-switch
+ * interface answers in 9ms on one of them and **hangs for two seconds** on each
+ * of the others before failing. The invite lists them in interface order, so
+ * every single call paid two seconds to learn what the previous call already
+ * knew.
+ *
+ * Kept in memory rather than written back to `peer_address`, deliberately.
+ * Which address works is a fact about this network right now — a laptop that
+ * moves between home and a VPN would otherwise have a stale preference
+ * persisted about it, and the recorded hints would drift away from what the
+ * peer actually said. Losing this on restart costs one slow call.
+ */
+func (s *Server) addressOrder(p store.Peer) []string {
+	s.rosterMu.Lock()
+	good := s.goodAddr[p.Fingerprint]
+	s.rosterMu.Unlock()
+	if good == "" {
+		return p.Addrs
+	}
+	out := make([]string, 0, len(p.Addrs))
+	out = append(out, good)
+	for _, a := range p.Addrs {
+		if a != good {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 /*
@@ -469,6 +516,9 @@ func presenceTitle(it *store.Item) string {
 		return ""
 	}
 }
+
+// peerDeadline caps one peer's whole turn — every address, both calls.
+const peerDeadline = 3 * time.Second
 
 // rosterInterval is how often a peer's roster is re-fetched while it is
 // already paired. Rosters change when somebody opts in or out, which is rare
