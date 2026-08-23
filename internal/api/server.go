@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
+	"time"
 
 	"lancast/internal/artwork"
 	"lancast/internal/auth"
@@ -21,6 +23,7 @@ import (
 	"lancast/internal/identity"
 	"lancast/internal/meta"
 	"lancast/internal/photo"
+	"lancast/internal/presence"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -146,6 +149,13 @@ type Server struct {
 	lanBound      bool
 	restartWidens bool
 	throttle      *auth.Throttle
+	// presence is who is watching what, right now. In memory and never
+	// persisted, which is ADR 0045 §4 and not an optimisation.
+	presence *presence.Tracker
+	// rosterAt is when each peer's roster was last fetched. In memory because
+	// it describes this process, not the pairing.
+	rosterMu sync.Mutex
+	rosterAt map[string]time.Time
 	// crashes records recovered panics as reports beside the database. Created
 	// here rather than injected: it needs only the data directory, and a
 	// dependency the caller may forget to wire is a crash reporter that is
@@ -179,6 +189,8 @@ func New(d Deps) *Server {
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
 		listenAddr: d.ListenAddr,
+		presence:   presence.New(),
+		rosterAt:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
@@ -270,6 +282,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/profile/peer-visibility", s.putPeerVisibility)
 
 	mux.HandleFunc("GET /api/people", s.listPeople)
+	// Peers and presence are read by any member, because granting somebody
+	// presence is one account's decision about its own viewing and never
+	// touches a peer route (ADR 0045 §6). Pairing stays admin-gated above.
+	mux.HandleFunc("GET /api/people/peers", s.peerPresence)
+	mux.HandleFunc("PUT /api/people/peers/{fingerprint}/{person}/presence", s.putPresenceGrant)
+	mux.HandleFunc("DELETE /api/presence", s.deletePresence)
+	// Answered over a pinned mutual-TLS connection rather than a session: the
+	// caller is a server, not a browser. See federationPresence.
+	mux.HandleFunc("GET /api/federation/presence", s.federationPresence)
+	mux.HandleFunc("GET /api/federation/roster", s.federationRoster)
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)

@@ -164,3 +164,103 @@
 .people__foot a:hover {
   color: var(--gold-bright);
 }
+
+/* Paired servers (ADR 0045). Divided from the local list by a rule rather than
+   a card: these are the same kind of row in a different place, not a different
+   kind of object. No gold anywhere here — gold means where you are and nothing
+   else (docs/design.md), and presence is emphatically another kind of state. */
+.people__peers {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1.5rem;
+}
+
+.people__peers-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 1rem;
+}
+
+.people__peer {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+  background: var(--surface);
+}
+
+.people__peer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.people__peer-name {
+  font-weight: 600;
+}
+
+/* An unreachable server is ordinary, so it is dim rather than red. Styling it
+   as an error trains people to ignore the row it appears in. */
+.people__peer-state {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.people__peer-state--up {
+  color: var(--text);
+}
+
+.people__peer-empty {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.people__peer-person {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+/* The name and its status share a column that is allowed to shrink, so a long
+   title truncates instead of pushing the switch off the card. */
+.people__peer-who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.people__peer-person-name {
+  font-weight: 500;
+}
+
+.people__peer-status {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.people__grant {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.people__join {
+  flex-shrink: 0;
+}

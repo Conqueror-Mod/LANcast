@@ -786,3 +786,34 @@ export interface MediaToolsState {
   /** Absent where there is no pinned build for the platform. */
   available_source?: MediaToolsSource;
 }
+
+/*
+ * Somebody on a paired server, and what ADR 0045 §3 permits to be said of them.
+ *
+ * `shares` is not `online` and not `watching`. It is whether *they* have granted
+ * *you* presence at all, and it is separate because "has not shared with you",
+ * "offline" and "online and idle" are three different statements. The People
+ * page is required to tell them apart, which it can only do if the type keeps
+ * them apart first — collapsing them into one optional string is how a choice
+ * gets rendered as an absence.
+ */
+export interface PeerPerson {
+  id: string;
+  name: string;
+  /** Whether you have granted them your presence. Your decision, not theirs. */
+  granted: boolean;
+  /** Whether they have granted you theirs. */
+  shares: boolean;
+  online?: boolean;
+  /** The work, by title. Never an episode, never a position. */
+  watching?: string;
+}
+
+export interface PeerPresence {
+  fingerprint: string;
+  name: string;
+  state: string;
+  /** Whether this server answered just now. Distinct from anybody being online. */
+  reachable: boolean;
+  people: PeerPerson[];
+}

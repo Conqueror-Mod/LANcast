@@ -32,6 +32,7 @@ import (
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
+	"lancast/internal/peer"
 	"lancast/internal/photo"
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
@@ -140,7 +141,7 @@ func main() {
 
 	// One server at a time. A second instance says so and exits rather than
 	// racing the first for the port and the database.
-	release, held, err := singleton.Acquire(singleton.Server)
+	release, held, err := singleton.Acquire(singleton.Server + instanceSuffix())
 	if err == nil && !held {
 		logAlreadyRunning(log)
 		os.Exit(1)
@@ -657,6 +658,23 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}
 		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 		log.Info("TLS enabled", "certificate", mode)
+
+		// Peers arrive on this same port and are told apart by an ALPN marker
+		// in the ClientHello, which no browser sends (internal/peer). They are
+		// answered with the identity certificate and are required to present
+		// one of their own; browsers keep the configuration above untouched and
+		// are never prompted for a certificate.
+		//
+		// Federation therefore exists only where TLS does, which is the correct
+		// coupling rather than a limitation: a loopback-only server is
+		// unreachable by another machine by definition, and mutual
+		// authentication has nothing to authenticate over cleartext.
+		if _, err := peer.Attach(tlsConfig, ident); err != nil {
+			// Not fatal. A server that cannot federate is a feature being
+			// unavailable; a server that will not start is the app being
+			// unavailable.
+			log.Warn("federation disabled: peer certificate unavailable", "error", err)
+		}
 	}
 
 	listener, err := net.Listen("tcp", listenAddr)

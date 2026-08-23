@@ -48,6 +48,7 @@ import type {
   SubtitleTrack,
   Trailer,
   Trending,
+  PeerPresence,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -1895,6 +1896,55 @@ export function useSetSharing() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
+  });
+}
+
+/*
+ * Presence on paired servers (ADR 0045).
+ *
+ * Polled rather than cached, because presence is a claim about *now* and a
+ * stale one is not a late answer but a wrong one. Ten seconds is chosen against
+ * the server's own twenty-second watching timeout: long enough not to hammer
+ * two servers over a WAN, short enough that a film starting or stopping shows
+ * up before somebody wonders whether the page is broken.
+ *
+ * The key is `peer-presence` and not a child of `["people"]`. That is the
+ * project's most-repeated bug in its most avoidable form: a sibling key gets
+ * swept by every prefix invalidation aimed at the other thing, and the two
+ * lists answer different questions from different servers.
+ */
+export function usePeerPresence() {
+  return useQuery({
+    queryKey: ["peer-presence"],
+    queryFn: ({ signal }) => apiGet<{ peers: PeerPresence[] }>("/api/people/peers", signal),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+/*
+ * Granting is a decision about yourself, so the switch answers immediately and
+ * the presence list is refetched behind it.
+ *
+ * Both keys, deliberately. The grant lives in `peer-presence`, and a person
+ * reading Settings → Account wants the count of who they share with to agree
+ * with what they just clicked — a write that changes what a list holds must
+ * invalidate that list, and "what a person could be looking at" is the question,
+ * not "what it writes".
+ */
+export function useGrantPresence() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { fingerprint: string; person: string; on: boolean }) =>
+      apiSend(
+        `/api/people/peers/${encodeURIComponent(v.fingerprint)}/${encodeURIComponent(v.person)}/presence`,
+        "PUT",
+        { on: v.on },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["peer-presence"] });
+      void qc.invalidateQueries({ queryKey: ["profile"] });
     },
   });
 }
