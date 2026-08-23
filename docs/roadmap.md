@@ -249,7 +249,7 @@ Status: **planned** · **next** · *unplanned*
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
-| Theme music subsystem | specced | Behavior in design.md; blocked on M2 |
+| Theme music subsystem | specced · **back burner** | Behavior in design.md; blocked on OST identification, which is unplanned. Deliberately parked rather than waiting: nothing else is queued behind it |
 | Music player UI | **built** | Album view with a numbered track list, square sleeves, an audio mode in the player, and a docked mini-player so leaving the player no longer stops the record ([plan](music-client-plan.md)). Playback moved above the router to make that possible — the media element used to be a child of the `/watch` route, and a route owns its DOM |
 | Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
 
@@ -404,6 +404,27 @@ group is not priority.
   because the keyboard model came first (ADR 0004): a pointer-only client would
   have needed a rewrite, and this one needed a stylesheet.
 
+- **Homepage hero as a recommendation** — a setting for what the spotlight
+  shows. Today `pickHero` in [Home.tsx](../web/src/screens/Home.tsx) is a fixed
+  rule: the first resumable item carrying fanart, else the first recently added,
+  music and pictures excluded. Resume-wins is right for the common case and
+  wrong for the one actually complained about — a library nobody is mid-way
+  through, where the hero becomes a permanent monument to the last thing
+  watched. Four modes: continue watching (today), recently added, recommended,
+  and one item pinned by hand. **Per device**, in `localStorage` beside
+  `bigscreen`, `tileSize` and `spoilers`, not a server setting: the hero is what
+  one person sees on one screen, and the reasoning under "Bigscreen mode" above
+  applies unchanged. **Recommended is the half that needs designing**, because
+  LANcast has no recommender and must not grow one that phones home. The
+  material is all already local — genre, decade and content rating on the item,
+  `playback_state` for what got finished rather than started, and the private
+  per-user ratings from [ADR 0035](adr/0035-who-may-see-whose-viewing.md). The
+  honest first version is "something unwatched, from a genre you finish" and
+  should be named as that rather than as an engine. Whatever the mode, **the
+  fanart test still gates it**: a hero with no backdrop is a grey slab, so a mode
+  with no qualifying candidate falls back to the next mode rather than rendering
+  empty.
+
 ### Libraries and media types
 
 - ~~**Playlists, and importing `.m3u`**~~ — **built** in v0.6.9
@@ -511,8 +532,77 @@ group is not priority.
   left alone.
 
   **Still not built:** hardware tuners (HDHomeRun and friends — no device to
-  build against), and recording, which needs somewhere to put the files and a
-  decision about what a recording *is* once it lands in a library.
+  build against), and recording. **Recording is on the back burner** — it is the
+  piece that turns a channel list into something you own, and it is also the one
+  that needs somewhere to put the files and a decision about what a recording
+  *is* once it lands in a library, which is a bigger question than the feature
+  looks.
+
+- **Installed games as a library — Steam and Epic** — captured, and the first
+  backlog item that **breaks the model rather than extending it**, so it needs an
+  ADR before it needs a design.
+  [ADR 0002](adr/0002-one-wide-media-item-table.md) claims a new media type is a
+  new `kind` value and no migration, and that claim has now survived music,
+  pictures and photos. It does **not** survive this one, and the reason is not
+  the schema — it is *server owns truth, clients are thin*. Every kind so far is
+  a file on the server, which the server can read, probe, transcode and stream to
+  anything on the LAN. **A game is installed on the client's machine**, cannot be
+  streamed, and is unlaunchable from every other device in the house. Put it in
+  `media_item` and every listing starts lying: it surfaces in search, in Recently
+  Added, and on a phone that can never run it. The alternative is a machine
+  identity on the row plus an exclusion in every listing that already exists —
+  which is precisely the six-nullable-columns argument ADR 0002 used to keep
+  **channels** out of `media_item`. Channels are the precedent, and they got
+  their own table.
+
+  The mechanics are the easy half and cost nothing in principle: Steam is
+  `libraryfolders.vdf` plus `appmanifest_*.acf` under `steamapps`, Epic is a
+  folder of JSON manifests — both local file reads, **no API key and no
+  network**, so *no phone-home* holds without an argument. Launching is a URI
+  handler (`steam://rungameid/…`, `com.epicgames.launcher://apps/…`). Artwork is
+  the one part that wants a provider, and providers are the thing this codebase
+  is built out of, so that part fits.
+
+  **The scope question is what the ADR must answer first:** is LANcast a media
+  server that also launches games, or is this a big-picture front end that
+  belongs behind a plugin? The plugin runtime exists and a games source is a
+  plausible first genuinely third-party plugin — except that a deny-by-default
+  WASM sandbox ([ADR 0020](adr/0020-plugin-isolation-boundary.md)) **cannot
+  launch a local executable**, because launching local executables is the exact
+  capability it was built to refuse. Granting it a "run this URI" capability
+  reopens that door for every plugin that follows. That tension is the decision,
+  and nothing should be built until it is made.
+
+- **Lyrics, and the rest of music.** [probe](../internal/probe/probe.go) throws
+  the `LYRICS` tag away on purpose — a multi-kilobyte blob has no business in a
+  struct that answers "can this client play this file", and that stays true. So
+  lyrics are a **separate read**, not a probe field: embedded `USLT`/`LYRICS`
+  from the tags, and `.lrc` sidecars beside the track. **Sidecar first**, exactly
+  as subtitles resolve, and for the same reason — the sidecar is the one a person
+  can fix. It is also the only one of the two that carries **timestamps**, which
+  is the whole feature: unsynced lyrics are a text file, synced lyrics follow the
+  song. No provider and no network for a first version; everything needed is
+  already on disk. Alongside it, the music player still owes **gapless and
+  crossfade** — a live album with a gap between tracks is a broken record, and
+  that is a decoder-scheduling problem in the client rather than anything the
+  server can fix.
+- **Photos need more than a grid — starting with people.** Face grouping is the
+  feature Google Photos used to justify reading every family album ever uploaded,
+  which makes doing it **entirely on the box** the sharpest available statement
+  of the difference. The model and the worker are the large part; the **naming
+  UI is the actual product**, because a cluster of unnamed faces is a curiosity
+  and a named one is how you find a photo. It follows the existing worker shape
+  (scan → enrich → probe) and must be re-runnable, with the same rule the rest of
+  the project holds: **a name a person typed is an edit and is locked**, and a
+  re-cluster may not overwrite it.
+
+  The smaller photo gaps are worth naming while we are here.
+  [exif.go](../internal/photo/exif.go) reads **two tags** — orientation and
+  capture time — by deliberate refusal of a general EXIF dependency. That refusal
+  was about scope rather than privacy, so it is revisitable, but it should be
+  revisited *consciously*: a places/map view needs GPS parsing, and GPS is the
+  one EXIF field that is a privacy decision rather than a parsing chore. Also
+  unbuilt: date-grouped albums, duplicate detection, and RAW.
 
 ### Metadata, ratings and discovery
 
@@ -607,6 +697,50 @@ group is not priority.
   because two admins demoting each other at the same moment is a race a
   handler check loses — and the prize for losing it is a server nobody can
   administer without `reset-auth` on the machine itself.
+
+- **Managed profiles with a content-rating ceiling** — approved, and mostly
+  assembly: [ADR 0015](adr/0015-multi-user-accounts.md) already gives accounts
+  and roles, and `content_rating` already flows through
+  [items.go](../internal/api/items.go). What matters is *where it is enforced*.
+  **Server-side, in the queries and in playback authorisation** — a client-side
+  hide is a suggestion, and this API serves files; an account that can be talked
+  into a stream by a hand-written request has no ceiling at all. Library
+  visibility belongs in the same place.
+
+  It also needs one thing said out loud so it does not read as a contradiction of
+  [ADR 0035](adr/0035-who-may-see-whose-viewing.md), which holds that a switch
+  somebody else can flip is not consent. **This one is deliberately the
+  opposite**: a rating ceiling is set *for* an account by an administrator and
+  cannot be cleared by the account itself, because a limit you can lift is not a
+  limit. The distinction is that ADR 0035 governs what others learn about you and
+  this governs what a household allows — and the two rules must not be
+  generalised into each other.
+- **A local Wrapped.** Everything Spotify computes about you in a datacentre,
+  computed on your own machine, from data that has never left it — and the
+  novelty is precisely that it is *not* a marketing artefact, so nothing about it
+  gets uploaded or shared unless ADR 0035's opt-in says so. The material is
+  `playback_state`, already there since v0.4.
+
+  One constraint decides whether this is charming or a lie, and it is the same
+  one the Profile page already documents: **`playback_state` holds one row per
+  item per user — the *last* time each thing was played.** So "your top film,
+  seven times" is not answerable and must not be implied. What *is* honest is
+  time spent, breadth, what you finished versus abandoned, and the shape of a
+  year. This is also the exact constraint the history question below turns on.
+- **Open question — a real history, Trakt- or Sonarr-shaped.** Captured as a
+  *question*, not a feature, because the interesting part is a cost decision
+  nobody has made. Everything above reads `playback_state`, which is a **state**
+  table: one row per item per user, overwritten on every play. It can answer
+  "where was I" perfectly and can never answer "how many times" or "what did I
+  watch on a Tuesday in March", because the previous answer is gone the moment
+  you press play again. A genuine history is therefore **an append-only event
+  log, and a second source of truth** — a row per sitting, growing without
+  bound, which is a different kind of object from anything in this schema and
+  brings retention, size and migration questions with it. That is the weight.
+  Nothing should be built until the scope is settled, and the first thing to
+  settle is whether the ask is a *log* (every sitting, for its own sake) or an
+  *exporter* (get my data out, in a format something else reads). Those are very
+  different jobs and only one of them is heavy.
 
 ### System, operations and diagnostics
 
@@ -723,6 +857,34 @@ group is not priority.
 - ~~**Desktop lifecycle — "Open on Windows start" and "Close to tray"**~~ —
   **built** in v0.6.1 ([plan](desktop-lifecycle-plan.md)).
 
+- **Multiple displays — which screen the window opens on, and remembering it.**
+  [desktopprefs](../internal/desktopprefs/prefs.go) is already the right home and
+  says why in its own doc comment: per user, per machine, a small JSON file the
+  server never learns about. "Which of my three monitors" is that kind of fact
+  exactly — it is about a desk, not an account, and putting it in `/api/settings`
+  would move one household member's window onto another's screen. The Win32 half
+  also already exists: `MonitorFromWindow`, `GetMonitorInfoW` and `SetWindowPos`
+  are in [fullscreen_windows.go](../internal/clientwindow/fullscreen_windows.go),
+  which is monitor-aware on purpose, so this is new preference plumbing rather
+  than new platform work.
+
+  Three things make it more than storing a rectangle:
+
+  **A remembered monitor stops existing.** A laptop is undocked, and coordinates
+  saved against a monitor that is gone restore the window off-screen — running,
+  painting, focusable, and invisible. This is the whole reason to store a
+  monitor *identity* (device name) alongside the rect and treat the rect as
+  advisory: validate against the monitor set present at startup and fall back to
+  primary. A window nobody can see is worse than a window in the wrong place.
+
+  **DPI is not carried by the coordinates.** A size remembered on a 4K panel and
+  restored onto 1080p is not the same window, and WebView2 scales inside it.
+
+  **"Open on" and "fullscreen on" are one question, not two.** Fullscreen
+  already targets the monitor the window is on, which is the correct behaviour
+  and should stay — so this is one setting, and a second one would be a way for
+  the two to disagree.
+
 ### Input and control
 
 - ~~**Keyboard-control shortcut map and customizer**~~ — **built** on the
@@ -753,6 +915,74 @@ group is not priority.
   acceptance test the ADR asks for, before any feature code: proving the media
   element survives an imperative cross-document move under React re-render.
 
+- **Skip intro and skip credits** — captured, needs an ADR, and the ADR is
+  about *detection* rather than about the button. Nothing in the codebase knows
+  where an intro is: [probe](../internal/probe/) reads streams, not chapters, and
+  the `chapter` hits elsewhere in the tree are the multi-part serial work of
+  [ADR 0017](adr/0017-collections-and-multi-part-works.md), which is unrelated.
+  Two sources, and they are not alternatives so much as a cheap one and a real
+  one. **Container chapter markers** are free, exact and honest — and present
+  only when whoever made the file bothered, which on a real library is a
+  minority. **Audio fingerprint comparison across a season** is what actually
+  works: the intro is the passage every episode has in common, which makes it
+  findable without knowing anything about the show. It is also the expensive one,
+  and it is the reason this needs a decision rather than a design.
+
+  Three rules to hold whichever way that goes:
+
+  **Skip ranges are derived data, not item fields.** They are computed and
+  recomputable, so they belong in their own table that can be dropped and rebuilt
+  — with one exception that follows from the rest of this project: if a person
+  *corrects* a range, that is an edit, and **locked fields apply**. A re-detect
+  must not re-litigate a human's correction, exactly as a rescan must not
+  re-litigate identity or playlist membership.
+
+  **Detection runs in its own worker**, like probing and for the same reason
+  ([ADR 0012](adr/0012-probe-before-transcode.md)): keep process execution split
+  from the analysis, so the ranges are testable against fixtures rather than
+  requiring a season of real episodes and a working ffmpeg.
+
+  **Never skip without a visible affordance.** A button that appears, not a jump
+  that happens. An automatic skip that is a few seconds wrong is indistinguishable
+  from a broken file, and the first thing it will eat is a cold open.
+
+- **The audio pass — loudness leveling, a dialogue-clarity knob, and an
+  equaliser** across music, shows and films. The most-felt gap on this page:
+  whispered dialogue and deafening explosions are the standing complaint about
+  watching anything at home, and **no commercial service offers the control at
+  all**.
+
+  The obvious implementation is the wrong one. ffmpeg has `loudnorm`, `compand`
+  and `equalizer`, and reaching for them costs twice: a filter **forces a
+  transcode on a file that would have direct-played**, and it bakes one person's
+  curve into a stream a household shares. **The client is the right home** — a
+  Web Audio graph on the media element, `BiquadFilterNode`s for the bands and a
+  `DynamicsCompressorNode` for night mode. Per device, no server cost, and it
+  works *with* direct play rather than defeating it. There is no `AudioContext`
+  in the client today, so this is new ground rather than an extension.
+
+  **The trap is surround, and it is real.**
+  `createMediaElementSource` reroutes the element's output through the graph,
+  and the graph's destination is stereo — so **a 5.1 file that was direct-playing
+  silently becomes two channels the moment somebody touches the EQ**. This
+  codebase already has the vocabulary for it: `MaxAudioChannels` in
+  [decide.go](../internal/probe/decide.go) exists to *force* a downmix, and doing
+  the same thing by accident is the quiet kind of wrong this roadmap keeps a
+  section about. So the graph engages only where the output is already stereo, or
+  the trade is stated plainly at the switch. It is never silent.
+
+  Two smaller rules. **Presets are per content type** — one flat curve shared by
+  a symphony, a sitcom and a war film is what makes people turn an equaliser off
+  and never return. And the graph must **survive the cross-document move** that
+  [ADR 0029](adr/0029-picture-in-picture-is-our-window.md) needs, which the
+  acceptance test named there should now cover an `AudioContext` as well as the
+  element. Watch Together raises no question here: the curve is per device, so
+  there is nothing to synchronise.
+- **Subtitle appearance — font, size, colour, background, position.** Every
+  commercial service ships three presets; this is a genuine accessibility win and
+  it is pure client work, with subtitle-offset plumbing already in
+  `web/src/playback/`. **Back burner** — wanted, not next.
+
 ### Resolved modeling question — multi-part and serial works
 
 **Decided in [ADR 0017](adr/0017-collections-and-multi-part-works.md) and now
@@ -781,7 +1011,10 @@ where that openness gets exercised.
 
 ## Dependencies that constrain ordering
 
-- **Theme music → M2.** Needs TVDB ids and OST identification. Cannot land sooner.
+- **Theme music → M2.** Needs TVDB ids and OST identification. Cannot land
+  sooner, and is now **on the back burner** by choice as well as by dependency:
+  OST identification is unplanned, and theme music is the only feature whose
+  absence nobody has reported.
 - **TV client → keyboard focus model.** The roving-tabindex controller is the TV
   client's foundation. Compromise it during M3 and the TV client becomes a
   rewrite instead of a restyle.
@@ -862,7 +1095,8 @@ where that openness gets exercised.
     never run.
 13. **Nothing foundational remains.** What's next is breadth, from the feature
     backlog: more client surfaces (TV/mobile), more plugin kinds as real
-    plugins need them, and theme music if OST identification lands. Each is
+    plugins need them. **Theme music is on the back burner** — it stays
+    blocked on OST identification and is not waiting for a slot. Each is
     planned immediately before it is built.
 
     Ahead of any of it: **Live TV plays at the wrong speed**, reported from a
