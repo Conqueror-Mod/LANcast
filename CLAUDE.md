@@ -157,3 +157,55 @@ go test ./internal/probe/ -run TestRemuxWhenOnlyContainerIsWrong -v
 The decision rules in `internal/probe/decide_test.go` are the model to copy:
 one named test per codec/container combination, asserting the decision *and*
 its reason. A test that starts needing a real encode is a design smell.
+
+## Anything touching ffmpeg is verified **as the service**, not from a shell
+
+LANcast ships as a Windows service (`lancastd`), and a service runs in
+**session 0** — no desktop, no window station, and no Direct3D. A shell you
+launch by hand does not. Anything that asks the GPU for something can therefore
+pass every test you can think to run and still fail for every user.
+
+It has happened once, and it cost a release. v0.8.0 added `-hwaccel auto`;
+ffmpeg chose DXVA2, DXVA2 needs a D3D device, and as a service there is none:
+
+```
+[DXVA2] Failed to create Direct3D device
+Device creation failed: -1313558101.
+```
+
+ffmpeg exited before writing a byte, so **every HEVC title span on a spinner for
+ever** in the shipped build.
+
+What makes it worth a section is that nothing was skipped. The unit tests
+asserted the flag was present and it was. A benchmark measured a real 8.6-to-3.1
+core saving. An HDR comparison confirmed identical colour at SSIM 0.9957. The
+change was even driven in the running app. Every one of those launched ffmpeg
+from an interactive session, where DXVA2 initialises fine — including the
+in-app check, because the test server was started from a shell rather than
+installed. The only environment never exercised was the one that ships.
+
+So, for a change to `internal/transcode`, `internal/probe`, or anything else
+that shells out to ffmpeg or ffprobe:
+
+1. Build, then swap the binary into the installed service and restart it —
+   backing up `C:\Program Files\LANcast\LANcast-Server.exe` first, so a
+   rollback is one copy. This is the *only* check that means anything for GPU
+   work; running `LANcast-Server.exe` from a terminal reproduces the wrong
+   session every time.
+2. Play a file that actually takes the path you changed, and read
+   `lancastd.log` for `ffmpeg reported errors` afterwards. A stuck spinner is
+   what this failure looks like from the front; the log is where it says why.
+
+Two habits fall out of it, both cheap:
+
+**Never let ffmpeg choose.** `auto` picked the one method that cannot work
+here. Name the method, and derive it from something already proven in this
+process — the encoder is chosen by a real encode at startup, which makes it
+evidence about *this session* rather than a capability list. `Encoder.decodeAccel`
+is that pattern.
+
+**"Falls back to software" is a claim about a codec, not about a device.**
+ffmpeg does fall back when a card cannot decode a *format*; it exits when the
+device cannot be *created*. That distinction was written into a comment as
+though it were behaviour, and it was wrong. If a comment asserts what ffmpeg
+does in a failure case, it is worth having watched it do that.
