@@ -1614,7 +1614,7 @@ answers the question without that knowledge, in one shape:
   only when something is genuinely re-encoded. The two differ by an order of
   magnitude in cost — a remux is a few percent of one core — and reporting both
   as a transcode overstates what the server is doing. The underlying flag is
-  `encoding` on `GET /api/transcode/sessions`.
+  `encoding` on `GET /api/transcode`.
 - `title` is resolved server-side — a scan names its library, because a client
   showing the row should not have to join an id back to a name.
 - `state` is `running` or `failed`. Only those appear: a finished task is not
