@@ -203,6 +203,80 @@ func TestNoHardwareDecodeOnAudioOnly(t *testing.T) {
 }
 
 /*
+ * When the decoded frames are allowed to stay on the card.
+ *
+ * This is the difference between 2.66 cores and 0.67 on a 1080p Main 10 file,
+ * and the shipping path was *slower in wall time than decoding in software* —
+ * NVDEC hands back p010, every frame is copied off the card, and a CPU swscale
+ * converts it to 8-bit because -pix_fmt said so.
+ *
+ * The conditions are the point. Anything downstream that needs a pixel in
+ * system memory pulls them back, and there are two: the tone map (zscale and
+ * tonemap are CPU filters, ADR 0033) and a resolution cap (`scale` likewise).
+ * Each has a case here so that adding a third CPU filter without thinking about
+ * this fails loudly rather than producing a chain ffmpeg refuses.
+ */
+func TestFramesStayOnTheCardWhenNothingNeedsThemBack(t *testing.T) {
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive,
+		Decision: fullDecision(), Encoder: candidates[0],
+	})
+	if !hasSequence(args, "-hwaccel_output_format", "cuda") {
+		t.Error("frames are being copied back for nothing")
+	}
+	if !hasArgPair(args, "-vf", "scale_cuda=format=yuv420p") {
+		t.Error("no scale_cuda: something has to do the 10-bit conversion")
+	}
+	// The whole saving. -pix_fmt is a system-memory format and naming it drags
+	// the frames off the card, which is the cost this avoids.
+	if argIndex(args, "-pix_fmt") >= 0 {
+		t.Error("-pix_fmt with frames on the card undoes the entire change")
+	}
+}
+
+// Tone mapping needs the frames in system memory: there is no tonemap_cuda in
+// stock ffmpeg, which is ADR 0033's constraint and has not changed.
+func TestTonemapPullsTheFramesBack(t *testing.T) {
+	dec := fullDecision()
+	dec.TonemapHDR = true
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive, Decision: dec,
+		Encoder: candidates[0], CanTonemap: true, CanTagSDR: true,
+	})
+	if argIndex(args, "-hwaccel_output_format") >= 0 {
+		t.Error("frames left on the card with a CPU tone map downstream")
+	}
+	if !hasSequence(args, "-pix_fmt", "yuv420p") {
+		t.Error("frames are in system memory and nothing forces 8-bit")
+	}
+	if argIndex(args, "scale_cuda=format=yuv420p") >= 0 {
+		t.Error("scale_cuda alongside CPU filters")
+	}
+}
+
+/*
+ * A resolution cap does too. `scale_cuda` exists but takes different arguments
+ * and will not accept the `-2` this uses to keep widths even, so the cap stays
+ * a CPU filter and the frames come back to meet it.
+ */
+func TestAResolutionCapPullsTheFramesBack(t *testing.T) {
+	dec := fullDecision()
+	dec.TargetHeight = 720
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive, Decision: dec, Encoder: candidates[0],
+	})
+	if argIndex(args, "-hwaccel_output_format") >= 0 {
+		t.Error("frames left on the card with a CPU scale downstream")
+	}
+	if !hasArgPair(args, "-vf", "scale=-2:720") {
+		t.Error("the cap stopped being applied")
+	}
+	if !hasSequence(args, "-pix_fmt", "yuv420p") {
+		t.Error("frames are in system memory and nothing forces 8-bit")
+	}
+}
+
+/*
  * AMF stays on software decode. Its Windows decode path is D3D-backed, which is
  * exactly what failed in session 0, and there is no AMD machine here to prove
  * otherwise on — guessing is what caused the regression this test guards.

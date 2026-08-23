@@ -83,7 +83,7 @@ var candidates = []Encoder{
 }
 
 // EncoderArgs returns the codec flags for this encoder at the given quality.
-func (e Encoder) EncoderArgs(quality int) []string {
+func (e Encoder) EncoderArgs(quality int, framesOnGPU bool) []string {
 	args := []string{"-c:v", e.Name}
 	if e.presetFlag != "" {
 		args = append(args, e.presetFlag, e.presetValue)
@@ -92,14 +92,33 @@ func (e Encoder) EncoderArgs(quality int) []string {
 		args = append(args, e.qualityFlag, strconv.Itoa(quality))
 	}
 
-	// Force 8-bit 4:2:0 for every encoder. A 10-bit source — common in HEVC
-	// Main10 — otherwise reaches an H.264 encoder that cannot accept 10-bit, and
-	// the hardware encoders answer that with a black frame rather than an error.
-	// There is no -hwaccel decode, so frames are in system memory and this is a
-	// plain swscale conversion the encoder accepts; on an already-8-bit source it
-	// is a no-op. Profile and level are stated explicitly for the same reason —
-	// several hardware encoders default to settings browsers refuse.
-	args = append(args, "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1")
+	/*
+	 * Force 8-bit 4:2:0, unless the frames never came back from the card.
+	 *
+	 * A 10-bit source — common in HEVC Main10 — otherwise reaches an H.264
+	 * encoder that cannot accept 10-bit, and the hardware encoders answer that
+	 * with a black frame rather than an error.
+	 *
+	 * `framesOnGPU` is the parameter this grew, and the comment it replaces is
+	 * why: it used to say "there is no -hwaccel decode, so frames are in system
+	 * memory and this is a plain swscale conversion". That stopped being true in
+	 * v0.8.0 and nothing here noticed. On a 10-bit file it had become the most
+	 * expensive thing in the pipeline — NVDEC produced p010 on the card, the
+	 * frames were copied back, and a CPU swscale converted every one of them.
+	 * Measured on a 1080p Main 10 file: 2.66 cores busy and *slower in wall time
+	 * than decoding in software*.
+	 *
+	 * When the frames stay on the card, the conversion is scale_cuda's job and
+	 * naming a software pixel format here would drag them back off it — which is
+	 * the whole cost this avoids.
+	 *
+	 * Profile and level are stated regardless: several hardware encoders default
+	 * to settings browsers refuse.
+	 */
+	if !framesOnGPU {
+		args = append(args, "-pix_fmt", "yuv420p")
+	}
+	args = append(args, "-profile:v", "high", "-level", "4.1")
 
 	// AMF defaults to a rate control that ignores -qp_i unless told to use
 	// constant QP.
@@ -174,7 +193,8 @@ func testEncode(ctx context.Context, bin string, e Encoder) error {
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-f", "lavfi", "-i", "testsrc=duration=0.2:size=320x240:rate=10",
 	}
-	args = append(args, e.EncoderArgs(23)...)
+	// The probe decodes nothing, so its frames are never on the card.
+	args = append(args, e.EncoderArgs(23, false)...)
 	args = append(args, "-f", "null", "-")
 
 	cmd := exec.CommandContext(ctx, bin, args...)
