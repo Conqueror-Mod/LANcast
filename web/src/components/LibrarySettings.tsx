@@ -34,6 +34,7 @@ import {
 } from "@/api/hooks";
 import { LIBRARY_KINDS, kindLabel } from "@/screens/libraryConfig";
 import { DirectoryPicker } from "./DirectoryPicker";
+import { navCount } from "./AppShell";
 import type { Library, LibraryRoot, ReparseResult } from "@/api/types";
 import "./LibrarySettings.css";
 
@@ -232,7 +233,23 @@ export function LibraryRow({ library }: { library: Library }) {
             {roots.length > 1
               ? `${roots.length} locations`
               : (roots[0]?.path ?? library.path)}{" "}
-            · {library.item_count.toLocaleString()} items ·{" "}
+            {/*
+              The count a person means, which is not the same as the number of
+              tiles for every kind of library.
+
+              A music library groups its songs under artists, so `item_count` —
+              what the grid would show — is a count of *performers*: this row
+              read "1,158 items" over a library holding 9,276 songs, right after
+              a scan that had just found all of them. A picture library does the
+              same with galleries.
+
+              navCount already draws that line for the nav, and the two surfaces
+              disagreeing about one library is worse than either being wrong on
+              its own. Films and shows keep the tile count deliberately: a film
+              *is* a tile, and counting a TV library in episodes answers a
+              question nobody asked of it.
+            */}
+            · {navCount(library).toLocaleString()} items ·{" "}
             {running
               ? `scanning — ${status?.files_seen ?? 0} seen`
               : whenScanned(library.scanned_at)}

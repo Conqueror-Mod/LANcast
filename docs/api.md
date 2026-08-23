@@ -1538,7 +1538,8 @@ What the server is doing right now, in one request.
       "library_id": 3, "started_at": 1754630000 },
     { "kind": "enrich", "id": "enrich", "title": "Fetching metadata",
       "state": "running", "done": 120, "total": 400 }
-  ]
+  ],
+  "staged": "0.8.2"
 }
 ```
 
@@ -1894,6 +1895,14 @@ to ask once, deliberately.
 An available update also appears in `GET /api/activity` as a task with
 `kind: "update"` and `state: "available"` — not work in progress, but something
 the server is waiting for someone to act on.
+
+`/api/activity` also carries **`staged`** at the top level, present only when a
+version is downloaded, verified and waiting to be applied on the next restart.
+It is stated there rather than left to be read out of a task id because it is
+the difference between "restarting finishes this" and "restarting will change
+nothing", and the desktop client's stale-window banner is shown to *everyone*
+where this endpoint's admin-only sibling is not. Absent means nothing is
+waiting.
 
 **What is sent:** a plain GET to the project's releases endpoint. No install
 identifier, no library statistics, no version history. This is consistent with
