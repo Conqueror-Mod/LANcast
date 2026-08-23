@@ -110,3 +110,11 @@
   right: auto;
   bottom: auto;
 }
+
+/* The items are wrapped so the list can own arrow-key movement between them.
+   `display: contents` keeps that wrapper out of the layout entirely — the
+   buttons stay direct flex children of .menu__list, which is what the column
+   spacing is built on. */
+.menu__items {
+  display: contents;
+}

@@ -208,6 +208,7 @@ rewrite. See [ADR 0004](adr/0004-keyboard-focus-model.md).
 | arrows | Spatial grid and shelf navigation |
 | enter | Open focused item |
 | escape | Back / close |
+| `c` / menu key | Actions for the focused item |
 | `/` | Focus search |
 | `ctrl+k` | Command palette |
 | `space` `f` `m` | Play-pause, fullscreen, mute (player) |
@@ -216,6 +217,17 @@ rewrite. See [ADR 0004](adr/0004-keyboard-focus-model.md).
 
 One central roving-tabindex controller owns spatial resolution; components
 declare themselves focusable rather than implementing their own key handling.
+
+The actions key is the context menu without a pointer, and it exists because a
+remote has no right button: anything reachable only by right-click does not
+exist in bigscreen, which is the same client at ten feet. `c` sits beside the
+dedicated menu key because plenty of laptops have neither that key nor a mouse
+worth using, and because it is what Kodi has meant by "context menu" for twenty
+years. It is rebindable — a remote's menu button sends whatever its maker chose.
+
+A menu that is open owns the arrows. Spatial navigation is suspended while one
+is, or the focus ring walks the grid *behind* it; focus moves into the menu on
+open and returns to what opened it on close.
 
 **Focus is never invisible.** The gold ring *is* the focus indicator — the
 aesthetic affordance and the accessibility affordance are the same object, which

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
 import {
@@ -102,7 +102,27 @@ function TrackRow({
 }) {
   const navigate = useNavigate();
   const play = () => navigate(`/watch/${track.id}?queue=${queue}`);
-  const focusable = useFocusable(play);
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
+  const [byKey, setByKey] = useState(false);
+  const openedFrom = useRef<HTMLElement | null>(null);
+  /*
+   * The row's menu, without a pointer.
+   *
+   * Anchored under the row rather than at a pointer that does not exist, and
+   * registered through the focus controller so the key is the one in the
+   * keyboard settings rather than one this row invented.
+   *
+   * It matters more here than on a tile: this list is driven by a remote, the
+   * reordering arrows are buttons *because* a d-pad cannot drag, and marking a
+   * track played had no route in at all before this.
+   */
+  const openMenu = useCallback((el: HTMLElement) => {
+    openedFrom.current = el;
+    setByKey(true);
+    const at = el.getBoundingClientRect();
+    setMenuAt({ x: at.left, y: at.bottom });
+  }, []);
+  const focusable = useFocusable(play, openMenu);
 
   /*
    * The filename is detail-only — deliberately, since it is a fragment of the
@@ -129,7 +149,6 @@ function TrackRow({
   const played = track.progress?.watched ?? false;
   const setPlayed = useSetWatchedByID();
   const pb = usePlayback();
-  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
 
   /*
    * A row is a line containing a play button and, for an admin, a remove
@@ -194,6 +213,7 @@ function TrackRow({
       className="track-line"
       onContextMenu={(e) => {
         e.preventDefault();
+        setByKey(false);
         setMenuAt({ x: e.clientX, y: e.clientY });
       }}
     >
@@ -300,7 +320,12 @@ function TrackRow({
         <PointMenu
           at={menuAt}
           actions={actions}
-          onClose={() => setMenuAt(null)}
+          autoFocus={byKey}
+          onClose={() => {
+            setMenuAt(null);
+            // Back to the row, or a remote is left with nothing focused.
+            if (byKey) openedFrom.current?.focus();
+          }}
         />
       )}
     </div>
