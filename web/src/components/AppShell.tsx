@@ -9,6 +9,7 @@ import {
   useIsAdmin,
   useUpdateStatus,
   useHealth,
+  useActivity,
 } from "@/api/hooks";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Library } from "@/api/types";
@@ -442,6 +443,7 @@ function UpdateBanner() {
  */
 function RestartBanner() {
   const { data: health } = useHealth();
+  const { data: activity } = useActivity();
   const [desktop, setDesktop] = useState<DesktopVersion>(null);
   const [dismissed, setDismissed] = useState("");
 
@@ -455,12 +457,30 @@ function RestartBanner() {
   const stale = clientIsStale(desktop, health?.version);
   if (!stale || dismissed === health?.version) return null;
 
+  /*
+   * Restarting only helps when something is waiting to be applied.
+   *
+   * This used to say "close and open it again" whenever the versions differed,
+   * which is advice that cannot work when nothing is staged: reopening runs the
+   * same binary, the versions still differ, and the banner comes back for ever.
+   * Reported by somebody who had restarted and was still being told to.
+   *
+   * The two states want different sentences. Staged is a chore — close it and
+   * you are done. Nothing staged means the window and the server came from
+   * different installs, which restarting cannot reconcile and only a fresh
+   * install can.
+   */
+  const staged = activity?.staged;
+
   return (
     <div className="app-shell__banner" role="status">
       <span className="app-shell__banner-text">
         The server is running LANcast {health?.version} and this window is still{" "}
-        {desktop?.client_version}. Close LANcast and open it again to finish
-        updating — your library and playback are unaffected.
+        {desktop?.client_version}.{" "}
+        {staged
+          ? "Close LANcast and open it again to finish updating"
+          : "Reinstalling LANcast brings the window up to the server; closing it will not, because there is nothing waiting to be applied"}{" "}
+        — your library and playback are unaffected.
       </span>
       <button
         className="app-shell__banner-x"

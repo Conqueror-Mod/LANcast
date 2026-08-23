@@ -514,6 +514,15 @@ export interface Activity {
 export interface ActivityStatus {
   active: boolean;
   tasks: Activity[];
+  /**
+   * The version waiting to be applied on the next restart, when there is one.
+   *
+   * Here rather than only on /api/update because the shell's stale-client
+   * banner needs it and is shown to everyone, where /api/update is admin-only.
+   * Absent means nothing is staged — which is the case where telling somebody
+   * to restart is advice that cannot work.
+   */
+  staged?: string;
 }
 
 // GET /api/logs. `complete` is false when older lines exist that this response

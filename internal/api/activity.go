@@ -105,10 +105,28 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tasks := buildActivity(snap)
-	writeJSON(w, http.StatusOK, map[string]any{
+	/*
+	 * `staged` is stated outright, not left to be inferred from a task id.
+	 *
+	 * The shell's stale-client banner needs it and cannot ask /api/update,
+	 * which is admin-only — the banner is shown to everyone, because a window
+	 * older than its server is a fact about the app in front of you rather than
+	 * an administrative one. This endpoint is already unrestricted and already
+	 * knows.
+	 *
+	 * Without it the banner told everyone to close and reopen whenever the
+	 * versions differed, including when nothing was waiting to be applied — in
+	 * which case reopening runs the same binary, the versions still differ, and
+	 * the advice repeats for ever.
+	 */
+	body := map[string]any{
 		"active": len(tasks) > 0,
 		"tasks":  tasks,
-	})
+	}
+	if snap.staged != "" {
+		body["staged"] = snap.staged
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 // buildActivity turns worker state into the client's one shape. It always
