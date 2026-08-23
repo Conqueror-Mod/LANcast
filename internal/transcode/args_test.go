@@ -160,8 +160,18 @@ func TestHardwareEncodeAlsoDecodesInHardware(t *testing.T) {
 		Input: "in.mkv", Output: Progressive,
 		Decision: fullDecision(), Encoder: candidates[0],
 	})
-	if !hasSequence(args, "-hwaccel", "auto") {
-		t.Error("no -hwaccel: the decode is still running in software")
+	/*
+	 * cuda, not auto. `auto` picked DXVA2, DXVA2 needs a Direct3D device, and
+	 * the server runs as a Windows service in session 0 where there is none —
+	 * so v0.8.0 shipped with HEVC playback broken outright. Naming the
+	 * encoder's own driver stack is the fix, and asserting the exact value is
+	 * what stops `auto` coming back as a tidy-up.
+	 */
+	if !hasSequence(args, "-hwaccel", "cuda") {
+		t.Error("NVENC should decode on CUDA; -hwaccel auto is what broke v0.8.0")
+	}
+	if argIndex(args, "auto") >= 0 {
+		t.Error("-hwaccel auto is back; it cannot create a D3D device as a service")
 	}
 	// An input option. After -i it applies to the output and does nothing.
 	if h, i := argIndex(args, "-hwaccel"), argIndex(args, "-i"); h > i {
@@ -189,6 +199,27 @@ func TestNoHardwareDecodeOnAudioOnly(t *testing.T) {
 	})
 	if argIndex(args, "-hwaccel") >= 0 {
 		t.Error("-hwaccel on audio-only content")
+	}
+}
+
+/*
+ * AMF stays on software decode. Its Windows decode path is D3D-backed, which is
+ * exactly what failed in session 0, and there is no AMD machine here to prove
+ * otherwise on — guessing is what caused the regression this test guards.
+ */
+func TestAMFDecodesInSoftwareUntilSomebodyProvesOtherwise(t *testing.T) {
+	var amf Encoder
+	for _, c := range candidates {
+		if c.Name == "h264_amf" {
+			amf = c
+		}
+	}
+	args := Args(Options{
+		Input: "in.mkv", Output: Progressive,
+		Decision: fullDecision(), Encoder: amf,
+	})
+	if argIndex(args, "-hwaccel") >= 0 {
+		t.Error("-hwaccel with AMF, which is unverified in a service context")
 	}
 }
 
