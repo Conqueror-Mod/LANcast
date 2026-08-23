@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useBackHandler } from "@/focus/FocusController";
 import "./Menu.css";
 
 /*
@@ -39,6 +40,20 @@ export type MenuAction = {
  * the dismissal rules have one home. A menu that is a `<div role="menu">` in
  * one place and something else in another is the kind of difference nobody
  * notices until a screen reader does.
+ *
+ * It is also where Escape is handled, and it is handled the way the rest of
+ * this client handles it. The first version of these menus listened on the
+ * document for the key itself, which FocusController forbids in as many words:
+ * "Escape is Back/close, resolved centrally so no screen wires its own key."
+ * A private listener does not nest — the menu and whatever it opened over both
+ * answer, or neither does — and the symptom was a context menu that Escape
+ * simply did not close. Every other dismissible surface here (RemoveDialog,
+ * AddToPlaylist, PhotoViewer, FixMatch, DirectoryPicker) already used the
+ * central one; this was the odd one out.
+ *
+ * Registering here rather than in the shells is what makes it conditional: the
+ * list is mounted only while the menu is open, so a closed ButtonMenu does not
+ * sit on the screen's Escape.
  */
 function MenuList({
   actions,
@@ -47,6 +62,12 @@ function MenuList({
   actions: MenuAction[];
   onDone: () => void;
 }) {
+  // Stable, because useBackHandler re-registers whenever the function identity
+  // changes and callers pass an inline arrow.
+  const done = useRef(onDone);
+  done.current = onDone;
+  useBackHandler(useCallback(() => done.current(), []));
+
   return (
     <>
       {actions.map((a, i) => (
@@ -69,32 +90,25 @@ function MenuList({
 }
 
 /*
- * useDismiss closes a menu on an outside click or Escape.
+ * useDismiss closes a menu on a click outside it.
  *
- * Shared because getting it wrong is silent: a menu that only closes when you
- * pick something is a menu you cannot back out of, and one that closes on any
- * click at all eats the click that was meant for the page behind it.
+ * Escape is not here — that is MenuList's, through the central back handler.
+ * Shared because getting this half wrong is silent too: a menu that only closes
+ * when you pick something is a menu you cannot back out of, and one that closes
+ * on any click at all eats the click meant for the page behind it.
  */
 function useDismiss(
   open: boolean,
   ref: React.RefObject<HTMLElement>,
   close: () => void,
-  escape: () => void,
 ) {
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) close();
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") escape();
-    };
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("mousedown", onDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 }
@@ -138,7 +152,7 @@ export function ButtonMenu({
     setOpen(false);
   };
 
-  useDismiss(open, ref, () => setOpen(false), restoreFocus);
+  useDismiss(open, ref, () => setOpen(false));
 
   return (
     <div className="menu" ref={ref}>
@@ -207,7 +221,7 @@ export function PointMenu({
     setPos({ x, y });
   }, [at]);
 
-  useDismiss(true, ref, onClose, onClose);
+  useDismiss(true, ref, onClose);
 
   return (
     <div
