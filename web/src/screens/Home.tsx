@@ -7,6 +7,7 @@ import {
   useSetWatchedByID,
 } from "@/api/hooks";
 import { useNavigate } from "react-router-dom";
+import { usePlayback } from "@/playback/PlaybackProvider";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
@@ -74,6 +75,7 @@ export function Home() {
 
   const setWatched = useSetWatchedByID();
   const navigate = useNavigate();
+  const pb = usePlayback();
 
   /*
    * What a right-click offers on a Continue shelf.
@@ -111,6 +113,14 @@ export function Home() {
           ? "Remove from Continue Listening"
           : "Remove from Continue Watching",
         onSelect: () => setWatched.mutate({ itemID: item.id, watched: false }),
+      },
+      {
+        label: "Play next",
+        onSelect: () => pb.playNextUp(item.id),
+      },
+      {
+        label: "Add to queue",
+        onSelect: () => pb.addToQueue(item.id),
       },
       {
         label: "Go to details",

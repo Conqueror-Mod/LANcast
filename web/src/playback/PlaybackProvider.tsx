@@ -162,6 +162,12 @@ interface PlaybackState {
   setShuffle: (on: boolean) => void;
   cycleRepeat: () => void;
   playNext: () => void;
+  /** Items queued by hand, played before the queue resumes. */
+  upNext: number[];
+  /** Queue an item to play immediately after the current one. */
+  playNextUp: (id: number) => void;
+  /** Queue an item behind anything already queued by hand. */
+  addToQueue: (id: number) => void;
   playPrev: () => void;
   /** `at` is the row's position, which is the only way to tell two copies of
    *  the same track apart in a playlist. */
@@ -218,6 +224,36 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // the behaviour people complain about in other players: you set 1.25x for a
   // slow talker and the next episode undoes it.
   const [speed, setSpeedState] = useState(1);
+  /*
+   * Items queued by hand, played before the queue resumes.
+   *
+   * A lane of its own rather than an insertion into `queue`, and the reason is
+   * written into the shuffle memo below: shuffle is "a view of the queue rather
+   * than a rewrite of it", and that view is rebuilt whenever the queue's
+   * contents change. Splicing a track into `queue` would therefore reshuffle
+   * everything else as a side effect of adding one thing — press "play next" on
+   * a shuffled library and the other 1,590 tracks reorder underneath you.
+   *
+   * It is also the more useful model. "Add to the end of the queue" means
+   * nothing when the queue is a whole shuffled library; "after this one" is
+   * what people are actually asking for, which is why every player that has
+   * both keeps them apart.
+   *
+   * Empty is the normal state, and while it is empty nothing here changes how
+   * the queue behaves at all.
+   */
+  const [upNext, setUpNext] = useState<number[]>([]);
+  /*
+   * True while the item playing came out of that lane.
+   *
+   * `pos` is a cursor into `order`, and an item played out of band is not at
+   * that cursor — resolvePos would fall back to searching for it and find
+   * either nothing or the wrong copy. So the cursor stays where the queue left
+   * off and this remembers that we are away from it, which is what lets the
+   * queue resume from the right place afterwards rather than from wherever the
+   * queued track happened to sit.
+   */
+  const [offPiste, setOffPiste] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   /*
    * Which randomisation this is.
@@ -396,7 +432,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
     // Not setQueue(q): re-entering the player for something already playing
     // inside a queue must not discard the queue. See queueAfterEntry.
-    setQueue((prev) => queueAfterEntry(prev, q, id));
+    setQueue((prev) => {
+      const next = queueAfterEntry(prev, q, id);
+      /*
+       * A genuinely new queue abandons anything queued against the old one.
+       * Tracks lined up behind an album are about that album; carrying them
+       * into a film somebody has just started is a queue that surprises you.
+       * Re-entering the player for what is already playing keeps them, which
+       * is the same test queueAfterEntry makes for the queue itself.
+       */
+      if (next !== prev) {
+        setUpNext([]);
+        setOffPiste(false);
+      }
+      return next;
+    });
     // A new entry into the player has no opinion about position. Clearing it
     // makes the next read fall back to finding the item, rather than trusting
     // an index left over from a different queue.
@@ -413,6 +463,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
     setItemID(0);
     setQueue([]);
+    setUpNext([]);
+    setOffPiste(false);
     setPlaying(false);
     setLoading(false);
     setCurrent(0);
@@ -441,7 +493,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [shuffle, shuffleEpoch, queue.join(",")]);
 
   const idxInOrder = resolvePos(order, pos, itemID);
-  const hasNext = repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null;
+  // Something queued by hand is a next, whatever the queue behind it says —
+  // including when the queue is a single item and would otherwise end here.
+  const hasNext =
+    upNext.length > 0 ||
+    (repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null);
   const hasPrev = order.length > 1;
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
@@ -454,13 +510,46 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [itemID]);
 
   const advanceQueue = useCallback((): boolean => {
-    const from = resolvePos(order, pos, itemID);
+    /*
+     * The hand-queued lane comes first, and takes the cursor with it.
+     *
+     * `pos` stays where the queue left off rather than following the item that
+     * plays, because the queued item is not in `order` at that index — it may
+     * not be in `order` at all. Leaving the cursor put is what lets the queue
+     * resume from the right place once the lane drains, instead of from
+     * wherever the queued thing happened to sit.
+     */
+    if (upNext.length > 0) {
+      const [head, ...rest] = upNext;
+      /*
+       * The cursor is made concrete on the way out, not left to be derived.
+       *
+       * `pos` is -1 for most of a queue's life — play() clears it and every
+       * read goes through resolvePos, which recovers the index from the item
+       * that is playing. That recovery stops working the moment the item
+       * playing is a queued one that is not in the order, so the index has to
+       * be resolved here, while the answer is still knowable, or the queue
+       * resumes from nowhere and advancing answers null.
+       */
+      setPos(resolvePos(order, pos, itemID));
+      setUpNext(rest);
+      setOffPiste(true);
+      setItemID(head);
+      return true;
+    }
+    /*
+     * Off the lane, the cursor is trusted as-is: resolvePos would look for the
+     * item that just played, and the item that just played was a queued one
+     * that is not at `pos`, so it would answer with the wrong index or none.
+     */
+    const from = offPiste ? pos : resolvePos(order, pos, itemID);
     const to = nextPos(order, from, repeat);
     if (to == null) return false;
+    setOffPiste(false);
     setPos(to);
     setItemID(order[to]);
     return true;
-  }, [order, pos, itemID, repeat]);
+  }, [order, pos, itemID, repeat, upNext, offPiste]);
 
   const playNext = useCallback(() => {
     advanceQueue();
@@ -502,6 +591,34 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   // Turning shuffle *on* is a new randomisation; turning it off is not, and
   // bumping the epoch there would only reshuffle an order nobody is using.
+  /*
+   * Queue something by hand.
+   *
+   * `next` puts it at the front of the lane, `last` at the back — which is what
+   * "play next" and "add to queue" mean when both exist. Neither touches
+   * `queue`, so nothing reshuffles and turning shuffle off still gives back the
+   * order it always would have.
+   *
+   * With nothing playing there is no "next" to be after, so it just plays. A
+   * queue action that silently did nothing on an idle player would be the kind
+   * of control people press twice and then distrust.
+   */
+  const enqueue = useCallback(
+    (id: number, where: "next" | "last") => {
+      if (itemID === 0) {
+        setItemID(id);
+        setQueue([id]);
+        setPos(-1);
+        setOffPiste(false);
+        return;
+      }
+      setUpNext((u) => (where === "next" ? [id, ...u] : [...u, id]));
+    },
+    [itemID],
+  );
+  const playNextUp = useCallback((id: number) => enqueue(id, "next"), [enqueue]);
+  const addToQueue = useCallback((id: number) => enqueue(id, "last"), [enqueue]);
+
   const toggleShuffle = useCallback(() => {
     setShuffle((v) => {
       if (!v) setShuffleEpoch((n) => n + 1);
@@ -1247,6 +1364,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setShuffle: setShuffleMode,
     cycleRepeat,
     playNext,
+    upNext,
+    playNextUp,
+    addToQueue,
     playPrev,
     playFromQueue,
     prefs,

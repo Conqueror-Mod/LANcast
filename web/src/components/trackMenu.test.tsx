@@ -21,6 +21,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { TrackList } from "./TrackList";
 import type { Item } from "@/api/types";
 
@@ -84,7 +85,9 @@ function render(playlistID?: number) {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <FocusProvider>
-            <TrackList tracks={tracks} playlistID={playlistID} />
+            <PlaybackProvider>
+              <TrackList tracks={tracks} playlistID={playlistID} />
+            </PlaybackProvider>
           </FocusProvider>
         </MemoryRouter>
       </QueryClientProvider>,

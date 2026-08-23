@@ -23,6 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { Home } from "./Home";
 
 declare global {
@@ -105,9 +106,11 @@ async function render() {
     root.render(
       <QueryClientProvider client={client}>
         <FocusProvider>
-          <MemoryRouter initialEntries={["/"]}>
-            <Home />
-          </MemoryRouter>
+          <PlaybackProvider>
+            <MemoryRouter initialEntries={["/"]}>
+              <Home />
+            </MemoryRouter>
+          </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
     );

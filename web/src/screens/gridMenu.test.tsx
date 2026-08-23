@@ -16,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { LibraryView } from "./LibraryView";
 import { configForKind } from "./libraryConfig";
 
@@ -120,12 +121,14 @@ async function render() {
     root.render(
       <QueryClientProvider client={client}>
         <FocusProvider>
-          <MemoryRouter initialEntries={["/library/1"]}>
-            <LibraryView
-              library={library as never}
-              config={configForKind("movie")}
-            />
-          </MemoryRouter>
+          <PlaybackProvider>
+            <MemoryRouter initialEntries={["/library/1"]}>
+              <LibraryView
+                library={library as never}
+                config={configForKind("movie")}
+              />
+            </MemoryRouter>
+          </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
     );
@@ -172,7 +175,15 @@ describe("the library grid menu", () => {
     mount([film]);
     await render();
     expect(rightClick(tile("A Film"))).toBe(true);
-    expect(labels()).toEqual(["Play", "Mark as watched", "Go to details"]);
+    // Pinned in order: Play first because it is what the tile is for, the
+    // watched toggle next, then the two queue actions, then details last.
+    expect(labels()).toEqual([
+      "Play",
+      "Mark as watched",
+      "Play next",
+      "Add to queue",
+      "Go to details",
+    ]);
   });
 
   // The state is a toggle, and a menu that always says "Mark as watched" is a
