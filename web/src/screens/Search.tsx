@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useGlobalSearch, useLibraries } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
 import { PosterTile } from "@/components/PosterTile";
+import { useItemActions } from "@/components/itemActions";
 import type { Item } from "@/api/types";
 import "./Browse.css";
 
@@ -22,6 +23,8 @@ import "./Browse.css";
  * link, survives a reload, and comes back with Back.
  */
 export function Search() {
+  // The same menu a library grid offers; a poster is a poster.
+  const actions = useItemActions();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const navigate = useNavigate();
@@ -87,7 +90,7 @@ export function Search() {
           <span className="section-label">{libraryName(libraryID)}</span>
           <div className="browse__grid">
             {group.map((item) => (
-              <PosterTile key={item.id} item={item} />
+              <PosterTile key={item.id} item={item} actions={actions} />
             ))}
           </div>
         </section>

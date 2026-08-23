@@ -4,6 +4,7 @@ import { useInfiniteItems, useLibraries } from "@/api/hooks";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { useBackHandler } from "@/focus/FocusController";
 import { PosterTile } from "@/components/PosterTile";
+import { useItemActions } from "@/components/itemActions";
 import {
   AlphabetRail,
   initialsOf,
@@ -23,6 +24,8 @@ import "./Browse.css";
  * is a place, and a place can be linked to, returned to, and found again.
  */
 export function Collections() {
+  // The same menu a library grid offers; a poster is a poster.
+  const actions = useItemActions();
   const [params, setParams] = useSearchParams();
   const { id } = useParams();
   const libraryID = Number(id);
@@ -112,7 +115,7 @@ export function Collections() {
 
       <div className="browse__grid">
         {items.map((item) => (
-          <PosterTile key={item.id} item={item} />
+          <PosterTile key={item.id} item={item} actions={actions} />
         ))}
       </div>
       <div ref={sentinel} aria-hidden="true" />

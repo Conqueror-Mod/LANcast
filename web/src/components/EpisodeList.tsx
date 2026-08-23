@@ -1,6 +1,10 @@
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
 import { useSetWatched } from "@/api/hooks";
+import { usePlayback } from "@/playback/PlaybackProvider";
+import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
+import { watchedVerb } from "@/lib/kind";
 import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";
 import { spoilerState, useSpoilerMode } from "@/lib/spoilers";
@@ -70,12 +74,26 @@ function EpisodeRow({
   const navigate = useNavigate();
   const play = () =>
     navigate(`/watch/${episode.id}`, { state: { queue } });
+  const pb = usePlayback();
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
+  const [byKey, setByKey] = useState(false);
+  const openedFrom = useRef<HTMLElement | null>(null);
+  // Anchored under the row, and registered through the controller so the key is
+  // the one in the keyboard settings rather than one this row invented.
+  const openMenu = useCallback((el: HTMLElement) => {
+    openedFrom.current = el;
+    setByKey(true);
+    const at = el.getBoundingClientRect();
+    setMenuAt({ x: at.left, y: at.bottom });
+  }, []);
   // Through the focus controller like every other interactive element, so
   // spatial navigation covers a season list without a second idea of what
   // focus means (ADR 0004).
-  const focusable = useFocusable(play);
+  const focusable = useFocusable(play, openMenu);
   const watched = !!episode.progress?.watched;
-  const markFocusable = useFocusable(() => onSetWatched(!watched));
+  // The mark control opens the same menu, so the actions key works wherever on
+  // the row focus happens to be.
+  const markFocusable = useFocusable(() => onSetWatched(!watched), openMenu);
 
   const progress = episode.progress;
   const duration = episode.duration_ms ?? 0;
@@ -98,8 +116,45 @@ function EpisodeRow({
    * from it is to drop one — so the mark control sits beside the play area
    * rather than inside it.
    */
+  /*
+   * The row's menu, and what it deliberately does not take away.
+   *
+   * Same contract as a track row: it only *adds*. The mark-watched control
+   * stays a button beside the play area, because this list is driven by a
+   * remote and a control that only exists inside a menu is one a d-pad has to
+   * be told about — the keyboard route makes that reachable now, but a working
+   * button is not worth removing to prove it.
+   *
+   * "Go to details" is here because nothing else in the client navigates to an
+   * episode's own page. It is reachable and has always been unreachable, which
+   * is the same shape as the two capabilities TrackList records as having
+   * shipped and never been usable.
+   */
+  const actions: MenuAction[] = [
+    { label: "Play", onSelect: play },
+    {
+      label: watched
+        ? `Mark as ${watchedVerb(episode).negated}`
+        : `Mark as ${watchedVerb(episode).past}`,
+      onSelect: () => onSetWatched(!watched),
+    },
+    { label: "Play next", onSelect: () => pb.playNextUp(episode.id) },
+    { label: "Add to queue", onSelect: () => pb.addToQueue(episode.id) },
+    {
+      label: "Go to details",
+      onSelect: () => navigate(`/item/${episode.id}`),
+    },
+  ];
+
   return (
-    <div className={"eprow" + (watched ? " eprow--watched" : "")}>
+    <div
+      className={"eprow" + (watched ? " eprow--watched" : "")}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setByKey(false);
+        setMenuAt({ x: e.clientX, y: e.clientY });
+      }}
+    >
       <button
         {...focusable}
         className="eprow__play"
@@ -182,6 +237,18 @@ function EpisodeRow({
       >
         ✓
       </button>
+      {menuAt && (
+        <PointMenu
+          at={menuAt}
+          actions={actions}
+          autoFocus={byKey}
+          onClose={() => {
+            setMenuAt(null);
+            // Back to the row, or a remote is left with nothing focused.
+            if (byKey) openedFrom.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

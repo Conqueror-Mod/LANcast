@@ -23,6 +23,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { Detail } from "./Detail";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -95,11 +96,13 @@ async function renderDetail(item: Record<string, unknown>) {
         {/* The same providers App mounts: Detail registers a back handler with
             the focus controller, which is a context rather than a global. */}
         <FocusProvider>
-          <MemoryRouter initialEntries={[`/item/${item.id}`]}>
-            <Routes>
-              <Route path="/item/:id" element={<Detail />} />
-            </Routes>
-          </MemoryRouter>
+          <PlaybackProvider>
+            <MemoryRouter initialEntries={[`/item/${item.id}`]}>
+              <Routes>
+                <Route path="/item/:id" element={<Detail />} />
+              </Routes>
+            </MemoryRouter>
+          </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
     );

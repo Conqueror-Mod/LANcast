@@ -8,12 +8,10 @@ import {
   useRecentPhotos,
   fetchLibraryTracks,
   playableKindFor,
-  useSetWatchedByID,
   type PlayableKind,
 } from "@/api/hooks";
-import { usePlayback } from "@/playback/PlaybackProvider";
 import { PosterTile } from "@/components/PosterTile";
-import type { MenuAction } from "@/components/Menu";
+import { useItemActions } from "@/components/itemActions";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterBar } from "@/components/FilterBar";
@@ -21,7 +19,6 @@ import { AlphabetRail } from "@/components/AlphabetRail";
 import { TileSizeSlider } from "@/components/TileSizeSlider";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { tileWidth, useTileSize } from "@/lib/tileSize";
-import { isContainer, isPicture, watchedVerb } from "@/lib/kind";
 import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
@@ -86,8 +83,9 @@ export function LibraryView({
    * track of a library is far too much URL. See the Player.
    */
   const navigate = useNavigate();
-  const setWatched = useSetWatchedByID();
-  const pb = usePlayback();
+  // One definition of what a poster offers, shared with search, collections
+  // and a detail page's children. See useItemActions.
+  const gridActions = useItemActions();
   const qc = useQueryClient();
   /*
    * What "play all" queues here, or null where it means nothing.
@@ -225,42 +223,6 @@ export function LibraryView({
   // and a banner that can show the same picture twice in a row; the newest are
   // already cached for the Home row, and shuffling them client-side gives the
   // variety without the cost.
-  /*
-   * What a right-click offers on a grid poster.
-   *
-   * Answered per item, and for most of a library the answer is nothing. A grid
-   * holds shows, seasons, albums and galleries beside films, and "Play" on a
-   * folder is not a smaller version of playing — it is a different action with
-   * a different meaning, and one this menu would be guessing at. A photograph
-   * is not watched and has no detail page worth visiting (see PosterTile).
-   * Those get no menu and keep the browser's own.
-   *
-   * What is left is the playable leaf — a film, an episode, a track — where all
-   * three of these are unambiguous.
-   *
-   * Removing a title from the library is deliberately **not** here. It deletes
-   * files from disk when the server allows it, it is admin-only, and the detail
-   * page puts it behind a dialog that names what is about to go. One right-click
-   * and one confirm is not the same weight of decision, and a grid is exactly
-   * where a slip lands on the wrong poster.
-   */
-  const gridActions = (item: Item): MenuAction[] => {
-    if (isPicture(item) || isContainer(item)) return [];
-    const verb = watchedVerb(item);
-    const seen = item.progress?.watched ?? false;
-    return [
-      { label: "Play", onSelect: () => navigate(`/watch/${item.id}`) },
-      {
-        label: seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`,
-        onSelect: () =>
-          setWatched.mutate({ itemID: item.id, watched: !seen }),
-      },
-      { label: "Play next", onSelect: () => pb.playNextUp(item.id) },
-      { label: "Add to queue", onSelect: () => pb.addToQueue(item.id) },
-      { label: "Go to details", onSelect: () => navigate(`/item/${item.id}`) },
-    ];
-  };
-
   const isPictures = library.kind === "picture";
   const { data: bannerPool } = useRecentPhotos(isPictures ? 24 : 0);
   const [shownPhoto, setShownPhoto] = useState<Item | null>(null);

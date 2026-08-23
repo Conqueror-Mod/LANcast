@@ -34,6 +34,7 @@ import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
+import { useItemActions } from "@/components/itemActions";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
@@ -275,6 +276,12 @@ export function Detail() {
   const [showNote, setShowNote] = useState<string | null>(null);
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
+  /*
+   * The children grid gets the same menu a library grid does. The gallery
+   * branch above deliberately does not: a photograph is not watched, has no
+   * page worth visiting, and selects into the banner rather than navigating.
+   */
+  const childActions = useItemActions();
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
 
@@ -786,6 +793,7 @@ export function Detail() {
                         ? child
                         : { ...child, artwork: item.artwork }
                     }
+                    actions={childActions}
                   />
                 ))}
               </div>
