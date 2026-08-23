@@ -29,6 +29,14 @@ import "./People.css";
  * the same and now has to hold across a network: a peer that is switched off, a
  * person who has not granted you presence, and a person sitting idle look
  * identical if you only render a title, and they are three different facts.
+ *
+ * **There is deliberately no join button.** Presence answers "is there anything
+ * to join" and stops there, which ADR 0045 names as a coherent design in its own
+ * right rather than a stepping stone. Joining across servers needs the remote
+ * guest sessions of ADR 0046, and a control that cannot be used is a promise
+ * about a date nobody has set — worse than an absence, because an absence
+ * invites the question and a greyed-out button answers it wrongly. It goes in
+ * when it works.
  */
 export function People() {
   const { data, isLoading } = usePeople();
@@ -242,25 +250,6 @@ function PeerPersonRow({
           {statusOf(person, reachable)}
         </span>
       </div>
-
-      {/*
-       * Watch Together is deliberately present and deliberately disabled. ADR
-       * 0045 §7 gives a presence grant the right to *ask*, with the host
-       * answering in the moment — but the asking needs the remote guest
-       * sessions of ADR 0046, which are phase 4 and not built. An affordance
-       * that says why it cannot be used yet is more honest than a missing one,
-       * and it is where the button goes when it can.
-       */}
-      {person.shares && person.watching && (
-        <button
-          type="button"
-          className="button people__join"
-          disabled
-          title="Joining across servers needs remote guest sessions, which are not built yet (ADR 0046)."
-        >
-          Watch Together
-        </button>
-      )}
 
       <label className="people__grant">
         {/*
