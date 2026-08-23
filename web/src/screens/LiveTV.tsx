@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
-import { bufferedAhead, shouldStartPlayback } from "@/lib/preroll";
-import {
-  catchUpTarget,
-  lagBehindEdge,
-  liveEdge,
-  resumeTarget,
-} from "@/lib/liveEdge";
+import { bufferedAhead, shouldHold, shouldStartPlayback } from "@/lib/preroll";
+import { catchUpRate, lagBehindEdge } from "@/lib/liveEdge";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -111,27 +106,6 @@ export function LiveTV() {
 
     let timer: number | null = null;
 
-    /*
-     * Move the play head, and never let failing to do so matter.
-     *
-     * Setting currentTime on a media element can throw — a stream the browser
-     * considers unseekable raises rather than declining — and the resume below
-     * does this immediately before calling play(). An unguarded assignment
-     * therefore turns "the catch-up did not work" into "the channel does not
-     * start", which is a far worse failure than the drift it was fixing.
-     *
-     * Staying near the live edge is an improvement on watching from a minute
-     * back. It is not worth playback.
-     */
-    const seekTo = (v: HTMLVideoElement, to: number | null) => {
-      if (to === null) return;
-      try {
-        v.currentTime = to;
-      } catch {
-        // Unseekable, or seeking somewhere it will not go. Keep playing.
-      }
-    };
-
     const release = () => {
       if (timer !== null) {
         window.clearInterval(timer);
@@ -149,6 +123,16 @@ export function LiveTV() {
      */
     const hold = () => {
       if (timer !== null) return;
+      /*
+       * A `waiting` event is not by itself evidence of a drought.
+       *
+       * Measured on a real channel: it fires about once a second while the
+       * element holds two minutes of media. Pausing on each one kept the player
+       * paused 28% of the time and dragged playback to 0.76x — the stutter, and
+       * the drift that no catch-up could outrun. The buffer decides, not the
+       * event.
+       */
+      if (!shouldHold(bufferedAhead(el))) return;
       setBuffering(true);
       el.pause();
       const startedAt = Date.now();
@@ -158,14 +142,13 @@ export function LiveTV() {
         }
         release();
         /*
-         * Resume near the edge, not where the drought stopped us.
+         * Resumes in place, deliberately.
          *
-         * This is the line that stops the drift accumulating. Resuming in
-         * place meant every stall cost lag permanently, and on a bursty
-         * provider that is several times a minute — which is how a channel
-         * ends up a minute behind reality without anything ever being slow.
+         * An earlier version seeked to the live edge here, which is the one
+         * thing this transport cannot do — see lib/liveEdge.ts. The lag a
+         * drought leaves behind is given back by playing slightly faster
+         * afterwards instead, which cannot strand the element.
          */
-        seekTo(el, resumeTarget(el.currentTime, liveEdge(el)));
         // A rejection is left alone: a browser refusing autoplay is a policy
         // decision, and the controls are right there.
         void el.play().catch(() => {});
@@ -173,32 +156,36 @@ export function LiveTV() {
     };
 
     /*
-     * Catch up when the play head has drifted, stall or no stall.
+     * Close the gap by playing slightly faster, never by seeking.
      *
-     * The resume above handles the common cause; this handles the rest — a
-     * burst that outruns playback, a tab throttled in the background, a
-     * machine that slept. Without it the gap only ever grows, because a
-     * progressive fMP4 has no window and nothing else has an opinion about
-     * where the play head should be.
+     * `catching` is tracked here rather than read off the element because a
+     * viewer can set their own speed from the player's menu: without it, the
+     * first tick after they chose 1.5x would quietly reset them to 1.0. We
+     * only ever touch the rate we ourselves engaged.
      *
-     * Only while playing. A paused element is somebody's decision, and yanking
-     * it forward would override that; the correction happens on the next tick
-     * after they press play, which is the right moment for a *live* channel to
-     * return to live.
+     * Only while playing. A paused element is somebody's decision, and its lag
+     * is about to be whatever it is when they come back.
      */
-    const catchUp = () => {
-      if (el.paused || el.seeking) return;
-      seekTo(el, catchUpTarget(el.currentTime, liveEdge(el), lagBehindEdge(el)));
+    let catching = false;
+    const trim = () => {
+      if (el.paused) return;
+      const want = catchUpRate(lagBehindEdge(el), catching);
+      if (want === el.playbackRate) return;
+      if (!catching && want === 1) return; // never their speed, only ours
+      el.playbackRate = want;
+      catching = want !== 1;
     };
     // On timeupdate rather than an interval: it fires only while media is
     // actually advancing, so a paused or stalled element costs nothing.
-    el.addEventListener("timeupdate", catchUp);
+    el.addEventListener("timeupdate", trim);
 
     hold();
     el.addEventListener("waiting", hold);
 
     return () => {
-      el.removeEventListener("timeupdate", catchUp);
+      el.removeEventListener("timeupdate", trim);
+      // Leave the element at normal speed for whatever plays next.
+      if (catching) el.playbackRate = 1;
       el.removeEventListener("waiting", hold);
       if (timer !== null) window.clearInterval(timer);
     };

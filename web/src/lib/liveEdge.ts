@@ -1,60 +1,78 @@
 /*
  * Keeping a live channel near its live edge.
  *
- * # The fault this fixes, measured
+ * # The fault
  *
- * A live channel drifted further behind reality the longer it ran. Watched in
+ * A live channel drifted further behind reality the longer it ran. Measured in
  * the app, the player's own clock said:
  *
- *	0:48 / 1:14      play head 26s behind the end of what had arrived
- *	1:23 / 2:17      play head 54s behind, ~30s later
+ *	0:48 / 1:14      play head 26s behind the incoming data
+ *	1:23 / 2:17      54s behind, ~30s later
  *
- * The play head advanced at 1.0x the whole time. Nothing was slow and nothing
- * was fast: the *gap* was growing, and nothing in the client had any opinion
- * about that.
+ * The play head advanced at 1.0x throughout. Nothing was slow and nothing was
+ * fast — the *gap* grew, because `preroll.ts` pauses on every drought and
+ * resumes wherever it stopped, so each one adds lag that nothing takes back.
  *
- * The server was measured at the same moment and is not at fault — 30.1 frames
- * per media-second against a declared 30, 29.9 frames per wall-second, 29.8s of
- * media in 30s. It hands over exactly one correctly-timed second per second.
+ * The server is not involved, and this was measured rather than assumed: the
+ * same channel at the same moment delivers 30.1 frames per media-second against
+ * a declared 30, 29.9 frames per wall-second, and audio at 46.9 packets per
+ * second against the 46.9 that AAC-LC at 48kHz requires — with audio and video
+ * spans agreeing to within 70ms, across twenty channels.
  *
- * # Why it accumulates rather than settling
+ * # Why this nudges the rate rather than seeking
  *
- * `preroll.ts` pauses on `waiting` and waits for a head start before resuming.
- * That is right, and on this provider — bursty delivery with measured five
- * second droughts — it fires often. But it resumed *wherever it stopped*, so
- * every drought moved the play head permanently further from the edge. The
- * buffering a viewer sees every few seconds is not the fault; it is the
- * recovery, running again and again, each pass adding lag that nothing ever
- * takes back.
+ * The first version of this file seeked, and that was the wrong instrument.
+ * The reason is in `channellive.go`: the live endpoint is an **unbounded
+ * chunked response with no `Accept-Ranges` and no `Content-Length`**. The
+ * browser cannot ask the server for a different offset, so a seek can only ever
+ * be a move within data already held — and one that misses leaves the element
+ * waiting for bytes nobody will request. Reported from use as a channel that
+ * stops and will not restart however many times you press play, and reproduced
+ * in the app: 22 seconds buffered, play head at 0:00, play doing nothing.
  *
- * Left alone the buffer also grows without bound, because a progressive fMP4
- * has no window and the element never discards what it has played.
+ * Seeking also forces the audio decoder to re-sync at a point a live stream may
+ * not cleanly have. "The speed problem is audio now" arrived with the release
+ * that introduced seeking, against audio measured as correct — which is the
+ * shape of an artefact of the correction rather than a fault in the stream.
  *
- * # The rule
+ * So: **never seek.** Play slightly faster until the gap closes. Nothing can be
+ * stranded by a rate change, no decoder has to re-sync, and Chromium preserves
+ * pitch by default, so the nudge is close to imperceptible. hls.js solves the
+ * same problem the same way.
  *
- * Two thresholds, not one. Correct only when the lag is worth correcting, and
- * correct to a position that still has a cushion — seeking to the very edge
- * lands with nothing in hand and the next drought stalls immediately, which
- * turns one visible jump into a permanent cycle of them.
+ * The honest limit: a rate nudge *bounds* drift rather than erasing it. On a
+ * channel that stalls constantly, holds can add lag faster than 10% recovers
+ * it. That is an argument for shortening the hold, not for seeking again.
  */
 
 /**
- * How far behind the edge the play head may drift before it is pulled forward.
+ * Lag beyond which the player starts catching up.
  *
- * Comfortably more than the measured 5s drought and the 8s head start
- * `preroll.ts` waits for, so ordinary buffering never triggers a seek — only
- * the accumulation of several droughts does.
+ * Well past the measured five-second drought and the eight-second head start
+ * `preroll.ts` waits for, so ordinary buffering never changes the rate.
  */
 export const MAX_LAG_SECONDS = 20;
 
 /**
- * Where to land: this far back from the edge, not at it.
+ * Lag at which it stops.
  *
- * Slightly more than one drought, so the correction arrives with enough in hand
- * to survive the next one. Landing at the edge is what makes a live player
- * stutter continuously after every catch-up.
+ * Deliberately far below MAX_LAG_SECONDS: the two together are hysteresis. A
+ * single threshold would flap around its own boundary, changing the rate every
+ * few seconds, and a rate that keeps changing is audible in a way that neither
+ * value alone is.
  */
-export const TARGET_LAG_SECONDS = 6;
+export const SETTLED_LAG_SECONDS = 8;
+
+/**
+ * How much faster to play while catching up.
+ *
+ * 10% closes a twenty-second gap in a little over three minutes — slow enough
+ * to be unobtrusive, fast enough to outrun ordinary drift. Higher values catch
+ * up sooner and start being something a viewer notices, and "the picture ran
+ * fast" is the complaint this whole area exists to answer, so it is not the
+ * direction to err in.
+ */
+export const CATCHUP_RATE = 1.1;
 
 /**
  * liveEdge is the end of what has arrived.
@@ -80,49 +98,23 @@ export function lagBehindEdge(el: {
 }
 
 /**
- * catchUpTarget answers where the play head should jump to, or null to leave it
- * alone.
+ * catchUpRate answers how fast to play, given the lag and whether the player is
+ * already catching up.
  *
  * Pure, and separate from the element, because jsdom neither buffers nor plays:
  * the rule is the part worth testing and the wiring is the part worth reading.
  * The same split `preroll.ts` makes, for the same reason.
  *
- * Never returns a target behind the current position. A live correction that
- * could move somebody backwards would re-show what they just watched, and a
- * rule that can only ever move forward cannot do that however the arithmetic
- * comes out.
+ * `catching` is passed in rather than read off the element, because a viewer
+ * may have chosen their own speed from the player's own menu — this has to be
+ * able to tell "1.1 because we set it" from "1.1 because they did", and the
+ * element cannot answer that.
  */
-export function catchUpTarget(
-  currentTime: number,
-  edge: number,
-  lag: number,
-): number | null {
-  if (edge <= 0) return null;
-  if (lag <= MAX_LAG_SECONDS) return null;
-
-  const target = edge - TARGET_LAG_SECONDS;
-  if (target <= currentTime) return null;
-  return target;
-}
-
-/**
- * resumeTarget is where playback should pick up after a stall.
- *
- * This is the half that stops the drift accumulating. `preroll.ts` resumed
- * wherever the drought left the play head, so each one cost lag permanently.
- * Resuming near the edge instead means a stall costs the time it lasted and
- * nothing after that.
- *
- * It is deliberately the same cushion as a catch-up rather than the edge
- * itself: having just waited for a head start, throwing it away by jumping to
- * the end would guarantee the next stall.
- */
-export function resumeTarget(
-  currentTime: number,
-  edge: number,
-): number | null {
-  if (edge <= 0) return null;
-  const target = edge - TARGET_LAG_SECONDS;
-  if (target <= currentTime) return null;
-  return target;
+export function catchUpRate(lag: number, catching: boolean): number {
+  if (!catching) {
+    return lag > MAX_LAG_SECONDS ? CATCHUP_RATE : 1;
+  }
+  // Already closing the gap: keep going until it is properly closed, rather
+  // than stopping the moment it dips under the threshold that started this.
+  return lag > SETTLED_LAG_SECONDS ? CATCHUP_RATE : 1;
 }

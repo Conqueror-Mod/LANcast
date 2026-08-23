@@ -4,6 +4,7 @@ import {
   PREROLL_SECONDS,
   bufferedAhead,
   shouldStartPlayback,
+  shouldHold,
 } from "./preroll";
 
 /*
@@ -71,5 +72,43 @@ describe("bufferedAhead", () => {
   // A play head past the buffer is not negative headroom; it is none.
   it("never reports a negative head start", () => {
     expect(bufferedAhead({ buffered: ranges([[0, 5]]), currentTime: 9 })).toBe(0);
+  });
+});
+
+/*
+ * `waiting` is not a measurement of how much media is in hand.
+ *
+ * Measured against a real channel in Chrome: it fired 113 times in 135 seconds
+ * — about once a second — while the element held between 117 and 142 seconds of
+ * buffered media. Pausing on each one left the player paused 28% of wall time
+ * with a median of 131 seconds in hand, and dragged playback to 0.76x real
+ * time. That was the stutter, the drift no catch-up could outrun, and almost
+ * certainly the choppy audio.
+ */
+describe("deciding whether a stall is real", () => {
+  it("does not hold when the cushion is already there", () => {
+    expect(shouldHold(PREROLL_SECONDS)).toBe(false);
+    expect(shouldHold(PREROLL_SECONDS + 1)).toBe(false);
+    // The measured case: two minutes in hand, and a `waiting` every second.
+    expect(shouldHold(131)).toBe(false);
+  });
+
+  it("still holds when the cushion is genuinely gone", () => {
+    expect(shouldHold(0)).toBe(true);
+    expect(shouldHold(0.2)).toBe(true);
+    expect(shouldHold(PREROLL_SECONDS - 1)).toBe(true);
+  });
+
+  /*
+   * The two rules are complements and must stay that way: a hold entered on a
+   * buffer that already satisfies shouldStartPlayback would release on its very
+   * next tick, which is the 250ms-per-event tax this exists to stop.
+   */
+  it("never holds on a buffer that would immediately resume", () => {
+    for (const ahead of [0, 1, 4, 7.9, 8, 12, 60, 131]) {
+      if (shouldStartPlayback(ahead, 0)) {
+        expect(shouldHold(ahead)).toBe(false);
+      }
+    }
   });
 });
