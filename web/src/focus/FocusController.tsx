@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { matchesBinding } from "@/lib/keys";
 
 /*
  * The central roving-tabindex controller (ADR 0004).
@@ -26,12 +27,21 @@ import {
 interface Entry {
   el: HTMLElement;
   onSelect?: () => void;
+  /*
+   * What the actions key opens, given the element it belongs to.
+   *
+   * The element rather than its rect: a menu opened this way has to be placed
+   * against the thing it belongs to *and* has to give focus back to it on the
+   * way out, and the second of those needs the element. The rect is one call
+   * away from it; the element is not recoverable from the rect.
+   */
+  onMenu?: (el: HTMLElement) => void;
 }
 
 interface FocusAPI {
   register: (id: string, entry: Entry) => void;
   unregister: (id: string) => void;
-  setSelect: (id: string, onSelect?: () => void) => void;
+  setSelect: (id: string, onSelect?: () => void, onMenu?: (el: HTMLElement) => void) => void;
   focusFirst: () => void;
   pushBack: (fn: () => void) => () => void;
   setSuspended: (v: boolean) => void;
@@ -170,9 +180,12 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     [setCurrent],
   );
 
-  const setSelect = useCallback((id: string, onSelect?: () => void) => {
+  const setSelect = useCallback((id: string, onSelect?: () => void, onMenu?: (el: HTMLElement) => void) => {
     const e = entries.current.get(id);
-    if (e) e.onSelect = onSelect;
+    if (e) {
+      e.onSelect = onSelect;
+      e.onMenu = onMenu;
+    }
   }, []);
 
   const focusFirst = useCallback(() => {
@@ -228,6 +241,23 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    /*
+     * The context menu, opened without a pointer.
+     *
+     * Resolved here rather than by each surface for the same reason Escape is:
+     * one controller owns what a key means, and a grid of two thousand tiles
+     * each listening for a keystroke is the thing this file exists to avoid.
+     *
+     * The element's rect goes with it, because a menu has to open somewhere and
+     * "at the pointer" is not available. Anchoring to the thing it belongs to
+     * is the only answer that reads correctly from a sofa.
+     */
+    if (matchesBinding("actions", e.key) && entry.onMenu) {
+      e.preventDefault();
+      entry.onMenu(entry.el);
+      return;
+    }
+
     const dir = KEY_TO_DIR[e.key];
     if (!dir) return;
     const target = nearest(entry.el.getBoundingClientRect(), dir, entries.current, id);
@@ -268,7 +298,10 @@ export function useFocusController(): FocusAPI {
  * to spread onto it. The element must be a real focus target (a button, or any
  * element — tabIndex is managed for you). Pass onSelect for Enter/click.
  */
-export function useFocusable(onSelect?: () => void) {
+export function useFocusable(
+  onSelect?: () => void,
+  onMenu?: (el: HTMLElement) => void,
+) {
   const api = useFocusController();
   const id = useId();
   const ref = useRef<HTMLElement | null>(null);
@@ -278,7 +311,7 @@ export function useFocusable(onSelect?: () => void) {
       if (el) {
         el.dataset.focusId = id;
         ref.current = el;
-        api.register(id, { el, onSelect });
+        api.register(id, { el, onSelect, onMenu });
       } else {
         api.unregister(id);
         ref.current = null;
@@ -290,8 +323,8 @@ export function useFocusable(onSelect?: () => void) {
 
   // Keep the select handler fresh without re-registering the element.
   useEffect(() => {
-    api.setSelect(id, onSelect);
-  }, [api, id, onSelect]);
+    api.setSelect(id, onSelect, onMenu);
+  }, [api, id, onSelect, onMenu]);
 
   return { ref: setRef, tabIndex: -1 as const, "data-focus-id": id };
 }

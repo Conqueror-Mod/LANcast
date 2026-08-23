@@ -49,6 +49,18 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { id: "back", meaning: "Back / close", scope: "global", keys: ["Escape"], fixed: true },
   { id: "search", meaning: "Search everything", scope: "global", keys: ["/"] },
   { id: "help", meaning: "Show this list", scope: "global", keys: ["?"] },
+  /*
+   * The context menu, without a pointer.
+   *
+   * `ContextMenu` is the dedicated key between the right-hand Alt and Ctrl, and
+   * plenty of laptops do not have one — so `c` is offered beside it, which is
+   * what Kodi has used for a context menu for twenty years and is the
+   * convention the people most likely to use this already have in their hands.
+   *
+   * Rebindable rather than fixed, because a remote's menu button sends whatever
+   * its maker chose and the whole point of this list is that you can say so.
+   */
+  { id: "actions", meaning: "Actions for the focused item", scope: "global", keys: ["ContextMenu", "c"] },
   { id: "bigscreen", meaning: "Bigscreen mode", scope: "global", keys: ["Ctrl+Shift+B"], fixed: true },
 
   { id: "playpause", meaning: "Play / pause", scope: "player", keys: [" ", "k"] },

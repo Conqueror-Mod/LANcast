@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useBackHandler } from "@/focus/FocusController";
+import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import "./Menu.css";
 
 /*
@@ -58,10 +58,81 @@ export type MenuAction = {
 function MenuList({
   actions,
   onDone,
+  autoFocus,
 }: {
   actions: MenuAction[];
   onDone: () => void;
+  /** Take focus on open — set when the menu was opened without a pointer. */
+  autoFocus?: boolean;
 }) {
+  const list = useRef<HTMLDivElement>(null);
+
+  /*
+   * Spatial navigation is off while a menu is open.
+   *
+   * Without this the arrows still walk the grid *behind* the menu: the tiles
+   * are registered focusables and the controller does not know a menu is over
+   * them. The focus ring wanders off underneath while the menu sits there, and
+   * on a television that is the whole interface coming apart.
+   *
+   * The same hook the player uses, for the same reason — a surface that owns
+   * the screen owns the arrows.
+   */
+  useSuspendFocus();
+
+  /*
+   * Up and down move between items, which is what makes this reachable at all
+   * without a pointer. Handled here rather than by the controller because the
+   * items are a list, not a grid: nearest-rect resolution would work and would
+   * be a strange way to walk four buttons stacked vertically.
+   *
+   * Home and End are free and cost a line each. A d-pad has neither, and a
+   * keyboard user reaching for them is not wrong.
+   */
+  const move = (delta: number) => {
+    const items = [
+      ...(list.current?.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"]:not(:disabled)',
+      ) ?? []),
+    ];
+    if (items.length === 0) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    // Wrapping, because a list this short with a dead end at each end is more
+    // annoying than the one extra press wrapping costs.
+    const next = (at + delta + items.length) % items.length;
+    items[at < 0 ? 0 : next]?.focus();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        move(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        move(-1);
+        break;
+      case "Home":
+      case "End": {
+        e.preventDefault();
+        const items = [
+          ...(list.current?.querySelectorAll<HTMLButtonElement>(
+            '[role="menuitem"]:not(:disabled)',
+          ) ?? []),
+        ];
+        (e.key === "Home" ? items[0] : items[items.length - 1])?.focus();
+        break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    list.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+      ?.focus();
+  }, [autoFocus]);
   // Stable, because useBackHandler re-registers whenever the function identity
   // changes and callers pass an inline arrow.
   const done = useRef(onDone);
@@ -69,7 +140,7 @@ function MenuList({
   useBackHandler(useCallback(() => done.current(), []));
 
   return (
-    <>
+    <div ref={list} onKeyDown={onKeyDown} className="menu__items">
       {actions.map((a, i) => (
         <button
           key={i}
@@ -85,7 +156,7 @@ function MenuList({
           {a.label}
         </button>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -171,7 +242,7 @@ export function ButtonMenu({
       </button>
       {open && (
         <div className="menu__list" role="menu">
-          <MenuList actions={actions} onDone={restoreFocus} />
+          <MenuList actions={actions} onDone={restoreFocus} autoFocus />
         </div>
       )}
     </div>
@@ -189,10 +260,17 @@ export function PointMenu({
   at,
   actions,
   onClose,
+  autoFocus,
 }: {
   at: MenuPoint;
   actions: MenuAction[];
   onClose: () => void;
+  /**
+   * Take focus on open. Set when the menu was summoned by the actions key
+   * rather than a pointer: a keyboard menu that does not take focus leaves the
+   * arrows walking the grid behind it, which is no menu at all.
+   */
+  autoFocus?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(at);
@@ -230,7 +308,7 @@ export function PointMenu({
       ref={ref}
       style={{ left: pos.x, top: pos.y }}
     >
-      <MenuList actions={actions} onDone={onClose} />
+      <MenuList actions={actions} onDone={onClose} autoFocus={autoFocus} />
     </div>
   );
 }

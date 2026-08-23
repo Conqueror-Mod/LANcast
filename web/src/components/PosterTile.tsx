@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
@@ -52,8 +52,31 @@ export function PosterTile({
 }) {
   const navigate = useNavigate();
   const open = onOpen ?? (() => navigate(`/item/${item.id}`));
-  const focusable = useFocusable(open);
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
+  // Set when the menu was summoned by the actions key, so it takes focus.
+  const [byKey, setByKey] = useState(false);
+
+  /*
+   * The same menu, without a pointer.
+   *
+   * Anchored under the tile's own bottom-left rather than at a pointer that
+   * does not exist — PointMenu keeps it on screen from there. Registered
+   * through the focus controller like everything else, so the key that opens it
+   * is the one in the keyboard settings rather than one this component invented
+   * (ADR 0004).
+   */
+  const openedFrom = useRef<HTMLElement | null>(null);
+  const openMenu = useCallback(
+    (el: HTMLElement) => {
+      if (!actions || actions(item).length === 0) return;
+      openedFrom.current = el;
+      setByKey(true);
+      const at = el.getBoundingClientRect();
+      setMenuAt({ x: at.left, y: at.bottom });
+    },
+    [actions, item],
+  );
+  const focusable = useFocusable(open, actions ? openMenu : undefined);
 
   const poster = artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
@@ -101,6 +124,7 @@ export function PosterTile({
           ? (e) => {
               if (actions(item).length === 0) return;
               e.preventDefault();
+              setByKey(false);
               setMenuAt({ x: e.clientX, y: e.clientY });
             }
           : undefined
@@ -160,7 +184,13 @@ export function PosterTile({
       <PointMenu
         at={menuAt}
         actions={actions(item)}
-        onClose={() => setMenuAt(null)}
+        autoFocus={byKey}
+        onClose={() => {
+          setMenuAt(null);
+          // Focus goes back to the tile it belonged to, or a keyboard is left
+          // with nothing focused and the grid has to be walked from the top.
+          if (byKey) openedFrom.current?.focus();
+        }}
       />
     )}
     </>
