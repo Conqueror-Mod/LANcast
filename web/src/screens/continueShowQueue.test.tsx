@@ -23,6 +23,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { Detail } from "./Detail";
 
 declare global {
@@ -119,12 +120,14 @@ async function render() {
     root.render(
       <QueryClientProvider client={client}>
         <FocusProvider>
-          <MemoryRouter initialEntries={["/item/900"]}>
-            <Routes>
-              <Route path="/item/:id" element={<Detail />} />
-              <Route path="/watch/:id" element={<FakePlayer />} />
-            </Routes>
-          </MemoryRouter>
+          <PlaybackProvider>
+            <MemoryRouter initialEntries={["/item/900"]}>
+              <Routes>
+                <Route path="/item/:id" element={<Detail />} />
+                <Route path="/watch/:id" element={<FakePlayer />} />
+              </Routes>
+            </MemoryRouter>
+          </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
     );

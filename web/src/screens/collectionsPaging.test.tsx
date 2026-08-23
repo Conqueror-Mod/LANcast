@@ -17,6 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { Collections } from "./Collections";
 
 declare global {
@@ -96,13 +97,15 @@ async function render() {
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={["/library/3/collections"]}>
           <FocusProvider>
-            <Routes>
-              <Route
-                path="/library/:id/collections"
-                element={<Collections />}
-              />
-              <Route path="/item/:id" element={<div id="detail" />} />
-            </Routes>
+            <PlaybackProvider>
+              <Routes>
+                <Route
+                  path="/library/:id/collections"
+                  element={<Collections />}
+                />
+                <Route path="/item/:id" element={<div id="detail" />} />
+              </Routes>
+            </PlaybackProvider>
           </FocusProvider>
         </MemoryRouter>
       </QueryClientProvider>,
