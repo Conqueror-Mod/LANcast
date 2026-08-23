@@ -48,6 +48,7 @@ import type {
   SubtitleTrack,
   Trailer,
   Trending,
+  PeerPresence,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -1895,6 +1896,92 @@ export function useSetSharing() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people"] });
       qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
+  });
+}
+
+/*
+ * Presence on paired servers (ADR 0045).
+ *
+ * Polled rather than cached, because presence is a claim about *now* and a
+ * stale one is not a late answer but a wrong one. Ten seconds is chosen against
+ * the server's own twenty-second watching timeout: long enough not to hammer
+ * two servers over a WAN, short enough that a film starting or stopping shows
+ * up before somebody wonders whether the page is broken.
+ *
+ * The key is `peer-presence` and not a child of `["people"]`. That is the
+ * project's most-repeated bug in its most avoidable form: a sibling key gets
+ * swept by every prefix invalidation aimed at the other thing, and the two
+ * lists answer different questions from different servers.
+ */
+export function usePeerPresence() {
+  return useQuery({
+    queryKey: ["peer-presence"],
+    queryFn: ({ signal }) => apiGet<{ peers: PeerPresence[] }>("/api/people/peers", signal),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+/*
+ * Granting is a decision about yourself, so the switch answers immediately.
+ *
+ * **Optimistically, and that is not a polish detail.** The write itself takes
+ * about ten milliseconds — it sets one local row. But the list it changes is
+ * built by calling every paired server, which costs two seconds when they
+ * answer and six when one of them does not. Invalidating and waiting therefore
+ * put a round trip to *somebody else's machine* between a person and their own
+ * consent, and the tick sat unmoved for long enough to be clicked again.
+ *
+ * A grant is local truth the moment it is written, so the cache is corrected
+ * here and the refetch happens behind it. `onError` puts the previous value
+ * back: the one thing worse than a slow switch is one that shows a permission
+ * that was never granted.
+ *
+ * Both keys, deliberately. A person reading Settings → Account wants the count
+ * of who they share with to agree with what they just clicked — a write that
+ * changes what a list holds must invalidate that list, and the question is what
+ * somebody could be *looking at*, not what the write touched.
+ */
+export function useGrantPresence() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { fingerprint: string; person: string; on: boolean }) =>
+      apiSend(
+        `/api/people/peers/${encodeURIComponent(v.fingerprint)}/${encodeURIComponent(v.person)}/presence`,
+        "PUT",
+        { on: v.on },
+      ),
+    onMutate: async (v) => {
+      // Stop an in-flight read from landing after this and undoing it.
+      await qc.cancelQueries({ queryKey: ["peer-presence"] });
+      const previous = qc.getQueryData<{ peers: PeerPresence[] }>([
+        "peer-presence",
+      ]);
+      if (previous) {
+        qc.setQueryData<{ peers: PeerPresence[] }>(["peer-presence"], {
+          peers: previous.peers.map((peer) =>
+            peer.fingerprint !== v.fingerprint
+              ? peer
+              : {
+                  ...peer,
+                  people: peer.people.map((person) =>
+                    person.id === v.person
+                      ? { ...person, granted: v.on }
+                      : person,
+                  ),
+                },
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(["peer-presence"], ctx.previous);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["peer-presence"] });
+      void qc.invalidateQueries({ queryKey: ["profile"] });
     },
   });
 }

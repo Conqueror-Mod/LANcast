@@ -622,5 +622,11 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "save progress")
 		return
 	}
+
+	// The player writes progress every five seconds while the picture is
+	// moving, which makes this the heartbeat presence needs without adding a
+	// second timer to the client. The *moment* is shared; the data is not —
+	// what this records goes to memory and never to a table (ADR 0045 §4).
+	s.recordWatching(s.userID(r), it)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 27
+const CurrentSchemaVersion = 28
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -66,6 +66,7 @@ var migrations = []migration{
 	{version: 25, sql: schemaRevision25},
 	{version: 26, sql: schemaRevision26},
 	{version: 27, sql: schemaRevision27},
+	{version: 28, sql: schemaRevision28},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -992,4 +993,52 @@ CREATE TABLE IF NOT EXISTS remote_person (
 );
 
 ALTER TABLE user ADD COLUMN visible_to_peers INTEGER NOT NULL DEFAULT 0;
+`
+
+/*
+ * Revision 28 — who may see me watching.
+ *
+ * The grant table [ADR 0045](../../docs/adr/0045-live-presence-between-paired-servers.md)
+ * §2 requires, and the shape is the decision: **one row per (local account,
+ * remote person)**, not a `share_presence` column on `user`.
+ *
+ * A single boolean would be a grant to *everybody* — the per-server answer this
+ * project considered and declined — wearing a per-account disguise. The unit of
+ * consent in ADR 0035 is a person throughout, and it stays a person here. A
+ * table also makes the absence of a row the default, which is how "off by
+ * default" ends up being true rather than merely intended: there is no column
+ * to have been initialised wrongly, and no migration in which anybody starts
+ * being visible.
+ *
+ * **It cascades twice, and both are the revocation mechanism.** From
+ * `remote_person`, which itself cascades from `peer`, so unpairing a server
+ * drops every grant to everybody on it in one statement — ADR 0045 §5's
+ * "immediately, with no per-person cleanup". And from `user`, so deleting an
+ * account takes its grants with it rather than leaving rows naming somebody who
+ * is gone.
+ *
+ * **Nothing here records presence itself.** This table says who *may* see;
+ * what they see is `internal/presence`, which is a map and a mutex and is never
+ * written down. Keeping the permission durable and the observation ephemeral is
+ * the whole architecture of ADR 0045 — a `last_seen_watching` column added here
+ * would collapse it, which is exactly why the ADR names that column as the
+ * request that will arrive.
+ *
+ * `granted_at` is for showing a person what they have agreed to and when. It is
+ * a fact about the grant, not about any viewing, and reveals nothing about what
+ * anybody watched.
+ */
+const schemaRevision28 = `
+CREATE TABLE IF NOT EXISTS presence_grant (
+    user_id     TEXT    NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    fingerprint TEXT    NOT NULL,
+    person_id   TEXT    NOT NULL,
+    granted_at  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, fingerprint, person_id),
+    FOREIGN KEY (fingerprint, person_id)
+        REFERENCES remote_person(fingerprint, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_presence_grant_person
+    ON presence_grant(fingerprint, person_id);
 `

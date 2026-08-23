@@ -186,6 +186,63 @@ address another machine could reach — it cannot introduce itself.
 **A pairing permits nothing.** It records that two servers know who each other
 are, and every later capability is granted separately.
 
+### Presence
+
+| Route | Purpose |
+|---|---|
+| `GET /api/people/peers` | `{peers: [...]}` — paired servers, the people on them, whether **you** have granted each of them presence, and what they are doing |
+| `PUT /api/people/peers/{fingerprint}/{person}/presence` | `{on}` — grant or revoke *your* presence to one named person |
+| `DELETE /api/presence` | Playback stopped; drop the caller's live presence now |
+| `GET /api/federation/presence?person={id}` | **Peer-to-peer.** Answers what that peer's person may see. Not a session route — see below |
+| `GET /api/federation/roster` | **Peer-to-peer.** The accounts here that have opted into being listed |
+
+Presence is a **third disclosure category** and no existing opt-in widens into
+it ([ADR 0045](adr/0045-live-presence-between-paired-servers.md) §1): agreeing
+to publish what you have finished is not agreeing to be watched in real time.
+It is off by default, and there is no migration in which anybody starts being
+visible.
+
+A grant **names a person**, never a server, so the route carries both a
+fingerprint and a person id. Granting is self-service and reads the caller's id
+from their session: there is no route that accepts a subject, and therefore no
+way for an administrator to grant presence on somebody's behalf (§6). The
+person must already be in that peer's roster, which is itself a per-account
+opt-in — an account that has not opted in cannot be named by anybody's grant,
+in either direction, and the schema enforces it rather than a handler.
+
+Each person in `GET /api/people/peers` carries `granted`, and then either
+`shares: false`, or `shares: true` with `online` and `watching`. Those are three
+different statements — *has not shared with you*, *offline*, and *online and
+idle* — and a client must not collapse them, for the reason the People page
+already states about `Not sharing`: a choice and an absence are not the same
+thing.
+
+`watching` is **the work, by title, or empty**. Never an episode
+("Cowboy Bebop", not "Cowboy Bebop S01E02"), never music or photographs, and
+never a position — §3 bounds the disclosure exhaustively and the payload carries
+nothing else. Presence is **never persisted**: there is no history, no "last
+seen watching", and no route that could answer either. Revocation takes effect
+on the next poll, mid-film.
+
+`GET /api/federation/presence` is the only route in this contract not
+authenticated by a session. Its caller is a server, and it is authenticated by
+the **mutual-TLS pin** ([ADR 0044](adr/0044-server-identity-and-peering.md) §4):
+the connection must present the identity key already recorded for that peer, and
+a request arriving without a peer certificate is refused. Which *person* is
+asking is the calling server's word, on the same basis a pairing already rests
+on. Peer connections are told apart from browsers by an ALPN marker in the
+ClientHello, so they share the ordinary port and no browser is ever asked for a
+certificate.
+
+Fetching a peer's roster is also what establishes that a pairing is **mutual**:
+this server only reaches that handler for a fingerprint the far side already
+holds, so a successful call proves both sides hold each other, and it is what
+moves a peer from `added` to `paired`
+([ADR 0044](adr/0044-server-identity-and-peering.md) §3). Until it succeeds a
+peer stays `added` — accepting an invite is not a pairing. A roster is stored
+wholesale, so somebody who turns their visibility off disappears from it on the
+next refresh and every grant naming them cascades away.
+
 ### Roles
 
 Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).

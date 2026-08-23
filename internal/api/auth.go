@@ -24,6 +24,12 @@ func isPublicPath(p string) bool {
 	switch p {
 	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup":
 		return true
+	case "/api/federation/presence", "/api/federation/roster":
+		// Not public: authenticated by the mutual-TLS pin instead of a session
+		// (ADR 0044 §4). It is listed here because the *session* gate is the
+		// wrong gate for a caller that is a server, and the handler refuses
+		// anything that did not present a peer certificate.
+		return true
 	}
 	return !strings.HasPrefix(p, "/api/")
 }
@@ -74,6 +80,10 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 			return
 		}
+		// Any authenticated request means the person is here. This is what
+		// makes "online" a fact rather than an assumption, and it costs
+		// nothing: the request was going to happen anyway.
+		s.presence.Seen(sess.UserID)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
 	})
 }

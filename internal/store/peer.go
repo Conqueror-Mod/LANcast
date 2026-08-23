@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -237,11 +238,20 @@ func (s *Store) MarkPeerSeen(ctx context.Context, fingerprint string, at time.Ti
 /*
  * ReplaceRemotePeople stores the roster a peer sent.
  *
- * Wholesale, because that is what a roster is: the complete set of accounts on
- * that server willing to be seen, as of now. Merging would keep somebody who
- * had turned `visible_to_peers` off, which is the one thing a roster refresh
- * has to be able to undo — an opt-out that cannot take back what it gave is not
- * an opt-out (ADR 0035).
+ * Wholesale in effect, because that is what a roster is: the complete set of
+ * accounts on that server willing to be seen, as of now. Somebody who turned
+ * `visible_to_peers` off is absent from it and is removed here, which is the
+ * one thing a roster refresh has to be able to do — an opt-out that cannot take
+ * back what it gave is not an opt-out (ADR 0035).
+ *
+ * **It is written as upsert-then-delete-the-absent rather than delete-then-
+ * reinsert, and the difference is not stylistic.** `presence_grant` cascades
+ * from this table (revision 28), so clearing the roster first destroys every
+ * grant naming anybody on this peer — including the people the very next
+ * statement puts back. A refresh is routine and unattended, so the effect was
+ * that consent quietly evaporated on a schedule: the person is still listed,
+ * the switch reads off, and nobody did anything. Rows that survive a refresh
+ * are now never deleted, so nothing cascades from them.
  *
  * Scoped to one peer. A peer can only ever describe its own people, and this
  * signature is why: there is no call that lets one peer's roster touch
@@ -266,19 +276,28 @@ func (s *Store) ReplaceRemotePeople(ctx context.Context, fingerprint string, peo
 		return ErrNotFound
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM remote_person WHERE fingerprint = ?`, fingerprint); err != nil {
-		return fmt.Errorf("replace remote people: clear: %w", err)
-	}
 	now := time.Now().Unix()
+	keep := make([]any, 0, len(people)+1)
+	keep = append(keep, fingerprint)
 	for _, p := range people {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO remote_person (fingerprint, id, name, updated_at)
 			VALUES (?, ?, ?, ?)
-			ON CONFLICT(fingerprint, id) DO UPDATE SET name = excluded.name`,
+			ON CONFLICT(fingerprint, id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`,
 			fingerprint, p.ID, p.Name, now); err != nil {
 			return fmt.Errorf("replace remote people: %w", err)
 		}
+		keep = append(keep, p.ID)
+	}
+
+	// Everybody this peer no longer vouches for. Their grants cascade away with
+	// them, which is the point: they withdrew.
+	del := `DELETE FROM remote_person WHERE fingerprint = ?`
+	if len(people) > 0 {
+		del += ` AND id NOT IN (?` + strings.Repeat(`, ?`, len(people)-1) + `)`
+	}
+	if _, err := tx.ExecContext(ctx, del, keep...); err != nil {
+		return fmt.Errorf("replace remote people: prune: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("replace remote people: commit: %w", err)
