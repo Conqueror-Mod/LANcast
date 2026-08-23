@@ -201,9 +201,18 @@ func buildActivity(snap snapshot) []Activity {
 		if sess.Finished {
 			continue
 		}
+		// A remux and a transcode are not the same work and must not read as
+		// the same work. Calling a copy a transcode overstates what the server
+		// is doing by an order of magnitude, and it is the sort of wrong that
+		// gets believed — it has already misdirected one investigation into
+		// Live TV pacing.
+		title := "Remuxing for playback"
+		if sess.Encoding {
+			title = "Transcoding for playback"
+		}
 		tasks = append(tasks, Activity{
 			Kind: "transcode", ID: "transcode:" + sess.ID,
-			Title: "Transcoding for playback", State: "running",
+			Title: title, State: "running",
 			Detail: sess.Output, Error: sess.Error,
 		})
 	}

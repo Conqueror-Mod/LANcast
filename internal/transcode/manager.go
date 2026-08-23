@@ -246,7 +246,8 @@ func (m *Manager) Sessions() []SessionInfo {
 		done, err := s.Done()
 		info := SessionInfo{
 			ID: s.ID, ItemID: s.ItemID, Output: string(s.Output),
-			StartAt: s.StartAt, IdleSeconds: int(s.Idle().Seconds()),
+			Encoding: s.Encoding,
+			StartAt:  s.StartAt, IdleSeconds: int(s.Idle().Seconds()),
 			RunningSeconds: int(time.Since(s.Started()).Seconds()), Finished: done,
 		}
 		if err != nil {
@@ -259,9 +260,11 @@ func (m *Manager) Sessions() []SessionInfo {
 
 // SessionInfo is a serializable view of a session.
 type SessionInfo struct {
-	ID             string  `json:"id"`
-	ItemID         int64   `json:"item_id"`
-	Output         string  `json:"output"`
+	ID     string `json:"id"`
+	ItemID int64  `json:"item_id"`
+	Output string `json:"output"`
+	// Encoding distinguishes a real re-encode from a remux. See Session.
+	Encoding       bool    `json:"encoding"`
 	StartAt        float64 `json:"start_at"`
 	IdleSeconds    int     `json:"idle_seconds"`
 	RunningSeconds int     `json:"running_seconds"`

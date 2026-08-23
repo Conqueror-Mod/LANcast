@@ -1609,6 +1609,12 @@ answers the question without that knowledge, in one shape:
   add new values; a client that does not recognise one still has a title and a
   progress pair, which is the point of normalizing.
 - `id` is stable for the task's lifetime, so a list can be keyed by it.
+- A `transcode` task titles itself **"Remuxing for playback"** when the streams
+  are being copied into a different container and **"Transcoding for playback"**
+  only when something is genuinely re-encoded. The two differ by an order of
+  magnitude in cost — a remux is a few percent of one core — and reporting both
+  as a transcode overstates what the server is doing. The underlying flag is
+  `encoding` on `GET /api/transcode/sessions`.
 - `title` is resolved server-side — a scan names its library, because a client
   showing the row should not have to join an id back to a name.
 - `state` is `running` or `failed`. Only those appear: a finished task is not

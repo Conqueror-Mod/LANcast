@@ -23,6 +23,23 @@ type Session struct {
 	Output  Output
 	StartAt float64
 	Dir     string // HLS only
+	/*
+	 * Encoding is whether either stream is genuinely being re-encoded, as
+	 * opposed to copied into a different container.
+	 *
+	 * It exists because the two cost wildly different things and were being
+	 * reported as the same thing. A remux is a few percent of one core; a
+	 * transcode is most of one. The activity panel called every session
+	 * "Transcoding for playback", so a live channel being copied — the
+	 * overwhelmingly common case — announced itself as a transcode.
+	 *
+	 * That is not a cosmetic complaint. It sent this project's own Live TV
+	 * investigation down the wrong path: the pacing fault was assumed to be an
+	 * encoder failing to keep up, on the evidence of a badge, while the server
+	 * log two lines away said `video=copy audio=copy`. A status that misreports
+	 * what the machine is doing is worse than no status, because it is trusted.
+	 */
+	Encoding bool
 
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
@@ -143,7 +160,7 @@ func startProgressive(ctx context.Context, bin string, o Options) (*Session, io.
 	}
 
 	s := &Session{
-		Output: Progressive, StartAt: o.StartAt,
+		Output: Progressive, StartAt: o.StartAt, Encoding: o.Decision.Encoding(),
 		cmd: cmd, cancel: cancel, stderr: stderr,
 		started: time.Now(), lastTouch: time.Now(),
 	}
@@ -171,7 +188,8 @@ func startHLS(ctx context.Context, bin string, o Options) (*Session, error) {
 
 	s := &Session{
 		Output: HLS, StartAt: o.StartAt, Dir: o.OutputDir,
-		cmd: cmd, cancel: cancel, stderr: stderr,
+		Encoding: o.Decision.Encoding(),
+		cmd:      cmd, cancel: cancel, stderr: stderr,
 		started: time.Now(), lastTouch: time.Now(),
 	}
 
