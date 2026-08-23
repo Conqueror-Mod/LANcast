@@ -532,8 +532,11 @@ group is not priority.
   left alone.
 
   **Still not built:** hardware tuners (HDHomeRun and friends — no device to
-  build against), and recording, which needs somewhere to put the files and a
-  decision about what a recording *is* once it lands in a library.
+  build against), and recording. **Recording is on the back burner** — it is the
+  piece that turns a channel list into something you own, and it is also the one
+  that needs somewhere to put the files and a decision about what a recording
+  *is* once it lands in a library, which is a bigger question than the feature
+  looks.
 
 - **Installed games as a library — Steam and Epic** — captured, and the first
   backlog item that **breaks the model rather than extending it**, so it needs an
@@ -569,6 +572,37 @@ group is not priority.
   capability it was built to refuse. Granting it a "run this URI" capability
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
+
+- **Lyrics, and the rest of music.** [probe](../internal/probe/probe.go) throws
+  the `LYRICS` tag away on purpose — a multi-kilobyte blob has no business in a
+  struct that answers "can this client play this file", and that stays true. So
+  lyrics are a **separate read**, not a probe field: embedded `USLT`/`LYRICS`
+  from the tags, and `.lrc` sidecars beside the track. **Sidecar first**, exactly
+  as subtitles resolve, and for the same reason — the sidecar is the one a person
+  can fix. It is also the only one of the two that carries **timestamps**, which
+  is the whole feature: unsynced lyrics are a text file, synced lyrics follow the
+  song. No provider and no network for a first version; everything needed is
+  already on disk. Alongside it, the music player still owes **gapless and
+  crossfade** — a live album with a gap between tracks is a broken record, and
+  that is a decoder-scheduling problem in the client rather than anything the
+  server can fix.
+- **Photos need more than a grid — starting with people.** Face grouping is the
+  feature Google Photos used to justify reading every family album ever uploaded,
+  which makes doing it **entirely on the box** the sharpest available statement
+  of the difference. The model and the worker are the large part; the **naming
+  UI is the actual product**, because a cluster of unnamed faces is a curiosity
+  and a named one is how you find a photo. It follows the existing worker shape
+  (scan → enrich → probe) and must be re-runnable, with the same rule the rest of
+  the project holds: **a name a person typed is an edit and is locked**, and a
+  re-cluster may not overwrite it.
+
+  The smaller photo gaps are worth naming while we are here.
+  [exif.go](../internal/photo/exif.go) reads **two tags** — orientation and
+  capture time — by deliberate refusal of a general EXIF dependency. That refusal
+  was about scope rather than privacy, so it is revisitable, but it should be
+  revisited *consciously*: a places/map view needs GPS parsing, and GPS is the
+  one EXIF field that is a privacy decision rather than a parsing chore. Also
+  unbuilt: date-grouped albums, duplicate detection, and RAW.
 
 ### Metadata, ratings and discovery
 
@@ -663,6 +697,50 @@ group is not priority.
   because two admins demoting each other at the same moment is a race a
   handler check loses — and the prize for losing it is a server nobody can
   administer without `reset-auth` on the machine itself.
+
+- **Managed profiles with a content-rating ceiling** — approved, and mostly
+  assembly: [ADR 0015](adr/0015-multi-user-accounts.md) already gives accounts
+  and roles, and `content_rating` already flows through
+  [items.go](../internal/api/items.go). What matters is *where it is enforced*.
+  **Server-side, in the queries and in playback authorisation** — a client-side
+  hide is a suggestion, and this API serves files; an account that can be talked
+  into a stream by a hand-written request has no ceiling at all. Library
+  visibility belongs in the same place.
+
+  It also needs one thing said out loud so it does not read as a contradiction of
+  [ADR 0035](adr/0035-who-may-see-whose-viewing.md), which holds that a switch
+  somebody else can flip is not consent. **This one is deliberately the
+  opposite**: a rating ceiling is set *for* an account by an administrator and
+  cannot be cleared by the account itself, because a limit you can lift is not a
+  limit. The distinction is that ADR 0035 governs what others learn about you and
+  this governs what a household allows — and the two rules must not be
+  generalised into each other.
+- **A local Wrapped.** Everything Spotify computes about you in a datacentre,
+  computed on your own machine, from data that has never left it — and the
+  novelty is precisely that it is *not* a marketing artefact, so nothing about it
+  gets uploaded or shared unless ADR 0035's opt-in says so. The material is
+  `playback_state`, already there since v0.4.
+
+  One constraint decides whether this is charming or a lie, and it is the same
+  one the Profile page already documents: **`playback_state` holds one row per
+  item per user — the *last* time each thing was played.** So "your top film,
+  seven times" is not answerable and must not be implied. What *is* honest is
+  time spent, breadth, what you finished versus abandoned, and the shape of a
+  year. This is also the exact constraint the history question below turns on.
+- **Open question — a real history, Trakt- or Sonarr-shaped.** Captured as a
+  *question*, not a feature, because the interesting part is a cost decision
+  nobody has made. Everything above reads `playback_state`, which is a **state**
+  table: one row per item per user, overwritten on every play. It can answer
+  "where was I" perfectly and can never answer "how many times" or "what did I
+  watch on a Tuesday in March", because the previous answer is gone the moment
+  you press play again. A genuine history is therefore **an append-only event
+  log, and a second source of truth** — a row per sitting, growing without
+  bound, which is a different kind of object from anything in this schema and
+  brings retention, size and migration questions with it. That is the weight.
+  Nothing should be built until the scope is settled, and the first thing to
+  settle is whether the ask is a *log* (every sitting, for its own sake) or an
+  *exporter* (get my data out, in a format something else reads). Those are very
+  different jobs and only one of them is heavy.
 
 ### System, operations and diagnostics
 
@@ -867,6 +945,43 @@ group is not priority.
   **Never skip without a visible affordance.** A button that appears, not a jump
   that happens. An automatic skip that is a few seconds wrong is indistinguishable
   from a broken file, and the first thing it will eat is a cold open.
+
+- **The audio pass — loudness leveling, a dialogue-clarity knob, and an
+  equaliser** across music, shows and films. The most-felt gap on this page:
+  whispered dialogue and deafening explosions are the standing complaint about
+  watching anything at home, and **no commercial service offers the control at
+  all**.
+
+  The obvious implementation is the wrong one. ffmpeg has `loudnorm`, `compand`
+  and `equalizer`, and reaching for them costs twice: a filter **forces a
+  transcode on a file that would have direct-played**, and it bakes one person's
+  curve into a stream a household shares. **The client is the right home** — a
+  Web Audio graph on the media element, `BiquadFilterNode`s for the bands and a
+  `DynamicsCompressorNode` for night mode. Per device, no server cost, and it
+  works *with* direct play rather than defeating it. There is no `AudioContext`
+  in the client today, so this is new ground rather than an extension.
+
+  **The trap is surround, and it is real.**
+  `createMediaElementSource` reroutes the element's output through the graph,
+  and the graph's destination is stereo — so **a 5.1 file that was direct-playing
+  silently becomes two channels the moment somebody touches the EQ**. This
+  codebase already has the vocabulary for it: `MaxAudioChannels` in
+  [decide.go](../internal/probe/decide.go) exists to *force* a downmix, and doing
+  the same thing by accident is the quiet kind of wrong this roadmap keeps a
+  section about. So the graph engages only where the output is already stereo, or
+  the trade is stated plainly at the switch. It is never silent.
+
+  Two smaller rules. **Presets are per content type** — one flat curve shared by
+  a symphony, a sitcom and a war film is what makes people turn an equaliser off
+  and never return. And the graph must **survive the cross-document move** that
+  [ADR 0029](adr/0029-picture-in-picture-is-our-window.md) needs, which the
+  acceptance test named there should now cover an `AudioContext` as well as the
+  element. Watch Together raises no question here: the curve is per device, so
+  there is nothing to synchronise.
+- **Subtitle appearance — font, size, colour, background, position.** Every
+  commercial service ships three presets; this is a genuine accessibility win and
+  it is pure client work, with subtitle-offset plumbing already in
+  `web/src/playback/`. **Back burner** — wanted, not next.
 
 ### Resolved modeling question — multi-part and serial works
 
