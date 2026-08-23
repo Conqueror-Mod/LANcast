@@ -63,6 +63,19 @@ type Decision struct {
 	TonemapHDR bool `json:"tonemap_hdr,omitempty"`
 }
 
+/*
+ * Encoding reports whether either stream is genuinely re-encoded.
+ *
+ * The distinction the name carries is a cost one: a remux rewrites the
+ * container and copies the streams, which is a few percent of one core, while
+ * an encode is most of one. Anything reporting to a person what the server is
+ * doing has to be able to tell them apart, or a copy gets announced as a
+ * transcode and the machine looks busier than it is.
+ */
+func (d Decision) Encoding() bool {
+	return d.VideoAction == "encode" || d.AudioAction == "encode"
+}
+
 // Profile describes what a client can play.
 //
 // Deliberately data rather than a hardcoded browser list: the same structure
