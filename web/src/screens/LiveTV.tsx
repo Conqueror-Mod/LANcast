@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
 import { bufferedAhead, shouldStartPlayback } from "@/lib/preroll";
+import {
+  catchUpTarget,
+  lagBehindEdge,
+  liveEdge,
+  resumeTarget,
+} from "@/lib/liveEdge";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -105,6 +111,27 @@ export function LiveTV() {
 
     let timer: number | null = null;
 
+    /*
+     * Move the play head, and never let failing to do so matter.
+     *
+     * Setting currentTime on a media element can throw — a stream the browser
+     * considers unseekable raises rather than declining — and the resume below
+     * does this immediately before calling play(). An unguarded assignment
+     * therefore turns "the catch-up did not work" into "the channel does not
+     * start", which is a far worse failure than the drift it was fixing.
+     *
+     * Staying near the live edge is an improvement on watching from a minute
+     * back. It is not worth playback.
+     */
+    const seekTo = (v: HTMLVideoElement, to: number | null) => {
+      if (to === null) return;
+      try {
+        v.currentTime = to;
+      } catch {
+        // Unseekable, or seeking somewhere it will not go. Keep playing.
+      }
+    };
+
     const release = () => {
       if (timer !== null) {
         window.clearInterval(timer);
@@ -130,16 +157,48 @@ export function LiveTV() {
           return;
         }
         release();
+        /*
+         * Resume near the edge, not where the drought stopped us.
+         *
+         * This is the line that stops the drift accumulating. Resuming in
+         * place meant every stall cost lag permanently, and on a bursty
+         * provider that is several times a minute — which is how a channel
+         * ends up a minute behind reality without anything ever being slow.
+         */
+        seekTo(el, resumeTarget(el.currentTime, liveEdge(el)));
         // A rejection is left alone: a browser refusing autoplay is a policy
         // decision, and the controls are right there.
         void el.play().catch(() => {});
       }, 250);
     };
 
+    /*
+     * Catch up when the play head has drifted, stall or no stall.
+     *
+     * The resume above handles the common cause; this handles the rest — a
+     * burst that outruns playback, a tab throttled in the background, a
+     * machine that slept. Without it the gap only ever grows, because a
+     * progressive fMP4 has no window and nothing else has an opinion about
+     * where the play head should be.
+     *
+     * Only while playing. A paused element is somebody's decision, and yanking
+     * it forward would override that; the correction happens on the next tick
+     * after they press play, which is the right moment for a *live* channel to
+     * return to live.
+     */
+    const catchUp = () => {
+      if (el.paused || el.seeking) return;
+      seekTo(el, catchUpTarget(el.currentTime, liveEdge(el), lagBehindEdge(el)));
+    };
+    // On timeupdate rather than an interval: it fires only while media is
+    // actually advancing, so a paused or stalled element costs nothing.
+    el.addEventListener("timeupdate", catchUp);
+
     hold();
     el.addEventListener("waiting", hold);
 
     return () => {
+      el.removeEventListener("timeupdate", catchUp);
       el.removeEventListener("waiting", hold);
       if (timer !== null) window.clearInterval(timer);
     };

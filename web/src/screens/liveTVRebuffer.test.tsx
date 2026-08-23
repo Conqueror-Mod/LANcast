@@ -80,14 +80,28 @@ function stubMedia(el: HTMLVideoElement, aheadSeconds: () => number) {
   const pause = vi.fn();
   Object.defineProperty(el, "play", { value: play, configurable: true });
   Object.defineProperty(el, "pause", { value: pause, configurable: true });
-  Object.defineProperty(el, "currentTime", { value: 0, configurable: true });
+  // Writable, because a real element's is. Defining it as a read-only value
+  // made this harness disagree with the thing it stands in for, and the player
+  // now moves the play head to keep a live channel near its edge.
+  let now = 0;
+  Object.defineProperty(el, "currentTime", {
+    configurable: true,
+    get: () => now,
+    set: (v: number) => {
+      now = v;
+    },
+  });
+  // The end of the buffer, expressed relative to the play head — which is what
+  // "ahead" has always meant in these tests. It used to be written as an
+  // absolute end that happened to be equal because the play head never moved.
+  // It moves now, and the two are no longer the same number.
   Object.defineProperty(el, "buffered", {
     configurable: true,
     get: () =>
       ({
         length: 1,
         start: () => 0,
-        end: () => aheadSeconds(),
+        end: () => now + aheadSeconds(),
       }) as unknown as TimeRanges,
   });
   return { play, pause };
