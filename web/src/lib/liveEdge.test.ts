@@ -1,19 +1,26 @@
 /*
  * The live-edge rule.
  *
- * Written against a fault measured in the running app: a channel whose play
- * head sat 26 seconds behind the incoming data, then 54 seconds behind half a
- * minute later, while playing at 1.0x the whole time. Nothing was slow. The gap
- * grew because every stall resumed in place and nothing ever took the lag back.
+ * Written against a fault measured in the running app while the server was
+ * measured at the same moment and found correct — 30.1 frames per media-second
+ * against a declared 30, and audio at 46.9 packets per second against the 46.9
+ * that AAC-LC at 48kHz requires:
+ *
+ *	0:48 / 1:14      play head 26s behind the incoming data
+ *	1:23 / 2:17      54s behind, ~30s later
+ *
+ * The play head ran at 1.0x throughout. The gap grew, because every drought
+ * resumed where it stopped and nothing took the lag back.
  */
 import { describe, it, expect } from "vitest";
+import { PREROLL_SECONDS } from "./preroll";
 import {
+  CATCHUP_RATE,
   MAX_LAG_SECONDS,
-  TARGET_LAG_SECONDS,
-  catchUpTarget,
+  SETTLED_LAG_SECONDS,
+  catchUpRate,
   lagBehindEdge,
   liveEdge,
-  resumeTarget,
 } from "./liveEdge";
 
 // A stand-in for TimeRanges, which jsdom does not provide.
@@ -37,9 +44,9 @@ describe("reading the edge", () => {
 
   it("measures the gap the app showed", () => {
     // 0:48 / 1:14, read off the player during the fault.
-    expect(
-      lagBehindEdge({ buffered: ranges([0, 74]), currentTime: 48 }),
-    ).toBe(26);
+    expect(lagBehindEdge({ buffered: ranges([0, 74]), currentTime: 48 })).toBe(
+      26,
+    );
   });
 
   // A play head past the end is not a negative lag; it is a play head at the
@@ -51,66 +58,62 @@ describe("reading the edge", () => {
   });
 });
 
-describe("deciding whether to catch up", () => {
-  it("leaves ordinary buffering alone", () => {
-    // The measured drought is 5s and preroll holds for 8s. Neither may
-    // provoke a seek, or every stall becomes a visible jump.
-    expect(catchUpTarget(100, 108, 8)).toBeNull();
-    expect(catchUpTarget(100, 118, 18)).toBeNull();
+describe("deciding how fast to play", () => {
+  it("leaves ordinary buffering at normal speed", () => {
+    // The measured drought is 5s and preroll holds for 8s. Neither may change
+    // the rate, or every stall becomes an audible speed-up.
+    expect(catchUpRate(5, false)).toBe(1);
+    expect(catchUpRate(PREROLL_SECONDS, false)).toBe(1);
+    expect(catchUpRate(MAX_LAG_SECONDS, false)).toBe(1);
   });
 
-  it("corrects a lag that has accumulated past the threshold", () => {
+  it("speeds up once the lag is more than buffering explains", () => {
+    expect(catchUpRate(MAX_LAG_SECONDS + 1, false)).toBe(CATCHUP_RATE);
     // The 54s gap from the app.
-    const to = catchUpTarget(83, 137, 54);
-    expect(to).toBe(137 - TARGET_LAG_SECONDS);
+    expect(catchUpRate(54, false)).toBe(CATCHUP_RATE);
   });
 
   /*
-   * Landing at the edge is the tempting mistake: it looks like the most
-   * "live" answer and it guarantees the next drought stalls immediately,
-   * turning one jump into a permanent cycle of them.
+   * Hysteresis. A single threshold flaps around its own boundary — speeding up
+   * at 20.1s, stopping at 19.9s, again seconds later — and a rate that keeps
+   * changing is audible in a way that neither setting alone is.
    */
-  it("lands with a cushion rather than at the edge", () => {
-    const to = catchUpTarget(0, 100, 100)!;
-    expect(to).toBeLessThan(100);
-    expect(100 - to).toBe(TARGET_LAG_SECONDS);
-    expect(TARGET_LAG_SECONDS).toBeLessThan(MAX_LAG_SECONDS);
+  it("keeps catching up below the threshold that started it", () => {
+    expect(catchUpRate(MAX_LAG_SECONDS - 5, true)).toBe(CATCHUP_RATE);
+    expect(catchUpRate(SETTLED_LAG_SECONDS + 1, true)).toBe(CATCHUP_RATE);
   });
 
-  it("does nothing before any media has arrived", () => {
-    expect(catchUpTarget(0, 0, 0)).toBeNull();
+  it("stops once the gap is properly closed", () => {
+    expect(catchUpRate(SETTLED_LAG_SECONDS, true)).toBe(1);
+    expect(catchUpRate(0, true)).toBe(1);
+  });
+
+  it("settles well below where it engages", () => {
+    expect(SETTLED_LAG_SECONDS).toBeLessThan(MAX_LAG_SECONDS);
   });
 
   /*
-   * The rule may only ever move forward. A correction that moved somebody
-   * backwards would re-show what they had just watched, which is a worse
-   * failure than the lag it was fixing.
+   * The rate has to be gentle. "The picture ran fast" is the complaint this
+   * whole area exists to answer, so a correction loud enough to be mistaken for
+   * that fault would be answering it with itself.
    */
-  it("never moves the play head backwards", () => {
-    // A big lag, but the cushion would land behind where we already are.
-    expect(catchUpTarget(98, 100, 100)).toBeNull();
+  it("nudges rather than races", () => {
+    expect(CATCHUP_RATE).toBeGreaterThan(1);
+    expect(CATCHUP_RATE).toBeLessThanOrEqual(1.15);
   });
-});
 
-describe("resuming after a stall", () => {
   /*
-   * The half that stops the drift accumulating. Resuming in place is what the
-   * player did before, and it is why each of several stalls a minute cost lag
-   * that was never recovered.
+   * The instrument matters as much as the thresholds, so it is pinned.
+   *
+   * The live endpoint is an unbounded chunked response with no Accept-Ranges,
+   * so a seek outside the buffer strands the element — observed as a channel
+   * holding 22 seconds of media, sitting at 0:00, that would not start however
+   * many times play was pressed. This module must offer no way back to that.
    */
-  it("resumes near the edge rather than where the drought stopped", () => {
-    expect(resumeTarget(48, 74)).toBe(74 - TARGET_LAG_SECONDS);
-  });
-
-  it("keeps the head start it just waited for", () => {
-    const to = resumeTarget(0, 40)!;
-    expect(40 - to).toBe(TARGET_LAG_SECONDS);
-  });
-
-  // Unlike a catch-up, this has no threshold: a stall is already evidence
-  // that the position is wrong. But it still may not go backwards.
-  it("leaves a play head already at the edge alone", () => {
-    expect(resumeTarget(38, 40)).toBeNull();
-    expect(resumeTarget(0, 0)).toBeNull();
+  it("offers no way to seek", async () => {
+    const mod = await import("./liveEdge");
+    for (const name of Object.keys(mod)) {
+      expect(name).not.toMatch(/seek|target/i);
+    }
   });
 });

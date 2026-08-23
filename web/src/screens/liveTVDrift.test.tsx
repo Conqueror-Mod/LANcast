@@ -1,18 +1,15 @@
 /*
- * A live channel stays near its live edge.
+ * A live channel does not drift behind its edge, and never seeks to fix it.
  *
  * The rule lives in lib/liveEdge.ts and is tested there. This file asserts the
- * half that a correct rule says nothing about: that it is actually connected to
- * the element. This suite exists because of a settings shell whose panes were
- * not wired to its buttons, and the same failure is available here — a perfect
- * catch-up rule that no event ever calls is indistinguishable, from the sofa,
- * from not having written it.
+ * half a correct rule says nothing about: that it is connected to the element,
+ * and that the element is driven the way this transport can survive.
  *
- * The fault being fixed, measured in the running app while the server was
- * measured at exactly 1.00x at the same moment:
- *
- *	0:48 / 1:14      play head 26s behind the incoming data
- *	1:23 / 2:17      54s behind, ~30s later
+ * Both halves have failed here already. The first version had a rule that was
+ * right and a constant that contradicted the one preroll uses, so every stall
+ * gave back part of the cushion it had just waited for. The second seeked a
+ * stream the browser cannot range-request, and stranded it: 22 seconds
+ * buffered, play head at 0:00, play doing nothing.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
@@ -20,7 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LiveTV } from "./LiveTV";
 import { PREROLL_SECONDS } from "@/lib/preroll";
-import { TARGET_LAG_SECONDS } from "@/lib/liveEdge";
+import { CATCHUP_RATE, MAX_LAG_SECONDS } from "@/lib/liveEdge";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -84,8 +81,8 @@ async function tick(ms = 400) {
 
 /*
  * jsdom has no media pipeline: `buffered` is always empty and play/pause throw.
- * Unlike the rebuffer harness this makes `currentTime` writable, because
- * whether the player moves it is the entire subject here.
+ * currentTime is writable so an attempt to seek would be *visible* rather than
+ * throwing — a test that cannot observe the wrong behaviour cannot forbid it.
  */
 function stubMedia(
   el: HTMLVideoElement,
@@ -94,18 +91,25 @@ function stubMedia(
   const play = vi.fn(() => Promise.resolve());
   const pause = vi.fn();
   let now = opts.at ?? 0;
+  let rate = 1;
   Object.defineProperty(el, "play", { value: play, configurable: true });
   Object.defineProperty(el, "pause", { value: pause, configurable: true });
   Object.defineProperty(el, "paused", {
     configurable: true,
     get: () => opts.paused ?? false,
   });
-  Object.defineProperty(el, "seeking", { configurable: true, get: () => false });
   Object.defineProperty(el, "currentTime", {
     configurable: true,
     get: () => now,
     set: (v: number) => {
       now = v;
+    },
+  });
+  Object.defineProperty(el, "playbackRate", {
+    configurable: true,
+    get: () => rate,
+    set: (v: number) => {
+      rate = v;
     },
   });
   Object.defineProperty(el, "buffered", {
@@ -148,74 +152,133 @@ async function start(opts: {
   return { el, ...media };
 }
 
-describe("a live channel does not drift behind its edge", () => {
-  /*
-   * The accumulating half. Every drought used to resume wherever it stopped,
-   * so on a provider that stalls several times a minute the play head walked
-   * away from live and never came back.
-   */
-  it("resumes near the edge after a stall, not where it stopped", async () => {
-    const { el, play } = await start({ edge: () => PREROLL_SECONDS + 60 });
-    await tick();
+async function timeupdate(el: HTMLVideoElement) {
+  await act(async () => {
+    el.dispatchEvent(new Event("timeupdate"));
+  });
+}
 
-    expect(play).toHaveBeenCalled();
-    expect(el.currentTime).toBe(PREROLL_SECONDS + 60 - TARGET_LAG_SECONDS);
+describe("a live channel closes its gap by playing faster", () => {
+  it("speeds up when the play head has drifted far behind", async () => {
+    const { el } = await start({ edge: () => 137, at: 83 }); // the 54s gap
+    await tick();
+    await timeupdate(el);
+
+    expect(el.playbackRate).toBe(CATCHUP_RATE);
   });
 
-  it("keeps a cushion rather than jumping to the very end", async () => {
-    const edge = 100;
-    const { el } = await start({ edge: () => edge });
+  it("returns to normal once the gap is closed", async () => {
+    let head = 83;
+    const { el } = await start({ edge: () => 137, at: head });
     await tick();
+    await timeupdate(el);
+    expect(el.playbackRate).toBe(CATCHUP_RATE);
 
-    // Landing at the edge is the tempting answer and it guarantees the next
-    // drought stalls at once, turning one jump into a permanent cycle.
-    expect(el.currentTime).toBeLessThan(edge);
-    expect(edge - el.currentTime).toBe(TARGET_LAG_SECONDS);
+    head = 135; // caught up
+    el.currentTime = head;
+    await timeupdate(el);
+
+    expect(el.playbackRate).toBe(1);
   });
 
-  /*
-   * The standing correction, for drift that arrives without a stall — a burst
-   * outrunning playback, a throttled background tab, a machine that slept.
-   */
-  it("pulls the play head forward when it has drifted far behind", async () => {
-    const { el } = await start({ edge: () => 137, at: 83 });
-    await tick();
-    // Put it back where the app was, then let a timeupdate arrive.
-    el.currentTime = 83;
-
-    await act(async () => {
-      el.dispatchEvent(new Event("timeupdate"));
-    });
-
-    expect(el.currentTime).toBe(137 - TARGET_LAG_SECONDS);
-  });
-
-  it("leaves ordinary buffering alone", async () => {
+  it("leaves ordinary buffering at normal speed", async () => {
+    // 8s behind: the head start preroll waits for, not drift.
     const { el } = await start({ edge: () => 100, at: 92 });
     await tick();
-    el.currentTime = 92; // 8s behind: the measured drought, not drift
+    el.currentTime = 92;
+    await timeupdate(el);
 
-    await act(async () => {
-      el.dispatchEvent(new Event("timeupdate"));
-    });
-
-    expect(el.currentTime).toBe(92);
+    expect(el.playbackRate).toBe(1);
   });
 
   /*
-   * A paused element is somebody's decision. Yanking it forward would override
-   * that — and the correction still happens on the next tick after they press
-   * play, which is the right moment for a live channel to return to live.
+   * The failure that stranded a channel. The live endpoint cannot be
+   * range-requested, so moving the play head is the one thing this must never
+   * do — a miss leaves the element waiting for bytes nobody will fetch.
    */
-  it("does not yank a paused player forward", async () => {
-    const { el } = await start({ edge: () => 200, at: 10, paused: true });
+  it("never moves the play head", async () => {
+    const { el } = await start({ edge: () => 500, at: 10 });
     await tick();
-    el.currentTime = 10;
+    const before = el.currentTime;
+    await timeupdate(el);
+    await timeupdate(el);
+
+    expect(el.currentTime).toBe(before);
+  });
+
+  it("does not touch a paused player", async () => {
+    const { el } = await start({ edge: () => 500, at: 10, paused: true });
+    await tick();
+    await timeupdate(el);
+
+    expect(el.playbackRate).toBe(1);
+    expect(el.currentTime).toBe(10);
+  });
+
+  /*
+   * A viewer can choose their own speed from the player's own menu. Resetting
+   * that on the next tick would make the control look broken, so the rate we
+   * did not set is not ours to clear.
+   */
+  it("leaves a speed the viewer chose alone", async () => {
+    const { el } = await start({ edge: () => 30, at: 25 }); // little lag
+    await tick();
+    el.playbackRate = 1.5;
+    await timeupdate(el);
+
+    expect(el.playbackRate).toBe(1.5);
+  });
+
+  /*
+   * The measured fault: `waiting` fires about once a second on a real channel
+   * while the element holds two minutes of media. Pausing on each one kept the
+   * player paused 28% of wall time and dragged playback to 0.76x.
+   */
+  it("ignores a stall it already has the media to ride out", async () => {
+    const { el, pause } = await start({ edge: () => 140, at: 8 });
+    await tick();
+    pause.mockClear();
 
     await act(async () => {
-      el.dispatchEvent(new Event("timeupdate"));
+      el.dispatchEvent(new Event("waiting"));
     });
+    await tick();
 
-    expect(el.currentTime).toBe(10);
+    expect(pause).not.toHaveBeenCalled();
+    expect(host.querySelector(".livetv__buffering")).toBeNull();
+  });
+
+  it("still holds when the cushion is genuinely gone", async () => {
+    // Derived, not written: this was hard-coded to the value PREROLL_SECONDS
+    // happened to have, and went stale the moment the measurement moved it.
+    let edge = PREROLL_SECONDS + 2;
+    const { el, pause } = await start({ edge: () => edge, at: 0 });
+    await tick();
+    pause.mockClear();
+
+    edge = 0.2; // the buffer really did run dry
+    await act(async () => {
+      el.dispatchEvent(new Event("waiting"));
+    });
+    await tick();
+
+    expect(pause).toHaveBeenCalled();
+  });
+
+  it("still resumes after a stall", async () => {
+    const { play } = await start({ edge: () => PREROLL_SECONDS + 2 });
+    await tick();
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("engages only past the threshold", async () => {
+    const { el } = await start({
+      edge: () => MAX_LAG_SECONDS + 100,
+      at: 100,
+    });
+    await tick();
+    el.currentTime = 100; // lag is 20s exactly
+    await timeupdate(el);
+    expect(el.playbackRate).toBe(1);
   });
 });
