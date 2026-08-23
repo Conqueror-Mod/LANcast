@@ -13,6 +13,7 @@ import type { Item } from "@/api/types";
 import { RemoveDialog } from "./RemoveDialog";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
+import { usePlayback } from "@/playback/PlaybackProvider";
 import "./TrackList.css";
 
 // A record is a numbered list, not a grid. Rendering an album's tracks as
@@ -127,6 +128,7 @@ function TrackRow({
 
   const played = track.progress?.watched ?? false;
   const setPlayed = useSetWatchedByID();
+  const pb = usePlayback();
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
 
   /*
@@ -164,6 +166,8 @@ function TrackRow({
       label: played ? "Mark as unplayed" : "Mark as played",
       onSelect: () => setPlayed.mutate({ itemID: track.id, watched: !played }),
     },
+    { label: "Play next", onSelect: () => pb.playNextUp(track.id) },
+    { label: "Add to queue", onSelect: () => pb.addToQueue(track.id) },
     { label: "Add to playlist", onSelect: () => onAddToPlaylist(track) },
     ...(edits
       ? [

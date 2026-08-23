@@ -11,6 +11,7 @@ import {
   useSetWatchedByID,
   type PlayableKind,
 } from "@/api/hooks";
+import { usePlayback } from "@/playback/PlaybackProvider";
 import { PosterTile } from "@/components/PosterTile";
 import type { MenuAction } from "@/components/Menu";
 import { PhotoBanner } from "@/components/PhotoBanner";
@@ -86,6 +87,7 @@ export function LibraryView({
    */
   const navigate = useNavigate();
   const setWatched = useSetWatchedByID();
+  const pb = usePlayback();
   const qc = useQueryClient();
   /*
    * What "play all" queues here, or null where it means nothing.
@@ -253,6 +255,8 @@ export function LibraryView({
         onSelect: () =>
           setWatched.mutate({ itemID: item.id, watched: !seen }),
       },
+      { label: "Play next", onSelect: () => pb.playNextUp(item.id) },
+      { label: "Add to queue", onSelect: () => pb.addToQueue(item.id) },
       { label: "Go to details", onSelect: () => navigate(`/item/${item.id}`) },
     ];
   };
