@@ -389,7 +389,30 @@ export function Detail() {
         setShowNote("This show has no episodes yet.");
         return;
       }
-      navigate(`/watch/${next.episode.id}`);
+      /*
+       * Continue hands over the rest of the show, not one episode.
+       *
+       * It used to navigate with no queue at all, and the player falls back to
+       * a queue of the single item it was given — so the episode you resumed
+       * played and the show stopped dead, because there was nothing after it to
+       * advance to. With repeat on it was worse: a one-item queue wraps onto
+       * itself, and the same episode replayed for ever. That is how it was
+       * found.
+       *
+       * The episodes from this one onward rather than all of them, because
+       * Continue means "carry on from here" — putting the earlier ones in the
+       * queue would make the *previous* button walk back through episodes the
+       * viewer has already finished, which Play from the top is for.
+       *
+       * Same shape as playShow, deliberately: history state rather than the
+       * URL, since a long-running show is far too many ids for a query string.
+       */
+      const eps = await fetchShowEpisodes(item.id);
+      const from = eps.findIndex((e) => e.id === next.episode!.id);
+      const queue = from >= 0 ? eps.slice(from) : [next.episode];
+      navigate(`/watch/${next.episode.id}`, {
+        state: { queue: queue.map((e) => e.id) },
+      });
     } finally {
       setShowBusy(null);
     }
