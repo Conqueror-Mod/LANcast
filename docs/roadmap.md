@@ -1126,24 +1126,59 @@ where that openness gets exercised.
     0.6% paused after, and the one hold left had 7 seconds in hand.
 
     Two calibrations came out of measuring **our own endpoint** rather than the
-    provider. The head start was 8s against a drought measured at 5s upstream;
-    at the endpoint the silences reach **9,850ms**, with seven silences over a
-    second in a 42-second window. A cushion shorter than the hole is not a
-    cushion, so it is 12s. And drift is closed by playing 10% faster, **never
-    by seeking** — the live endpoint is an unbounded chunked response with no
-    `Accept-Ranges`, so a seek that misses strands the element, observed as a
-    channel holding 22 seconds of media at `0:00` that would not restart.
+    provider, and both have since been superseded by fixing the cause instead.
+    The head start was 8s against a drought measured at 5s upstream; at the
+    endpoint the silences reached **9,850ms**, so it went to 12s. Then the
+    server stopped relaying the silences and it came back **down to 3s** — the
+    two cushions add up and a viewer waits for the sum. Drift is closed by
+    playing 10% faster, **never by seeking**: the live endpoint is an unbounded
+    chunked response with no `Accept-Ranges`, so a seek that misses strands the
+    element, observed as a channel holding 22 seconds of media at `0:00` that
+    would not restart.
 
-    Three things this leaves. **"Far too fast" was never reproduced** and is
-    not claimed as fixed; if it is real it is a separate fault. **The real fix
-    is server-side and unbuilt**: the server relays a stranger's segment pacing
-    verbatim, and every constant tuned in the client is compensation for that —
-    a read-ahead buffer in the live path would make the cushion's size stop
-    mattering. And the lesson, which cost an hour: the activity panel called
-    every ffmpeg session "Transcoding for playback" whatever it was doing, so a
-    channel being *copied* announced itself as a transcode and sent this
-    investigation after an encoder that was never running, on the evidence of a
-    badge, while the log two lines away said `video=copy`.
+    **The server-side fix is built** (v0.8.5). This entry previously called it
+    "unbuilt" and named it the real answer, and that was right on both counts:
+    `internal/livebuf` reads ahead and hands the stream out at its own rate,
+    turning a p99 gap of **5,326ms** into **152ms** with **zero** silences over
+    a second, at the price of 12.4s to first byte paid once. It paces by bytes
+    at the observed rate rather than by decoding timestamps, so it stays a byte
+    pipe that cannot corrupt a container or disagree with the muxer about what a
+    second is.
+
+    Two follow-ons have shipped since. The player now says **"Catching up"**
+    whenever it is running above 1.0x (v0.8.6) — a 10% correction is audible,
+    and silently applying it turns the fix into somebody else's bug report,
+    which is exactly what happened. And **hold and resume no longer share a
+    threshold** (v0.8.7): a channel near the boundary held at 2.9s, resumed at
+    3.0s, lost it within three seconds and held again, so resuming now waits for
+    5s where starting still waits for 3.
+
+    **Where it stands.** Live TV has no known open fault. Two things are still
+    true rather than fixed. **"Far too fast" was never reproduced** and is not
+    claimed; if it is real it is a separate fault and needs a fresh report.
+    And every client-side constant is still *compensation* — the reason
+    [ADR 0013](adr/0013-transcode-pipeline.md) now carries a **proposed**
+    amendment arguing for MSE on the live path and only there, with hls.js
+    vendored as pinned, reviewable source. That decision is **not taken**: the
+    standing rule that this build ships no unaudited third-party player stands
+    until it is. The v0.8.7 hysteresis fix was step one of that amendment and
+    the only step that does not depend on its outcome. **Deciding it is the next
+    Live TV question**, and it is a decision before it is any code.
+
+    And the lesson, which cost an hour: the activity panel called every ffmpeg
+    session "Transcoding for playback" whatever it was doing, so a channel being
+    *copied* announced itself as a transcode and sent this investigation after
+    an encoder that was never running, on the evidence of a badge, while the log
+    two lines away said `video=copy`.
+
+    ~~Also ahead of the breadth work: **the right-click menus are half a
+    feature**~~ — **closed in v0.8.6.** Every poster answers a right-click now,
+    containers included, and the three capabilities that existed but were each
+    reachable from exactly one screen (add to playlist, remove from library,
+    start over) are on the tiles that own them. What is **not** verified is
+    layout: the lists run to seven items where the longest was five, and jsdom
+    performs none, so `PointMenu`'s edge-flip has never been watched carrying
+    the taller list.
 
 ## What the last pass taught
 
