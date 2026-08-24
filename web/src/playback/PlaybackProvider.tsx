@@ -13,7 +13,7 @@ import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
-import { resumeSeconds } from "./resumePoint";
+import { resumeSeconds, startedFloorMs } from "./resumePoint";
 import {
   shuffledStartingWith,
   queueAfterEntry,
@@ -402,9 +402,30 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       lastSaved.current = now;
       const pos = transcoding.current ? offset.current + current : current;
       if (pos <= 0 || !itemID) return;
+      /*
+       * A position this early is not a bookmark, and writing one does damage.
+       *
+       * This throttle fires every five seconds, so skipping through a shuffled
+       * library to find something to watch wrote a five-second position onto
+       * every film passed over. Each then resumed at 0:05 *and* appeared on the
+       * Continue Watching shelf, which is the shelf claiming you are part way
+       * through forty films you glanced at.
+       *
+       * resumeSeconds refuses to resume from under the same floor, which fixes
+       * the positions already in the database. This is the other half: stop
+       * making them. Both are needed — the read side alone leaves the Continue
+       * shelf wrong, because that is a server query over position_ms and never
+       * goes near resumeSeconds.
+       *
+       * The finished check stays outside it. Something at 0.92 of its duration
+       * is finished however short it is, and a five-minute item reaches that
+       * before it reaches the floor.
+       */
+      const done = totalDuration ? pos / totalDuration > 0.92 : false;
+      if (!done && pos * 1000 < startedFloorMs(totalDuration * 1000)) return;
       void apiSend(`/api/items/${itemID}/progress`, "PUT", {
         position_ms: Math.floor(pos * 1000),
-        watched: totalDuration ? pos / totalDuration > 0.92 : false,
+        watched: done,
       }).catch(() => {});
     },
     [current, itemID, totalDuration],

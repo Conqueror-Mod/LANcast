@@ -625,6 +625,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// setting, because a server with no channel sources does no work here.
 	go periodicGuideRefresh(ctx, apiSrv)
 
+	// Records whose relevance is their age, dropped once a day.
+	go periodicPrune(ctx, st, settings, log)
+
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
 	trans.Start(ctx)
@@ -1002,6 +1005,60 @@ func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
 			return
 		case <-t.C:
 			srv.RefreshGuides(ctx)
+		}
+	}
+}
+
+/*
+ * periodicPrune drops records that have stopped being worth keeping.
+ *
+ * Two tables were append-only with a timestamp and no ceiling — audit_event
+ * and provider_cache — so a server left running for a year kept every row of
+ * both and nothing ever looked at the age of one again. epg_program already
+ * had a prune; these did not.
+ *
+ * Daily, and not on the request path. The work is two DELETEs and, when they
+ * removed something, a VACUUM — which takes an exclusive lock for a full
+ * rewrite of the file. That is seconds on a large library, and the reason it
+ * runs only after a prune that actually freed pages rather than on every pass.
+ *
+ * The first pass is deliberately *not* immediate, unlike the guide refresh.
+ * A server starting up is a server somebody is waiting for, and taking a write
+ * lock to rewrite a 100MB database during boot is the kind of "maintenance"
+ * that reads as a hang. There is no hurry: these rows have been there for
+ * months.
+ *
+ * The retention window is re-read each pass rather than captured, so changing
+ * it in Settings takes effect without a restart — the same rule periodicScan
+ * follows for its interval.
+ */
+func periodicPrune(ctx context.Context, st *store.Store,
+	settings *config.SettingsStore, log *slog.Logger) {
+
+	const every = 24 * time.Hour
+
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			res, err := st.Prune(ctx, settings.Get().AuditRetentionDays, now)
+			if err != nil {
+				log.Error("prune", "error", err)
+				continue
+			}
+			if !res.Any() {
+				continue
+			}
+			log.Info("pruned old records",
+				"audit_events", res.AuditEvents, "cache_rows", res.CacheRows)
+			// Only now is there anything to reclaim. Without this the rows are
+			// gone and the file is exactly as large as it was.
+			if err := st.Vacuum(ctx); err != nil {
+				log.Error("vacuum after prune", "error", err)
+			}
 		}
 	}
 }

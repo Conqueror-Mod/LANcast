@@ -12,6 +12,7 @@ import {
 } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions } from "@/components/itemActions";
+import { startOf } from "@/playback/queueOrder";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterBar } from "@/components/FilterBar";
@@ -103,13 +104,17 @@ export function LibraryView({
     setGathering(shuffle ? "shuffle" : "play");
     try {
       const ids = await fetchLibraryTracks(qc, libraryID, playKind ?? "track");
-      if (ids.length === 0) return;
-      // Always the first track. Shuffle does the randomising, and it moves
-      // whatever is playing to the front of its order — so picking a random
-      // start here as well was a second randomiser doing nothing, and until the
-      // order started with the current track it actively stranded everything
-      // shuffled in front of it.
-      navigate(`/watch/${ids[0]}`, { state: { queue: ids, shuffle } });
+      const start = startOf(ids, shuffle);
+      if (start === undefined) return;
+      /*
+       * The start is chosen here, not left to shuffle.
+       *
+       * This used to pass ids[0] always, on the reasoning that shuffle
+       * randomises anyway. It does not: shuffledStartingWith *pins* the id it
+       * is given to the front, so Randomize all began with the same film every
+       * time and shuffled everything behind it. See startOf.
+       */
+      navigate(`/watch/${start}`, { state: { queue: ids, shuffle } });
     } finally {
       // Cleared even on failure, so a button cannot sit reading "Gathering…"
       // for the rest of the session.

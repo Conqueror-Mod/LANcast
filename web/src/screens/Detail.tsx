@@ -35,6 +35,7 @@ import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions } from "@/components/itemActions";
+import { startOf } from "@/playback/queueOrder";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
@@ -438,9 +439,13 @@ export function Detail() {
       // The queue goes in history state rather than the URL: a long-running
       // show is far too many ids for a query string, and the player already
       // takes it this way from a library's Play all.
-      navigate(`/watch/${eps[0].id}`, {
-        state: { queue: eps.map((e) => e.id), shuffle },
-      });
+      const ids = eps.map((e) => e.id);
+      // Not ids[0] when shuffling — shuffledStartingWith pins the id it is
+      // given, so a fixed start shuffled every episode except the first. See
+      // startOf.
+      const start = startOf(ids, shuffle);
+      if (start === undefined) return;
+      navigate(`/watch/${start}`, { state: { queue: ids, shuffle } });
     } finally {
       setShowBusy(null);
     }

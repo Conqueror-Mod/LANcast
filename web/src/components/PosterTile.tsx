@@ -129,7 +129,28 @@ export function PosterTile({
             }
           : undefined
       }
-      title={item.title}
+      /*
+       * The tooltip goes away while this tile's menu is open.
+       *
+       * `title` is a real tooltip drawn by the browser, and a browser draws it
+       * above everything the page can produce -- there is no z-index that wins,
+       * because it is not in the page. Right-clicking leaves the pointer
+       * resting on the tile, so the tooltip appears a second later *on top of
+       * the menu* and covers whichever item happens to be under the cursor.
+       * Seen in the shipped v0.8.6 build: "Add to queue" was unreadable behind
+       * the film's own name.
+       *
+       * jsdom could never have caught it. The attribute is present, the menu
+       * item is present, every assertion passes, and the two are only in
+       * conflict once something paints. Same class of miss as the menu that
+       * opened half off the screen.
+       *
+       * The attribute earns its place the rest of the time -- these titles
+       * truncate at one line -- so it is suppressed rather than removed.
+       * aria-label stays put: it is not drawn, and a screen reader still needs
+       * the tile to have a name while a menu hangs off it.
+       */
+      title={menuAt ? undefined : item.title}
       aria-label={item.title}
     >
       <div
