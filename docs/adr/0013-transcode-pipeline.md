@@ -1,6 +1,13 @@
 # ADR 0013 — Transcode pipeline: progressive by default, HLS alongside
 
-Date: 2026-07-22 · Status: accepted
+Date: 2026-07-22 · Status: accepted · Amendment proposed 2026-08-23 for the live TV path
+
+> **Amendment note.** The decision below stands unchanged for films and
+> episodes. Live TV, which did not exist when this was written, turned out to
+> be the workload a progressive stream cannot serve — six commits in a week
+> hand-rolled what Media Source Extensions provides directly. The original
+> reasoning is kept rather than deleted; the revisit is appended at the end of
+> this file under **Amendment — 2026-08-23**.
 
 ## Context
 
@@ -87,3 +94,208 @@ assert traversal attempts are refused.
 A TV client exists (make HLS primary for it), hls.js is vendored deliberately
 (HLS in the browser, enabling mid-transcode seeking), or transcode load on real
 hardware justifies the hardware-acceleration swamp.
+
+---
+
+# Amendment — 2026-08-23: live TV is the case progressive cannot serve
+
+Status of this amendment: **proposed**. The decision below is not taken until
+somebody agrees to the dependency it asks for.
+
+## What changed
+
+Nothing about the original reasoning is wrong, and none of it is withdrawn. What
+changed is that live TV arrived, and live TV is the one workload where the
+missing control surface is not a stated limit but the entire problem.
+
+The original text names the cost precisely — "progressive playback cannot seek
+past the transcoded point ... this is the honest limit of a format with no
+playlist". That was written about a film. Applied to a channel it understates
+the case, because for live the missing playlist costs more than seeking: it
+costs the ability to know how much media the element is holding, to skip a gap,
+to sit at a live edge, or to tell being starved apart from being stuck.
+
+Six commits between 2026-08-16 and 2026-08-23 are all one shape:
+
+| commit | what it added |
+| --- | --- |
+| `91c0d12` | a head-start cushion before first play |
+| `18416f5` | rebuilding that cushion after a stall, not only at start |
+| `f2261ef` | keeping a channel near its live edge |
+| `d26f552` | not pausing a player that already holds two minutes |
+| `2ebb69e` | `internal/livebuf` — server-side jitter absorption |
+| `61d9c78` | surfacing catch-up rate in the UI |
+
+Every one of those is a hand-rolled reimplementation of something Media Source
+Extensions provides directly: buffer-for-playback and buffer-after-rebuffer
+thresholds, gap skipping, live-edge management, and a `buffered` range that
+means what it says.
+
+## Why the client cannot do this well, stated mechanically
+
+A progressive `<video>` gives no control surface, and three specific
+consequences fell out of that this week:
+
+- **`buffered.end` does not mean what it appears to.** On a progressive
+  response it reflects what the element has parsed, not what it holds and not
+  what is in flight, so the obvious "how much media do I have" question has no
+  reliable answer. `d26f552` exists because a player holding two minutes of
+  media was being paused on the strength of that number.
+- **`waiting` fires at roughly once a second regardless of buffer depth**, so it
+  cannot distinguish *starved* from *stalled*. Plezy — an unrelated Flutter
+  client for Plex/Jellyfin/Emby, examined for exactly this question — still
+  needed a `BufferingStallPolicy` to draw that line even with a real player
+  underneath: position advanced under 250 ms, buffer nonetheless adequate, 12 s
+  elapsed, playback wanted. With a bare element the inputs to that test are not
+  available.
+- **Seeking a non-range-requestable stream strands the element.** `f2261ef`'s
+  live-edge work had to avoid seeking altogether; the comment at
+  [LiveTV.tsx:150](../../web/src/screens/LiveTV.tsx) records that an earlier
+  version seeked to the edge and could not. Catch-up is therefore done by
+  `playbackRate`, which is why the UI now has to *tell the viewer* the picture
+  is running fast.
+
+The last one is the tell. A workaround that needs its own onscreen explanation
+is a workaround that has run out of room.
+
+## The corroborating survey
+
+Plezy is GPL-3.0 and LANcast is MIT, so it was read for architecture and
+parameters only; no implementation is carried across. Two findings bear on this
+decision.
+
+**Every comparable client uses a player that speaks the format.** Plezy vendors
+no Flutter media package at all — it maintains its own ExoPlayer plugin on
+Android and its own libmpv binding elsewhere. Both speak HLS and MPEG-TS
+natively, so no remux-to-progressive step exists anywhere in that codebase. The
+question "does a real player just handle it" answers yes, and the price of yes
+is a player, obtained at whatever layer is cheapest.
+
+**Their buffer numbers validate ours and correct one shape.** ExoPlayer's
+`LoadControl` as they configure it: 1,000 ms to begin, **5,000 ms to resume
+after a rebuffer**, 30–60 s steady-state on a normal device, and a
+user-selectable tier running to 240 s. `PREROLL_SECONDS` is a single 3 s number
+used for both cases. Starting fast and resuming conservatively is free to adopt
+and does not depend on this amendment.
+
+Their `live_seek_accumulator.dart` also describes our disease from the other
+side: re-reading a live position that has not finished settling, debounced at
+300 ms and pinned for up to 1,500 ms. The general rule — never re-read a value
+the stream has not finished producing — is the one `buffered.end` breaks here.
+
+## What the original objection was, and what survives of it
+
+The objection was never "a dependency". It was, precisely, an **unaudited binary
+blob** shipped to satisfy the default client, on a server "whose whole premise is
+that you own what runs". That premise is not up for revision and this amendment
+does not revise it.
+
+What is now in evidence is the cost of the alternative. The original trade was
+"~300 KB of somebody else's code" against "a stated seeking limit". The real
+trade turned out to be ~300 KB of reviewed, pinned, widely-deployed code against
+roughly a thousand lines of our own buffer-management code — client and server —
+that reimplements the same thing, is tuned against one provider's segment
+interval, and is documented in `livebuf.go` as "a guess about a stranger's
+segment interval — a guess that was wrong by half until it was measured". Ours
+is not audited either. It is merely ours.
+
+So the objection is met by *how* the dependency is taken, not by refusing it:
+
+- vendored as **source into the repository**, pinned to a specific commit,
+  reviewed as any other checked-in code — not pulled at build time from a
+  registry, and not a prebuilt bundle
+- **updated deliberately**, by a human reading a diff, never automatically
+- confined to the live TV path, so that a decision to remove it later is a
+  deletion rather than a rewrite
+
+That is a different artefact from the one ADR 0013 refused. A blob you cannot
+read and a file you can are the same size and not the same risk.
+
+## Decision (proposed)
+
+**Adopt MSE for live TV, and only for live TV.**
+
+The live path becomes: server produces HLS with fMP4 segments — which it
+*already does*, from the same session machinery, per the original decision — and
+the client feeds it through hls.js into a `MediaSource`. Nothing new is built on
+the server. The HLS output that has been served alongside since day one, for
+"a future TV app, or a browser once hls.js is vendored deliberately", finally has
+its consumer. This is the second of the three conditions the original "Revisit
+when" listed, arriving on its own.
+
+**Progressive fMP4 remains the default for VOD.** Films and episodes are not
+bursty, do not have a live edge, and play correctly today. Changing them buys
+mid-transcode seeking, which is real but is a separate decision with its own
+regression surface, and it is not what this evidence is about. One workload, one
+change.
+
+**`internal/livebuf` stays.** It is on the correct side of the network and it
+addresses a problem MSE does not: the provider's publishing rhythm is upstream
+of anything the client can do, and 98% of a measured 42 s window was silence.
+MSE removes the need for the client to *guess* at that rhythm; it does not
+remove the rhythm. The client-side constants in `preroll.ts` are what MSE
+replaces.
+
+## Consequences
+
+**Good — the live-edge, catch-up and cushion code becomes deletable.** Not
+rewritten against a new API: deleted, because `MediaSource` answers the
+questions those workarounds exist to guess at. The `playbackRate` catch-up and
+its explanatory badge go with it.
+
+**Good — starved and stalled become distinguishable**, which is currently
+impossible and is why a slow provider and a wedged ffmpeg present identically as
+a spinner.
+
+**Good — mid-stream seeking within a live window becomes possible**, which is the
+precondition for anything resembling time-shift or pause-live-TV. Not proposed
+here; simply no longer structurally blocked.
+
+**Cost — a third-party dependency in the client, permanently.** Confined to live
+TV, vendored as reviewable source, pinned. This is the trade and it should be
+named as one, not softened.
+
+**Cost — a second playback path in the client.** Live and VOD now differ in how
+the element is fed, and a bug can live in one and not the other. This is
+mitigated by the paths already differing in every other respect — Plezy models
+live as a wholly separate session type with its own capability flags, having
+reached the same conclusion independently — but it is a real maintenance cost.
+
+**Cost — browsers with native HLS take a different path again.** Safari plays
+the playlist URL directly and must not be handed an MSE pipeline it does not
+need.
+
+**Unchanged — no client framework rewrite.** The evidence here is about the
+playback layer and says nothing about React. A native or Flutter client would
+fix live TV incidentally, by replacing everything else too, and the server —
+which is where LANcast's value is — does not move in that trade. If TV and
+mobile surfaces are wanted later, that is a reach argument to be made on its own
+merits, as a *second* client rather than a refactor.
+
+## Work breakdown
+
+Ordered so each step is verifiable alone, and so the dependency is the last
+thing added rather than the first.
+
+1. Adopt the asymmetric cushion in `preroll.ts` — fast to start, conservative to
+   resume after a rebuffer. Independent of everything below; ship it either way.
+2. Confirm the existing HLS output plays a live channel end to end, using a
+   throwaway harness. If it does not, this amendment is premature and the fault
+   is on the server side.
+3. Vendor hls.js as pinned source, with a `README` in its directory recording
+   the commit, the review date, and who read it.
+4. Live playback goes through MSE behind a setting defaulting to off, so the
+   progressive path remains one toggle away during the transition.
+5. Native-HLS browsers detected and given the playlist directly.
+6. Default flipped, then `preroll.ts` and the live-edge workarounds deleted —
+   deletion is the acceptance test. Client tests updated in the same commit;
+   note that jsdom performs no media, so this needs looking at as well as
+   asserting.
+7. `docs/api.md` in the same commit as any endpoint or contract change.
+
+## Revisit when
+
+The original conditions stand for the VOD path. For live: if a native client
+surface arrives (ExoPlayer and mpv both speak HLS, making this vendored library
+redundant there), or if a hls.js review finds something that fails the standard
+in step 3 — in which case the correct answer is not to soften the standard.
