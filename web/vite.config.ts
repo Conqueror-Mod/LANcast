@@ -6,6 +6,15 @@ import { fileURLToPath, URL } from "node:url";
 // web package's dist/ directory (embedded via //go:embed). In development the
 // Vite server proxies the API to the running lancastd on :8080, giving hot
 // reload against real data.
+//
+// A server with a password set serves HTTPS with a self-signed certificate and
+// redirects http to it, so the plain default proxy follows the redirect into a
+// certificate the browser will not accept and every API call fails with
+// ERR_CERT_AUTHORITY_INVALID -- which looks like a client that renders nothing
+// rather than like a proxy problem. `secure: false` is what lets the *proxy*
+// accept that certificate; it is a dev-server setting and has nothing to do
+// with what the built client trusts. Point LANCAST_API at the https origin to
+// develop against a secured server.
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -14,7 +23,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
+      "/api": {
+        target: process.env.LANCAST_API ?? "http://127.0.0.1:8080",
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   build: {

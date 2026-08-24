@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
-import { useSetWatched } from "@/api/hooks";
+import { useIsAdmin, useSetWatched } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
+import { RemoveDialog } from "./RemoveDialog";
 import { watchedVerb } from "@/lib/kind";
 import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";
@@ -39,6 +40,17 @@ export function EpisodeList({
   parentID: number;
 }) {
   const setWatched = useSetWatched(parentID);
+  const isAdmin = useIsAdmin();
+  /*
+   * One dialog for the list, not one per row.
+   *
+   * Only one can be open, and a RemoveDialog mounted per episode would be
+   * twenty-six dialogs on a season -- the same call TrackList makes, for the
+   * same reason. Removing an episode was already permitted by the server and
+   * was reachable from nowhere: nothing in the client navigates to an episode's
+   * own page, so the one screen that offers removal could not be got to.
+   */
+  const [removing, setRemoving] = useState<Item | null>(null);
   // Read once for the list rather than per row: it is one device setting, and a
   // hook per row would read the same value twenty-six times.
   const [spoilerMode] = useSpoilerMode();
@@ -54,8 +66,18 @@ export function EpisodeList({
           onSetWatched={(watched) =>
             setWatched.mutate({ itemID: ep.id, watched })
           }
+          onRemove={isAdmin ? setRemoving : undefined}
         />
       ))}
+      {removing && (
+        <RemoveDialog
+          item={removing}
+          onClose={() => setRemoving(null)}
+          // Nowhere to navigate: the season page outlives the episode, and
+          // useDeleteItem invalidates the children list this is drawn from.
+          onDone={() => setRemoving(null)}
+        />
+      )}
     </div>
   );
 }
@@ -65,11 +87,14 @@ function EpisodeRow({
   queue,
   spoilers,
   onSetWatched,
+  onRemove,
 }: {
   episode: Item;
   queue: number[];
   spoilers: { hideSynopsis: boolean; hideStill: boolean };
   onSetWatched: (watched: boolean) => void;
+  /** Absent for anyone who is not an admin, which is what hides the item. */
+  onRemove?: (episode: Item) => void;
 }) {
   const navigate = useNavigate();
   const play = () =>
@@ -131,7 +156,29 @@ function EpisodeRow({
    * shipped and never been usable.
    */
   const actions: MenuAction[] = [
-    { label: "Play", onSelect: play },
+    /*
+     * Pressing the row resumes, and there was no way to say otherwise -- the
+     * one thing the bar under a half-watched episode invites you to want.
+     * Starting over is spelled as forgetting the position rather than as a flag
+     * carried into the player, because the player already decides where to
+     * begin from `progress`: a second source of truth for where an episode
+     * starts would disagree the first time anything else navigated to it.
+     *
+     * Only where there is a position to ignore. On a fresh episode "Play" and
+     * "Play from start" are two verbs for one action.
+     */
+    { label: pct > 0 ? "Resume" : "Play", onSelect: play },
+    ...(pct > 0
+      ? [
+          {
+            label: "Play from start",
+            onSelect: () => {
+              onSetWatched(false);
+              play();
+            },
+          },
+        ]
+      : []),
     {
       label: watched
         ? `Mark as ${watchedVerb(episode).negated}`
@@ -144,6 +191,15 @@ function EpisodeRow({
       label: "Go to details",
       onSelect: () => navigate(`/item/${episode.id}`),
     },
+    ...(onRemove
+      ? [
+          {
+            label: "Remove from library…",
+            danger: true,
+            onSelect: () => onRemove(episode),
+          },
+        ]
+      : []),
   ];
 
   return (

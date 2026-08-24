@@ -54,7 +54,8 @@ const film = {
   artwork: {},
 };
 
-// A container, which offers nothing and so must not open a menu.
+// A container, which now has its own menu -- and a photograph, which still has
+// none, so the refusal this file was written to guard still has a subject.
 const show = {
   id: 13,
   title: "A Show",
@@ -64,10 +65,18 @@ const show = {
   artwork: {},
 };
 
+const photo = {
+  id: 14,
+  title: "A Photograph",
+  kind: "photo",
+  library_id: 1,
+  artwork: {},
+};
+
 let host: HTMLDivElement;
 let root: Root;
 
-function mount(items: unknown[]) {
+function mount(items: unknown[], role = "admin") {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -80,7 +89,7 @@ function mount(items: unknown[]) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "chris", role },
         });
       }
       if (url.includes("/api/items")) return json({ items, total: items.length });
@@ -101,8 +110,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render(items: unknown[]) {
-  mount(items);
+async function render(items: unknown[], role = "admin") {
+  mount(items, role);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root.render(
@@ -219,12 +228,27 @@ describe("opening a menu without a pointer", () => {
     expect(document.activeElement).toBe(t);
   });
 
-  // The same refusal the pointer route makes: a container has nothing to offer,
-  // so the key does nothing rather than opening an empty box.
+  /*
+   * The same refusal the pointer route makes, on the one tile that still has
+   * nothing to offer. A photograph is neither watched nor queued and has no
+   * page worth visiting, so the key does nothing rather than opening an empty
+   * box. A container used to be in this test and has a menu of its own now.
+   */
   it("does nothing on an item with no actions", async () => {
+    // As an ordinary viewer, for whom a photograph really has nothing: the one
+    // thing an admin can do to one is remove it.
+    await render([photo], "user");
+    act(() => tile("A Photograph").focus());
+    press(actionsKey);
+    expect(menuItems().length).toBe(0);
+  });
+
+  // And the container it replaced does open one, keyboard route included --
+  // the half that would otherwise quietly regress to the old refusal.
+  it("opens a container's own menu from the key", async () => {
     await render([show]);
     act(() => tile("A Show").focus());
     press(actionsKey);
-    expect(menuItems().length).toBe(0);
+    expect(menuItems().map((i) => i.textContent?.trim())).toContain("Play all");
   });
 });
