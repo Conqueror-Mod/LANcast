@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"lancast/internal/livebuf"
 	"lancast/internal/probe"
 	"lancast/internal/transcode"
 )
@@ -93,7 +94,22 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	 * things standing between a channel list and a server that slowly fills
 	 * with ffmpeg.
 	 */
-	defer stream.Close()
+	/*
+	 * Smooth the provider's rhythm before it reaches the browser.
+	 *
+	 * Relayed untouched, a channel arrives in tight bursts separated by
+	 * silences — measured at this endpoint, 98% of a 42-second window was
+	 * silence and the longest hole was 9,850ms. Every cushion in the client
+	 * exists to survive those holes, and each of its constants is a guess about
+	 * a stranger's segment interval. `livebuf` reads ahead and hands the stream
+	 * out at its own rate, so the hole is absorbed on the side that can see it.
+	 *
+	 * The cost is latency, deliberately: the lead is added to how far behind
+	 * live every viewer is. Nobody can tell whether they are eight or fourteen
+	 * seconds behind a broadcast; everybody can tell when it stops.
+	 */
+	smoothed := livebuf.New(stream, livebuf.Options{})
+	defer smoothed.Close()
 
 	/*
 	 * Wait for the first byte before committing to 200.
@@ -111,7 +127,7 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	 * that can no longer be sent.
 	 */
 	buf := make([]byte, 64<<10)
-	n, rerr := firstBytes(stream, buf)
+	n, rerr := firstBytes(smoothed, buf)
 	if n == 0 {
 		reason := transcode.FailureReason(stderrOf(stream))
 		// The upstream URL is in that stderr and never leaves this process:
@@ -151,7 +167,7 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		n, rerr = stream.Read(buf)
+		n, rerr = smoothed.Read(buf)
 	}
 }
 

@@ -54,12 +54,17 @@
  * few more seconds to begin and then runs is worth more than one that begins
  * sooner and stutters for as long as you watch it.
  *
- * The real fix is upstream of this file — the server could absorb the
- * burstiness rather than relaying it, and then no client-side cushion would
- * need to know what a provider's segment interval is. Until then this number
- * has to be bigger than the hole.
+ * **That fix now exists**, which is why this number came back down. The server
+ * absorbs the burstiness in `internal/livebuf` and hands the stream out at its
+ * own rate, so the hole never reaches here and this cushion no longer has to be
+ * bigger than a stranger's segment interval. It covers ordinary jitter — a slow
+ * frame, a scheduling hiccup — and the server covers the silences.
+ *
+ * Which is also why it is small again: the two cushions add up, and the wait
+ * before a channel starts is the sum of both. Paying for the same protection
+ * twice would double the startup for nothing.
  */
-export const PREROLL_SECONDS = 12;
+export const PREROLL_SECONDS = 3;
 
 /*
  * How long to wait for that head start before starting anyway.
@@ -70,7 +75,7 @@ export const PREROLL_SECONDS = 12;
  * honest fallback: it is what the old behaviour did immediately, so the worst
  * case is no worse than before.
  */
-export const PREROLL_DEADLINE_MS = 18_000;
+export const PREROLL_DEADLINE_MS = 8_000;
 
 /**
  * shouldStartPlayback decides whether a live element has waited enough.
