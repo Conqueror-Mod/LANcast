@@ -24,11 +24,27 @@ describe("shouldStartPlayback", () => {
     expect(shouldStartPlayback(1, 1000)).toBe(false);
   });
 
-  // The threshold has to cover the measured drought, or the wait buys nothing.
-  it("covers the measured five-second gap with margin", () => {
-    expect(PREROLL_SECONDS).toBeGreaterThan(5);
-    expect(shouldStartPlayback(5.1, 1000)).toBe(false);
-    expect(shouldStartPlayback(PREROLL_SECONDS, 1000)).toBe(true);
+  /*
+   * This used to assert PREROLL_SECONDS > 5, on the premise that the client
+   * cushion had to outlast the provider's drought on its own. That premise is
+   * gone: `internal/livebuf` holds the jitter buffer on the server now and
+   * hands the stream out at its own rate, so the silences never reach here.
+   *
+   * The cushion covers ordinary jitter — a slow frame, a scheduling hiccup —
+   * and is deliberately small, because the two cushions add up and a viewer
+   * waits for the sum of both before a channel starts. Paying twice for the
+   * same protection would double the startup for nothing.
+   */
+  it("is a small cushion, not a substitute for the server's", () => {
+    expect(PREROLL_SECONDS).toBeGreaterThan(0);
+    expect(PREROLL_SECONDS).toBeLessThanOrEqual(5);
+    expect(shouldStartPlayback(PREROLL_SECONDS, 0)).toBe(true);
+    expect(shouldStartPlayback(PREROLL_SECONDS - 0.1, 0)).toBe(false);
+  });
+
+  // The deadline is the escape hatch, so it has to outlast the wait it bounds.
+  it("gives the cushion time to arrive before giving up on it", () => {
+    expect(PREROLL_DEADLINE_MS / 1000).toBeGreaterThan(PREROLL_SECONDS);
   });
 
   /*
