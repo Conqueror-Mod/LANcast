@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   PREROLL_DEADLINE_MS,
   PREROLL_SECONDS,
+  REBUFFER_SECONDS,
   bufferedAhead,
   shouldStartPlayback,
   shouldHold,
@@ -123,6 +124,76 @@ describe("deciding whether a stall is real", () => {
   it("never holds on a buffer that would immediately resume", () => {
     for (const ahead of [0, 1, 4, 7.9, 8, 12, 60, 131]) {
       if (shouldStartPlayback(ahead, 0)) {
+        expect(shouldHold(ahead)).toBe(false);
+      }
+    }
+  });
+});
+
+/*
+ * Starting and recovering are different problems.
+ *
+ * At start nothing is known about the channel. After a drought exactly one
+ * thing is: it just ran out. Resuming on the same evidence that was enough to
+ * begin with is how a channel that stalls once stalls for ever.
+ */
+describe("resuming costs more than starting", () => {
+  it("wants a bigger cushion after a drought than before the first frame", () => {
+    expect(REBUFFER_SECONDS).toBeGreaterThan(PREROLL_SECONDS);
+  });
+
+  it("starts on a head start that would not be enough to resume on", () => {
+    expect(shouldStartPlayback(PREROLL_SECONDS, 0)).toBe(true);
+    expect(shouldStartPlayback(PREROLL_SECONDS, 0, true)).toBe(false);
+  });
+
+  it("resumes once the larger cushion is there", () => {
+    expect(shouldStartPlayback(REBUFFER_SECONDS, 0, true)).toBe(true);
+    expect(shouldStartPlayback(REBUFFER_SECONDS - 0.1, 0, true)).toBe(false);
+  });
+
+  it("defaults to the first-start rule when nothing is said", () => {
+    // Every existing call site passes two arguments and means "starting".
+    expect(shouldStartPlayback(PREROLL_SECONDS, 0)).toBe(
+      shouldStartPlayback(PREROLL_SECONDS, 0, false),
+    );
+  });
+
+  /*
+   * The deadline is the escape hatch for a channel that will never reach any
+   * threshold, and that question — how long is too long to show somebody
+   * nothing — has the same answer whichever side of a drought you are on.
+   */
+  it("honours the deadline on both paths", () => {
+    expect(shouldStartPlayback(0, PREROLL_DEADLINE_MS, true)).toBe(true);
+    expect(shouldStartPlayback(0, PREROLL_DEADLINE_MS - 1, true)).toBe(false);
+  });
+
+  /*
+   * The gap between the thresholds is hysteresis, and it is the reason this
+   * change is a bug fix rather than a tuning preference.
+   *
+   * Before it, `shouldHold` released below PREROLL_SECONDS and
+   * `shouldStartPlayback` resumed at PREROLL_SECONDS — one boundary tested from
+   * both sides. A channel sitting on it holds at 2.9s, resumes at 3.0s, has
+   * that 3.0s eaten within three seconds of playback, and holds again: a pause
+   * every few seconds, each one correct by the rule and wrong by the outcome.
+   */
+  it("leaves a band where a recovering channel neither holds nor resumes", () => {
+    const band = [PREROLL_SECONDS, PREROLL_SECONDS + 1, REBUFFER_SECONDS - 0.1];
+    for (const ahead of band) {
+      expect(shouldHold(ahead)).toBe(false); // not thin enough to pause again
+      expect(shouldStartPlayback(ahead, 0, true)).toBe(false); // not yet enough to resume
+    }
+  });
+
+  /*
+   * The complement invariant, on the recovery path this time: a hold must never
+   * be entered on a buffer that its very next tick would release.
+   */
+  it("never holds on a buffer that would immediately resume after a drought", () => {
+    for (const ahead of [0, 1, 2.9, 3, 4, 5, 7.9, 12, 60, 131]) {
+      if (shouldStartPlayback(ahead, 0, true)) {
         expect(shouldHold(ahead)).toBe(false);
       }
     }

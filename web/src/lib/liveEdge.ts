@@ -48,8 +48,9 @@
 /**
  * Lag beyond which the player starts catching up.
  *
- * Well past the measured five-second drought and the eight-second head start
- * `preroll.ts` waits for, so ordinary buffering never changes the rate.
+ * Well past the measured five-second drought and past both thresholds
+ * `preroll.ts` waits for — the head start and the larger one it wants before
+ * resuming from a drought — so ordinary buffering never changes the rate.
  */
 export const MAX_LAG_SECONDS = 20;
 
