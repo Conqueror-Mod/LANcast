@@ -341,3 +341,19 @@
   color: var(--text-muted);
   background: var(--space-raised);
 }
+
+/* Shown only while the player is running fast to close a gap. Deliberately
+   quiet — it explains something a viewer may hear, it is not an alarm — and
+   deliberately not gold, which means where you are and nothing else. */
+.livetv__catchup {
+  margin-left: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
