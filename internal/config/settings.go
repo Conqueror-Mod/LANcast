@@ -77,6 +77,21 @@ type Settings struct {
 	// a downloader, a sync job, another machine's writes.
 	ScanIntervalHours int `json:"scan_interval_hours,omitempty"`
 
+	// AuditRetentionDays drops audit events older than this many days. Zero
+	// keeps them for ever, which is a real answer for somebody running this
+	// where the audit trail is the point.
+	//
+	// It exists because audit_event was append-only with no ceiling: a server
+	// left running for a year kept every row, and nothing ever looked at the
+	// age of one again. This is the same judgement ContinueWeeks makes one
+	// field up — age is relevance for some records and not for others, and
+	// saying which is the operator's call.
+	//
+	// Ninety days by default. Long enough that "what happened to that library
+	// last month" is still answerable, short enough that the table stops being
+	// a permanent record of every scan the server has ever run.
+	AuditRetentionDays int `json:"audit_retention_days,omitempty"`
+
 	// DebugLogging raises the server's log level to debug, at runtime and
 	// across restarts. Persisted rather than a one-shot toggle because the
 	// faults worth debug logging for are usually the intermittent ones: turning
@@ -128,7 +143,8 @@ func Defaults() Settings {
 		// found unsurprising, and an unsurprising default is the whole job of a
 		// default.
 		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
-		AllowMediaDeletion: true, ScanIntervalHours: 0}
+		AllowMediaDeletion: true, ScanIntervalHours: 0,
+		AuditRetentionDays: 90}
 }
 
 // SettingsStore reads and writes the settings file.
@@ -211,8 +227,11 @@ func (s *SettingsStore) Set(next Settings) error {
 // failing open in the most destructive direction available to it, against
 // state a person cannot easily reconstruct.
 //
-// Zero is meaningful for ContinueWeeks (never expire) and ScanIntervalHours
-// (off), so those are floors rather than replacements.
+// Zero is meaningful for ContinueWeeks (never expire), ScanIntervalHours (off)
+// and AuditRetentionDays (keep for ever), so those are floors rather than
+// replacements. AuditRetentionDays matters most here: reading a hand-edited
+// negative as a cutoff would delete the whole audit trail on the next pass,
+// and there is nowhere to recover it from.
 func clamp(s *Settings) {
 	d := Defaults()
 	if s.WatchedThreshold < 50 || s.WatchedThreshold > 100 {
@@ -226,6 +245,9 @@ func clamp(s *Settings) {
 	}
 	if s.ScanIntervalHours < 0 {
 		s.ScanIntervalHours = 0
+	}
+	if s.AuditRetentionDays < 0 {
+		s.AuditRetentionDays = 0
 	}
 }
 

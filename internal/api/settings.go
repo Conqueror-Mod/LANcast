@@ -33,6 +33,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"continue_limit":       cur.ContinueLimit,
 		"allow_media_deletion": cur.AllowMediaDeletion,
 		"scan_interval_hours":  cur.ScanIntervalHours,
+		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
@@ -73,6 +74,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		ContinueLimit      *int  `json:"continue_limit"`
 		AllowMediaDeletion *bool `json:"allow_media_deletion"`
 		ScanIntervalHours  *int  `json:"scan_interval_hours"`
+		AuditRetentionDays *int  `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -150,6 +152,17 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		next.ScanIntervalHours = *req.ScanIntervalHours
 	}
+	if req.AuditRetentionDays != nil {
+		// The ceiling is ten years. Not a technical limit -- it is the point
+		// past which "keep for this many days" is a clumsier way of saying
+		// zero, which is the supported way to keep an audit trail for ever.
+		if *req.AuditRetentionDays < 0 || *req.AuditRetentionDays > 3650 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"audit_retention_days must be between 0 (keep for ever) and 3650")
+			return
+		}
+		next.AuditRetentionDays = *req.AuditRetentionDays
+	}
 
 	encoderChanged := req.HardwareEncoder != nil &&
 		*req.HardwareEncoder != next.HardwareEncoder
@@ -211,5 +224,6 @@ func changedSettings(prev, next config.Settings) []string {
 	// can destroy media at all.
 	add("allow_media_deletion", prev.AllowMediaDeletion != next.AllowMediaDeletion)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
+	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
 }
