@@ -77,8 +77,47 @@ export const PREROLL_SECONDS = 3;
  */
 export const PREROLL_DEADLINE_MS = 8_000;
 
+/*
+ * Seconds to hold before resuming after the cushion has *already* run dry.
+ *
+ * Larger than the head start, and that asymmetry is the point. Starting and
+ * recovering are not the same problem: at start, nothing is known about the
+ * channel and the cost of guessing low is a few seconds of stutter. After a
+ * drought, one thing is known for certain — this channel just ran out — and
+ * the cost of guessing low is running out again immediately.
+ *
+ * ExoPlayer draws the same line and steeper: 1,000 ms to begin against 5,000 ms
+ * to resume after a rebuffer. The shape is what transfers, not the numbers.
+ * Their start value is low because a real player skips gaps and holds 30-60s
+ * behind it; a bare element does neither, and *one second in hand* is the exact
+ * condition measured at the top of this file as the original bug. So the head
+ * start stays where measurement put it and only the resume threshold moves.
+ *
+ * It also buys hysteresis, which was missing. `shouldHold` releases below
+ * PREROLL_SECONDS and, before this, `shouldStartPlayback` resumed at the same
+ * value — one boundary, tested from both sides. A channel sitting near it holds
+ * at 2.9s, resumes at 3.0s, has that 3.0s eaten by the play head within three
+ * seconds, and holds again: a pause every few seconds, each one correct by the
+ * rule and wrong by the outcome. A gap between the two thresholds means
+ * recovering costs more than falling did, so a recovery has to be real to count.
+ * `liveEdge.ts` pairs MAX_LAG_SECONDS with SETTLED_LAG_SECONDS for exactly this
+ * reason.
+ */
+export const REBUFFER_SECONDS = 5;
+
 /**
  * shouldStartPlayback decides whether a live element has waited enough.
+ *
+ * `afterDrought` distinguishes resuming from starting: a player that has run
+ * dry once has to show more in hand than a player that has never played, per
+ * REBUFFER_SECONDS. It is not "was this triggered by a `waiting` event" —
+ * `waiting` fires during the initial fill too — but "has this element ever
+ * played", which is the thing that makes the channel's behaviour known rather
+ * than guessed.
+ *
+ * The deadline does not move with it. It is the escape hatch for a channel that
+ * will never reach any threshold, and it answers the same question in both
+ * cases: how long is too long to show somebody nothing.
  *
  * Pure, and separate from the element, because jsdom neither buffers nor plays:
  * the rule is the part worth testing and the wiring is the part worth reading.
@@ -86,10 +125,10 @@ export const PREROLL_DEADLINE_MS = 8_000;
 export function shouldStartPlayback(
   bufferedAheadSeconds: number,
   waitedMs: number,
+  afterDrought = false,
 ): boolean {
-  return (
-    bufferedAheadSeconds >= PREROLL_SECONDS || waitedMs >= PREROLL_DEADLINE_MS
-  );
+  const want = afterDrought ? REBUFFER_SECONDS : PREROLL_SECONDS;
+  return bufferedAheadSeconds >= want || waitedMs >= PREROLL_DEADLINE_MS;
 }
 
 /**
@@ -111,6 +150,11 @@ export function shouldStartPlayback(
  *
  * Holding is still correct when the cushion is genuinely gone; that is what
  * this whole file is for.
+ *
+ * This is the lower edge of the band described on REBUFFER_SECONDS: hold below
+ * PREROLL_SECONDS, resume above REBUFFER_SECONDS. It stays at the *lower* value
+ * deliberately — raising it would start pausing a player that is merely running
+ * thin, which is the mistake `d26f552` was written to undo.
  */
 export function shouldHold(bufferedAheadSeconds: number): boolean {
   return bufferedAheadSeconds < PREROLL_SECONDS;

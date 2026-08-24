@@ -108,6 +108,16 @@ export function LiveTV() {
     if (!el) return;
 
     let timer: number | null = null;
+    /*
+     * Whether this element has ever got as far as playing.
+     *
+     * It is what separates "still filling up" from "ran dry", and those want
+     * different thresholds (see REBUFFER_SECONDS). `waiting` cannot tell them
+     * apart on its own — it fires plenty during the initial fill — and neither
+     * can `el.paused`, which is true in both cases because we are the ones who
+     * paused it.
+     */
+    let hasPlayed = false;
 
     const release = () => {
       if (timer !== null) {
@@ -139,8 +149,15 @@ export function LiveTV() {
       setBuffering(true);
       el.pause();
       const startedAt = Date.now();
+      const afterDrought = hasPlayed;
       timer = window.setInterval(() => {
-        if (!shouldStartPlayback(bufferedAhead(el), Date.now() - startedAt)) {
+        if (
+          !shouldStartPlayback(
+            bufferedAhead(el),
+            Date.now() - startedAt,
+            afterDrought,
+          )
+        ) {
           return;
         }
         release();
@@ -193,10 +210,25 @@ export function LiveTV() {
     // actually advancing, so a paused or stalled element costs nothing.
     el.addEventListener("timeupdate", trim);
 
+    /*
+     * The element is the authority on whether it has ever played.
+     *
+     * Set from `playing` rather than from wherever we happen to call `play()`,
+     * because the two are not the same: a `play()` can be refused by autoplay
+     * policy, and `hold` can decline to hold at all when the buffer is already
+     * healthy — a path on which the element is plainly playing and no `play()`
+     * of ours was involved. `playing` covers both and cannot be wrong about it.
+     */
+    const played = () => {
+      hasPlayed = true;
+    };
+    el.addEventListener("playing", played);
+
     hold();
     el.addEventListener("waiting", hold);
 
     return () => {
+      el.removeEventListener("playing", played);
       el.removeEventListener("timeupdate", trim);
       // Leave the element at normal speed for whatever plays next, and do not
       // let the indicator outlive the channel that raised it.
