@@ -262,6 +262,36 @@ describe("the library grid menu", () => {
   });
 
   /*
+   * The tile's own tooltip must not cover its own menu.
+   *
+   * `title` is drawn by the *browser*, above everything the page can produce,
+   * and right-clicking leaves the pointer resting on the tile -- so a second
+   * later the film's name appears on top of the menu and hides whichever item
+   * is under the cursor. Found by looking at the shipped v0.8.6 build, where
+   * it covered "Add to queue".
+   *
+   * This asserts the mechanism, not the picture: jsdom paints nothing, so the
+   * overlap itself is invisible to it and always will be. What it can prove is
+   * that the attribute is gone while the menu is open and back afterwards,
+   * which is the whole of the fix.
+   */
+  it("drops its tooltip while its menu is open", async () => {
+    mount([film]);
+    await render();
+    const t = tile("A Film");
+    expect(t.getAttribute("title")).toBe("A Film");
+
+    rightClick(t);
+    expect(t.hasAttribute("title"), "tooltip covers the menu").toBe(false);
+    // The name is still announced -- aria-label is not drawn, and a tile needs
+    // a name while a menu hangs off it.
+    expect(t.getAttribute("aria-label")).toBe("A Film");
+
+    act(() => menuItems()[0].click());
+    expect(t.getAttribute("title")).toBe("A Film");
+  });
+
+  /*
    * Removing a title deletes files from disk when the server allows it, so it
    * is behind the same admin gate the track row uses -- and the gate is the
    * assertion, because a permission that is only a hidden button is not one.
