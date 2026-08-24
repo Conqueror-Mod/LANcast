@@ -25,7 +25,7 @@ import "./Browse.css";
  */
 export function Collections() {
   // The same menu a library grid offers; a poster is a poster.
-  const actions = useItemActions();
+  const { actions, dialogs } = useItemActions();
   const [params, setParams] = useSearchParams();
   const { id } = useParams();
   const libraryID = Number(id);
@@ -119,6 +119,7 @@ export function Collections() {
         ))}
       </div>
       <div ref={sentinel} aria-hidden="true" />
+      {dialogs}
     </div>
   );
 }

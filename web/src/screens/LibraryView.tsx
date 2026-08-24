@@ -85,7 +85,7 @@ export function LibraryView({
   const navigate = useNavigate();
   // One definition of what a poster offers, shared with search, collections
   // and a detail page's children. See useItemActions.
-  const gridActions = useItemActions();
+  const { actions: gridActions, dialogs: gridDialogs } = useItemActions();
   const qc = useQueryClient();
   /*
    * What "play all" queues here, or null where it means nothing.
@@ -445,6 +445,10 @@ export function LibraryView({
           {isFetchingNextPage ? "Loading more…" : ""}
         </div>
       )}
+
+      {/* The menu's dialogs. Rendered by the surface rather than by the menu,
+          which unmounts the instant an item is picked -- see useItemActions. */}
+      {gridDialogs}
     </div>
   );
 }

@@ -24,7 +24,7 @@ import "./Browse.css";
  */
 export function Search() {
   // The same menu a library grid offers; a poster is a poster.
-  const actions = useItemActions();
+  const { actions, dialogs } = useItemActions();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const navigate = useNavigate();
@@ -95,6 +95,7 @@ export function Search() {
           </div>
         </section>
       ))}
+      {dialogs}
     </div>
   );
 }

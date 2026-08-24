@@ -195,13 +195,20 @@ describe("marking an episode watched", () => {
         });
       }),
     );
-    return calls;
+    // Progress writes only. The list also asks who you are -- removal is
+    // admin-only -- and these are about what marking a row *writes*, not about
+    // how many requests rendering a season makes.
+    return {
+      get all() {
+        return calls.filter((c) => c.url.includes("/progress"));
+      },
+    };
   }
 
   afterEach(() => vi.unstubAllGlobals());
 
   it("marks an unwatched episode watched", async () => {
-    const calls = stubFetch();
+    const writes = stubFetch();
     render([episode({ id: 12 })]);
 
     await act(async () => {
@@ -209,6 +216,7 @@ describe("marking an episode watched", () => {
       await Promise.resolve();
     });
 
+    const calls = writes.all;
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toContain("/api/items/12/progress");
     expect(calls[0].body).toEqual({ position_ms: 0, watched: true });
@@ -220,7 +228,7 @@ describe("marking an episode watched", () => {
    * opposite of what "I have not seen this" means.
    */
   it("clears the position when marking unwatched", async () => {
-    const calls = stubFetch();
+    const writes = stubFetch();
     render([
       episode({ id: 12, progress: { position_ms: 900_000, watched: true } }),
     ]);
@@ -230,7 +238,7 @@ describe("marking an episode watched", () => {
       await Promise.resolve();
     });
 
-    expect(calls[0].body).toEqual({ position_ms: 0, watched: false });
+    expect(writes.all[0].body).toEqual({ position_ms: 0, watched: false });
   });
 
   // The control says which way it goes, since a tick alone does not tell a

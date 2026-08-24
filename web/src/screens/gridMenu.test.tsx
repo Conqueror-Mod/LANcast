@@ -57,7 +57,7 @@ const seenFilm = {
   artwork: {},
 };
 
-// A container: clicking opens it, and there is nothing here a menu can offer.
+// A container: clicking opens it, and its menu is about the whole of it.
 const show = {
   id: 13,
   title: "A Show",
@@ -67,11 +67,20 @@ const show = {
   artwork: {},
 };
 
+// The one tile left with nothing to offer an ordinary viewer.
+const photo = {
+  id: 14,
+  title: "A Photograph",
+  kind: "photo",
+  library_id: 1,
+  artwork: {},
+};
+
 let host: HTMLDivElement;
 let root: Root;
 let writes: { url: string; body: Record<string, unknown> }[];
 
-function mount(items: unknown[]) {
+function mount(items: unknown[], role = "admin") {
   writes = [];
   vi.stubGlobal(
     "fetch",
@@ -93,7 +102,7 @@ function mount(items: unknown[]) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "chris", role },
         });
       }
       if (url.includes("/api/items")) return json({ items, total: items.length });
@@ -183,6 +192,10 @@ describe("the library grid menu", () => {
       "Play next",
       "Add to queue",
       "Go to details",
+      // Last, and only for an admin. A destructive item anywhere but the end
+      // of the list is one a slipped press can reach on the way to something
+      // ordinary.
+      "Remove from library…",
     ]);
   });
 
@@ -197,14 +210,38 @@ describe("the library grid menu", () => {
   });
 
   /*
-   * A container opens no menu *and* does not swallow the browser's own. The
-   * second half is the part that would rot silently: an empty action list still
-   * calls preventDefault unless the tile declines first.
+   * A show used to open no menu at all, which meant the most common tile in a
+   * television library answered a right-click with the browser's own. It has
+   * its own list now -- and pointedly not the film's: a show is not queued, it
+   * is gathered into a queue.
    */
-  it("leaves a container alone entirely", async () => {
+  it("gives a container its own menu", async () => {
     mount([show]);
     await render();
-    expect(rightClick(tile("A Show")), "suppressed the native menu").toBe(false);
+    expect(rightClick(tile("A Show")), "left the native menu alone").toBe(true);
+    expect(labels()).toEqual([
+      "Play all",
+      "Shuffle",
+      "Mark all as watched",
+      "Mark all as unwatched",
+      "Go to details",
+      "Remove from library…",
+    ]);
+  });
+
+  /*
+   * The refusal itself still has to hold, or PosterTile's guard rots silently:
+   * an empty action list still calls preventDefault unless the tile declines
+   * first. A photograph seen by an ordinary viewer is the case that is still
+   * empty -- neither watched nor queued, and no page worth visiting.
+   */
+  it("leaves a tile with nothing to offer alone entirely", async () => {
+    mount([photo], "user");
+    await render();
+    expect(
+      rightClick(tile("A Photograph")),
+      "suppressed the native menu",
+    ).toBe(false);
     expect(menuItems().length).toBe(0);
   });
 
@@ -224,10 +261,13 @@ describe("the library grid menu", () => {
     expect(w?.body.watched).toBe(true);
   });
 
-  // Removing a title deletes files from disk when the server allows it. One
-  // right-click away is not the right weight for that; the detail page keeps it.
-  it("does not offer to remove a title", async () => {
-    mount([film]);
+  /*
+   * Removing a title deletes files from disk when the server allows it, so it
+   * is behind the same admin gate the track row uses -- and the gate is the
+   * assertion, because a permission that is only a hidden button is not one.
+   */
+  it("does not offer to remove a title to an ordinary viewer", async () => {
+    mount([film], "user");
     await render();
     rightClick(tile("A Film"));
     expect(labels().join(" ")).not.toContain("Remove");

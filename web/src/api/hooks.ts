@@ -1283,6 +1283,53 @@ export async function fetchArtistQueue(
 }
 
 /**
+ * fetchDescendantIDs flattens any container into a play queue of leaf ids.
+ *
+ * fetchArtistQueue above is the two-level version of this for one shape; this
+ * is the general one, and it exists because a right-click on a *tile* has no
+ * page open behind it. The detail page knows a show's seasons because it
+ * rendered them. A menu opened on a poster in a search result knows nothing but
+ * the row, so "Play all" has to go and find out.
+ *
+ * Depth-first, so the order is the order the thing is meant to be consumed in:
+ * season one before season two, and the tracks of a record in the order the
+ * record plays. Breadth-first would queue every season's first episode.
+ *
+ * The query key is useChildren's, so a container whose page has been opened is
+ * already in cache and this costs nothing -- and opening it afterwards is
+ * served from what this fetched.
+ *
+ * A collection is deliberately *not* handled here. Its membership lives in
+ * item_collection rather than parent_id, so a collection has no children to
+ * walk and the caller uses collection_id instead.
+ */
+export async function fetchDescendantIDs(
+  qc: QueryClient,
+  parentID: number,
+  depth = 0,
+): Promise<number[]> {
+  // A cycle in parent_id is not a shape the scanner produces, but a database
+  // row is trusted data and this is a recursive walk over it: without a stop,
+  // one bad row is a hung tab rather than a wrong answer. Four is deeper than
+  // any real hierarchy here (artist -> album -> track is three).
+  if (depth > 4) return [];
+  const kids = await qc.fetchQuery({
+    queryKey: ["children", parentID, ""],
+    queryFn: () =>
+      apiGet<ItemsPage>("/api/items?parent_id=" + parentID).then((r) => r.items),
+  });
+  const ids: number[] = [];
+  for (const kid of kids) {
+    if (isContainer(kid)) {
+      ids.push(...(await fetchDescendantIDs(qc, kid.id, depth + 1)));
+    } else {
+      ids.push(kid.id);
+    }
+  }
+  return ids;
+}
+
+/**
  * fetchLibraryTracks returns every track id in a library, in title order.
  *
  * Pages rather than asking for everything at once: `limit` is capped at 500 by

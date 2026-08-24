@@ -281,7 +281,7 @@ export function Detail() {
    * branch above deliberately does not: a photograph is not watched, has no
    * page worth visiting, and selects into the banner rather than navigating.
    */
-  const childActions = useItemActions();
+  const { actions: childActions, dialogs: childDialogs } = useItemActions();
   const back = useCallback(() => navigate(-1), [navigate]);
   useBackHandler(back);
 
@@ -829,6 +829,11 @@ export function Detail() {
       {renaming && (
         <RenamePlaylist playlist={item} onClose={() => setRenaming(false)} />
       )}
+      {/* The children grid's own dialogs. Separate from this page's Remove and
+          Add-to-playlist above: those act on the item being *looked at*, these
+          act on whichever child was right-clicked, and one pair of state
+          variables serving both would remove the wrong thing. */}
+      {childDialogs}
       {trailerOpen && trailer && (
         <TrailerModal
           trailer={trailer}
