@@ -131,3 +131,32 @@ export function prevPos(
   if (repeat === "all" && order.length > 0) return order.length - 1;
   return null;
 }
+
+/**
+ * startOf picks which id a freshly-built queue should begin on.
+ *
+ * "Randomize all" always started with the same film, and the reason is a
+ * comment that had the mechanism exactly backwards. Every caller navigated to
+ * `ids[0]` and left the randomising to shuffle, on the grounds that
+ * `shuffledStartingWith` reorders everything anyway so a random start here
+ * would be "a second randomiser doing nothing".
+ *
+ * It is the opposite. `shuffledStartingWith` *pins* the id it is given to the
+ * front — deliberately, so that turning shuffle on mid-queue does not strand
+ * everything shuffled ahead of the playing track. Hand it a fixed `ids[0]` and
+ * it faithfully pins the same film every time: the shuffle is real, and it is a
+ * shuffle of positions 2..n. The one position a listener actually notices is
+ * the only one that never moved.
+ *
+ * So the random choice has to happen *here*, before the queue is handed over.
+ * An ordered start still takes ids[0], which is what Play all means.
+ */
+export function startOf(
+  ids: number[],
+  shuffle: boolean,
+  rand: () => number = Math.random,
+): number | undefined {
+  if (ids.length === 0) return undefined;
+  if (!shuffle) return ids[0];
+  return ids[Math.floor(rand() * ids.length)];
+}

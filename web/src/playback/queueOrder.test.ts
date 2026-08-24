@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   shuffled,
   shuffledStartingWith,
+  startOf,
   queueAfterEntry,
   resolvePos,
   nextPos,
@@ -190,5 +191,42 @@ describe("position-based navigation", () => {
     it("returns -1 when the item is not in the order at all", () => {
       expect(resolvePos(withRepeat, 5, 99)).toBe(-1);
     });
+  });
+});
+
+describe("startOf", () => {
+  const seq = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+
+  it("takes the front when the queue is ordered", () => {
+    expect(startOf(seq(20), false)).toBe(1);
+  });
+
+  /*
+   * The bug this exists for: "Randomize all" always started with the same film.
+   * Every caller passed ids[0] and left the randomising to shuffle, but
+   * shuffledStartingWith *pins* the id it is given to the front — so the
+   * shuffle was real and was a shuffle of positions 2..n.
+   */
+  it("does not always pick the same id when shuffling", () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) seen.add(startOf(seq(50), true)!);
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("can pick the last id, which a fixed front never could", () => {
+    // rand() just under 1 lands on the final index.
+    expect(startOf(seq(10), true, () => 0.999)).toBe(10);
+  });
+
+  it("picks from the queue and nowhere else", () => {
+    const ids = seq(8);
+    for (let i = 0; i < 100; i++) expect(ids).toContain(startOf(ids, true)!);
+  });
+
+  // An empty queue has no start. Callers already refuse to navigate on one;
+  // returning 0 here would have them navigate to /watch/0.
+  it("has no answer for an empty queue", () => {
+    expect(startOf([], true)).toBeUndefined();
+    expect(startOf([], false)).toBeUndefined();
   });
 });

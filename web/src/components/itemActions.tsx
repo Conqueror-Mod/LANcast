@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fetchDescendantIDs, useIsAdmin, useSetWatchedByID } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { isContainer, isMusic, isPicture, watchedVerb } from "@/lib/kind";
+import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
 import type { MenuAction } from "./Menu";
@@ -87,8 +88,12 @@ export function useItemActions(): ItemActions {
       setGathering(true);
       try {
         const ids = await fetchDescendantIDs(qc, item.id);
-        if (ids.length === 0) return;
-        navigate(`/watch/${ids[0]}`, { state: { queue: ids, shuffle } });
+        // Not ids[0]: shuffledStartingWith pins whatever it is handed to the
+        // front, so a fixed start makes Shuffle mean "shuffle everything after
+        // the first episode". See startOf.
+        const start = startOf(ids, shuffle);
+        if (start === undefined) return;
+        navigate(`/watch/${start}`, { state: { queue: ids, shuffle } });
       } finally {
         // Cleared even on failure, so one request that timed out cannot leave
         // every menu on the screen permanently disabled.
