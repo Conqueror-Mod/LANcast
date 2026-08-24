@@ -265,6 +265,34 @@ describe("a live channel closes its gap by playing faster", () => {
     expect(pause).toHaveBeenCalled();
   });
 
+  /*
+   * A speed change a viewer can hear must not be a secret. 10% is subtle
+   * enough to be mistaken for the stream being wrong rather than for a
+   * correction being applied — which is precisely how it was first reported.
+   */
+  it("says so on screen while it is running fast", async () => {
+    const { el } = await start({ edge: () => 137, at: 83 });
+    await tick();
+    expect(host.textContent).not.toContain("Catching up");
+
+    await timeupdate(el);
+    expect(el.playbackRate).toBe(CATCHUP_RATE);
+    expect(host.textContent).toContain("Catching up");
+  });
+
+  it("stops saying so once it is back to normal speed", async () => {
+    const { el } = await start({ edge: () => 137, at: 83 });
+    await tick();
+    await timeupdate(el);
+    expect(host.textContent).toContain("Catching up");
+
+    el.currentTime = 135; // caught up
+    await timeupdate(el);
+
+    expect(el.playbackRate).toBe(1);
+    expect(host.textContent).not.toContain("Catching up");
+  });
+
   it("still resumes after a stall", async () => {
     const { play } = await start({ edge: () => PREROLL_SECONDS + 2 });
     await tick();

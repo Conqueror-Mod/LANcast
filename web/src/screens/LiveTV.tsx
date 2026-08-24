@@ -71,6 +71,9 @@ export function LiveTV() {
   const [playing, setPlaying] = useState<Channel | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [buffering, setBuffering] = useState(false);
+  // Whether the player is running fast to close a gap. Shown, because a speed
+  // change a viewer can hear should not be a secret.
+  const [catchingUp, setCatchingUp] = useState(false);
   const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -174,6 +177,17 @@ export function LiveTV() {
       if (!catching && want === 1) return; // never their speed, only ours
       el.playbackRate = want;
       catching = want !== 1;
+      /*
+       * Say so on screen.
+       *
+       * Playing faster than normal is something a viewer can hear — 10% is
+       * subtle enough to be mistaken for the stream being wrong rather than
+       * for a correction being applied, and "the audio sounds slightly fast"
+       * is exactly how it was first reported. A player that quietly changes
+       * speed and says nothing turns its own fix into somebody else's bug
+       * report.
+       */
+      setCatchingUp(catching);
     };
     // On timeupdate rather than an interval: it fires only while media is
     // actually advancing, so a paused or stalled element costs nothing.
@@ -184,8 +198,10 @@ export function LiveTV() {
 
     return () => {
       el.removeEventListener("timeupdate", trim);
-      // Leave the element at normal speed for whatever plays next.
+      // Leave the element at normal speed for whatever plays next, and do not
+      // let the indicator outlive the channel that raised it.
       if (catching) el.playbackRate = 1;
+      setCatchingUp(false);
       el.removeEventListener("waiting", hold);
       if (timer !== null) window.clearInterval(timer);
     };
@@ -307,6 +323,14 @@ export function LiveTV() {
           )}
           <div className="livetv__nowrow">
             <span className="livetv__now">{playing.name}</span>
+            {catchingUp && (
+              <span
+                className="livetv__catchup"
+                title="This channel fell behind live, so it is playing slightly faster until it catches up."
+              >
+                Catching up
+              </span>
+            )}
             <button
               className="livetv__stop"
               onClick={() => {
