@@ -582,8 +582,15 @@ export function useCandidates(id: number, query: string | null) {
 export function useApplyMatch(id: number) {
   const qc = useQueryClient();
   return useMutation({
+    // The updated item comes back, and the caller needs it: a confirmed match
+    // does not lock a row whose shape is still wrong (ADR 0041), so
+    // `match_state` is how the client learns the door did not close.
+    // apiPost rather than apiSend, because the caller needs the body: the
+    // handler returns the updated item, and a confirmed match does not lock a
+    // row whose shape is still wrong (ADR 0041), so `match_state` is how the
+    // client learns the door did not close.
     mutationFn: (c: MatchCandidate) =>
-      apiSend(`/api/items/${id}/match`, "POST", {
+      apiPost<Item>(`/api/items/${id}/match`, {
         provider: c.Provider,
         external_id: c.ExternalID,
         // The candidate's kind may differ from the item's — correcting a

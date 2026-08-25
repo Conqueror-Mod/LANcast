@@ -67,14 +67,51 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
 
   useBackHandler(onClose);
 
+  /*
+   * A confirmed match usually locks the row and the dialog closes. It does not
+   * lock a row whose shape is still wrong (ADR 0041) -- a parentless film in a
+   * shows library, which is what a lost `EP1` marker produces -- because
+   * locking there stops a rescan *fixing* the row when the filename is
+   * corrected on disk.
+   *
+   * The identity is applied either way, so the choice is honoured. What
+   * changes is that the row stays reviewable, and somebody who just pressed
+   * Confirm has to be told why rather than watching it reappear in the queue.
+   * `match_state` is the signal: anything but `locked` after a successful
+   * confirm means the door was deliberately left open.
+   */
+  const [unsettled, setUnsettled] = useState(false);
   const pick = (c: MatchCandidate) =>
-    apply.mutate(c, { onSuccess: () => onClose() });
+    apply.mutate(c, {
+      onSuccess: (updated) => {
+        if (updated?.match_state === "locked") {
+          onClose();
+          return;
+        }
+        setUnsettled(true);
+      },
+    });
 
   const locked = item.locked_fields ?? [];
 
   return (
     <div className="fixmatch__overlay" onClick={onClose}>
       <div className="fixmatch" onClick={(e) => e.stopPropagation()} role="dialog">
+        {unsettled && (
+          /*
+             Not an error, and not styled as one. The match was applied; this
+             says what did not happen and what to do about it, because the file
+             is corrected on disk rather than in here -- that is the decision
+             ADR 0041 records, not a limitation of this dialog.
+          */
+          <p className="fixmatch__unsettled">
+            Match applied, and this row is still open for review. It is a film
+            sitting loose in a shows library, which is usually a file whose
+            episode number was lost from its name — locking it now would stop a
+            rescan picking up the fix. Correct the filename on disk and rescan,
+            or move the file to a film library.
+          </p>
+        )}
         <div className="fixmatch__head">
           <span className="section-label">Fix match</span>
           <button className="fixmatch__x" onClick={onClose} aria-label="Close">

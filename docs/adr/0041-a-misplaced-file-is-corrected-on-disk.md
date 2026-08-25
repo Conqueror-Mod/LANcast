@@ -76,8 +76,8 @@ Two remedies, both already available:
   already live. A library's kind is the declaration of what its folder holds, and
   moving a file across is how that declaration is honoured.
 
-**One change is accepted and still to build: a confirmed match must not lock a
-row whose shape is still wrong.** Locking an identity onto a parentless movie row
+**One change is accepted and — as of 2026-08-25, in v0.8.13 — built: a confirmed
+match must not lock a row whose shape is still wrong.** Locking an identity onto a parentless movie row
 in a show library is the trap above, and it is what turned a two-minute filename
 fix into a dead end. Either the shape is settled first, or the row stays
 reviewable. This is small, independent of everything else here, and it is the
@@ -164,3 +164,28 @@ library shared from another machine, or read-only media. Every remedy above is a
 write to the filesystem, so where that write is impossible this decision offers
 nothing, and reparenting becomes the only remedy rather than a redundant one.
 That is the condition to watch for — not a reason to build it now.
+
+## What was built
+
+`store.ShapeUnsettled(libraryKind, item)` is the rule, deliberately narrow: a
+**parentless** `movie` row in a `show` library, which is the exact shape a lost
+episode marker produces. It is *not* "a shows library contains a film" — that is
+ordinary and legitimate, it is Case 2 above, and a check that cries wolf gets
+ignored, which is worse than no check. `shapecheck.go` already declines to cry
+wolf about the same thing at library level.
+
+`enrich.ApplyMatch` consults it and passes `StateReview` instead of
+`StateLocked`. **The identity is still applied** — the person's choice is
+honoured, the fields are written, nothing is refused or silently dropped. What
+changes is only whether the door closes behind it.
+
+A failure to read the library falls to the reviewable side. The cost of being
+wrong that way is one row a rescan may revisit; the cost of the other way is a
+wrong identity welded on for ever.
+
+Somebody who presses Confirm has to be told, or the row simply reappears in the
+queue and looks like a bug. The handler already returns the updated item, so the
+client reads `match_state`: anything but `locked` after a successful confirm
+means the door was left open deliberately, and Fix match says so and stays open
+rather than closing. No API change was needed — which is why the contract is
+unchanged here.

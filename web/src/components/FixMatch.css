@@ -247,3 +247,20 @@
   user-select: text;
   overflow-wrap: anywhere;
 }
+
+/* A confirmed match that deliberately did not lock (ADR 0041).
+
+   Not styled as an error, because nothing failed: the identity was applied and
+   the row was left reviewable on purpose. Red here would read as "your change
+   was rejected", which is the opposite of what happened — so this is the same
+   muted note the rest of the dialog uses for explanation. */
+.fixmatch__unsettled {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-tile);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}

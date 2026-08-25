@@ -860,3 +860,107 @@ func TestSeasonUnderUnmatchedShowStaysPending(t *testing.T) {
 		t.Error("season left the pending queue; it must wait for its show")
 	}
 }
+
+/*
+ * A confirmed match does not lock a row whose shape is still wrong (ADR 0041).
+ *
+ * The trap, from a real library: a file that lost its `EP1` marker parses as a
+ * film, lands parentless in a shows library, and is then confirmed against a
+ * same-named film. Locking is meant to stop a rescan re-litigating a settled
+ * identity; on this row it stopped a rescan *fixing* one, so correcting the
+ * filename on disk — the remedy ADR 0041 chose — did nothing at all. A
+ * two-minute rename became a dead end.
+ *
+ * The identity is still applied. Only the door is left open.
+ */
+func showHarness(t *testing.T) (*store.Store, *store.Library) {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	lib, err := st.CreateLibrary(context.Background(), "Shows", "show", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st, lib
+}
+
+func TestApplyMatchLeavesAnUnsettledRowReviewable(t *testing.T) {
+	ctx := context.Background()
+	st, lib := showHarness(t)
+	id := addItem(t, st, lib, `C:\tv\storm.avi`, "Storm of the Century", 1999)
+
+	p := &fakeProvider{id: "fake", record: &meta.Record{
+		Source: "fake", ExternalID: "60622", Kind: meta.KindMovie,
+		Fields: meta.Fields{Title: meta.S("Storm of the Century"), Year: meta.I(1999),
+			Overview: meta.S("Applied anyway.")},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := w.ApplyMatch(ctx, *it, "fake", "60622", meta.KindMovie); err != nil {
+		t.Fatalf("ApplyMatch: %v", err)
+	}
+
+	got, _ := st.GetItem(ctx, id, "local")
+	// The person's choice is honoured: nothing is refused or silently dropped.
+	if got.Overview == nil || *got.Overview != "Applied anyway." {
+		t.Errorf("overview = %v, want the chosen record applied", got.Overview)
+	}
+	if got.ExternalID == nil || *got.ExternalID != "60622" {
+		t.Errorf("external id = %v, want the confirmed identity", got.ExternalID)
+	}
+	// But the row stays reviewable, so a corrected filename can still fix it.
+	if got.MatchState == meta.StateLocked {
+		t.Error("a parentless film in a shows library was locked")
+	}
+	if got.MatchState != meta.StateReview {
+		t.Errorf("match state = %q, want %q", got.MatchState, meta.StateReview)
+	}
+}
+
+/*
+ * And the row that is *not* the trap must still lock, or Fix match stops
+ * working on the libraries it is most needed in. A shows library legitimately
+ * holds an episode; only the parentless *film* is the wrong shape.
+ */
+func TestApplyMatchStillLocksAnEpisodeInAShowsLibrary(t *testing.T) {
+	ctx := context.Background()
+	st, lib := showHarness(t)
+
+	// Through UpsertItem like the scanner, because store never leaks *sql.DB
+	// and a test is not an exemption from that rule.
+	const path = `C:\tv\s01e01.avi`
+	season, episode := 1, 1
+	if _, err := st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: lib.ID, Path: path, Kind: "episode",
+		Title: "Cooking the Books", SortTitle: "black books",
+		Season: &season, Episode: &episode,
+		Container: "avi", SizeBytes: 1, MTime: 1,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	known, _ := st.KnownFiles(ctx, lib.ID)
+	id := known[path].ID
+
+	p := &fakeProvider{id: "fake", record: &meta.Record{
+		Source: "fake", ExternalID: "903", Kind: meta.KindEpisode,
+		Fields: meta.Fields{Title: meta.S("Cooking the Books")},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := w.ApplyMatch(ctx, *it, "fake", "903", meta.KindEpisode); err != nil {
+		t.Fatalf("ApplyMatch: %v", err)
+	}
+	got, _ := st.GetItem(ctx, id, "local")
+	if got.MatchState != meta.StateLocked {
+		t.Errorf("match state = %q, want locked", got.MatchState)
+	}
+}

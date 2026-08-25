@@ -373,7 +373,35 @@ func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, ex
 		}
 	}
 
-	return w.applyRecords(ctx, item, itemKind, lockedSet, locals, []meta.Record{*rec}, meta.StateLocked, 1.0)
+	/*
+	 * A confirmed match does not lock a row whose shape is still wrong
+	 * (ADR 0041).
+	 *
+	 * Locking exists so a rescan reconciles files without re-litigating an
+	 * identity a person settled. On a row that is in the wrong *place* it does
+	 * the opposite: a file that lost its `EP1` marker parses as a film, lands
+	 * parentless in a shows library, gets confirmed against a same-named film,
+	 * and the lock then stops the rescan from *fixing* it when the filename is
+	 * corrected on disk. That turned a two-minute rename into a dead end, which
+	 * is the whole reason ADR 0041 exists.
+	 *
+	 * So the identity is still applied -- the person's choice is honoured and
+	 * the fields are written -- and the row stays reviewable rather than
+	 * locked. Nothing is refused and nothing is silently ignored; what changes
+	 * is only whether the door closes behind it.
+	 *
+	 * A failure to read the library is not a reason to refuse the match. It is
+	 * a reason not to claim the shape is settled, so it falls to the reviewable
+	 * side: the cost of being wrong that way is one row a rescan may revisit,
+	 * against a wrong identity welded on for ever.
+	 */
+	state := meta.StateLocked
+	lib, err := w.st.GetLibrary(ctx, item.LibraryID)
+	if err != nil || lib == nil || store.ShapeUnsettled(lib.Kind, item) {
+		state = meta.StateReview
+	}
+
+	return w.applyRecords(ctx, item, itemKind, lockedSet, locals, []meta.Record{*rec}, state, 1.0)
 }
 
 // applyRecords merges resolved records over an item's current metadata and
