@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 28
+const CurrentSchemaVersion = 29
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -67,6 +67,7 @@ var migrations = []migration{
 	{version: 26, sql: schemaRevision26},
 	{version: 27, sql: schemaRevision27},
 	{version: 28, sql: schemaRevision28},
+	{version: 29, sql: schemaRevision29},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1041,4 +1042,28 @@ CREATE TABLE IF NOT EXISTS presence_grant (
 
 CREATE INDEX IF NOT EXISTS idx_presence_grant_person
     ON presence_grant(fingerprint, person_id);
+`
+
+/*
+ * Revision 29 — the edition marker is kept instead of thrown away (ADR 0042).
+ *
+ * `stripEditionSuffix` has always *found* "(Alternate Cut)", "Director's Cut",
+ * "DC", "SE" and the rest, and then discarded the finding to keep the shortened
+ * title. That is what makes an edition match the work it is an edition of, and
+ * it is right — but it also means two editions of one film arrive as two rows
+ * that are identical in every field a person can see.
+ *
+ * Nullable and additive, so every existing row reads as "no edition stated" and
+ * behaves exactly as it does now. No backfill: the column is populated as files
+ * are re-parsed, and a rescan reconciles files rather than re-litigating
+ * identity.
+ *
+ * **It is a label, never a grouping key.** The file that motivated ADR 0042
+ * called itself an alternate cut and was a byte-for-byte copy of the theatrical
+ * file -- so the marker is a thing the user wrote, and it is displayed rather
+ * than trusted. Nothing joins on it, nothing dedupes by it, and nothing may
+ * start.
+ */
+const schemaRevision29 = `
+ALTER TABLE media_item ADD COLUMN edition TEXT;
 `

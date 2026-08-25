@@ -817,3 +817,40 @@ export interface PeerPresence {
   reachable: boolean;
   people: PeerPerson[];
 }
+
+/*
+ * A work claimed by more than one file (ADR 0042).
+ *
+ * LANcast reports these and resolves none of them. A shared provider id is
+ * evidence that something wants a human, not that anything is duplicated: of
+ * the thirteen pairs in the library this was built against, two were not
+ * duplicates at all — a film split across two discs, and a 1989 film wearing a
+ * 2022 film's identity from a stale .nfo.
+ */
+export type CollisionMember = {
+  id: number;
+  title: string;
+  /** The one place this API returns a path: the report is for going and
+   *  looking at the two files. Admin-only for that reason. */
+  path: string;
+  /** What the filename claimed. A label, never a grouping key — the file that
+   *  motivated ADR 0042 called itself an alternate cut and was a copy. */
+  edition?: string;
+  size_bytes: number | null;
+  library_id: number;
+  missing: boolean;
+  /** Present only after a comparison. Sampled, not exhaustive. */
+  fingerprint?: string;
+  /** Could not be read. An absence of evidence, not a difference. */
+  unreadable?: boolean;
+};
+
+export type Collision = {
+  provider: string;
+  external_id: string;
+  same_size: boolean;
+  members: CollisionMember[];
+  /** Absent until compared, and absent afterwards if any member was
+   *  unreadable. "Identical so far as sampled" — never "identical". */
+  same_bytes?: boolean;
+};

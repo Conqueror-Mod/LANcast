@@ -1,0 +1,159 @@
+/* Two files, one work (ADR 0042).
+   A report, not a control panel: nothing here is a button that changes the
+   library, because the decision this screen exists to surface is not the
+   server's to make. The only button reads bytes. */
+
+.collide-section {
+  margin-top: 34px;
+}
+
+.collide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.collide {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  background: var(--space-raised);
+  padding: 14px 16px;
+}
+
+.collide__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.collide__title {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.collide__count {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.collide__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.collide__file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.collide__file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The marker the file claimed, styled as a quotation rather than a fact —
+   the file that motivated this said "Alternate Cut" and was a copy. */
+.collide__edition {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.collide__size {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.collide__missing {
+  font-size: 12px;
+  color: #e79080;
+}
+
+/* A path is for reading and copying, so it wraps rather than truncating: an
+   elided path is one somebody has to go and find another way. */
+.collide__path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  word-break: break-all;
+  user-select: text;
+}
+
+.collide__hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+  user-select: text;
+}
+
+.collide__unreadable {
+  font-size: 12px;
+  color: #e79080;
+}
+
+.collide__verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.collide__flag {
+  font-size: 12px;
+  border-radius: 3px;
+  padding: 2px 8px;
+}
+
+/* Neither state is styled as good or bad, deliberately. "Identical" is not a
+   problem and "differs" is not a success — both are facts a person is about to
+   act on, and colouring one as an error would be the report taking a view. */
+.collide__flag--same {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.collide__flag--differ {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.collide__compare {
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.collide__compare:hover:not(:disabled),
+.collide__compare:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.collide__compare:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}

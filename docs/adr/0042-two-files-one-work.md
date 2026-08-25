@@ -1,6 +1,6 @@
 # ADR 0042 — Two files, one work
 
-Date: 2026-08-17 · Status: proposed
+Date: 2026-08-17 · Status: **accepted** 2026-08-25 · built in v0.8.12
 
 ## Context
 
@@ -143,3 +143,68 @@ sources outranking providers is deliberate ([ADR 0008](0008-field-level-locking.
 and is not reopened here — but an NFO that disagrees with both the filename and
 the containing folder is a detectable condition, and it is the same shape of
 answer as this ADR: report it, do not overrule it.
+
+## What was built
+
+Accepted and implemented on 2026-08-25, as decided rather than as amended.
+
+**Schema revision 29** adds a nullable `media_item.edition`. `splitEdition`
+replaces `stripEditionSuffix` — the strip and the marker now come from one
+match, because a strip that happened with no marker recorded leaves two
+identical rows, and a marker recorded with no strip labels a film with part of
+its own name. The marker is stored **as written**, so "Director's Cut" survives
+as the file spelled it. Nothing joins on it.
+
+**`GET /api/collisions`** reports works claimed by more than one row.
+Admin-only, because it is the one response in this API that returns `path`: the
+value of the report is being able to go and look at the two files.
+
+The key is `(provider, external_id, season, episode)`, and arriving at that was
+the one thing this build got wrong on the first attempt. **Every episode of a
+show carries the show's `external_id`** — an episode's provider identity is a
+show id plus a position — so the obvious key reported every multi-episode show
+as one enormous collision. Run against the real library before shipping: **999
+episode rows against 86 genuine film ones**, a report 92% noise, burying exactly
+what it exists to surface. No test caught it, because every test was written
+against the pairs this ADR describes and those are all films.
+
+It also improved the feature. Two files of the *same* episode is a real
+collision the pair alone could never detect, and the corrected key finds 26 of
+them in that library. Containers stay excluded — a show and its season
+legitimately share an id.
+
+`size_bytes` and `same_size` are free and always present. `?compare=` opts one
+collision into a byte comparison: the size plus three 1 MB windows at head,
+middle and tail — the same sampling this investigation ran by hand. The field is
+`same_bytes` and the client says **"identical, so far as sampled"**, never
+"identical", because three windows cannot prove equality. That shortcut is
+defensible only because nothing acts on the answer; it would not be if it
+authorised a delete.
+
+An unreadable member carries `unreadable: true` and suppresses `same_bytes`
+entirely. **A file that cannot be opened is an absence of evidence, not a
+different file** — conflating those would be the report inventing a finding.
+
+The surface is a section on the Review screen rather than a page of its own:
+both answer the same question, and a nav entry for a report that is usually
+empty is a nav entry that is usually noise. Its test asserts the **absence** of
+merge, rank, delete, keep and hide controls, because that absence is the
+decision and is exactly what a later feature adds back without noticing what it
+overturns.
+
+Duration is absent throughout, for the reason recorded above.
+
+### What the live library actually holds
+
+Surveyed with the shipped query: **42 film collisions across 86 files**, plus 26
+episode files. The thirteen pairs this ADR was written from were a survey of
+1,209 films; the library has grown since, and the shape of the finding has not —
+identical copies in two index folders, a re-encode beside a remux, and folder
+names differing by a typo (`Final Destination (2000-20025)`) producing two
+parallel trees of the same films.
+
+### Still open, and unchanged by this
+
+The `CD1`/`CD2` pair is now *reported* and is still two rows; whether that is a
+parser gap or a scanner one remains its own question. The NFO-disagreement
+report this ADR argues for at the end is not built.

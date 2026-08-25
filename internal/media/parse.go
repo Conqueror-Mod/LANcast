@@ -53,6 +53,20 @@ type Info struct {
 	Series  string
 	Season  int
 	Episode int
+	/*
+	 * Edition is the marker the filename claimed, verbatim, or empty.
+	 *
+	 * "(Alternate Cut)", "Director's Cut", "DC". It has always been *found* --
+	 * stripping it is what makes an edition match the work it is an edition of
+	 * -- and it used to be found and thrown away, which left two editions of
+	 * one film as two rows identical in every field a person can see.
+	 *
+	 * **A label, never a grouping key** (ADR 0042). The file that motivated
+	 * that decision called itself an alternate cut and was a byte-for-byte copy
+	 * of the theatrical file. The marker is a thing the user wrote: display it,
+	 * do not believe it, and never join on it.
+	 */
+	Edition string
 }
 
 var videoExts = map[string]bool{
@@ -370,8 +384,9 @@ func Parse(root, path, libKind string) Info {
 		info.Year = year
 	}
 	// The edition marker comes off after cleaning, so "Alien.DC" has become
-	// "Alien DC" and the suffix is a word rather than a separator away.
-	info.Title = stripEditionSuffix(clean(name))
+	// "Alien DC" and the suffix is a word rather than a separator away. The
+	// marker itself is kept now rather than discarded (ADR 0042).
+	info.Title, info.Edition = splitEdition(clean(name))
 	if info.Title == "" {
 		info.Title = clean(base)
 	}
@@ -594,11 +609,39 @@ var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+[\(\[]?(` +
  * and neither does it strip down to an article — see below.
  */
 func stripEditionSuffix(s string) string {
-	out := strings.TrimSpace(reEditionSuffix.ReplaceAllString(s, ""))
-	if out == "" || isArticleOnly(out) {
-		return s
+	title, _ := splitEdition(s)
+	return title
+}
+
+/*
+ * splitEdition returns the title without its edition marker, and the marker.
+ *
+ * The strip and the marker are one operation because they must agree: a strip
+ * that happened and a marker that was not recorded leaves two identical rows,
+ * and a marker recorded where no strip happened labels a film with part of its
+ * own name. Deriving both from the same match is the only way they cannot
+ * disagree.
+ *
+ * The marker is returned **as written**, trimmed of its brackets and nothing
+ * else. It is shown to a person, so "Director's Cut" must not come back
+ * "directors cut" -- the vocabulary is matched case-insensitively precisely so
+ * that the file's own spelling survives.
+ *
+ * When the strip is refused -- nothing left, or an article only -- there is no
+ * marker either. Refusing means the words were part of the title, and a title
+ * is not an edition of itself.
+ */
+func splitEdition(s string) (title, edition string) {
+	loc := reEditionSuffix.FindStringIndex(s)
+	if loc == nil {
+		return s, ""
 	}
-	return out
+	out := strings.TrimSpace(s[:loc[0]])
+	if out == "" || isArticleOnly(out) {
+		return s, ""
+	}
+	marker := strings.Trim(strings.TrimSpace(s[loc[0]:]), "()[]")
+	return out, strings.TrimSpace(marker)
 }
 
 /*
