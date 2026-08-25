@@ -96,6 +96,33 @@
   --mini-strip-w: 236px;
   --mini-strip-h: 46px; /* one line of title over one row of icons */
 
+  /*
+   * The stacking order.
+   *
+   * Here for the same reason the docked-corner sizes above are: these are not
+   * four independent numbers, they are one *relationship* spread across four
+   * files, and a relationship nobody can see in one place is one that gets
+   * broken without anybody noticing.
+   *
+   * It was broken. A context menu opened on a tile in the last row is clamped
+   * back onto the screen, which lands it exactly where the docked player sits,
+   * and it was painted underneath at 60 against the strip's 121. The menu
+   * opened, took focus, held the right items — and was invisible and
+   * unclickable. It was reported as "no context menu opens near boundaries",
+   * because that is what being covered looks like from the front. The clamp
+   * did not merely allow that collision, it produced it: the tiles most likely
+   * to need repositioning are the ones nearest the corner the dock occupies.
+   *
+   * Read top to bottom, this is the whole ladder. Everything below the dock —
+   * the masthead, the filter bar, the side panels — is well under 100 and has
+   * never been in contention, so those keep their literals rather than
+   * pretending to a precision they do not need.
+   */
+  --z-dock-picture: 120; /* playback.css  — the docked video or cover */
+  --z-dock-strip: 121; /* MiniPlayer.css — the controls beneath it */
+  --z-point-menu: 130; /* Menu.css — a menu the pointer summoned, over both */
+  --z-viewer: 200; /* PhotoViewer.css — owns the screen, so it covers a menu */
+
   /* Motion. */
   --dur-fast: 120ms; /* hover / focus */
   --dur-base: 280ms; /* page and panel transitions */

@@ -6,7 +6,7 @@
   position: fixed;
   right: var(--mini-inset);
   bottom: var(--mini-inset);
-  z-index: 121;
+  z-index: var(--z-dock-strip);
   display: flex;
   align-items: center;
   /* Five controls where there were two: they wrap onto their own line under the
