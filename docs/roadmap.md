@@ -11,6 +11,19 @@ All of it is released: the repository is **public under MIT**, releases are
 way down. Nothing sits unreleased on `main`. Details in the areas below; what
 the pass taught is at the end.
 
+**Three decisions are open and none of them is waiting on code** — they are
+listed under [Open decisions](#open-decisions), which exists because a proposed
+ADR is a different kind of queue from an unbuilt feature and nothing was
+indexing it. One of them, [ADR 0042](adr/0042-two-files-one-work.md), is
+holding up work that is otherwise ready.
+
+**No known defects.** Six releases on 2026-08-25 (v0.8.6–v0.8.11) closed the
+container menus, three ordering and resume faults, the menu edge case, and
+database growth. Every one of the interesting ones was found by using the app or
+by measuring the live database, and not one by the test suite — which is the
+finding, not an aside. The suite is at 381 client tests and cannot see paint,
+cannot see layout, and had nothing to say about a scheduled job that never ran.
+
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
 the claim ADR 0002 made: that a new kind needs no new tables. It holds — music
@@ -1040,6 +1053,28 @@ where that openness gets exercised.
   existing client today to buy a property nobody is using yet, and ADR 0018
   already promises `/api` never changes meaning — the same guarantee at no cost.
 
+## Open decisions
+
+*Three ADRs are `proposed` and none of them is waiting on code. They are
+waiting on somebody deciding, which is a different queue and was not written
+down anywhere — so it is written down here.*
+
+| ADR | Proposed | The question | What it holds up |
+|---|---|---|---|
+| [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today. Live TV has no known open fault after v0.8.5–v0.8.7. It is the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
+| [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
+| [0042](adr/0042-two-files-one-work.md) | 2026-08-17 | What happens when **two files claim one work** — report the collision, keep the edition marker, never merge or delete | **The [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix.** That fix cannot land alone: it turns thirteen already-present duplicate pairs from a visible failure into an invisible one |
+
+0042 is the one with a real dependency — it is not "shall we do this next", it
+is a decision another piece of work is parked behind. The other two are ceilings
+rather than blockages.
+
+The standing rule 0013's amendment argues with is in
+[CLAUDE.md](../CLAUDE.md): this build ships no unaudited third-party player, and
+progressive fMP4 is the default precisely so it does not have to. That rule is
+**unchanged until the amendment is accepted**, and an ADR sitting in the
+repository does not accept itself.
+
 ## Next planning order
 
 1. ~~Metadata and artwork (M2)~~ — **built.** See
@@ -1157,7 +1192,13 @@ where that openness gets exercised.
     3.0s, lost it within three seconds and held again, so resuming now waits for
     5s where starting still waits for 3.
 
-    **Where it stands.** Live TV has no known open fault. Two things are still
+    **Where it stands.** Live TV has no known open fault, and two more
+    followed the server fix: the player says **"Catching up"** whenever it is
+    above 1.0x (v0.8.6), because a 10% correction is audible and applying it
+    silently turns the fix into somebody else's bug report — which is exactly
+    what happened; and **hold and resume stopped sharing a threshold** (v0.8.7),
+    which had a channel near the boundary holding at 2.9s, resuming at 3.0s,
+    losing it within three seconds and holding again. Two things are still
     true rather than fixed. **"Far too fast" was never reproduced** and is not
     claimed; if it is real it is a separate fault and needs a fresh report.
     And every client-side constant is still *compensation* — the reason
@@ -1176,13 +1217,31 @@ where that openness gets exercised.
     two lines away said `video=copy`.
 
     ~~Also ahead of the breadth work: **the right-click menus are half a
-    feature**~~ — **closed in v0.8.6.** Every poster answers a right-click now,
-    containers included, and the three capabilities that existed but were each
-    reachable from exactly one screen (add to playlist, remove from library,
-    start over) are on the tiles that own them. What is **not** verified is
-    layout: the lists run to seven items where the longest was five, and jsdom
-    performs none, so `PointMenu`'s edge-flip has never been watched carrying
-    the taller list.
+    feature**~~ — **closed in v0.8.6, and the layout gap closed in v0.8.11.**
+    Every poster answers a right-click, containers included, and the three
+    capabilities that existed but were each reachable from exactly one screen
+    (add to playlist, remove from library, start over) are on the tiles that own
+    them.
+
+    The layout half is worth keeping because it took five releases and was
+    invisible the whole time. The v0.8.6 entry recorded that jsdom performs no
+    layout, so `PointMenu`'s edge-flip had never been watched carrying a
+    seven-item list. It was worse than mis-placement: a menu near an edge is
+    clamped back on screen to `innerHeight - height - 8`, which is exactly where
+    the docked player sits, and it was painted underneath it at `z-index: 60`
+    against 120 and 121. **The clamp did not permit the collision, it produced
+    it** — the tiles most likely to need repositioning were the ones guaranteed
+    to be covered afterwards. It reported as "no context menu opens near
+    boundaries", because that is what being covered looks like from the front.
+
+    Two things generalise. **The suite cannot see paint**, so every assertion
+    about that menu passed in both states for four releases; it was found by
+    somebody using the app and confirmed with `elementFromPoint`, not by a test.
+    And the numbers now live in `tokens.css` as a named ladder because they were
+    four values in four files expressing one relationship — **the comment
+    directly above them already recorded the same class of failure one level
+    down**, where the docked strip grew and the picture's clearance did not
+    follow, and it happened again anyway.
 
 ## What the last pass taught
 
