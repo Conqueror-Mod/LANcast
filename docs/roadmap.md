@@ -11,11 +11,11 @@ All of it is released: the repository is **public under MIT**, releases are
 way down. Nothing sits unreleased on `main`. Details in the areas below; what
 the pass taught is at the end.
 
-**Three decisions are open and none of them is waiting on code** — they are
-listed under [Open decisions](#open-decisions), which exists because a proposed
-ADR is a different kind of queue from an unbuilt feature and nothing was
-indexing it. One of them, [ADR 0042](adr/0042-two-files-one-work.md), is
-holding up work that is otherwise ready.
+**Two decisions are open and neither is waiting on code** — they are listed
+under [Open decisions](#open-decisions), which exists because a proposed ADR is
+a different kind of queue from an unbuilt feature and nothing was indexing it.
+[ADR 0042](adr/0042-two-files-one-work.md) was the third and was **accepted and
+built** on 2026-08-25, which unblocks the ADR 0041 parser fix.
 
 **No known defects.** Six releases on 2026-08-25 (v0.8.6–v0.8.11) closed the
 container menus, three ordering and resume faults, the menu edge case, and
@@ -1055,19 +1055,22 @@ where that openness gets exercised.
 
 ## Open decisions
 
-*Three ADRs are `proposed` and none of them is waiting on code. They are
-waiting on somebody deciding, which is a different queue and was not written
-down anywhere — so it is written down here.*
+*Two ADRs are `proposed` and neither is waiting on code. They are waiting on
+somebody deciding, which is a different queue and was not written down anywhere
+— so it is written down here. A third, 0042, was accepted and built on
+2026-08-25 and is kept in the table struck through, because what a decision
+unblocked is worth more than a tidy list.*
 
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
 | [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today. Live TV has no known open fault after v0.8.5–v0.8.7. It is the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
 | [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
-| [0042](adr/0042-two-files-one-work.md) | 2026-08-17 | What happens when **two files claim one work** — report the collision, keep the edition marker, never merge or delete | **The [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix.** That fix cannot land alone: it turns thirteen already-present duplicate pairs from a visible failure into an invisible one |
+| ~~[0042](adr/0042-two-files-one-work.md)~~ | 2026-08-17 | ~~What happens when **two files claim one work**~~ | **Accepted 2026-08-25 and built.** The collision report exists, the edition marker is kept, and nothing merges, ranks or deletes. This no longer blocks the [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix |
 
-0042 is the one with a real dependency — it is not "shall we do this next", it
-is a decision another piece of work is parked behind. The other two are ceilings
-rather than blockages.
+0042 was the one with a real dependency, and it is **accepted and built**: the
+parser fix it was holding up can now land, because the thirteen duplicate pairs
+it would otherwise create silently are reported instead. The two that remain are
+ceilings rather than blockages — nothing is waiting on either.
 
 The standing rule 0013's amendment argues with is in
 [CLAUDE.md](../CLAUDE.md): this build ships no unaudited third-party player, and

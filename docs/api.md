@@ -2488,6 +2488,67 @@ real TV library listed 55 of them, each offering a Fix button leading to a
 search that cannot succeed. Shows are still listed: a show's title is a real
 title, and a wrong match on one is worth correcting.
 
+### `GET /api/collisions?library_id=&compare=`
+
+Works claimed by more than one row. **Admin only**, because it is the one
+response in this API that returns `path` — the whole value of the report is being able to go
+and look at the two files, and a collision the reader cannot locate on disk is a
+notification rather than a report.
+
+```json
+{ "collisions": [
+  { "provider": "tmdb", "external_id": "324857", "same_size": true,
+    "members": [
+      { "id": 41, "title": "Spider-Verse", "path": "W:/Films/…/Spider-Verse (2018).mkv",
+        "size_bytes": 2832374353, "library_id": 1, "missing": false },
+      { "id": 88, "title": "Spider-Verse", "path": "W:/Films/…/Spider-Verse (Alternate Cut) (2018).mkv",
+        "edition": "Alternate Cut", "size_bytes": 2832374353,
+        "library_id": 1, "missing": false } ] } ] }
+```
+
+**The work key is `(provider, external_id, season, episode)`**, and the last two
+are not decoration. Every episode of a show carries the **show's**
+`external_id` — that is how an episode's provider identity works, a show id plus
+a position — so keying on the pair alone reports every multi-episode show as one
+enormous collision. On a real library that was 999 episode rows against 86
+genuine film ones. A film has no season or episode and groups as you would
+expect; two files of the *same* episode collide, which the pair alone could
+never detect.
+
+**LANcast reports the collision and does not resolve it**
+([ADR 0042](adr/0042-two-files-one-work.md)). There is no merge, no ranking, no
+"keep the best copy", and no delete — not as a missing feature but as the
+decision. A shared provider id is evidence that *something* wants a human, not
+that anything is duplicated: on the library this was built against, thirteen
+pairs shared one and **two were not duplicates at all** — a film split across two
+discs, and a 1989 film wearing a 2022 film's identity from a stale `.nfo`.
+
+`edition` is the marker the filename claimed, verbatim, or absent. It is a
+**label, never a grouping key**: the file that motivated the decision called
+itself an alternate cut and was byte-for-byte the theatrical copy.
+
+**Duration is deliberately not reported.** `duration_ms` is overwritten with the
+provider's runtime on match, so two rows sharing an id always report identical
+durations whatever the files hold — including the misfile above, where one film
+is 126 minutes and the other 177. What is real: `path`, `size_bytes`, and
+comparing the bytes.
+
+`same_size` is free and always present. Equal sizes make a copy likely; unequal
+sizes rule one out, which is the more useful answer and needs no I/O.
+
+`compare=<external_id>` opts one collision into a byte comparison, adding
+`fingerprint` per member and `same_bytes` to the collision. The fingerprint is
+**sampled** — the size plus three 1 MB windows at head, middle and tail — so
+`same_bytes` means *identical so far as sampled* and never *identical*. That
+trade is defensible only because nothing acts on it. A member that could not be
+read carries `"unreadable": true` and no fingerprint, and the collision then
+omits `same_bytes` entirely: a file that cannot be opened is an absence of
+evidence, not a different file.
+
+Comparison is opt-in per collision because sampling three windows of a 14.6 GB
+file is cheap next to reading it and expensive next to nothing — a report is
+opened far more often than any one row in it is investigated.
+
 ### `POST /api/items/{id}/refresh` · `POST /api/libraries/{id}/refresh`
 
 Re-fetch metadata, honoring all field locks. Returns `202`.

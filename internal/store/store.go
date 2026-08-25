@@ -356,6 +356,15 @@ type Item struct {
 	Artist  *string `json:"artist,omitempty"`
 	Season  *int    `json:"season"`
 	Episode *int    `json:"episode"`
+	/*
+	 * Edition is the marker the filename claimed, or nil (ADR 0042).
+	 *
+	 * Displayed so two editions of one work can be told apart in a grid; never
+	 * a grouping key. The file that motivated that decision called itself an
+	 * alternate cut and was byte-for-byte the theatrical copy, so the marker is
+	 * a thing the user wrote -- show it, do not believe it.
+	 */
+	Edition *string `json:"edition,omitempty"`
 
 	Container  *string `json:"container"`
 	SizeBytes  *int64  `json:"size_bytes"`
@@ -478,6 +487,14 @@ type ScanFile struct {
 	Series    *string
 	Season    *int
 	Episode   *int
+	/*
+	 * Edition is the marker the filename claimed, or nil (ADR 0042).
+	 *
+	 * A label, never a grouping key: the file that motivated that decision
+	 * called itself an alternate cut and was byte-for-byte the theatrical copy.
+	 * Nothing joins on it, dedupes by it, or ranks with it.
+	 */
+	Edition   *string
 	Container string
 	SizeBytes int64
 	MTime     int64
@@ -523,8 +540,8 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
 			(library_id, root_id, kind, path, title, sort_title, year, series, season, episode,
-			 container, size_bytes, mtime, added_at, updated_at, missing)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+			 edition, container, size_bytes, mtime, added_at, updated_at, missing)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 		ON CONFLICT(path) DO UPDATE SET
 			-- root_id is refreshed too. A file can change roots without changing
 			-- path only if the roots themselves moved, which RepointRoot does --
@@ -534,7 +551,8 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			root_id = excluded.root_id,
 			kind = excluded.kind, title = excluded.title, sort_title = excluded.sort_title,
 			year = excluded.year, series = excluded.series, season = excluded.season,
-			episode = excluded.episode, container = excluded.container,
+			episode = excluded.episode, edition = excluded.edition,
+			container = excluded.container,
 			size_bytes = excluded.size_bytes, mtime = excluded.mtime,
 			updated_at = excluded.updated_at, missing = 0,
 			-- The scanner only upserts files whose size or mtime changed, so
@@ -542,7 +560,7 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			-- probe describes a file that no longer exists.
 			probed_at = NULL`,
 		f.LibraryID, f.RootID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
-		f.Container, f.SizeBytes, f.MTime, now, now)
+		f.Edition, f.Container, f.SizeBytes, f.MTime, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("upsert item %q: %w", f.Path, err)
 	}
@@ -760,7 +778,7 @@ type ItemFilter struct {
 }
 
 const itemCols = `id, library_id, root_id, kind, path, title, sort_title, year, series, season, episode,
-	container, size_bytes, mtime, duration_ms, added_at, missing,
+	edition, container, size_bytes, mtime, duration_ms, added_at, missing,
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
@@ -791,7 +809,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var missing int
 	err := sc.Scan(&it.ID, &it.LibraryID, &it.RootID, &it.Kind, &it.Path, &it.Title, &it.SortTitle,
-		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Container, &it.SizeBytes,
+		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Edition, &it.Container, &it.SizeBytes,
 		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
 		&it.ParentID, &it.Overview, &it.Rating, &it.ContentRating, &it.ReleasedAt,
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,

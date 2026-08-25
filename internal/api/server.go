@@ -351,6 +351,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/together/{id}", s.leaveTogether)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
+	// Admin-only because it returns paths, which every other item response
+	// withholds. The whole value of the report is being able to go and look at
+	// the two files (ADR 0042).
+	mux.HandleFunc("GET /api/collisions", s.adminOnly(s.collisions))
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)

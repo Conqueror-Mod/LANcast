@@ -1021,6 +1021,19 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, root store.Libr
 		y := nfo.Year
 		f.Year = &y
 	}
+	/*
+	 * The edition marker, kept rather than discarded (ADR 0042).
+	 *
+	 * The strip has always happened -- it is what makes "Alien DC" match Alien
+	 * -- and the finding used to be thrown away, which left two editions of one
+	 * film as two rows identical in every field a person can see. Nil when the
+	 * filename claimed nothing, so a row reads "no edition stated" rather than
+	 * empty-string-means-something.
+	 */
+	if nfo.Edition != "" {
+		ed := nfo.Edition
+		f.Edition = &ed
+	}
 	if nfo.Series != "" {
 		sr := nfo.Series
 		f.Series = &sr

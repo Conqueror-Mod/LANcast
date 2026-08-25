@@ -928,3 +928,74 @@ func TestEditionStripNeverLeavesOnlyAnArticle(t *testing.T) {
 // editionRoot is a library root for the title-parsing cases above; the files
 // sit directly in it, so nothing above them influences the parse.
 var editionRoot = filepath.Join("R", "Movies")
+
+/*
+ * The edition marker, kept rather than discarded (ADR 0042).
+ *
+ * The strip has always happened; what is new is that the finding survives. Both
+ * halves are asserted together because they have to agree: a strip that
+ * happened with no marker recorded leaves two identical rows, and a marker
+ * recorded with no strip labels a film with part of its own name.
+ */
+func TestSplitEdition(t *testing.T) {
+	cases := []struct {
+		in      string
+		title   string
+		edition string
+	}{
+		// The motivating file. It was a byte-for-byte copy of the theatrical
+		// cut, which is exactly why the marker is a label and not a key.
+		{"Spider-Man Into the Spider-Verse (Alternate Cut)", "Spider-Man Into the Spider-Verse", "Alternate Cut"},
+		{"Alien DC", "Alien", "DC"},
+		{"Blade Runner (Director's Cut)", "Blade Runner", "Director's Cut"},
+		{"Dune [Extended Edition]", "Dune", "Extended Edition"},
+
+		// No marker: the title is the title and the edition is empty.
+		{"Fight Club", "Fight Club", ""},
+
+		/*
+		 * The refusals, which must yield no marker either. Refusing to strip
+		 * means the words were part of the title -- and a title is not an
+		 * edition of itself. "The Final Cut" is a 2004 film; the older strip
+		 * reduced it to "The".
+		 */
+		{"The Final Cut", "The Final Cut", ""},
+		{"Uncut", "Uncut", ""},
+	}
+	for _, c := range cases {
+		title, edition := splitEdition(c.in)
+		if title != c.title || edition != c.edition {
+			t.Errorf("splitEdition(%q) = (%q, %q), want (%q, %q)",
+				c.in, title, edition, c.title, c.edition)
+		}
+	}
+}
+
+// The marker is shown to a person, so the file's own spelling has to survive.
+// The vocabulary is matched case-insensitively for exactly this reason.
+func TestEditionKeepsTheFilesOwnSpelling(t *testing.T) {
+	for _, in := range []string{"Alien (Director's Cut)", "Alien (DIRECTOR'S CUT)"} {
+		_, edition := splitEdition(in)
+		if edition == "" {
+			t.Fatalf("splitEdition(%q) found no edition", in)
+		}
+		if edition == "directors cut" {
+			t.Errorf("splitEdition(%q) normalised the marker to %q", in, edition)
+		}
+	}
+}
+
+// stripEditionSuffix is now splitEdition's first return, and every existing
+// caller depends on it behaving exactly as it did.
+func TestStripEditionSuffixIsUnchanged(t *testing.T) {
+	for in, want := range map[string]string{
+		"Alien DC":                "Alien",
+		"The Final Cut":           "The Final Cut",
+		"Fight Club":              "Fight Club",
+		"Dune [Extended Edition]": "Dune",
+	} {
+		if got := stripEditionSuffix(in); got != want {
+			t.Errorf("stripEditionSuffix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

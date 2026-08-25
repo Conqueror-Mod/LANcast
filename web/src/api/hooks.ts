@@ -20,6 +20,7 @@ import type {
   GuideNow,
   Person,
   CastMember,
+  Collision,
   CrashReport,
   MediaToolsState,
   Facets,
@@ -623,6 +624,47 @@ export function useTrailer(id: number) {
 
 // Items whose identity is uncertain — review (applied but flagged) and
 // unmatched (nothing good enough was found). The metadata-health queue.
+/*
+ * Works claimed by more than one file (ADR 0042).
+ *
+ * Admin-only on the server, because the response carries paths. Enabled by the
+ * caller rather than guarded here, so a member never fires a request that is
+ * going to 403.
+ */
+export function useCollisions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["collisions"],
+    queryFn: ({ signal }) =>
+      apiGet<{ collisions: Collision[] }>("/api/collisions", signal),
+    enabled,
+  });
+}
+
+/*
+ * Compare one collision's files, byte by sampled byte.
+ *
+ * A separate query per collision rather than a field on the list, because the
+ * comparison reads three windows of every file involved and a report is opened
+ * far more often than any one row in it is investigated. It runs when somebody
+ * asks, and its own key caches the answer for as long as the page lives.
+ *
+ * `staleTime: Infinity` because the answer is about bytes on disk: it does not
+ * go stale while a page is open, and re-reading 14 GB on a window focus would
+ * be a surprising thing for a report to do.
+ */
+export function useCompareCollision(externalID: string | null) {
+  return useQuery({
+    queryKey: ["collisions", "compare", externalID],
+    queryFn: ({ signal }) =>
+      apiGet<{ collisions: Collision[] }>(
+        `/api/collisions?compare=${encodeURIComponent(externalID ?? "")}`,
+        signal,
+      ),
+    enabled: !!externalID,
+    staleTime: Infinity,
+  });
+}
+
 export function useReview(libraryID?: number) {
   const p = libraryID ? `?library_id=${libraryID}` : "";
   return useQuery({

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useReview } from "@/api/hooks";
+import { useIsAdmin, useReview } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { FixMatch } from "@/components/FixMatch";
+import { Collisions } from "@/components/Collisions";
 import { scorePct } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./Review.css";
@@ -46,6 +47,9 @@ function ReviewRow({ item, onFix }: { item: Item; onFix: () => void }) {
 export function Review() {
   const { data, isLoading } = useReview();
   const [fixItem, setFixItem] = useState<Item | null>(null);
+  // The collision report returns paths, so it is admin-only on the server.
+  // Asked for only when the caller is one, so a member never fires a 403.
+  const isAdmin = useIsAdmin();
 
   const items = data?.items ?? [];
 
@@ -62,7 +66,9 @@ export function Review() {
       </p>
 
       {!isLoading && items.length === 0 && (
-        <p className="review__empty">Everything is matched. Nothing to review.</p>
+        // "Nothing to review" would be a lie with a collision report below it.
+        // This message is about the match queue, so it says so.
+        <p className="review__empty">Every match is confident.</p>
       )}
 
       <div className="review__list">
@@ -70,6 +76,14 @@ export function Review() {
           <ReviewRow key={item.id} item={item} onFix={() => setFixItem(item)} />
         ))}
       </div>
+
+      {/*
+        Below the match queue rather than beside it, and on this screen rather
+        than its own: both are the same question — what in this library needs a
+        person to look at it — and a second nav entry for a report that is
+        usually empty is a nav entry that is usually noise (ADR 0042).
+      */}
+      <Collisions enabled={isAdmin} />
 
       {fixItem && <FixMatch item={fixItem} onClose={() => setFixItem(null)} />}
     </div>
