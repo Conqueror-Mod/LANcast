@@ -3,6 +3,7 @@ import {
   shuffled,
   shuffledStartingWith,
   startOf,
+  shuffleForEntry,
   queueAfterEntry,
   resolvePos,
   nextPos,
@@ -228,5 +229,35 @@ describe("startOf", () => {
   it("has no answer for an empty queue", () => {
     expect(startOf([], true)).toBeUndefined();
     expect(startOf([], false)).toBeUndefined();
+  });
+});
+
+/*
+ * Reported as "Futurama is not playing in order", and nothing about Futurama
+ * was wrong: the episode query and the client's own walk both return S01E01
+ * first, and every screen displayed them correctly. Randomize all had turned
+ * shuffle on for the session, and Continue handed the player a correctly
+ * ordered queue that it then shuffled.
+ */
+describe("shuffleForEntry", () => {
+  it("obeys an explicit request either way", () => {
+    expect(shuffleForEntry(true, true, false)).toBe(true);
+    expect(shuffleForEntry(false, false, true)).toBe(false);
+  });
+
+  // The bug. A caller that supplies a queue is stating an order.
+  it("plays a supplied queue in order when shuffle was left on", () => {
+    expect(shuffleForEntry(undefined, true, true)).toBe(false);
+  });
+
+  /*
+   * And the rule this must not break: returning from the mini-player navigates
+   * to /watch/{id} with no queue at all, and clearing shuffle there would turn
+   * "go back to what is playing" into "stop shuffling", which is a different
+   * button.
+   */
+  it("leaves the session alone when no queue is supplied", () => {
+    expect(shuffleForEntry(undefined, false, true)).toBe(true);
+    expect(shuffleForEntry(undefined, false, false)).toBe(false);
   });
 });

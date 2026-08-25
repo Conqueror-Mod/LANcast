@@ -160,3 +160,39 @@ export function startOf(
   if (!shuffle) return ids[0];
   return ids[Math.floor(rand() * ids.length)];
 }
+
+/**
+ * shuffleForEntry decides what shuffle should be when the player is entered.
+ *
+ * Shuffle belongs to the session, deliberately: returning to the player from
+ * the mini-player must not silently clear a shuffle you turned on, so an entry
+ * carrying no queue information leaves the flag alone.
+ *
+ * That rule was applied to *every* entry, and it is wrong for half of them. A
+ * caller that hands over a queue is making a statement about order — Continue
+ * on a show says "these episodes, from here, in this sequence"; pressing an
+ * episode row says "this season from here"; an album's track list says "the
+ * record, in the order the record plays". None of them passed `shuffle`,
+ * because none of them thought they were saying anything about it, so all of
+ * them inherited whatever the session happened to hold.
+ *
+ * Which is how Futurama played out of order. Randomize all on a film library
+ * turns shuffle on for the session; pressing Continue on a show afterwards
+ * hands over a correctly ordered queue and plays it shuffled. Nothing about
+ * the show, its data or its ordering is wrong — both the episode query and the
+ * client's own walk return season 1 episode 1 first — and every screen still
+ * *displays* the right order, because the shuffled order lives only in the
+ * player. That is what makes it look like the queue is broken rather than the
+ * flag.
+ *
+ * So: an explicit request always wins; supplying a queue without one means "in
+ * this order"; supplying nothing keeps the session's flag.
+ */
+export function shuffleForEntry(
+  explicit: boolean | undefined,
+  suppliedQueue: boolean,
+  current: boolean,
+): boolean {
+  if (explicit !== undefined) return explicit;
+  return suppliedQueue ? false : current;
+}
