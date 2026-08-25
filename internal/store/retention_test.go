@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -199,14 +200,14 @@ func TestPruneStampSurvivesARestart(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	if last, err := s.LastPrune(ctx); err != nil || !last.IsZero() {
+	if last, _, err := s.LastPrune(ctx); err != nil || !last.IsZero() {
 		t.Fatalf("a fresh database claims a previous prune: %v %v", last, err)
 	}
 	if !PruneDue(mustLastPrune(t, s), now, 24*time.Hour) {
 		t.Error("a database that has never pruned is not due")
 	}
 
-	if err := s.SetLastPrune(ctx, now); err != nil {
+	if err := s.SetLastPrune(ctx, now, PrunePolicy(90)); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 
@@ -226,10 +227,10 @@ func TestSetLastPruneOverwrites(t *testing.T) {
 	first := time.Now().Add(-48 * time.Hour)
 	second := time.Now()
 
-	if err := s.SetLastPrune(ctx, first); err != nil {
+	if err := s.SetLastPrune(ctx, first, PrunePolicy(90)); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	if err := s.SetLastPrune(ctx, second); err != nil {
+	if err := s.SetLastPrune(ctx, second, PrunePolicy(90)); err != nil {
 		t.Fatalf("second: %v", err)
 	}
 	if got := mustLastPrune(t, s); got.Unix() != second.Unix() {
@@ -239,9 +240,98 @@ func TestSetLastPruneOverwrites(t *testing.T) {
 
 func mustLastPrune(t *testing.T, s *Store) time.Time {
 	t.Helper()
-	last, err := s.LastPrune(context.Background())
+	last, _, err := s.LastPrune(context.Background())
 	if err != nil {
 		t.Fatalf("last prune: %v", err)
 	}
 	return last
+}
+
+/*
+ * Changing the rules makes a pass due, whatever the clock says.
+ *
+ * Without this, shortening a retention window does nothing visible for up to a
+ * day and the natural reading is that the setting does not work. It also
+ * matters on upgrade: the cache window went from thirty days to seven, and a
+ * server that pruned this morning under the old policy is holding rows the new
+ * one drops.
+ */
+func TestPolicyChangeMakesAPassDue(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	if err := s.SetLastPrune(ctx, now, PrunePolicy(90)); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	last, recorded, err := s.LastPrune(ctx)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+
+	// An hour later, same rules: not due, and the policy agrees.
+	if PruneDue(last, now.Add(time.Hour), 24*time.Hour) {
+		t.Error("due on the clock an hour after a prune")
+	}
+	if PolicyChanged(recorded, PrunePolicy(90)) {
+		t.Errorf("policy %q does not round-trip", recorded)
+	}
+
+	// The operator shortens the audit window. Due now, not tomorrow.
+	if !PolicyChanged(recorded, PrunePolicy(7)) {
+		t.Error("a changed audit window did not make a pass due")
+	}
+}
+
+/*
+ * A stamp written by v0.8.10 is a bare integer with no policy. It must read as
+ * a real timestamp -- so the clock rule still works -- and as an unknown
+ * policy, which makes it due. An upgrade is exactly when the rules may have
+ * moved, so that is the right answer rather than a lucky one.
+ */
+func TestOlderStampFormatIsReadableAndDue(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	when := time.Now().Add(-time.Hour)
+
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		lastPruneKey, strconv.FormatInt(when.Unix(), 10)); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	last, policy, err := s.LastPrune(ctx)
+	if err != nil {
+		t.Fatalf("last prune: %v", err)
+	}
+	if last.Unix() != when.Unix() {
+		t.Errorf("timestamp = %v, want %v", last, when)
+	}
+	if policy != "" {
+		t.Errorf("policy = %q, want empty for the older format", policy)
+	}
+	if !PolicyChanged(policy, PrunePolicy(90)) {
+		t.Error("an unknown policy did not make a pass due")
+	}
+}
+
+// A meta row nobody can parse must not fail a maintenance pass.
+func TestUnparseableStampReadsAsNever(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		lastPruneKey, "not a timestamp"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	last, _, err := s.LastPrune(ctx)
+	if err != nil {
+		t.Fatalf("last prune: %v", err)
+	}
+	if !last.IsZero() {
+		t.Errorf("last = %v, want the zero time", last)
+	}
+	if !PruneDue(last, time.Now(), 24*time.Hour) {
+		t.Error("an unreadable stamp left maintenance disabled")
+	}
 }
