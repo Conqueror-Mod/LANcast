@@ -88,11 +88,32 @@
    to. Fixed takes it out of that entirely, and PointMenu measures itself
    against the viewport so an edge tile does not open a menu half off-screen.
 
-   The z-index sits above the shelves and the masthead and below the player
-   chrome, which is the only thing that should ever cover a menu. */
+   The z-index sits above everything that can be under the pointer, **including
+   the docked player**, and that last part is a correction rather than a detail.
+
+   It was 60, above the shelves and the masthead and deliberately below the
+   player chrome, on the reasoning that the player is the one thing that should
+   ever cover a menu. That reasoning is right about the *full* player, which
+   owns the screen, and wrong about the docked strip, which is persistent
+   furniture in the bottom-right corner at z-index 120 and 121.
+
+   And the clamp above does not merely allow the collision, it *creates* it: a
+   tile in the last row or hard against the right edge produces a menu that
+   would run off the viewport, so it is moved back to `innerHeight - height - 8`
+   — which is precisely where the docked player sits. So the tiles most likely
+   to need the clamp were the tiles guaranteed to be covered by it.
+
+   The symptom was not a menu in the wrong place, which is what the clamp was
+   written to prevent. It was **no menu at all**: it opened, took focus, and
+   rendered underneath the strip. Confirmed with elementFromPoint against this
+   stylesheet and the real dock geometry — every point on the menu returned
+   `playback--mini` or `mini`.
+
+   130 clears both docked layers and stays below PhotoViewer (200) and the
+   splash (1000), which do own the screen and should still cover a menu. */
 .menu__list--point {
   position: fixed;
-  z-index: 60;
+  z-index: var(--z-point-menu);
   /* Both of these are inherited from .menu__list, where they anchor the list
      under a trigger button, and both are actively wrong here.
 
