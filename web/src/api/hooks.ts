@@ -1302,6 +1302,15 @@ export async function fetchArtistQueue(
  * A collection is deliberately *not* handled here. Its membership lives in
  * item_collection rather than parent_id, so a collection has no children to
  * walk and the caller uses collection_id instead.
+ *
+ * **A show is not handled here either, and callers must not send one.** Its
+ * episodes hang off seasons, and `/api/items/{id}/episodes` exists precisely
+ * so that no client reimplements that walk -- showplay.go says so in as many
+ * words, including the case this would get wrong: a show whose episodes sit
+ * directly under the show row rather than under a season. That endpoint also
+ * excludes missing episodes and orders by season and episode outright, rather
+ * than relying on every episode tying on sort_title for the default sort to
+ * fall through. This is for the shapes with no dedicated endpoint.
  */
 export async function fetchDescendantIDs(
   qc: QueryClient,
@@ -1313,16 +1322,43 @@ export async function fetchDescendantIDs(
   // one bad row is a hung tab rather than a wrong answer. Four is deeper than
   // any real hierarchy here (artist -> album -> track is three).
   if (depth > 4) return [];
-  const kids = await qc.fetchQuery({
-    queryKey: ["children", parentID, ""],
-    queryFn: () =>
-      apiGet<ItemsPage>("/api/items?parent_id=" + parentID).then((r) => r.items),
-  });
+
+  /*
+   * Paged, because the API caps `limit` and defaults it to 100.
+   *
+   * The first version asked once and took what came back, which is the exact
+   * silent truncation fetchLibraryTracks carries a comment about: a container
+   * with more than a hundred children would produce a Play all that worked
+   * perfectly and quietly left out the rest. Rare in a season and entirely
+   * ordinary in a gallery.
+   */
+  const PAGE = 500;
+  const kids: Item[] = [];
+  for (let offset = 0; ; ) {
+    const page = await qc.fetchQuery({
+      queryKey: ["children", parentID, "", offset],
+      queryFn: () =>
+        apiGet<ItemsPage>(
+          `/api/items?parent_id=${parentID}&limit=${PAGE}&offset=${offset}`,
+        ),
+    });
+    kids.push(...page.items);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+
   const ids: number[] = [];
   for (const kid of kids) {
     if (isContainer(kid)) {
       ids.push(...(await fetchDescendantIDs(qc, kid.id, depth + 1)));
-    } else {
+    } else if (!kid.missing) {
+      /*
+       * A missing item is a row whose file is gone -- an unmounted drive, a
+       * deleted file the scan has seen but not been told to forget. Queueing
+       * one hands the player something it cannot open, which stalls the queue
+       * at that position rather than skipping it. EpisodesOf filters these
+       * server-side; this walk was not.
+       */
       ids.push(kid.id);
     }
   }

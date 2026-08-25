@@ -1,7 +1,12 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { fetchDescendantIDs, useIsAdmin, useSetWatchedByID } from "@/api/hooks";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  fetchDescendantIDs,
+  fetchShowEpisodes,
+  useIsAdmin,
+  useSetWatchedByID,
+} from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { isContainer, isMusic, isPicture, watchedVerb } from "@/lib/kind";
 import { startOf } from "@/playback/queueOrder";
@@ -55,6 +60,25 @@ export type ItemActions = {
   dialogs: React.ReactNode;
 };
 
+/*
+ * The ids a container queues, from whichever route knows the answer.
+ *
+ * A show has a dedicated endpoint and must use it: episodes hang off seasons,
+ * `/api/items/{id}/episodes` exists so that no client reimplements that walk,
+ * and it also handles the shape the walk gets wrong -- a show whose episodes
+ * sit directly under the show row. It orders by season and episode outright
+ * rather than depending on every episode tying on sort_title, and it drops
+ * missing episodes server-side.
+ *
+ * Everything else is a plain parent_id hierarchy with no endpoint of its own.
+ */
+async function queueFor(qc: QueryClient, item: Item): Promise<number[]> {
+  if (item.kind === "show") {
+    return (await fetchShowEpisodes(item.id)).map((e) => e.id);
+  }
+  return fetchDescendantIDs(qc, item.id);
+}
+
 export function useItemActions(): ItemActions {
   const navigate = useNavigate();
   const setWatched = useSetWatchedByID();
@@ -87,7 +111,7 @@ export function useItemActions(): ItemActions {
       if (gathering) return;
       setGathering(true);
       try {
-        const ids = await fetchDescendantIDs(qc, item.id);
+        const ids = await queueFor(qc, item);
         // Not ids[0]: shuffledStartingWith pins whatever it is handed to the
         // front, so a fixed start makes Shuffle mean "shuffle everything after
         // the first episode". See startOf.
@@ -127,7 +151,9 @@ export function useItemActions(): ItemActions {
       if (gathering) return;
       setGathering(true);
       try {
-        const ids = await fetchDescendantIDs(qc, item.id);
+        // The same route Play all uses, so "mark all as watched" and "play
+        // all" cannot come to disagree about what a show contains.
+        const ids = await queueFor(qc, item);
         for (let i = 0; i < ids.length; i += 8) {
           await Promise.all(
             ids
