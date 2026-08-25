@@ -151,3 +151,97 @@ func TestVacuumRuns(t *testing.T) {
 		t.Fatalf("vacuum: %v", err)
 	}
 }
+
+/*
+ * Due-ness, which is the part that shipped broken.
+ *
+ * v0.8.8 counted from process start. On a server that restarts more often than
+ * the interval the clock never reached it — the machine it was written for
+ * updated three times in seventeen hours and the pass never fired once. These
+ * assert the property that fixes it: due-ness is a date.
+ */
+func TestPruneDue(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	const every = 24 * time.Hour
+
+	cases := []struct {
+		name string
+		last time.Time
+		want bool
+	}{
+		// Every installation upgrading into this has no row. If "never" were
+		// not due, the first pass after an upgrade would be the one that never
+		// happens — and those are the servers with the most to drop.
+		{"never pruned", time.Time{}, true},
+		{"pruned an hour ago", now.Add(-time.Hour), false},
+		{"pruned just under a day ago", now.Add(-23 * time.Hour), false},
+		{"pruned exactly a day ago", now.Add(-24 * time.Hour), true},
+		{"pruned a week ago", now.AddDate(0, 0, -7), true},
+		// A clock that moved backwards must not disable maintenance until the
+		// calendar catches up.
+		{"stamped in the future", now.Add(48 * time.Hour), true},
+	}
+	for _, c := range cases {
+		if got := PruneDue(c.last, now, every); got != c.want {
+			t.Errorf("%s: due = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+/*
+ * The restart that broke v0.8.8, as a test.
+ *
+ * Nothing here simulates uptime, because that is the point: the stamp is read
+ * back from the database, so a fresh process sees what the last one recorded.
+ */
+func TestPruneStampSurvivesARestart(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	if last, err := s.LastPrune(ctx); err != nil || !last.IsZero() {
+		t.Fatalf("a fresh database claims a previous prune: %v %v", last, err)
+	}
+	if !PruneDue(mustLastPrune(t, s), now, 24*time.Hour) {
+		t.Error("a database that has never pruned is not due")
+	}
+
+	if err := s.SetLastPrune(ctx, now); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	// What a restarted process sees.
+	if PruneDue(mustLastPrune(t, s), now.Add(time.Hour), 24*time.Hour) {
+		t.Error("due again an hour after a prune — the restart bug is back")
+	}
+	if !PruneDue(mustLastPrune(t, s), now.Add(25*time.Hour), 24*time.Hour) {
+		t.Error("not due a day later")
+	}
+}
+
+// Writing twice updates rather than failing the primary key.
+func TestSetLastPruneOverwrites(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	first := time.Now().Add(-48 * time.Hour)
+	second := time.Now()
+
+	if err := s.SetLastPrune(ctx, first); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if err := s.SetLastPrune(ctx, second); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if got := mustLastPrune(t, s); got.Unix() != second.Unix() {
+		t.Errorf("last prune = %v, want %v", got, second)
+	}
+}
+
+func mustLastPrune(t *testing.T, s *Store) time.Time {
+	t.Helper()
+	last, err := s.LastPrune(context.Background())
+	if err != nil {
+		t.Fatalf("last prune: %v", err)
+	}
+	return last
+}
