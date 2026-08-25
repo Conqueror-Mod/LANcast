@@ -1056,11 +1056,24 @@ func periodicPrune(ctx context.Context, st *store.Store,
 	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
-		last, err := st.LastPrune(ctx)
+		last, policy, err := st.LastPrune(ctx)
 		if err != nil {
 			log.Error("prune: last run", "error", err)
-		} else if store.PruneDue(last, time.Now(), every) {
-			runPrune(ctx, st, settings, log)
+		} else {
+			/*
+			 * Due on the clock, or because the rules moved.
+			 *
+			 * "I pruned yesterday" stops being evidence that nothing is stale
+			 * the moment the retention windows change. Without the second
+			 * check, shortening the audit window in Settings does nothing
+			 * visible for up to a day, and the natural reading of that is that
+			 * the setting is broken.
+			 */
+			now := time.Now()
+			want := store.PrunePolicy(settings.Get().AuditRetentionDays)
+			if store.PruneDue(last, now, every) || store.PolicyChanged(policy, want) {
+				runPrune(ctx, st, settings, log)
+			}
 		}
 
 		select {
@@ -1077,7 +1090,8 @@ func runPrune(ctx context.Context, st *store.Store,
 	settings *config.SettingsStore, log *slog.Logger) {
 
 	now := time.Now()
-	res, err := st.Prune(ctx, settings.Get().AuditRetentionDays, now)
+	auditDays := settings.Get().AuditRetentionDays
+	res, err := st.Prune(ctx, auditDays, now)
 	if err != nil {
 		log.Error("prune", "error", err)
 		return
@@ -1091,7 +1105,7 @@ func runPrune(ctx context.Context, st *store.Store,
 	 * pruned is due immediately" rule keeps firing it. Recording the attempt
 	 * is what makes this daily rather than half-hourly.
 	 */
-	if err := st.SetLastPrune(ctx, now); err != nil {
+	if err := st.SetLastPrune(ctx, now, store.PrunePolicy(auditDays)); err != nil {
 		log.Error("prune: record run", "error", err)
 	}
 	if !res.Any() {
