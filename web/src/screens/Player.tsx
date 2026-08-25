@@ -6,6 +6,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
+import { shuffleForEntry } from "@/playback/queueOrder";
 import { clock } from "@/lib/format";
 import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
@@ -78,8 +79,21 @@ export function Player() {
 
   const queueParam = searchParams.get("queue");
   const { play, setShuffle } = pb;
+  /*
+   * The session's current flag, read through a ref.
+   *
+   * shuffleForEntry needs to know what shuffle is *now* in order to leave it
+   * alone, but this effect must not re-run when it changes — setShuffle is one
+   * of the things the effect calls, so a dependency on the value it writes is
+   * a loop.
+   */
+  const shuffleRef = useRef(pb.shuffle);
+  shuffleRef.current = pb.shuffle;
   useEffect(() => {
     if (!itemID) return;
+    // Both forms of "here is the queue" count: history state, and the ?queue=
+    // the track list and the collection page still use.
+    const suppliedQueue = (stateQueue && stateQueue.length > 0) || !!queueParam;
     const queue =
       stateQueue && stateQueue.length > 0
         ? stateQueue
@@ -87,9 +101,20 @@ export function Player() {
           ? queueParam.split(",").map(Number)
           : [itemID];
     play(itemID, queue);
-    // Only when the caller said so. Shuffle otherwise belongs to the session —
-    // starting an album should not silently clear a shuffle you had turned on.
-    if (stateShuffle !== undefined) setShuffle(stateShuffle);
+    /*
+     * An explicit request wins; supplying a queue means "in this order";
+     * supplying nothing leaves the session's flag alone.
+     *
+     * This used to be "only when the caller said so", full stop, on the
+     * reasoning that starting an album should not silently clear a shuffle you
+     * had turned on. That is right for an entry carrying no queue — coming
+     * back from the mini-player — and wrong for one that hands over a
+     * sequence, which is a statement about order that four callers were making
+     * without knowing it. See shuffleForEntry.
+     */
+    setShuffle(
+      shuffleForEntry(stateShuffle, suppliedQueue, shuffleRef.current),
+    );
     // stateQueue is stable for a history entry; its length identifies it well
     // enough to avoid re-running on an unrelated render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
