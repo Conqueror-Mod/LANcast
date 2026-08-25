@@ -1017,49 +1017,94 @@ func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
  * both and nothing ever looked at the age of one again. epg_program already
  * had a prune; these did not.
  *
- * Daily, and not on the request path. The work is two DELETEs and, when they
- * removed something, a VACUUM — which takes an exclusive lock for a full
- * rewrite of the file. That is seconds on a large library, and the reason it
- * runs only after a prune that actually freed pages rather than on every pass.
+ * **Due-ness is a date, not an uptime**, and the first version got that wrong
+ * in a way worth recording. It was a plain 24-hour ticker with no immediate
+ * pass, on the reasoning that taking a write lock to rewrite a large database
+ * during boot reads as a hang. The reasoning was right and the conclusion was
+ * not: the fix for "do not do it at boot" is to *delay* the first pass, not to
+ * measure from boot. A ticker counting from process start resets on every
+ * restart, so a server that restarts more often than the interval never prunes
+ * at all — and the machine this was written for updated itself three times in
+ * seventeen hours, so it never fired once. A daily job scheduled by uptime is
+ * really a job that only runs on servers nobody touches.
  *
- * The first pass is deliberately *not* immediate, unlike the guide refresh.
- * A server starting up is a server somebody is waiting for, and taking a write
- * lock to rewrite a 100MB database during boot is the kind of "maintenance"
- * that reads as a hang. There is no hurry: these rows have been there for
- * months.
+ * So the last successful pass is persisted, and the check is against the
+ * clock. A server that has been off for a month prunes shortly after it comes
+ * back; one restarted hourly still prunes daily.
  *
- * The retention window is re-read each pass rather than captured, so changing
- * it in Settings takes effect without a restart — the same rule periodicScan
- * follows for its interval.
+ * The short tick is what makes that possible without a long sleep, and it is
+ * the same shape periodicScan already uses for the same reason. `settleIn`
+ * keeps the first check off the boot path — long enough that a person opening
+ * the app immediately after starting the service never waits on a VACUUM,
+ * short enough that a restart does not defer maintenance by another day.
  */
 func periodicPrune(ctx context.Context, st *store.Store,
 	settings *config.SettingsStore, log *slog.Logger) {
 
-	const every = 24 * time.Hour
+	const (
+		every    = 24 * time.Hour
+		tick     = 30 * time.Minute
+		settleIn = 5 * time.Minute
+	)
 
-	t := time.NewTicker(every)
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(settleIn):
+	}
+
+	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
+		last, err := st.LastPrune(ctx)
+		if err != nil {
+			log.Error("prune: last run", "error", err)
+		} else if store.PruneDue(last, time.Now(), every) {
+			runPrune(ctx, st, settings, log)
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case now := <-t.C:
-			res, err := st.Prune(ctx, settings.Get().AuditRetentionDays, now)
-			if err != nil {
-				log.Error("prune", "error", err)
-				continue
-			}
-			if !res.Any() {
-				continue
-			}
-			log.Info("pruned old records",
-				"audit_events", res.AuditEvents, "cache_rows", res.CacheRows)
-			// Only now is there anything to reclaim. Without this the rows are
-			// gone and the file is exactly as large as it was.
-			if err := st.Vacuum(ctx); err != nil {
-				log.Error("vacuum after prune", "error", err)
-			}
+		case <-t.C:
 		}
+	}
+}
+
+// runPrune is one pass: drop what is stale, record that it happened, and
+// reclaim the space only if something was actually removed.
+func runPrune(ctx context.Context, st *store.Store,
+	settings *config.SettingsStore, log *slog.Logger) {
+
+	now := time.Now()
+	res, err := st.Prune(ctx, settings.Get().AuditRetentionDays, now)
+	if err != nil {
+		log.Error("prune", "error", err)
+		return
+	}
+
+	/*
+	 * Stamped even when nothing was removed.
+	 *
+	 * Otherwise a server with nothing stale re-runs the whole check every tick
+	 * for ever, and — worse — never writes the row at all, so the "never
+	 * pruned is due immediately" rule keeps firing it. Recording the attempt
+	 * is what makes this daily rather than half-hourly.
+	 */
+	if err := st.SetLastPrune(ctx, now); err != nil {
+		log.Error("prune: record run", "error", err)
+	}
+	if !res.Any() {
+		log.Debug("prune: nothing stale")
+		return
+	}
+
+	log.Info("pruned old records",
+		"audit_events", res.AuditEvents, "cache_rows", res.CacheRows)
+	// Only now is there anything to reclaim. Without this the rows are gone
+	// and the file is exactly as large as it was.
+	if err := st.Vacuum(ctx); err != nil {
+		log.Error("vacuum after prune", "error", err)
 	}
 }
 

@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -35,6 +38,78 @@ import (
 // not being enriched again this month — while still covering a rescan of a
 // large library, which is the one workload that reads the same keys twice.
 const CacheMaxAge = 30 * 24 * time.Hour
+
+/*
+ * lastPruneKey records when a pass last completed, in the meta table.
+ *
+ * It is persisted because the alternative -- a ticker counting from process
+ * start -- does not survive a restart, and a server that restarts more often
+ * than the interval then never prunes at all. That is not hypothetical: the
+ * first version shipped with a 24-hour ticker and never fired once on the
+ * machine it was written for, which updated itself three times in seventeen
+ * hours. Every restart put the clock back to zero.
+ *
+ * A daily job whose schedule is uptime is really a job that only runs on
+ * servers nobody touches.
+ */
+const lastPruneKey = "last_prune_at"
+
+// LastPrune reports when a pass last completed, or the zero time if never.
+//
+// A missing row is "never", not an error: every existing installation has one
+// of those, and treating it as a failure would mean the first pass after an
+// upgrade is the one that does not happen.
+func (s *Store) LastPrune(ctx context.Context) (time.Time, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM meta WHERE key = ?`, lastPruneKey).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("last prune: %w", err)
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		// A meta row nobody can parse is not worth failing a maintenance pass
+		// over. Treat it as never, which self-repairs on the next write.
+		return time.Time{}, nil
+	}
+	return time.Unix(n, 0), nil
+}
+
+// SetLastPrune records that a pass completed at t.
+func (s *Store) SetLastPrune(ctx context.Context, t time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		lastPruneKey, strconv.FormatInt(t.Unix(), 10))
+	if err != nil {
+		return fmt.Errorf("set last prune: %w", err)
+	}
+	return nil
+}
+
+/*
+ * PruneDue reports whether a pass should run now.
+ *
+ * Time-based, not uptime-based, which is the whole point of persisting `last`.
+ * A zero `last` -- never pruned, including every installation upgrading into
+ * this -- is due immediately, because the rows it would drop have been
+ * accumulating since before the feature existed.
+ */
+func PruneDue(last, now time.Time, every time.Duration) bool {
+	if last.IsZero() {
+		return true
+	}
+	// A `last` in the future means a clock that moved backwards. Treat it as
+	// due rather than waiting the difference out: the alternative is a server
+	// whose maintenance is disabled until the calendar catches up.
+	if last.After(now) {
+		return true
+	}
+	return now.Sub(last) >= every
+}
 
 // PruneResult is what one maintenance pass removed.
 type PruneResult struct {
