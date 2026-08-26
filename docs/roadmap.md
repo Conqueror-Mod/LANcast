@@ -8,8 +8,13 @@ multi-user accounts (admin/member roles) are built, and branding & splash shippe
 All of it is released: the repository is **public under MIT**, releases are
 **signed**, the client **opens its own window by default**, and the server can
 **check for, download, verify and stage an update** that swaps itself in on the
-way down. Nothing sits unreleased on `main`. Details in the areas below; what
-the pass taught is at the end.
+way down. Details in the areas below; what the pass taught is at the end.
+
+**One cosmetic fix sits unreleased on `main`** — `d2af184`, removing a
+redundant `title` from the collection poster button, deliberately left to ride
+with the next release rather than earning a tag of its own. This line used to
+read "nothing sits unreleased", which is the kind of claim that is only useful
+while it is true.
 
 **Two decisions are open and neither is waiting on code** — they are listed
 under [Open decisions](#open-decisions), which exists because a proposed ADR is
