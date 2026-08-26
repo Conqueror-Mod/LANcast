@@ -457,3 +457,16 @@
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
+
+/* A collection with no image at all still shows the control, so the one
+   collection somebody wants to fix is not the one that cannot be. */
+.detail__poster-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.03);
+}

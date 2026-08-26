@@ -491,32 +491,38 @@ export function Detail() {
         <BackButton onBack={back} />
 
         <div className="detail__hero">
-          {poster &&
-            /*
-             * A collection's poster is a control; every other item's is a
-             * picture.
-             *
-             * The server picks a collection's earliest film when it has no
-             * image of its own, which is right for almost every franchise and
-             * wrong for some -- the MCU wearing Iron Man (2008) is defensible
-             * and is not what somebody who has looked at it wants. Admin only,
-             * because there is one poster and everybody sees it.
-             *
-             * Rendered as a button only where it does something. A poster that
-             * looks pressable and is not is worse than one that never invited
-             * the press.
-             */
-            (isCollection && isAdmin ? (
-              <button
-                type="button"
-                className="detail__poster detail__poster--editable"
-                onClick={() => setPosterOpen(true)}
-                title="Choose which film's poster this collection uses"
-              >
+          {/*
+            A collection's poster is a control; every other item's is a picture.
+            
+            Deliberately *outside* the `poster &&` guard, which is where it was
+            and which made the control unreachable exactly when it was most
+            needed: a collection with no image renders no poster, so the branch
+            holding the button never ran, and the only collection anybody wanted
+            to fix was the one that could not be. A collection whose films have
+            no posters either still gets the button, and the picker says there
+            is nothing to choose -- which is an answer, where a missing control
+            is a mystery.
+            
+            Admin only, because there is one poster and everybody sees it. The
+            poster is a button only where it does something: one that looks
+            pressable and is not is worse than one that never invited the press.
+          */}
+          {isCollection && isAdmin ? (
+            <button
+              type="button"
+              className="detail__poster detail__poster--editable"
+              onClick={() => setPosterOpen(true)}
+              title="Choose which film's poster this collection uses"
+            >
+              {poster ? (
                 <img src={poster} alt="" draggable={false} />
-                <span className="detail__poster-edit">Change poster</span>
-              </button>
-            ) : (
+              ) : (
+                <span className="detail__poster-empty">No poster</span>
+              )}
+              <span className="detail__poster-edit">Change poster</span>
+            </button>
+          ) : (
+            poster && (
               <img
                 className={
                   "detail__poster" + (isMusic ? " detail__poster--square" : "")
@@ -525,7 +531,8 @@ export function Detail() {
                 alt=""
                 draggable={false}
               />
-            ))}
+            )
+          )}
 
           <div className="detail__info">
             <h1 className="detail__title">{item.title}</h1>

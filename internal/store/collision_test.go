@@ -736,3 +736,107 @@ func TestACollectionRefusesAMemberWithNoPoster(t *testing.T) {
 		t.Error("a member with no poster was accepted")
 	}
 }
+
+/*
+ * The detail page inherits a poster, like the grid does.
+ *
+ * LoadDetail ran the fallback for artists only, under a comment whose reasoning
+ * was never about artists: "an artist whose tile has a poster and whose detail
+ * page has none reads as a bug in whichever one the user saw second." Two more
+ * container kinds grew the same fallback afterwards and neither was added here.
+ *
+ * Reported on the Marvel Cinematic Universe, where it hid a *feature* rather
+ * than an image: the page renders its poster only when there is one, so the
+ * control that changes it sat inside a branch that never ran. On the live
+ * library that collection owned 0 posters with 36 available to borrow.
+ */
+func TestDetailPageInheritsACollectionPoster(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "Marvel Cinematic Universe")
+	film := seedFilm(t, s, lib, "/m/ironman.mkv", "Iron Man", 2008)
+	seedPoster(t, s, film, "hash-ironman")
+	addMember(t, s, film, col)
+
+	it, err := s.GetItem(ctx, col, "local")
+	if err != nil {
+		t.Fatalf("GetItem: %v", err)
+	}
+	if err := s.LoadDetail(ctx, it); err != nil {
+		t.Fatalf("LoadDetail: %v", err)
+	}
+	if it.Artwork == nil || it.Artwork.Poster != "hash-ironman" {
+		t.Fatalf("detail poster = %+v, want the borrowed one", it.Artwork)
+	}
+	if !it.Artwork.Inherited {
+		t.Error("a borrowed detail poster was not flagged inherited")
+	}
+}
+
+// A gallery had the same gap for the same reason, and gets the same fix.
+func TestDetailPageInheritsAGalleryPoster(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+
+	gal, err := s.UpsertItem(ctx, ScanFile{
+		LibraryID: lib, Path: "/p/holiday", Kind: "gallery",
+		Title: "Holiday", SortTitle: "holiday", MTime: 1,
+	})
+	if err != nil {
+		t.Fatalf("seed gallery: %v", err)
+	}
+	photo, err := s.UpsertItem(ctx, ScanFile{
+		LibraryID: lib, Path: "/p/holiday/a.jpg", Kind: "photo",
+		Title: "a.jpg", SortTitle: "a.jpg", MTime: 1,
+	})
+	if err != nil {
+		t.Fatalf("seed photo: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE media_item SET parent_id = ? WHERE id = ?`, gal, photo); err != nil {
+		t.Fatalf("parent: %v", err)
+	}
+	seedPoster(t, s, photo, "hash-photo")
+
+	it, err := s.GetItem(ctx, gal, "local")
+	if err != nil {
+		t.Fatalf("GetItem: %v", err)
+	}
+	if err := s.LoadDetail(ctx, it); err != nil {
+		t.Fatalf("LoadDetail: %v", err)
+	}
+	if it.Artwork == nil || it.Artwork.Poster != "hash-photo" {
+		t.Errorf("gallery detail poster = %+v, want the borrowed one", it.Artwork)
+	}
+}
+
+// And a collection that owns one keeps it — the fallback must not overwrite a
+// real poster, or a chosen one would be undone on every page load.
+func TestDetailPageKeepsAnOwnedCollectionPoster(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "A Franchise")
+	first := seedFilm(t, s, lib, "/m/one.mkv", "First", 1990)
+	second := seedFilm(t, s, lib, "/m/two.mkv", "Second", 1995)
+	seedPoster(t, s, first, "hash-first")
+	seedPoster(t, s, second, "hash-second")
+	addMember(t, s, first, col)
+	addMember(t, s, second, col)
+
+	if err := s.SetCollectionPoster(ctx, col, second); err != nil {
+		t.Fatalf("choose: %v", err)
+	}
+	it, _ := s.GetItem(ctx, col, "local")
+	if err := s.LoadDetail(ctx, it); err != nil {
+		t.Fatalf("LoadDetail: %v", err)
+	}
+	if it.Artwork.Poster != "hash-second" {
+		t.Errorf("detail poster = %q, want the chosen one", it.Artwork.Poster)
+	}
+	if it.Artwork.Inherited {
+		t.Error("a chosen poster was reported as inherited")
+	}
+}
