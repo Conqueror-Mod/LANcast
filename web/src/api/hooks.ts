@@ -513,6 +513,27 @@ export function useChildren(parentID: number, enabled: boolean, sort?: string) {
 // The members of a collection, in curated order. Membership is many-to-many and
 // keyed through item_collection, so it is a different endpoint from the
 // parent_id children above.
+/*
+ * Choose which of a collection's films it wears, or 0 to go back to the
+ * default (ADR 0025's inheritance, overruled).
+ *
+ * Invalidates the item, the browse grids and the member list: this changes a
+ * picture that is on screen in more than one place at once, and the tile in the
+ * grid behind the dialog is the one somebody is looking at while they decide.
+ */
+export function useSetCollectionPoster(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fromItemID: number) =>
+      apiPost<Item>(`/api/items/${id}/poster`, { from_item_id: fromItemID }, "PUT"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["item", id] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["collection-members", id] });
+    },
+  });
+}
+
 export function useCollectionMembers(collectionID: number, enabled: boolean) {
   return useQuery({
     queryKey: ["collection-members", collectionID],

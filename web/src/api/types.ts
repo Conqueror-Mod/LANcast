@@ -62,6 +62,17 @@ export interface Artwork {
    * Until then this is absent and every row draws its number instead.
    */
   thumb?: string;
+  /*
+   * True when this image is borrowed rather than owned.
+   *
+   * A container with no image of its own wears a child's — an artist an album
+   * sleeve, a gallery a photo, a collection its earliest film (ADR 0025). The
+   * server has always sent this and the client never declared it, so nothing
+   * could tell "showing Iron Man because it is first" from "showing Iron Man
+   * because somebody chose it". That distinction is what lets a picker offer to
+   * reset only when there is something to reset.
+   */
+  inherited?: boolean;
 }
 
 export interface Progress {

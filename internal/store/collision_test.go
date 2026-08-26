@@ -586,3 +586,153 @@ func TestACollectionDoesNotBorrowFromAMissingFilm(t *testing.T) {
 		t.Errorf("poster = %+v, want the present film's", items[0].Artwork)
 	}
 }
+
+/*
+ * Choosing which of its films a collection wears.
+ *
+ * The inherited default -- earliest release -- is right for almost every
+ * franchise and wrong for some: the MCU wearing Iron Man (2008) is defensible
+ * and is not what somebody who has looked at it wants.
+ */
+func TestChoosingACollectionPosterOverridesTheDefault(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "Marvel Cinematic Universe")
+
+	first := seedFilm(t, s, lib, "/m/ironman.mkv", "Iron Man", 2008)
+	chosen := seedFilm(t, s, lib, "/m/endgame.mkv", "Avengers: Endgame", 2019)
+	seedPoster(t, s, first, "hash-ironman")
+	seedPoster(t, s, chosen, "hash-endgame")
+	addMember(t, s, first, col)
+	addMember(t, s, chosen, col)
+
+	// Before: the default.
+	items := []Item{{ID: col, Kind: "collection"}}
+	if err := s.inheritCollectionPosters(ctx, items); err != nil {
+		t.Fatalf("inherit: %v", err)
+	}
+	if items[0].Artwork.Poster != "hash-ironman" {
+		t.Fatalf("default poster = %q, want the earliest film's", items[0].Artwork.Poster)
+	}
+
+	if err := s.SetCollectionPoster(ctx, col, chosen); err != nil {
+		t.Fatalf("SetCollectionPoster: %v", err)
+	}
+
+	art, err := s.ItemArtwork(ctx, col)
+	if err != nil {
+		t.Fatalf("ItemArtwork: %v", err)
+	}
+	if art == nil || art.Poster != "hash-endgame" {
+		t.Fatalf("poster = %+v, want the chosen film's", art)
+	}
+	// Owned now, not borrowed: the inherit pass must leave it alone.
+	after := []Item{{ID: col, Kind: "collection", Artwork: art}}
+	if err := s.inheritCollectionPosters(ctx, after); err != nil {
+		t.Fatalf("inherit after choosing: %v", err)
+	}
+	if after[0].Artwork.Poster != "hash-endgame" {
+		t.Errorf("the default overwrote a choice: %+v", after[0].Artwork)
+	}
+
+	/*
+	 * And it locks. Without one the next artwork write replaces the choice --
+	 * PutArtwork deselects every poster row before selecting its own -- and a
+	 * choice a refresh can undo is not a choice (ADR 0008).
+	 */
+	locked, err := s.LockedFields(ctx, col)
+	if err != nil {
+		t.Fatalf("LockedFields: %v", err)
+	}
+	var hasArtwork bool
+	for _, f := range locked {
+		if f == "artwork" {
+			hasArtwork = true
+		}
+	}
+	if !hasArtwork {
+		t.Errorf("locked fields = %v, want artwork locked", locked)
+	}
+}
+
+// The undo half. An override somebody cannot take back is a trap, and the
+// default is a rule that improves.
+func TestClearingACollectionPosterReturnsToTheDefault(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "A Franchise")
+
+	first := seedFilm(t, s, lib, "/m/one.mkv", "First", 1990)
+	other := seedFilm(t, s, lib, "/m/two.mkv", "Second", 1995)
+	seedPoster(t, s, first, "hash-first")
+	seedPoster(t, s, other, "hash-second")
+	addMember(t, s, first, col)
+	addMember(t, s, other, col)
+
+	if err := s.SetCollectionPoster(ctx, col, other); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if err := s.ClearCollectionPoster(ctx, col); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+
+	art, _ := s.ItemArtwork(ctx, col)
+	if art != nil && art.Poster != "" {
+		t.Errorf("a cleared collection still owns %q", art.Poster)
+	}
+	items := []Item{{ID: col, Kind: "collection"}}
+	if err := s.inheritCollectionPosters(ctx, items); err != nil {
+		t.Fatalf("inherit: %v", err)
+	}
+	if items[0].Artwork == nil || items[0].Artwork.Poster != "hash-first" {
+		t.Errorf("poster = %+v, want the default back", items[0].Artwork)
+	}
+	locked, _ := s.LockedFields(ctx, col)
+	for _, f := range locked {
+		if f == "artwork" {
+			t.Error("clearing left the artwork lock behind")
+		}
+	}
+}
+
+/*
+ * A film that is not in the collection is refused. The id arrives from a
+ * client, and this is the boundary where a bad one would become "any item's
+ * poster on any collection".
+ */
+func TestACollectionRefusesAPosterFromANonMember(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "A Franchise")
+	member := seedFilm(t, s, lib, "/m/in.mkv", "In", 1990)
+	seedPoster(t, s, member, "hash-in")
+	addMember(t, s, member, col)
+
+	stranger := seedFilm(t, s, lib, "/m/out.mkv", "Out", 1991)
+	seedPoster(t, s, stranger, "hash-out")
+
+	if err := s.SetCollectionPoster(ctx, col, stranger); err == nil {
+		t.Fatal("a non-member's poster was accepted")
+	}
+	art, _ := s.ItemArtwork(ctx, col)
+	if art != nil && art.Poster != "" {
+		t.Errorf("a refused request still wrote %q", art.Poster)
+	}
+}
+
+// A member with no poster of its own has nothing to lend.
+func TestACollectionRefusesAMemberWithNoPoster(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "A Franchise")
+	bare := seedFilm(t, s, lib, "/m/bare.mkv", "Bare", 1990)
+	addMember(t, s, bare, col)
+
+	if err := s.SetCollectionPoster(ctx, col, bare); err == nil {
+		t.Error("a member with no poster was accepted")
+	}
+}

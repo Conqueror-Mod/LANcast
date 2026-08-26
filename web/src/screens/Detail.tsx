@@ -32,6 +32,7 @@ import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
+import { ChoosePoster } from "@/components/ChoosePoster";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions } from "@/components/itemActions";
@@ -277,6 +278,7 @@ export function Detail() {
   const [showNote, setShowNote] = useState<string | null>(null);
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
+  const [posterOpen, setPosterOpen] = useState(false);
   /*
    * The children grid gets the same menu a library grid does. The gallery
    * branch above deliberately does not: a photograph is not watched, has no
@@ -489,16 +491,41 @@ export function Detail() {
         <BackButton onBack={back} />
 
         <div className="detail__hero">
-          {poster && (
-            <img
-              className={
-                "detail__poster" + (isMusic ? " detail__poster--square" : "")
-              }
-              src={poster}
-              alt=""
-              draggable={false}
-            />
-          )}
+          {poster &&
+            /*
+             * A collection's poster is a control; every other item's is a
+             * picture.
+             *
+             * The server picks a collection's earliest film when it has no
+             * image of its own, which is right for almost every franchise and
+             * wrong for some -- the MCU wearing Iron Man (2008) is defensible
+             * and is not what somebody who has looked at it wants. Admin only,
+             * because there is one poster and everybody sees it.
+             *
+             * Rendered as a button only where it does something. A poster that
+             * looks pressable and is not is worse than one that never invited
+             * the press.
+             */
+            (isCollection && isAdmin ? (
+              <button
+                type="button"
+                className="detail__poster detail__poster--editable"
+                onClick={() => setPosterOpen(true)}
+                title="Choose which film's poster this collection uses"
+              >
+                <img src={poster} alt="" draggable={false} />
+                <span className="detail__poster-edit">Change poster</span>
+              </button>
+            ) : (
+              <img
+                className={
+                  "detail__poster" + (isMusic ? " detail__poster--square" : "")
+                }
+                src={poster}
+                alt=""
+                draggable={false}
+              />
+            ))}
 
           <div className="detail__info">
             <h1 className="detail__title">{item.title}</h1>
@@ -838,6 +865,13 @@ export function Detail() {
           Add-to-playlist above: those act on the item being *looked at*, these
           act on whichever child was right-clicked, and one pair of state
           variables serving both would remove the wrong thing. */}
+      {posterOpen && (
+        <ChoosePoster
+          collection={item}
+          members={members ?? []}
+          onClose={() => setPosterOpen(false)}
+        />
+      )}
       {childDialogs}
       {trailerOpen && trailer && (
         <TrailerModal
