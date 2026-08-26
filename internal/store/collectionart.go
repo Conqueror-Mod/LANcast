@@ -108,3 +108,105 @@ func (s *Store) inheritCollectionPosters(ctx context.Context, items []Item) erro
 	}
 	return rows.Err()
 }
+
+/*
+ * Choosing which of its films a collection wears.
+ *
+ * The default above is right for almost every franchise and wrong for some: the
+ * Marvel Cinematic Universe wearing Iron Man (2008) is defensible and is not
+ * what somebody who has looked at it wants. So the rule stays the default and
+ * this is the override — the same shape as every other correction in this
+ * project, where a heuristic is good enough to ship and a person is allowed to
+ * disagree with it.
+ *
+ * **It is a selection, not a copy.** Artwork is content-addressed and shared,
+ * so pointing the collection at the film's existing `artwork` row costs one
+ * `item_artwork` row and no bytes. Nothing is downloaded and nothing is
+ * duplicated, which also means the picture the collection shows and the picture
+ * the film shows cannot drift apart.
+ *
+ * **And it locks.** Field locks are how this project records "a person decided
+ * this" (ADR 0008), and without one the next artwork write would quietly
+ * replace the choice — PutArtwork deselects every row of the kind before
+ * selecting its own. A choice a refresh can undo is not a choice; it is a
+ * preference that survives until something happens.
+ *
+ * The member must actually be in the collection. The id arrives from a client
+ * and this is the boundary where a bad one becomes "any item's poster on any
+ * collection" -- so it is checked here rather than trusted, and a non-member is
+ * an error rather than a silent no-op.
+ */
+func (s *Store) SetCollectionPoster(ctx context.Context, collectionID, memberID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set collection poster: %w", err)
+	}
+	defer tx.Rollback()
+
+	var artworkID int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT ia.artwork_id
+		FROM item_collection ic
+		JOIN item_artwork ia ON ia.item_id = ic.item_id
+		     AND ia.kind = 'poster' AND ia.selected = 1
+		WHERE ic.collection_id = ? AND ic.item_id = ?`,
+		collectionID, memberID).Scan(&artworkID)
+	if err != nil {
+		return fmt.Errorf("set collection poster: no poster for item %d in collection %d: %w",
+			memberID, collectionID, err)
+	}
+
+	// The same deselect-then-select PutArtwork does, and for the same reason:
+	// the primary key is (item_id, artwork_id, kind), so a different image
+	// inserts a second row rather than replacing the first, and two rows
+	// carrying selected = 1 leave which one wins to whatever SQLite returns
+	// last.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE item_artwork SET selected = 0 WHERE item_id = ? AND kind = 'poster'`,
+		collectionID); err != nil {
+		return fmt.Errorf("set collection poster: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT OR REPLACE INTO item_artwork (item_id, artwork_id, kind, selected)
+		VALUES (?, ?, 'poster', 1)`, collectionID, artworkID); err != nil {
+		return fmt.Errorf("set collection poster: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO item_lock (item_id, field) VALUES (?, 'artwork')
+		ON CONFLICT DO NOTHING`, collectionID); err != nil {
+		return fmt.Errorf("set collection poster: %w", err)
+	}
+	return tx.Commit()
+}
+
+/*
+ * ClearCollectionPoster puts a collection back to the default.
+ *
+ * The undo half, and it is not optional: an override somebody cannot take back
+ * is a trap, and the default is a rule that improves — a franchise whose first
+ * film arrives later should be able to start wearing it again.
+ *
+ * Deselecting rather than deleting, matching PutArtwork: the row is cheap, the
+ * bytes are shared, and keeping it means the previous choice is still there for
+ * a picker to show. The lock goes, because the whole point is to stop recording
+ * that a person decided.
+ */
+func (s *Store) ClearCollectionPoster(ctx context.Context, collectionID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("clear collection poster: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE item_artwork SET selected = 0 WHERE item_id = ? AND kind = 'poster'`,
+		collectionID); err != nil {
+		return fmt.Errorf("clear collection poster: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM item_lock WHERE item_id = ? AND field = 'artwork'`,
+		collectionID); err != nil {
+		return fmt.Errorf("clear collection poster: %w", err)
+	}
+	return tx.Commit()
+}

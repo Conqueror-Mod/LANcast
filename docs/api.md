@@ -2488,6 +2488,44 @@ real TV library listed 55 of them, each offering a Fix button leading to a
 search that cannot succeed. Shows are still listed: a show's title is a real
 title, and a wrong match on one is worth correcting.
 
+### `PUT /api/items/{id}/poster`
+
+Choose which of a collection's films it wears. **Admin only** — there is one
+poster and everybody sees it, so this is shared state rather than a per-viewer
+preference, and it matches every other write that changes what the library looks
+like to everyone.
+
+```json
+{ "from_item_id": 41 }
+```
+
+`from_item_id` of **0 clears the override** and returns the collection to the
+default. Returns the updated item.
+
+A collection with no artwork of its own borrows its **earliest** film's poster,
+read-time and flagged `"inherited": true`
+([ADR 0025](adr/0025-artist-images.md)'s pattern). That is right for almost every
+franchise and wrong for some — a Marvel Cinematic Universe wearing Iron Man
+(2008) is defensible and is not necessarily what somebody who has looked at it
+wants. This is the disagreement.
+
+It is a **selection, not a copy**: artwork is content-addressed and shared, so
+the collection points at the film's existing image. Nothing is downloaded, and
+the two pictures cannot drift apart.
+
+**It locks.** Setting a poster this way writes an `artwork` field lock
+([ADR 0008](adr/0008-field-level-locking.md)), because storing any new image
+deselects every poster row before selecting its own — so a provider refresh
+would otherwise replace the choice, and a choice a refresh can undo is not a
+choice. Clearing removes the lock, so the
+default resumes and improves with it: a franchise whose first film arrives later
+starts wearing it again.
+
+**400** when the item is not a collection, when `from_item_id` is not one of its
+members, or when that member has no poster of its own. A non-member is refused
+rather than silently ignored: the id arrives from a client, and that is the
+boundary where a bad one would become "any item's poster on any collection".
+
 ### `GET /api/collisions?library_id=&compare=`
 
 Works claimed by more than one row. **Admin only**, because it is the one

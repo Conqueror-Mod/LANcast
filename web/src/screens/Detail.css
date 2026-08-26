@@ -408,3 +408,52 @@
   user-select: text;
   overflow-wrap: anywhere;
 }
+
+/* A collection's poster is a control, so it says so — on hover, and only for
+   somebody who can act on it.
+
+   The label rides over the bottom of the image rather than sitting beside it:
+   a caption under the poster would push the whole hero down for every
+   collection, and the affordance is only wanted at the moment of pointing. */
+.detail__poster--editable {
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  position: relative;
+  display: block;
+  overflow: hidden;
+}
+
+.detail__poster--editable img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.detail__poster-edit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-primary);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+
+.detail__poster--editable:hover .detail__poster-edit,
+.detail__poster--editable:focus-visible .detail__poster-edit {
+  opacity: 1;
+}
+
+.detail__poster--editable:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
