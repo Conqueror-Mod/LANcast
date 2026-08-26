@@ -896,11 +896,34 @@ func (s *Store) LoadDetail(ctx context.Context, it *Item) error {
 	if it.Artwork, err = s.ItemArtwork(ctx, it.ID); err != nil {
 		return err
 	}
-	// Same fallback the grid gets. An artist whose tile has a poster and whose
-	// detail page has none reads as a bug in whichever one the user saw second.
-	if it.Kind == "artist" && (it.Artwork == nil || it.Artwork.Poster == "") {
+	/*
+	 * Same fallback the grid gets, for every container that has one.
+	 *
+	 * The comment this replaces said it for artists alone -- "an artist whose
+	 * tile has a poster and whose detail page has none reads as a bug in
+	 * whichever one the user saw second" -- and the reasoning was never about
+	 * artists. Two more kinds have grown the same fallback since and neither
+	 * was added here, so a gallery and a collection both had a poster in the
+	 * grid and a blank hero on their own page.
+	 *
+	 * It was reported on the Marvel Cinematic Universe, where it hid a feature
+	 * rather than just an image: the page renders its poster only when there is
+	 * one, so the control that changes it was inside the branch that never ran.
+	 *
+	 * Every inherit pass filters by kind and skips an item that already owns an
+	 * image, so running all three is cheaper than deciding which to run -- and
+	 * a fourth container kind gets this for free rather than being forgotten a
+	 * third time.
+	 */
+	if it.Artwork == nil || it.Artwork.Poster == "" {
 		one := []Item{*it}
 		if err := s.inheritArtistPosters(ctx, one); err != nil {
+			return err
+		}
+		if err := s.inheritGalleryPosters(ctx, one); err != nil {
+			return err
+		}
+		if err := s.inheritCollectionPosters(ctx, one); err != nil {
 			return err
 		}
 		it.Artwork = one[0].Artwork
