@@ -1931,6 +1931,26 @@ func (s *Store) CollectionMembers(ctx context.Context, collectionID int64) ([]It
 		FROM media_item mi
 		JOIN item_collection ic ON ic.item_id = mi.id
 		WHERE ic.collection_id = ?
+		-- A film whose file is gone is not in the collection.
+		--
+		-- This was the one membership listing without the filter, and every
+		-- neighbour has it: the child count counts present films, and
+		-- collectionIsReal decides a collection exists on present films. So the
+		-- page disagreed with its own header -- "9 films" over a grid of 17 --
+		-- and the extras were not duplicates but stale rows.
+		--
+		-- Reported from a real library as duplication in the Halloween
+		-- Collection, and it was a rename: every file had moved from
+		-- "Halloween.1978.1080p.Bluray.AC3.x264.mkv" into
+		-- "Halloween (1978)/Halloween (1978).mkv". Scanning marks missing
+		-- rather than deleting -- deliberately, so an unmounted drive cannot
+		-- destroy a library -- so the old rows survived, kept their
+		-- memberships, and every film in the franchise appeared twice. One
+		-- had been renamed twice and appeared three times.
+		--
+		-- Nothing is deleted here either. The rows stay; they are simply not
+		-- listed, and a drive coming back puts them straight back.
+		AND mi.missing = 0
 		-- Release order, which is how a franchise is watched. This was
 		-- "ord, sort_title", and every one of the 699 memberships in a real
 		-- library carries ord = 0 (nothing has ever written one), so it was

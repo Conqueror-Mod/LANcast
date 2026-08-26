@@ -830,6 +830,11 @@ func (s *Store) AttachArtwork(ctx context.Context, items []Item) error {
 	if err := s.inheritGalleryPosters(ctx, items); err != nil {
 		return err
 	}
+	// A smart collection has nothing to fetch: it is defined by a keyword, and
+	// a keyword has no image behind it (ADR 0042's neighbour, meta/smart.go).
+	if err := s.inheritCollectionPosters(ctx, items); err != nil {
+		return err
+	}
 	// And the other direction: a track wears its album's sleeve. Last, so a
 	// container that just borrowed from a child is itself available to its
 	// children rather than depending on the order rows arrived in.
