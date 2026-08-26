@@ -964,3 +964,112 @@ func TestApplyMatchStillLocksAnEpisodeInAShowsLibrary(t *testing.T) {
 		t.Errorf("match state = %q, want locked", got.MatchState)
 	}
 }
+
+/*
+ * A film joins both its franchise and its umbrella (ADR 0017's many-to-many,
+ * finally used for what it is for).
+ *
+ * TMDB's belongs_to_collection holds exactly one answer and it is always the
+ * narrow one -- Avengers: Endgame belongs to "The Avengers Collection", never
+ * to the Marvel Cinematic Universe, which exists only as keyword 180547. So
+ * these are two memberships, and the earlier version of ingestCollection
+ * returning after its first hit is precisely why they need separate passes.
+ */
+func TestEnrichJoinsBothTheFranchiseAndTheSmartCollection(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\endgame.mkv`, "Avengers: Endgame", 2019)
+
+	p := &fakeProvider{id: "tmdb", record: &meta.Record{
+		Source: "tmdb", ExternalID: "299534", Kind: meta.KindMovie,
+		Fields:     meta.Fields{Title: meta.S("Avengers: Endgame"), Year: meta.I(2019)},
+		Collection: &meta.CollectionRef{ExternalID: "86311", Name: "The Avengers Collection"},
+		Keywords: []meta.Keyword{
+			{ID: 9715, Name: "superhero"},
+			{ID: 180547, Name: "marvel cinematic universe (mcu)"},
+		},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := w.ApplyMatch(ctx, *it, "tmdb", "299534", meta.KindMovie); err != nil {
+		t.Fatalf("ApplyMatch: %v", err)
+	}
+
+	cols, err := st.CollectionsOf(ctx, id)
+	if err != nil {
+		t.Fatalf("CollectionsOf: %v", err)
+	}
+	names := map[string]bool{}
+	for _, c := range cols {
+		names[c.Title] = true
+	}
+	if !names["The Avengers Collection"] {
+		t.Errorf("franchise membership missing: %v", names)
+	}
+	if !names["Marvel Cinematic Universe"] {
+		t.Errorf("smart collection membership missing: %v", names)
+	}
+	if len(cols) != 2 {
+		t.Errorf("got %d memberships, want 2: %v", len(cols), names)
+	}
+}
+
+// A film with no matching keyword joins nothing extra -- the rule adds a tile
+// for a grouping people go looking for and stays out of the way otherwise.
+func TestEnrichAddsNoSmartCollectionToAnOrdinaryFilm(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\heat.mkv`, "Heat", 1995)
+
+	p := &fakeProvider{id: "tmdb", record: &meta.Record{
+		Source: "tmdb", ExternalID: "949", Kind: meta.KindMovie,
+		Fields:   meta.Fields{Title: meta.S("Heat"), Year: meta.I(1995)},
+		Keywords: []meta.Keyword{{ID: 10051, Name: "heist"}},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	it, _ := st.GetItem(ctx, id, "local")
+	if err := w.ApplyMatch(ctx, *it, "tmdb", "949", meta.KindMovie); err != nil {
+		t.Fatalf("ApplyMatch: %v", err)
+	}
+	cols, _ := st.CollectionsOf(ctx, id)
+	if len(cols) != 0 {
+		t.Errorf("an ordinary film joined %d collections", len(cols))
+	}
+}
+
+/*
+ * Re-enriching must not duplicate the membership. EnsureCollection and
+ * AddToCollection both upsert; this is the test that says so out loud, because
+ * a smart collection is re-evaluated on every pass rather than once.
+ */
+func TestSmartCollectionMembershipIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	id := addItem(t, st, lib, `C:\m\ironman.mkv`, "Iron Man", 2008)
+
+	p := &fakeProvider{id: "tmdb", record: &meta.Record{
+		Source: "tmdb", ExternalID: "1726", Kind: meta.KindMovie,
+		Fields:   meta.Fields{Title: meta.S("Iron Man"), Year: meta.I(2008)},
+		Keywords: []meta.Keyword{{ID: 180547, Name: "marvel cinematic universe (mcu)"}},
+	}}
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(st, reg, &fakeArt{}, quietLog())
+
+	for i := 0; i < 3; i++ {
+		it, _ := st.GetItem(ctx, id, "local")
+		if err := w.ApplyMatch(ctx, *it, "tmdb", "1726", meta.KindMovie); err != nil {
+			t.Fatalf("ApplyMatch %d: %v", i, err)
+		}
+	}
+	cols, _ := st.CollectionsOf(ctx, id)
+	if len(cols) != 1 {
+		t.Errorf("three passes produced %d memberships, want 1", len(cols))
+	}
+}

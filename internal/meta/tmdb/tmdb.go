@@ -173,7 +173,10 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 
 func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error) {
 	var m movieDetail
-	if err := c.get(ctx, "/movie/"+id, url.Values{"append_to_response": {"credits"}}, &m); err != nil {
+	// Keywords ride along on the same request rather than costing a second one.
+	// They are what expresses an umbrella grouping like the MCU, which
+	// belongs_to_collection structurally cannot -- see movieDetail.Keywords.
+	if err := c.get(ctx, "/movie/"+id, url.Values{"append_to_response": {"credits,keywords"}}, &m); err != nil {
 		return nil, err
 	}
 
@@ -197,6 +200,9 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	rec.Genres = genreNames(m.Genres)
 	rec.Credits = convertCredits(m.Credits)
 	rec.Artwork = artRefs(m.PosterPath, m.BackdropPath)
+	for _, k := range m.Keywords.Keywords {
+		rec.Keywords = append(rec.Keywords, meta.Keyword{ID: k.ID, Name: k.Name})
+	}
 	if m.Collection != nil && m.Collection.ID != 0 {
 		rec.Collection = &meta.CollectionRef{
 			ExternalID: strconv.Itoa(m.Collection.ID),
@@ -497,6 +503,25 @@ type movieDetail struct {
 	Credits      creditsBlock    `json:"credits"`
 	Collection   *tmdbCollection `json:"belongs_to_collection"`
 	IMDbID       string          `json:"imdb_id"`
+	/*
+	 * Keywords, which are how the *umbrella* groupings are expressed.
+	 *
+	 * `belongs_to_collection` gives exactly one franchise per film and it is
+	 * always the narrow one: Avengers: Endgame belongs to "The Avengers
+	 * Collection", not to the Marvel Cinematic Universe. The MCU is a keyword
+	 * -- 180547, on 81 films -- and there is no other field that carries it.
+	 * Verified against the live API rather than assumed.
+	 */
+	Keywords keywordsBlock `json:"keywords"`
+}
+
+type keywordsBlock struct {
+	Keywords []tmdbKeyword `json:"keywords"`
+}
+
+type tmdbKeyword struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 // tmdbCollection is TMDB's belongs_to_collection block — the franchise or

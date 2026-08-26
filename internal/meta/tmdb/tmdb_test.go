@@ -161,8 +161,12 @@ func TestFetchMovie(t *testing.T) {
 		if r.URL.Path != "/movie/335984" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
-		if r.URL.Query().Get("append_to_response") != "credits" {
-			t.Error("credits were not requested in the same call")
+		// Both ride one request. Keywords are what express an umbrella
+		// grouping like the MCU, which belongs_to_collection structurally
+		// cannot -- and a second round trip per film to fetch them would be a
+		// doubled provider bill for one field.
+		if got := r.URL.Query().Get("append_to_response"); got != "credits,keywords" {
+			t.Errorf("append_to_response = %q, want credits and keywords in one call", got)
 		}
 		w.Write([]byte(`{
 		 "title":"Blade Runner 2049","overview":"K discovers a secret.",
@@ -170,6 +174,8 @@ func TestFetchMovie(t *testing.T) {
 		 "imdb_id":"tt1856101",
 		 "genres":[{"name":"Science Fiction"},{"name":"Drama"}],
 		 "poster_path":"/p.jpg","backdrop_path":"/b.jpg",
+		 "keywords":{"keywords":[{"id":180547,"name":"marvel cinematic universe (mcu)"},
+		                         {"id":9715,"name":"superhero"}]},
 		 "credits":{"cast":[{"name":"Ryan Gosling","character":"K","order":0}],
 		            "crew":[{"name":"Denis Villeneuve","job":"Director"},
 		                    {"name":"Some Gaffer","job":"Gaffer"}]}}`))
@@ -217,6 +223,18 @@ func TestFetchMovie(t *testing.T) {
 	}
 	if len(rec.Credits) != 2 {
 		t.Errorf("credits = %v (%d), want actor + director and no gaffer", roles, len(rec.Credits))
+	}
+
+	// Keywords are parsed, which is what a smart collection is built on: the
+	// MCU exists as keyword 180547 and as no other field in the payload.
+	var mcu bool
+	for _, k := range rec.Keywords {
+		if k.ID == 180547 {
+			mcu = true
+		}
+	}
+	if !mcu {
+		t.Errorf("keywords = %+v, want the MCU keyword parsed", rec.Keywords)
 	}
 }
 

@@ -487,6 +487,7 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 	}
 
 	w.ingestCollection(ctx, item, remotes)
+	w.ingestSmartCollections(ctx, item, remotes)
 	w.fetchRatings(ctx, item.ID, imdbID)
 
 	// A sidecar is written into the user's media folder with LANcast's own
@@ -754,3 +755,42 @@ func max(a, b int) int {
 
 // ErrBusy is reserved for callers that want to distinguish a no-op Run.
 var ErrBusy = errors.New("enrichment already running")
+
+/*
+ * ingestSmartCollections links an item into every rule-defined grouping its
+ * keywords place it in (meta.SmartCollections).
+ *
+ * Separate from ingestCollection above, and the difference is not tidiness.
+ * That one returns after the first hit, because a provider's franchise field
+ * holds exactly one answer -- a film belongs to one sequence. A keyword-defined
+ * grouping is an *additional* membership: Iron Man is in "Iron Man Collection"
+ * and in "Marvel Cinematic Universe", and item_collection has been many-to-many
+ * since ADR 0017 precisely so that is expressible. Folding this into the other
+ * function would have meant one of the two memberships winning.
+ *
+ * No artwork is fetched. A keyword has no poster -- it is a tag, not a TMDB
+ * collection with images behind it -- so the tile falls back to whatever the
+ * client shows for a collection with none. Inventing one by borrowing a
+ * member's poster would be the same trick artist images use (ADR 0025), and it
+ * is a bigger decision than this rule needs.
+ *
+ * Best-effort throughout, like its neighbour: a grouping that failed to link is
+ * a tile that is missing, not an enrichment that should fail.
+ */
+func (w *Worker) ingestSmartCollections(ctx context.Context, item store.Item, remotes []meta.Record) {
+	for _, rec := range remotes {
+		for _, sc := range meta.SmartCollectionsFor(rec) {
+			collID, _, err := w.st.EnsureCollection(
+				ctx, item.LibraryID, sc.Source, sc.ExternalID(), sc.Name, media.SortTitle(sc.Name))
+			if err != nil {
+				w.log.Warn("ensure smart collection failed",
+					"item", item.ID, "collection", sc.Name, "error", err)
+				continue
+			}
+			if err := w.st.AddToCollection(ctx, item.ID, collID, 0); err != nil {
+				w.log.Warn("add to smart collection failed",
+					"item", item.ID, "collection", sc.Name, "error", err)
+			}
+		}
+	}
+}
