@@ -363,14 +363,39 @@ func TestCollectionFilterReadsMembership(t *testing.T) {
 	if len(items) != 1 || items[0].ID != uhd {
 		t.Fatalf("collection filter = %d items, want the one member", len(items))
 	}
-	_ = sd
 
+	/*
+	 * The *filter* still works on a one-film collection -- membership is
+	 * membership, and a caller naming a collection id gets its members.
+	 *
+	 * The *facet* does not offer it. A collection of one film is not a
+	 * collection: TMDB publishes a franchise for almost everything, so a
+	 * library owning one Anchorman gets an "Anchorman Collection" tile that
+	 * opens onto the film you could already see. On a real library that was
+	 * 102 of 277. Offering a chip for one the Collections page will not show
+	 * would be a filter leading to a grid you cannot get back to.
+	 */
 	f, err := st.LibraryFacets(ctx, lib, "u1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.Collections) != 1 || f.Collections[0].Members != 1 {
-		t.Errorf("collection facet = %+v, want one collection with one member", f.Collections)
+	if len(f.Collections) != 0 {
+		t.Errorf("collection facet = %+v, want a one-film collection hidden", f.Collections)
+	}
+
+	// A second film, and it earns its place -- by count, so it reappears on
+	// its own with no flag to maintain.
+	if _, err := st.db.ExecContext(ctx,
+		`INSERT INTO item_collection (item_id, collection_id, ord) VALUES (?, ?, 0)`,
+		sd, col); err != nil {
+		t.Fatal(err)
+	}
+	f, err = st.LibraryFacets(ctx, lib, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Collections) != 1 || f.Collections[0].Members != 2 {
+		t.Errorf("collection facet = %+v, want one collection with two members", f.Collections)
 	}
 }
 

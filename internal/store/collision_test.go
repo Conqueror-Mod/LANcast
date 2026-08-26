@@ -278,3 +278,109 @@ func TestFilmsStillCollideWithNoPosition(t *testing.T) {
 		t.Errorf("a film reported a position: %+v", got[0])
 	}
 }
+
+/*
+ * Collection organisation rules.
+ *
+ * Two rules, both read-time, both derived from what a real library actually
+ * held: 277 collections of which 102 held exactly one film, and 699
+ * memberships not one of which carried a non-zero `ord`.
+ */
+
+func seedCollection(t *testing.T, s *Store, lib int64, title string) int64 {
+	t.Helper()
+	id, err := s.UpsertItem(context.Background(), ScanFile{
+		LibraryID: lib, Path: "/c/" + title, Kind: "collection",
+		Title: title, SortTitle: title, MTime: 1,
+	})
+	if err != nil {
+		t.Fatalf("seed collection: %v", err)
+	}
+	return id
+}
+
+func addMember(t *testing.T, s *Store, item, collection int64) {
+	t.Helper()
+	if _, err := s.db.ExecContext(context.Background(),
+		`INSERT INTO item_collection (item_id, collection_id, ord) VALUES (?, ?, 0)`,
+		item, collection); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+}
+
+func seedFilm(t *testing.T, s *Store, lib int64, path, title string, year int) int64 {
+	t.Helper()
+	f := ScanFile{
+		LibraryID: lib, Path: path, Kind: "movie",
+		Title: title, SortTitle: title, Container: "mkv", SizeBytes: 1, MTime: 1,
+	}
+	if year > 0 {
+		f.Year = &year
+	}
+	id, err := s.UpsertItem(context.Background(), f)
+	if err != nil {
+		t.Fatalf("seed film: %v", err)
+	}
+	return id
+}
+
+/*
+ * Release order, not alphabetical.
+ *
+ * The case from the real library: "The Final Destination" (2009) is the fourth
+ * film and sorts under T, so alphabetically it landed after "Final Destination
+ * 5" (2011) — a franchise reading as a list rather than a sequence.
+ */
+func TestCollectionMembersAreInReleaseOrder(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "Final Destination Collection")
+
+	for _, f := range []struct {
+		title string
+		year  int
+	}{
+		{"Final Destination 5", 2011},
+		{"The Final Destination", 2009},
+		{"Final Destination", 2000},
+		{"Final Destination 2", 2003},
+	} {
+		addMember(t, s, seedFilm(t, s, lib, "/m/"+f.title+".mkv", f.title, f.year), col)
+	}
+
+	got, err := s.CollectionMembers(ctx, col)
+	if err != nil {
+		t.Fatalf("members: %v", err)
+	}
+	want := []string{
+		"Final Destination", "Final Destination 2",
+		"The Final Destination", "Final Destination 5",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d members, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].Title != w {
+			t.Errorf("position %d = %q, want %q", i, got[i].Title, w)
+		}
+	}
+}
+
+// A film with no year sorts last. NULL leads in SQLite, and an unmatched row
+// heading a franchise is worse than it trailing one.
+func TestAnUndatedFilmTrailsItsCollection(t *testing.T) {
+	s := openTestStore(t)
+	lib := mustLibrary(t, s).ID
+	col := seedCollection(t, s, lib, "A Franchise")
+	addMember(t, s, seedFilm(t, s, lib, "/m/unknown.mkv", "Unknown", 0), col)
+	addMember(t, s, seedFilm(t, s, lib, "/m/first.mkv", "First", 1990), col)
+
+	got, err := s.CollectionMembers(context.Background(), col)
+	if err != nil {
+		t.Fatalf("members: %v", err)
+	}
+	if len(got) != 2 || got[0].Title != "First" {
+		t.Errorf("order = %v, want the dated film first", titles(got))
+	}
+}

@@ -1296,8 +1296,14 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		SELECT c.id, c.title, COUNT(ic.item_id) AS members
 		FROM media_item c
 		JOIN item_collection ic ON ic.collection_id = c.id
+		JOIN media_item m ON m.id = ic.item_id AND m.missing = 0
 		WHERE c.library_id = ? AND c.kind = 'collection' AND c.missing = 0
 		GROUP BY c.id, c.title
+		-- The same rule the Collections listing applies, and it has to be here
+		-- too: a filter chip offering a collection the page will not show is a
+		-- filter that returns a grid you cannot get back to. The count is of
+		-- present films for the same reason.
+		HAVING members > 1
 		ORDER BY members DESC, c.title`, libraryID)
 	if err != nil {
 		return f, fmt.Errorf("library facets (collections): %w", err)
@@ -1925,7 +1931,22 @@ func (s *Store) CollectionMembers(ctx context.Context, collectionID int64) ([]It
 		FROM media_item mi
 		JOIN item_collection ic ON ic.item_id = mi.id
 		WHERE ic.collection_id = ?
-		ORDER BY ic.ord, mi.sort_title`, collectionID)
+		-- Release order, which is how a franchise is watched. This was
+		-- "ord, sort_title", and every one of the 699 memberships in a real
+		-- library carries ord = 0 (nothing has ever written one), so it was
+		-- alphabetical: "The Final Destination" (2009) sorted away from the
+		-- numbered films it sits between, and a collection read as a list
+		-- rather than a sequence.
+		--
+		-- ord stays in front and stays unused. It is where a curated order
+		-- goes if one is ever wanted, and leaving it first means that feature
+		-- slots in without revisiting this query. Year is the rule underneath
+		-- because it needs no provider call and works offline.
+		--
+		-- A film with no year sorts last rather than first: NULL leads in
+		-- SQLite, and an unmatched row heading a franchise is worse than it
+		-- trailing one.
+		ORDER BY ic.ord, mi.year IS NULL, mi.year, mi.sort_title`, collectionID)
 	if err != nil {
 		return nil, fmt.Errorf("collection members: %w", err)
 	}
