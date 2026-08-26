@@ -512,7 +512,20 @@ export function Detail() {
               type="button"
               className="detail__poster detail__poster--editable"
               onClick={() => setPosterOpen(true)}
-              title="Choose which film's poster this collection uses"
+              /*
+               * No `title`. It said the same thing as the visible label a few
+               * lines down, so both appeared at once and the browser's own
+               * tooltip painted over the poster's lower edge -- the same shape
+               * as the v0.8.11 bug where a tile's tooltip covered the menu it
+               * had just opened. A native tooltip is drawn above everything the
+               * page can produce, so a control that already labels itself
+               * should not ask for a second one.
+               *
+               * aria-label carries the fuller sentence instead: it is not
+               * drawn, and "Change poster" alone is thinner than a screen
+               * reader deserves.
+               */
+              aria-label={`Change the poster for ${item.title} to one of its films`}
             >
               {poster ? (
                 <img src={poster} alt="" draggable={false} />
