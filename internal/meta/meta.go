@@ -182,6 +182,28 @@ type Record struct {
 	// Collection is set when the source knows this item belongs to a franchise
 	// or series. Nil for the common standalone case.
 	Collection *CollectionRef
+
+	/*
+	 * Keywords are the source's free tags, and they carry the groupings a
+	 * franchise field cannot.
+	 *
+	 * `Collection` above is one franchise per item and always the narrow one:
+	 * Avengers: Endgame belongs to "The Avengers Collection", never to the
+	 * Marvel Cinematic Universe. The umbrella exists only as a keyword. So
+	 * these are kept, and `SmartCollections` turns the ones worth grouping on
+	 * into memberships.
+	 *
+	 * Not stored. A keyword is an input to that rule, not a fact about the item
+	 * worth a column -- and storing several thousand tag rows to answer one
+	 * question would be a schema change earning nothing.
+	 */
+	Keywords []Keyword
+}
+
+// Keyword is one of a source's free tags.
+type Keyword struct {
+	ID   int
+	Name string
 }
 
 // Provider is a searchable remote metadata source.
