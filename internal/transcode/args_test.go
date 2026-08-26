@@ -493,17 +493,17 @@ func TestLiveGeneratesTimestamps(t *testing.T) {
 }
 
 /*
- * A live stream fragments on every frame, not on keyframes.
+ * A live stream fragments on the clock, not on keyframes and not on frames.
  *
  * frag_keyframe waits for the next IDR, and a channel with a long GOP can be
  * several seconds between them — so the picture arrives late enough to look
  * broken. The unbuffered flush is the same argument: a buffered live stream
  * arrives in bursts behind whatever the buffer holds.
  */
-func TestLiveFragmentsEveryFrameAndFlushes(t *testing.T) {
+func TestLiveFragmentsOnDurationAndFlushes(t *testing.T) {
 	got := strings.Join(Args(Options{Input: "u", Live: true}), " ")
-	if !strings.Contains(got, "frag_every_frame") {
-		t.Errorf("live output fragments on keyframes: %s", got)
+	if !strings.Contains(got, "-frag_duration "+liveFragDuration) {
+		t.Errorf("live output has no fragment interval: %s", got)
 	}
 	if !strings.Contains(got, "-flush_packets 1") {
 		t.Errorf("live output is buffered: %s", got)
@@ -526,7 +526,7 @@ func TestLiveIgnoresAnOffset(t *testing.T) {
 // the shared builder is exactly where that could go unnoticed.
 func TestAFileGetsNoLiveFlags(t *testing.T) {
 	got := strings.Join(Args(Options{Input: "/media/film.mkv", StartAt: 30}), " ")
-	for _, unwanted := range []string{"-reconnect", "-rw_timeout", "frag_every_frame", "+genpts"} {
+	for _, unwanted := range []string{"-reconnect", "-rw_timeout", "-frag_duration", "+genpts"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("file command carried %q: %s", unwanted, got)
 		}
@@ -859,17 +859,47 @@ func TestFragmentedOutputCanDescribeAC3(t *testing.T) {
 	}
 }
 
-// Live still fragments on every frame: fragmenting on keyframes makes the
-// browser wait for the first one, which on a long GOP is seconds of blank
-// screen that reads as a broken channel.
-func TestLiveStillFragmentsEveryFrame(t *testing.T) {
-	flags := argValue(Args(Options{Input: "in.ts", Output: Progressive, AudioIndex: -1, Live: true}), "-movflags")
-	if !strings.Contains(flags, "frag_every_frame") {
-		t.Errorf("-movflags %q, want frag_every_frame for live", flags)
+// Live still gets a short fragment interval that does not depend on the
+// source's GOP: fragmenting on keyframes makes the browser wait for the first
+// one, which on a long GOP is seconds of blank screen that reads as a broken
+// channel.
+func TestLiveFragmentIntervalDoesNotDependOnTheGOP(t *testing.T) {
+	live := Args(Options{Input: "in.ts", Output: Progressive, AudioIndex: -1, Live: true})
+	if got := argValue(live, "-frag_duration"); got != liveFragDuration {
+		t.Errorf("-frag_duration %q, want %q for live", got, liveFragDuration)
+	}
+	if flags := argValue(live, "-movflags"); strings.Contains(flags, "frag_keyframe") {
+		t.Errorf("-movflags %q ties the live interval to the GOP", flags)
 	}
 	file := argValue(Args(Options{Input: "in.mkv", Output: Progressive, AudioIndex: -1}), "-movflags")
 	if !strings.Contains(file, "frag_keyframe") {
 		t.Errorf("-movflags %q, want frag_keyframe for a file", file)
+	}
+}
+
+/*
+ * frag_every_frame never comes back, on any path.
+ *
+ * It was here for a good reason — a short interval the source's GOP cannot
+ * lengthen — and it corrupted the timestamps of every live channel it
+ * produced. Measured against one fixed MPEG-TS capture, changing only this
+ * constant: 2,192 ffmpeg warnings and duplicate DTS with it, zero without.
+ * A browser demuxer requires DTS to increase strictly, so the picture froze
+ * while ffmpeg stayed healthy and went on producing bytes.
+ *
+ * The reason it is worth a test rather than a comment is that the argument
+ * *for* the flag still reads as correct, so the obvious repair for a
+ * late-starting picture is to put it back.
+ */
+func TestNothingFragmentsOnEveryFrame(t *testing.T) {
+	for _, o := range []Options{
+		{Input: "in.ts", Output: Progressive, AudioIndex: -1, Live: true},
+		{Input: "in.mkv", Output: Progressive, AudioIndex: -1},
+		{Input: "in.ts", Output: HLS, OutputDir: "d", AudioIndex: -1, Live: true},
+	} {
+		if got := strings.Join(Args(o), " "); strings.Contains(got, "frag_every_frame") {
+			t.Errorf("live=%v output=%s: %s", o.Live, o.Output, got)
+		}
 	}
 }
 
