@@ -275,6 +275,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const runRef = useRef<WatchRun>(NO_RUN);
   const [stillWatching, setStillWatching] = useState<string | null>(null);
   /*
+   * The prompt, readable from an event handler without re-subscribing it.
+   *
+   * `onPause` must not clear the run when the pause is the one this feature
+   * performs itself — that fires immediately after the prompt is set, and
+   * would wipe it on the way past.
+   */
+  const stillWatchingRef = useRef<string | null>(null);
+  /*
    * True while the item playing came out of that lane.
    *
    * `pos` is a cursor into `order`, and an item played out of band is not at
@@ -609,16 +617,34 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * returns almost at once, which is how this feature becomes the nuisance it
    * exists to avoid.
    */
+  /*
+   * Anything deliberate clears the unattended run.
+   *
+   * The rule in stillWatching.ts says "any deliberate act resets it" and only
+   * Next and the prompt actually did, which left the feature able to interrupt
+   * somebody who had plainly just been at the remote — pausing to see what was
+   * on, or skipping back thirty seconds, both left the count climbing.
+   *
+   * Deliberately not called from `timeupdate`, which fires into an empty room,
+   * or from `waiting`, which is the network rather than a person.
+   */
+  const noteAttention = useCallback(() => {
+    runRef.current = attended();
+    stillWatchingRef.current = null;
+    setStillWatching(null);
+  }, []);
+
   const keepWatching = useCallback(() => {
     runRef.current = attended();
+    stillWatchingRef.current = null;
     setStillWatching(null);
     advanceQueue();
   }, [advanceQueue]);
 
   const playNext = useCallback(() => {
-    // Pressing Next is attention. So is everything else a person does on
-    // purpose — the run only counts advances nobody asked for.
+    // Pressing Next is attention, like every other deliberate act.
     runRef.current = attended();
+    stillWatchingRef.current = null;
     setStillWatching(null);
     advanceQueue();
   }, [advanceQueue]);
@@ -907,6 +933,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     (target: number) => {
       const v = videoRef.current;
       if (!v) return;
+      // Seeking is somebody at the controls, so it ends the run.
+      noteAttention();
       const t = Math.max(0, Math.min(target, totalDuration || target));
       if (transcoding.current) {
         offset.current = t;
@@ -1583,6 +1611,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             onPause={() => {
               setPlaying(false);
               saveProgress(true);
+              // Pausing is a person. Not the pause this feature performs
+              // itself, which happens after the prompt is already set and
+              // would otherwise clear it on the way past.
+              if (!stillWatchingRef.current) noteAttention();
             }}
             onEnded={() => {
               saveProgress(true);
@@ -1669,7 +1701,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               const next = advanced(runRef.current, now);
               runRef.current = next;
               if (shouldAsk(next, now)) {
-                setStillWatching(describeRun(next, now));
+                stillWatchingRef.current = describeRun(next, now);
+                setStillWatching(stillWatchingRef.current);
                 setPlaying(false);
                 return;
               }
