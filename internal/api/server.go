@@ -304,6 +304,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/channels", s.listChannels)
 	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
 	mux.HandleFunc("GET /api/channels/{id}/live", s.channelLive)
+	mux.HandleFunc("GET /api/channels/{id}/hls/index.m3u8", s.channelLiveHLS)
+	mux.HandleFunc("GET /api/channels/{id}/hls/{session}/{name}", s.hlsSegment)
 	// The guide is readable by the household, like the channels it describes.
 	mux.HandleFunc("GET /api/guide", s.listGuide)
 	mux.HandleFunc("GET /api/channels/{id}/guide", s.channelGuide)

@@ -911,3 +911,32 @@ func TestHLSCarriesNoMovflags(t *testing.T) {
 		t.Errorf("HLS output carries -movflags %q", argValue(a, "-movflags"))
 	}
 }
+
+/*
+ * The playlist type is a claim about the source, and getting it wrong is not
+ * cosmetic.
+ *
+ * A live channel emitted with `-hls_playlist_type vod` produces no playlist at
+ * all while it runs: measured against a real channel, nine good segments were
+ * written over 60s and index.m3u8 never appeared, so nothing could play it.
+ * These two tests are what stop that returning.
+ */
+func TestLiveHLSIsAnEventPlaylist(t *testing.T) {
+	args := Args(Options{
+		Input: "http://tuner.invalid/ch.m3u8", Output: HLS, OutputDir: "/tmp/x",
+		Live: true, Decision: remuxDecision(), AudioIndex: -1,
+	})
+	if got := argValue(args, "-hls_playlist_type"); got != "event" {
+		t.Fatalf("live HLS playlist type = %q, want event", got)
+	}
+}
+
+func TestFileHLSStaysVOD(t *testing.T) {
+	args := Args(Options{
+		Input: "in.mkv", Output: HLS, OutputDir: "/tmp/x",
+		Decision: remuxDecision(),
+	})
+	if got := argValue(args, "-hls_playlist_type"); got != "vod" {
+		t.Fatalf("file HLS playlist type = %q, want vod", got)
+	}
+}

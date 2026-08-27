@@ -559,10 +559,33 @@ func Args(o Options) []string {
 
 	switch o.Output {
 	case HLS:
+		/*
+		 * The playlist type is a claim about the source, not a preference.
+		 *
+		 * `vod` says the stream is complete and whole. For a film that is true.
+		 * For a channel it is a lie with a measurable cost: ffmpeg defers the
+		 * playlist entirely, so a harness watching a real channel for 60s saw
+		 * nine good segments written — h264 + aac, independently decodable, no
+		 * complaints — and `index.m3u8` never appear. The media was fine and
+		 * undiscoverable, because a player has no way in but the playlist.
+		 *
+		 * `event` is the choice here rather than a sliding window, and the
+		 * trade is deliberate: every segment stays listed, so a viewer who
+		 * paused can still reach what they missed, at the cost of a playlist
+		 * and a directory that grow for as long as the session lives. That is
+		 * bounded by the session rather than unbounded — `IdleTimeout` reaps a
+		 * channel nobody is reading and takes its directory with it — but a
+		 * channel genuinely watched for a day is a real disk cost and is not
+		 * yet solved here.
+		 */
+		playlistType := "vod"
+		if o.Live {
+			playlistType = "event"
+		}
 		a = append(a,
 			"-f", "hls",
 			"-hls_time", strconv.Itoa(SegmentSeconds),
-			"-hls_playlist_type", "vod",
+			"-hls_playlist_type", playlistType,
 			"-hls_segment_type", "fmp4",
 			// independent_segments tells the player each segment can be
 			// decoded alone, which is what makes seeking work.
