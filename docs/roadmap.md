@@ -667,6 +667,36 @@ group is not priority.
 
 ### Metadata, ratings and discovery
 
+- **Cast search, beyond the crash.** Searching people by name *and* role
+  answered `datatype mismatch` and an empty list for every query, because
+  `SearchCast` assigned its where clause instead of appending and dropped the
+  role condition while keeping its argument. The picker always scopes to a
+  role, so that was every keystroke anyone typed into it — which is why it read
+  as a thin feature rather than a broken one, and why both existing tests
+  passed: one searched with no role, the other filtered with no query. Fixed,
+  with a test for the combination. **What remains is the actual feature.**
+  Matching is `name LIKE 'q%' OR name LIKE '% q%'`, so it finds a first name or
+  a surname and nothing else — no substring, no initials, no accent folding,
+  and "de niro" does not find "Robert De Niro" typed as "deniro". It is also
+  scoped to **one library**, so there is no way to ask "everything Harrison Ford
+  is in" across films and shows at once, which is the question people actually
+  have. Both are real work rather than a one-character fix, and neither should
+  reuse a second normalizer — `clean` and `SortTitle` in `internal/media` are
+  the ones that exist.
+
+- **Actor images beside the names.** A detail page lists its cast as text, and
+  the storage for the pictures is already there and empty: `person.thumb_hash`
+  has been in the schema since the credits work and **nothing in the codebase
+  writes it or reads it**. TMDB returns `profile_path` on the same credits
+  request the names already come from, so the fetch is not a new provider call
+  — it is the artwork pipeline pointed at a table it does not yet cover.
+  [ADR 0025](adr/0025-artist-images.md) is the precedent and the warning: it
+  exists because artist images needed their own decisions about *which* image
+  is canonical and what happens when there is none. A face has the same
+  problem and one more, because a missing headshot is far more common than a
+  missing album cover — so the empty state is the design, not an afterthought.
+
+
 - ~~**Ratings system**~~ — **done**: TMDB rating display + rating sort (Phase 3),
   and the **Metacritic / Rotten Tomatoes / IMDb** tie-in via OMDb
   ([ADR 0019](adr/0019-external-ratings.md)).
@@ -675,6 +705,26 @@ group is not priority.
   filters, unwatched toggle, per-library counts in the nav.
 
 ### Social and profiles
+
+- **Resetting watched and listened history.** There is no way to undo a viewing
+  record beyond one title at a time, and the request is usually one of three
+  quite different things: *forget this show* (a shared account watched
+  something for somebody else), *forget everything* (handing the server on, or
+  starting a rewatch), or *forget the last hour* (the film that autoplayed while
+  nobody was in the room — see "Are you still watching" under Input and
+  control). Those want different controls and only the middle one is a single
+  button. Two constraints are already decided and must hold. Playback state is
+  keyed per user ([ADR 0006](adr/0006-playback-state-keyed-by-user.md)), so a
+  reset is per account and never global, and an administrator clearing their own
+  history must not touch anybody else's. And it is **destructive and
+  irreversible**, which puts it in the same class as removing a library: it
+  belongs in the audit log ([ADR 0026](adr/0026-audit-log.md)), and it needs the
+  inline confirmation the re-probe row uses rather than a modal, since a modal
+  overstates a thing people will do deliberately. Worth deciding at the same
+  time whether "watched" and "in progress" clear together — they are one table
+  and two meanings, and a person asking to forget a finished show rarely means
+  "and lose my place in the one I am half way through".
+
 
 - **Profile page** — **the history half is built**, and the rest is deliberately
   not. `GET /api/profile` answers identity, history and totals in one request,
@@ -804,6 +854,24 @@ group is not priority.
   different jobs and only one of them is heavy.
 
 ### System, operations and diagnostics
+
+- **Developer tools in the desktop window.** The client is WebView2 and its
+  devtools are switched off, which is defensible for a shipped app and costs
+  more than it looks. The console, the network log and the element inspector are
+  where a client-side fault is actually diagnosed, and without them the
+  alternatives are what this project has repeatedly had to fall back on: reading
+  `lancastd.log` and inferring the client's behaviour from the server's, or
+  polling a log and screenshotting the player to prove a timecode did *not*
+  reset. v0.8.6's own notes name the gap — the "Catching up" label exists partly
+  because a speed change had to be "answerable without devtools, which the
+  native window does not have". WebView2 exposes this as one setting
+  (`AreDevToolsEnabled`), so the work is not the switch but deciding what it is
+  attached to: **off by default and enabled from Settings** is the obvious shape,
+  since a always-on inspector in a media player is a support liability, and an
+  unreachable one is why bugs get diagnosed by inference. Worth pairing with the
+  existing debug-logging toggle on the Logs pane, which is the same decision one
+  layer down.
+
 
 - ~~**Activity status in the UI**~~ — **built.** `GET /api/activity` answers
   "what is the server doing right now?" in one request, normalizing scan,
@@ -947,6 +1015,26 @@ group is not priority.
   the two to disagree.
 
 ### Input and control
+
+- **"Are you still watching."** Nothing stops playback when nobody is there.
+  Autoplay walks a season, each episode marks itself watched at the end, and a
+  server left running overnight has both spent hours of transcode and rewritten
+  the one piece of state people actually care about — where they had got to. The
+  idle reaper is not this: it kills a session nobody is *reading*, and an
+  unattended stream is being read perfectly well. Two things make it more than a
+  convenience here. Progress is per user and load-bearing
+  ([ADR 0006](adr/0006-playback-state-keyed-by-user.md)), so silently marking
+  six episodes watched is data loss dressed as a feature, and it is the thing
+  the history-reset item under Social and profiles would then be needed to
+  undo. And every unattended stream holds one of a **default ceiling of three**
+  transcode slots, so one forgotten television costs a third of the server's
+  capacity to serve nobody. The rule wants deciding rather than copying: after N
+  consecutive unattended items, or N hours, and *what counts as attention* —
+  Plex uses the absence of any interaction, which punishes anyone watching a
+  film without touching the remote. Whatever it is, it must stop **before**
+  writing the next progress record, or it has already done the damage it exists
+  to prevent.
+
 
 - ~~**Keyboard-control shortcut map and customizer**~~ — **built** on the
   existing spatial focus model (ADR 0004). The map was already in one place so
