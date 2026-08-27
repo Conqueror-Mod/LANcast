@@ -1,0 +1,7 @@
+# The vendored artefact is verified by its sha256, so git must not touch a byte
+# of it. Without this, line-ending translation rewrites the file on checkout and
+# the reproduction check in README.md fails for ever on a Windows clone -- which
+# is exactly how the unminified bundle came out 806 bytes adrift while being
+# identical in content.
+hls.min.js -text -diff
+LICENSE -text
