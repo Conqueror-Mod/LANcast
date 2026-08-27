@@ -211,6 +211,62 @@ So the objection is met by *how* the dependency is taken, not by refusing it:
 That is a different artefact from the one ADR 0013 refused. A blob you cannot
 read and a file you can are the same size and not the same risk.
 
+## A second symptom, on the VOD path
+
+The live-TV case above is the reason for this amendment. A separate observation
+belongs beside it, because it is the same shape and it is on the path this
+amendment leaves unchanged.
+
+A single playback of one film starts several progressive transcode sessions.
+Measured on installed v0.8.17, one item, played and left strictly alone — no
+seeking, no pausing, no navigation:
+
+    run 1: 6 sessions, +57.8s +10.0s +4.9s +10.0s +1.7s, then quiet for 2m46s
+    run 2: 5 sessions, +18.3s +0.7s +171.1s +3.6s
+
+Two framings of this were wrong before the third, and both are worth recording
+so they are not re-derived.
+
+It is **not a leak and not unintended server behaviour.** `Manager.Progressive`
+has no session reuse by design, `supersede(owner, itemID)` makes one stream per
+viewer per item a guarantee, and only one ffmpeg is ever alive. `sameOffset` is
+HLS-only and is not involved.
+
+It is **not the client re-rendering.** Every client path that issues a new
+request — the initial-load effect, `retryWithoutClaims`, and `seekTo` — reassigns
+`v.src` and calls `v.load()`, which visibly resets the timecode and shows a
+note. Polling the log until a session started and screenshotting immediately
+caught playback continuous at 7:45 with no note and no reload. None of those
+paths fired.
+
+What is left is the media element itself, opening additional connections to a
+long progressive response it cannot range-request. `internal/api/transcode.go`
+is the only caller of `trans.Progressive`, so each session is exactly one HTTP
+GET; with the client ruled out, the element is what issued them. That also
+completes the note in `manager.go` beside `supersede`, which attributed two
+starts six milliseconds apart to seeking: the attribution was incomplete rather
+than wrong, since no seeking occurred in either run above.
+
+**The discriminating reading has not been taken yet.** `start_at` was added to
+the progressive log line for exactly this (v0.8.18); the runs above predate it.
+Successive sessions carrying an advancing `t` near the playback position confirm
+a reconnecting element; a fixed `t` means something else is asking. Until that
+reading exists, the mechanism above is the surviving hypothesis and not a
+finding.
+
+Nothing is proposed for it here. Playback is unaffected, one process runs, and
+on a copy path a reconnect costs an ffmpeg start and a re-probe — cheap. On a
+full encode it is not cheap, and a file re-encoded from a fresh offset
+repeatedly is real waste, which is what would make it worth acting on.
+
+Its bearing on this ADR is that it is the same class of defect as the live-TV
+one, arriving from the other direction: a progressive stream offers the client
+no control surface, so the client's only way to ask for anything is to open
+another connection, and the server's only way to answer is another ffmpeg. MSE
+removes the class rather than the instance. That is evidence about the shape of
+the decision; it is not on its own an argument for moving the VOD path, which
+stays where the original ADR left it.
+
 ## Decision (proposed)
 
 **Adopt MSE for live TV, and only for live TV.**
