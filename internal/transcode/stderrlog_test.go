@@ -50,9 +50,21 @@ func loggingManager(t *testing.T, bin string) (*Manager, *safeBuf) {
  */
 func goFakeFFmpeg(t *testing.T, body string) string {
 	t.Helper()
+	return goFakeFFmpegImporting(t, []string{"fmt", "os"}, body)
+}
+
+// goFakeFFmpegImporting is the same fake for a body needing more than fmt and
+// os — a stand-in that has to stay alive needs "time", and an unused import is
+// a compile error.
+func goFakeFFmpegImporting(t *testing.T, imports []string, body string) string {
+	t.Helper()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "main.go")
-	prog := "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n" + body + "\n}\n"
+	var imp strings.Builder
+	for _, i := range imports {
+		imp.WriteString("\t\"" + i + "\"\n")
+	}
+	prog := "package main\n\nimport (\n" + imp.String() + ")\n\nfunc main() {\n" + body + "\n}\n"
 	if err := os.WriteFile(src, []byte(prog), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -119,5 +131,88 @@ func TestACleanSessionLogsNoErrors(t *testing.T) {
 
 	if strings.Contains(out.String(), "ffmpeg reported errors") {
 		t.Errorf("a healthy stream logged an error line.\ngot: %s", out.String())
+	}
+}
+
+/*
+ * Killing a running ffmpeg is not a failure, and must not be logged as one.
+ *
+ * The comment on reportStderr used to assert that "being killed is not an error
+ * ffmpeg reports". Watching it disproved that: a killed ffmpeg reliably writes
+ * `Error submitting a packet to the muxer: Broken pipe`, and on the live fMP4
+ * path a muxer error with a PATCHWELCOME return code. So **every ordinary
+ * channel stop** logged `WARN "ffmpeg reported errors"` under a wall of
+ * alarming text.
+ *
+ * It cost real time: during an investigation into a frozen channel it sent two
+ * separate diagnoses down the wrong path, because a warning that fires on every
+ * success cannot be told from one that fires on a failure.
+ *
+ * The fake stays alive rather than exiting, which is the whole point — the
+ * reader never reaches EOF, so the session is stopped while ffmpeg is still
+ * running.
+ */
+func TestStoppingARunningSessionIsNotAnError(t *testing.T) {
+	bin := goFakeFFmpegImporting(t, []string{"fmt", "os", "time"},
+		"\tfmt.Print(\"some bytes\")\n"+
+			"\tos.Stdout.Sync()\n"+
+			"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
+			"\ttime.Sleep(30 * time.Second)")
+	m, out := loggingManager(t, bin)
+
+	stream, err := m.Live(context.Background(), 99, LiveOptions{
+		URL: "http://example.invalid/channel.ts", Decision: remux(),
+	})
+	if err != nil {
+		t.Fatalf("Live: %v", err)
+	}
+	// Read a little and walk away, which is what switching channels does. Not
+	// io.Copy: reading to EOF would mean ffmpeg had ended by itself, which is
+	// the case this test exists to be distinguished from.
+	buf := make([]byte, 4)
+	if _, err := io.ReadFull(stream, buf); err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	stream.Close()
+
+	if strings.Contains(out.String(), "ffmpeg reported errors") {
+		t.Errorf("stopping a healthy session logged an error line.\ngot: %s", out.String())
+	}
+}
+
+/*
+ * ...but the text is kept, not discarded.
+ *
+ * Downgrading the level is only defensible if the evidence survives. A
+ * maintainer turning debug logging on to investigate playback should still find
+ * what ffmpeg said on the way out, or this has traded a noisy log for a silent
+ * one — which is the other way to lose an investigation.
+ */
+func TestWhatAStoppedFFmpegSaidIsStillAvailableAtDebug(t *testing.T) {
+	bin := goFakeFFmpegImporting(t, []string{"fmt", "os", "time"},
+		"\tfmt.Print(\"some bytes\")\n"+
+			"\tos.Stdout.Sync()\n"+
+			"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
+			"\ttime.Sleep(30 * time.Second)")
+
+	out := &safeBuf{}
+	m := NewManager(t.TempDir(), slog.New(slog.NewTextHandler(out,
+		&slog.HandlerOptions{Level: slog.LevelDebug})))
+	m.bin = bin
+
+	stream, err := m.Live(context.Background(), 100, LiveOptions{
+		URL: "http://example.invalid/channel.ts", Decision: remux(),
+	})
+	if err != nil {
+		t.Fatalf("Live: %v", err)
+	}
+	buf := make([]byte, 4)
+	if _, err := io.ReadFull(stream, buf); err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	stream.Close()
+
+	if !strings.Contains(out.String(), "Broken pipe") {
+		t.Errorf("ffmpeg's parting words were dropped entirely.\ngot: %s", out.String())
 	}
 }
