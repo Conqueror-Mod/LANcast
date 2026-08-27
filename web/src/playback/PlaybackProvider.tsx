@@ -13,6 +13,14 @@ import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
+import {
+  NO_RUN,
+  advanced,
+  attended,
+  describeRun,
+  shouldAsk,
+  type WatchRun,
+} from "./stillWatching";
 import { resumeSeconds, startedFloorMs } from "./resumePoint";
 import {
   shuffledStartingWith,
@@ -161,6 +169,17 @@ interface PlaybackState {
    *  toggle: it would turn shuffle *off* if it happened to be on already. */
   setShuffle: (on: boolean) => void;
   cycleRepeat: () => void;
+  /*
+   * "Are you still watching": the text to show, or null.
+   *
+   * A string rather than a boolean so the prompt can say what the machine
+   * actually did — "3 things have played automatically over about 2 hours" is
+   * a fact about the queue, where "are you still there?" is a question about
+   * the person, and only one of those is the player's business.
+   */
+  stillWatching: string | null;
+  /** Answering it: resume, and start the run over. */
+  keepWatching: () => void;
   playNext: () => void;
   /** Items queued by hand, played before the queue resumes. */
   upNext: number[];
@@ -245,6 +264,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * the queue behaves at all.
    */
   const [upNext, setUpNext] = useState<number[]>([]);
+  /*
+   * The unattended run, for "are you still watching".
+   *
+   * A ref rather than state because every write happens inside an event
+   * handler that is already doing something else, and re-rendering the player
+   * to record that the queue moved on would be a render per episode for a
+   * value nothing draws. What is drawn is the prompt, and that is state.
+   */
+  const runRef = useRef<WatchRun>(NO_RUN);
+  const [stillWatching, setStillWatching] = useState<string | null>(null);
   /*
    * True while the item playing came out of that lane.
    *
@@ -574,7 +603,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return true;
   }, [order, pos, itemID, repeat, upNext, offPiste]);
 
+  /*
+   * Answering the prompt is the clearest attention there is, so it buys a full
+   * new run rather than a few quiet minutes. Anything less and the prompt
+   * returns almost at once, which is how this feature becomes the nuisance it
+   * exists to avoid.
+   */
+  const keepWatching = useCallback(() => {
+    runRef.current = attended();
+    setStillWatching(null);
+    advanceQueue();
+  }, [advanceQueue]);
+
   const playNext = useCallback(() => {
+    // Pressing Next is attention. So is everything else a person does on
+    // purpose — the run only counts advances nobody asked for.
+    runRef.current = attended();
+    setStillWatching(null);
     advanceQueue();
   }, [advanceQueue]);
 
@@ -1402,6 +1447,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     toggleShuffle,
     setShuffle: setShuffleMode,
     cycleRepeat,
+    stillWatching,
+    keepWatching,
     playNext,
     upNext,
     playNextUp,
@@ -1606,6 +1653,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                * album", which is not what it says.
                */
               if (!prefsRef.current.autoPlay) {
+                setPlaying(false);
+                return;
+              }
+              /*
+               * The queue moving on by itself is the thing being counted.
+               *
+               * Asked *before* advancing rather than after, because the point
+               * is to stop the next transcode from starting and the next
+               * progress record from being written — a prompt that appears
+               * over an episode already playing has let the thing happen that
+               * it exists to prevent.
+               */
+              const now = Date.now();
+              const next = advanced(runRef.current, now);
+              runRef.current = next;
+              if (shouldAsk(next, now)) {
+                setStillWatching(describeRun(next, now));
                 setPlaying(false);
                 return;
               }

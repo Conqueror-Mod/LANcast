@@ -230,3 +230,22 @@
   position: relative;
   display: inline-flex;
 }
+
+/*
+ * "Are you still watching."
+ *
+ * Sits with the note rather than over the picture: the player is already
+ * paused when this appears, so there is nothing to cover and nothing to block.
+ * A dialog here would be a second thing to dismiss instead of the first thing
+ * to read.
+ */
+.player__still {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  /* flex-shrink on the children, not the row: this lives inside a flex column
+     and a shrinking row collapses to nothing with its text still "applied". */
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  color: var(--text-dim, #b9c0cc);
+}

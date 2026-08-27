@@ -84,6 +84,8 @@ export interface Credit {
   name: string;
   role: string;
   character?: string;
+  /** Content-addressed hash of this person's picture, when there is one. */
+  thumb?: string;
 }
 
 // One external score (ADR 0019). `source` is an open set — imdb, rotten_tomatoes,

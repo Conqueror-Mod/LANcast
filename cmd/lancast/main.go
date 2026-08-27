@@ -162,6 +162,7 @@ func runWindow(l *launcher) {
 		// directory is machine-wide and may belong to a service account.
 		DataDir:  clientDataDir(),
 		CertPin:  l.serverCertPin(),
+		DevTools: devToolsWanted(),
 		Bindings: l.desktopBindings(),
 	})
 	if err != nil {
@@ -194,7 +195,12 @@ func (l *launcher) desktopBindings() map[string]any {
 				// server says it is.
 				"client_version": Version,
 				"close_to_tray":  prefs.CloseToTray,
-				"open_at_login":  atLogin,
+				// Reported from the file rather than from the running window,
+				// because the window cannot change it after launch: this is
+				// what the *next* start will do, which is what the toggle is
+				// promising.
+				"devtools":      prefs.DevTools,
+				"open_at_login": atLogin,
 				// True when this launcher started the server, so closing the
 				// window ends it. False when a service or an earlier launch
 				// owns it, in which case closing this window stops nothing —
@@ -219,7 +225,15 @@ func (l *launcher) desktopBindings() map[string]any {
 		},
 		// lancastDesktopSet writes both preferences. Whole-value rather than
 		// per-field so the page cannot half-apply a change.
-		"lancastDesktopSet": func(closeToTray, openAtLogin bool) map[string]any {
+		/*
+		 * A third argument rather than a second function.
+		 *
+		 * The page sends the whole preference set every time, so adding one
+		 * means one more parameter here and nothing at the call site has to
+		 * know whether it changed. A separate lancastDevTools() would be a
+		 * second way to write the same file, free to race the first.
+		 */
+		"lancastDesktopSet": func(closeToTray, openAtLogin, devTools bool) map[string]any {
 			// The registry is the thing that actually starts LANcast at login,
 			// so it goes first: a preference file saying "on" over a run key
 			// that was never written is a setting that lies. If this fails the
@@ -227,7 +241,7 @@ func (l *launcher) desktopBindings() map[string]any {
 			if err := applyAutostart(openAtLogin); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
-			p := desktopprefs.Prefs{CloseToTray: closeToTray, OpenAtLogin: openAtLogin}
+			p := desktopprefs.Prefs{CloseToTray: closeToTray, OpenAtLogin: openAtLogin, DevTools: devTools}
 			if err := desktopprefs.Save(dir, p); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
@@ -451,4 +465,18 @@ func applyAutostart(on bool) error {
 		args = append(args, "-browser")
 	}
 	return autostart.Enable(args...)
+}
+
+/*
+ * devToolsWanted reads the preference before the window exists.
+ *
+ * Its own function because the browser arguments are read at environment
+ * creation, so this has to happen before anything else in the window setup —
+ * and because a failure to read the file must not stop the app opening. A
+ * missing or unreadable preference means off, which is the same answer the
+ * defaults give.
+ */
+func devToolsWanted() bool {
+	prefs, err := desktopprefs.Load(clientDataDir())
+	return err == nil && prefs.DevTools
 }

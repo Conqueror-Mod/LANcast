@@ -31,6 +31,8 @@ type Store interface {
 	SaveRatings(ctx context.Context, itemID int64, ratings []store.ItemRating) error
 	ReplaceGenres(ctx context.Context, itemID int64, names []string) error
 	ReplaceCredits(ctx context.Context, itemID int64, provider string, credits []store.Credit) error
+	SetPersonThumb(ctx context.Context, provider, externalID, hash string) error
+	PeopleNeedingThumbs(ctx context.Context, itemID int64) ([]string, error)
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
 	ArtworkExists(ctx context.Context, hash string) (bool, error)
 	EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error)
@@ -481,6 +483,7 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		if err := w.st.ReplaceCredits(ctx, item.ID, merged.Source, credits); err != nil {
 			return err
 		}
+		w.storeFaces(ctx, item.ID, merged.Source, merged.Credits)
 	}
 	if !lockedSet[meta.FieldArtwork] {
 		w.storeArtwork(ctx, item.ID, merged.Artwork)
@@ -791,6 +794,57 @@ func (w *Worker) ingestSmartCollections(ctx context.Context, item store.Item, re
 				w.log.Warn("add to smart collection failed",
 					"item", item.ID, "collection", sc.Name, "error", err)
 			}
+		}
+	}
+}
+
+/*
+ * storeFaces fetches the cast's headshots, once per person.
+ *
+ * The pictures ride along on the credits payload the names already came from,
+ * so this costs no extra provider call — only the image fetches, and only for
+ * people who have none yet.
+ *
+ * "Once per person" is the whole design and it is enforced by the database
+ * rather than here: `SetPersonThumb` writes only where `thumb_hash IS NULL`,
+ * and `PeopleNeedingThumbs` is asked first so the common case — a re-enrichment
+ * of a film whose cast is already illustrated — does no work at all. Without
+ * both, a library of a thousand films would re-fetch tens of thousands of
+ * headshots on every pass, for faces that had not changed since the last one.
+ *
+ * Failures are debug rather than warn, and never fatal. A missing headshot is
+ * the ordinary case — a provider has one for the billed cast and nothing for
+ * the stunt double — and an enrichment that failed a film because a face was
+ * unavailable would be trading the metadata for the decoration.
+ */
+func (w *Worker) storeFaces(ctx context.Context, itemID int64, provider string, credits []meta.Credit) {
+	wanted, err := w.st.PeopleNeedingThumbs(ctx, itemID)
+	if err != nil {
+		w.log.Debug("cast pictures: could not ask who needs one", "item", itemID, "error", err)
+		return
+	}
+	if len(wanted) == 0 {
+		return
+	}
+	need := make(map[string]bool, len(wanted))
+	for _, id := range wanted {
+		need[id] = true
+	}
+
+	for _, c := range credits {
+		// People are keyed by name where the provider gives no stable id, which
+		// is what ReplaceCredits writes as external_id — so the same key is
+		// what identifies them here.
+		if c.Image == "" || !need[c.Name] {
+			continue
+		}
+		hash, _, _, _, err := w.art.Download(ctx, c.Image)
+		if err != nil {
+			w.log.Debug("cast picture download failed", "person", c.Name, "error", err)
+			continue
+		}
+		if err := w.st.SetPersonThumb(ctx, provider, c.Name, hash); err != nil {
+			w.log.Debug("cast picture record failed", "person", c.Name, "error", err)
 		}
 	}
 }

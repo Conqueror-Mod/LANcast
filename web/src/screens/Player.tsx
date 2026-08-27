@@ -377,6 +377,20 @@ export function Player() {
             )}
           </span>
           {pb.note && <span className="player__note">{pb.note}</span>}
+          {/*
+            The prompt states what happened and offers the one action that
+            answers it. Not a modal: the film is already stopped, so there is
+            nothing to block, and a dialog over a paused player is a second
+            thing to dismiss rather than the first thing to read.
+          */}
+          {pb.stillWatching && (
+            <div className="player__still" role="status">
+              <span>{pb.stillWatching}</span>
+              <button className="set-btn" onClick={pb.keepWatching}>
+                Keep watching
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="player__bottom">

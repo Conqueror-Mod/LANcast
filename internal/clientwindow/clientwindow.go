@@ -49,6 +49,14 @@ type Options struct {
 	// HTTP and has no certificate to trust.
 	CertPin string
 
+	/*
+	 * DevTools opens the web view's inspector alongside the window.
+	 *
+	 * Read at environment creation, like CertPin, which is why it is an option
+	 * here rather than something the page can turn on for itself.
+	 */
+	DevTools bool
+
 	// Bindings are Go functions exposed to the page as global JavaScript
 	// functions, each returning a promise.
 	//

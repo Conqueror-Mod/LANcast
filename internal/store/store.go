@@ -443,6 +443,18 @@ type Credit struct {
 	Role      string `json:"role"`
 	Character string `json:"character,omitempty"`
 	Order     int    `json:"-"`
+	/*
+	 * Thumb is the content-addressed hash of this person's picture, or empty.
+	 *
+	 * On the credit rather than on a separate people endpoint because a cast
+	 * list is read as a whole — twelve faces on a detail page is one request
+	 * with the names, or thirteen without.
+	 *
+	 * Empty is the ordinary case and always will be: a provider has a headshot
+	 * for the billed cast and nothing for the stunt double, so a missing image
+	 * is not a failure and the client draws a name, as it always has.
+	 */
+	Thumb string `json:"thumb,omitempty"`
 }
 
 // Artwork holds the content-addressed hashes for an item's images.

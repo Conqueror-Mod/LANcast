@@ -33,6 +33,21 @@ type Prefs struct {
 	CloseToTray bool `json:"close_to_tray"`
 	// OpenAtLogin starts the client when the user signs in to Windows.
 	OpenAtLogin bool `json:"open_at_login"`
+	/*
+	 * DevTools opens the web view's inspector with the window.
+	 *
+	 * Off by default like the others, and for a sharper reason than surprise:
+	 * an always-on inspector in a media player is a support liability, and an
+	 * unreachable one is why client faults in this project have been diagnosed
+	 * by inference — reading the server log and deducing what the page must
+	 * have done. Both of those are worse than a switch somebody has to find.
+	 *
+	 * It takes effect at the next launch, because the browser arguments are
+	 * read when the web view environment is created and there is no supported
+	 * way to add one to a running environment. The UI says so rather than
+	 * appearing not to work.
+	 */
+	DevTools bool `json:"devtools"`
 }
 
 // Load reads preferences from dir.

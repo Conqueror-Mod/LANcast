@@ -21,6 +21,7 @@ declare global {
     lancastDesktopSet?: (
       closeToTray: boolean,
       openAtLogin: boolean,
+      devTools: boolean,
     ) => Promise<{ ok: boolean; error?: string }>;
   }
 }
@@ -28,6 +29,7 @@ declare global {
 interface DesktopState {
   close_to_tray: boolean;
   open_at_login: boolean;
+  devtools: boolean;
   // Whether this window started the server it is showing. Only the client
   // process knows: from the server's side, a window that launched it and a
   // window that attached to a running service look identical.
@@ -50,12 +52,16 @@ export function DesktopSettings() {
   // write landed. "Open at login" is backed by a registry key, and reporting a
   // tick the machine did not accept is the failure this whole section exists to
   // avoid.
-  const save = async (closeToTray: boolean, openAtLogin: boolean) => {
+  const save = async (
+    closeToTray: boolean,
+    openAtLogin: boolean,
+    devTools: boolean,
+  ) => {
     if (!window.lancastDesktopSet) return;
     setSaving(true);
     setSaveError("");
     try {
-      const res = await window.lancastDesktopSet(closeToTray, openAtLogin);
+      const res = await window.lancastDesktopSet(closeToTray, openAtLogin, devTools);
       if (!res.ok) setSaveError(res.error ?? "could not be saved");
     } catch (e) {
       setSaveError(String(e));
@@ -115,7 +121,7 @@ export function DesktopSettings() {
         title="Close to tray"
         sub="Keep LANcast running in the notification area when you close the window. Quit from the tray to stop it."
         checked={state.close_to_tray}
-        onChange={(next) => save(next, state.open_at_login)}
+        onChange={(next) => save(next, state.open_at_login, state.devtools)}
         busy={saving}
         error={saveError}
         reason="Takes effect the next time you open LANcast."
@@ -124,9 +130,28 @@ export function DesktopSettings() {
         title="Open when Windows starts"
         sub="Start LANcast automatically when you sign in."
         checked={state.open_at_login}
-        onChange={(next) => save(state.close_to_tray, next)}
+        onChange={(next) => save(state.close_to_tray, next, state.devtools)}
         busy={saving}
         error={saveError}
+      />
+      {/*
+        Off by default, and stated as a next-launch change rather than
+        appearing not to work: the browser arguments are read when the web view
+        environment is created, and there is no supported way to add one to a
+        running environment.
+
+        Worth having at all because client faults in this project have been
+        diagnosed by inference — reading the server log and deducing what the
+        page must have done — for want of a console.
+      */}
+      <LifecycleOption
+        title="Developer tools"
+        sub="Open the web inspector alongside the window. For diagnosing the client itself."
+        checked={state.devtools}
+        onChange={(next) => save(state.close_to_tray, state.open_at_login, next)}
+        busy={saving}
+        error={saveError}
+        reason="Opens the next time you start LANcast."
       />
     </section>
   );

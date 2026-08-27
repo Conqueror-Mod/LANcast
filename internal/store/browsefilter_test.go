@@ -497,3 +497,72 @@ func TestCastSearchCombinesANameWithARole(t *testing.T) {
 		t.Fatalf("directors = %+v, want only Bo Reyes", directors)
 	}
 }
+
+// Substring, not just prefix-or-word: the point of the widening.
+func TestCastSearchMatchesInsideAName(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Robert De Niro", Role: "actor", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// "niro" is inside the surname. The old prefix-or-word rule found nobody,
+	// which is most of what "actor search is very limited" meant.
+	got, err := st.SearchCast(ctx, lib, "niro", "actor", 10)
+	if err != nil || len(got) != 1 || got[0].Name != "Robert De Niro" {
+		t.Fatalf("got %+v err %v, want Robert De Niro", got, err)
+	}
+}
+
+/*
+ * A wildcard typed into a search box is a search for that character.
+ *
+ * Unescaped, "%" matches every person in the library — a search box that
+ * answers a question nobody asked, and the sort of thing nobody notices until
+ * somebody types a percent sign.
+ */
+func TestCastSearchTreatsWildcardsAsText(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Ana Cruz", Role: "actor", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"%", "_"} {
+		got, err := st.SearchCast(ctx, lib, q, "actor", 10)
+		if err != nil {
+			t.Fatalf("%q: %v", q, err)
+		}
+		if len(got) != 0 {
+			t.Errorf("%q matched %+v; a wildcard must be text", q, got)
+		}
+	}
+}
+
+/*
+ * Library 0 means every library, which is the question people actually have:
+ * "everything this person is in" does not stop at a library boundary.
+ */
+func TestCastSearchAcrossEveryLibrary(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Ana Cruz", Role: "actor", Order: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	all, err := st.SearchCast(ctx, 0, "cruz", "actor", 10)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("all-libraries search got %+v err %v", all, err)
+	}
+	// And the scoped form still scopes.
+	none, err := st.SearchCast(ctx, lib+9999, "cruz", "actor", 10)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("a different library returned %+v err %v", none, err)
+	}
+}
