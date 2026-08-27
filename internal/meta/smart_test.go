@@ -95,3 +95,54 @@ func TestTheCuratedSetStaysCurated(t *testing.T) {
 		seen[key] = true
 	}
 }
+
+/*
+ * The MonsterVerse rule.
+ *
+ * Checked on TMDB rather than recalled, the same discipline the MCU facts
+ * above were written under: keyword 380322 `monsterverse`, carried by six
+ * films — Godzilla (2014), Kong: Skull Island, King of the Monsters, Godzilla
+ * vs. Kong, Godzilla x Kong, and Godzilla x Kong: Supernova (2027), which is
+ * unreleased and already tagged.
+ *
+ * It exists because `belongs_to_collection` splits the franchise three ways:
+ * three films in "Godzilla Collection", one alone in "Godzilla x Kong
+ * Collection", and **Kong: Skull Island in nothing at all**, a Kong film
+ * belonging to no Godzilla sequence. No narrowing of the provider's answer
+ * puts Skull Island beside Godzilla vs. Kong; only the keyword does.
+ */
+func TestSmartCollectionsForMatchesTheMonsterVerseKeyword(t *testing.T) {
+	got := SmartCollectionsFor(kwRec("tmdb", 4565, 380322))
+	if len(got) != 1 {
+		t.Fatalf("got %d smart collections, want 1", len(got))
+	}
+	if got[0].Name != "MonsterVerse" {
+		t.Errorf("Name = %q, want MonsterVerse", got[0].Name)
+	}
+	if got[0].ExternalID() != "keyword:380322" {
+		t.Errorf("ExternalID = %q", got[0].ExternalID())
+	}
+}
+
+/*
+ * The two rules are independent, which is the property a curated list has to
+ * keep as it grows: a film carrying one keyword joins one collection, and a
+ * film carrying both joins both. A second entry that quietly widened the first
+ * would be worse than no second entry.
+ */
+func TestTheTwoUmbrellasDoNotBleedIntoEachOther(t *testing.T) {
+	mcu := SmartCollectionsFor(kwRec("tmdb", 180547))
+	if len(mcu) != 1 || mcu[0].Name != "Marvel Cinematic Universe" {
+		t.Errorf("MCU keyword alone gave %+v", mcu)
+	}
+	mv := SmartCollectionsFor(kwRec("tmdb", 380322))
+	if len(mv) != 1 || mv[0].Name != "MonsterVerse" {
+		t.Errorf("MonsterVerse keyword alone gave %+v", mv)
+	}
+	// Nothing carries both today. The assertion is about the rule, not the
+	// catalogue: membership is per keyword, so a film that did would be in
+	// both rather than in whichever matched first.
+	if both := SmartCollectionsFor(kwRec("tmdb", 180547, 380322)); len(both) != 2 {
+		t.Errorf("got %d for a film carrying both keywords, want 2", len(both))
+	}
+}
