@@ -470,3 +470,41 @@
   color: var(--text-faint);
   background: rgba(255, 255, 255, 0.03);
 }
+
+/*
+ * Cast faces.
+ *
+ * The circle is the same size whether it holds a photograph or two letters,
+ * which is what keeps a row of twelve looking like a cast list rather than a
+ * row with holes in it — most of a cast list has no headshot below the billed
+ * few, so the fallback is the common case and has to be a design.
+ */
+.detail__cast-face {
+  /* flex-shrink up front: these sit in a flex row inside a scrolling
+     container, and without it they collapse to slivers with the image still
+     "applied" and nothing visibly wrong in the styles. */
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2, #1b2029);
+  margin-bottom: 0.4rem;
+}
+
+.detail__cast-face--none {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim, #8b93a1);
+}
+
+.detail__cast-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex-shrink: 0;
+}

@@ -35,7 +35,7 @@ func open(o Options) error {
 
 	// Applied before the environment is created — the web view reads this on
 	// creation and ignores later changes.
-	if err := applyCertPin(o.CertPin); err != nil {
+	if err := applyBrowserArgs(o.CertPin, o.DevTools); err != nil {
 		return err
 	}
 
@@ -208,4 +208,45 @@ func (c *controller) Hide() {
 // the quit belongs.
 func (c *controller) Close() {
 	c.w.Dispatch(func() { c.w.Terminate() })
+}
+
+/*
+ * applyBrowserArgs composes every Chromium switch this window needs, once.
+ *
+ * There is one environment variable and it is read once at environment
+ * creation, so anything wanting a switch has to come through here — a second
+ * caller doing its own Setenv would silently replace the certificate pin, which
+ * is the switch that makes the app work at all beyond loopback.
+ *
+ * applyCertPin keeps its own guard rather than being folded in, because a
+ * malformed pin must fail loudly whether or not anything else wanted a switch,
+ * and because its tests are about that rule specifically.
+ */
+func applyBrowserArgs(pin string, devTools bool) error {
+	if !devTools {
+		return applyCertPin(pin)
+	}
+	/*
+	 * Opens the inspector with the window rather than merely permitting it.
+	 *
+	 * WebView2 allows devtools already; what this window does not give anyone
+	 * is a way to reach them — the host owns the keyboard model (ADR 0004) so
+	 * F12 does not arrive, and there is no context menu to right-click. Opening
+	 * it up front is the honest version of a switch labelled "developer tools".
+	 */
+	const devToolsArg = "--auto-open-devtools-for-tabs"
+	if pin == "" {
+		if existing := os.Getenv(browserArgsEnv); existing != "" {
+			return fmt.Errorf("client window: %s is already set (%q); not adding developer tools",
+				browserArgsEnv, existing)
+		}
+		return os.Setenv(browserArgsEnv, devToolsArg)
+	}
+	if err := applyCertPin(pin); err != nil {
+		return err
+	}
+	// The pin has been validated and set by the line above, so appending here
+	// is appending to a value this function just wrote rather than to somebody
+	// else's.
+	return os.Setenv(browserArgsEnv, os.Getenv(browserArgsEnv)+" "+devToolsArg)
 }

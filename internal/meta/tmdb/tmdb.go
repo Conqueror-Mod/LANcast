@@ -483,7 +483,10 @@ type creditsBlock struct {
 	Cast []struct {
 		Name      string `json:"name"`
 		Character string `json:"character"`
-		Order     int    `json:"order"`
+		// The headshot, on the credits payload the names already come from —
+		// so putting faces on a detail page costs no extra provider call.
+		ProfilePath string `json:"profile_path"`
+		Order       int    `json:"order"`
 	} `json:"cast"`
 	Crew []struct {
 		Name string `json:"name"`
@@ -592,6 +595,7 @@ func convertCredits(c creditsBlock) []meta.Credit {
 		}
 		out = append(out, meta.Credit{
 			Name: m.Name, Role: "actor", Character: m.Character, Order: m.Order,
+			Image: profileURL(m.ProfilePath),
 		})
 	}
 	for _, m := range c.Crew {
@@ -640,4 +644,19 @@ func parseDate(date string) (int64, bool) {
 		return 0, false
 	}
 	return t.Unix(), true
+}
+
+/*
+ * profileURL turns TMDB's profile path into a fetchable address.
+ *
+ * `w185` rather than the original: a headshot is drawn at about sixty pixels on
+ * a detail page and at twice that on a high-density screen, so anything larger
+ * is bytes nobody sees — twelve of them per page, on a server that may be
+ * fetching for a thousand films.
+ */
+func profileURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	return "https://image.tmdb.org/t/p/w185" + path
 }

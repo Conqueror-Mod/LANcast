@@ -97,6 +97,15 @@ type Credit struct {
 	Role      string // actor | director | writer
 	Character string
 	Order     int
+	/*
+	 * Image is a URL for this person's picture, or empty.
+	 *
+	 * A URL and not a fetched image: this package describes what a provider
+	 * said, and fetching is the enrichment worker's job — the same split every
+	 * other artwork reference in this file makes, and the reason a provider can
+	 * be tested without a network.
+	 */
+	Image string
 }
 
 // Fields are the per-field metadata values. Pointers distinguish "this source

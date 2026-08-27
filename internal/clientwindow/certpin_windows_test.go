@@ -83,3 +83,71 @@ func TestExistingBrowserArgsAreNotClobbered(t *testing.T) {
 		t.Errorf("existing args became %q", got)
 	}
 }
+
+/*
+ * Developer tools must not cost the certificate pin.
+ *
+ * The pin is the switch that makes this window work beyond loopback at all —
+ * without it the web view refuses the server's self-signed certificate
+ * outright and the app never appears. Adding a second switch to the same
+ * environment variable is exactly the shape of change that quietly replaces
+ * the first.
+ *
+ * It is also a combination nothing else exercises: a developer runs against
+ * loopback, which has no certificate and therefore no pin, so pin-plus-devtools
+ * is the path that only ever happens on somebody else's machine. That is the
+ * v0.8.0 lesson — correct in every environment except the one that ships.
+ */
+func TestDevToolsKeepsTheCertificatePin(t *testing.T) {
+	t.Setenv(browserArgsEnv, "")
+	if err := applyBrowserArgs(goodPin(), true); err != nil {
+		t.Fatalf("applyBrowserArgs: %v", err)
+	}
+	got := os.Getenv(browserArgsEnv)
+	if !strings.Contains(got, "--ignore-certificate-errors-spki-list="+goodPin()) {
+		t.Errorf("the pin was lost when developer tools were added: %q", got)
+	}
+	if !strings.Contains(got, "--auto-open-devtools-for-tabs") {
+		t.Errorf("developer tools were not requested: %q", got)
+	}
+}
+
+// Each switch alone, because the two orders through the function are different
+// code and only one of them appends.
+func TestBrowserArgsForEachSwitchAlone(t *testing.T) {
+	t.Setenv(browserArgsEnv, "")
+	if err := applyBrowserArgs("", true); err != nil {
+		t.Fatalf("devtools alone: %v", err)
+	}
+	if got := os.Getenv(browserArgsEnv); got != "--auto-open-devtools-for-tabs" {
+		t.Errorf("devtools alone set %q", got)
+	}
+
+	t.Setenv(browserArgsEnv, "")
+	if err := applyBrowserArgs(goodPin(), false); err != nil {
+		t.Fatalf("pin alone: %v", err)
+	}
+	if got := os.Getenv(browserArgsEnv); !strings.HasPrefix(got, "--ignore-certificate-errors-spki-list=") {
+		t.Errorf("pin alone set %q", got)
+	}
+}
+
+// A malformed pin still fails loudly with developer tools on. Turning on an
+// inspector must never be a way to skip validation of the security switch.
+func TestDevToolsDoesNotExcuseABadPin(t *testing.T) {
+	t.Setenv(browserArgsEnv, "")
+	if err := applyBrowserArgs("not-a-pin", true); err == nil {
+		t.Error("a malformed pin was accepted when developer tools were on")
+	}
+	if got := os.Getenv(browserArgsEnv); strings.Contains(got, "devtools") {
+		t.Errorf("switches were set despite a bad pin: %q", got)
+	}
+}
+
+// Something else steering the browser is still refused rather than appended to.
+func TestBrowserArgsRefusesWhenSomethingElseIsSteering(t *testing.T) {
+	t.Setenv(browserArgsEnv, "--some-other-switch")
+	if err := applyBrowserArgs("", true); err == nil {
+		t.Error("developer tools were added on top of somebody else's switches")
+	}
+}

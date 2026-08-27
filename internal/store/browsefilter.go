@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 /*
@@ -82,7 +83,7 @@ type CastMember struct {
 }
 
 /*
- * SearchCast finds people credited in one library.
+ * SearchCast finds people credited in one library, or in all of them.
  *
  * A type-ahead rather than a facet list, and that is the whole design. Genres
  * are a dozen values and fit in a row of chips; a thousand-film library has
@@ -99,8 +100,26 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	args := []any{libraryID}
+	/*
+	 * libraryID 0 searches every library.
+	 *
+	 * "Everything Harrison Ford is in" is the question people actually have,
+	 * and it does not stop at a library boundary — he is in films and he is in
+	 * television, and those are two libraries here. The per-library form stays
+	 * because the cast *picker* is a filter for the grid it sits above, and
+	 * that grid is one library.
+	 *
+	 * Zero rather than a pointer or a second method: a library id of 0 cannot
+	 * exist (AUTOINCREMENT starts at 1), so it is free to mean "all of them"
+	 * and every caller that passes a real id is unchanged.
+	 */
+	args := []any{}
 	where := ""
+	scope := ""
+	if libraryID > 0 {
+		scope = ` AND m.library_id = ?`
+		args = append(args, libraryID)
+	}
 	if role != "" {
 		// Scoped to one role, because "who is in this" and "who made this" are
 		// different questions with different answers, and an actor-director
@@ -110,24 +129,27 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 	}
 	if query != "" {
 		/*
-		 * Prefix-or-word match: "ford" finds Harrison Ford, and "harrison f"
-		 * finds him too. LIKE is case-insensitive for ASCII in SQLite, which is
-		 * what a name search wants and what the collation already gives us.
+		 * Substring match, anchored nowhere.
 		 *
-		 * `+=`, and it was `=`. Assigning here dropped the role clause from the
-		 * SQL while leaving the role's argument in `args`, so the placeholders
-		 * and the arguments misaligned and SQLite refused the statement outright
-		 * — every search with *both* a name and a role answered
-		 * `datatype mismatch` and an empty list.
+		 * It was prefix-or-word — `q%` or `% q%` — which finds a first name or
+		 * a surname and nothing else. That is most of what "actor search is
+		 * very limited" meant once the crash underneath it was fixed: "niro"
+		 * found nobody, because De Niro's surname begins with "De", and
+		 * "gyllen" found nobody either.
 		 *
-		 * That is the whole of "actor search barely works": the cast picker
-		 * scopes to a role, so every keystroke typed into it hit exactly this
-		 * path. Searching with no role set, or a role with no query, both
-		 * worked — which is why the two existing tests passed and why it read
-		 * as a thin feature rather than a broken one.
+		 * A leading wildcard gives up the index, and that is affordable here
+		 * and worth saying why rather than discovering later: `person` holds
+		 * one row per credited human rather than one per credit, the result is
+		 * capped at 200, and the query is already grouping and counting across
+		 * `credit` — the scan is not the expensive half. A million-person table
+		 * would change that answer; a home library will not have one.
+		 *
+		 * LIKE is case-insensitive for ASCII in SQLite, which is what a name
+		 * search wants. `like` escapes the wildcards so a search for "%" is a
+		 * search for a percent sign rather than for everybody.
 		 */
-		where += ` AND (p.name LIKE ? OR p.name LIKE ?)`
-		args = append(args, query+"%", "% "+query+"%")
+		where += ` AND p.name LIKE ? ESCAPE '\'`
+		args = append(args, "%"+like(query)+"%")
 	}
 	args = append(args, limit)
 
@@ -136,7 +158,7 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 		FROM person p
 		JOIN credit c ON c.person_id = p.id
 		JOIN media_item m ON m.id = c.item_id
-		WHERE m.library_id = ? AND m.missing = 0`+where+`
+		WHERE m.missing = 0`+scope+where+`
 		GROUP BY p.id, p.name
 		ORDER BY items DESC, p.name
 		LIMIT ?`, args...)
@@ -200,3 +222,16 @@ type CollectionFacet struct {
  * the lower steps would all return the same grid and read as broken controls.
  */
 var RatingThresholds = []float64{9, 8.5, 8, 7.5, 7, 6.5, 6, 5}
+
+/*
+ * like escapes LIKE's own wildcards.
+ *
+ * Without it a search for "%" matches every person in the library and a search
+ * for "_" matches every two-letter difference, which is a search box that
+ * answers questions nobody asked. The escape character has to be declared in
+ * the SQL for SQLite to honour it, which is why the clause carries ESCAPE.
+ */
+func like(q string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(q)
+}

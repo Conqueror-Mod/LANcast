@@ -263,6 +263,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
+	// Forgetting what you watched. GET prices it, DELETE does it.
+	mux.HandleFunc("GET /api/profile/history", s.historyPreview)
+	mux.HandleFunc("DELETE /api/profile/history", s.resetHistory)
 
 	// Who this server is (ADR 0044). Reports an identity; grants nothing.
 	mux.HandleFunc("GET /api/identity", s.identity)

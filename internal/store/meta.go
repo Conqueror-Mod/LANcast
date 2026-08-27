@@ -625,7 +625,7 @@ func (s *Store) ReplaceCredits(ctx context.Context, itemID int64, provider strin
 // Credits returns an item's cast and crew in billing order.
 func (s *Store) Credits(ctx context.Context, itemID int64) ([]Credit, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT p.name, c.role, COALESCE(c.character, ''), c.ord
+		SELECT p.name, c.role, COALESCE(c.character, ''), c.ord, COALESCE(p.thumb_hash, '')
 		FROM credit c JOIN person p ON p.id = c.person_id
 		WHERE c.item_id = ? ORDER BY c.ord`, itemID)
 	if err != nil {
@@ -636,7 +636,7 @@ func (s *Store) Credits(ctx context.Context, itemID int64) ([]Credit, error) {
 	out := []Credit{}
 	for rows.Next() {
 		var c Credit
-		if err := rows.Scan(&c.Name, &c.Role, &c.Character, &c.Order); err != nil {
+		if err := rows.Scan(&c.Name, &c.Role, &c.Character, &c.Order, &c.Thumb); err != nil {
 			return nil, fmt.Errorf("credits: %w", err)
 		}
 		out = append(out, c)
@@ -994,4 +994,58 @@ func join(parts []string, sep string) string {
 		out += p
 	}
 	return out
+}
+
+/*
+ * SetPersonThumb records a person's picture, once.
+ *
+ * Keyed on (provider, external_id) rather than on the person row's id, because
+ * the caller is the enrichment worker holding a provider's answer and not a
+ * database row — and because `person` is deduplicated on exactly that pair, so
+ * it is the identity the rest of this file already uses.
+ *
+ * `thumb_hash IS NULL` in the WHERE is what makes it once. A face does not
+ * change, the hash is content-addressed so a re-fetch of the same image writes
+ * the same value, and the only thing a repeated write would achieve is a
+ * download per enrichment pass per person — which on a library with a thousand
+ * films is tens of thousands of requests to a provider that asked for none of
+ * them.
+ */
+func (s *Store) SetPersonThumb(ctx context.Context, provider, externalID, hash string) error {
+	if hash == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE person SET thumb_hash = ?
+		WHERE provider = ? AND external_id = ? AND thumb_hash IS NULL`,
+		hash, provider, externalID)
+	if err != nil {
+		return fmt.Errorf("set person thumb: %w", err)
+	}
+	return nil
+}
+
+// PeopleNeedingThumbs lists credited people on an item who have no picture yet.
+//
+// Asked per item rather than globally so enrichment stays a per-item job: a
+// worker that reached for every person in the library at once would be a
+// different shape of thing from everything else in that package, with its own
+// batching and its own failure modes.
+func (s *Store) PeopleNeedingThumbs(ctx context.Context, itemID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT p.external_id FROM credit c JOIN person p ON p.id = c.person_id
+		WHERE c.item_id = ? AND p.thumb_hash IS NULL`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("people needing thumbs: %w", err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("people needing thumbs: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

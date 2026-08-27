@@ -1050,6 +1050,39 @@ because it changes who can see something about a person.
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
 
+### `GET /api/profile/history`
+
+`?scope=all|finished|unfinished` and an optional `?under={item_id}` — how many
+playback records a reset **would** remove. Removes nothing.
+
+It exists so the confirmation can name a number. A person who expected to clear
+one show and is told four hundred has learned something while it is still free,
+and a number is what makes an irreversible action reviewable rather than a
+shrug.
+
+### `DELETE /api/profile/history`
+
+The same parameters, performed. Answers `{ "removed": n, "scope": "..." }`.
+
+**The account is the session's and there is no user id to supply.** Playback
+state is keyed by user ([ADR 0006](adr/0006-playback-state-keyed-by-user.md))
+so that one person's viewing is their own, and an administrator clearing their
+own history must not be able to reach into anybody else's — so the endpoint
+offers no way to name a victim. This is the same reasoning as the sharing
+switch above: running the server is not consent on somebody else's behalf.
+
+Three scopes because "reset my history" means three different things.
+`playback_state` is one table carrying two meanings, and somebody forgetting a
+show they finished rarely means "and lose my place in the one I am half way
+through". `under` narrows to an item and everything beneath it, recursively, so
+forgetting a show is one call rather than a client walking its episodes.
+
+Audited ([ADR 0026](adr/0026-audit-log.md)): destructive and irreversible puts
+it in the same class as removing a library. The entry records the scope and the
+count, not the rows — "forgot 412 finished items" is what answers the question a
+month later, and a list of ids for things that may since have been deleted is
+not.
+
 ### `GET /api/items/{id}`
 
 The list shape plus M2 metadata and a `theme` block (both below). Returns
