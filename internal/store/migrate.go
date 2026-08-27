@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 29
+const CurrentSchemaVersion = 30
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -68,6 +68,7 @@ var migrations = []migration{
 	{version: 27, sql: schemaRevision27},
 	{version: 28, sql: schemaRevision28},
 	{version: 29, sql: schemaRevision29},
+	{version: 30, sql: schemaRevision30},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1066,4 +1067,41 @@ CREATE INDEX IF NOT EXISTS idx_presence_grant_person
  */
 const schemaRevision29 = `
 ALTER TABLE media_item ADD COLUMN edition TEXT;
+`
+
+/*
+ * Revision 30 — forgetting what you watched is not pretending you never did.
+ *
+ * `ProfileStatistics` derives every total from `playback_state`, so clearing
+ * the history cleared the statistics with it: the profile page reported zero
+ * things started, zero finished and no time watched, for somebody who had
+ * watched hundreds of hours. Reported the day the reset shipped.
+ *
+ * That conflates two different requests. "Forget what I have watched" is about
+ * the *list* — the record of which titles, which somebody may want gone
+ * because a shared account watched something for them, or because the server
+ * is changing hands. "I have never watched anything" is a claim about the
+ * person, and no one asked to make it.
+ *
+ * So a reset now banks the totals it is about to destroy, and the profile
+ * reports the banked figures plus whatever is still live. The history list is
+ * genuinely gone; the totals stay true.
+ *
+ * `first_at` is kept as a minimum rather than summed, because it is the oldest
+ * playback this account has ever had and that does not change by forgetting
+ * the row that carried it — it is what lets the page say what period the
+ * numbers cover instead of implying they cover all time.
+ *
+ * One row per account, created on first reset. Nothing exists here for an
+ * account that has never cleared anything, which is why the read has to
+ * tolerate its absence rather than expect a zero row.
+ */
+const schemaRevision30 = `
+CREATE TABLE IF NOT EXISTS profile_totals (
+    user_id    TEXT PRIMARY KEY,
+    started    INTEGER NOT NULL DEFAULT 0,
+    finished   INTEGER NOT NULL DEFAULT 0,
+    watched_ms INTEGER NOT NULL DEFAULT 0,
+    first_at   INTEGER
+);
 `

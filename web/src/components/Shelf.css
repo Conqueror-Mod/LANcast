@@ -39,7 +39,102 @@
      scroll box. The shadow needs more room below than the lift needs above. */
   padding-bottom: 14px;
   padding-top: 8px;
-  scrollbar-width: thin;
+  /*
+   * No scrollbar.
+   *
+   * A horizontal bar under every row is four or five of them stacked down the
+   * home page, each drawing a line that says nothing about the content above
+   * it. The chevrons say the same thing — there is more that way — only where
+   * it is true, and disappear where it is not.
+   *
+   * Scrolling itself is untouched: a trackpad, a shift-wheel and a touch drag
+   * all still work, and the keyboard never used the bar to begin with.
+   */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.shelf__track::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * The viewport exists to hold the chevrons against the track's edges.
+ *
+ * They cannot live inside the track: it scrolls, and a button inside it would
+ * travel away with the tiles. They cannot be siblings without this either, or
+ * they would sit at the section's edge and float over the header rather than
+ * over the row.
+ */
+.shelf__viewport {
+  position: relative;
+}
+
+.shelf__page {
+  position: absolute;
+  top: 8px;
+  bottom: 14px;
+  width: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  z-index: 2;
+  color: var(--text-primary, #eef2f7);
+  /*
+   * Hidden by default and revealed by the shelf, so a row nobody is pointing at
+   * is just the row. Opacity rather than display, so the fade has something to
+   * animate and the button does not appear mid-press.
+   */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast, 120ms) ease;
+  /*
+   * A gradient rather than a disc, so the tiles under it fade out instead of
+   * being covered. A solid button over a poster hides part of the thing the
+   * row exists to show.
+   */
+  background: linear-gradient(
+    to right,
+    rgb(11 14 20 / 92%),
+    rgb(11 14 20 / 0%)
+  );
+}
+
+.shelf__page--left {
+  left: 0;
+}
+
+.shelf__page--right {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    rgb(11 14 20 / 92%),
+    rgb(11 14 20 / 0%)
+  );
+}
+
+/*
+ * Shown when the shelf is pointed at *and* there is somewhere to go.
+ *
+ * Both conditions: a chevron that is always there is furniture, and one that
+ * points at nothing invites a click that does nothing — which is worse than
+ * absence, because absence is honest.
+ */
+.shelf:hover .shelf__page[data-visible],
+.shelf:focus-within .shelf__page[data-visible] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.shelf__page:hover {
+  /*
+   * Brighter, not gold. Gold means where you are (design.md); this is a way to
+   * go somewhere, and lighting it gold would put the focus signal on a control
+   * that never holds focus at all.
+   */
+  color: #fff;
 }
 
 .shelf__item {
