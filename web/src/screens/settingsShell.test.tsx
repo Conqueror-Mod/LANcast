@@ -141,3 +141,66 @@ describe("panes added after the shell was built", () => {
     expect(host.textContent).toContain("Bigscreen");
   });
 });
+
+/*
+ * The codec-denial row, wired end to end.
+ *
+ * Here rather than beside capabilities.ts because the unit tests prove the
+ * *rule* and this proves the *wiring* — which is the half that has failed
+ * before in this file's own history, and the half a passing build does not
+ * cover.
+ *
+ * It matters because the state it shows was invisible while being wrong: a real
+ * install withheld all four claims it is capable of making and served a full 4K
+ * re-encode of every HEVC film as a result, with no symptom but a busy CPU.
+ */
+describe("the playback codecs row", () => {
+  function codecRow(): HTMLElement | undefined {
+    return [...host.querySelectorAll<HTMLElement>(".set-row")].find((r) =>
+      r.querySelector(".set-row__title")?.textContent?.includes("Playback codecs"),
+    );
+  }
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it("names what is being withheld rather than only counting it", () => {
+    localStorage.setItem(
+      "lancast:codec-denied",
+      JSON.stringify({ hevc: Date.now(), ac3: Date.now() }),
+    );
+    render("/settings?pane=display");
+
+    const sub = codecRow()?.querySelector(".set-row__sub")?.textContent ?? "";
+    expect(sub).toContain("hevc");
+    expect(sub).toContain("ac3");
+  });
+
+  it("clears them when asked, and says so", () => {
+    localStorage.setItem(
+      "lancast:codec-denied",
+      JSON.stringify({ hevc: Date.now() }),
+    );
+    render("/settings?pane=display");
+
+    const btn = codecRow()?.querySelector("button");
+    expect(btn).toBeTruthy();
+    expect(btn!.disabled).toBe(false);
+    act(() => {
+      btn!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(localStorage.getItem("lancast:codec-denied")).toBeNull();
+    // The row has to re-read, or the button clears the store and leaves the
+    // screen asserting the opposite of what is true — the stale-view bug this
+    // project keeps shipping.
+    expect(codecRow()?.querySelector(".set-row__sub")?.textContent).not.toContain(
+      "hevc",
+    );
+  });
+
+  it("offers nothing to press when nothing is withheld", () => {
+    render("/settings?pane=display");
+    expect(codecRow()?.querySelector("button")?.disabled).toBe(true);
+  });
+});

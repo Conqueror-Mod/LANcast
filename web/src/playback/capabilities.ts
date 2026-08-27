@@ -34,22 +34,105 @@ const PROBES: Record<string, string> = {
   eac3: 'audio/mp4; codecs="ec-3"',
 };
 
-// Capabilities this browser has been caught lying about.
-//
-// `canPlayType` answers "probably", never "definitely": HEVC in particular
-// depends on the GPU and, on Windows, on a codec extension that may not be
-// installed. When a direct-played file fails, the claim that produced it is
-// recorded here and never made again on this machine — otherwise every HEVC
-// file would fail the same way, once each, forever.
+/*
+ * Capabilities this browser has been caught lying about.
+ *
+ * `canPlayType` answers "probably", never "definitely": HEVC in particular
+ * depends on the GPU and, on Windows, on a codec extension that may not be
+ * installed. When a direct-played file fails, the claim that produced it is
+ * recorded here and stops being made — otherwise every HEVC file would fail the
+ * same way, once each, forever.
+ *
+ * # Why these expire
+ *
+ * They used to be permanent, and permanence turned a safety net into a ratchet.
+ *
+ * Found on a real install: this key held `["hevc","hevc10","ac3","eac3"]` —
+ * every claim the client is capable of making. The machine had been serving a
+ * full 4K HEVC re-encode *and* an audio re-encode for every such film, a core
+ * per viewer, for an unknown length of time. Clearing it and replaying the same
+ * file direct-played with no ffmpeg at all, so all four denials were false.
+ *
+ * Nothing surfaced any of it. The fallback is correct behaviour, so a machine
+ * quietly downgraded for ever looks exactly like a machine working properly.
+ *
+ * The reason a denial goes stale is that the thing it describes is not a fact
+ * about the codec, it is a fact about this machine *today*: a GPU driver
+ * updates, WebView2 updates, someone installs the HEVC Video Extensions. None
+ * of those can announce themselves here, and a denial that cannot expire will
+ * never notice any of them.
+ */
 const DENIED_KEY = "lancast:codec-denied";
 
-function denied(): Set<string> {
+/*
+ * How long a denial stands before the claim is tried again.
+ *
+ * The asymmetry decides this. Retrying too eagerly costs one failed direct
+ * play, which `retryWithoutClaims` already recovers from in a second or two.
+ * Retrying too rarely costs a needless full re-encode on every affected file
+ * until someone notices — and nobody noticed for months.
+ *
+ * A fortnight keeps a genuinely-unsupported codec down to one hiccup every two
+ * weeks, while a real fix — the codec extension finally installed — pays off
+ * without waiting on a release.
+ */
+export const DENIAL_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+/*
+ * Reads the store, dropping anything that has aged out.
+ *
+ * The legacy shape — a bare array of names, written when denials were for ever
+ * — is read as *expired* rather than as denied-just-now. Every install carrying
+ * one has been sitting on it for an unknown time, and the one on which this was
+ * found was wrong about all four entries. Giving them one retry on upgrade is
+ * the whole repair, and a denial that is still true simply comes straight back.
+ */
+function denials(): Record<string, number> {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(DENIED_KEY);
-    return new Set<string>(raw ? JSON.parse(raw) : []);
+    raw = localStorage.getItem(DENIED_KEY);
   } catch {
-    return new Set();
+    return {};
   }
+  if (!raw) return {};
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (Array.isArray(parsed)) return {}; // legacy: expire it
+
+  const now = Date.now();
+  const cutoff = now - DENIAL_TTL_MS;
+  const out: Record<string, number> = {};
+  let corrected = false;
+  for (const [k, at] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof at !== "number" || at <= cutoff) continue;
+    /*
+     * A time in the future is a clock that moved, not a denial entitled to
+     * outlive the ceiling — and it has to be *written back*, not merely clamped
+     * on the way out. Clamping the returned value alone leaves the future
+     * timestamp in the store, where it stays ahead of every cutoff for ever:
+     * permanence reintroduced by accident, which is the bug this file is here
+     * to remove.
+     */
+    if (at > now) corrected = true;
+    out[k] = Math.min(at, now);
+  }
+  if (corrected) {
+    try {
+      localStorage.setItem(DENIED_KEY, JSON.stringify(out));
+    } catch {
+      // Read-only storage still gets the clamped view for this session.
+    }
+  }
+  return out;
+}
+
+function denied(): Set<string> {
+  return new Set(Object.keys(denials()));
 }
 
 /**
@@ -58,15 +141,43 @@ function denied(): Set<string> {
  * what stops a retry loop.
  */
 export function deny(capability: string): boolean {
-  const set = denied();
-  if (set.has(capability)) return false;
-  set.add(capability);
+  const current = denials();
+  if (capability in current) return false;
+  current[capability] = Date.now();
   try {
-    localStorage.setItem(DENIED_KEY, JSON.stringify([...set]));
+    localStorage.setItem(DENIED_KEY, JSON.stringify(current));
   } catch {
     // A browser with no storage still works; it just re-learns each session.
   }
   return true;
+}
+
+/**
+ * deniedCapabilities lists what is currently withheld, newest first.
+ *
+ * For the settings panel. The point of showing it is that this state was
+ * invisible, and invisible is how it survived being wrong for months.
+ */
+export function deniedCapabilities(): { name: string; at: number }[] {
+  return Object.entries(denials())
+    .map(([name, at]) => ({ name, at }))
+    .sort((a, b) => b.at - a.at);
+}
+
+/**
+ * clearDenials forgets every denial, so each capability is measured again.
+ *
+ * The manual half of the same repair the expiry does on a timer: someone who
+ * has just installed a codec extension should not have to wait a fortnight to
+ * find out it worked.
+ */
+export function clearDenials() {
+  try {
+    localStorage.removeItem(DENIED_KEY);
+  } catch {
+    // Nothing stored, nothing to forget.
+  }
+  resetCapabilities();
 }
 
 let cached: string | null = null;
