@@ -86,6 +86,8 @@ export interface Credit {
   character?: string;
   /** Content-addressed hash of this person's picture, when there is one. */
   thumb?: string;
+  /** The id the browse filter is keyed on, so a face can be a filter control. */
+  person_id?: number;
 }
 
 // One external score (ADR 0019). `source` is an open set — imdb, rotten_tomatoes,

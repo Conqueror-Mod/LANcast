@@ -14,6 +14,7 @@ import {
   fetchShowEpisodes,
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
+import { CastRow } from "./CastRow";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
 import {
   runtime,
@@ -183,20 +184,6 @@ function RemoveButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/*
- * Initials for a person with no picture.
- *
- * Two letters at most: "Jamie Lee Curtis" is JC rather than JLC, because the
- * circle is sized for a face and three letters in it stop looking like a
- * monogram and start looking like a mistake.
- */
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase();
-}
 
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
@@ -761,43 +748,7 @@ export function Detail() {
               <p className="detail__overview">{item.overview}</p>
             )}
 
-            {cast.length > 0 && (
-              <div className="detail__cast">
-                <span className="section-label">Cast</span>
-                <div className="detail__cast-row">
-                  {cast.map((c, i) => (
-                    <div className="detail__cast-member" key={i}>
-                      {/*
-                        A face when there is one, and the initials when there is
-                        not — which is most of the time further down a cast
-                        list, so the fallback is the design rather than an
-                        afterthought. A row of twelve where three are pictures
-                        and nine are gaps reads as broken; one where every
-                        entry is the same shape reads as a cast list.
-                      */}
-                      {c.thumb ? (
-                        <img
-                          className="detail__cast-face"
-                          src={artworkURL(c.thumb, "thumb")}
-                          alt=""
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span className="detail__cast-face detail__cast-face--none">
-                          {initialsOf(c.name)}
-                        </span>
-                      )}
-                      <span className="detail__cast-name">{c.name}</span>
-                      {c.character && (
-                        <span className="detail__cast-character">
-                          {c.character}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <CastRow cast={cast} libraryID={item.library_id} />
           </div>
         </div>
 
