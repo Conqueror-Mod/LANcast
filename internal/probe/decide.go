@@ -267,6 +267,15 @@ var knownCapabilities = map[string]struct {
 	 */
 	"flacmp4": {},
 	"opusmp4": {},
+	/*
+	 * 10-bit H.264, named for the profile rather than the bit depth because
+	 * "High 10" belongs to H.264 alone — HEVC's is Main 10 — so the claim
+	 * cannot be misread as covering both the way `hevc` once was.
+	 *
+	 * A permission, not a codec: H.264 is already in every profile, and what
+	 * is being authorised is a bit depth the baseline excludes.
+	 */
+	"high10": {},
 }
 
 /*
@@ -564,11 +573,24 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	if p.MaxVideoBitRate > 0 && s.BitRate > p.MaxVideoBitRate {
 		return false, fmt.Sprintf("video bitrate %d exceeds the limit", s.BitRate)
 	}
-	// 10-bit H.264 is a real trap: the codec name matches, browsers advertise
-	// H.264 support, and playback still fails. High 10 is not in any browser's
-	// baseline.
-	if strings.EqualFold(s.Codec, "h264") && isTenBit(s) {
-		return false, "10-bit H.264 is not supported by browsers"
+	/*
+	 * 10-bit H.264 is a real trap: the codec name matches, browsers advertise
+	 * H.264 support, and playback still fails. High 10 is in no browser's
+	 * baseline, so it stays out of every profile and needs asking for by name.
+	 *
+	 * Unlike `hevc10`, the check is *not* scoped to claims. H.264 is listed
+	 * natively by every profile here including `tv`, and trusting a native
+	 * listing the way HEVC's does would hand High 10 to set-top boxes on the
+	 * strength of them decoding 8-bit H.264 — which is the same conflation
+	 * hevc10 exists to undo, and wrong more often, since High 10 is missing
+	 * from most fixed-function decoders that manage High profile perfectly.
+	 *
+	 * So every client asks, and the answer is worth having: Chromium reports
+	 * `probably` for `avc1.6e0033`, and High 10 is most of an anime library —
+	 * a full video re-encode, every time, on files it can play.
+	 */
+	if strings.EqualFold(s.Codec, "h264") && isTenBit(s) && !p.Allows("high10") {
+		return false, "10-bit H.264 needs a decoder this client did not claim"
 	}
 	/*
 	 * 10-bit HEVC is the same trap one codec along, and it took a real film to

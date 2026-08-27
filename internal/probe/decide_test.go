@@ -967,3 +967,86 @@ func TestABareLosslessFileIsStillLeftAlone(t *testing.T) {
 		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
 	}
 }
+
+/*
+ * 10-bit H.264, once the client says it can.
+ *
+ * High 10 is most of an anime library and was a full video re-encode every
+ * time — on files the engine can play. Chromium answers `probably` for
+ * `avc1.6e0033`, so the question was worth asking rather than assuming.
+ */
+func TestTenBitH264DirectPlaysWhenClaimed(t *testing.T) {
+	s := video("h264", 1080)
+	s.Profile = "High 10"
+
+	p := WithCapabilities(BrowserProfile(), []string{"high10"})
+	d := Decide(result("mp4", s, audio("aac", 2)), p)
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+// The pix_fmt route has to honour the claim too, or the same file decides
+// differently depending on which signal the prober happened to report.
+func TestTenBitH264FromPixFmtAlsoHonoursTheClaim(t *testing.T) {
+	s := video("h264", 1080)
+	s.PixFmt = "yuv420p10le"
+
+	p := WithCapabilities(BrowserProfile(), []string{"high10"})
+	if d := Decide(result("mp4", s, audio("aac", 2)), p); d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
+
+/*
+ * A native listing is not a claim, and this is where High 10 differs from
+ * Main 10 on purpose.
+ *
+ * `hevc10` trusts a profile that lists HEVC natively, because `tv` and `safari`
+ * are device classes known to decode Main 10 in hardware. H.264 is listed
+ * natively by *every* profile here, so the same rule would hand High 10 to a
+ * set-top box on the strength of it decoding 8-bit H.264 — and High 10 is
+ * missing from most fixed-function decoders that manage High profile fine.
+ */
+func TestTenBitH264IsNotGrantedByANativeH264Listing(t *testing.T) {
+	s := video("h264", 1080)
+	s.Profile = "High 10"
+
+	for _, p := range []Profile{TVProfile(), SafariProfile()} {
+		d := Decide(result("mp4", s, audio("aac", 2)), p)
+		if d.VideoAction != "encode" {
+			t.Errorf("%s: VideoAction = %q (%s), want encode — no claim was made",
+				p.Name, d.VideoAction, d.Reason)
+		}
+	}
+}
+
+// The two bit-depth claims are separate questions about separate codecs, and
+// neither licences the other.
+func TestHigh10AndHEVC10DoNotLicenceEachOther(t *testing.T) {
+	h264 := video("h264", 1080)
+	h264.Profile = "High 10"
+	hevc := video("hevc", 2160)
+	hevc.PixFmt = "yuv420p10le"
+
+	onlyHEVC := WithCapabilities(BrowserProfile(), []string{"hevc", "hevc10"})
+	if d := Decide(result("mp4", h264, audio("aac", 2)), onlyHEVC); d.VideoAction != "encode" {
+		t.Errorf("VideoAction = %q (%s), want encode — hevc10 says nothing about H.264",
+			d.VideoAction, d.Reason)
+	}
+
+	onlyHigh10 := WithCapabilities(BrowserProfile(), []string{"hevc", "high10"})
+	if d := Decide(result("mp4", hevc, audio("aac", 2)), onlyHigh10); d.VideoAction != "encode" {
+		t.Errorf("VideoAction = %q (%s), want encode — high10 says nothing about HEVC",
+			d.VideoAction, d.Reason)
+	}
+}
+
+// 8-bit H.264 was never in question and must not change.
+func TestHigh10ClaimDoesNotDisturbOrdinaryH264(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"high10"})
+	d := Decide(result("mp4", video("h264", 1080), audio("aac", 2)), p)
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+}
