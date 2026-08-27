@@ -19,7 +19,7 @@ pull requests while passing on every developer machine. This line used to read
 "nothing sits unreleased", then "one cosmetic fix"; it is the kind of claim
 that is only useful while it is true.
 
-**Two decisions are open and neither is waiting on code** — they are listed
+**Three decisions are open and none is waiting on code** — they are listed
 under [Open decisions](#open-decisions), which exists because a proposed ADR is
 a different kind of queue from an unbuilt feature and nothing was indexing it.
 [ADR 0042](adr/0042-two-files-one-work.md) was the third and was **accepted and
@@ -1098,6 +1098,7 @@ unblocked is worth more than a tidy list.*
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
 | [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today, but the argument got stronger: a channel that froze at `0:01` for three minutes while ffmpeg stayed healthy was undiagnosable from the client, because a progressive stream cannot tell *starved* from *stalled*. That is the amendment's central claim, demonstrated rather than asserted. It remains the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
+| [0048](adr/0048-media-tools-install-themselves-on-first-run.md) | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | Most installs being quietly unable to play most of their library. [ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md) fixed the capability and not the discovery: the report that prompted it was *"AC-3 is not supported yet"*, a wrong conclusion about the software, not "I cannot find the button". Costs an exception written into the no-phone-home principle itself, which is the decision |
 | [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
 | ~~[0042](adr/0042-two-files-one-work.md)~~ | 2026-08-17 | ~~What happens when **two files claim one work**~~ | **Accepted 2026-08-25 and built.** The collision report exists, the edition marker is kept, and nothing merges, ranks or deletes. This no longer blocks the [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix |
 
