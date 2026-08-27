@@ -61,7 +61,7 @@ function mockServer(peers: unknown) {
   );
 }
 
-async function render() {
+async function render(until?: () => boolean) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchInterval: false } },
   });
@@ -75,9 +75,66 @@ async function render() {
     );
   });
   // Let the peers query settle.
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
+  //
+  // This used to be a single `setTimeout(r, 0)`, which is a fixed wait standing
+  // in for an async condition. One macrotask tick is enough on a quiet machine,
+  // where the stubbed fetch resolves at once; it is not always enough on a
+  // loaded CI runner, because settling is a chain — promise, query cache,
+  // subscriber notify, React render — and each link can slip past the tick.
+  //
+  // When it did slip, the peer row had not rendered and `querySelector` found a
+  // *different* checkbox on the page, so the failure arrived as a baffling
+  // `expected false to be true` rather than as "the thing is not there yet".
+  // Two pull requests were blocked by that before anyone read it properly.
+  if (until) {
+    await settle(until);
+    return;
+  }
+  // No condition given: this is a test asserting something is *absent*, and for
+  // those a longer flush is strictly safer than a shorter one — a wait that
+  // ends early makes an absence assertion pass for the wrong reason.
+  await flush();
+}
+
+/** Runs the event loop a bounded number of times without demanding anything. */
+async function flush(ticks = 20) {
+  for (let i = 0; i < ticks; i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+}
+
+/*
+ * Waits for a condition rather than for a duration.
+ *
+ * Bounded, so a genuine failure to render still fails the test rather than
+ * hanging it — but bounded in ticks it does not normally need, instead of in
+ * ticks it normally just about gets away with.
+ */
+async function settle(until: () => boolean, ticks = 50) {
+  for (let i = 0; i < ticks; i++) {
+    if (until()) return;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+  if (!until()) throw new Error("condition never became true");
+}
+
+/*
+ * The peer's own checkboxes, scoped to the peer rows.
+ *
+ * A bare `input[type="checkbox"]` matches the first box anywhere on the page,
+ * which is whatever happens to have rendered — so a timing problem presented as
+ * a wrong value rather than as a missing element.
+ */
+function peerBoxes(): HTMLInputElement[] {
+  return [
+    ...host.querySelectorAll<HTMLInputElement>(
+      '.people__peer-person input[type="checkbox"]',
+    ),
+  ];
 }
 
 function onePeer(people: PeerPersonFixture[], reachable = true) {
@@ -211,7 +268,7 @@ describe("people on paired servers", () => {
     await render();
 
     const boxes = Array.from(
-      host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+      peerBoxes(),
     );
     expect(boxes).toHaveLength(2);
     expect(boxes[0].checked).toBe(true);
@@ -222,9 +279,9 @@ describe("people on paired servers", () => {
     mockServer(
       onePeer([{ id: "g-1", name: "Georgia", granted: false, shares: false }]),
     );
-    await render();
+    await render(() => peerBoxes().length > 0);
 
-    const box = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const box = peerBoxes()[0];
     await act(async () => {
       box.click();
     });
@@ -282,18 +339,16 @@ describe("people on paired servers", () => {
         });
       }),
     );
-    await render();
+    await render(() => peerBoxes().length > 0);
 
-    const box = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const box = peerBoxes()[0];
     expect(box.checked).toBe(false);
 
     await act(async () => {
       box.click();
     });
 
-    const after = host.querySelector<HTMLInputElement>(
-      'input[type="checkbox"]',
-    )!;
+    const after = peerBoxes()[0];
     expect(after.checked).toBe(true);
     // And it must stay usable: disabling it while the write is in flight makes
     // a decision somebody already made feel like it did not register.
