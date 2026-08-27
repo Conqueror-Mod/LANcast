@@ -30,6 +30,20 @@ const PROBES: Record<string, string> = {
    * answer for it gets the file transcoded instead.
    */
   hevc10: 'video/mp4; codecs="hvc1.2.4.L120.B0"',
+  /*
+   * 10-bit H.264 — High 10, `avc1.6e0033`: profile_idc 110 (0x6e), level 5.1.
+   *
+   * Named for the profile rather than the bit depth because "High 10" belongs
+   * to H.264 alone, where HEVC's is Main 10 — so the claim cannot be misread as
+   * covering both, which is what `hevc` was and what `hevc10` had to undo.
+   *
+   * Worth asking rather than assuming in either direction. The server's floor
+   * excludes it because High 10 is in no browser's baseline, and that was read
+   * for years as "browsers cannot do this"; Chromium answers `probably`. It is
+   * most of an anime library, and every one of those files was a full video
+   * re-encode of something the engine can play.
+   */
+  high10: 'video/mp4; codecs="avc1.6e0033"',
   ac3: 'audio/mp4; codecs="ac-3"',
   eac3: 'audio/mp4; codecs="ec-3"',
   /*

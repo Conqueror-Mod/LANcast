@@ -1398,6 +1398,7 @@ GET /api/items/87/playback?can=hevc,ac3
 | `hevc10` | permission for **10-bit** HEVC (Main 10). Adds no codec of its own |
 | `ac3`, `eac3`, `dts` | that audio codec |
 | `matroska` | the container alone, for a client with a real demuxer |
+| `high10` | permission for **10-bit H.264** (High 10). Adds no codec of its own |
 | `flacmp4` | permission to **carry FLAC inside MP4**. Adds no codec of its own |
 | `opusmp4` | permission to **carry Opus inside MP4**. Adds no codec of its own |
 
@@ -1408,6 +1409,19 @@ audio and a stuttering picture, from a client that had probed
 `hvc1.1.6` (8-bit) and been read as covering Main 10 too. A client should probe
 `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for
 it; without it, 10-bit HEVC is transcoded.
+
+`high10` is `hevc10`'s counterpart one codec along, with one deliberate
+difference. `hevc10` trusts a profile that lists HEVC *natively* — `tv` and
+`safari` are device classes known to decode Main 10 in hardware — but `high10`
+trusts no native listing at all, because H.264 is listed by every profile
+including the browser floor. Applying the same rule would hand High 10 to a
+set-top box on the strength of it decoding 8-bit H.264, and High 10 is absent
+from most fixed-function decoders that manage High profile perfectly. So every
+client asks, or the file is transcoded.
+
+Probe `video/mp4; codecs="avc1.6e0033"` and send `high10` only if the engine
+answers for it. It is named for the profile rather than the bit depth because
+"High 10" belongs to H.264 alone, so it cannot be misread as covering HEVC.
 
 `flacmp4` and `opusmp4` are the same shape of question one layer down: not
 "can you decode FLAC" — every browser in the floor already can, which is why a
