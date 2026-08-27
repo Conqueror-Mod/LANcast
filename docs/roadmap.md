@@ -1373,10 +1373,15 @@ repository does not accept itself.
     producing HLS a real player can consume, and that has never been
     demonstrated. Until a throwaway harness plays a live channel end to end,
     no dependency is taken and the standing rule that this build ships no
-    unaudited third-party player is untouched. **Running that harness is the
-    next Live TV task** — it is the cheapest thing that can invalidate the
-    amendment, which is why it now sits ahead of the work rather than inside
-    it. The v0.8.7 hysteresis fix was step one and the only step that does not
+    unaudited third-party player is untouched. **That harness has now been run** (2026-08-27) and the
+    answer is no: over 60 seconds ffmpeg wrote nine good segments and **never
+    wrote a playlist**, so there was nothing for a player to fetch. A control
+    changing one flag — `-hls_playlist_type vod` to `event` — produced the
+    playlist at 7.0s, so the cause is not in doubt. `Manager.Live` hard-codes
+    progressive output and no channel has ever taken the HLS path, so the
+    amendment's premise that the server needs no work was **wrong**. Building a
+    live HLS output is the next Live TV task, and the sliding-window question
+    is a decision inside it. The v0.8.7 hysteresis fix was step one and the only step that does not
     depend on the outcome.
 
     And the lesson, which cost an hour: the activity panel called every ffmpeg

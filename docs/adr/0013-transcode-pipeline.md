@@ -374,6 +374,56 @@ commitment, and so the dependency is added late rather than early.
    asserting.
 7. `docs/api.md` in the same commit as any endpoint or contract change.
 
+## Step 2, run 2026-08-27: the answer is no, and the fault is ours
+
+The gate was run against a real channel with `cmd/hlsharness` (build tag
+`hlsharness`, throwaway). It drives `transcode.Args` rather than a hand-written
+ffmpeg command, so what it tests is the shipping argument construction.
+
+**The existing HLS output cannot be consumed live.** Over 60 seconds, 119 polls:
+
+| | shipping args | control |
+| --- | --- | --- |
+| first segment on disk | 7.0s | 7.0s |
+| segments written | 9 | 9 |
+| `index.m3u8` appears | **never** | 7.0s |
+| segments listed | **0** | 9 |
+| ffmpeg complaints | none | none |
+
+ffmpeg is producing correct media the whole time — the first segment probes as
+h264 + aac and is independently decodable. What never arrives is the playlist,
+and a player has no other way in. Nothing fails, nothing logs an error, and the
+process is healthy; the stream is simply undiscoverable. That is the same shape
+as every other fault this ADR records.
+
+**The cause is one flag.** The control changed exactly two arguments —
+`-hls_playlist_type vod` to `event`, and the window size — and the playlist
+appeared at 7.0s with `TARGETDURATION 6` and `MEDIA-SEQUENCE 0`. Everything
+else in a long command line was held constant, so the attribution is not an
+inference. `Args` hard-codes `-hls_playlist_type vod` and `-hls_list_size 0`
+for every HLS output and never consults `o.Live`, which is correct for a film
+and untrue of a channel: VOD tells a player the stream is complete and whole.
+
+Two things follow, and both were the point of gating on this.
+
+**The amendment's premise was wrong.** It said the server "already does"
+produce HLS a live player can consume and that "nothing new is built on the
+server". That is true for a film and false for a channel. `Manager.Live`
+hard-codes `Output: Progressive`, so no channel has ever taken the HLS path at
+all — the machinery exists and has never been pointed at live. Server work is
+required before hls.js could be given anything to play, which is precisely the
+condition under which this step says the amendment is premature.
+
+**The work is small, and it is a decision rather than a patch.** `event` keeps
+every segment listed, so the playlist and the segment directory grow without
+bound — correct for the type, and unacceptable for a channel left running for
+days. A bounded sliding window discards history a viewer may be behind. That
+choice belongs in the fix, not in a harness, and the harness does not make it.
+
+**Status is unchanged by this.** Acceptance in principle stands, the dependency
+is still not taken, and step 3 has not been reached. What has changed is that
+the live HLS output is now known to need building rather than assumed to exist.
+
 ## Revisit when
 
 The original conditions stand for the VOD path. For live: if a native client
