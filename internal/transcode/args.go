@@ -278,11 +278,45 @@ const (
 	/*
 	 * fragLiveFlags stream a source that never ends.
 	 *
-	 * `frag_every_frame` rather than `frag_keyframe`: fragmenting on keyframes
-	 * means the browser waits for the first one, which on a channel with a long
-	 * GOP can be several seconds of blank screen that reads as a broken stream.
+	 * Not `frag_keyframe`: fragmenting on keyframes means the browser waits for
+	 * the first one, which on a channel with a long GOP is several seconds of
+	 * blank screen that reads as a broken stream. That reasoning is why
+	 * `frag_every_frame` was here, and it still holds — the fragment interval
+	 * has to be short and it cannot depend on the source's GOP.
+	 *
+	 * What `frag_every_frame` also did was corrupt the timestamps of every live
+	 * channel it produced. Measured against a *fixed* 40s MPEG-TS capture, so
+	 * this is the flag rather than the stream: the source's video DTS steps
+	 * cleanly by 0.033333, and the fMP4 came out irregular and duplicated —
+	 *
+	 *	source  1.400000 1.433333 1.466667 1.500000 1.533333 1.566667
+	 *	output  0.000000 0.066667 0.100000 0.133333 0.166667 0.166667
+	 *
+	 * with the same input and only this constant changed:
+	 *
+	 *	frag_every_frame   2192 warnings, duplicate DTS
+	 *	frag_keyframe         0 warnings, clean
+	 *	frag_duration 200ms   0 warnings, clean, +0.9% bytes
+	 *
+	 * (`delay_moov` was tested separately and is not involved.) The warnings
+	 * are ffmpeg's "Packet duration: -3000 out of range" on video, "-1024" on
+	 * audio, and "pts has no value" — all of them non-monotonic DTS by another
+	 * name, and a browser demuxer requires DTS to increase strictly.
+	 *
+	 * So the interval moves off the frame and onto the clock: liveFragDuration
+	 * below fragments on time instead, which keeps the short interval the long
+	 * GOP argument demands without deriving it from frames.
 	 */
-	fragLiveFlags = "frag_every_frame+empty_moov+delay_moov+default_base_moof"
+	fragLiveFlags = "empty_moov+delay_moov+default_base_moof"
+
+	/*
+	 * liveFragDuration is how often a live fragment is emitted, in microseconds.
+	 *
+	 * 200ms is short enough that the picture still starts immediately — which
+	 * is the whole reason the keyframe default was rejected — and long enough
+	 * that fragmentation costs 0.9% of the bytes rather than one box per frame.
+	 */
+	liveFragDuration = "200000"
 )
 
 // Args builds the ffmpeg command line.
@@ -547,8 +581,10 @@ func Args(o Options) []string {
 			 * keyframes, which on a channel with a long GOP can be several
 			 * seconds apart — so the browser waits for the first keyframe
 			 * before showing anything, and the picture arrives late enough to
-			 * look broken. `frag_every_frame` costs a little overhead and
-			 * starts the picture immediately.
+			 * look broken. `-frag_duration` fragments on the clock instead,
+			 * which starts the picture immediately without letting the source
+			 * decide the interval. See fragLiveFlags for why it is not
+			 * `frag_every_frame`.
 			 *
 			 * `-flush_packets 1` matters for the same reason: without it
 			 * ffmpeg buffers its output, and a buffered live stream is one
@@ -556,6 +592,7 @@ func Args(o Options) []string {
 			 */
 			a = append(a,
 				"-movflags", fragLiveFlags,
+				"-frag_duration", liveFragDuration,
 				"-flush_packets", "1",
 				"-f", "mp4",
 				"pipe:1",
