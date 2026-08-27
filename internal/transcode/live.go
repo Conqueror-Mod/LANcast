@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"lancast/internal/probe"
@@ -115,6 +116,84 @@ func (m *Manager) Live(ctx context.Context, channelID int64, o LiveOptions) (io.
 		"video", decision.VideoAction, "audio", decision.AudioAction)
 
 	return &sessionReader{ReadCloser: stdout, m: m, s: s}, nil
+}
+
+/*
+ * LiveHLS returns a session producing HLS for this channel, starting one if
+ * needed.
+ *
+ * Unlike the progressive path, this is **shared between viewers**. A
+ * progressive stream is a pipe into one response and cannot be anything else,
+ * which is why `Progressive` supersedes rather than reuses. Segments are files:
+ * two people watching one channel read the same ones, so a second viewer costs
+ * an HTTP handler rather than an ffmpeg. On a bounded `MaxSessions` that is the
+ * difference between a channel two people can watch and one they cannot.
+ *
+ * Keyed on the channel alone for the same reason — there is no per-viewer state
+ * in a live stream to keep apart. There is no offset either: a channel has one
+ * position, now, so the `sameOffset` reuse test the file path needs does not
+ * apply and is not consulted.
+ */
+func (m *Manager) LiveHLS(ctx context.Context, channelID int64, o LiveOptions) (*Session, error) {
+	if !m.Available() {
+		return nil, ErrNotInstalled
+	}
+
+	// Channel ids are recorded negated, as in Live, because channel and item
+	// numbering are different and a session list that mixed them would show a
+	// channel as though it were a library item.
+	key := -channelID
+
+	m.mu.Lock()
+	for _, s := range m.sessions {
+		if s.ItemID == key && s.Output == HLS {
+			s.Touch()
+			m.mu.Unlock()
+			return s, nil
+		}
+	}
+	m.mu.Unlock()
+
+	if err := m.reserve(); err != nil {
+		return nil, err
+	}
+
+	decision := o.Decision
+	if decision.VideoAction == "" {
+		decision.VideoAction = "copy"
+	}
+	if decision.AudioAction == "" {
+		decision.AudioAction = "copy"
+	}
+
+	id := newID()
+	opts := Options{
+		Input:      o.URL,
+		Output:     HLS,
+		Live:       true,
+		HLSInput:   o.HLS,
+		Decision:   decision,
+		AudioIndex: -1,
+		Encoder:    m.Encoder(),
+		OutputDir:  filepath.Join(m.root, id),
+	}
+	opts.CanTonemap, opts.CanTagSDR = m.colourFor()
+
+	s, err := startHLS(ctx, m.binary(), opts)
+	if err != nil {
+		m.release()
+		return nil, err
+	}
+	s.ID, s.ItemID = id, key
+
+	m.mu.Lock()
+	m.sessions[id] = s
+	m.mu.Unlock()
+
+	m.log.Info("live transcode started", "session", id, "channel", channelID,
+		"output", "hls", "video", decision.VideoAction, "audio", decision.AudioAction)
+
+	return s, nil
 }
 
 // LiveDecision turns a probe of a channel into the actions ffmpeg should take.

@@ -2432,6 +2432,61 @@ see `GET /api/guide` below.
 rather than half-rewritten. A client that can reach the provider still plays;
 one that cannot will fail on an encrypted stream. Stated rather than guessed at.
 
+### `GET /api/channels/{id}/hls/index.m3u8`
+
+The same channel as an **HLS playlist** with fMP4 segments, rather than one
+progressive response.
+
+It exists because a progressive stream gives a client no control surface: a bare
+element cannot say how much media it is holding, cannot tell being starved from
+being stuck, and cannot be seeked on a response that has no ranges. Those three
+gaps are the subject of the [ADR 0013](adr/0013-transcode-pipeline.md) live-TV
+amendment, and a playlist answers all of them for any client that can consume
+one.
+
+**The playlist is an `EVENT` playlist, and that is a claim about the source
+rather than a preference.** `VOD` says the stream is complete and whole, which
+is true of a film and false of a channel — and the cost of saying it is not
+cosmetic. Emitted as VOD, ffmpeg defers the playlist entirely: measured against
+a real channel, nine good segments were written over 60 seconds and
+`index.m3u8` never appeared at all. The media was fine and undiscoverable.
+
+`EVENT` keeps every segment listed, so a viewer who paused can still reach what
+they missed, at the cost of a playlist and a segment directory that grow for as
+long as the session lives. That is bounded by the session — an idle channel is
+reaped and its directory goes with it — but a channel genuinely watched for a
+day is a real disk cost and is not yet solved.
+
+**One session is shared between viewers**, unlike the progressive path. Segments
+are files, so a second viewer of the same channel costs an HTTP handler rather
+than another ffmpeg, which on a bounded session ceiling is the difference
+between a channel two people can watch and one they cannot. There is no offset
+in the key: a channel has one position, now.
+
+**ffmpeg is *not* stopped when the request ends**, which is the opposite of
+`/live` and deliberate. There, the request is the stream and a closed tab must
+kill the process. Here the request is one poll of a playlist among many, and
+tying the encode to it would kill the channel between the playlist and its first
+segment. The session ends on idle instead.
+
+Segment URLs are rewritten to `/api/channels/{id}/hls/{session}/{name}`, so the
+provider's address never reaches a client — the same rule the rest of the
+channel routes keep.
+
+`503 no_ffmpeg` when ffmpeg is not installed. `503 busy` at the session ceiling.
+`503 unavailable` if no playlist appears within 30 seconds.
+
+**No browser in this build consumes it.** hls.js is deliberately not vendored,
+so this is in the same position the file HLS endpoints have been in since M3:
+the output exists for a client that can use it. Shipping it does not take the
+dependency decision.
+
+### `GET /api/channels/{id}/hls/{session}/{name}`
+
+One segment, or the `init.mp4`, from a live session's directory. Identical
+handling to the file HLS segment route, including that the name is validated
+rather than trusted before it becomes a filesystem path.
+
 ### `GET` / `POST /api/channel-sources`
 
 Channel lists and where they came from. **Admin only** — and for a stronger

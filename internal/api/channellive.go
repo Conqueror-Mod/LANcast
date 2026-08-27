@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"lancast/internal/livebuf"
@@ -212,4 +213,87 @@ func (s *Server) probeChannel(r *http.Request, url string) *probe.Result {
 		return nil
 	}
 	return res
+}
+
+/*
+ * channelLiveHLS serves a channel as an HLS playlist.
+ *
+ * It exists because the progressive live path has no control surface, which is
+ * the whole subject of the ADR 0013 amendment: a bare element cannot say how
+ * much media it holds, cannot tell starved from stalled, and cannot be seeked
+ * on a response that has no ranges. A playlist answers all three, for any
+ * client able to consume one.
+ *
+ * There is no client for it in this build yet — hls.js is deliberately not
+ * vendored (ADR 0013) — and that is the same position the file HLS endpoints
+ * have been in since M3. The output is the thing being built here; the decision
+ * about what consumes it is taken separately and is not taken by shipping this.
+ */
+func (s *Server) channelLiveHLS(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid channel id")
+		return
+	}
+	ch, err := s.st.GetChannel(r.Context(), id)
+	if s.notFoundOr(w, err, "get channel", "no such channel") {
+		return
+	}
+
+	if !s.trans.Available() {
+		writeError(w, http.StatusServiceUnavailable, "no_ffmpeg",
+			"live channels need ffmpeg, which this server cannot find")
+		return
+	}
+
+	probed := s.probeChannel(r, ch.URL)
+	decision := transcode.LiveDecision(probed, clientProfile(r), s.log)
+
+	/*
+	 * context.WithoutCancel, and this is the difference that matters against
+	 * the progressive path.
+	 *
+	 * There, the request context *is* the lifetime: a closed tab must kill
+	 * ffmpeg, because nothing else ever will. Here the request is one poll of a
+	 * playlist among many, and tying the encode to it would kill the channel
+	 * between the playlist and its first segment. The session is instead ended
+	 * by IdleTimeout, which is what already reaps file HLS sessions and what
+	 * makes a shared session possible at all.
+	 */
+	sess, err := s.trans.LiveHLS(context.WithoutCancel(r.Context()), id, transcode.LiveOptions{
+		URL:      ch.URL,
+		Decision: decision,
+		HLS:      transcode.IsHLS(probed),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, transcode.ErrTooManySessions):
+			writeError(w, http.StatusServiceUnavailable, "busy",
+				"too many streams are already running on this server")
+		default:
+			s.writeInternal(w, err, "start live hls")
+		}
+		return
+	}
+
+	path, err := s.trans.WaitForFile(r.Context(), sess, "index.m3u8", 30*time.Second)
+	if err != nil {
+		s.log.Warn("live hls playlist unavailable", "channel", id, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "could not start the channel")
+		return
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		s.writeInternal(w, err, "read playlist")
+		return
+	}
+
+	// Segments are served by the existing session-scoped endpoint, which
+	// already validates the name and is not channel-specific.
+	rewritten := rewritePlaylist(string(body), "/api/channels/"+itoa64(id)+"/hls/"+sess.ID+"/")
+
+	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(rewritten))
 }
