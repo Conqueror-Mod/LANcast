@@ -64,6 +64,32 @@ type SmartCollection struct {
  */
 var SmartCollections = []SmartCollection{
 	{Source: "tmdb", KeywordID: 180547, Name: "Marvel Cinematic Universe"},
+	/*
+	 * The MonsterVerse — keyword 380322, `monsterverse`, verified on TMDB
+	 * rather than guessed, carrying six films.
+	 *
+	 * The second entry earns its place by being the same failure as the first,
+	 * found the same way: by somebody looking at the library and noticing the
+	 * franchise was not there. `belongs_to_collection` splits these five across
+	 * *two* collections and an orphan — Godzilla (2014), King of the Monsters
+	 * and Godzilla vs. Kong in "Godzilla Collection", Godzilla x Kong alone in
+	 * "Godzilla x Kong Collection", and **Kong: Skull Island in nothing at
+	 * all**, because a Kong film belongs to no Godzilla sequence.
+	 *
+	 * That last one is what makes this an umbrella rather than a tidy-up. There
+	 * is no narrowing of the provider's answer that puts Skull Island beside
+	 * Godzilla vs. Kong; only the keyword does.
+	 *
+	 * It passes the bar above — a place people go, not a property films share.
+	 * "Monster movie" would be the genre filter in collection's clothing; the
+	 * MonsterVerse is a single continuity with a running order.
+	 *
+	 * And the rule keeps answering: Godzilla x Kong: Supernova (2027) already
+	 * carries the keyword, so it joins on the day its file appears with nothing
+	 * changed here — which is the argument the MCU entry makes, now with a
+	 * second case to show it was not a one-off.
+	 */
+	{Source: "tmdb", KeywordID: 380322, Name: "MonsterVerse"},
 }
 
 /*
