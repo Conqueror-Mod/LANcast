@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-08-25 · **v0.8.16 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-08-27 · **v0.8.16 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -10,11 +10,14 @@ All of it is released: the repository is **public under MIT**, releases are
 **check for, download, verify and stage an update** that swaps itself in on the
 way down. Details in the areas below; what the pass taught is at the end.
 
-**One cosmetic fix sits unreleased on `main`** — `d2af184`, removing a
-redundant `title` from the collection poster button, deliberately left to ride
-with the next release rather than earning a tag of its own. This line used to
-read "nothing sits unreleased", which is the kind of claim that is only useful
-while it is true.
+**Six commits sit unreleased on `main`**, and three of them are real fixes
+rather than tidying: `231043c` stops a muxer flag corrupting the timestamps of
+every live channel, `845610f` stops a codec denial lasting for ever, and
+`c969561` stops a container rewrite destroying lossless audio. `d2af184` is the
+cosmetic one, and `4f7ec11`/`e9f4552` repair a test that had been blocking
+pull requests while passing on every developer machine. This line used to read
+"nothing sits unreleased", then "one cosmetic fix"; it is the kind of claim
+that is only useful while it is true.
 
 **Two decisions are open and neither is waiting on code** — they are listed
 under [Open decisions](#open-decisions), which exists because a proposed ADR is
@@ -22,12 +25,32 @@ a different kind of queue from an unbuilt feature and nothing was indexing it.
 [ADR 0042](adr/0042-two-files-one-work.md) was the third and was **accepted and
 built** on 2026-08-25, which unblocks the ADR 0041 parser fix.
 
-**No known defects.** Six releases on 2026-08-25 (v0.8.6–v0.8.11) closed the
-container menus, three ordering and resume faults, the menu edge case, and
-database growth. Every one of the interesting ones was found by using the app or
-by measuring the live database, and not one by the test suite — which is the
-finding, not an aside. The suite is at 381 client tests and cannot see paint,
-cannot see layout, and had nothing to say about a scheduled job that never ran.
+**No known defects — and that claim has now been wrong twice in a week, both
+times about something invisible.** Six releases on 2026-08-25 (v0.8.6–v0.8.11)
+closed the container menus, three ordering and resume faults, the menu edge
+case, and database growth. Then 2026-08-26 found two more that nothing was
+going to report, because in neither case did anything fail:
+
+- **A muxer flag was corrupting the timestamps of every live channel**
+  (`231043c`). Presents as audio drift, and as one channel in twenty freezing
+  outright while ffmpeg stays healthy.
+- **A codec denial lasted for ever** (`845610f`). This machine had written off
+  `hevc`, `hevc10`, `ac3` and `eac3` — every claim the client can make — and
+  was serving a full 4K re-encode *and* an audio re-encode of every such film,
+  a core per viewer, for an unknown length of time. Clearing it made the same
+  file direct-play with no ffmpeg at all, so all four were false.
+
+The second is the more instructive: falling back to a transcode is *correct
+behaviour*, so a permanently downgraded machine is indistinguishable from a
+working one. The only symptom is that the server seems to work hard. It
+surfaced by accident while answering a question about codec support.
+
+Every one of the interesting ones was found by using the app or by measuring
+the live database, and not one by the test suite — which is the finding, not an
+aside. The suite is at 409 client tests and cannot see paint, cannot see
+layout, had nothing to say about a scheduled job that never ran, and could not
+have seen either of the two above: one lives in an ffmpeg command line and the
+other in `localStorage`.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -275,7 +298,8 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
 | Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
-| Client capability negotiation | **built** | Clients report what they decode (`?can=`) and the server widens the profile ([plan](client-capabilities-plan.md)). `?profile=` had existed for a release and no client ever used it, so a browser that decodes HEVC in hardware was still served a full re-encode of every HEVC file — the whole of the "slow between films" complaint. Additive and widen-only, resolved once for both decision endpoints so they cannot disagree, and a claim that proves false is dropped, remembered, and retried as a conversion |
+| Client capability negotiation | **built** | Clients report what they decode (`?can=`) and the server widens the profile ([plan](client-capabilities-plan.md)). `?profile=` had existed for a release and no client ever used it, so a browser that decodes HEVC in hardware was still served a full re-encode of every HEVC file — the whole of the "slow between films" complaint. Additive and widen-only, resolved once for both decision endpoints so they cannot disagree, and a claim that proves false is dropped, remembered, and retried as a conversion. **Remembered used to mean for ever**, which turned the safety net into a ratchet: one machine had written off all four claims it can make and was re-encoding every HEVC film as a result, invisibly, because falling back is correct behaviour. Denials expire after a fortnight and can be cleared from Settings → Display (`845610f`) — a denial is a fact about this machine *today*, and a driver update, a WebView2 update or a codec extension being installed cannot announce themselves here |
+| Lossless through a container rewrite | **built** | `flacmp4` and `opusmp4` let a client that can read FLAC or Opus *inside MP4* have them copied rather than re-encoded when only the container is wrong (`c969561`). Before it, rewrapping an MKV turned lossless into AAC to change a box — the one conversion here that cannot be undone. Gated on a claim rather than widened into the floor, because "can decode FLAC" and "can decode FLAC in MP4" are different questions and only the first is true of every browser. ALAC needs no claim, MP4 being its native home; Vorbis is deliberately excluded and asserted so |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
@@ -1073,7 +1097,7 @@ unblocked is worth more than a tidy list.*
 
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
-| [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today. Live TV has no known open fault after v0.8.5–v0.8.7. It is the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
+| [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today, but the argument got stronger: a channel that froze at `0:01` for three minutes while ffmpeg stayed healthy was undiagnosable from the client, because a progressive stream cannot tell *starved* from *stalled*. That is the amendment's central claim, demonstrated rather than asserted. It remains the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
 | [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
 | ~~[0042](adr/0042-two-files-one-work.md)~~ | 2026-08-17 | ~~What happens when **two files claim one work**~~ | **Accepted 2026-08-25 and built.** The collision report exists, the edition marker is kept, and nothing merges, ranks or deletes. This no longer blocks the [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix |
 
@@ -1205,16 +1229,39 @@ repository does not accept itself.
     3.0s, lost it within three seconds and held again, so resuming now waits for
     5s where starting still waits for 3.
 
-    **Where it stands.** Live TV has no known open fault, and two more
-    followed the server fix: the player says **"Catching up"** whenever it is
-    above 1.0x (v0.8.6), because a 10% correction is audible and applying it
-    silently turns the fix into somebody else's bug report — which is exactly
-    what happened; and **hold and resume stopped sharing a threshold** (v0.8.7),
-    which had a channel near the boundary holding at 2.9s, resuming at 3.0s,
-    losing it within three seconds and holding again. Two things are still
-    true rather than fixed. **"Far too fast" was never reproduced** and is not
-    claimed; if it is real it is a separate fault and needs a fresh report.
-    And every client-side constant is still *compensation* — the reason
+    **Then the "no known open fault" claim turned out to be wrong.** This
+    section said exactly that, and driving two channels in the app found a
+    defect within minutes: one froze at `0:01` for eighty seconds while ffmpeg
+    stayed healthy and went on producing bytes for three more minutes. The
+    cause was ours and it was not the channel — `frag_every_frame`, chosen
+    deliberately in [ADR 0013](adr/0013-transcode-pipeline.md) so a long-GOP
+    channel would not wait for its first keyframe, **corrupted the timestamps
+    of every live channel it produced**. Measured against a fixed 40s capture
+    so it was the flag and not the stream: 2,192 ffmpeg warnings and duplicate
+    DTS with it, zero without, and a browser demuxer requires DTS to increase
+    strictly. `231043c` moves the fragment interval off the frame and onto the
+    clock (`-frag_duration 200000`), which keeps the reason the flag was chosen
+    and drops the damage, at 0.9% more bytes. Verified **as the installed
+    service**, per the session-0 rule: audio sync corrected and the channel
+    plays.
+
+    Three things are worth keeping from how it was found, because none of them
+    was the test suite. The symptom users would report is *audio drift*, not a
+    freeze. The server log said `ffmpeg reported errors` **on every normal
+    channel stop**, which sent two separate diagnoses down the wrong path
+    before anyone read it properly. And the reason it survived is that nothing
+    failed: ffmpeg exits fine, the picture simply stops.
+
+    **Where it stands.** The two v0.8.5–v0.8.7 follow-ons still hold: the player
+    says **"Catching up"** whenever it is above 1.0x (v0.8.6), because a 10%
+    correction is audible and applying it silently turns the fix into somebody
+    else's bug report — which is exactly what happened; and **hold and resume
+    stopped sharing a threshold** (v0.8.7), which had a channel near the
+    boundary holding at 2.9s, resuming at 3.0s, losing it within three seconds
+    and holding again. Two things are still true rather than fixed. **"Far too
+    fast" was never reproduced** and is not claimed; if it is real it is a
+    separate fault and needs a fresh report. And every client-side constant is
+    still *compensation* — the reason
     [ADR 0013](adr/0013-transcode-pipeline.md) now carries a **proposed**
     amendment arguing for MSE on the live path and only there, with hls.js
     vendored as pinned, reviewable source. That decision is **not taken**: the
@@ -1255,6 +1302,39 @@ repository does not accept itself.
     directly above them already recorded the same class of failure one level
     down**, where the docked strip grew and the picture's clearance did not
     follow, and it happened again anyway.
+
+14. **Codec breadth, now that the denial ratchet is gone.** Asking "what is
+    still unsupported" turned up a list in three tiers, and only one of them is
+    worth building for the current client.
+
+    **Reachable now.** A **10-bit H.264** claim, modelled on `hevc10` with its
+    own probe string — Chromium answers `probably` for `avc1.6e0033`, and
+    High 10 is most of an anime library, currently a full re-encode every time.
+    Safe to add only because a denial now expires; before `845610f` it would
+    have become the fifth claim written off for ever.
+
+    **Not reachable, and the reason is the client rather than the server.**
+    MPEG-2, MPEG-4 part 2, VC-1, TrueHD and DTS all answer empty in Chromium,
+    so a claim for any of them would never fire. They are **TV-client work**,
+    listed here so the next person does not re-derive it: the server already
+    handles them, and `tv` already lists most of them.
+
+    **The measurement lesson, which cost an hour.** A synthetic `canPlayType`
+    sweep in ordinary Chromium **does not predict WebView2** — it answers empty
+    for `ac3` and `eac3`, and WebView2 direct-plays E-AC-3 quite happily, Edge
+    carrying different codec licensing. The only probe that counts is one run
+    in the shipping client, and the cheapest way to run it is to play a file
+    with that codec and read the decision reason out of `lancastd.log`.
+
+15. **ffmpeg on first run is a decision before it is any code.** The intent is
+    to install it automatically rather than waiting to be asked, which
+    [ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md) deliberately did
+    not do. That needs an **amendment written and accepted first**: fetching
+    ~80MB from a third party on first start, unasked, is what the no-phone-home
+    principle in [README.md](../README.md) exists to prevent, and that principle
+    is not negotiable without an ADR. The install button itself already exists
+    and works; what is proposed is removing the asking, which is exactly the
+    part the rule is about.
 
 ## What the last pass taught
 
