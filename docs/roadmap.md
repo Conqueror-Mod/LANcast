@@ -10,14 +10,29 @@ All of it is released: the repository is **public under MIT**, releases are
 **check for, download, verify and stage an update** that swaps itself in on the
 way down. Details in the areas below; what the pass taught is at the end.
 
-**Six commits sit unreleased on `main`**, and three of them are real fixes
-rather than tidying: `231043c` stops a muxer flag corrupting the timestamps of
-every live channel, `845610f` stops a codec denial lasting for ever, and
-`c969561` stops a container rewrite destroying lossless audio. `d2af184` is the
-cosmetic one, and `4f7ec11`/`e9f4552` repair a test that had been blocking
-pull requests while passing on every developer machine. This line used to read
-"nothing sits unreleased", then "one cosmetic fix"; it is the kind of claim
-that is only useful while it is true.
+**Nine commits sit unreleased on `main`**, and four of them change what a
+viewer gets: `231043c` stops a muxer flag corrupting the timestamps of every
+live channel, `845610f` stops a codec denial lasting for ever, `c969561` stops
+a container rewrite destroying lossless audio, and `6ae4396` stops 10-bit
+H.264 being re-encoded for clients that can decode it. `d2af184` is cosmetic,
+`4f7ec11`/`e9f4552` repair a test that had been blocking pull requests while
+passing on every developer machine, and two are this file. This line has read
+"nothing sits unreleased", then "one cosmetic fix", then "six commits"; it is
+the kind of claim that is only useful while it is true, which is the argument
+for a release rather than for another edit.
+
+**The installed build on the development machine is none of these.** It is a
+hand-built binary carrying `231043c` alone, swapped in to verify the live TV
+fix as a service. It is ahead of v0.8.16 on live TV and behind `main` on
+everything else, and a release is what makes it consistent again.
+
+**Three things in that batch have never been looked at**, and each is the kind
+the suite cannot see. The **denial reset row** on Settings → Display has tests
+for its wiring and none for its appearance, jsdom performing no layout. A
+**High 10 file** has not been played with the claim active. And an
+**MKV + Opus** file has not been watched remuxing with `audio=copy` — there is
+exactly one in the measured library. None blocks a release; all three are
+cheaper to check before one than after.
 
 **Two decisions are open and neither is waiting on code** — they are listed
 under [Open decisions](#open-decisions), which exists because a proposed ADR is
@@ -299,6 +314,7 @@ Status: **planned** · **next** · *unplanned*
 | Media probing | **built** | ffprobe; codecs, duration, tracks |
 | Transcode decision tree | **built** | Direct play / remux / transcode, with reasons |
 | Client capability negotiation | **built** | Clients report what they decode (`?can=`) and the server widens the profile ([plan](client-capabilities-plan.md)). `?profile=` had existed for a release and no client ever used it, so a browser that decodes HEVC in hardware was still served a full re-encode of every HEVC file — the whole of the "slow between films" complaint. Additive and widen-only, resolved once for both decision endpoints so they cannot disagree, and a claim that proves false is dropped, remembered, and retried as a conversion. **Remembered used to mean for ever**, which turned the safety net into a ratchet: one machine had written off all four claims it can make and was re-encoding every HEVC film as a result, invisibly, because falling back is correct behaviour. Denials expire after a fortnight and can be cleared from Settings → Display (`845610f`) — a denial is a fact about this machine *today*, and a driver update, a WebView2 update or a codec extension being installed cannot announce themselves here |
+| 10-bit H.264 | **built** | `high10` lets a client that can decode High 10 direct-play it instead of being served a full video re-encode (`6ae4396`). Excluded from every profile before, on a comment that read as a fact about browsers and was a fact about nobody asking — Chromium answers `probably` for `avc1.6e0033`, and High 10 is most of an anime library. Unlike `hevc10` it trusts no *native* listing, since H.264 is listed by every profile: the same rule would grant High 10 to a set-top box for decoding 8-bit, and High 10 is missing from most fixed-function decoders that manage High profile fine |
 | Lossless through a container rewrite | **built** | `flacmp4` and `opusmp4` let a client that can read FLAC or Opus *inside MP4* have them copied rather than re-encoded when only the container is wrong (`c969561`). Before it, rewrapping an MKV turned lossless into AAC to change a box — the one conversion here that cannot be undone. Gated on a claim rather than widened into the floor, because "can decode FLAC" and "can decode FLAC in MP4" are different questions and only the first is true of every browser. ALAC needs no claim, MP4 being its native home; Vorbis is deliberately excluded and asserted so |
 | ffmpeg pipeline and HLS | **built** | Progressive fMP4 + HLS, session lifecycle |
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
@@ -1307,11 +1323,27 @@ repository does not accept itself.
     still unsupported" turned up a list in three tiers, and only one of them is
     worth building for the current client.
 
-    **Reachable now.** A **10-bit H.264** claim, modelled on `hevc10` with its
-    own probe string — Chromium answers `probably` for `avc1.6e0033`, and
-    High 10 is most of an anime library, currently a full re-encode every time.
+    ~~**Reachable now.** A **10-bit H.264** claim~~ — **built** (`6ae4396`).
+    `high10`, named for the profile rather than the bit depth because "High 10"
+    belongs to H.264 alone where HEVC's is Main 10, so it cannot be misread as
+    covering both the way `hevc` once was. High 10 is most of an anime library
+    and had been a full video re-encode every time, on the reasoning that it
+    "is not supported by browsers" — which was read for years as a fact about
+    browsers and turned out to be a fact about nobody having asked: Chromium
+    answers `probably` for `avc1.6e0033`.
+
+    It differs from `hevc10` in one way on purpose. `hevc10` trusts a profile
+    that lists HEVC *natively*, because `tv` and `safari` are device classes
+    known to decode Main 10 in hardware; `high10` trusts no native listing,
+    because H.264 is listed by every profile including the browser floor, and
+    the same rule would hand High 10 to a set-top box on the strength of it
+    decoding 8-bit. High 10 is absent from most fixed-function decoders that
+    manage High profile perfectly.
+
     Safe to add only because a denial now expires; before `845610f` it would
-    have become the fifth claim written off for ever.
+    have become the fifth claim written off for ever. **Not yet watched
+    end to end**: the decision is tested and the engine was probed, but no
+    High 10 file has been played through the app with the claim active.
 
     **Not reachable, and the reason is the client rather than the server.**
     MPEG-2, MPEG-4 part 2, VC-1, TrueHD and DTS all answer empty in Chromium,
