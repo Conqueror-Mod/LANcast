@@ -348,6 +348,23 @@ describe("people on paired servers", () => {
       box.click();
     });
 
+    /*
+     * Poll for the optimistic result rather than reading it one tick after the
+     * click.
+     *
+     * The assertion is still "without waiting for a refetch", and it still
+     * means that: the refetch stubbed above never resolves, so nothing here can
+     * be satisfied by the server answering. What the ticks allow is React and
+     * the query cache to finish propagating a change that has already been
+     * made locally — which is not the same thing, and was being conflated.
+     *
+     * Reading it immediately is what failed on CI while passing on every
+     * developer machine, because the number of hops between `mutate` and a
+     * repainted checkbox is not fixed. `settle` fails the test if the box never
+     * checks, so the guarantee is unchanged; only the impatience is gone.
+     */
+    await settle(() => peerBoxes()[0]?.checked === true);
+
     const after = peerBoxes()[0];
     expect(after.checked).toBe(true);
     // And it must stay usable: disabling it while the write is in flight makes
