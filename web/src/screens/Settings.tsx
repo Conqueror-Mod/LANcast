@@ -35,6 +35,11 @@ import {
   useCancelMediaToolsInstall,
   useScanAllLibraries,
 } from "@/api/hooks";
+import {
+  capabilities,
+  clearDenials,
+  deniedCapabilities,
+} from "@/playback/capabilities";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { useBigscreen } from "@/lib/bigscreen";
@@ -1339,6 +1344,68 @@ function ReprobeRow({ available }: { available: boolean }) {
   );
 }
 
+/*
+ * What this browser is claiming it can decode, and what it has stopped claiming.
+ *
+ * Sits under the re-probe row because it is the mirror image of it: that row is
+ * what the *server* knows about your files, this is what the *client* says
+ * about itself. Both go stale, and neither used to say so.
+ *
+ * It exists because this state was invisible and wrong at the same time. A real
+ * install was found withholding every claim it is capable of making — hevc,
+ * hevc10, ac3, eac3 — and had been serving a full 4K re-encode of every HEVC
+ * film as a result. Clearing it made the same file direct-play with no ffmpeg.
+ * Nothing had failed: falling back is correct behaviour, so the symptom was
+ * only ever "this seems to work hard".
+ *
+ * Denials now expire on their own, so the button is the impatient path rather
+ * than the only one — someone who has just installed a codec extension should
+ * not wait a fortnight to learn whether it took.
+ */
+function CodecDenialsRow() {
+  const [denials, setDenials] = useState(() => deniedCapabilities());
+  const [claims, setClaims] = useState(() => capabilities());
+
+  function reset() {
+    clearDenials();
+    setDenials(deniedCapabilities());
+    setClaims(capabilities());
+  }
+
+  let sub: string;
+  if (denials.length > 0) {
+    // Named rather than counted. "2 withheld" invites a shrug; "hevc, ac3" is
+    // the thing a person can connect to a film that plays badly. Kept short
+    // because .set-row__sub is one ellipsised line — all four names plus a
+    // clause ran past the end of it.
+    sub = `Withheld after a failure: ${denials.map((d) => d.name).join(", ")}.`;
+  } else if (claims) {
+    sub = `Claiming ${claims.split(",").join(", ")}.`;
+  } else {
+    // No claims and no denials is the ordinary state of a browser that simply
+    // decodes none of the optional codecs, and is not a fault.
+    sub = "This browser decodes none of the optional codecs.";
+  }
+
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">Playback codecs</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        <button
+          className="set-btn"
+          disabled={denials.length === 0}
+          onClick={reset}
+        >
+          Try them again
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const SIGNER_LABEL: Record<string, string> = {
   first_party: "First-party",
   pinned: "Pinned",
@@ -1838,7 +1905,18 @@ export function Settings() {
           {pane === "account" && <AccountSection />}
           {pane === "app" && <DesktopSettings />}
           {pane === "keyboard" && <KeyBindings />}
-          {pane === "display" && <DisplaySection />}
+          {pane === "display" && (
+            <>
+              <DisplaySection />
+              {/* On the device pane rather than the admin Playback one: a
+                  denial is stored per browser, so the person it slows down is
+                  the one sitting here, who may not be an administrator. */}
+              <section className="settings__section">
+                <span className="section-label">Playback</span>
+                <CodecDenialsRow />
+              </section>
+            </>
+          )}
         </div>
       </div>
     </div>
