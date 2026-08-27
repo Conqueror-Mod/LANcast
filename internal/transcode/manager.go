@@ -330,8 +330,21 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
 
+	/*
+	 * `start_at` matters more here than on the HLS line that already carries it,
+	 * because this path starts a fresh ffmpeg per request and nothing else
+	 * records where each one began.
+	 *
+	 * Without it, a run of sessions on one item is unreadable: a client
+	 * reconnecting at the position it had reached and a client re-requesting
+	 * the same offset over and over produce identical lines, and those are
+	 * different faults with different fixes. An evening was spent narrowing
+	 * that by elimination — polling the log and screenshotting the player to
+	 * prove the timecode had not reset — which this field answers outright.
+	 */
 	m.log.Info("transcode started", "session", s.ID, "item", itemID,
-		"output", "progressive", "video", o.Decision.VideoAction,
+		"output", "progressive", "start_at", o.StartAt,
+		"video", o.Decision.VideoAction,
 		"audio", o.Decision.AudioAction, "reason", o.Decision.Reason)
 
 	return &sessionReader{ReadCloser: stdout, m: m, s: s}, nil
