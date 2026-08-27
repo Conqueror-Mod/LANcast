@@ -1380,8 +1380,17 @@ repository does not accept itself.
     playlist at 7.0s, so the cause is not in doubt. `Manager.Live` hard-codes
     progressive output and no channel has ever taken the HLS path, so the
     amendment's premise that the server needs no work was **wrong**. Building a
-    live HLS output is the next Live TV task, and the sliding-window question
-    is a decision inside it. The v0.8.7 hysteresis fix was step one and the only step that does not
+    live HLS output was the next Live TV task and **is now built** (#391): the
+    playlist type follows the source, `event` for a channel, and a session is
+    shared between viewers. **Step 3 is amended rather than done.** Vendoring
+    hls.js *as source* turned out to mean 54,255 lines to review and a
+    993-package build toolchain — more third-party exposure, not less, and a
+    review nobody would honestly perform. The term is now **reproduce the
+    bundle**: build from the pinned commit, confirm byte-identity with the
+    published artefact, vendor what you built. Verified on 1.7.1 — three of
+    four bundles byte-identical, the fourth identical modulo Windows line
+    endings. The dependency is still **not taken**; what changed is that the
+    gate is one a person can pass. The v0.8.7 hysteresis fix was step one and the only step that does not
     depend on the outcome.
 
     And the lesson, which cost an hour: the activity panel called every ffmpeg

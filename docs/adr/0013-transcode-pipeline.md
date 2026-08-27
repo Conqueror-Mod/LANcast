@@ -221,9 +221,14 @@ is not audited either. It is merely ours.
 
 So the objection is met by *how* the dependency is taken, not by refusing it:
 
-- vendored as **source into the repository**, pinned to a specific commit,
-  reviewed as any other checked-in code — not pulled at build time from a
-  registry, and not a prebuilt bundle
+- vendored as a **bundle built here from a pinned commit and verified
+  byte-identical to the published one**, checked into the repository — not
+  pulled at build time from a registry, and not a bundle taken on trust.
+  (Originally written as "vendored as source ... not a prebuilt bundle";
+  amended 2026-08-27, because vendoring the source meant 54,255 lines to review
+  and a 993-package build toolchain, which is more third-party exposure rather
+  than less. The reproduction is what the word "prebuilt" was guarding
+  against.)
 - **updated deliberately**, by a human reading a diff, never automatically
 - confined to the live TV path, so that a decision to remove it later is a
   deletion rather than a rewrite
@@ -360,9 +365,13 @@ commitment, and so the dependency is added late rather than early.
    using a throwaway harness. If it does not, this amendment is premature, the
    fault is on the server side, and steps 3 onward do not happen. Nothing below
    this line starts until this passes.
-3. Vendor hls.js as pinned source, with a `README` in its directory recording
-   the commit, the review date, and who read it. A review that fails the
-   standard stops here.
+3. Vendor hls.js, with a `README` in its directory recording the commit, the
+   reproduction result, the review date, and who read it. **Amended 2026-08-27**
+   after measuring what the original term asked for — see *Step 3, run
+   2026-08-27* above. Vendor the **bundle you built from the pinned commit and
+   confirmed byte-identical to the published artefact**, not the source tree and
+   not a downloaded bundle. A reproduction that does not match, or a review of
+   the risk-carrying paths that fails the standard, stops here.
 4. Live playback goes through MSE behind a setting defaulting to off, so the
    progressive path remains one toggle away during the transition.
 5. Native-HLS browsers detected and given the playlist directly. Safari is a
@@ -423,6 +432,85 @@ choice belongs in the fix, not in a harness, and the harness does not make it.
 **Status is unchanged by this.** Acceptance in principle stands, the dependency
 is still not taken, and step 3 has not been reached. What has changed is that
 the live HLS output is now known to need building rather than assumed to exist.
+
+## Step 3, run 2026-08-27: the term changes, because the one written cannot be met
+
+Step 3 said to vendor hls.js as pinned source and review it "as any other
+checked-in code". Measuring what that asks for showed the term does not survive
+contact with the package, in two directions at once.
+
+**npm ships no source.** The published package is `dist/` bundles plus two stub
+files. So "vendor the source" means the GitHub repository, not the registry
+artefact — which the term already implied and which turns out to matter.
+
+**The review surface is not what the amendment compared.** hls.js 1.7.1 is
+**54,255 lines across 138 TypeScript files**; `controller/` alone is 25,047.
+The amendment framed the trade as "~300 KB of reviewed, pinned, widely-deployed
+code against roughly a thousand lines of our own". But 300 KB is a *shipping
+size*, and the thing being traded is a *review surface*: 54,255 lines against
+our ~1,150, which is about **47× the reading**, not a wash. Nobody reads 54,000
+lines of media demuxing as "any other checked-in code", and a term that produces
+a rubber stamp with somebody's name on it is worse than no term.
+
+**Vendoring source also inverts the term's own intent.** Building it needs 72
+direct devDependencies, which install as **993 packages**, and `npm ci` fails
+outright on Node 20 unless `--ignore-scripts` is passed — a devDependency's
+postinstall script is incompatible with the runtime. A term written to reduce
+exposure to third-party code would add a 993-package toolchain to the build in
+order to avoid shipping one reviewed artefact.
+
+### The amended term: reproduce the bundle
+
+Rather than soften "reviewed" — which this ADR has repeatedly said is the wrong
+answer — the term changes to something that can actually be held:
+
+**Build the bundle from the pinned commit, confirm it matches the published
+artefact byte for byte, and vendor the artefact you built.** Provenance is then
+something verified rather than trust extended, which is the principle the
+original objection was protecting: you own what runs.
+
+Review then scopes to what a human can genuinely hold in their head and what
+actually carries risk — network fetch paths, dynamic code evaluation, worker
+creation, URL handling — rather than to a line count nobody will honestly read.
+
+**This was tested before being written down, and it holds.** hls.js 1.7.1,
+commit `565f70ee8e074a0fbe82ed80dfb7fac0697bbb8a`, Apache-2.0, **zero runtime
+dependencies**:
+
+| artefact | result |
+| --- | --- |
+| `hls.min.js` | **byte-identical** |
+| `hls.light.min.js` | **byte-identical** |
+| `hls.worker.js` | **byte-identical** |
+| `hls.js` (unminified, dev only) | identical modulo line endings |
+
+Two things have to be known or the comparison fails, and both cost an hour to
+find:
+
+- **The repository's `package.json` carries no `version` field** — it is
+  injected at publish. Built without it, the version string compiles to
+  `void 0` and every bundle differs. Set it to the tag being reproduced.
+- **On Windows, git translates line endings**, so the unminified bundle came out
+  with 806 CRs against the published zero — a size delta of exactly 806 bytes,
+  and identical after normalising. The shipping artefact is minified and was
+  unaffected, but a reproduction check that compares raw bytes on a Windows
+  checkout will report a false mismatch on the dev bundle for ever.
+
+The recipe, for whoever repeats it:
+
+```
+git clone --depth 1 --branch v<tag> https://github.com/video-dev/hls.js.git
+npm ci --ignore-scripts
+# add "version": "<tag>" to package.json — the repo omits it
+npx rollup --config
+# compare dist/hls.min.js against the published package
+```
+
+**What this does not settle.** The dependency is still not taken. What has
+changed is that the gate is now one a person can actually pass: a reproduction
+that either matches or does not, plus a bounded review of the paths that carry
+risk. Whether to take it after that is still the decision the amendment names.
+
 
 ## Revisit when
 
