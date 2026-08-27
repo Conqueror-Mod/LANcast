@@ -1,6 +1,6 @@
 # ADR 0043 — Media tools are fetched on request, not bundled
 
-Date: 2026-08-18 · Status: accepted · built
+Date: 2026-08-18 · Status: accepted · built · **One half proposed for reversal** by [ADR 0048](0048-media-tools-install-themselves-on-first-run.md)
 
 Amends [ADR 0016](0016-packaging-and-distribution.md), which decided ffmpeg is
 "documented, not bundled" and left the door open in the same breath: *if
@@ -63,6 +63,12 @@ requires the operator to know there was something to record.
 
 **Fetch the media tools on request from inside the app. Do not bundle them, and
 do not fetch them unasked.**
+
+> **Under revision.** "Do not fetch them unasked" is the half
+> [ADR 0048](0048-media-tools-install-themselves-on-first-run.md) proposes to
+> reverse, on the grounds that this ADR fixed the *capability* and not the
+> *discovery* — the report that prompted it was never "I cannot find the
+> button". Everything else below stands and 0048 depends on it.
 
 ### Fetched, not bundled
 
