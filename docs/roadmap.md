@@ -1366,13 +1366,18 @@ repository does not accept itself.
     fast" was never reproduced** and is not claimed; if it is real it is a
     separate fault and needs a fresh report. And every client-side constant is
     still *compensation* — the reason
-    [ADR 0013](adr/0013-transcode-pipeline.md) now carries a **proposed**
-    amendment arguing for MSE on the live path and only there, with hls.js
-    vendored as pinned, reviewable source. That decision is **not taken**: the
-    standing rule that this build ships no unaudited third-party player stands
-    until it is. The v0.8.7 hysteresis fix was step one of that amendment and
-    the only step that does not depend on its outcome. **Deciding it is the next
-    Live TV question**, and it is a decision before it is any code.
+    [ADR 0013](adr/0013-transcode-pipeline.md) carries an amendment arguing for
+    MSE on the live path and only there, with hls.js vendored as pinned,
+    reviewable source. That decision is now **accepted in principle** (2026-08-27)
+    and **gated on its step 2**: the amendment rests on the server already
+    producing HLS a real player can consume, and that has never been
+    demonstrated. Until a throwaway harness plays a live channel end to end,
+    no dependency is taken and the standing rule that this build ships no
+    unaudited third-party player is untouched. **Running that harness is the
+    next Live TV task** — it is the cheapest thing that can invalidate the
+    amendment, which is why it now sits ahead of the work rather than inside
+    it. The v0.8.7 hysteresis fix was step one and the only step that does not
+    depend on the outcome.
 
     And the lesson, which cost an hour: the activity panel called every ffmpeg
     session "Transcoding for playback" whatever it was doing, so a channel being
