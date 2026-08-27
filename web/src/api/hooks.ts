@@ -2041,6 +2041,69 @@ export function usePersonActivity(id: string | undefined, sharing: boolean) {
   });
 }
 
+/** What a history reset is allowed to forget. */
+export type HistoryScope = "all" | "finished" | "unfinished";
+
+/*
+ * How many playback records a reset would remove, without removing them.
+ *
+ * Its own query rather than a number computed on the client, because the client
+ * does not hold the history — it holds a page of it. Asking the server is the
+ * only way the confirmation can be *true*, and a confirmation that names a
+ * number it guessed is worse than one that names none.
+ */
+export function useHistoryCount(scope: HistoryScope, enabled = true) {
+  return useQuery({
+    queryKey: ["history-count", scope],
+    queryFn: ({ signal }) =>
+      apiGet<{ count: number; scope: string }>(
+        `/api/profile/history?scope=${scope}`,
+        signal,
+      ),
+    enabled,
+    // Refetched whenever the panel is opened rather than served from cache: a
+    // number that is quietly an hour old is exactly the kind of stale figure
+    // somebody would confirm an irreversible action against.
+    staleTime: 0,
+  });
+}
+
+/*
+ * Forgetting it.
+ *
+ * Invalidates far more than it writes, and deliberately. This is the mutation
+ * that changes what nearly every list in the app is showing — Continue
+ * Watching, the unwatched filter, every grid's progress bars, the profile's
+ * own totals. The rule this project keeps relearning is to ask what a person
+ * could be *looking at* that a write changes, rather than what it writes.
+ */
+export function useResetHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { scope: HistoryScope }) =>
+      apiSend(`/api/profile/history?scope=${v.scope}`, "DELETE"),
+    onSuccess: () => {
+      /*
+       * `["items"]` reaches the browse grid's `["items", "infinite", …]` by
+       * prefix — that is the distinction this project has shipped the wrong
+       * side of before, and the reason the grid's key is a *child* of the one
+       * callers invalidate rather than a sibling like `["items-infinite"]`.
+       */
+      for (const key of [
+        "history-count",
+        "profile",
+        "items",
+        "continue",
+        "recently-added",
+        "review",
+        "children",
+      ]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
 export function useSetSharing() {
   const qc = useQueryClient();
   return useMutation({

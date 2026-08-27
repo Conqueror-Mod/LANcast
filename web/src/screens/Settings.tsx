@@ -34,6 +34,9 @@ import {
   useInstallMediaTools,
   useCancelMediaToolsInstall,
   useScanAllLibraries,
+  useHistoryCount,
+  useResetHistory,
+  type HistoryScope,
 } from "@/api/hooks";
 import {
   capabilities,
@@ -655,6 +658,8 @@ function AccountSection() {
       <DisplayNameForm />
 
       <SharingToggle />
+
+      <HistoryReset />
 
       <span className="set-sublabel">Password</span>
       <form
@@ -1401,6 +1406,119 @@ function CodecDenialsRow() {
         >
           Try them again
         </button>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * Forgetting what you have watched.
+ *
+ * On the Account pane rather than under an administrator's settings, because
+ * this is one person's record and only its owner may clear it — the endpoint
+ * takes no user id for exactly that reason (ADR 0006). An administrator runs
+ * the server; that is not consent on somebody else's behalf.
+ *
+ * Three choices rather than one button, because "clear my history" means three
+ * different things and `playback_state` is one table carrying two meanings.
+ * Somebody forgetting a show they finished rarely means "and lose my place in
+ * the one I am half way through".
+ *
+ * The count is fetched before anything is offered, and the confirmation says
+ * it. A number is what makes an irreversible action reviewable: a person who
+ * expected to clear one thing and is told four hundred has learned something
+ * while it is still free. "Are you sure" teaches nobody anything.
+ */
+function HistoryReset() {
+  const [scope, setScope] = useState<HistoryScope>("all");
+  const [confirming, setConfirming] = useState(false);
+  const [done, setDone] = useState<number | null>(null);
+  const count = useHistoryCount(scope);
+  const reset = useResetHistory();
+
+  const n = count.data?.count ?? 0;
+  const busy = reset.isPending || count.isFetching;
+
+  let sub: string;
+  if (reset.isError) {
+    sub = errorMessage(reset.error);
+  } else if (done !== null) {
+    sub = done === 0 ? "There was nothing to forget." : `Forgot ${done}.`;
+  } else if (count.isError) {
+    sub = "Could not read how much history you have.";
+  } else if (count.isLoading) {
+    sub = "Counting…";
+  } else {
+    // Named rather than counted alone: "412 things" invites a shrug where
+    // "412 things you have watched" is the thing about to be destroyed.
+    sub = `${n} ${n === 1 ? "record" : "records"} — this cannot be undone.`;
+  }
+
+  return (
+    <div className="set-row">
+      <div className="set-row__main">
+        <div className="set-row__title">Clear watch history</div>
+        <div className="set-row__sub">{sub}</div>
+      </div>
+      <div className="set-row__actions">
+        {confirming ? (
+          <>
+            <span className="set-confirm">
+              Forgets {n} {n === 1 ? "record" : "records"}, permanently.
+            </span>
+            <button
+              className="set-btn"
+              disabled={busy}
+              onClick={() =>
+                reset.mutate(
+                  { scope },
+                  {
+                    onSuccess: () => {
+                      setDone(n);
+                      setConfirming(false);
+                    },
+                  },
+                )
+              }
+            >
+              Forget them
+            </button>
+            <button className="set-btn" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <select
+              className="set-input"
+              value={scope}
+              aria-label="What to forget"
+              onChange={(e) => {
+                setScope(e.target.value as HistoryScope);
+                setDone(null);
+              }}
+            >
+              <option value="all">Everything</option>
+              <option value="finished">Only what I finished</option>
+              <option value="unfinished">Only what I did not finish</option>
+            </select>
+            {/*
+              Disabled at zero rather than hidden. A control that vanishes when
+              there is nothing to do leaves somebody wondering where it went,
+              and "nothing to forget" is a useful answer in itself.
+            */}
+            <button
+              className="set-btn"
+              disabled={busy || n === 0}
+              onClick={() => {
+                setDone(null);
+                setConfirming(true);
+              }}
+            >
+              Clear…
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

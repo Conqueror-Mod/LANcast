@@ -204,3 +204,54 @@ describe("the playback codecs row", () => {
     expect(codecRow()?.querySelector("button")?.disabled).toBe(true);
   });
 });
+
+/*
+ * The history reset row, wired end to end.
+ *
+ * It shipped in v0.8.18 with a store, two endpoints and **no user interface at
+ * all** — reachable only with curl, while the release notes described choosing
+ * between three options and being told a count. The plan said
+ * store → api → Settings and stopped at api, and nothing caught it because a
+ * server-side feature with no caller compiles, passes and tests clean.
+ *
+ * So this asserts the part that was missing: that the control exists on a pane
+ * a normal account can reach, and that it offers the three scopes rather than
+ * one button.
+ */
+describe("the clear watch history row", () => {
+  function historyRow(): HTMLElement | undefined {
+    return [...host.querySelectorAll<HTMLElement>(".set-row")].find((r) =>
+      r.querySelector(".set-row__title")?.textContent?.includes("Clear watch history"),
+    );
+  }
+
+  it("is on the account pane, which every user has", () => {
+    render("/settings?pane=account");
+    expect(historyRow()).toBeTruthy();
+  });
+
+  it("offers the three scopes, not one button", () => {
+    render("/settings?pane=account");
+    const options = [
+      ...(historyRow()?.querySelectorAll("option") ?? []),
+    ].map((o) => (o as HTMLOptionElement).value);
+    // Finished and unfinished are separate because playback_state is one table
+    // with two meanings — forgetting a finished show must not cost the place
+    // in one half-watched.
+    expect(options).toEqual(["all", "finished", "unfinished"]);
+  });
+
+  /*
+   * With no server behind the query the count cannot be read, so the button
+   * must not offer to destroy an unknown quantity. Confirming against a number
+   * nobody has is the failure this row's whole design is trying to avoid.
+   */
+  it("will not offer to clear a count it does not have", () => {
+    render("/settings?pane=account");
+    const btn = [...(historyRow()?.querySelectorAll("button") ?? [])].find(
+      (b) => b.textContent?.includes("Clear"),
+    );
+    expect(btn).toBeTruthy();
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+  });
+});
