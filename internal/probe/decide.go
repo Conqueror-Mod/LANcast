@@ -127,9 +127,11 @@ type Profile struct {
 // The bare audio containers are listed because a music library is mostly files
 // whose container *is* the codec — an .mp3 reports container "mp3", a .flac
 // reports "flac". Without them every track in the library failed the container
-// check and was rewrapped into MP4, and FLAC does not survive that: it cannot
-// be copied into fragmented MP4 (see mp4CarriesAudio), so a lossless file was
-// re-encoded to AAC to play a container the browser already handles natively.
+// check and was rewrapped into MP4 to play a container the browser already
+// handles natively. That rewrap used to cost the lossless too, since FLAC could
+// not be copied into fragmented MP4; it can now (see mp4CarriesAudio), so the
+// remaining reason to list the bare containers is simply that a rewrap nobody
+// needs is still work nobody needs.
 // PCM is listed at 16-bit and 8-bit only; 24-bit WAV support is not universal
 // and a needless encode there is cheap, where a wrong claim is silence.
 func BrowserProfile() Profile {
@@ -243,6 +245,28 @@ var knownCapabilities = map[string]struct {
 	// A container claim on its own — a client with a real demuxer rather than a
 	// browser's narrow one.
 	"matroska": {containers: []string{"matroska"}},
+	/*
+	 * FLAC and Opus *inside MP4*, which is a different question from whether
+	 * the client can decode them at all.
+	 *
+	 * Both are already in the browser floor, because a .flac or .opus file
+	 * plays natively. Neither could be *carried* into fragmented MP4, so a file
+	 * needing only a container rewrite had its audio re-encoded — and for FLAC
+	 * that is lossless becoming AAC to change a box.
+	 *
+	 * A claim rather than a widening of the floor, because the original
+	 * decision here was right and is documented: FLAC in fragmented MP4 is
+	 * legal by spec and unplayable in enough browsers that copying it blind is
+	 * a coin toss. Chromium manages both — verified by muxing real files and
+	 * watching it reach readyState 4 — and Chromium is not every browser. So
+	 * the client answers for the exact MP4 codec string and only then is the
+	 * lossless kept.
+	 *
+	 * Permissions rather than codecs, like hevc10: they add nothing to play,
+	 * they authorise a container.
+	 */
+	"flacmp4": {},
+	"opusmp4": {},
 }
 
 /*
@@ -393,7 +417,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		videoMuxWhy = fmt.Sprintf("video codec %s cannot be carried in MP4", video.Codec)
 	}
 	audioCopyable, audioMuxWhy := audioOK, audioWhy
-	if audioOK && !mp4CarriesAudio(audio) {
+	if audioOK && !mp4CarriesAudio(audio, p) {
 		audioCopyable = false
 		audioMuxWhy = fmt.Sprintf("audio codec %s cannot be carried in MP4", audio.Codec)
 	}
@@ -488,13 +512,40 @@ func mp4CarriesVideo(s *Stream) bool {
 // MP4 and actually played back. FLAC and Opus are deliberately excluded: both
 // are legal in MP4 by spec and both fail in enough browsers that copying them
 // is a coin toss, where re-encoding to AAC costs almost nothing.
-func mp4CarriesAudio(s *Stream) bool {
+func mp4CarriesAudio(s *Stream, p Profile) bool {
 	if s == nil {
 		return true
 	}
 	switch strings.ToLower(s.Codec) {
 	case "aac", "mp3", "ac3", "eac3":
 		return true
+	/*
+	 * The lossless cases, added because leaving them out was destroying data.
+	 *
+	 * A codec absent from this list cannot be copied, so a file needing only a
+	 * *container* rewrite gets its audio re-encoded — and for FLAC and ALAC
+	 * that means lossless becoming AAC to change a box the client did not like.
+	 *
+	 * Carriage is verified rather than assumed. On ffmpeg 8.1.2, with this
+	 * package's own flags, all three copy into fragmented MP4 with exit 0 and
+	 * no stderr, carrying the standard box tags `fLaC`, `Opus` and `alac`.
+	 *
+	 * Playing them is a separate question and the reason FLAC and Opus are
+	 * gated on a claim: Chromium reports isTypeSupported true for both in MP4
+	 * and reaches readyState 4 on real files, and Chromium is not every
+	 * browser. The floor stays conservative and the client that can answer for
+	 * the exact MP4 codec string gets its lossless kept.
+	 *
+	 * Vorbis is deliberately absent. It has no settled mapping into MP4, and
+	 * every Vorbis file measured was in Ogg — which the browser takes as it
+	 * stands — so carrying it would be a risk run for no file that exists.
+	 */
+	case "alac":
+		return true
+	case "flac":
+		return p.Allows("flacmp4")
+	case "opus":
+		return p.Allows("opusmp4")
 	}
 	return false
 }

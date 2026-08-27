@@ -32,6 +32,23 @@ const PROBES: Record<string, string> = {
   hevc10: 'video/mp4; codecs="hvc1.2.4.L120.B0"',
   ac3: 'audio/mp4; codecs="ac-3"',
   eac3: 'audio/mp4; codecs="ec-3"',
+  /*
+   * FLAC and Opus *inside MP4*, which is not the same question as whether this
+   * browser can play a .flac or a .opus file — it can, and the server's floor
+   * already assumes so.
+   *
+   * The server could not previously copy either into fragmented MP4, so a file
+   * needing only a container rewrite had its audio re-encoded; for FLAC that is
+   * lossless turned into AAC to change a box. It can carry them now, but only
+   * on a client that says it can read them there, because FLAC-in-MP4 is legal
+   * by spec and not universally decodable.
+   *
+   * Asked separately from each other for the reason hevc10 exists: they are two
+   * engine answers, and treating one as covering the other is exactly the
+   * mistake that shipped a stuttering Main 10 picture.
+   */
+  flacmp4: 'audio/mp4; codecs="flac"',
+  opusmp4: 'audio/mp4; codecs="opus"',
 };
 
 // Capabilities this browser has been caught lying about.

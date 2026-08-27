@@ -1398,6 +1398,8 @@ GET /api/items/87/playback?can=hevc,ac3
 | `hevc10` | permission for **10-bit** HEVC (Main 10). Adds no codec of its own |
 | `ac3`, `eac3`, `dts` | that audio codec |
 | `matroska` | the container alone, for a client with a real demuxer |
+| `flacmp4` | permission to **carry FLAC inside MP4**. Adds no codec of its own |
+| `opusmp4` | permission to **carry Opus inside MP4**. Adds no codec of its own |
 
 `hevc` and `hevc10` are separate because they are separate questions and the
 answers differ: a browser can answer "probably" for Main profile and still
@@ -1406,6 +1408,21 @@ audio and a stuttering picture, from a client that had probed
 `hvc1.1.6` (8-bit) and been read as covering Main 10 too. A client should probe
 `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for
 it; without it, 10-bit HEVC is transcoded.
+
+`flacmp4` and `opusmp4` are the same shape of question one layer down: not
+"can you decode FLAC" — every browser in the floor already can, which is why a
+`.flac` file direct-plays — but "can you decode it *in an MP4*". Those differ.
+FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file
+whose only fault is its container had its audio re-encoded, turning lossless
+into AAC to change a box.
+
+A client should probe `audio/mp4; codecs="flac"` and `audio/mp4; codecs="opus"`
+separately — they are two engine answers, and one does not licence the other —
+and send each only if the engine answers for it. Without the claim the audio is
+re-encoded, which is what happened for every such file before these existed.
+
+ALAC needs no claim: MP4 is its native home, so only whether the client decodes
+it at all is ever in question, and the profile already says.
 
 The distinction applies **only to claims**. A profile that lists HEVC natively —
 `tv`, `safari` — is a device class known to decode Main 10 in hardware, and

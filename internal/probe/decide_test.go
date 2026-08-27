@@ -307,7 +307,9 @@ func TestVP8IsNotCopiedIntoMP4(t *testing.T) {
 }
 
 // The subtle one: FLAC in fragmented MP4 is legal by spec and unplayable in
-// enough browsers that copying it is a coin toss. Re-encoding costs nothing.
+// enough browsers that copying it blind is a coin toss. The floor therefore
+// still re-encodes it — a client that can answer for FLAC-in-MP4 says so and
+// gets it copied instead (TestFLACSurvivesARewrapWhenTheClientCan).
 func TestFLACIsNotCopiedIntoMP4(t *testing.T) {
 	d := Decide(result("matroska", video("h264", 1080), audio("flac", 2)), BrowserProfile())
 	if d.AudioAction != "encode" {
@@ -864,5 +866,104 @@ func TestNativeHEVCProfilesStillTakeTenBit(t *testing.T) {
 		if d.VideoAction != "copy" {
 			t.Errorf("%s: 10-bit HEVC = %q (%s), want copy", p.Name, d.VideoAction, d.Reason)
 		}
+	}
+}
+
+/*
+ * Lossless audio survives a container rewrite — when the client can take it.
+ *
+ * A codec MP4 cannot carry has to be re-encoded even when the client decodes it
+ * perfectly well, because the only thing wrong with the file is the box it
+ * arrived in. For FLAC and ALAC that meant lossless became AAC to fix a
+ * container: the one conversion in this system that cannot be undone.
+ *
+ * Gated on a claim rather than widened into the floor, because "can decode
+ * FLAC" and "can decode FLAC inside MP4" are different questions and only the
+ * first is true of every browser.
+ */
+func TestFLACSurvivesARewrapWhenTheClientCan(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"flacmp4"})
+	d := Decide(result("matroska", video("h264", 1080), audio("flac", 2)), p)
+	if d.Method != Remux {
+		t.Fatalf("Method = %q (%s), want remux", d.Method, d.Reason)
+	}
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q (%s), want copy — re-encoding lossless to change a container destroys it",
+			d.AudioAction, d.Reason)
+	}
+}
+
+func TestOpusSurvivesARewrapWhenTheClientCan(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"opusmp4"})
+	d := Decide(result("matroska", video("h264", 1080), audio("opus", 2)), p)
+	if d.Method != Remux {
+		t.Fatalf("Method = %q (%s), want remux", d.Method, d.Reason)
+	}
+	if d.AudioAction != "copy" {
+		t.Errorf("AudioAction = %q (%s), want copy", d.AudioAction, d.Reason)
+	}
+}
+
+/*
+ * One claim does not licence the other.
+ *
+ * They are separate engine answers — a browser may carry one and not the other
+ * — and reading either as covering both is the mistake hevc10 was created to
+ * undo, where a claim measured for 8-bit was taken as permission for Main 10.
+ */
+func TestTheTwoLosslessClaimsAreIndependent(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"flacmp4"})
+	d := Decide(result("matroska", video("h264", 1080), audio("opus", 2)), p)
+	if d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q (%s), want encode — only FLAC was claimed",
+			d.AudioAction, d.Reason)
+	}
+}
+
+/*
+ * ALAC turns on the client, not the container.
+ *
+ * MP4 is ALAC's native home so carriage was never the question; whether
+ * anything can decode it is. The browser floor cannot, so it is still
+ * re-encoded there — and a device that says it can gets the lossless kept,
+ * with no claim needed.
+ */
+func TestALACIsCopiedOnlyForAClientThatCanPlayIt(t *testing.T) {
+	browser := Decide(result("matroska", video("h264", 1080), audio("alac", 2)), BrowserProfile())
+	if browser.AudioAction != "encode" {
+		t.Errorf("browser AudioAction = %q (%s), want encode — no browser decodes ALAC",
+			browser.AudioAction, browser.Reason)
+	}
+	tv := Decide(result("matroska", video("h264", 1080), audio("alac", 2)), TVProfile())
+	if tv.AudioAction != "copy" {
+		t.Errorf("tv AudioAction = %q (%s), want copy", tv.AudioAction, tv.Reason)
+	}
+}
+
+/*
+ * Vorbis is left out on purpose.
+ *
+ * It has no settled mapping into MP4, and every Vorbis file measured was in Ogg
+ * — which the browser takes as it stands, so carrying it would be a risk run
+ * for no file that exists. Asserted rather than merely omitted so that adding
+ * it later is a decision somebody makes rather than a line somebody tidies.
+ */
+func TestVorbisIsNotCarriedIntoMP4(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"flacmp4", "opusmp4"})
+	d := Decide(result("matroska", video("h264", 1080), audio("vorbis", 2)), p)
+	if d.AudioAction != "encode" {
+		t.Errorf("AudioAction = %q (%s), want encode", d.AudioAction, d.Reason)
+	}
+}
+
+/*
+ * The bare containers still direct-play, which is the case this change must not
+ * disturb: 131 FLAC files and 11 Ogg files in the measured library are already
+ * served untouched, and the point of the carriage work is the rewrap path.
+ */
+func TestABareLosslessFileIsStillLeftAlone(t *testing.T) {
+	d := Decide(result("flac", audio("flac", 2)), BrowserProfile())
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
 	}
 }
