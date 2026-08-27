@@ -222,13 +222,33 @@ func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
  * is the library id, which GetLibrary performs.
  */
 func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
-		return
-	}
-	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
-		return
+	/*
+	 * Library 0 searches every library.
+	 *
+	 * "Everything this person is in" does not stop at the boundary between
+	 * films and television, and those are two libraries here — so with every
+	 * route requiring one id, the question people actually have could not be
+	 * asked at all. A library id of 0 cannot exist (AUTOINCREMENT starts at 1),
+	 * so it is free to mean all of them and no existing caller changes.
+	 *
+	 * Parsed here rather than by loosening `pathID`, which refuses anything
+	 * <= 0 and is shared by every route that takes an id: relaxing it would
+	 * quietly make `/api/items/0` and every other id-bearing path accept a
+	 * value none of them has a meaning for. The one route where 0 means
+	 * something parses it itself, and skips the existence check that would
+	 * otherwise reject it.
+	 */
+	var id int64
+	if r.PathValue("id") != "0" {
+		parsed, ok := pathID(r)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+			return
+		}
+		if _, err := s.st.GetLibrary(r.Context(), parsed); s.notFoundOr(w, err, "get library", "no such library") {
+			return
+		}
+		id = parsed
 	}
 	/*
 	 * `id` resolves specific people instead of searching.

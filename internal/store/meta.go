@@ -625,7 +625,7 @@ func (s *Store) ReplaceCredits(ctx context.Context, itemID int64, provider strin
 // Credits returns an item's cast and crew in billing order.
 func (s *Store) Credits(ctx context.Context, itemID int64) ([]Credit, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT p.name, c.role, COALESCE(c.character, ''), c.ord, COALESCE(p.thumb_hash, '')
+		SELECT p.name, c.role, COALESCE(c.character, ''), c.ord, COALESCE(p.thumb_hash, ''), p.id
 		FROM credit c JOIN person p ON p.id = c.person_id
 		WHERE c.item_id = ? ORDER BY c.ord`, itemID)
 	if err != nil {
@@ -636,7 +636,7 @@ func (s *Store) Credits(ctx context.Context, itemID int64) ([]Credit, error) {
 	out := []Credit{}
 	for rows.Next() {
 		var c Credit
-		if err := rows.Scan(&c.Name, &c.Role, &c.Character, &c.Order, &c.Thumb); err != nil {
+		if err := rows.Scan(&c.Name, &c.Role, &c.Character, &c.Order, &c.Thumb, &c.PersonID); err != nil {
 			return nil, fmt.Errorf("credits: %w", err)
 		}
 		out = append(out, c)

@@ -832,6 +832,17 @@ would actually remove something rather than being a silent no-op. `genres`,
 
 ## Items
 
+
+**`{id}` may be `0`, which searches every library.** "Everything this person is
+in" does not stop at the boundary between films and television, and those are
+separate libraries — so with every route requiring one id, the question people
+actually have could not be asked. A library id of 0 cannot exist, so it is free
+to mean all of them and no existing caller changes.
+
+Name matching is a **substring**: "niro" finds Robert De Niro. It was
+prefix-or-word, which found only the start of a first name or a surname.
+LIKE's own wildcards are escaped, so a typed `%` searches for a percent sign
+rather than matching everybody.
 ### `GET /api/items`
 
 | Parameter | Meaning |

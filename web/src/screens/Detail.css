@@ -484,8 +484,17 @@
      container, and without it they collapse to slivers with the image still
      "applied" and nothing visibly wrong in the styles. */
   flex-shrink: 0;
-  width: 56px;
-  height: 56px;
+  /*
+   * 96, not 56.
+   *
+   * 56 was chosen against nothing and shipped too small to recognise a face
+   * in — which for a picture of a face is the entire point of having one, and
+   * the first thing said about it on sight. 96 is close to the poster tile's
+   * own smallest rung, so a cast row reads as part of the same grid rather
+   * than as a strip of dots under it.
+   */
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
   object-fit: cover;
   display: grid;
@@ -495,7 +504,7 @@
 }
 
 .detail__cast-face--none {
-  font-size: 0.95rem;
+  font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-dim, #8b93a1);
@@ -507,4 +516,35 @@
   align-items: center;
   text-align: center;
   flex-shrink: 0;
+}
+
+/*
+ * A cast face that filters.
+ *
+ * Gold on hover and focus, because this is now a place you can go — which is
+ * exactly and only what gold means here (design.md). It is absent at rest: a
+ * row of twelve permanently gold faces would make the signal meaningless in
+ * the one place it has to be readable.
+ */
+.detail__cast-member--link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: 8px;
+  transition: transform var(--dur-fast, 120ms) ease;
+}
+
+.detail__cast-member--link:hover,
+.detail__cast-member--link:focus-visible {
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.detail__cast-member--link:hover .detail__cast-face,
+.detail__cast-member--link:focus-visible .detail__cast-face {
+  box-shadow: 0 0 0 2px var(--gold, #c8a04a);
+}
+
+.detail__cast-member--link:hover .detail__cast-name,
+.detail__cast-member--link:focus-visible .detail__cast-name {
+  color: var(--gold, #c8a04a);
 }

@@ -455,6 +455,16 @@ type Credit struct {
 	 * is not a failure and the client draws a name, as it always has.
 	 */
 	Thumb string `json:"thumb,omitempty"`
+	/*
+	 * PersonID is what the browse filter is keyed on.
+	 *
+	 * The face is a filter control, and a filter is by id because a name is not
+	 * an identity — two people share one, and one person is spelled two ways
+	 * across providers. The pill resolves the id back to a name for display
+	 * (browseFilters.ts), which is the same round trip the cast picker already
+	 * makes.
+	 */
+	PersonID int64 `json:"person_id,omitempty"`
 }
 
 // Artwork holds the content-addressed hashes for an item's images.
