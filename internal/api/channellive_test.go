@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -153,9 +154,25 @@ func TestLiveStopsFFmpegWhenTheClientGoes(t *testing.T) {
 	buf := make([]byte, 4096)
 	_, _ = resp.Body.Read(buf)
 
-	if n := len(h.srvAPI.trans.Sessions()); n == 0 {
+	sessions := h.srvAPI.trans.Sessions()
+	if len(sessions) == 0 {
 		resp.Body.Close()
 		t.Fatal("no transcode session while a channel is streaming")
+	}
+	/*
+	 * The probe has to have worked, and this is where that is checked.
+	 *
+	 * A source that never ends is exactly what defeats a probe, so making the
+	 * test source realistic risks quietly moving it onto the *unprobed*
+	 * fallback — which copies video and re-encodes audio, and would keep this
+	 * test passing while testing something else. H.264 + AAC over MPEG-TS is a
+	 * remux, so `Encoding` must be false; if this ever fails, the probe is
+	 * timing out rather than answering.
+	 */
+	if sessions[0].Encoding {
+		resp.Body.Close()
+		t.Fatalf("session is re-encoding: the probe did not answer, so this is "+
+			"the unprobed fallback rather than the remux it should be: %+v", sessions[0])
 	}
 
 	// The viewer closes the tab.
@@ -173,7 +190,28 @@ func TestLiveStopsFFmpegWhenTheClientGoes(t *testing.T) {
 }
 
 /*
- * ffmpegTestSource writes a two-second clip and serves it over HTTP.
+ * ffmpegTestSource serves a channel that behaves like a channel: bytes arrive
+ * steadily and the stream does not end.
+ *
+ * It used to be a two-second MP4 behind an `http.FileServer`, and that is a
+ * *file*, not a live source. ffmpeg read all of it at disk speed, finished, and
+ * exited — usually before the test that had just started it could look. So
+ * `TestLiveStopsFFmpegWhenTheClientGoes` asserted "a session is running" against
+ * a session that had frequently already ended, and passed only when it won the
+ * race. Measured on a developer machine with ffmpeg present: **three failures
+ * in four runs**. CI never saw it, because CI has no ffmpeg and the test skips —
+ * so it cost local time and taught people to ignore red from `go test ./...`.
+ *
+ * The property under test cannot survive a source that stops on its own. "ffmpeg
+ * stops when the viewer does" is unfalsifiable if ffmpeg had already stopped for
+ * its own reasons.
+ *
+ * Two changes make it a stream. **MPEG-TS rather than MP4**, because a live
+ * channel is a transport stream and because MP4 keeps its `moov` at the end —
+ * ffmpeg cannot begin on a partial one, so a trickled MP4 would produce nothing
+ * at all. And the handler **writes in chunks and then holds the connection
+ * open** rather than closing it, which is what an endless source looks like from
+ * the reading end.
  *
  * Generated rather than committed: a binary fixture in the repository is one
  * more thing to explain, and ffmpeg is already required for the test to mean
@@ -184,20 +222,67 @@ func ffmpegTestSource(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "source.mp4")
+	path := filepath.Join(dir, "source.ts")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error",
-		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=10:duration=2",
-		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo:d=2",
+		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=10:duration=4",
+		"-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo:d=4",
 		"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-shortest", "-y", path)
+		"-c:a", "aac", "-shortest", "-f", "mpegts", "-y", path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("could not generate a test clip: %v: %s", err, out)
 	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the generated clip: %v", err)
+	}
 
-	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	// Closed before the server is, so a held request lets go and Close does not
+	// block on it. Cleanups run last-registered-first, which is why this one is
+	// registered second.
+	held := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp2t")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		const chunk = 8 << 10
+		/*
+		 * Loop the payload rather than sending it once and holding the
+		 * connection open.
+		 *
+		 * Holding an idle connection is not what a channel does, and the probe
+		 * proves it: `probeChannel` reads until it has enough or until its
+		 * timeout, so a source that goes silent after 57KB makes every request
+		 * wait out the clock. Bytes that keep arriving let it finish at once,
+		 * which is also the honest imitation — a channel is never quiet.
+		 */
+		for off := 0; ; off += chunk {
+			if off >= len(data) {
+				off = 0
+			}
+			end := off + chunk
+			if end > len(data) {
+				end = len(data)
+			}
+			if _, err := w.Write(data[off:end]); err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+			select {
+			case <-held:
+				return
+			case <-r.Context().Done():
+				return
+			case <-time.After(2 * time.Millisecond):
+			}
+		}
+	}))
 	t.Cleanup(srv.Close)
-	return srv.URL + "/source.mp4"
+	t.Cleanup(func() { close(held) })
+	return srv.URL + "/source.ts"
 }
