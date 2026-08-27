@@ -50,6 +50,33 @@ type Session struct {
 	lastTouch time.Time
 	done      bool
 	err       error
+	ended     bool
+}
+
+/*
+ * NoteEnded records that ffmpeg finished on its own, rather than being stopped.
+ *
+ * Set from the reader when it sees EOF, because on the progressive path that is
+ * the only place the truth is available: stdout is a `cmd.StdoutPipe()`, and
+ * calling `Wait` on one before reads have completed is documented as incorrect
+ * — it closes the pipe under the reader. So there is no exit-status goroutine
+ * for a progressive session, and `Done` answers `(false, nil)` for its whole
+ * life.
+ *
+ * EOF is a better signal than an exit status anyway, and race-free: ffmpeg's
+ * stdout closes when ffmpeg exits, and nothing else closes it.
+ */
+func (s *Session) NoteEnded() {
+	s.mu.Lock()
+	s.ended = true
+	s.mu.Unlock()
+}
+
+// EndedItself reports whether ffmpeg stopped of its own accord.
+func (s *Session) EndedItself() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ended
 }
 
 // Started reports when the session began.

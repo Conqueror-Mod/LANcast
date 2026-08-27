@@ -552,10 +552,33 @@ func (m *Manager) Stop(id string) {
  * the mux rejected, or died three seconds in, and it had already written that
  * down. Diagnosing live playback without it is inference over a silent log.
  *
- * ffmpeg runs at `-loglevel error`, so anything here is worth a line — this does
- * not need a level or a filter to stay quiet on a healthy stream. A viewer who
- * simply closes the tab produces nothing, because being killed is not an error
- * ffmpeg reports.
+ * ffmpeg runs at `-loglevel error`, so anything here is worth a line.
+ *
+ * # Why the level depends on how the session ended
+ *
+ * This used to say that "a viewer who simply closes the tab produces nothing,
+ * because being killed is not an error ffmpeg reports". That was reasoning
+ * presented as behaviour, and watching it disproved it: killing ffmpeg mid-
+ * stream reliably produces `Error submitting a packet to the muxer: Broken
+ * pipe`, and on the live fMP4 path a muxer error with a `PATCHWELCOME` return
+ * code. So **every ordinary channel stop logged `WARN "ffmpeg reported
+ * errors"`** with a stack of alarming text under it.
+ *
+ * That is not merely untidy. During a real investigation into a frozen channel
+ * it sent two separate diagnoses down the wrong path — first "the probe misread
+ * the codec", then "ffmpeg died mid-stream" — because a warning that fires on
+ * every success is indistinguishable from one that fires on a failure. The
+ * actual fault was a muxer flag corrupting timestamps, and this line was the
+ * loudest thing in the log pointing away from it.
+ *
+ * A log that cries wolf on every stop costs more than it saves, and this one
+ * had been measured doing exactly that.
+ *
+ * So: ffmpeg ending **by itself** is a fact about the media and stays a
+ * warning; ffmpeg being **killed** while it was still running is a fact about
+ * us, and goes to debug. `EndedItself` is set from the reader seeing EOF, and
+ * `Done`'s error covers the HLS path, which has no reader and does keep an exit
+ * status. Neither is a guess about what a message means.
  */
 func (m *Manager) reportStderr(s *Session) {
 	if m.log == nil {
@@ -563,6 +586,12 @@ func (m *Manager) reportStderr(s *Session) {
 	}
 	msg := strings.TrimSpace(s.Stderr())
 	if msg == "" {
+		return
+	}
+	_, err := s.Done()
+	if !s.EndedItself() && err == nil {
+		m.log.Debug("ffmpeg output while shutting down", "session", s.ID, "item", s.ItemID,
+			"output", s.Output, "stderr", msg)
 		return
 	}
 	m.log.Warn("ffmpeg reported errors", "session", s.ID, "item", s.ItemID, "output", s.Output,
@@ -583,6 +612,12 @@ func (r *sessionReader) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 {
 		r.s.Touch()
+	}
+	// EOF here means ffmpeg's stdout closed, which means ffmpeg exited without
+	// being asked to. It is the difference between a complaint worth a warning
+	// and the noise a killed process makes on the way out — see reportStderr.
+	if errors.Is(err, io.EOF) {
+		r.s.NoteEnded()
 	}
 	return n, err
 }
