@@ -229,6 +229,22 @@ export function Player() {
     }, 2500);
   }, [pb.isAudio, pb.playing]);
 
+  /*
+   * The prompt has to be visible when it appears, which it was not.
+   *
+   * `.player__chrome` is `opacity: 0` while the player is idle, and the idle
+   * timer only *hides* when playing — nothing shows it again on pause. So by
+   * the time "are you still watching" fires, after hours nobody has touched,
+   * the chrome has long since faded and the prompt rendered into it invisibly.
+   *
+   * That is the exact failure this feature exists to avoid: playback stopped,
+   * and the screen said nothing about why. Waking the chrome is enough,
+   * because the hide timer checks `pb.playing` and playback is already paused.
+   */
+  useEffect(() => {
+    if (pb.stillWatching) wakeChrome();
+  }, [pb.stillWatching, wakeChrome]);
+
   useEffect(
     () => () => {
       window.clearTimeout(idleTimer.current);
