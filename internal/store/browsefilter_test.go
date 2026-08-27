@@ -453,3 +453,47 @@ func TestRatingFloorExcludesUnratedRatherThanSinkingThem(t *testing.T) {
 	}
 	_ = sd
 }
+
+/*
+ * A name and a role together, which is the combination the cast picker always
+ * sends and the one nothing covered.
+ *
+ * The two tests above pass a query with no role, or a role with no query. Both
+ * of those worked. Combining them did not: the query branch *assigned* the
+ * where clause instead of appending, so the role condition vanished from the
+ * SQL while its argument stayed in the list, and SQLite answered
+ * `datatype mismatch` for every such search.
+ *
+ * The picker scopes to a role, so this was every keystroke a person typed into
+ * it. It read as "actor search is very limited" rather than as a fault, because
+ * an empty list is what a search with no matches looks like.
+ */
+func TestCastSearchCombinesANameWithARole(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, uhd, _, _ := seedLibrary(t, st)
+	if err := st.ReplaceCredits(ctx, uhd, "tmdb", []Credit{
+		{Name: "Bo Reyes", Role: "director", Order: 0},
+		{Name: "Bo Draper", Role: "actor", Order: 0},
+		{Name: "Ana Cruz", Role: "actor", Order: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	actors, err := st.SearchCast(ctx, lib, "bo", "actor", 10)
+	if err != nil {
+		t.Fatalf("searching actors by name: %v", err)
+	}
+	if len(actors) != 1 || actors[0].Name != "Bo Draper" {
+		t.Fatalf("actors = %+v, want only Bo Draper", actors)
+	}
+
+	// And the role still narrows: the director called Bo must not appear above.
+	directors, err := st.SearchCast(ctx, lib, "bo", "director", 10)
+	if err != nil {
+		t.Fatalf("searching directors by name: %v", err)
+	}
+	if len(directors) != 1 || directors[0].Name != "Bo Reyes" {
+		t.Fatalf("directors = %+v, want only Bo Reyes", directors)
+	}
+}

@@ -109,10 +109,24 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 		args = append(args, role)
 	}
 	if query != "" {
-		// Prefix-or-word match: "ford" finds Harrison Ford, and "harrison f"
-		// finds him too. LIKE is case-insensitive for ASCII in SQLite, which is
-		// what a name search wants and what the collation already gives us.
-		where = ` AND (p.name LIKE ? OR p.name LIKE ?)`
+		/*
+		 * Prefix-or-word match: "ford" finds Harrison Ford, and "harrison f"
+		 * finds him too. LIKE is case-insensitive for ASCII in SQLite, which is
+		 * what a name search wants and what the collation already gives us.
+		 *
+		 * `+=`, and it was `=`. Assigning here dropped the role clause from the
+		 * SQL while leaving the role's argument in `args`, so the placeholders
+		 * and the arguments misaligned and SQLite refused the statement outright
+		 * — every search with *both* a name and a role answered
+		 * `datatype mismatch` and an empty list.
+		 *
+		 * That is the whole of "actor search barely works": the cast picker
+		 * scopes to a role, so every keystroke typed into it hit exactly this
+		 * path. Searching with no role set, or a role with no query, both
+		 * worked — which is why the two existing tests passed and why it read
+		 * as a thin feature rather than a broken one.
+		 */
+		where += ` AND (p.name LIKE ? OR p.name LIKE ?)`
 		args = append(args, query+"%", "% "+query+"%")
 	}
 	args = append(args, limit)
