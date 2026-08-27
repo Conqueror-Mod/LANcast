@@ -649,14 +649,22 @@ func parseDate(date string) (int64, bool) {
 /*
  * profileURL turns TMDB's profile path into a fetchable address.
  *
- * `w185` rather than the original: a headshot is drawn at about sixty pixels on
- * a detail page and at twice that on a high-density screen, so anything larger
- * is bytes nobody sees — twelve of them per page, on a server that may be
- * fetching for a thousand films.
+ * `w300`, and the reasoning that first said `w185` was wrong in a way worth
+ * keeping written down: it sized the fetch against a CSS box ("about sixty
+ * pixels") rather than against the variant the server actually serves.
+ *
+ * The cache generates a `thumb` at 185px wide whatever it is given, so a 185px
+ * source meant deriving 185 from 185 — no resampling, no headroom, and the
+ * stored image already at its ceiling. 300 costs a few kilobytes more per
+ * person, once, and lets the thumb be a real downscale, which is visibly
+ * better at the size these are now drawn.
+ *
+ * Not larger than that: the served variant is capped at 185 regardless, so
+ * anything beyond enough source to downscale cleanly is bytes nobody sees.
  */
 func profileURL(path string) string {
 	if path == "" {
 		return ""
 	}
-	return "https://image.tmdb.org/t/p/w185" + path
+	return "https://image.tmdb.org/t/p/w300" + path
 }
