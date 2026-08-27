@@ -1,6 +1,6 @@
 # ADR 0013 — Transcode pipeline: progressive by default, HLS alongside
 
-Date: 2026-07-22 · Status: accepted · Amendment proposed 2026-08-23 for the live TV path
+Date: 2026-07-22 · Status: accepted · Amendment for the live TV path accepted in principle 2026-08-27, gated on its step 2
 
 > **Amendment note.** The decision below stands unchanged for films and
 > episodes. Live TV, which did not exist when this was written, turned out to
@@ -99,8 +99,28 @@ hardware justifies the hardware-acceleration swamp.
 
 # Amendment — 2026-08-23: live TV is the case progressive cannot serve
 
-Status of this amendment: **proposed**. The decision below is not taken until
-somebody agrees to the dependency it asks for.
+Status of this amendment: **accepted in principle, 2026-08-27, conditional on
+steps 1 and 2 of the work breakdown.**
+
+The dependency is agreed to, on the terms this amendment sets out and not on
+looser ones: hls.js vendored as pinned source, reviewed by a human, confined to
+the live TV path. What is not yet agreed is that it is *necessary*, and two
+conditions gate that:
+
+- **The HLS output must be shown to play a live channel end to end** (step 2).
+  This amendment's whole case rests on the server already producing a stream a
+  real player can consume. That has never been demonstrated. If it fails, the
+  fault is on the server side, the amendment is premature, and no dependency is
+  taken.
+- **The hls.js review must pass** (step 3). If it finds something that fails the
+  standard, the answer is to stop, not to soften the standard.
+
+The condition is ordered first rather than noted here, because it is the
+cheapest thing that can invalidate the amendment and it costs an afternoon
+against a channel that already exists. Accepting the argument and then testing
+its precondition is the wrong way round.
+
+Nothing in the work breakdown past step 2 begins until both conditions hold.
 
 ## What changed
 
@@ -330,24 +350,79 @@ merits, as a *second* client rather than a refactor.
 
 ## Work breakdown
 
-Ordered so each step is verifiable alone, and so the dependency is the last
-thing added rather than the first.
+Ordered so each step is verifiable alone, so the falsifier runs before any
+commitment, and so the dependency is added late rather than early.
 
 1. Adopt the asymmetric cushion in `preroll.ts` — fast to start, conservative to
-   resume after a rebuffer. Independent of everything below; ship it either way.
-2. Confirm the existing HLS output plays a live channel end to end, using a
-   throwaway harness. If it does not, this amendment is premature and the fault
-   is on the server side.
+   resume after a rebuffer. Independent of everything below; ship it either way,
+   and it is the one step that does not depend on the outcome.
+2. **The gate.** Confirm the existing HLS output plays a live channel end to end,
+   using a throwaway harness. If it does not, this amendment is premature, the
+   fault is on the server side, and steps 3 onward do not happen. Nothing below
+   this line starts until this passes.
 3. Vendor hls.js as pinned source, with a `README` in its directory recording
-   the commit, the review date, and who read it.
+   the commit, the review date, and who read it. A review that fails the
+   standard stops here.
 4. Live playback goes through MSE behind a setting defaulting to off, so the
    progressive path remains one toggle away during the transition.
-5. Native-HLS browsers detected and given the playlist directly.
+5. Native-HLS browsers detected and given the playlist directly. Safari is a
+   third path rather than a second, and must not be handed an MSE pipeline it
+   does not need.
 6. Default flipped, then `preroll.ts` and the live-edge workarounds deleted —
    deletion is the acceptance test. Client tests updated in the same commit;
    note that jsdom performs no media, so this needs looking at as well as
    asserting.
 7. `docs/api.md` in the same commit as any endpoint or contract change.
+
+## Step 2, run 2026-08-27: the answer is no, and the fault is ours
+
+The gate was run against a real channel with `cmd/hlsharness` (build tag
+`hlsharness`, throwaway). It drives `transcode.Args` rather than a hand-written
+ffmpeg command, so what it tests is the shipping argument construction.
+
+**The existing HLS output cannot be consumed live.** Over 60 seconds, 119 polls:
+
+| | shipping args | control |
+| --- | --- | --- |
+| first segment on disk | 7.0s | 7.0s |
+| segments written | 9 | 9 |
+| `index.m3u8` appears | **never** | 7.0s |
+| segments listed | **0** | 9 |
+| ffmpeg complaints | none | none |
+
+ffmpeg is producing correct media the whole time — the first segment probes as
+h264 + aac and is independently decodable. What never arrives is the playlist,
+and a player has no other way in. Nothing fails, nothing logs an error, and the
+process is healthy; the stream is simply undiscoverable. That is the same shape
+as every other fault this ADR records.
+
+**The cause is one flag.** The control changed exactly two arguments —
+`-hls_playlist_type vod` to `event`, and the window size — and the playlist
+appeared at 7.0s with `TARGETDURATION 6` and `MEDIA-SEQUENCE 0`. Everything
+else in a long command line was held constant, so the attribution is not an
+inference. `Args` hard-codes `-hls_playlist_type vod` and `-hls_list_size 0`
+for every HLS output and never consults `o.Live`, which is correct for a film
+and untrue of a channel: VOD tells a player the stream is complete and whole.
+
+Two things follow, and both were the point of gating on this.
+
+**The amendment's premise was wrong.** It said the server "already does"
+produce HLS a live player can consume and that "nothing new is built on the
+server". That is true for a film and false for a channel. `Manager.Live`
+hard-codes `Output: Progressive`, so no channel has ever taken the HLS path at
+all — the machinery exists and has never been pointed at live. Server work is
+required before hls.js could be given anything to play, which is precisely the
+condition under which this step says the amendment is premature.
+
+**The work is small, and it is a decision rather than a patch.** `event` keeps
+every segment listed, so the playlist and the segment directory grow without
+bound — correct for the type, and unacceptable for a channel left running for
+days. A bounded sliding window discards history a viewer may be behind. That
+choice belongs in the fix, not in a harness, and the harness does not make it.
+
+**Status is unchanged by this.** Acceptance in principle stands, the dependency
+is still not taken, and step 3 has not been reached. What has changed is that
+the live HLS output is now known to need building rather than assumed to exist.
 
 ## Revisit when
 
