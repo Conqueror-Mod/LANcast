@@ -485,16 +485,22 @@
      "applied" and nothing visibly wrong in the styles. */
   flex-shrink: 0;
   /*
-   * 96, not 56.
+   * 120, having been 56 and then 96.
    *
-   * 56 was chosen against nothing and shipped too small to recognise a face
-   * in — which for a picture of a face is the entire point of having one, and
-   * the first thing said about it on sight. 96 is close to the poster tile's
-   * own smallest rung, so a cast row reads as part of the same grid rather
-   * than as a strip of dots under it.
+   * 56 was chosen against nothing and was too small to recognise a face in,
+   * which for a picture of a face is the entire point. 96 fixed that and still
+   * read as a strip of tokens under the synopsis rather than as part of the
+   * page.
+   *
+   * 120 is the ceiling rather than a step on the way to more: the server serves
+   * these from the `thumb` variant, which is 185px wide, so beyond about this
+   * size a high-density screen starts resampling upwards and a bigger circle
+   * buys a softer face. Growing further means serving a different variant, and
+   * that is twelve larger images per detail page — a real cost, for a picture
+   * that is already recognisable.
    */
-  width: 96px;
-  height: 96px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   object-fit: cover;
   display: grid;
@@ -504,7 +510,7 @@
 }
 
 .detail__cast-face--none {
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-dim, #8b93a1);
