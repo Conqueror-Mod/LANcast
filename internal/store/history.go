@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -136,6 +138,40 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 	).Scan(&st.Started, &st.Finished, &st.WatchedMS, &st.FirstAt)
 	if err != nil {
 		return st, fmt.Errorf("profile statistics: %w", err)
+	}
+
+	/*
+	 * Plus anything banked by a history reset.
+	 *
+	 * Clearing the history used to zero these, because every total was derived
+	 * from the rows being deleted — so a profile reported nothing started and
+	 * no time watched for somebody who had watched hundreds of hours. That
+	 * conflates two requests: "forget the list of what I watched" is about the
+	 * record, and "I have never watched anything" is a claim about the person
+	 * that nobody made.
+	 *
+	 * A missing row is the ordinary case — most accounts have never cleared
+	 * anything — so this reads as zero rather than expecting a row to exist.
+	 */
+	var banked ProfileStats
+	err = s.db.QueryRowContext(ctx, `
+		SELECT started, finished, watched_ms, first_at
+		FROM profile_totals WHERE user_id = ?`, userID,
+	).Scan(&banked.Started, &banked.Finished, &banked.WatchedMS, &banked.FirstAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, nil
+	}
+	if err != nil {
+		return st, fmt.Errorf("profile statistics: banked totals: %w", err)
+	}
+
+	st.Started += banked.Started
+	st.Finished += banked.Finished
+	st.WatchedMS += banked.WatchedMS
+	// The oldest playback either half knows about. A reset does not make an
+	// account younger than it is.
+	if st.FirstAt == nil || (banked.FirstAt != nil && *banked.FirstAt < *st.FirstAt) {
+		st.FirstAt = banked.FirstAt
 	}
 	return st, nil
 }

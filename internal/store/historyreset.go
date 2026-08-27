@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 /*
@@ -107,13 +108,59 @@ func (s *Store) ResetHistory(ctx context.Context, userID string, scope HistorySc
 	if err != nil {
 		return 0, fmt.Errorf("reset history: %w", err)
 	}
-	res, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("reset history: %w", err)
+	}
+	defer tx.Rollback()
+
+	/*
+	 * Bank the totals before destroying the rows that carry them.
+	 *
+	 * In the same transaction, because a crash between the two would either
+	 * lose the totals or double them — and the second is worse, since a number
+	 * that grows on its own is harder to disbelieve than one that vanishes.
+	 *
+	 * The banked figures use the same arithmetic ProfileStatistics does: a
+	 * finished item counts its duration, an unfinished one counts how far in
+	 * you got. Summing runtimes instead would report eleven hours for eleven
+	 * films abandoned in their first minute.
+	 */
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO profile_totals (user_id, started, finished, watched_ms, first_at)
+		SELECT ?, COUNT(*), COALESCE(SUM(ps.watched), 0),
+		       COALESCE(SUM(CASE WHEN ps.watched = 1
+		                         THEN COALESCE(mi.duration_ms, ps.position_ms)
+		                         ELSE ps.position_ms END), 0),
+		       MIN(ps.updated_at)
+		FROM playback_state ps
+		JOIN media_item mi ON mi.id = ps.item_id
+		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)`+
+		strings.ReplaceAll(where, "item_id", "ps.item_id")+`
+		ON CONFLICT(user_id) DO UPDATE SET
+			started    = started    + excluded.started,
+			finished   = finished   + excluded.finished,
+			watched_ms = watched_ms + excluded.watched_ms,
+			-- The oldest playback this account ever had. Kept as a minimum
+			-- rather than replaced, or clearing history a second time would
+			-- move the account's history forward in time.
+			first_at   = MIN(COALESCE(first_at, excluded.first_at),
+			                 COALESCE(excluded.first_at, first_at))`,
+		append([]any{userID}, args...)...); err != nil {
+		return 0, fmt.Errorf("reset history: banking totals: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM playback_state WHERE user_id = ?`+where, args...)
 	if err != nil {
 		return 0, fmt.Errorf("reset history: %w", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
+		return 0, fmt.Errorf("reset history: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("reset history: %w", err)
 	}
 	return n, nil

@@ -106,3 +106,108 @@ func TestResetHistoryRefusesAnUnknownScope(t *testing.T) {
 		t.Error("an unknown scope was priced")
 	}
 }
+
+/*
+ * Forgetting the list is not claiming you never watched anything.
+ *
+ * Reported the day the reset shipped: clearing history zeroed the profile,
+ * because every total was derived from the rows being deleted. A person who
+ * had watched hundreds of hours was shown nothing started and no time watched.
+ *
+ * Those are two different requests, and only one was made.
+ */
+func TestResetHistoryKeepsTheTotalsHonest(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	_, uhd, sdr, _ := seedLibrary(t, st)
+	seedProgress(t, st, uhd, sdr)
+
+	before, err := st.ProfileStatistics(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Started == 0 {
+		t.Fatal("setup: no statistics to preserve")
+	}
+
+	if _, err := st.ResetHistory(ctx, "u1", HistoryAll, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := st.ProfileStatistics(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Started != before.Started || after.Finished != before.Finished {
+		t.Errorf("totals changed: before %+v after %+v", before, after)
+	}
+	if after.WatchedMS != before.WatchedMS {
+		t.Errorf("watched time changed: %d -> %d", before.WatchedMS, after.WatchedMS)
+	}
+
+	// And the history list really is gone, which is the half that was asked for.
+	hist, err := st.History(ctx, "u1", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hist) != 0 {
+		t.Errorf("history survived the reset: %d entries", len(hist))
+	}
+}
+
+/*
+ * Clearing twice must not double anything.
+ *
+ * The banked row is accumulated, so a second reset adds to it — and a number
+ * that grows on its own is harder to disbelieve than one that vanishes, which
+ * makes this the worse of the two failure modes.
+ */
+func TestResetHistoryTwiceDoesNotInflateTheTotals(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	_, uhd, sdr, _ := seedLibrary(t, st)
+	seedProgress(t, st, uhd, sdr)
+
+	want, err := st.ProfileStatistics(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := st.ResetHistory(ctx, "u1", HistoryAll, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.ProfileStatistics(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Started != want.Started || got.WatchedMS != want.WatchedMS {
+		t.Errorf("totals drifted over repeated resets: %+v, want %+v", got, want)
+	}
+}
+
+// One account's reset must not bank, or disturb, another's totals.
+func TestResetHistoryBanksOnlyTheCallersTotals(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	_, uhd, sdr, _ := seedLibrary(t, st)
+	seedProgress(t, st, uhd, sdr)
+
+	other, err := st.ProfileStatistics(ctx, "u2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ResetHistory(ctx, "u1", HistoryAll, 0); err != nil {
+		t.Fatal(err)
+	}
+	after, err := st.ProfileStatistics(ctx, "u2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Compared field by field: FirstAt is a pointer, so == would compare
+	// addresses and fail on two reads of the same unchanged value.
+	if after.Started != other.Started || after.Finished != other.Finished ||
+		after.WatchedMS != other.WatchedMS {
+		t.Errorf("another account's totals moved: %+v -> %+v", other, after)
+	}
+}
