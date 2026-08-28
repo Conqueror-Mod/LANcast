@@ -895,7 +895,25 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND ` + collectionIsReal
 	}
 	if f.Query != "" {
-		where += ` AND (title LIKE ? OR series LIKE ?)`
+		/*
+		 * A search offers only what can be played.
+		 *
+		 * `topLevelPredicate` carries `missing = 0` and its comment records why
+		 * — "a missing row is a file the server cannot open; offering it as a
+		 * tile is offering something that cannot play". A search does not take
+		 * that branch, so the rule stopped at the grid: the browse page hid
+		 * these and the search box handed them straight back.
+		 *
+		 * That is how a title whose file had been renamed months earlier was
+		 * still reachable, played, and failed at the last moment with a message
+		 * about server load. The row is kept — scanning marks missing rather
+		 * than deleting — but keeping it is not the same as offering it.
+		 *
+		 * Children are deliberately not covered by this. A season that shows
+		 * the episode it is missing is telling you something true about the
+		 * season, and the detail page now explains what a missing file means.
+		 */
+		where += ` AND (title LIKE ? OR series LIKE ?) AND missing = 0`
 		q := "%" + f.Query + "%"
 		args = append(args, q, q)
 	}

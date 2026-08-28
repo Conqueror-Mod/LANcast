@@ -493,3 +493,46 @@ func TestGetItemNotFound(t *testing.T) {
 		t.Errorf("error = %v, want ErrNotFound", err)
 	}
 }
+
+/*
+ * A search offers only what can be played.
+ *
+ * `topLevelPredicate` carries `missing = 0` and its comment records why. A
+ * search does not take that branch, so the rule stopped at the grid: browse hid
+ * these and the search box handed them straight back.
+ *
+ * That is not hypothetical. A title whose file had been renamed months earlier
+ * was still reachable this way, played, and failed at the last moment with a
+ * message about server load — while 817 rows in the same library sat in the
+ * same state.
+ */
+func TestSearchDoesNotOfferAMissingFile(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	if _, err := st.UpsertItem(ctx, file(lib.ID, `C:\m\hollow man.mkv`, "Hollow Man")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertItem(ctx, file(lib.ID, `C:\m\hollow man dir cut.mkv`, "Hollow Man Dir Cut")); err != nil {
+		t.Fatal(err)
+	}
+	known, _ := st.KnownFiles(ctx, lib.ID)
+	gone := known[`C:\m\hollow man dir cut.mkv`].ID
+	if err := st.MarkMissing(ctx, []int64{gone}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err := st.ListItems(ctx, ItemFilter{Query: "Hollow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.ID == gone {
+			t.Error("a search returned a title whose file is not on disk")
+		}
+	}
+	if len(items) != 1 {
+		t.Errorf("search returned %d results, want only the one that can play", len(items))
+	}
+}
