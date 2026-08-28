@@ -1389,8 +1389,15 @@ repository does not accept itself.
     bundle**: build from the pinned commit, confirm byte-identity with the
     published artefact, vendor what you built. Verified on 1.7.1 — three of
     four bundles byte-identical, the fourth identical modulo Windows line
-    endings. The dependency is still **not taken**; what changed is that the
-    gate is one a person can pass. The v0.8.7 hysteresis fix was step one and the only step that does not
+    endings. **The dependency is now taken** (#393): hls.js
+    1.7.1 is vendored as a bundle reproduced here and verified byte-identical to
+    the published one, reviewed and signed. **Steps 4 and 5 are built** (#394) —
+    MSE behind a device setting that defaults to off, with native-HLS browsers
+    given the playlist directly and any device that cannot do MSE falling back
+    rather than failing. **Step 6 is gated**: the default does not flip and
+    nothing is deleted until MSE has been watched playing a real channel in a
+    real browser, against a server containing #391. jsdom performs no media, so
+    the 443-test client suite proves the wiring and cannot prove playback. The v0.8.7 hysteresis fix was step one and the only step that does not
     depend on the outcome.
 
     And the lesson, which cost an hour: the activity panel called every ffmpeg
