@@ -564,3 +564,14 @@
 .detail__cast-member--link:focus-visible .detail__cast-name {
   color: var(--gold, #c8a04a);
 }
+
+/* A title whose file has gone. Stated in the flow rather than as a warning
+   banner: it is an ordinary condition of a library that marks missing instead
+   of deleting, not an error the viewer has to act on. */
+.detail__missing {
+  margin: 12px 0 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
