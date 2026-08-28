@@ -83,7 +83,7 @@ var candidates = []Encoder{
 }
 
 // EncoderArgs returns the codec flags for this encoder at the given quality.
-func (e Encoder) EncoderArgs(quality int, framesOnGPU bool) []string {
+func (e Encoder) EncoderArgs(quality int, framesOnGPU bool, width, height int, fps float64) []string {
 	args := []string{"-c:v", e.Name}
 	if e.presetFlag != "" {
 		args = append(args, e.presetFlag, e.presetValue)
@@ -118,7 +118,15 @@ func (e Encoder) EncoderArgs(quality int, framesOnGPU bool) []string {
 	if !framesOnGPU {
 		args = append(args, "-pix_fmt", "yuv420p")
 	}
-	args = append(args, "-profile:v", "high", "-level", "4.1")
+	/*
+	 * The level is derived from the frame rather than assumed.
+	 *
+	 * This was `4.1` unconditionally, which is correct for 1080p and refused
+	 * outright by NVENC for anything larger — see level.go. A 2160x1080 episode
+	 * failed to encode at all, producing a black screen on a file every other
+	 * player handles.
+	 */
+	args = append(args, "-profile:v", "high", "-level", H264Level(width, height, fps))
 
 	// AMF defaults to a rate control that ignores -qp_i unless told to use
 	// constant QP.
@@ -194,7 +202,7 @@ func testEncode(ctx context.Context, bin string, e Encoder) error {
 		"-f", "lavfi", "-i", "testsrc=duration=0.2:size=320x240:rate=10",
 	}
 	// The probe decodes nothing, so its frames are never on the card.
-	args = append(args, e.EncoderArgs(23, false)...)
+	args = append(args, e.EncoderArgs(23, false, 0, 0, 0)...)
 	args = append(args, "-f", "null", "-")
 
 	cmd := exec.CommandContext(ctx, bin, args...)

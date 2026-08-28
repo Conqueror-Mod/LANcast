@@ -2,6 +2,7 @@ package probe
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -46,6 +47,36 @@ type Decision struct {
 	// cap applied that never reached a pixel.
 	TargetHeight       int   `json:"target_height,omitempty"`
 	TargetVideoBitRate int64 `json:"target_video_bitrate,omitempty"`
+
+	/*
+	 * SourceWidth and SourceHeight are the frame the encoder will be handed,
+	 * before any TargetHeight scaling.
+	 *
+	 * They exist because H.264 has a *level*, and a level is a promise about
+	 * frame size that a hardware encoder enforces. Stating one that the frame
+	 * exceeds is not a hint the encoder rounds up — NVENC answers
+	 * `InitializeEncoder failed: invalid param (8): Invalid Level` and produces
+	 * nothing at all.
+	 *
+	 * They ride on the decision for the reason the fields above do: the
+	 * decision is the only thing that has seen the stream, and ffmpeg is built
+	 * from the decision rather than from the probe. Set only when VideoAction
+	 * is "encode", since nothing else needs a level.
+	 *
+	 * Height alone is not enough and that is the trap this was found in. A
+	 * 2160x1080 scope master is *1080 tall* — under every height cap in the
+	 * system — and 2160 wide, which is what puts it over the frame-size limit.
+	 * The same shape as resolution buckets reading width rather than height.
+	 */
+	SourceWidth  int `json:"source_width,omitempty"`
+	SourceHeight int `json:"source_height,omitempty"`
+	/*
+	 * SourceFrameRate carries the rate for the same reason, and it matters for
+	 * exactly one distinction: 4K at 30 and 4K at 60 fit the same frame-size
+	 * limit and different throughput limits. Zero when the source did not say,
+	 * which the level rule treats as "do not consult", never as "zero".
+	 */
+	SourceFrameRate float64 `json:"source_frame_rate,omitempty"`
 
 	/*
 	 * TonemapHDR marks a re-encode whose source is HDR and whose output is not
@@ -486,6 +517,13 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 			// source being re-encoded is always an HDR-to-SDR conversion. There
 			// is no configuration in which it is not (ADR 0033).
 			d.TonemapHDR = IsHDR(video)
+
+			d.SourceWidth, d.SourceHeight = video.Width, video.Height
+			// Already normalised to a decimal string by the probe; an
+			// unparseable one stays zero rather than becoming a guess.
+			if f, err := strconv.ParseFloat(video.FrameRate, 64); err == nil {
+				d.SourceFrameRate = f
+			}
 
 			if p.MaxHeight > 0 && video.Height > p.MaxHeight {
 				d.TargetHeight = p.MaxHeight

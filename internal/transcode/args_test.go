@@ -940,3 +940,59 @@ func TestFileHLSStaysVOD(t *testing.T) {
 		t.Fatalf("file HLS playlist type = %q, want vod", got)
 	}
 }
+
+/*
+ * The level reaches the command line, computed from the frame.
+ *
+ * The unit tests prove the rule; this proves the wiring, which is the half that
+ * failed in production: the rule did not exist, `4.1` was a literal, and a
+ * 2160x1080 episode produced no video at all because NVENC refused the level
+ * before encoding a frame.
+ */
+func TestArgsLevelFollowsTheFrame(t *testing.T) {
+	enc := Encoder{Name: "h264_nvenc", qualityFlag: "-cq"}
+
+	wide := Args(Options{
+		Input: "in.mkv", Output: Progressive, AudioIndex: -1, Encoder: enc,
+		Decision: probe.Decision{
+			Method: probe.Transcode, VideoAction: "encode", AudioAction: "encode",
+			SourceWidth: 2160, SourceHeight: 1080, SourceFrameRate: 23.976,
+		},
+	})
+	if got := argValue(wide, "-level"); got != "5.0" {
+		t.Errorf("2160x1080 encoded at level %q, want 5.0", got)
+	}
+
+	hd := Args(Options{
+		Input: "in.mkv", Output: Progressive, AudioIndex: -1, Encoder: enc,
+		Decision: probe.Decision{
+			Method: probe.Transcode, VideoAction: "encode", AudioAction: "encode",
+			SourceWidth: 1920, SourceHeight: 1080, SourceFrameRate: 23.976,
+		},
+	})
+	if got := argValue(hd, "-level"); got != "4.1" {
+		t.Errorf("1080p encoded at level %q, want the 4.1 it always used", got)
+	}
+}
+
+/*
+ * A resolution cap lowers the level with it.
+ *
+ * The level has to describe the frame the encoder is handed, not the one on
+ * disk: 4K scaled to 720p is a 720p encode, and promising 5.1 for it would be
+ * true but needlessly narrow the devices that will accept the output.
+ */
+func TestArgsLevelFollowsTheCapNotTheSource(t *testing.T) {
+	a := Args(Options{
+		Input: "in.mkv", Output: Progressive, AudioIndex: -1,
+		Encoder: Encoder{Name: "h264_nvenc", qualityFlag: "-cq"},
+		Decision: probe.Decision{
+			Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy",
+			SourceWidth: 3840, SourceHeight: 2160, SourceFrameRate: 24,
+			TargetHeight: 720,
+		},
+	})
+	if got := argValue(a, "-level"); got != "4.1" {
+		t.Errorf("4K capped to 720p encoded at level %q, want 4.1", got)
+	}
+}
