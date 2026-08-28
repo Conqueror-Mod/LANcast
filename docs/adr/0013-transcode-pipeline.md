@@ -272,14 +272,38 @@ completes the note in `manager.go` beside `supersede`, which attributed two
 starts six milliseconds apart to seeking: the attribution was incomplete rather
 than wrong, since no seeking occurred in either run above.
 
-**The discriminating reading has not been taken yet.** `start_at` was added to
-the progressive log line for exactly this (v0.8.18); the runs above predate it.
-Successive sessions carrying an advancing `t` near the playback position confirm
-a reconnecting element; a fixed `t` means something else is asking. Until that
-reading exists, the mechanism above is the surviving hypothesis and not a
-finding.
+**The reading has now been taken, and it refutes the hypothesis above.**
+`start_at` was added to the progressive log line for exactly this (v0.8.18), and
+the rule was stated in advance: successive sessions carrying an advancing `t`
+near the playback position confirm a reconnecting element; a fixed `t` means
+something else is asking.
 
-Nothing is proposed for it here. Playback is unaffected, one process runs, and
+Observed 2026-08-27, on item 7264, while a person watched it play:
+
+```
+22:28:26.543  session=2b610d0f12c19e4b item=7264 output=progressive start_at=0
+22:28:33.000  session=8787867d528f4770 item=7264 output=progressive start_at=0
+```
+
+Seven seconds apart, **both at zero**. So it is *not* the media element opening
+another connection to carry on where it was — that would have arrived with `t`
+near the play head. Something asked for the film again, from the beginning.
+
+This does not identify what. It rules out the one mechanism that survived the
+earlier eliminations, which leaves the question genuinely open rather than
+narrowed: the leak, the client re-render, and now the reconnecting element have
+each been excluded by measurement. What has never been checked is whether the
+*first* of a pair is being abandoned — `supersede(owner, itemID)` guarantees one
+stream per viewer per item, so a second request at the same offset kills the
+first, and a client that reissues its opening request would produce exactly this
+pair without anything being wrong downstream.
+
+Worth recording that the earlier framing was stated as a hypothesis and is now
+falsified, rather than quietly replaced. The prediction was made before the
+measurement, which is the only reason the measurement means anything.
+
+Nothing is proposed for it here, and the refutation does not change that.
+Playback is unaffected, one process runs, and
 on a copy path a reconnect costs an ffmpeg start and a re-probe — cheap. On a
 full encode it is not cheap, and a file re-encoded from a fresh offset
 repeatedly is real waste, which is what would make it worth acting on.
