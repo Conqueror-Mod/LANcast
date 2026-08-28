@@ -38,6 +38,30 @@ import { usePrefs, qualityQuery, type Prefs } from "./prefs";
 import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
+/*
+ * What to say during the wait, in words written for the person waiting.
+ *
+ * This used to append the decision's own `reason` verbatim, which is a sentence
+ * written for a log: "Repackaging — matroska container is not supported, but
+ * both codecs are". Every word of that is true and it reads as a complaint
+ * about the file, so a viewer asked why their MKV was unsupported when nothing
+ * was wrong — the server was doing the cheapest thing it can do, rewriting the
+ * container while copying both streams untouched.
+ *
+ * The reason has not gone anywhere. It is in the server log and on the activity
+ * panel, which is where a sentence in that vocabulary belongs. What a viewer
+ * needs is how long to expect to wait and why there is a wait at all.
+ */
+export function waitNote(d: { method: string; reason?: string }): string {
+  if (d.method === "remux") {
+    // A container rewrite copies both streams, so it is quick and lossless.
+    // Naming that is the difference between "my file is unsupported" and "it
+    // is being put in a different box".
+    return "Repackaging for your browser — this is quick, and nothing is re-encoded";
+  }
+  return "Converting for your browser — this can take a few seconds to start";
+}
+
 // Playback lives above the router.
 //
 // It used to live in the Player screen, which meant the media element was a
@@ -857,11 +881,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         decision.current = { method: "direct", reason: "" };
       }
       transcoding.current = decision.current.method !== "direct";
-      setNote(
-        transcoding.current
-          ? `${decision.current.method === "remux" ? "Repackaging" : "Converting"} — ${decision.current.reason}`
-          : "",
-      );
+      setNote(transcoding.current ? waitNote(decision.current) : "");
       if (transcoding.current) {
         offset.current = startedFrom.current;
         setSubOffset(startedFrom.current);
