@@ -47,6 +47,7 @@ import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { useBigscreen } from "@/lib/bigscreen";
 import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
+import { useLiveTransport } from "@/lib/liveTransport";
 import { AuditLog } from "@/components/AuditLog";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
@@ -59,8 +60,6 @@ import type {
 } from "@/api/types";
 import { LibraryRow, AddLibrary } from "@/components/LibrarySettings";
 import "./Settings.css";
-
-
 
 function ProviderKey({
   label,
@@ -481,9 +480,9 @@ function LiveTVSection() {
     <section className="settings__section">
       <span className="section-label">Live TV</span>
       <p className="set-row__note">
-        A channel list is an M3U — from an IPTV provider, or from a tuner on this
-        network. Channels are played through this server, so the list URL and
-        anything in it stays here.
+        A channel list is an M3U — from an IPTV provider, or from a tuner on
+        this network. Channels are played through this server, so the list URL
+        and anything in it stays here.
       </p>
       <p className="set-row__note">
         A guide is a separate XMLTV file, plain or gzipped. Listings attach to
@@ -715,173 +714,174 @@ function AdminSections({ pane }: { pane: string }) {
   return (
     <>
       {pane === "libraries" && (
-      <section className="settings__section">
-        <span className="section-label">Libraries</span>
-        {libraries?.map((lib) => (
-          <LibraryRow key={lib.id} library={lib} />
-        ))}
-        <AddLibrary />
-        <ScanEverything />
+        <section className="settings__section">
+          <span className="section-label">Libraries</span>
+          {libraries?.map((lib) => (
+            <LibraryRow key={lib.id} library={lib} />
+          ))}
+          <AddLibrary />
+          <ScanEverything />
 
-        {settings && (
-          <>
-            <RuleSelect
-              title="Rescan libraries automatically"
-              sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."
-              value={settings.scan_interval_hours}
-              options={[
-                { value: 0, label: "Never" },
-                { value: 1, label: "Hourly" },
-                { value: 6, label: "Every 6 hours" },
-                { value: 12, label: "Every 12 hours" },
-                { value: 24, label: "Daily" },
-                { value: 168, label: "Weekly" },
-              ]}
-              onChange={(v) => update.mutate({ scan_interval_hours: v })}
-            />
-            {/* The switch that decides whether this server can destroy media at
+          {settings && (
+            <>
+              <RuleSelect
+                title="Rescan libraries automatically"
+                sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."
+                value={settings.scan_interval_hours}
+                options={[
+                  { value: 0, label: "Never" },
+                  { value: 1, label: "Hourly" },
+                  { value: 6, label: "Every 6 hours" },
+                  { value: 12, label: "Every 12 hours" },
+                  { value: 24, label: "Daily" },
+                  { value: 168, label: "Weekly" },
+                ]}
+                onChange={(v) => update.mutate({ scan_interval_hours: v })}
+              />
+              {/* The switch that decides whether this server can destroy media at
                 all. Off is a real answer, and it was not available before:
                 every install could delete files from disk through the API. */}
-            <label className="set-toggle">
-              <input
-                type="checkbox"
-                checked={settings.allow_media_deletion}
-                onChange={(e) =>
-                  update.mutate({ allow_media_deletion: e.target.checked })
-                }
-              />
-              Allow deleting media files from disk
-            </label>
-            <div className="set-row__sub set-row__sub--standalone">
-              When off, removing a title takes it out of the library and leaves
-              every file where it is. Nothing on this server can then delete
-              your media.
-            </div>
-          </>
-        )}
-      </section>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.allow_media_deletion}
+                  onChange={(e) =>
+                    update.mutate({ allow_media_deletion: e.target.checked })
+                  }
+                />
+                Allow deleting media files from disk
+              </label>
+              <div className="set-row__sub set-row__sub--standalone">
+                When off, removing a title takes it out of the library and
+                leaves every file where it is. Nothing on this server can then
+                delete your media.
+              </div>
+            </>
+          )}
+        </section>
       )}
 
       {pane === "metadata" && (
-      <section className="settings__section">
-        <span className="section-label">Metadata</span>
-        {settings && (
-          <>
-            <ProviderKey
-              label="TMDB"
-              configured={settings.tmdb.configured}
-              pending={update.isPending}
-              onSave={(v) => update.mutate({ tmdb_key: v })}
-            />
-            <ProviderKey
-              label="OpenSubtitles"
-              configured={settings.opensubtitles.configured}
-              pending={update.isPending}
-              onSave={(v) => update.mutate({ opensubtitles_key: v })}
-            />
-            <ProviderKey
-              label="OMDb"
-              hint="Rotten Tomatoes, Metacritic & IMDb ratings"
-              configured={settings.omdb.configured}
-              pending={update.isPending}
-              onSave={(v) => update.mutate({ omdb_key: v })}
-            />
-            <MediaToolsRow settings={settings} update={update} />
-            <ReprobeRow available={!!settings.media_tools?.probe_available} />
-            <label className="set-toggle">
-              <input
-                type="checkbox"
-                checked={settings.auto_enrich}
-                onChange={(e) =>
-                  update.mutate({ auto_enrich: e.target.checked })
-                }
+        <section className="settings__section">
+          <span className="section-label">Metadata</span>
+          {settings && (
+            <>
+              <ProviderKey
+                label="TMDB"
+                configured={settings.tmdb.configured}
+                pending={update.isPending}
+                onSave={(v) => update.mutate({ tmdb_key: v })}
               />
-              Automatically fetch metadata after a scan
-            </label>
-            <label className="set-toggle">
-              <input
-                type="checkbox"
-                checked={settings.write_nfo}
-                onChange={(e) => update.mutate({ write_nfo: e.target.checked })}
+              <ProviderKey
+                label="OpenSubtitles"
+                configured={settings.opensubtitles.configured}
+                pending={update.isPending}
+                onSave={(v) => update.mutate({ opensubtitles_key: v })}
               />
-              Write NFO sidecar files next to media
-            </label>
-          </>
-        )}
-      </section>
+              <ProviderKey
+                label="OMDb"
+                hint="Rotten Tomatoes, Metacritic & IMDb ratings"
+                configured={settings.omdb.configured}
+                pending={update.isPending}
+                onSave={(v) => update.mutate({ omdb_key: v })}
+              />
+              <MediaToolsRow settings={settings} update={update} />
+              <ReprobeRow available={!!settings.media_tools?.probe_available} />
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.auto_enrich}
+                  onChange={(e) =>
+                    update.mutate({ auto_enrich: e.target.checked })
+                  }
+                />
+                Automatically fetch metadata after a scan
+              </label>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.write_nfo}
+                  onChange={(e) =>
+                    update.mutate({ write_nfo: e.target.checked })
+                  }
+                />
+                Write NFO sidecar files next to media
+              </label>
+            </>
+          )}
+        </section>
       )}
 
       {pane === "playback" && (
-      <section className="settings__section">
-        <span className="section-label">Playback</span>
-        {settings && (
-          <div className="set-row">
-            <div className="set-row__main">
-              <div className="set-row__title">Video encoder</div>
-              <div className="set-row__sub">
-                Active: {settings.encoder.active.label}
-                {settings.encoder.active.hardware ? " (hardware)" : ""}
+        <section className="settings__section">
+          <span className="section-label">Playback</span>
+          {settings && (
+            <div className="set-row">
+              <div className="set-row__main">
+                <div className="set-row__title">Video encoder</div>
+                <div className="set-row__sub">
+                  Active: {settings.encoder.active.label}
+                  {settings.encoder.active.hardware ? " (hardware)" : ""}
+                </div>
+              </div>
+              <div className="set-row__actions">
+                <select
+                  className="set-input"
+                  value={settings.encoder.preference}
+                  onChange={(e) =>
+                    update.mutate({ hardware_encoder: e.target.value })
+                  }
+                >
+                  <option value="auto">Auto</option>
+                  {settings.encoder.available.map((enc) => (
+                    <option key={enc.name} value={enc.name}>
+                      {enc.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-            <div className="set-row__actions">
-              <select
-                className="set-input"
-                value={settings.encoder.preference}
-                onChange={(e) =>
-                  update.mutate({ hardware_encoder: e.target.value })
-                }
-              >
-                <option value="auto">Auto</option>
-                {settings.encoder.available.map((enc) => (
-                  <option key={enc.name} value={enc.name}>
-                    {enc.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
+          )}
 
-        {settings && (
-          <>
-            {/* Applied by the server on every progress write, so every client
+          {settings && (
+            <>
+              {/* Applied by the server on every progress write, so every client
                 agrees about what is finished — the reason this is here and not
                 in each player. */}
-            <RuleSelect
-              title="Counts as watched at"
-              sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."
-              value={settings.watched_threshold}
-              options={[
-                { value: 70, label: "70%" },
-                { value: 80, label: "80%" },
-                { value: 85, label: "85%" },
-                { value: 90, label: "90%" },
-                { value: 95, label: "95%" },
-                { value: 100, label: "100% — only at the end" },
-              ]}
-              onChange={(v) => update.mutate({ watched_threshold: v })}
-            />
-            <RuleNumber
-              title="Weeks to keep in Continue Watching"
-              sub="Anything untouched for longer drops off the shelf. 0 keeps everything for ever — the half hour of a documentary you abandoned in March is not something you are in the middle of, and it pushes out what you paused last night."
-              value={settings.continue_weeks}
-              min={0}
-              max={520}
-              onCommit={(v) => update.mutate({ continue_weeks: v })}
-            />
-            <RuleNumber
-              title="Items in Continue Watching"
-              sub="How many the shelf holds at most. A client may ask for fewer; it cannot ask for more."
-              value={settings.continue_limit}
-              min={1}
-              max={100}
-              onCommit={(v) => update.mutate({ continue_limit: v })}
-            />
-          </>
-        )}
-      </section>
+              <RuleSelect
+                title="Counts as watched at"
+                sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."
+                value={settings.watched_threshold}
+                options={[
+                  { value: 70, label: "70%" },
+                  { value: 80, label: "80%" },
+                  { value: 85, label: "85%" },
+                  { value: 90, label: "90%" },
+                  { value: 95, label: "95%" },
+                  { value: 100, label: "100% — only at the end" },
+                ]}
+                onChange={(v) => update.mutate({ watched_threshold: v })}
+              />
+              <RuleNumber
+                title="Weeks to keep in Continue Watching"
+                sub="Anything untouched for longer drops off the shelf. 0 keeps everything for ever — the half hour of a documentary you abandoned in March is not something you are in the middle of, and it pushes out what you paused last night."
+                value={settings.continue_weeks}
+                min={0}
+                max={520}
+                onCommit={(v) => update.mutate({ continue_weeks: v })}
+              />
+              <RuleNumber
+                title="Items in Continue Watching"
+                sub="How many the shelf holds at most. A client may ask for fewer; it cannot ask for more."
+                value={settings.continue_limit}
+                min={1}
+                max={100}
+                onCommit={(v) => update.mutate({ continue_limit: v })}
+              />
+            </>
+          )}
+        </section>
       )}
-
     </>
   );
 }
@@ -950,7 +950,8 @@ function ScanEverything() {
             {busy.length > 0 && (
               <>
                 {busy.length} {busy.length === 1 ? "was" : "were"} already
-                scanning and {busy.length === 1 ? "was" : "were"} left to finish.
+                scanning and {busy.length === 1 ? "was" : "were"} left to
+                finish.
               </>
             )}
             {started.length === 0 && busy.length === 0 && (
@@ -1080,10 +1081,41 @@ function RuleNumber({
 function DisplaySection() {
   const [bigscreen, setBigscreen] = useBigscreen();
   const [spoilers, setSpoilers] = useSpoilerMode();
+  const [liveTransport, setLiveTransport] = useLiveTransport();
 
   return (
     <section className="settings__section">
       <span className="section-label">Display</span>
+
+      {/*
+       * Live TV transport, and it is deliberately a device setting rather than
+       * a server one: what a browser can do with MediaSource is a fact about
+       * this machine, not about the library.
+       *
+       * Off by default, and staying that way until the new path has been lived
+       * with — step 4 of the ADR 0013 amendment. The old path is one toggle
+       * away for exactly as long as that takes.
+       */}
+      <label className="set-toggle set-toggle--described">
+        <input
+          type="checkbox"
+          checked={liveTransport === "mse"}
+          onChange={(e) =>
+            setLiveTransport(e.target.checked ? "mse" : "progressive")
+          }
+        />
+        <span>
+          <strong>Improved live TV playback</strong>
+          <span className="set-toggle__desc">
+            Plays channels through a segmented stream instead of one long
+            response, which lets the player see how much it is holding rather
+            than guessing. It should stutter less and stop drifting behind live.
+            New, and off by default — if a channel behaves worse with this on,
+            turn it off and it will play the way it always has. Applies on this
+            device only.
+          </span>
+        </span>
+      </label>
 
       <label className="set-toggle set-toggle--described">
         <input
@@ -1096,19 +1128,19 @@ function DisplaySection() {
           <span className="set-toggle__desc">
             Scales the whole interface for a television across the room. The
             same screens, larger — not a separate client. Applies on this device
-            only, survives a restart, and toggles with{" "}
-            <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> from anywhere, so you
-            can get back out without finding this page again.
+            only, survives a restart, and toggles with <kbd>Ctrl</kbd>{" "}
+            <kbd>Shift</kbd> <kbd>B</kbd> from anywhere, so you can get back out
+            without finding this page again.
           </span>
         </span>
       </label>
 
       {/*
-        * Spoilers, in the device pane for the same reason bigscreen is: there is
-        * no per-user preference store on the server, and inventing one for a
-        * checkbox would be a schema decision made by a checkbox. Somebody who
-        * watches on two machines sets it twice, which is honest and small.
-        */}
+       * Spoilers, in the device pane for the same reason bigscreen is: there is
+       * no per-user preference store on the server, and inventing one for a
+       * checkbox would be a schema decision made by a checkbox. Somebody who
+       * watches on two machines sets it twice, which is honest and small.
+       */}
       <label className="set-row set-row--stacked">
         <div className="set-row__main">
           <div className="set-row__title">Spoilers on a season page</div>
@@ -1172,7 +1204,11 @@ function MediaToolsRow({
       <div className="set-row__main">
         <div className="set-row__title">
           Media tools{" "}
-          <span className={"addon-signer addon-signer--" + (ok ? "first_party" : "unsigned")}>
+          <span
+            className={
+              "addon-signer addon-signer--" + (ok ? "first_party" : "unsigned")
+            }
+          >
             {ok ? "found" : "missing"}
           </span>
         </div>
@@ -1293,7 +1329,8 @@ function ReprobeRow({ available }: { available: boolean }) {
     sub = "Install ffmpeg to inspect your files.";
   } else if (running) {
     const { probed = 0, total = 0 } = status.data ?? {};
-    sub = total > 0 ? `Reading files — ${probed} of ${total}.` : "Reading files…";
+    sub =
+      total > 0 ? `Reading files — ${probed} of ${total}.` : "Reading files…";
   } else if (reprobe.isError) {
     sub = (reprobe.error as Error).message;
   } else if (queued === 0) {
@@ -1567,7 +1604,9 @@ function GrantDialog({
             ))}
           </ul>
         ) : (
-          <p className="addon-dialog__caps">Nothing beyond running — no network, no secrets.</p>
+          <p className="addon-dialog__caps">
+            Nothing beyond running — no network, no secrets.
+          </p>
         )}
         <div className="addon-dialog__actions">
           <button
@@ -1607,15 +1646,16 @@ function AddonRow({ plugin }: { plugin: Plugin }) {
     <div className="set-row">
       <div className="set-row__main">
         <div className="set-row__title">
-          {plugin.name}{" "}
-          <span className="addon-version">v{plugin.version}</span>{" "}
+          {plugin.name} <span className="addon-version">v{plugin.version}</span>{" "}
           <span className={"addon-signer addon-signer--" + plugin.signer}>
             {SIGNER_LABEL[plugin.signer] ?? plugin.signer}
           </span>
         </div>
         <div className="set-row__sub">
           {plugin.enabled ? "Enabled" : "Disabled"}
-          {granted.length > 0 ? " · " + granted.join(" · ") : " · no capabilities"}
+          {granted.length > 0
+            ? " · " + granted.join(" · ")
+            : " · no capabilities"}
         </div>
       </div>
       <div className="set-row__actions">
@@ -1701,7 +1741,9 @@ function AddonsSection() {
         <span className="set-error">{(upload.error as Error).message}</span>
       )}
 
-      {staged && <GrantDialog plugin={staged} onClose={() => setStaged(null)} />}
+      {staged && (
+        <GrantDialog plugin={staged} onClose={() => setStaged(null)} />
+      )}
     </section>
   );
 }
@@ -1772,7 +1814,6 @@ function ServerLogSection() {
     </section>
   );
 }
-
 
 /*
  * Server identity. /api/health has returned the version since the beginning and
@@ -2012,12 +2053,12 @@ export function Settings() {
               )}
               {pane === "activity" && <AuditLog />}
               {pane === "logs" && (
-        <>
-          <ServerLogSection />
-          <CrashReports />
-          <MaintenanceSection />
-        </>
-      )}
+                <>
+                  <ServerLogSection />
+                  <CrashReports />
+                  <MaintenanceSection />
+                </>
+              )}
             </>
           )}
           {pane === "account" && <AccountSection />}
@@ -2073,14 +2114,16 @@ function MaintenanceSection() {
             <input
               type="checkbox"
               checked={settings.debug_logging}
-              onChange={(e) => update.mutate({ debug_logging: e.target.checked })}
+              onChange={(e) =>
+                update.mutate({ debug_logging: e.target.checked })
+              }
             />
             Write debug detail to the log
           </label>
           <div className="set-row__sub set-row__sub--standalone">
-            Takes effect on the next line logged — no restart — and survives one,
-            because the faults worth turning this on for are the intermittent
-            ones. Leave it off for ordinary running: it is verbose.
+            Takes effect on the next line logged — no restart — and survives
+            one, because the faults worth turning this on for are the
+            intermittent ones. Leave it off for ordinary running: it is verbose.
           </div>
         </>
       )}
@@ -2102,7 +2145,9 @@ function MaintenanceSection() {
             onClick={() =>
               clear.mutate("artwork", {
                 onSuccess: (r) =>
-                  setFreed(`${Math.round((r.freed_bytes / 1048576) * 10) / 10} MB`),
+                  setFreed(
+                    `${Math.round((r.freed_bytes / 1048576) * 10) / 10} MB`,
+                  ),
               })
             }
           >
@@ -2150,7 +2195,9 @@ function MaintenanceSection() {
                 setConfirmReset(true);
                 return;
               }
-              reset.mutate(undefined, { onSuccess: () => setConfirmReset(false) });
+              reset.mutate(undefined, {
+                onSuccess: () => setConfirmReset(false),
+              });
             }}
           >
             {reset.isPending

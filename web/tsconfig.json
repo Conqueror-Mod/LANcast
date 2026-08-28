@@ -21,7 +21,7 @@
     "noUncheckedSideEffectImports": true,
 
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "paths": { "@/*": ["src/*"], "hls.js": ["vendor/hls.js/hls.d.ts"] }
   },
   "include": ["src"]
 }
