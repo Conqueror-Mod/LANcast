@@ -111,3 +111,39 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* The media-tools option on the setup form.
+   Laid out as a real paragraph rather than a terse label: the text *is* the
+   consent, so it has to be readable rather than skimmable-past. */
+.auth__check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  /* Items in a column that can overflow must not shrink to fit; they collapse
+     to nothing with every style still applying. */
+  flex-shrink: 0;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth__check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.auth__check strong {
+  display: block;
+  font-weight: 500;
+}
+
+.auth__check-desc {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.auth__check code {
+  font-size: 12px;
+  word-break: break-all;
+}
