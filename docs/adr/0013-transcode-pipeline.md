@@ -372,16 +372,33 @@ commitment, and so the dependency is added late rather than early.
    confirmed byte-identical to the published artefact**, not the source tree and
    not a downloaded bundle. A reproduction that does not match, or a review of
    the risk-carrying paths that fails the standard, stops here.
-4. Live playback goes through MSE behind a setting defaulting to off, so the
-   progressive path remains one toggle away during the transition.
-5. Native-HLS browsers detected and given the playlist directly. Safari is a
-   third path rather than a second, and must not be handed an MSE pipeline it
-   does not need.
-6. Default flipped, then `preroll.ts` and the live-edge workarounds deleted —
+4. ~~Live playback goes through MSE behind a setting defaulting to off~~ —
+   **built** (#394). `livePath` resolves the setting against what the device can
+   do, and the setting can only ask: a browser without `MediaSource` falls back
+   to progressive rather than failing, because a preference is not worth a dead
+   channel. hls.js is imported dynamically — 618 KB against a 460 KB client
+   bundle would otherwise more than double what every viewer downloads to serve
+   a setting that is off. The `preroll`/`liveEdge` compensation does not run on
+   the MSE path; step 6 deletes it, step 4 stops it running.
+5. ~~Native-HLS browsers detected and given the playlist directly~~ — **built
+   in the same change**, because once `livePath` returned three answers instead
+   of two the check was free. Safari is a third path rather than a second and is
+   never handed an MSE pipeline it does not need. **Unexercised**: there is no
+   native-HLS browser on the machine this was written on — the desktop client is
+   WebView2 — so this branch has unit tests and has never run. Say so rather
+   than counting it as verified.
+6. **Gated, and this is the gate.** Nothing in step 6 begins until MSE has been
+   watched playing a real channel in a real browser. jsdom performs no media, so
+   the suite proves the wiring and the fallbacks and cannot prove playback. The
+   check also needs a **server containing #391** — the live HLS endpoint shipped
+   after v0.8.20, so against the current release the setting reports the server
+   as too old, which the client now says in those words rather than blaming the
+   channel.
+7. Default flipped, then `preroll.ts` and the live-edge workarounds deleted —
    deletion is the acceptance test. Client tests updated in the same commit;
    note that jsdom performs no media, so this needs looking at as well as
    asserting.
-7. `docs/api.md` in the same commit as any endpoint or contract change.
+8. `docs/api.md` in the same commit as any endpoint or contract change.
 
 ## Step 2, run 2026-08-27: the answer is no, and the fault is ours
 

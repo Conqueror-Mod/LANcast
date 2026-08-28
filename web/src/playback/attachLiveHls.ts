@@ -16,6 +16,15 @@
 
 import type Hls from "hls.js";
 
+/**
+ * Said when the server does not have the endpoint this path needs.
+ *
+ * Exported so the screen can recognise it rather than pattern-matching on
+ * prose, and so a test can assert the distinction without asserting the
+ * wording.
+ */
+export const OLD_SERVER = "server-too-old";
+
 /** What a caller needs to take back: stop it, and let go of the element. */
 export type LiveAttachment = {
   destroy: () => void;
@@ -74,6 +83,22 @@ export async function attachLiveHls(
   const hls: Hls = new HlsCtor(liveHlsConfig());
 
   hls.on(HlsCtor.Events.ERROR, (_e, data) => {
+    /*
+     * A 404 on the playlist means the *server* is too old, not that the
+     * channel is off the air.
+     *
+     * The endpoint this path needs shipped after v0.8.20, so a client updated
+     * ahead of its server asks for something that is not there. Reporting that
+     * as "the channel stopped" sends somebody to their provider to debug a
+     * channel that is fine — the same class of misdirection as the activity
+     * panel calling every session a transcode, which cost this project an hour
+     * on the evidence of a badge.
+     */
+    const status = (data.response as { code?: number } | undefined)?.code;
+    if (data.fatal === true && status === 404) {
+      onError?.(true, OLD_SERVER);
+      return;
+    }
     /*
      * Non-fatal errors are ordinary and are not reported upward.
      *

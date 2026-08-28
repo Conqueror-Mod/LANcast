@@ -8,7 +8,7 @@ import {
   useLiveTransport,
   type LivePath,
 } from "@/lib/liveTransport";
-import { attachLiveHls } from "@/playback/attachLiveHls";
+import { attachLiveHls, OLD_SERVER } from "@/playback/attachLiveHls";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -307,6 +307,12 @@ export function LiveTV() {
 
     void attachLiveHls(el, playing.id, (fatal, detail) => {
       if (!fatal) return;
+      if (detail === OLD_SERVER) {
+        setPlayError(
+          "This server does not have improved live playback yet — it needs a newer version than 0.8.20. Turn the setting off in Settings to play channels the way this server supports.",
+        );
+        return;
+      }
       setPlayError(
         `The channel stopped: ${detail}. It may be off the air, or the server may have run out of streams.`,
       );
