@@ -207,6 +207,20 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 		return playTarget{}, false
 	}
 	if _, err := os.Stat(path); err != nil {
+		/*
+		 * Logged for the same reason a refused transcode is: this is a decision
+		 * the server made, and it is invisible to the player.
+		 *
+		 * The element sees a failed request with no status and reports a bare
+		 * error, so the screen said the conversion could not start and blamed
+		 * the load — which sends somebody to Activity to investigate a file
+		 * that is not on the disk. The row is marked missing and the client no
+		 * longer offers Play for one, so reaching here means something asked
+		 * anyway: a stale tab, a direct link, or a scan that has not run since
+		 * the file went.
+		 */
+		s.log.Warn("refused playback: the file is not on disk",
+			"item", id, "path", path)
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
 		return playTarget{}, false
 	}

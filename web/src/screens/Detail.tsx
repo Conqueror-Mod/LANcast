@@ -184,7 +184,6 @@ function RemoveButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
 }
@@ -274,9 +273,9 @@ export function Detail() {
    * because a film opened from the grid is usually already cached and never has
    * a loading render to differ from.
    */
-  const [showBusy, setShowBusy] = useState<null | "continue" | "play" | "random">(
-    null,
-  );
+  const [showBusy, setShowBusy] = useState<
+    null | "continue" | "play" | "random"
+  >(null);
   const [showNote, setShowNote] = useState<string | null>(null);
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
@@ -628,7 +627,9 @@ export function Detail() {
             {isShow && (
               <div className="detail__actions">
                 <PlayButton
-                  label={showBusy === "continue" ? "Finding…" : "Continue watching"}
+                  label={
+                    showBusy === "continue" ? "Finding…" : "Continue watching"
+                  }
                   onPlay={() => void continueShow()}
                 />
                 <button
@@ -658,17 +659,45 @@ export function Detail() {
                 episodes, a collection's films) offers Play all, which queues
                 them in order. A show, whose children are seasons, gets neither —
                 you drill into a season first. */}
+            {/*
+             * A file that is not there does not offer to play.
+             *
+             * Scanning marks missing rather than deleting, which is the right
+             * rule — an unmounted drive must not destroy library data, and the
+             * row comes back the moment the file does. What was wrong is that
+             * a marked row still showed Play, so the only way to learn the
+             * file had gone was to press it and watch the player fail.
+             *
+             * It failed badly, too: the request is refused before ffmpeg is
+             * ever started, which the element reports as a bare error, so the
+             * player blamed the server for being busy. Wrong in a way that
+             * sends somebody to look at Activity for a file that simply is not
+             * on the disk any more.
+             *
+             * Said rather than hidden. Hiding the tile would be the other
+             * error — 62 films and 747 photographs in one real library are in
+             * this state, and a library that quietly shrinks when a drive is
+             * unplugged is exactly what marking missing exists to avoid.
+             */}
+            {item.missing && !container && (
+              <p className="detail__missing" role="status">
+                This file is not on the disk any more, so it cannot be played.
+                It is kept here rather than removed, and comes back on its own
+                if the file returns.
+              </p>
+            )}
+
             <div className="detail__actions">
-              {!container && !isPicture(item) && (
+              {!container && !isPicture(item) && !item.missing && (
                 <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
               )}
               {/*
-                * A season leads with Continue, matching the show page so the
-                * two do not disagree about what a season offers. It asks the
-                * same endpoint: the query matches episodes by their parent, so
-                * a season id answers with that season's next episode rather
-                * than the show's.
-                */}
+               * A season leads with Continue, matching the show page so the
+               * two do not disagree about what a season offers. It asks the
+               * same endpoint: the query matches episodes by their parent, so
+               * a season id answers with that season's next episode rather
+               * than the show's.
+               */}
               {isEpisodeList && (
                 <PlayButton
                   label={showBusy === "continue" ? "Finding…" : "Continue"}
@@ -678,7 +707,11 @@ export function Detail() {
               {container && playableChildren.length > 0 && (
                 <SecondaryButton
                   label="Play all"
-                  className={isEpisodeList ? "detail__play detail__play--secondary" : "detail__play"}
+                  className={
+                    isEpisodeList
+                      ? "detail__play detail__play--secondary"
+                      : "detail__play"
+                  }
                   onPress={() =>
                     navigate(
                       `/watch/${playableChildren[0].id}?queue=${playableChildren
@@ -706,9 +739,7 @@ export function Detail() {
                   has no file — "download this season" would have to mean a zip
                   the server does not build — and a missing item's file is not
                   there to hand over. */}
-              {!container && !item.missing && (
-                <DownloadButton item={item} />
-              )}
+              {!container && !item.missing && <DownloadButton item={item} />}
               {/* Anything that plays on its own can go in a playlist — a
                   track, a film, an episode. A container cannot: a playlist
                   holds entries, not albums, so "add this record" would have to
@@ -811,7 +842,9 @@ export function Detail() {
               // album artist there is no such thing as here.
               <TrackList
                 tracks={children}
-                albumArtist={isPlaylist ? undefined : (item.artist ?? undefined)}
+                albumArtist={
+                  isPlaylist ? undefined : (item.artist ?? undefined)
+                }
                 // Turns on the row edits: reorder, and remove from the list.
                 playlistID={isPlaylist ? item.id : undefined}
               />

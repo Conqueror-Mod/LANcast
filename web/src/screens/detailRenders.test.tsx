@@ -196,3 +196,39 @@ describe("the rewatch count", () => {
     expect(host.textContent).not.toContain("times");
   });
 });
+
+/*
+ * A title whose file has gone.
+ *
+ * Scanning marks missing rather than deleting — an unmounted drive must not
+ * destroy library data — so these rows are ordinary and long-lived: one real
+ * library holds 62 films and 747 photographs in this state. Every one of them
+ * used to offer Play, and the only way to learn the file had gone was to press
+ * it and watch the player fail with a message blaming server load.
+ */
+describe("a title whose file is missing", () => {
+  it("does not offer to play it", async () => {
+    await renderDetail({ ...movie, missing: true });
+    // The button is the whole fault: pressing it produces a refusal the player
+    // cannot render, which is why this is asserted rather than the message.
+    expect(host.textContent).not.toContain("Play");
+  });
+
+  it("says why, rather than leaving an empty space where the button was", async () => {
+    await renderDetail({ ...movie, missing: true });
+    expect(host.textContent).toContain("not on the disk");
+  });
+
+  it("says the row is kept, because that is the rule and not an accident", async () => {
+    // A library that quietly shrinks when a drive is unplugged is exactly what
+    // marking missing exists to prevent, so the screen says so.
+    await renderDetail({ ...movie, missing: true });
+    expect(host.textContent).toContain("comes back");
+  });
+
+  it("still plays a title whose file is there", async () => {
+    await renderDetail({ ...movie, missing: false });
+    expect(host.textContent).toContain("Play");
+    expect(host.textContent).not.toContain("not on the disk");
+  });
+});
