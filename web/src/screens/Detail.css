@@ -158,6 +158,16 @@
   font-size: 13px;
 }
 
+/* How many times this has been watched. Muted and typographic, like the
+   genres above it — never gold, which means where you are and nothing else,
+   and never a badge, because a rewatch count is something you read when you
+   are already looking at a title rather than something to be alerted to. */
+.detail__watchcount {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* External ratings (ADR 0019): a row of source chips. Monochrome on the raised
    surface — never gold, which stays the focus signal. */
 .detail__ratings {

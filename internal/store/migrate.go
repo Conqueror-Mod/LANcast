@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 30
+const CurrentSchemaVersion = 31
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -69,6 +69,7 @@ var migrations = []migration{
 	{version: 28, sql: schemaRevision28},
 	{version: 29, sql: schemaRevision29},
 	{version: 30, sql: schemaRevision30},
+	{version: 31, sql: schemaRevision31},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1104,4 +1105,29 @@ CREATE TABLE IF NOT EXISTS profile_totals (
     watched_ms INTEGER NOT NULL DEFAULT 0,
     first_at   INTEGER
 );
+`
+
+/*
+ * Revision 31 — a title can be watched more than once.
+ *
+ * `watched` is a boolean, and a boolean is wrong about how people actually
+ * watch things: a film seen twenty times and a film seen once carry the same
+ * record, so the system knows less than the person does. Comedies get rewatched
+ * annually, records get played to death, and none of that survived contact with
+ * a flag.
+ *
+ * `watch_count` is a tally beside the flag rather than a replacement for it.
+ * Every existing read — the history list, the unwatched filters, the Continue
+ * shelves, the profile totals — asks "have you finished this", and that question
+ * is unchanged and still answered by `watched`. Deriving the flag from the count
+ * would have meant rewriting all of them to gain nothing.
+ *
+ * The backfill is `watched`, which is the honest maximum: a row known to be
+ * finished has been finished at least once. It cannot recover a history nobody
+ * recorded, and inventing a plausible number would be worse than starting a
+ * true one late.
+ */
+const schemaRevision31 = `
+ALTER TABLE playback_state ADD COLUMN watch_count INTEGER NOT NULL DEFAULT 0;
+UPDATE playback_state SET watch_count = 1 WHERE watched = 1;
 `

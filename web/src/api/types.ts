@@ -78,6 +78,20 @@ export interface Artwork {
 export interface Progress {
   position_ms: number;
   watched: boolean;
+  /*
+   * How many times this has been finished — not whether it has.
+   *
+   * It only ever grows. Marking something unwatched puts it back on the list
+   * rather than claiming it was never seen, so a title can read `watched:
+   * false` while carrying a count of four.
+   *
+   * Optional because the client updates independently of the server: the
+   * installer replaces this bundle while an in-app update replaces only
+   * `LANcast-Server.exe`, so a client newer than its server is an ordinary
+   * state rather than a broken one. Absent means "this server does not count
+   * yet", which reads the same as zero and must not be shown as one.
+   */
+  watch_count?: number;
 }
 
 export interface Credit {

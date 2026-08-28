@@ -926,7 +926,7 @@ uniformly.
   "duration_ms": 6960000, "size_bytes": 8123456789,
   "series": null, "season": null, "episode": null,
   "added_at": 1753142400, "missing": false,
-  "progress": { "position_ms": 1284000, "watched": false } } ] }
+  "progress": { "position_ms": 1284000, "watched": false, "watch_count": 2 } } ] }
 ```
 
 The item **detail** response carries `file_name` — the base name of the file,
@@ -1162,6 +1162,26 @@ all. Reporting those as match failures buries the real ones.
 
 Returns `204`. Clients should throttle to roughly one call per five seconds
 during playback.
+
+**The request body does not carry `watch_count`, and clients must not try to
+set it.** The server maintains it, and it moves on the *transition* from
+unfinished to finished rather than on the level: a player posting `watched:
+true` every five seconds through the credits records one viewing, not twelve.
+
+Starting something again is what makes the next viewing countable, and nothing
+has to announce it — an early position posts as not watched, which returns the
+row to unfinished, and reaching the end counts again. So a rewatch is counted
+without any client doing anything differently.
+
+**Marking a title unwatched leaves the count alone.** "Put this back on my
+list" is not a claim never to have seen it, so a response may carry
+`"watched": false` with a non-zero `watch_count`. A client showing the count
+must not infer it from the flag in either direction.
+
+Counts are per account, like the rest of `progress`. They begin at 1 for
+anything already finished when the server upgraded to schema revision 31 —
+history that predates the column cannot be recovered, and one is the honest
+minimum rather than a guess.
 
 ### `DELETE /api/items/{id}?mode=`
 

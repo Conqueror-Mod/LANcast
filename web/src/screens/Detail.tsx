@@ -564,6 +564,21 @@ export function Detail() {
               <div className="detail__genres">{item.genres.join(" · ")}</div>
             )}
 
+            {/* How many times this has been watched, shown only once there is
+                something to say.
+                
+                From two, not one: "Watched once" is what the tick already
+                means, and repeating it in words on every finished title would
+                be noise on most of a library to serve the few that earn it.
+                Deliberately not on tiles or shelves — a number on every poster
+                competes with the artwork, and gold already means where you
+                are. */}
+            {(item.progress?.watch_count ?? 0) > 1 && (
+              <div className="detail__watchcount">
+                Watched {item.progress!.watch_count} times
+              </div>
+            )}
+
             {/* The file this row came from. Shown because a wrongly matched
                 title is impossible to correct if you cannot tell which file it
                 is — the numbered pieces of an anthology look identical

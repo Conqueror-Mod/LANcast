@@ -489,6 +489,15 @@ type Artwork struct {
 type Progress struct {
 	PositionMS int64 `json:"position_ms"`
 	Watched    bool  `json:"watched"`
+	/*
+	 * WatchCount is how many times this has been finished, not whether it has.
+	 *
+	 * It only ever grows. Marking something unwatched puts it back on the list
+	 * to be watched again — it is not a claim never to have seen it — so the
+	 * tally is left alone, and a title can read "not watched" while carrying a
+	 * count of four.
+	 */
+	WatchCount int `json:"watch_count"`
 }
 
 // ScanFile is what the scanner knows about a file on disk.
@@ -2066,8 +2075,8 @@ func (s *Store) GetItem(ctx context.Context, id int64, userID string) (*Item, er
 	var p Progress
 	var watched int
 	err = s.db.QueryRowContext(ctx,
-		`SELECT position_ms, watched FROM playback_state WHERE item_id = ? AND user_id = ?`,
-		id, userID).Scan(&p.PositionMS, &watched)
+		`SELECT position_ms, watched, watch_count FROM playback_state WHERE item_id = ? AND user_id = ?`,
+		id, userID).Scan(&p.PositionMS, &watched, &p.WatchCount)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		// No progress yet; leave it nil.
@@ -2087,7 +2096,7 @@ func (s *Store) AttachProgress(ctx context.Context, items []Item, userID string)
 		return nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT item_id, position_ms, watched FROM playback_state WHERE user_id = ?`, userID)
+		`SELECT item_id, position_ms, watched, watch_count FROM playback_state WHERE user_id = ?`, userID)
 	if err != nil {
 		return fmt.Errorf("attach progress: %w", err)
 	}
@@ -2098,7 +2107,7 @@ func (s *Store) AttachProgress(ctx context.Context, items []Item, userID string)
 		var id int64
 		var p Progress
 		var watched int
-		if err := rows.Scan(&id, &p.PositionMS, &watched); err != nil {
+		if err := rows.Scan(&id, &p.PositionMS, &watched, &p.WatchCount); err != nil {
 			return fmt.Errorf("attach progress: %w", err)
 		}
 		p.Watched = watched != 0
@@ -2122,14 +2131,34 @@ func (s *Store) SaveProgress(ctx context.Context, itemID int64, userID string, p
 	if watched {
 		w = 1
 	}
+	/*
+	 * The count moves on the edge, never on the level.
+	 *
+	 * A player posts progress every five seconds, so "watched" arrives true
+	 * many times for one viewing; counting those would tally heartbeats. What
+	 * marks a viewing is the *transition* from not-finished to finished, and
+	 * that transition already happens once per rewatch without anything
+	 * detecting a restart: starting a film again posts an early position, this
+	 * statement writes `watched = 0`, and finishing it writes 1 again.
+	 *
+	 * SQLite evaluates every SET expression against the pre-update row, so
+	 * `watched` below is the old value while `excluded.watched` is the new one
+	 * — which is what makes the comparison mean "it just became watched"
+	 * rather than "it is watched".
+	 *
+	 * A row born watched counts as one: marking something finished that was
+	 * never played is a viewing nobody recorded at the time.
+	 */
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO playback_state (item_id, user_id, position_ms, watched, updated_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO playback_state (item_id, user_id, position_ms, watched, watch_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(item_id, user_id) DO UPDATE SET
 			position_ms = excluded.position_ms,
+			watch_count = watch_count +
+				(CASE WHEN excluded.watched = 1 AND watched = 0 THEN 1 ELSE 0 END),
 			watched = excluded.watched,
 			updated_at = excluded.updated_at`,
-		itemID, userID, positionMS, w, time.Now().Unix())
+		itemID, userID, positionMS, w, w, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("save progress: %w", err)
 	}
