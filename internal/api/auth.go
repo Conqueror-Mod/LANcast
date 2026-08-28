@@ -222,6 +222,22 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		/*
+		 * InstallMediaTools is the ticked option on the setup form (ADR 0048).
+		 *
+		 * A pointer so "not sent" and "sent as false" stay different. An older
+		 * client, or a scripted setup that predates this, must not be read as
+		 * having declined -- it never saw the question. Nil falls back to the
+		 * configured default, which is what a headless install sets.
+		 *
+		 * The fetch is not admin-gated because at this moment there are no
+		 * accounts. What stands in for that gate is that this field only arrives
+		 * from a form stating what will be downloaded, from where, how large and
+		 * under which licence, with the option to untick it. That disclosure is
+		 * the consent, which is why this must never default to true when the
+		 * field is absent.
+		 */
+		InstallMediaTools *bool `json:"install_media_tools"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -252,9 +268,41 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
 	}
+
+	/*
+	 * The media tools, if the box was ticked (ADR 0048).
+	 *
+	 * After the account exists rather than before: a download that fails must
+	 * never cost somebody their setup, and the server is entirely usable
+	 * without ffmpeg -- it simply cannot convert.
+	 *
+	 * Setup does not wait for it. The fetch runs alongside with progress in
+	 * Settings, so a playback attempted meanwhile can still fail for want of
+	 * tools -- but explainably, which is the difference between "this software
+	 * cannot play my files" and "wait a moment".
+	 *
+	 * Skipped silently when ffmpeg is already there: most Linux and macOS
+	 * installs, and every machine where somebody solved this by hand.
+	 */
+	/*
+	 * Absent means no, and that is the whole safety property.
+	 *
+	 * The proposal needed an environment variable so a scripted or air-gapped
+	 * install could refuse a fetch that would otherwise start on its own. A
+	 * ticked box on a form removes the need for one: a script that POSTs to
+	 * this endpoint simply does not send the field, and nothing is fetched.
+	 * The escape hatch stopped being necessary when the trigger stopped being
+	 * automatic.
+	 */
+	toolsStarted := false
+	if req.InstallMediaTools != nil && *req.InstallMediaTools && !s.trans.Available() {
+		_, toolsStarted = s.beginToolsInstall()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"configured":    true,
-		"authenticated": true,
+		"configured":             true,
+		"authenticated":          true,
+		"media_tools_installing": toolsStarted,
 		// Not !lanBound: a server the operator deliberately bound to loopback is
 		// not LAN-bound either, and a restart would not change that. Promising
 		// otherwise sends them to do something that cannot work.

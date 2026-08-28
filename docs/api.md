@@ -85,8 +85,28 @@ non-browser clients work normally.
 | Route | Purpose |
 |---|---|
 | `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}`; `user` carries `sharing` |
-| `POST /api/auth/setup` | `{username, password}` → creates the first admin; only while unconfigured |
+| `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
+
+**`install_media_tools` is the one place the server may fetch anything on its
+own initiative, and it is why the field is optional rather than a boolean with a
+default** ([ADR 0048](adr/0048-media-tools-install-themselves-on-first-run.md)).
+
+Sending `true` starts a one-off download of ffmpeg — around 160MB, pinned URL,
+checksum verified — in the background. The response reports
+`media_tools_installing`, and progress is polled from `GET /api/media-tools`.
+
+**Absent means no.** Absent and `false` are deliberately different: absent means
+the caller never saw the question, which is true of an older client and of any
+script. Only a client that displayed what would be downloaded, from where, how
+large and under which licence may send `true` — that disclosure *is* the
+consent, and it is what stands in for the admin gate that cannot exist before
+any account does.
+
+Setup does not wait for the download, and a fetch that cannot start never fails
+the request: the account is created either way, and the server is fully usable
+without ffmpeg — it simply cannot convert. Nothing is fetched when ffmpeg is
+already present.
 | `POST /api/auth/logout` | Ends this session |
 | `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
 
