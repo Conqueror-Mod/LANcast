@@ -163,6 +163,23 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		// before an account exists, and inferring it from lan_enabled gets the
 		// deliberately-loopback case wrong in the opposite direction.
 		"restart_required": s.restartWidens,
+		/*
+		 * Whether this server can convert anything at all (ADR 0048).
+		 *
+		 * Reported here because this is the one response every screen already
+		 * fetches, and because the absence has to be visible *before* playback
+		 * is attempted. A <video> element handed a failed request reports a
+		 * bare error with no status, so a client that waits to be told cannot
+		 * be told — which is how a household concluded the software could not
+		 * play their library rather than that a tool was missing.
+		 *
+		 * Deliberately not admin-only. The install button is, correctly, but
+		 * the *fact* is not a secret and the person most affected is a member
+		 * who cannot see Settings at all. Telling them what is wrong costs
+		 * nothing and is the difference between "this is broken" and "ask
+		 * whoever runs this to install ffmpeg".
+		 */
+		"can_convert": s.trans.Available(),
 	}
 	if sess, ok := s.session(r); ok {
 		resp["authenticated"] = true

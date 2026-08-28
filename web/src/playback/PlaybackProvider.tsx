@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useItem, useSubtitles } from "@/api/hooks";
+import { useAuthStatus, useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import {
@@ -38,6 +38,7 @@ import { usePrefs, qualityQuery, type Prefs } from "./prefs";
 import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
+import { conversionHelp } from "./conversionAvailable";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -430,6 +431,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return Number.isFinite(saved) && saved > 0 && saved <= 1 ? saved : 1;
   });
   const [note, setNote] = useState("");
+  /*
+   * The latest auth status, held in a ref.
+   *
+   * Read inside an async effect that runs once per item, and a value captured
+   * in its closure would be whatever was true when the effect started. A ref
+   * is the only shape that gives the check the *current* answer — which matters
+   * because installing ffmpeg mid-session is exactly the fix this message is
+   * telling somebody to apply.
+   */
+  const auth = useAuthStatus().data;
+  const authRef = useRef(auth);
+  authRef.current = auth;
   const [subKey, setSubKey] = useState<string | null>(null);
   // True from the moment a source is chosen until the element has a frame to
   // show. A transcode takes seconds to produce its first bytes, and without
@@ -881,6 +894,32 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         decision.current = { method: "direct", reason: "" };
       }
       transcoding.current = decision.current.method !== "direct";
+
+      /*
+       * Say it before trying, not after failing (ADR 0048).
+       *
+       * A server without ffmpeg answers this request perfectly well — the
+       * decision is computed from stored probe data — and then cannot carry it
+       * out. Left alone, the element is handed a request that will be refused,
+       * reports a bare error with no status, and the viewer sees a black
+       * rectangle. That is how somebody concludes the software cannot play
+       * their library rather than that a tool is missing.
+       *
+       * Checked here because this is the last moment before the attempt, and
+       * because the answer is already in hand: every screen fetches auth status,
+       * which reports whether the server can convert at all.
+       */
+      const help = conversionHelp(
+        authRef.current?.can_convert,
+        authRef.current?.user?.role,
+        transcoding.current ? "file" : "no",
+      );
+      if (help) {
+        setLoading(false);
+        setNote(`${help.title}. ${help.action}`);
+        return;
+      }
+
       setNote(transcoding.current ? waitNote(decision.current) : "");
       if (transcoding.current) {
         offset.current = startedFrom.current;

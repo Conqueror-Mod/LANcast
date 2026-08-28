@@ -403,3 +403,25 @@ func TestSetupSucceedsEvenIfTheFetchCannotStart(t *testing.T) {
 		t.Errorf("the account was not created: %v", out)
 	}
 }
+
+/*
+ * Whether the server can convert is reported to everyone (ADR 0048).
+ *
+ * The install button is admin-only, correctly. The *fact* that ffmpeg is
+ * missing is not a secret, and the person most affected is a member who cannot
+ * open Settings at all — so withholding it from them leaves the one reader who
+ * most needs an explanation with a black rectangle and no reason for it.
+ */
+func TestAuthStatusReportsWhetherTheServerCanConvert(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "GET", "/api/auth/status", nil)
+	defer resp.Body.Close()
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["can_convert"]; !ok {
+		t.Error("auth status does not say whether the server can convert, so a client cannot explain a failure it is about to have")
+	}
+}
