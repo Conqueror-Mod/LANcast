@@ -248,12 +248,33 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 	return playTarget{item: it, decision: decision, audioIndex: audioIndex}, true
 }
 
+/*
+ * writeTranscodeError answers a refusal, and says so in the log.
+ *
+ * The logging is the point. These two cases used to write a status to the
+ * client and record nothing, which made them the only playback outcomes the
+ * server had no opinion about — and they are precisely the ones that leave a
+ * player showing a spinner for ever, because a `<video>` element handed a 429
+ * has nothing to display.
+ *
+ * The cost of that was not theoretical: a film sat converting with no session
+ * in the log, and the question "was this refused, or did the request never
+ * arrive" could not be answered at all. A refusal is a decision the server
+ * made. It should be as visible as the sessions it declined to start.
+ *
+ * The live session count travels with it because it is the difference between
+ * "the ceiling is doing its job" and "sessions are leaking" — the same number
+ * read two ways, and unreadable without it.
+ */
 func (s *Server) writeTranscodeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, transcode.ErrNotInstalled):
+		s.log.Warn("refused a transcode: ffmpeg is not installed")
 		writeError(w, http.StatusServiceUnavailable, "unavailable",
 			"ffmpeg is not installed, so this file cannot be converted for playback")
 	case errors.Is(err, transcode.ErrTooManySessions):
+		s.log.Warn("refused a transcode: at the session ceiling",
+			"running", len(s.trans.Sessions()), "max", s.trans.MaxSessions)
 		writeError(w, http.StatusTooManyRequests, "too_many_requests",
 			"too many transcodes are already running; try again shortly")
 	default:
