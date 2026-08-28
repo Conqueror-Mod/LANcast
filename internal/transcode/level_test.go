@@ -1,6 +1,10 @@
 package transcode
 
-import "testing"
+import (
+	"testing"
+
+	"lancast/internal/probe"
+)
 
 /*
  * The level a hardware encode promises.
@@ -95,5 +99,86 @@ func TestMacroblocksRoundUp(t *testing.T) {
 	}
 	if got := mbFor(2160, 1080); got != 9180 {
 		t.Errorf("2160x1080 = %d macroblocks, want 9180", got)
+	}
+}
+
+/*
+ * The keyframe interval, which decides how long a scrub takes to show a
+ * picture.
+ *
+ * Nothing set one, so encodes ran at the encoder's default of roughly ten
+ * seconds — and because the output fragments on keyframes, that is how long the
+ * viewer waited after every seek. Measured at ~2,344ms to first bytes against
+ * ~1,413ms at two seconds.
+ */
+
+func TestGopIsTwoSecondsOfWhateverTheRateIs(t *testing.T) {
+	// The point of deriving it: 48 frames is two seconds at 24fps and less
+	// than one at 60, so a fixed number is right for one library and wrong for
+	// the next.
+	for _, tc := range []struct {
+		fps  float64
+		want int
+	}{
+		{23.976, 48},
+		{24, 48},
+		{25, 50},
+		{29.97, 60},
+		{30, 60},
+		{50, 100},
+		{59.94, 120},
+		{60, 120},
+	} {
+		if got := gopFrames(tc.fps); got != tc.want {
+			t.Errorf("%.3f fps = %d frames, want %d", tc.fps, got, tc.want)
+		}
+	}
+}
+
+func TestGopFallsBackWhenTheRateIsUnknown(t *testing.T) {
+	// An unprobed or unreported rate gets the common case rather than a guess
+	// about an unusual one.
+	if got := gopFrames(0); got != 48 {
+		t.Errorf("unknown rate = %d, want 48", got)
+	}
+}
+
+func TestGopHasAFloor(t *testing.T) {
+	// A pathological rate must not produce a keyframe every frame, which costs
+	// far more in bits than it returns in latency.
+	if got := gopFrames(1); got != 12 {
+		t.Errorf("1 fps = %d, want the floor of 12", got)
+	}
+}
+
+// And it reaches the command line, which is the half a passing rule does not
+// prove.
+func TestArgsCarryTheKeyframeInterval(t *testing.T) {
+	a := Args(Options{
+		Input: "in.mkv", Output: Progressive, AudioIndex: -1,
+		Encoder: Encoder{Name: "h264_nvenc", qualityFlag: "-cq"},
+		Decision: probe.Decision{
+			Method: probe.Transcode, VideoAction: "encode", AudioAction: "copy",
+			SourceWidth: 1920, SourceHeight: 1080, SourceFrameRate: 23.976,
+		},
+	})
+	if got := argValue(a, "-g"); got != "48" {
+		t.Errorf("keyframe interval = %q, want 48", got)
+	}
+}
+
+// A copy has no encoder to instruct, and naming a GOP for one would be an
+// argument about a stream nothing is re-encoding.
+func TestACopyGetsNoKeyframeInterval(t *testing.T) {
+	a := Args(Options{
+		Input: "in.mkv", Output: Progressive, AudioIndex: -1,
+		Decision: probe.Decision{
+			Method: probe.Remux, VideoAction: "copy", AudioAction: "copy",
+		},
+	})
+	for _, v := range a {
+		if v == "-g" {
+			t.Fatal("a copy was given a keyframe interval")
+		}
 	}
 }

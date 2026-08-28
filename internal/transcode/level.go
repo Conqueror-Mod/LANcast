@@ -97,3 +97,42 @@ func H264Level(width, height int, fps float64) string {
 	// whole file exists to stop being silent.
 	return levels[len(levels)-1].name
 }
+
+/*
+ * How often the encoder should place a keyframe.
+ *
+ * Nothing set this, so every encode used the encoder's own default — around 250
+ * frames, which is ten seconds at 24fps. The file path fragments on keyframes
+ * (`frag_keyframe`), so the browser gets nothing playable until the *second*
+ * keyframe: on a progressive stream a seek restarts ffmpeg, and the viewer
+ * waits out a whole GOP before the picture returns.
+ *
+ * Measured on a real episode, seeking to three different offsets twice each:
+ * ~2,344ms to the first bytes with the default, ~1,413ms at two seconds. About
+ * 930ms off every scrub.
+ *
+ * Two seconds rather than shorter. A keyframe is expensive — more of them means
+ * more bits for the same quality — and the return diminishes quickly: the rest
+ * of the delay is process startup, opening the input and initialising the
+ * encoder, none of which a GOP length can help. Two seconds also improves
+ * seeking *within* what the browser already holds, where a decoder must find a
+ * keyframe before it can show anything.
+ *
+ * Derived from the frame rate rather than fixed, because "48 frames" is two
+ * seconds at 24fps and under one at 60. An unknown rate falls back to 48, which
+ * is the common case rather than a guess about an unusual one.
+ */
+const gopSeconds = 2
+
+func gopFrames(fps float64) int {
+	if fps <= 0 {
+		return 48
+	}
+	g := int(fps*gopSeconds + 0.5)
+	if g < 12 {
+		// Below this a GOP costs more in bits than it returns in latency, and
+		// a pathological frame rate should not produce a keyframe every frame.
+		return 12
+	}
+	return g
+}
