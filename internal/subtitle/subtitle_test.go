@@ -1,6 +1,8 @@
 package subtitle
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -368,5 +370,70 @@ func TestIsSidecar(t *testing.T) {
 		if IsSidecar(p) {
 			t.Errorf("IsSidecar(%q) = true", p)
 		}
+	}
+}
+
+/*
+ * Sidecar discovery is a question about a directory, and it must ask once.
+ *
+ * It used to read the folder twice for every video — once for isSoleVideo and
+ * once for the listing — which a caller walking a library pays per file. A
+ * season of twenty episodes read one directory forty times, and a music
+ * library did it per track for subtitle formats that cannot apply to audio.
+ */
+func TestFindSidecarsReadsTheDirectoryOnce(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"Film.mkv", "Film.en.srt", "Film.fr.srt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reads := 0
+	counting := func(d string) ([]fs.DirEntry, error) {
+		reads++
+		return os.ReadDir(d)
+	}
+
+	got := FindSidecarsWith(filepath.Join(dir, "Film.mkv"), counting)
+	if len(got) != 2 {
+		t.Fatalf("found %d sidecars, want 2", len(got))
+	}
+	if reads != 1 {
+		t.Errorf("read the directory %d times, want 1", reads)
+	}
+}
+
+// A caller sharing one reader across a folder pays for that folder once,
+// however many videos are in it. This is the property the scanner relies on.
+func TestSharedReaderCostsOneReadPerDirectory(t *testing.T) {
+	dir := t.TempDir()
+	for i := range 20 {
+		name := fmt.Sprintf("Episode %02d.mkv", i+1)
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reads := 0
+	cache := map[string][]fs.DirEntry{}
+	shared := func(d string) ([]fs.DirEntry, error) {
+		if e, ok := cache[d]; ok {
+			return e, nil
+		}
+		reads++
+		e, err := os.ReadDir(d)
+		if err != nil {
+			return nil, err
+		}
+		cache[d] = e
+		return e, nil
+	}
+
+	for i := range 20 {
+		FindSidecarsWith(filepath.Join(dir, fmt.Sprintf("Episode %02d.mkv", i+1)), shared)
+	}
+	if reads != 1 {
+		t.Errorf("read the directory %d times for 20 videos, want 1", reads)
 	}
 }

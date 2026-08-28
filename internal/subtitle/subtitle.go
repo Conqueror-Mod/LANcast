@@ -5,6 +5,7 @@
 package subtitle
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,10 +102,34 @@ type Sidecar struct {
 // only when this is the sole video in its directory. Otherwise every candidate
 // must name the video: in the filename ("Subs/Film.en.srt") or via a per-video
 // subfolder ("Subs/Film (2020)/English.srt").
+/*
+ * DirReader lists a directory. It exists so a scan can read each folder once
+ * instead of once per file in it.
+ *
+ * Sidecar discovery is inherently per-directory — "what else is sitting next to
+ * this video" — but it was being asked per *file*, twice: once here and once in
+ * isSoleVideo. A season folder of twenty episodes therefore read the same
+ * directory forty times, and a music library read one per track for subtitle
+ * formats that cannot apply to audio at all.
+ */
+type DirReader func(string) ([]fs.DirEntry, error)
+
+// FindSidecars finds subtitle files beside a video, reading the filesystem
+// directly. Callers walking many files in one directory should use
+// FindSidecarsWith and share a reader.
 func FindSidecars(videoPath string) []Sidecar {
+	return FindSidecarsWith(videoPath, os.ReadDir)
+}
+
+// FindSidecarsWith is FindSidecars against a caller-supplied directory reader.
+func FindSidecarsWith(videoPath string, read DirReader) []Sidecar {
 	base := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
 	dir := filepath.Dir(videoPath)
-	sole := isSoleVideo(dir, videoPath)
+
+	// One read, used for both questions. Sharing a reader across files is only
+	// half the saving if a single call still asks twice.
+	entries, readErr := read(dir)
+	sole := readErr == nil && isSoleVideo(entries, videoPath)
 
 	var out []Sidecar
 	seen := map[string]bool{}
@@ -124,7 +149,7 @@ func FindSidecars(videoPath string) []Sidecar {
 
 	// Beside the video: always require the filename to name the video. A loose
 	// "English.srt" next to two films belongs to neither.
-	if entries, err := os.ReadDir(dir); err == nil {
+	if readErr == nil {
 		for _, e := range entries {
 			if e.IsDir() || !IsSidecar(e.Name()) {
 				continue
@@ -211,11 +236,7 @@ func nameMatchesVideo(stem, base string) bool {
 // isSoleVideo reports whether videoPath is the only video file in dir. When it
 // is, a language-only subtitle in a Subs/ folder can safely be assumed to
 // belong to it; when it is not, that assumption links movies to the wrong file.
-func isSoleVideo(dir, videoPath string) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
+func isSoleVideo(entries []fs.DirEntry, videoPath string) bool {
 	self := filepath.Base(videoPath)
 	for _, e := range entries {
 		if e.IsDir() || !media.IsVideo(e.Name()) {

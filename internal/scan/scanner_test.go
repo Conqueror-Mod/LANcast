@@ -1865,3 +1865,70 @@ func TestPreviouslyImportedExtrasAreMarkedMissingNotDeleted(t *testing.T) {
 		t.Errorf("items_missing = %d, want 1 — the row was deleted rather than marked", p.ItemsMissing)
 	}
 }
+
+/*
+ * A music scan does not go looking for subtitles.
+ *
+ * This is the measured cost, not a tidiness point. Sidecar discovery reads the
+ * containing directory and then opens a write transaction per file — for every
+ * track, on every scan, for `.srt` files that cannot belong to an MP3. A
+ * 9,276-track library spent about 94 seconds a scan there and reported
+ * `changed=0` every time.
+ *
+ * Asserted through the door a person would notice: an audio file with a
+ * plausibly-named subtitle beside it gains no sidecar rows.
+ */
+func TestMusicScanIndexesNoSidecars(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+
+	writeFile(t, root, "Artist/Album/01 Song.mp3", 10)
+	// Named exactly the way a video's sidecar would be, so this passes only
+	// because the library kind is consulted rather than by accident.
+	writeFile(t, root, "Artist/Album/01 Song.en.srt", 5)
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("indexed %d items, want 1 track", len(items))
+	}
+	subs, err := st.ExternalSubtitles(context.Background(), items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 0 {
+		t.Errorf("a music scan recorded %d sidecar subtitles, want none", len(subs))
+	}
+}
+
+// The mirror: a video library still finds them, so the saving above is scoped
+// rather than a removal of the feature.
+func TestVideoScanStillIndexesSidecars(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := fixture(t, sc, st)
+
+	writeFile(t, root, "Some Film (2019)/Some Film (2019).mkv", 10)
+	writeFile(t, root, "Some Film (2019)/Some Film (2019).en.srt", 5)
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found int
+	for _, it := range items {
+		subs, err := st.ExternalSubtitles(context.Background(), it.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found += len(subs)
+	}
+	if found == 0 {
+		t.Error("a movie scan found no sidecar subtitles; the saving was not scoped to audio")
+	}
+}
