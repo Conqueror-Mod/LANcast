@@ -1216,7 +1216,7 @@ where that openness gets exercised.
 
 ## Open decisions
 
-*Two ADRs are `proposed` and neither is waiting on code. They are waiting on
+*One ADR is `proposed` and it is not waiting on code. They are waiting on
 somebody deciding, which is a different queue and was not written down anywhere
 — so it is written down here. A third, 0042, was accepted and built on
 2026-08-25 and is kept in the table struck through, because what a decision
@@ -1225,7 +1225,7 @@ unblocked is worth more than a tidy list.*
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
 | [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today, but the argument got stronger: a channel that froze at `0:01` for three minutes while ffmpeg stayed healthy was undiagnosable from the client, because a progressive stream cannot tell *starved* from *stalled*. That is the amendment's central claim, demonstrated rather than asserted. It remains the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
-| [0048](adr/0048-media-tools-install-themselves-on-first-run.md) | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | Most installs being quietly unable to play most of their library. [ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md) fixed the capability and not the discovery: the report that prompted it was *"AC-3 is not supported yet"*, a wrong conclusion about the software, not "I cannot find the button". Costs an exception written into the no-phone-home principle itself, which is the decision |
+| ~~[0048](adr/0048-media-tools-install-themselves-on-first-run.md)~~ | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | **Accepted 2026-08-28, narrower than proposed, and the principle survives.** The tools are a ticked option on the setup form rather than an automatic fetch: pressing *Create account* fetches them, unticking is one click. That serves the inattentive user — the one the ADR was written for — exactly as well, and the traffic follows a button somebody pressed, so no-phone-home keeps its third job and **README is unchanged**. The exception the ADR argued should be written into the principle turned out not to be needed. Not yet built |
 | [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
 | ~~[0042](adr/0042-two-files-one-work.md)~~ | 2026-08-17 | ~~What happens when **two files claim one work**~~ | **Accepted 2026-08-25 and built.** The collision report exists, the edition marker is kept, and nothing merges, ranks or deletes. This no longer blocks the [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix |
 
@@ -1234,11 +1234,15 @@ parser fix it was holding up can now land, because the thirteen duplicate pairs
 it would otherwise create silently are reported instead. The two that remain are
 ceilings rather than blockages — nothing is waiting on either.
 
-The standing rule 0013's amendment argues with is in
+The standing rule 0013's amendment argued with is in
 [CLAUDE.md](../CLAUDE.md): this build ships no unaudited third-party player, and
-progressive fMP4 is the default precisely so it does not have to. That rule is
-**unchanged until the amendment is accepted**, and an ADR sitting in the
-repository does not accept itself.
+progressive fMP4 is the default precisely so it does not have to. **That
+amendment was accepted on 2026-08-27** and the rule was satisfied rather than
+relaxed — hls.js is vendored as a bundle reproduced here and verified
+byte-identical to the published one, reviewed and signed. Steps 4 and 5 are
+built and MSE sits behind a device setting that defaults to off. Step 6, which
+flips that default and deletes the compensation code, is gated on somebody
+watching a real channel play.
 
 ## Next planning order
 
