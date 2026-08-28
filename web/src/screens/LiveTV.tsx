@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
 import { bufferedAhead, shouldHold, shouldStartPlayback } from "@/lib/preroll";
 import { catchUpRate, lagBehindEdge } from "@/lib/liveEdge";
+import {
+  livePath,
+  mediaCapability,
+  useLiveTransport,
+  type LivePath,
+} from "@/lib/liveTransport";
+import { attachLiveHls } from "@/playback/attachLiveHls";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -77,6 +84,19 @@ export function LiveTV() {
   const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [transport] = useLiveTransport();
+  /*
+   * Which path this channel actually takes.
+   *
+   * The setting asks; the device decides. Resolved once per render rather than
+   * inside the effects, so every one of them agrees about what is feeding the
+   * element — two effects disagreeing on that is how a stream ends up with both
+   * an hls.js instance and a src attribute pointing at different endpoints.
+   */
+  const path: LivePath = useMemo(
+    () => livePath(transport, mediaCapability()),
+    [transport],
+  );
 
   /*
    * Hold playback until there is a head start — at the start, and again every
@@ -102,6 +122,22 @@ export function LiveTV() {
   useEffect(() => {
     if (!playing) {
       setBuffering(false);
+      return;
+    }
+    /*
+     * None of this runs on the MSE path, and that is the point of the amendment
+     * rather than an optimisation.
+     *
+     * Every line below compensates for a transport that cannot answer how much
+     * media it holds. `MediaSource` answers it, so holding, re-arming and
+     * playing 10% fast are not merely unnecessary there — they would fight a
+     * buffering policy that is already doing the job, using `bufferedAhead`
+     * readings that finally mean something. Step 6 deletes this; step 4 stops
+     * it running.
+     */
+    if (path !== "progressive") {
+      setBuffering(false);
+      setCatchingUp(false);
       return;
     }
     const el = videoRef.current;
@@ -237,7 +273,69 @@ export function LiveTV() {
       el.removeEventListener("waiting", hold);
       if (timer !== null) window.clearInterval(timer);
     };
-  }, [playing]);
+  }, [playing, path]);
+
+  /*
+   * Feed the element through hls.js when the MSE path is chosen.
+   *
+   * Only on that path. `native-hls` and `progressive` both hand the element a
+   * `src` and want no library at all — the first because Safari plays the
+   * playlist itself, the second because that is the transport this client
+   * shipped with.
+   *
+   * The import inside is dynamic, so the 618 KB bundle is fetched the first
+   * time somebody actually plays a channel this way and never by anybody who
+   * does not. See playback/attachLiveHls.ts.
+   */
+  useEffect(() => {
+    if (!playing || path !== "mse") return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    /*
+     * `cancelled` guards the await, and it is load-bearing on a channel list.
+     *
+     * Loading the library takes a moment, and a viewer changing channel during
+     * it unmounts this effect before the promise resolves. Without the guard
+     * the resolved attachment binds to an element now showing a different
+     * channel, and nothing ever destroys it — an orphaned hls.js pulling
+     * segments for a channel nobody is watching, which is the live-TV version
+     * of the leaked-session fault the server side is careful about.
+     */
+    let cancelled = false;
+    let attached: { destroy: () => void } | null = null;
+
+    void attachLiveHls(el, playing.id, (fatal, detail) => {
+      if (!fatal) return;
+      setPlayError(
+        `The channel stopped: ${detail}. It may be off the air, or the server may have run out of streams.`,
+      );
+    })
+      .then((a) => {
+        if (cancelled) {
+          a.destroy();
+          return;
+        }
+        attached = a;
+      })
+      .catch((e: unknown) => {
+        /*
+         * Failing to load the library is not a dead channel.
+         *
+         * The progressive path still works and is one setting away, so this
+         * says which thing broke rather than reporting the channel as
+         * unplayable — the two have completely different fixes.
+         */
+        setPlayError(
+          `Could not load the HLS player (${String(e)}). Live TV playback is set to MSE in Settings; switching it back to standard will play this channel the old way.`,
+        );
+      });
+
+    return () => {
+      cancelled = true;
+      attached?.destroy();
+    };
+  }, [playing, path]);
 
   const channels = useMemo(() => data?.channels ?? [], [data]);
   const nowNext = guide.data?.channels ?? {};
@@ -308,7 +406,22 @@ export function LiveTV() {
              * copying both streams rather than re-encoding them, because
              * nearly every channel is already H.264 and AAC.
              */
-            src={`/api/channels/${playing.id}/live`}
+            /*
+             * No `src` on the MSE path: hls.js owns the element there, and an
+             * element with both a `src` and an attached `MediaSource` is one
+             * fetching a channel twice — the progressive response and the
+             * segments — with the browser free to prefer either.
+             *
+             * `native-hls` takes the playlist directly, which is the whole
+             * reason that path is distinguished from `mse`.
+             */
+            src={
+              path === "mse"
+                ? undefined
+                : path === "native-hls"
+                  ? `/api/channels/${playing.id}/hls/index.m3u8`
+                  : `/api/channels/${playing.id}/live`
+            }
             /*
              * No `autoPlay`, and no play() on `canplay`.
              *
@@ -432,16 +545,18 @@ export function LiveTV() {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span aria-hidden="true">{c.name.slice(0, 2).toUpperCase()}</span>
+                <span aria-hidden="true">
+                  {c.name.slice(0, 2).toUpperCase()}
+                </span>
               )}
             </span>
             <span className="livetv__body">
               <span className="livetv__name">{c.name}</span>
               {(() => {
                 const entry = nowNext[String(c.id)];
-              // No listings: nothing, rather than "no information". A tile that
-              // says "unknown" six hundred times is noise, and the absence of a
-              // strapline already reads as absence.
+                // No listings: nothing, rather than "no information". A tile that
+                // says "unknown" six hundred times is noise, and the absence of a
+                // strapline already reads as absence.
                 if (!entry) {
                   return c.group ? (
                     <span className="livetv__grouptag">{c.group}</span>

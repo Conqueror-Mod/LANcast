@@ -5,3 +5,4 @@
 # identical in content.
 hls.min.js -text -diff
 LICENSE -text
+hls.d.ts -text

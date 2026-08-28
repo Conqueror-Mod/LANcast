@@ -18,7 +18,20 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      /*
+       * hls.js resolves to the vendored bundle, never to a registry.
+       *
+       * It is not in package.json on purpose: ADR 0013 requires this library to
+       * be the artefact reproduced and checked in under web/vendor, not
+       * whatever npm would install at build time. An alias is what makes
+       * `import("hls.js")` mean that file and nothing else.
+       */
+      "hls.js": fileURLToPath(
+        new URL("./vendor/hls.js/hls.min.js", import.meta.url),
+      ),
+    },
   },
   server: {
     port: 5173,
