@@ -40,8 +40,12 @@ import {
 } from "@/api/hooks";
 import {
   capabilities,
+  claimable,
   clearDenials,
   deniedCapabilities,
+  restore,
+  withhold,
+  withheldCapabilities,
 } from "@/playback/capabilities";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
@@ -1407,11 +1411,24 @@ function ReprobeRow({ available }: { available: boolean }) {
 function CodecDenialsRow() {
   const [denials, setDenials] = useState(() => deniedCapabilities());
   const [claims, setClaims] = useState(() => capabilities());
+  const [off, setOff] = useState(() => withheldCapabilities());
+  const offered = claimable();
+
+  function refresh() {
+    setDenials(deniedCapabilities());
+    setClaims(capabilities());
+    setOff(withheldCapabilities());
+  }
 
   function reset() {
     clearDenials();
-    setDenials(deniedCapabilities());
-    setClaims(capabilities());
+    refresh();
+  }
+
+  function toggle(name: string, on: boolean) {
+    if (on) restore(name);
+    else withhold(name);
+    refresh();
   }
 
   let sub: string;
@@ -1444,6 +1461,42 @@ function CodecDenialsRow() {
           Try them again
         </button>
       </div>
+
+      {/*
+       * Turning a codec off by hand, which the automatic net cannot do.
+       *
+       * A denial is recorded when a direct play *fails*. A file that decodes
+       * in hardware and stutters has not failed — measured on a real film:
+       * HEVC Main 10 direct-played with the decode engine at 8-9%, the server
+       * idle, and a juddering picture in two different browsers, while the
+       * same file re-encoded played perfectly. Nothing in here can see the
+       * difference between a smooth picture and a rough one. A person can.
+       *
+       * Only what this browser actually claims is offered: a switch for a
+       * codec the engine never claimed would be a control that does nothing.
+       */}
+      {offered.length > 0 && (
+        <div className="set-codecs">
+          <div className="set-codecs__note">
+            If a file plays but stutters, the browser is claiming a codec it
+            cannot really keep up with. Turn it off here and the server will
+            convert those files instead.
+          </div>
+          {offered.map((name) => {
+            const on = !off.includes(name);
+            return (
+              <label className="set-codecs__item" key={name}>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={(e) => toggle(name, e.target.checked)}
+                />
+                <span>{name}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

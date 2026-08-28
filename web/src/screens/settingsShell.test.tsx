@@ -13,7 +13,7 @@
  * URL carries it. The sections themselves render their empty state and are not
  * the subject.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -162,7 +162,12 @@ describe("the playback codecs row", () => {
   }
 
   beforeEach(() => localStorage.clear());
-  afterEach(() => localStorage.clear());
+  afterEach(() => {
+    localStorage.clear();
+    // The canPlayType stub below is per-test; leaving it in place would make a
+    // later test's browser claim codecs it does not have.
+    vi.restoreAllMocks();
+  });
 
   it("names what is being withheld rather than only counting it", () => {
     localStorage.setItem(
@@ -202,6 +207,53 @@ describe("the playback codecs row", () => {
   it("offers nothing to press when nothing is withheld", () => {
     render("/settings?pane=display");
     expect(codecRow()?.querySelector("button")?.disabled).toBe(true);
+  });
+
+  /*
+   * Turning a codec off by hand, wired end to end.
+   *
+   * The rule is unit-tested; this is the half that has failed before — a
+   * control that renders, reads well, and is connected to nothing. It exists
+   * because the automatic denial cannot catch a codec that plays *badly*: a
+   * real film direct-played HEVC Main 10 with hardware decode engaged and
+   * juddered in two browsers, while the same file re-encoded played perfectly.
+   * Nothing failed, so nothing was ever recorded.
+   *
+   * jsdom answers "" to every canPlayType, so the engine claims nothing and no
+   * switches are offered. The claim is stubbed to put one there — which is the
+   * honest shape anyway: the panel only ever offers what this browser claims.
+   */
+  it("stops claiming a codec when its switch is turned off", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    render("/settings?pane=display");
+
+    const boxes = [
+      ...(codecRow()?.querySelectorAll<HTMLInputElement>(
+        ".set-codecs__item input",
+      ) ?? []),
+    ];
+    const hevc10 = boxes.find(
+      (b) => b.parentElement?.textContent?.trim() === "hevc10",
+    );
+    expect(hevc10).toBeTruthy();
+    expect(hevc10!.checked).toBe(true);
+
+    act(() => {
+      hevc10!.click();
+    });
+
+    expect(
+      JSON.parse(localStorage.getItem("lancast:codec-withheld") ?? "[]"),
+    ).toContain("hevc10");
+    // And the control reflects it, rather than saving and looking unchanged.
+    const after = [
+      ...(codecRow()?.querySelectorAll<HTMLInputElement>(
+        ".set-codecs__item input",
+      ) ?? []),
+    ].find((b) => b.parentElement?.textContent?.trim() === "hevc10");
+    expect(after?.checked).toBe(false);
   });
 });
 
