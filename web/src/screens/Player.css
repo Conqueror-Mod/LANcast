@@ -249,3 +249,74 @@
   font-size: 0.9rem;
   color: var(--text-dim, #b9c0cc);
 }
+
+/* The playback statistics overlay.
+ *
+ * Positioned top-left, away from the transport chrome along the bottom and from
+ * the "are you still watching" prompt. Inside .player, so it inherits that
+ * stacking context and cannot be painted under the docked strip the way
+ * PointMenu once was — the clamp-into-the-player collision that took five
+ * releases to notice, because being covered looks exactly like not opening.
+ *
+ * It deliberately does not fade with .player--idle: a diagnostic somebody is
+ * reading while watching for a stutter must not disappear because they stopped
+ * moving the mouse to watch. */
+.pstats {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  pointer-events: auto;
+}
+
+.player--idle .pstats {
+  opacity: 1;
+}
+
+.pstats__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.pstats__close {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.pstats__close:hover {
+  color: var(--text);
+}
+
+.pstats__line {
+  /* Items in a column that may overflow must not shrink to fit; they collapse
+     to nothing with every style still applying. */
+  flex-shrink: 0;
+}
+
+/* The one line that is a verdict rather than a number. Not gold — gold means
+   where you are, and this means something is wrong. */
+.pstats__line--bad {
+  color: var(--danger, #ff6b6b);
+  margin-top: 4px;
+}

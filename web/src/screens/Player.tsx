@@ -11,6 +11,7 @@ import { clock } from "@/lib/format";
 import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
+import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
 import { TogetherPanel } from "@/components/TogetherPanel";
@@ -137,6 +138,16 @@ export function Player() {
   // things race to own what is playing.
 
   const [chromeVisible, setChromeVisible] = useState(true);
+  /*
+   * The statistics overlay, off unless asked for.
+   *
+   * A diagnostic rather than a feature: it answers "is the picture dropping
+   * frames" in a glance, which is the question that cost an evening of GPU
+   * counters and ffprobe when a film played badly and the player could say
+   * nothing about it. Permanently visible it would be clutter on every film to
+   * serve the rare one that misbehaves.
+   */
+  const [showStats, setShowStats] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /*
    * Whether anything behind the settings button is away from its default.
@@ -311,6 +322,20 @@ export function Player() {
         const subs = bindingKeys("subtitles");
         if (e.key === subs[0]) cycleSub(-1);
         else if (e.key === subs[1]) cycleSub(1);
+        else if (e.key === "i" || e.key === "I") {
+          /*
+           * `i`, for information: the statistics overlay.
+           *
+           * Fixed rather than rebindable, and checked *last* on purpose. It is
+           * a diagnostic somebody reaches for once when something looks wrong,
+           * so it has not earned a place in the keyboard customizer beside the
+           * transport keys used every day — but a fixed key that ran before the
+           * bindings would silently shadow anything rebound to `i`, and the
+           * player disagreeing with the customizer about what a key does is the
+           * exact failure the single key map exists to prevent.
+           */
+          setShowStats((v) => !v);
+        }
       }
       wakeChrome();
     };
@@ -374,6 +399,13 @@ export function Player() {
           <span className="player__loading-mark" aria-hidden="true" />
           <span>{pb.note || "Starting…"}</span>
         </div>
+      )}
+
+      {showStats && (
+        <PlaybackStats
+          video={pb.videoRef.current}
+          onClose={() => setShowStats(false)}
+        />
       )}
 
       <div className="player__chrome">
@@ -703,8 +735,12 @@ export function Player() {
                       // where it is.
                     }
                   }}
-                  aria-label={pb.popoutAvailable ? "Pop out player" : "Picture in picture"}
-                  title={pb.popoutAvailable ? "Pop out player" : "Picture in picture"}
+                  aria-label={
+                    pb.popoutAvailable ? "Pop out player" : "Picture in picture"
+                  }
+                  title={
+                    pb.popoutAvailable ? "Pop out player" : "Picture in picture"
+                  }
                   aria-pressed={pb.popoutAvailable ? pb.popout : undefined}
                 >
                   <PipGlyph />
