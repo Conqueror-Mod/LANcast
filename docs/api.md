@@ -84,9 +84,24 @@ non-browser clients work normally.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, user?}`; `user` carries `sharing` |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, user?}`; `user` carries `sharing` |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
+
+**`can_convert` says whether ffmpeg is present**, and it is reported to every
+caller rather than only to administrators
+([ADR 0048](adr/0048-media-tools-install-themselves-on-first-run.md)).
+
+The install button is admin-only, correctly. The *fact* is not a secret, and the
+person most affected is a member who cannot open Settings at all. A client must
+use this to explain the failure **before** attempting playback: a `<video>`
+element handed a refused request reports a bare error with no status, so a
+client that waits to be told cannot be told, and the viewer sees a black
+rectangle instead of a reason.
+
+A client older than the server, or a server older than the client, may not see
+this field. **Absent must read as capable** — assuming otherwise puts a warning
+in front of somebody whose playback works.
 
 **`install_media_tools` is the one place the server may fetch anything on its
 own initiative, and it is why the field is optional rather than a boolean with a

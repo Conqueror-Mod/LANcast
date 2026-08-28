@@ -488,6 +488,15 @@ export interface AuthStatus {
   // loopback address was configured deliberately — there a restart changes
   // nothing, so promising otherwise sends the operator on a dead end.
   restart_required: boolean;
+  /*
+   * Whether the server can convert files at all — false when ffmpeg is absent.
+   *
+   * Optional because a client may be newer than its server. Absent means "this
+   * server does not say", which must read as *capable*: assuming a server
+   * cannot convert would put a warning in front of somebody whose playback
+   * works perfectly.
+   */
+  can_convert?: boolean;
   user?: AuthUser;
 }
 

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useChannels, useGuide, useChannelSchedule } from "@/api/hooks";
+import {
+  useAuthStatus,
+  useChannels,
+  useGuide,
+  useChannelSchedule,
+} from "@/api/hooks";
 import { bufferedAhead, shouldHold, shouldStartPlayback } from "@/lib/preroll";
 import { catchUpRate, lagBehindEdge } from "@/lib/liveEdge";
 import {
@@ -9,6 +14,7 @@ import {
   type LivePath,
 } from "@/lib/liveTransport";
 import { attachLiveHls, OLD_SERVER } from "@/playback/attachLiveHls";
+import { conversionHelp } from "@/playback/conversionAvailable";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -85,6 +91,22 @@ export function LiveTV() {
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [transport] = useLiveTransport();
+  /*
+   * A channel always needs ffmpeg, so this is checked before one is played
+   * rather than after it fails.
+   *
+   * Live TV is the harshest case for the missing-tools failure. A film that
+   * direct-plays still works on a server without ffmpeg, so the library looks
+   * mostly fine; every channel is an ffmpeg session, so Live TV is uniformly
+   * dead with nothing on screen saying why. `needsConversion` is therefore
+   * always true here.
+   */
+  const auth = useAuthStatus().data;
+  const toolsHelp = conversionHelp(
+    auth?.can_convert,
+    auth?.user?.role,
+    "channel",
+  );
   /*
    * Which path this channel actually takes.
    *
@@ -387,6 +409,16 @@ export function LiveTV() {
         <h1 className="browse__title">Live TV</h1>
         <span className="browse__count">{channels.length || ""}</span>
       </div>
+
+      {/* Said above the list rather than when a channel fails, because every
+          channel needs ffmpeg: without it Live TV is uniformly dead, and a
+          viewer who clicks three channels and gets three black rectangles has
+          learned nothing except that it does not work. */}
+      {toolsHelp && (
+        <p className="browse__message" role="status">
+          <strong>{toolsHelp.title}.</strong> {toolsHelp.action}
+        </p>
+      )}
 
       {!isLoading && channels.length === 0 && (
         <p className="browse__message">
