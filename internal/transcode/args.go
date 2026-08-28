@@ -458,6 +458,16 @@ func Args(o Options) []string {
 		a = append(a, o.Encoder.EncoderArgs(o.CRF, framesOnGPU, outW, outH, o.Decision.SourceFrameRate)...)
 
 		/*
+		 * A keyframe every couple of seconds, so a seek returns a picture
+		 * sooner.
+		 *
+		 * The output fragments on keyframes, so the wait after a scrub is a
+		 * whole GOP — and nothing set one, leaving the encoder's default of
+		 * roughly ten seconds. See gopFrames for the measurement.
+		 */
+		a = append(a, "-g", strconv.Itoa(gopFrames(o.Decision.SourceFrameRate)))
+
+		/*
 		 * The video filter chain: one -vf, built from every filter this job
 		 * needs.
 		 *
