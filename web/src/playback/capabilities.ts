@@ -211,6 +211,88 @@ export function clearDenials() {
   resetCapabilities();
 }
 
+/*
+ * Capabilities a person has withheld by hand.
+ *
+ * Separate from `DENIED_KEY`, and permanent, because it answers a different
+ * question. An automatic denial records "this failed here", which is a fact
+ * about a machine on a day — a driver updates, a codec extension is installed,
+ * and it goes stale, which is why those expire after a fortnight.
+ *
+ * This records "I watched it and it played badly", and that does not go stale
+ * on a timer. Expiring it would put the judder back every fortnight and give
+ * the person no way to make it stop.
+ *
+ * It exists because the automatic net cannot catch the worst version of this
+ * bug. A denial is written when a direct play *fails*; a file that decodes in
+ * hardware and stutters has not failed, so nothing fires. Measured on a real
+ * film: HEVC Main 10 direct-played with hardware decode engaged at 8-9%, the
+ * server idle, the bytes arriving, and a picture that juddered in both WebView2
+ * and Chrome — while the same file re-encoded to H.264 played perfectly. The
+ * engine answers `probably` for `hvc1.2.4.L120.B0` and means "I can decode
+ * this", not "I can decode this well enough to watch".
+ *
+ * Nothing can measure the difference from in here. A person can see it.
+ */
+const WITHHELD_KEY = "lancast:codec-withheld";
+
+function withheldSet(): Set<string> {
+  try {
+    const raw = localStorage.getItem(WITHHELD_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((x): x is string => typeof x === "string"));
+  } catch {
+    // No storage, or nonsense in it: withhold nothing rather than fail to play.
+    return new Set();
+  }
+}
+
+function saveWithheld(names: Set<string>) {
+  try {
+    localStorage.setItem(WITHHELD_KEY, JSON.stringify([...names]));
+  } catch {
+    // A browser with no storage cannot remember this. It still plays.
+  }
+  resetCapabilities();
+}
+
+/** withhold stops a capability being claimed, until somebody restores it. */
+export function withhold(capability: string) {
+  const set = withheldSet();
+  set.add(capability);
+  saveWithheld(set);
+}
+
+/** restore starts claiming a capability again. */
+export function restore(capability: string) {
+  const set = withheldSet();
+  set.delete(capability);
+  saveWithheld(set);
+}
+
+/** withheldCapabilities lists what a person has turned off, for the settings panel. */
+export function withheldCapabilities(): string[] {
+  return [...withheldSet()].sort();
+}
+
+/**
+ * claimable lists every capability this browser answers `probably` for,
+ * ignoring both kinds of withholding.
+ *
+ * The settings panel needs it: to offer "stop claiming hevc10" it has to know
+ * the engine claims it at all, and `capabilities()` has by then removed it.
+ * Asking the engine again here is cheap and cannot disagree with itself — it is
+ * the same question `capabilities()` asks, without the subtraction.
+ */
+export function claimable(): string[] {
+  const el = document.createElement("video");
+  return Object.entries(PROBES)
+    .filter(([, type]) => el.canPlayType(type) === "probably")
+    .map(([name]) => name);
+}
+
 let cached: string | null = null;
 
 /**
@@ -225,10 +307,13 @@ export function capabilities(): string {
 
   const el = document.createElement("video");
   const no = denied();
+  const off = withheldSet();
   const can: string[] = [];
 
   for (const [name, type] of Object.entries(PROBES)) {
-    if (no.has(name)) continue;
+    // Withheld by a person outranks everything: they have watched it and the
+    // engine has not.
+    if (no.has(name) || off.has(name)) continue;
     // "probably" and "maybe" are the only positive answers the API gives, and
     // "maybe" is too weak to burn a failed playback on — it is the answer for
     // "this container might hold something I can decode".
@@ -248,5 +333,7 @@ export function resetCapabilities() {
 export function withCapabilities(url: string): string {
   const can = capabilities();
   if (!can) return url;
-  return url + (url.includes("?") ? "&" : "?") + "can=" + encodeURIComponent(can);
+  return (
+    url + (url.includes("?") ? "&" : "?") + "can=" + encodeURIComponent(can)
+  );
 }
