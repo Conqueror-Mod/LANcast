@@ -1,6 +1,6 @@
 # ADR 0048 — The media tools install themselves on first run
 
-Date: 2026-08-27 · Status: **proposed**
+Date: 2026-08-27 · Status: **accepted 2026-08-28, in a narrower form than proposed** — see the decision below
 
 Amends [ADR 0043](0043-media-tools-are-fetched-not-bundled.md), which decided
 the media tools are fetched **on request and never automatically**, and said so
@@ -84,7 +84,88 @@ That sentence is still right about what it describes. The question this ADR puts
 is whether the third job, as written, is worth what it currently costs — and
 whether "without being asked" is the same as "without being told".
 
-## Decision (proposed)
+## Decision — accepted 2026-08-28, and not as proposed
+
+**The setup screen offers the media tools as a ticked option on the form
+somebody already submits.** Pressing *Create account* fetches them. Unticking is
+one click, and the screen states what will be downloaded, from where, how large
+it is, under which licence, and that it is optional — before anything is
+fetched.
+
+This is deliberately **not** the automatic fetch proposed above, and the
+difference is the whole reason the acceptance is worth reading.
+
+### Why this rather than the proposal
+
+The proposal's case rests on the *inattentive* user: somebody who reads nothing,
+plays a file, and concludes the software cannot play their library. A ticked
+option serves that person **exactly as well as an automatic fetch** — they press
+the button they were always going to press and the tools arrive. It is only the
+*attentive* user who experiences any difference, and what they experience is
+being asked.
+
+What it does not cost is the principle. The proposal was explicit that its price
+was an exception written into no-phone-home, permanently, with every future
+"could the server just fetch X" acquiring a precedent. That price bought the
+inattentive user something they now get anyway.
+
+The third job of no-phone-home — *the server does not do network things you did
+not ask for* — survives intact, because pressing a button that says what it will
+do **is** asking. 0043's sentence stands unamended:
+
+> A media server that contacts the internet without being asked has broken no
+> phone-home, and that principle does not have an exception for convenience.
+
+Nothing here contacts the internet without being asked. The fetch follows an
+affirmative act by a present human who was told what it does.
+
+**README is therefore unchanged**, which is the part worth noticing. The ADR
+argued convincingly that an exception belonging in a principle should be written
+into it rather than hidden in a footnote — and the better answer turned out to
+be not needing one. An exception avoided is worth more than an exception
+honestly disclosed.
+
+### The open questions, settled
+
+**Setup does not block on the download.** The server is usable immediately and
+the fetch runs alongside with progress, per 0043's existing requirement. A
+playback attempted while it is still running can still fail for want of tools —
+but that failure is now *explainable*, because Settings shows a download in
+flight, which is the difference between a wrong conclusion about the software
+and an obvious "wait a moment".
+
+**What a member sees on a server whose admin declined is still not fixed**, and
+this acceptance does not pretend otherwise. The point-of-failure work — surfacing
+the absence where it bites, in the player error and on Live TV — is the thing
+that fixes it, and it is now the follow-on rather than an alternative to this.
+The ADR was right that it should probably be built regardless.
+
+### Unchanged from the proposal
+
+One attempt, on first run, never on a schedule and never on a later probe
+failure — a failure recurs, and a fetch that recurs is the retry loop this
+project has refused twice already. Skipped entirely when `mediatools` already
+finds ffmpeg, so most Linux and macOS installs never see it. The
+`media_tools_auto_install` setting still pre-empts the screen for scripted and
+air-gapped installs, and now means "tick it for me" rather than "do it without
+asking". Everything security-relevant from 0043 stands: pinned URL per platform,
+checksum verified before unpacking, no caller-supplied URL, atomic move, and a
+version bump remains a code change.
+
+### What would reopen this
+
+The signal is unchanged from the proposal and worth restating: somebody
+reporting the first-run download as unwelcome. A ticked box makes that less
+likely than an automatic fetch, not impossible — and if it happens it should be
+believed the first time rather than argued with.
+
+## What was proposed, and not accepted
+
+*Kept in full, because the acceptance above is an answer to it and an answer
+without its question is not reviewable. Everything from here to "Alternatives
+considered" describes the automatic fetch that was **not** adopted.*
+
+### The proposal
 
 **On first run, the server fetches the media tools once, having said so, unless
 told not to.**
@@ -141,7 +222,7 @@ The fetch is **not** admin-authenticated, because at first run there are no
 accounts yet — which is precisely why it must be *declinable on the screen that
 announces it*, since the usual gate does not exist at that moment.
 
-## The README changes, and that is the real cost
+### The README change it would have cost (not made)
 
 The principle cannot stand unedited and honest. It would become:
 
@@ -193,7 +274,7 @@ in it. Rejected because the failure it permits is not a missing feature but a
 **wrong conclusion about the software**, arrived at by the one user who reported
 it and presumably by others who did not.
 
-## Consequences
+### Consequences as proposed
 
 **Most installs stop being broken in a way nobody can see.** That is the whole
 point and it should be stated first.
@@ -217,7 +298,7 @@ a decline on the screen. Both are one action, and the manual file-drop route fro
 **Nothing changes for a server that already has ffmpeg**, which is most Linux
 installs and every machine where somebody solved this by hand.
 
-## Open questions
+### Open questions at the time (both settled in the decision above)
 
 **Does the setup screen block on the download, or proceed alongside it?**
 Proceeding is friendlier and means the server is usable immediately; blocking
