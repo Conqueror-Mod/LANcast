@@ -12,7 +12,12 @@ import { createPortal } from "react-dom";
 import { useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
-import { withCapabilities, capabilities, deny, resetCapabilities } from "./capabilities";
+import {
+  withCapabilities,
+  capabilities,
+  deny,
+  resetCapabilities,
+} from "./capabilities";
 import {
   NO_RUN,
   advanced,
@@ -417,7 +422,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // surface at its 1px idle size for the first paints, so the screen above it
   // was transparent onto whatever page it had just covered: the detail page's
   // Play button showing through a "playing" player.
-  const surface: Surface = fullClaimed ? "full" : itemID === 0 ? "idle" : "mini";
+  const surface: Surface = fullClaimed
+    ? "full"
+    : itemID === 0
+      ? "idle"
+      : "mini";
 
   // Total runtime. A transcode or remux streams a fragmented MP4 whose element
   // duration is whatever has been produced so far — a few seconds — so for those
@@ -557,7 +566,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // including when the queue is a single item and would otherwise end here.
   const hasNext =
     upNext.length > 0 ||
-    (repeat !== "off" ? order.length > 1 : nextPos(order, idxInOrder, repeat) !== null);
+    (repeat !== "off"
+      ? order.length > 1
+      : nextPos(order, idxInOrder, repeat) !== null);
   const hasPrev = order.length > 1;
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
@@ -726,8 +737,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setUpNext((u) => u.filter((_, i) => i !== at));
   }, []);
 
-  const playNextUp = useCallback((id: number) => enqueue(id, "next"), [enqueue]);
-  const addToQueue = useCallback((id: number) => enqueue(id, "last"), [enqueue]);
+  const playNextUp = useCallback(
+    (id: number) => enqueue(id, "next"),
+    [enqueue],
+  );
+  const addToQueue = useCallback(
+    (id: number) => enqueue(id, "last"),
+    [enqueue],
+  );
 
   const toggleShuffle = useCallback(() => {
     setShuffle((v) => {
@@ -910,7 +927,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setNote("That file would not play directly — converting instead");
     const v = videoRef.current;
     if (!v || !item) return;
-    decision.current = { method: "transcode", reason: "direct playback failed" };
+    decision.current = {
+      method: "transcode",
+      reason: "direct playback failed",
+    };
     transcoding.current = true;
     offset.current = startedFrom.current;
     setSubOffset(startedFrom.current);
@@ -927,6 +947,33 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     v.load();
     void v.play().catch(() => {});
   }, [item, audioIndex]);
+
+  /*
+   * A conversion that never started, said out loud.
+   *
+   * `retryWithoutClaims` deliberately does nothing here — retrying a failed
+   * transcode under a narrower profile is the same request again, which is how
+   * a failing file becomes an infinite loop. Correct, and it left the other
+   * half undone: the element errored, nothing handled it, and the spinner sat
+   * there with "Converting…" under it for ever.
+   *
+   * That is the worst outcome available, because it is indistinguishable from
+   * working slowly. A film sat like that while the server had already refused
+   * the request — and the refusal was not logged either, so afterwards it could
+   * not be told apart from a request that never arrived.
+   *
+   * No probe of the URL to find out why. Asking again would start the very
+   * transcode that was refused, taking a slot to explain why there were no
+   * slots. The reason is in the server log; what belongs here is that it
+   * failed, and that waiting will not fix it.
+   */
+  const transcodeFailed = useCallback(() => {
+    setLoading(false);
+    setNote(
+      "The conversion did not start. The server may already be converting as " +
+        "much as it can — check Activity in Settings, or try again shortly.",
+    );
+  }, []);
 
   // ---- seeking --------------------------------------------------------------
   const seekTo = useCallback(
@@ -1135,8 +1182,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const exitFullscreen = useCallback(() => {
-    const host = (window as { lancastToggleFullscreen?: () => Promise<boolean> })
-      .lancastToggleFullscreen;
+    const host = (
+      window as { lancastToggleFullscreen?: () => Promise<boolean> }
+    ).lancastToggleFullscreen;
     if (host) {
       // The binding is a toggle, so this asks only when there is something to
       // leave — calling it blind would put a windowed player into fullscreen,
@@ -1144,7 +1192,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (fullscreen) void host().then((on) => setFullscreen(Boolean(on)));
       return;
     }
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    if (document.fullscreenElement)
+      void document.exitFullscreen().catch(() => {});
   }, [fullscreen]);
 
   const toggleFullscreen = useCallback(() => {
@@ -1160,8 +1209,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
      *
      * In a browser there is no binding and the Fullscreen API is right.
      */
-    const host = (window as { lancastToggleFullscreen?: () => Promise<boolean> })
-      .lancastToggleFullscreen;
+    const host = (
+      window as { lancastToggleFullscreen?: () => Promise<boolean> }
+    ).lancastToggleFullscreen;
     if (host) {
       // The binding answers with the state it ended in, which is the only
       // source of truth for a window the page cannot see.
@@ -1290,9 +1340,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * between documents. Cheap enough to simply re-assert.
    */
   useEffect(() => {
-    const v = videoRef.current as (HTMLVideoElement & {
-      setSinkId?: (id: string) => Promise<void>;
-    }) | null;
+    const v = videoRef.current as
+      | (HTMLVideoElement & {
+          setSinkId?: (id: string) => Promise<void>;
+        })
+      | null;
     if (!v?.setSinkId) return;
     v.setSinkId(prefs.audioDevice).catch(() => {
       // A device that has been unplugged since it was chosen. Falling back to
@@ -1594,7 +1646,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               setNote("");
             }}
             onWaiting={() => setLoading(true)}
-            onError={() => retryWithoutClaims()}
+            onError={() => {
+              // Two different failures wearing one event. A direct play that
+              // fails is a claim to withdraw; a transcode that fails is the
+              // server saying no, and only one of them is worth retrying.
+              if (transcoding.current) transcodeFailed();
+              else retryWithoutClaims();
+            }}
             onTimeUpdate={(e) => {
               const t = e.currentTarget.currentTime;
               setCurrent(t);

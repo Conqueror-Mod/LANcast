@@ -1,12 +1,17 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"lancast/internal/store"
+	"lancast/internal/transcode"
 )
 
 func TestRewritePlaylist(t *testing.T) {
@@ -332,4 +337,77 @@ func TestReprobeRejectsBadInput(t *testing.T) {
 	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=nonsense", nil), 400, "bad_request")
 	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=all&library=abc", nil), 400, "bad_request")
 	wantError(t, h.do(t, "POST", "/api/probe/refresh?scope=all&library=9999", nil), 404, "not_found")
+}
+
+/*
+ * A refusal is a decision, and it has to be visible.
+ *
+ * These two cases wrote a status to the client and recorded nothing, which made
+ * them the only playback outcomes the server had no opinion about — and they
+ * are exactly the ones that leave a player showing a spinner, because a
+ * `<video>` element handed a 429 has nothing to display.
+ *
+ * The cost was measured rather than imagined: a film sat "Converting" with no
+ * session in the log, and afterwards "was it refused" and "did the request ever
+ * arrive" could not be told apart. That is the question this logging answers.
+ */
+func TestRefusedTranscodesAreLogged(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		want   string
+	}{
+		{
+			name:   "at the ceiling",
+			err:    transcode.ErrTooManySessions,
+			status: http.StatusTooManyRequests,
+			want:   "at the session ceiling",
+		},
+		{
+			name:   "no ffmpeg",
+			err:    transcode.ErrNotInstalled,
+			status: http.StatusServiceUnavailable,
+			want:   "ffmpeg is not installed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			s := &Server{
+				log:   slog.New(slog.NewTextHandler(&buf, nil)),
+				trans: transcode.NewManager(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+			}
+
+			rec := httptest.NewRecorder()
+			s.writeTranscodeError(rec, tc.err)
+
+			if rec.Code != tc.status {
+				t.Errorf("status = %d, want %d", rec.Code, tc.status)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Errorf("log did not say why it refused; got %q", buf.String())
+			}
+			if !strings.Contains(buf.String(), "refused a transcode") {
+				t.Error("the log line does not name the refusal, so it cannot be searched for")
+			}
+		})
+	}
+}
+
+// The session count travels with the ceiling refusal, because it is the
+// difference between "the ceiling is working" and "sessions are leaking" — the
+// same event read two ways, and unreadable without the number.
+func TestCeilingRefusalReportsHowManyAreRunning(t *testing.T) {
+	var buf bytes.Buffer
+	s := &Server{
+		log:   slog.New(slog.NewTextHandler(&buf, nil)),
+		trans: transcode.NewManager(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))),
+	}
+
+	s.writeTranscodeError(httptest.NewRecorder(), transcode.ErrTooManySessions)
+
+	out := buf.String()
+	if !strings.Contains(out, "running=") || !strings.Contains(out, "max=") {
+		t.Errorf("refusal did not report the session counts; got %q", out)
+	}
 }

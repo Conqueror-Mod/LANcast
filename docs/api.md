@@ -2206,6 +2206,15 @@ Returns `409 conflict` for a file that can be played directly (transcoding it
 would be wasted CPU), `503` if ffmpeg is not installed, and `429` past the
 concurrent-transcode limit.
 
+**A client must render the refusals.** Both are handed to a `<video>` element as
+a failed request, which the element reports as a bare `error` with no status and
+nothing to display — so a player that does not act on them shows a spinner for
+ever, which is indistinguishable from converting slowly. Retrying is not a
+recovery: the same request under a narrower profile is the same request. Both
+are also written to the server log now, the `429` carrying how many sessions are
+running against the ceiling, since that number is what separates "the limit is
+working" from "sessions are leaking".
+
 ### `GET /api/stream/{id}/hls/index.m3u8`
 
 The same transcode as an HLS playlist with fMP4 segments, for clients that
