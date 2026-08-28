@@ -61,6 +61,39 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		return nil
 	}
 
+	/*
+	 * Nothing moved on disk, and a previous scan finished: there is nothing to
+	 * read.
+	 *
+	 * This pass opens and parses the tags of **every track in the library**,
+	 * then rebuilds the artist and album grouping from what it read. On a
+	 * 9,276-track library that was about 94 seconds, on every scan, and the
+	 * three scans before this was written each reported `changed=0` — a minute
+	 * and a half of reading files to arrive at the grouping already in the
+	 * database.
+	 *
+	 * The reasoning that makes it safe to skip is that tags live *inside* the
+	 * file. The walk has just established that no file's size or mtime moved,
+	 * so no file's tags can have moved either, and the grouping they produced
+	 * last time is still the right one.
+	 *
+	 * `ScannedAt` is the guard that matters. It is written only after a
+	 * reconcile completes, so a scan interrupted halfway — which may have
+	 * grouped some tracks and not others — leaves it unset and the next scan
+	 * does the full pass rather than trusting a half-built hierarchy.
+	 *
+	 * The cost of this: improving the *grouping rules* no longer takes effect
+	 * on a library where nothing has changed on disk, because the rules are only
+	 * re-run when something does. That is the same trade the video path already
+	 * makes with `reinterpreted`, and the escape hatch is the same — touch the
+	 * library, or change anything in it, and the pass runs.
+	 */
+	if lib.ScannedAt != nil && p != nil && p.ItemsChanged == 0 && p.ItemsMissing == 0 {
+		s.log.Debug("skipping tag pass; nothing changed since the last scan",
+			"library", lib.ID)
+		return nil
+	}
+
 	tracks, err := s.st.LibraryTracks(ctx, lib.ID)
 	if err != nil {
 		return err

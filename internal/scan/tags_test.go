@@ -610,3 +610,102 @@ func TestAlbumGroupingIsCaseInsensitive(t *testing.T) {
 		t.Errorf("tracks = %d, want 2", got)
 	}
 }
+
+/*
+ * A rescan of an unchanged music library reads no tags at all.
+ *
+ * This pass opened and parsed every track in the library on every scan and then
+ * rebuilt the grouping from what it read. On a real 9,276-track library that
+ * was about 94 seconds per scan, while the scan itself reported `changed=0`
+ * every time — a minute and a half spent arriving at the answer already in the
+ * database.
+ *
+ * `calls` is the assertion because it is the cost. Timing would be flaky; the
+ * number of files opened is the thing that made it slow.
+ */
+func TestSecondScanReadsNoTagsWhenNothingChanged(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+	writeFile(t, root, "Portishead/Dummy/02 Sour Times.mp3", 10)
+
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3":  {Title: "Mysterons", Artist: "Portishead", Album: "Dummy", Track: 1},
+		"02 Sour Times.mp3": {Title: "Sour Times", Artist: "Portishead", Album: "Dummy", Track: 2},
+	}}
+	sc.SetTagReader(tags)
+
+	scanAndWait(t, sc, lib)
+	first := tags.calls
+	if first != 2 {
+		t.Fatalf("first scan read %d files, want 2", first)
+	}
+
+	// Reload so the second scan sees the scanned_at the first one wrote — the
+	// guard is "a previous scan finished", not "this process ran one".
+	reloaded, err := st.GetLibrary(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *reloaded)
+
+	if tags.calls != first {
+		t.Errorf("second scan read %d more files; an unchanged library should read none",
+			tags.calls-first)
+	}
+}
+
+// The grouping survives the skip: the point is to avoid rebuilding an answer
+// that is already right, not to lose it.
+func TestSkippedTagPassLeavesTheGroupingIntact(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3": {Title: "Mysterons", Artist: "Portishead", Album: "Dummy", Track: 1},
+	}})
+	scanAndWait(t, sc, lib)
+
+	reloaded, err := st.GetLibrary(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *reloaded)
+
+	track := trackByPath(t, st, lib.ID, "01 Mysterons.mp3")
+	if track.Title != "Mysterons" {
+		t.Errorf("title = %q after a skipped pass, want Mysterons", track.Title)
+	}
+	if track.ParentID == nil {
+		t.Error("track lost its album after a scan that skipped the tag pass")
+	}
+}
+
+/*
+ * An interrupted scan must not be trusted.
+ *
+ * `scanned_at` is written only after a reconcile completes, so a library that
+ * has never finished one gets the full pass however unchanged its files look —
+ * otherwise a scan that died halfway leaves a half-built hierarchy that nothing
+ * would ever rebuild.
+ */
+func TestUnfinishedLibraryStillReadsTags(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3": {Title: "Mysterons", Artist: "Portishead", Album: "Dummy"},
+	}}
+	sc.SetTagReader(tags)
+	scanAndWait(t, sc, lib)
+	first := tags.calls
+
+	// lib still carries the zero ScannedAt it was created with, which is what a
+	// library whose first scan never finished looks like.
+	scanAndWait(t, sc, lib)
+	if tags.calls == first {
+		t.Error("a library with no completed scan skipped the tag pass")
+	}
+}
