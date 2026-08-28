@@ -77,8 +77,18 @@ export function useIsAdmin(): boolean {
 export function useSetup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (creds: { username: string; password: string }) =>
-      apiPost<AuthStatus>("/api/auth/setup", creds),
+    mutationFn: (creds: {
+      username: string;
+      password: string;
+      /*
+       * Sent only when the person actually saw the option (ADR 0048).
+       *
+       * Optional rather than defaulted here: absent means "was never asked"
+       * and the server treats that as no. A client that quietly sent `true`
+       * would be manufacturing the consent the disclosure exists to obtain.
+       */
+      install_media_tools?: boolean;
+    }) => apiPost<AuthStatus>("/api/auth/setup", creds),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
   });
 }
@@ -239,7 +249,10 @@ export function useUpdateLibrary() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { id: number; name?: string; path?: string }) =>
-      apiSend(`/api/libraries/${v.id}`, "PATCH", { name: v.name, path: v.path }),
+      apiSend(`/api/libraries/${v.id}`, "PATCH", {
+        name: v.name,
+        path: v.path,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["libraries"] });
       // A repoint rewrites every item path in the library, so anything holding
@@ -525,7 +538,11 @@ export function useSetCollectionPoster(id: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (fromItemID: number) =>
-      apiPost<Item>(`/api/items/${id}/poster`, { from_item_id: fromItemID }, "PUT"),
+      apiPost<Item>(
+        `/api/items/${id}/poster`,
+        { from_item_id: fromItemID },
+        "PUT",
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["item", id] });
       qc.invalidateQueries({ queryKey: ["items"] });
@@ -991,7 +1008,8 @@ export function useCastByIDs(libraryID: number, ids: string[]) {
     queryKey: ["cast-by-id", libraryID, key],
     queryFn: ({ signal }) =>
       apiGet<{ people: CastMember[] }>(
-        `/api/libraries/${libraryID}/cast?` + ids.map((i) => `id=${i}`).join("&"),
+        `/api/libraries/${libraryID}/cast?` +
+          ids.map((i) => `id=${i}`).join("&"),
         signal,
       ),
     enabled: libraryID > 0 && ids.length > 0,
@@ -1009,7 +1027,8 @@ export function useCastByIDs(libraryID: number, ids: string[]) {
 export function useMediaTools(enabled: boolean) {
   return useQuery({
     queryKey: ["media-tools"],
-    queryFn: ({ signal }) => apiGet<MediaToolsState>("/api/media-tools", signal),
+    queryFn: ({ signal }) =>
+      apiGet<MediaToolsState>("/api/media-tools", signal),
     enabled,
     refetchInterval: (q) => (q.state.data?.running ? 1000 : false),
   });
@@ -1349,7 +1368,10 @@ export async function fetchArtistQueue(
   // Only leaves. An album containing anything other than tracks is not a shape
   // the scanner produces today, but handing the player a container would be a
   // silent failure rather than a loud one.
-  return pages.flat().filter((t) => !isContainer(t)).map((t) => t.id);
+  return pages
+    .flat()
+    .filter((t) => !isContainer(t))
+    .map((t) => t.id);
 }
 
 /**
@@ -1404,7 +1426,7 @@ export async function fetchDescendantIDs(
    */
   const PAGE = 500;
   const kids: Item[] = [];
-  for (let offset = 0; ; ) {
+  for (let offset = 0; ;) {
     const page = await qc.fetchQuery({
       queryKey: ["children", parentID, "", offset],
       queryFn: () =>
@@ -1487,7 +1509,9 @@ export async function fetchLibraryTracks(
  */
 export type PlayableKind = "track" | "movie" | "episode";
 
-export function playableKindFor(libraryKind: string | undefined): PlayableKind | null {
+export function playableKindFor(
+  libraryKind: string | undefined,
+): PlayableKind | null {
   switch (libraryKind) {
     case "music":
       return "track";
@@ -1520,10 +1544,11 @@ export async function fetchShowContinue(showID: number): Promise<{
 }
 
 export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
-  const res = await apiGet<{ episodes: Item[] }>(`/api/items/${showID}/episodes`);
+  const res = await apiGet<{ episodes: Item[] }>(
+    `/api/items/${showID}/episodes`,
+  );
   return res.episodes ?? [];
 }
-
 
 /*
  * Marking an episode watched, or putting it back.
@@ -1867,7 +1892,10 @@ export function useMyRatings(limit = 50) {
   return useQuery({
     queryKey: ["my-ratings", limit],
     queryFn: ({ signal }) =>
-      apiGet<{ ratings: RatedItem[] }>(`/api/profile/ratings?limit=${limit}`, signal),
+      apiGet<{ ratings: RatedItem[] }>(
+        `/api/profile/ratings?limit=${limit}`,
+        signal,
+      ),
     staleTime: 30_000,
   });
 }
@@ -1889,8 +1917,14 @@ export function useRenameSelf() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string; name?: string; role?: Role }) =>
-      apiSend(`/api/users/${id}`, "PATCH", patch),
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      name?: string;
+      role?: Role;
+    }) => apiSend(`/api/users/${id}`, "PATCH", patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 }
@@ -2024,7 +2058,8 @@ export function useChannelSchedule(channelID: number | null, hours = 12) {
 export function usePeople() {
   return useQuery({
     queryKey: ["people"],
-    queryFn: ({ signal }) => apiGet<{ people: Person[] }>("/api/people", signal),
+    queryFn: ({ signal }) =>
+      apiGet<{ people: Person[] }>("/api/people", signal),
     staleTime: 60_000,
   });
 }
@@ -2035,7 +2070,10 @@ export function usePersonActivity(id: string | undefined, sharing: boolean) {
   return useQuery({
     queryKey: ["person-activity", id],
     queryFn: ({ signal }) =>
-      apiGet<{ activity: HistoryEntry[] }>(`/api/people/${id}/activity`, signal),
+      apiGet<{ activity: HistoryEntry[] }>(
+        `/api/people/${id}/activity`,
+        signal,
+      ),
     enabled: !!id && sharing,
     staleTime: 60_000,
   });
@@ -2133,7 +2171,8 @@ export function useSetSharing() {
 export function usePeerPresence() {
   return useQuery({
     queryKey: ["peer-presence"],
-    queryFn: ({ signal }) => apiGet<{ peers: PeerPresence[] }>("/api/people/peers", signal),
+    queryFn: ({ signal }) =>
+      apiGet<{ peers: PeerPresence[] }>("/api/people/peers", signal),
     refetchInterval: 10_000,
     staleTime: 5_000,
   });

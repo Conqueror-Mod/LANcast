@@ -67,6 +67,48 @@ func (j *toolsJob) snapshot() map[string]any {
  * would mean a client timeout looked like a failed install. Progress is polled
  * from the same path.
  */
+/*
+ * beginToolsInstall starts a download and reports whether it started.
+ *
+ * Split out of installMediaTools so first-run setup can begin the same install
+ * without going through an admin-gated HTTP handler — at account creation there
+ * are no accounts yet, so that gate cannot be the thing protecting it.
+ *
+ * What protects it instead is that nothing calls this without a person having
+ * pressed a button that said what it does (ADR 0048). Any future caller
+ * inherits that obligation: this function does not ask, it only starts.
+ *
+ * Returns false when there is nothing to start — an unsupported platform, or an
+ * install already running — which the two callers report differently and
+ * neither treats as fatal.
+ */
+func (s *Server) beginToolsInstall() (mediatools.Source, bool) {
+	src, err := mediatools.SourceForHost()
+	if err != nil {
+		return mediatools.Source{}, false
+	}
+
+	s.tools.mu.Lock()
+	if s.tools.running {
+		s.tools.mu.Unlock()
+		return src, false
+	}
+	// Not tied to any request context: the install must survive the browser tab
+	// that started it, which is the difference between a background job and a
+	// long request.
+	ctx, cancel := context.WithCancel(context.Background())
+	s.tools.running = true
+	s.tools.stage = mediatools.StageDownloading
+	s.tools.done, s.tools.total = 0, src.SizeBytes
+	s.tools.err = ""
+	s.tools.finished = time.Time{}
+	s.tools.cancel = cancel
+	s.tools.mu.Unlock()
+
+	go s.runToolsInstall(ctx, src, s.mediaToolsDir())
+	return src, true
+}
+
 func (s *Server) installMediaTools(w http.ResponseWriter, r *http.Request) {
 	src, err := mediatools.SourceForHost()
 	if errors.Is(err, mediatools.ErrUnsupportedPlatform) {

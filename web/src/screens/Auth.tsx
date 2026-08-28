@@ -41,10 +41,31 @@ export function Setup({ restartRequired }: { restartRequired: boolean }) {
   const setup = useSetup();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  /*
+   * Ticked to begin with, and that is the decision rather than a default
+   * nobody thought about (ADR 0048).
+   *
+   * Most libraries cannot play without ffmpeg, and the failure it produces is
+   * not "a feature is missing" — it is somebody concluding the software cannot
+   * play their files, from a symptom two layers from its cause. The person this
+   * protects is the one who reads nothing, so the box has to be ticked for
+   * them.
+   *
+   * What keeps that honest is that the fetch follows a button *they* press,
+   * having been told what it downloads, from where, how big and under which
+   * licence. That is why this is a ticked box on a form and not a fetch the
+   * server starts on its own: the traffic is asked for, so the no-phone-home
+   * principle keeps its third job and README needed no exception.
+   */
+  const [installTools, setInstallTools] = useState(true);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    setup.mutate({ username: username.trim(), password });
+    setup.mutate({
+      username: username.trim(),
+      password,
+      install_media_tools: installTools,
+    });
   }
 
   return (
@@ -70,6 +91,27 @@ export function Setup({ restartRequired }: { restartRequired: boolean }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+        </label>
+        {/* The disclosure *is* the consent, so it names the thing, the size,
+            the source and the licence rather than asking for a blank yes. A
+            download somebody cannot identify is not consent (ADR 0043). */}
+        <label className="auth__check">
+          <input
+            type="checkbox"
+            checked={installTools}
+            onChange={(e) => setInstallTools(e.target.checked)}
+          />
+          <span>
+            <strong>Download the media tools (about 160 MB)</strong>
+            <span className="auth__check-desc">
+              Most video files need converting before a browser can play them,
+              and LANcast uses ffmpeg to do it. It is fetched once from{" "}
+              <code>github.com/BtbN/FFmpeg-Builds</code>, is licensed under the
+              GPL, and never contacts anything again. Without it, most of a
+              library will not play. You can untick this and install it later
+              from Settings.
+            </span>
+          </span>
         </label>
         {setup.isError && (
           <p className="auth__error" role="alert">

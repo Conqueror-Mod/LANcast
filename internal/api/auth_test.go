@@ -326,3 +326,80 @@ func TestAuthStatusReportsRestartRequired(t *testing.T) {
 		t.Errorf("lan_enabled = %v, want false", body["lan_enabled"])
 	}
 }
+
+/*
+ * The first-run media-tools option (ADR 0048).
+ *
+ * The safety property is that **absent means no**. The fetch is not
+ * admin-gated, because at setup there are no accounts — what stands in for that
+ * gate is a disclosure on the form. So a request that never carried the field
+ * never saw the disclosure, and must not trigger a download: an older client, a
+ * script, or anything replaying the endpoint.
+ *
+ * These assert the decision rather than the download. Starting a real 160MB
+ * fetch in a test would be the opposite of what this file is for; what can be
+ * checked is that the server reports whether it started one, and that it says
+ * no in every case where consent was not given.
+ */
+func TestSetupDoesNotFetchToolsWhenNotAsked(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{
+		"username": testUser, "password": "a good long password",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("setup failed: %d", resp.StatusCode)
+	}
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["media_tools_installing"] != false {
+		t.Errorf("a setup that never mentioned the tools started a download: %v", out)
+	}
+}
+
+func TestSetupDoesNotFetchToolsWhenDeclined(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{
+		"username": testUser, "password": "a good long password", "install_media_tools": false,
+	})
+	defer resp.Body.Close()
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["media_tools_installing"] != false {
+		t.Errorf("unticking the box still started a download: %v", out)
+	}
+}
+
+/*
+ * Accepting must not cost somebody their account.
+ *
+ * The install runs after the account exists and setup does not wait for it, so
+ * a fetch that cannot start — an unsupported platform, no network — leaves a
+ * working server and a usable Settings row rather than a stuck setup. The test
+ * environment has no pinned build to fetch, which makes it exactly the case
+ * worth asserting.
+ */
+func TestSetupSucceedsEvenIfTheFetchCannotStart(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{
+		"username": testUser, "password": "a good long password", "install_media_tools": true,
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ticking the box broke setup: %d", resp.StatusCode)
+	}
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["configured"] != true || out["authenticated"] != true {
+		t.Errorf("the account was not created: %v", out)
+	}
+}
