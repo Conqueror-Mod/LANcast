@@ -145,3 +145,54 @@ describe("a detail page arriving", () => {
     expect((host.textContent ?? "").trim().length).toBeGreaterThan(0);
   });
 });
+
+/*
+ * The rewatch count on a detail page.
+ *
+ * Shown from two, because "watched once" is what the tick already says and
+ * repeating it in words on every finished title would be noise across most of a
+ * library. The interesting assertions are the two boundaries and the case where
+ * the flag and the count disagree — marking something unwatched keeps the
+ * tally, so `watched: false` with a count of four is an ordinary state and not
+ * a contradiction to be smoothed over.
+ */
+describe("the rewatch count", () => {
+  it("says nothing for something watched once", async () => {
+    await renderDetail({
+      ...movie,
+      progress: { position_ms: 0, watched: true, watch_count: 1 },
+    });
+    expect(host.textContent).not.toContain("times");
+  });
+
+  it("says how many times once there have been several", async () => {
+    await renderDetail({
+      ...movie,
+      progress: { position_ms: 0, watched: true, watch_count: 4 },
+    });
+    expect(host.textContent).toContain("Watched 4 times");
+  });
+
+  it("keeps saying so after the title is marked unwatched", async () => {
+    // The count outlives the flag on purpose: putting something back on the
+    // list is not a claim never to have seen it.
+    await renderDetail({
+      ...movie,
+      progress: { position_ms: 0, watched: false, watch_count: 4 },
+    });
+    expect(host.textContent).toContain("Watched 4 times");
+  });
+
+  /*
+   * An older server does not send the field at all — the client updates
+   * through the installer while the server updates itself, so a client ahead
+   * of its server is ordinary. Absent must read as "no count", never as one.
+   */
+  it("says nothing when the server does not report a count", async () => {
+    await renderDetail({
+      ...movie,
+      progress: { position_ms: 0, watched: true },
+    });
+    expect(host.textContent).not.toContain("times");
+  });
+});
