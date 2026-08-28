@@ -78,6 +78,11 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, transcode.ErrTooManySessions):
+			// The running count travels with it: the same line read two ways is
+			// "the ceiling is doing its job" or "sessions are leaking", and it
+			// is unreadable without the number.
+			s.log.Warn("refused a channel: at the session ceiling",
+				"channel", id, "running", len(s.trans.Sessions()), "max", s.trans.MaxSessions)
 			writeError(w, http.StatusServiceUnavailable, "busy",
 				"too many streams are already running on this server")
 		default:
@@ -268,6 +273,11 @@ func (s *Server) channelLiveHLS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, transcode.ErrTooManySessions):
+			// The running count travels with it: the same line read two ways is
+			// "the ceiling is doing its job" or "sessions are leaking", and it
+			// is unreadable without the number.
+			s.log.Warn("refused a channel: at the session ceiling",
+				"channel", id, "running", len(s.trans.Sessions()), "max", s.trans.MaxSessions)
 			writeError(w, http.StatusServiceUnavailable, "busy",
 				"too many streams are already running on this server")
 		default:
