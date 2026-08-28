@@ -8,7 +8,7 @@ import (
 )
 
 func TestSoftwareEncoderArgs(t *testing.T) {
-	args := Software.EncoderArgs(23, false)
+	args := Software.EncoderArgs(23, false, 1920, 1080, 23.976)
 	if !hasArgPair(args, "-c:v", "libx264") {
 		t.Errorf("args = %v", args)
 	}
@@ -40,7 +40,7 @@ func TestHardwareEncodersUseTheirOwnQualityFlag(t *testing.T) {
 			t.Fatalf("candidate %s missing", name)
 		}
 
-		args := enc.EncoderArgs(23, false)
+		args := enc.EncoderArgs(23, false, 1920, 1080, 23.976)
 		if !hasArgPair(args, flag, "23") {
 			t.Errorf("%s: args = %v, want %s 23", name, args, flag)
 		}
@@ -67,7 +67,7 @@ func TestAMFSetsRateControl(t *testing.T) {
 			amf = c
 		}
 	}
-	args := amf.EncoderArgs(23, false)
+	args := amf.EncoderArgs(23, false, 1920, 1080, 23.976)
 	if !hasArgPair(args, "-rc", "cqp") {
 		t.Errorf("AMF args = %v, want constant QP rate control", args)
 	}

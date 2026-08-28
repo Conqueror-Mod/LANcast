@@ -442,7 +442,20 @@ func Args(o Options) []string {
 		// x264 wants -crf, NVENC -cq, QSV -global_quality, AMF -qp_i. Same
 		// intent, four spellings, and each hardware encoder needs profile and
 		// level stated or it defaults to something browsers refuse.
-		a = append(a, o.Encoder.EncoderArgs(o.CRF, framesOnGPU)...)
+		/*
+		 * The level is computed from the frame the encoder will actually be
+		 * handed, which is the source scaled by any TargetHeight — a cap makes
+		 * the frame smaller and can only ever lower the level needed.
+		 *
+		 * `scale=-2:H` keeps the aspect ratio, so the width follows the height
+		 * proportionally; that is the same arithmetic, done here so the level
+		 * describes the output rather than the input.
+		 */
+		outW, outH := o.Decision.SourceWidth, o.Decision.SourceHeight
+		if h := o.Decision.TargetHeight; h > 0 && outH > 0 && h < outH {
+			outW, outH = outW*h/outH, h
+		}
+		a = append(a, o.Encoder.EncoderArgs(o.CRF, framesOnGPU, outW, outH, o.Decision.SourceFrameRate)...)
 
 		/*
 		 * The video filter chain: one -vf, built from every filter this job
