@@ -398,6 +398,39 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 
 	seen := make(map[string]bool, len(known))
 
+	/*
+	 * One directory read per directory, not per file.
+	 *
+	 * The cache lives for this root's walk and is thrown away with it, so it
+	 * cannot go stale between scans — a folder's contents are read once while
+	 * the walk is inside it, which is exactly when WalkDir has just listed it
+	 * anyway. Measured cost of not having it: a 9,276-track music library spent
+	 * around 94 seconds per scan almost entirely here, and reported
+	 * `changed=0` every time.
+	 */
+	dirCache := make(map[string][]fs.DirEntry)
+	readDir := func(dir string) ([]fs.DirEntry, error) {
+		if e, ok := dirCache[dir]; ok {
+			return e, nil
+		}
+		e, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, err
+		}
+		dirCache[dir] = e
+		return e, nil
+	}
+
+	/*
+	 * Subtitles are a video question, and asking it of audio is not merely
+	 * wasted work — it is thousands of directory reads and a write transaction
+	 * per track, every scan, looking for `.srt` files beside an MP3.
+	 *
+	 * A picture library is the same. Neither can carry a sidecar subtitle in any
+	 * sense the subtitle package recognises, so the honest thing is not to ask.
+	 */
+	wantsSubtitles := lib.Kind == media.LibraryMovie || lib.Kind == media.LibraryShow
+
 	err = filepath.WalkDir(root.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// A single unreadable directory shouldn't abort the whole scan.
@@ -506,7 +539,9 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 			// Subtitles are still re-checked. A sidecar dropped next to an
 			// untouched film is the common way they arrive, and skipping the
 			// video would otherwise mean it is never noticed.
-			s.syncSubtitles(ctx, st.ID, path)
+			if wantsSubtitles {
+				s.syncSubtitles(ctx, st.ID, path, readDir)
+			}
 			return nil
 		}
 
@@ -516,7 +551,9 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 			s.recordIssue(p, root.Path, path, "could not be recorded")
 			return nil
 		}
-		s.syncSubtitles(ctx, id, path)
+		if wantsSubtitles {
+			s.syncSubtitles(ctx, id, path, readDir)
+		}
 		s.mu.Lock()
 		p.ItemsChanged++
 		s.mu.Unlock()
@@ -961,8 +998,17 @@ func deref2(p *int) int {
 //
 // Best-effort: a subtitle that cannot be indexed must not fail a scan, and a
 // library on a read-only mount is a normal deployment.
-func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath string) {
-	found := subtitle.FindSidecars(videoPath)
+/*
+ * syncSubtitles indexes the subtitle files sitting beside one video.
+ *
+ * `read` is the walk's shared directory reader. Sidecar discovery is a question
+ * about a *folder* — what else is next to this file — and it was being asked
+ * once per file and answered by reading the directory twice. A season of twenty
+ * episodes read the same folder forty times per scan.
+ */
+func (s *Scanner) syncSubtitles(ctx context.Context, itemID int64, videoPath string,
+	read subtitle.DirReader) {
+	found := subtitle.FindSidecarsWith(videoPath, read)
 	if len(found) == 0 {
 		// Still call through, so a sidecar that was deleted stops being listed.
 		if err := s.st.ReplaceSidecarSubtitles(ctx, itemID, nil); err != nil {
