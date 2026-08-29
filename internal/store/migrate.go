@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 31
+const CurrentSchemaVersion = 32
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -70,6 +70,7 @@ var migrations = []migration{
 	{version: 29, sql: schemaRevision29},
 	{version: 30, sql: schemaRevision30},
 	{version: 31, sql: schemaRevision31},
+	{version: 32, sql: schemaRevision32},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1130,4 +1131,28 @@ CREATE TABLE IF NOT EXISTS profile_totals (
 const schemaRevision31 = `
 ALTER TABLE playback_state ADD COLUMN watch_count INTEGER NOT NULL DEFAULT 0;
 UPDATE playback_state SET watch_count = 1 WHERE watched = 1;
+`
+
+/*
+ * Revision 32 — the banked totals learn to count viewings too.
+ *
+ * Revision 31 gave `playback_state` a tally of how many times a title has been
+ * finished, and the profile statistics went on summing the flag beside it — so
+ * a film watched twenty times still contributed one, and the number the tally
+ * exists to produce was thrown away at the moment it was read.
+ *
+ * Fixing that live is arithmetic. What needs a column is the *banked* half:
+ * clearing history destroys the rows carrying `watch_count`, and totals banked
+ * without it would silently reset a rewatcher's tally to the number of titles
+ * they had finished. That is the fault revision 30 was written to prevent,
+ * arriving through the door revision 31 opened.
+ *
+ * The backfill is `finished`, for the same reason revision 31 backfilled from
+ * `watched`: a viewing that was banked before anything counted viewings
+ * happened at least once, and one is the honest minimum. Accounts that have
+ * never cleared anything have no row here at all and need no backfill.
+ */
+const schemaRevision32 = `
+ALTER TABLE profile_totals ADD COLUMN viewings INTEGER NOT NULL DEFAULT 0;
+UPDATE profile_totals SET viewings = finished;
 `

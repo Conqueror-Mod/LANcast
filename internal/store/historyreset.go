@@ -123,16 +123,25 @@ func (s *Store) ResetHistory(ctx context.Context, userID string, scope HistorySc
 	 * that grows on its own is harder to disbelieve than one that vanishes.
 	 *
 	 * The banked figures use the same arithmetic ProfileStatistics does: a
-	 * finished item counts its duration, an unfinished one counts how far in
-	 * you got. Summing runtimes instead would report eleven hours for eleven
-	 * films abandoned in their first minute.
+	 * finished item counts its duration *per viewing*, an unfinished one counts
+	 * how far in you got. Summing runtimes instead would report eleven hours
+	 * for eleven films abandoned in their first minute.
+	 *
+	 * `viewings` is banked for the same reason the rest is. The rows being
+	 * destroyed are the only place `watch_count` lives, so a reset that did not
+	 * carry it would quietly return a rewatcher's tally to the number of titles
+	 * they had finished — which is the fault this banking exists to prevent,
+	 * arriving through the door revision 31 opened.
 	 */
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO profile_totals (user_id, started, finished, watched_ms, first_at)
+		INSERT INTO profile_totals (user_id, started, finished, viewings, watched_ms, first_at)
 		SELECT ?, COUNT(*), COALESCE(SUM(ps.watched), 0),
-		       COALESCE(SUM(CASE WHEN ps.watched = 1
-		                         THEN COALESCE(mi.duration_ms, ps.position_ms)
-		                         ELSE ps.position_ms END), 0),
+		       COALESCE(SUM(ps.watch_count), 0),
+		       COALESCE(SUM(CASE WHEN mi.duration_ms IS NULL THEN ps.position_ms
+		                         ELSE ps.watch_count * mi.duration_ms
+		                              + CASE WHEN ps.watched = 1 THEN 0
+		                                     ELSE ps.position_ms END
+		                    END), 0),
 		       MIN(ps.updated_at)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
@@ -141,6 +150,7 @@ func (s *Store) ResetHistory(ctx context.Context, userID string, scope HistorySc
 		ON CONFLICT(user_id) DO UPDATE SET
 			started    = started    + excluded.started,
 			finished   = finished   + excluded.finished,
+			viewings   = viewings   + excluded.viewings,
 			watched_ms = watched_ms + excluded.watched_ms,
 			-- The oldest playback this account ever had. Kept as a minimum
 			-- rather than replaced, or clearing history a second time would

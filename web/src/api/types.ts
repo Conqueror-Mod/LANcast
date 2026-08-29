@@ -637,9 +637,17 @@ export interface ProfileUser {
 
 export interface ProfileStats {
   started: number;
+  // Two different questions, and keeping them apart is the point: `finished` is
+  // how many distinct titles have been finished, `viewings` is how many times
+  // finishing happened. Somebody who has seen twelve films, one of them nine
+  // times, has finished twelve things and sat through twenty.
   finished: number;
+  // Optional because a server older than this field simply does not send it,
+  // and a client newer than its server is ordinary here.
+  viewings?: number;
   // Time spent, not runtime owned: an unfinished item counts how far in you
-  // got, so eleven abandoned films are not eleven hours.
+  // got, so eleven abandoned films are not eleven hours — and a rewatched one
+  // counts its runtime per viewing, so nine sittings are not one.
   watched_ms: number;
   first_at: number | null;
 }
