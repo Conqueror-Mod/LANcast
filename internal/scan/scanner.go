@@ -98,6 +98,22 @@ type Progress struct {
 	StartedAt  int64   `json:"started_at"`
 	FinishedAt *int64  `json:"finished_at,omitempty"`
 	Error      string  `json:"error,omitempty"`
+
+	/*
+	 * When the scan began, at a resolution worth measuring with.
+	 *
+	 * Unexported, so the API contract is unchanged: `started_at` and
+	 * `finished_at` stay the second-resolution stamps clients already read.
+	 * They are also why this exists. Deciding whether a scan is worth
+	 * optimising needs its duration, and subtracting two second-stamps reports
+	 * an unchanged 9,276-track music library as "0" or "3" — the difference
+	 * between one second and three being most of the answer.
+	 *
+	 * That measurement was taken with a stopwatch and the settings pane,
+	 * because the log recorded counts and no duration at all. It cost a driven
+	 * UI and a polling loop to learn a number the scan already knew.
+	 */
+	started time.Time
 }
 
 // Issue is a file or directory the scan could not fully process. It carries a
@@ -183,7 +199,13 @@ func (s *Scanner) Start(lib store.Library) (Progress, error) {
 		return p, ErrBusy
 	}
 	s.running[lib.ID] = true
-	p := &Progress{LibraryID: lib.ID, State: StateRunning, StartedAt: time.Now().Unix()}
+	now := time.Now()
+	p := &Progress{
+		LibraryID: lib.ID,
+		State:     StateRunning,
+		StartedAt: now.Unix(),
+		started:   now,
+	}
 	s.last[lib.ID] = p
 	s.mu.Unlock()
 
@@ -199,16 +221,26 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	err := s.walk(ctx, lib, p)
 
 	s.mu.Lock()
-	now := time.Now().Unix()
-	p.FinishedAt = &now
+	end := time.Now()
+	fin := end.Unix()
+	p.FinishedAt = &fin
+	/*
+	 * Milliseconds, on both outcomes.
+	 *
+	 * A scan that failed after forty minutes and one that failed on its first
+	 * directory are different faults, and the line said the same thing about
+	 * both.
+	 */
+	elapsed := end.Sub(p.started).Milliseconds()
 	if err != nil {
 		p.State = StateFailed
 		p.Error = err.Error()
-		s.log.Error("scan failed", "library", lib.ID, "error", err)
+		s.log.Error("scan failed", "library", lib.ID, "elapsed_ms", elapsed, "error", err)
 	} else {
 		p.State = StateIdle
 		s.log.Info("scan complete", "library", lib.ID,
-			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing)
+			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing,
+			"elapsed_ms", elapsed)
 
 		// The shape check runs on success only. A failed scan produced a
 		// partial library by definition, and telling somebody their TV library
