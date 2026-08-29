@@ -84,6 +84,15 @@ const PROBES: Record<string, string> = {
  * per viewer, for an unknown length of time. Clearing it and replaying the same
  * file direct-played with no ffmpeg at all, so all four denials were false.
  *
+ * **Why every claim was denied at once was not understood at the time, and the
+ * answer was one line away**: `retryWithoutClaims` withdrew the whole set on any
+ * direct-play failure, because the element's error does not name a codec. So a
+ * single file no browser can decode — TrueHD, DTS — cost every claim this
+ * client makes. Expiry shortened that damage without touching its cause, and
+ * the same install reported it again months later with all *seven* claims down
+ * and 130 unnecessary HEVC transcodes behind it. A file is now only allowed to
+ * cost the claims it actually used; see capabilitiesNeededBy below.
+ *
  * Nothing surfaced any of it. The fallback is correct behaviour, so a machine
  * quietly downgraded for ever looks exactly like a machine working properly.
  *
@@ -336,4 +345,62 @@ export function withCapabilities(url: string): string {
   return (
     url + (url.includes("?") ? "&" : "?") + "can=" + encodeURIComponent(can)
   );
+}
+
+/*
+ * Which claims a particular file could have been ruined by.
+ *
+ * `retryWithoutClaims` used to deny *every* claim this browser makes when a
+ * direct play failed, because the element's error does not say which codec let
+ * it down. That is safe and enormously over-broad: one TrueHD file that no
+ * browser can decode took hevc, hevc10, high10, ac3, eac3, flacmp4 and opusmp4
+ * down with it, and the server re-encoded everything for a fortnight.
+ *
+ * It is also exactly the state the comment on DENIED_KEY describes — "every
+ * claim the client is capable of making", all of them false. That was read as a
+ * problem of *permanence* and fixed with expiry, which shortened the damage
+ * without touching what caused it. Measured on the reporting install: 130
+ * transcode sessions whose stated reason was `video codec hevc is not
+ * supported`, on a machine that decodes HEVC.
+ *
+ * A file cannot be ruined by a claim it never needed. The streams say which
+ * ones it needed, so only those are at risk and only those are withdrawn.
+ *
+ * Deliberately derived from the same conditions `internal/probe/decide.go`
+ * uses, because a client that disagrees with the server about what `hevc10`
+ * means would withdraw the wrong claim and leave the real culprit standing.
+ * `pix_fmt` is the one signal the server has and this does not, so ten-bit is
+ * read from the profile alone — which is why an unrecognised profile falls back
+ * to the plain claim rather than guessing.
+ */
+export function capabilitiesNeededBy(
+  streams: { kind: string; codec?: string; profile?: string }[] | undefined,
+): string[] {
+  if (!streams) return [];
+  const need = new Set<string>();
+  const tenBit = (p: string | undefined) =>
+    /(^|\s)(main\s*10|high\s*10|10\s*bit)/i.test(p ?? "");
+
+  for (const s of streams) {
+    const codec = (s.codec ?? "").toLowerCase();
+    if (s.kind === "video") {
+      if (codec === "hevc" || codec === "h265") {
+        // The plain claim is always at risk; the ten-bit permission only when
+        // the file is ten-bit, since an 8-bit file cannot have been spoiled by
+        // a permission it never used.
+        need.add("hevc");
+        if (tenBit(s.profile)) need.add("hevc10");
+      }
+      if (codec === "h264" && tenBit(s.profile)) need.add("high10");
+    }
+    if (s.kind === "audio") {
+      if (codec === "ac3") need.add("ac3");
+      if (codec === "eac3") need.add("eac3");
+      // FLAC and Opus are claims about carrying them *inside MP4*, which is the
+      // question a direct play of this file asked.
+      if (codec === "flac") need.add("flacmp4");
+      if (codec === "opus") need.add("opusmp4");
+    }
+  }
+  return [...need].sort();
 }

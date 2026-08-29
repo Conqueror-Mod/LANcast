@@ -15,6 +15,7 @@ import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import {
   withCapabilities,
   capabilities,
+  capabilitiesNeededBy,
   deny,
   resetCapabilities,
 } from "./capabilities";
@@ -959,29 +960,53 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, audioIndex, prefs.quality]);
 
-  // A direct-played file that fails is a capability this browser claimed and
-  // does not have.
-  //
-  // `canPlayType` answers "probably" — HEVC in particular depends on the GPU
-  // and, on Windows, on a codec extension that may not be installed. The claim
-  // is dropped for this machine, remembered, and the file is asked for again;
-  // the server, no longer told the client can decode it, converts it instead.
-  //
-  // Only for a *direct* source, and only for a claim not already withdrawn.
-  // A transcode that fails is a server-side problem and retrying it under a
-  // narrower profile would be the same request again — which is how a failing
-  // file becomes an infinite loop rather than an error.
+  /*
+   * A direct-played file that fails is a capability this browser claimed and
+   * does not have — but only one of them, and only one of the ones this file
+   * actually used.
+   *
+   * `canPlayType` answers "probably", never "definitely": HEVC in particular
+   * depends on the GPU and, on Windows, on a codec extension that may not be
+   * installed. So a failed direct play withdraws the claim that produced it,
+   * and the server converts the file next time instead.
+   *
+   * **It used to withdraw every claim at once**, because the element's error
+   * does not say which codec let it down. One TrueHD file that no browser can
+   * decode therefore took hevc, hevc10, high10, ac3, eac3, flacmp4 and opusmp4
+   * with it, and the server re-encoded everything until they expired. Measured
+   * on the reporting install: 130 transcode sessions whose stated reason was
+   * `video codec hevc is not supported`, on a machine that decodes HEVC in
+   * hardware. `capabilities.ts` already described that state — "every claim the
+   * client is capable of making", all false — and read it as a problem of
+   * permanence, which shortened the damage without touching the cause.
+   *
+   * A file cannot be ruined by a claim it never needed, so only the claims its
+   * own streams called for are at risk.
+   *
+   * The conversion is no longer conditional on having withdrawn something. Those
+   * are two different jobs: withdrawing a claim is what this *remembers*, and
+   * converting is what it *does about the film in front of somebody*. A failure
+   * with no attributable claim — an unreadable file, a codec nothing here
+   * models — used to produce a bare error and no recovery at all.
+   *
+   * Only for a *direct* source. A transcode that fails is a server-side problem
+   * and retrying it under a narrower profile would be the same request again,
+   * which is how a failing file becomes an infinite loop rather than an error.
+   */
   const retryWithoutClaims = useCallback(() => {
     if (transcoding.current) return;
-    const claimed = capabilities();
-    if (!claimed) return;
 
-    let news = false;
-    for (const c of claimed.split(",")) {
-      if (deny(c)) news = true;
+    const claimed = capabilities();
+    if (claimed) {
+      const atRisk = capabilitiesNeededBy(item?.streams);
+      const claims = claimed.split(",");
+      const suspects = atRisk.filter((c) => claims.includes(c));
+      let news = false;
+      for (const c of suspects) {
+        if (deny(c)) news = true;
+      }
+      if (news) resetCapabilities();
     }
-    if (!news) return;
-    resetCapabilities();
 
     setNote("That file would not play directly — converting instead");
     const v = videoRef.current;
