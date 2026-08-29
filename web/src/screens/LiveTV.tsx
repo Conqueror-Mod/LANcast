@@ -338,12 +338,18 @@ export function LiveTV() {
      * not a guess: a channel attached perfectly and sat at 0:00 until somebody
      * pressed play.
      *
-     * It has to happen on `MANIFEST_PARSED` and not a line after `attachMedia`.
-     * That was the first attempt and it changed nothing on screen: attachMedia
-     * returns before the MediaSource reaches the element, so `play()` ran
-     * against an element with no source, rejected, and was swallowed. Attaching
-     * and being playable are different moments and only one of them is
-     * observable from the caller.
+     * `loadedmetadata`, and it took two wrong answers to get here. Playing a
+     * line after `attachMedia` returns does not work, because the MediaSource
+     * reaches the element in a later task. Playing on hls.js's
+     * `MANIFEST_PARSED` does not work either, because the manifest is loaded
+     * independently of the element and can be parsed before the element has
+     * anything at all. Both are milestones in the *library*; neither says
+     * anything about the *element*.
+     *
+     * `loadedmetadata` cannot be wrong about it: it does not fire until the
+     * element has media. It is also the one that was observed — the player box
+     * resized to the channel's aspect ratio well before anybody pressed play,
+     * which is that event, on this path, with nothing acting on it.
      *
      * No head start is added. Waiting for one is the guess hls.js replaces — it
      * holds its own buffer and knows how much it has, which is the whole
@@ -351,10 +357,26 @@ export function LiveTV() {
      * coming back through a different door.
      */
     const start = () => {
-      // A rejection is left alone: a browser refusing autoplay is a policy
-      // decision, and the controls are right there.
-      void el.play().catch(() => {});
+      /*
+       * A refusal is said out loud rather than swallowed.
+       *
+       * The `.catch(() => {})` on the progressive path is right there: a
+       * browser refusing autoplay is a policy decision and the controls are
+       * visible. On this path the same silence hid two failed fixes, because a
+       * rejected play() and a play() that was never called look identical from
+       * the sofa — a channel at 0:00. Naming it costs one line and separates
+       * them.
+       */
+      void el.play().catch((e: unknown) => {
+        const name = e instanceof Error ? e.name : String(e);
+        if (name === "NotAllowedError") return; // Autoplay policy. Press play.
+        setPlayError(
+          `The channel is ready but did not start (${name}). Pressing play should work.`,
+        );
+      });
     };
+
+    el.addEventListener("loadedmetadata", start, { once: true });
 
     void attachLiveHls(el, playing.id, (fatal, detail) => {
       if (!fatal) return;
@@ -367,7 +389,7 @@ export function LiveTV() {
       setPlayError(
         `The channel stopped: ${detail}. It may be off the air, or the server may have run out of streams.`,
       );
-    }, start)
+    })
       .then((a) => {
         if (cancelled) {
           a.destroy();
@@ -390,6 +412,10 @@ export function LiveTV() {
 
     return () => {
       cancelled = true;
+      // `once` only fires it once; it does not remove it on unmount. A channel
+      // changed before the first one loaded would otherwise leave a listener
+      // armed on an element now showing something else.
+      el.removeEventListener("loadedmetadata", start);
       attached?.destroy();
     };
   }, [playing, path]);

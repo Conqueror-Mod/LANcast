@@ -232,10 +232,23 @@ describe("live tv transport", () => {
     await flush();
     await flush();
 
-    // The playlist arrives, a level is chosen, and only now is there anything
-    // for play() to act on.
+    /*
+     * The manifest alone must not be enough.
+     *
+     * This was the second wrong fix: the playlist is loaded independently of
+     * the element, so MANIFEST_PARSED can fire while the element still has
+     * nothing. It shipped and started no channel.
+     */
     await act(async () => {
       for (const h of fakeHlsInstances) h.emitManifestParsed();
+    });
+    await flush();
+    expect(play).not.toHaveBeenCalled();
+
+    // The element having media is the only thing that settles it.
+    const el = host.querySelector("video")!;
+    await act(async () => {
+      el.dispatchEvent(new Event("loadedmetadata"));
     });
     await flush();
 
