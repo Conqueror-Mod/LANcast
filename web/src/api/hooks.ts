@@ -433,8 +433,73 @@ export function useScanAllLibraries() {
   });
 }
 
+/** Which items a metadata refresh re-asks about. */
+export type RefreshScope = "all" | "unmatched";
+
+/**
+ * How many items a refresh would re-ask about, before it is asked for.
+ *
+ * The same shape the history reset uses, for the same reason: this is not
+ * destructive but it is expensive — about 1,480 provider lookups for a real
+ * film library at five a second — and a cost that only reveals itself once
+ * committed is one people learn to avoid entirely. A number beforehand makes it
+ * a decision instead of a gamble.
+ *
+ * `enabled` so the count is fetched when the menu is open and not on every
+ * render of every library row: two extra requests per library on a settings
+ * pane with a dozen of them is a lot of asking for a number nobody is reading.
+ */
+export function useRefreshPreview(
+  libraryID: number,
+  scope: RefreshScope,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["refresh-preview", libraryID, scope],
+    queryFn: () =>
+      apiGet<{ count: number; scope: RefreshScope }>(
+        `/api/libraries/${libraryID}/refresh?scope=${scope}`,
+      ),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useRefreshLibrary() {
-  return useBackgroundLibraryJob((id) => `/api/libraries/${id}/refresh`);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      libraryID,
+      scope,
+    }: {
+      libraryID: number;
+      scope: RefreshScope;
+    }) =>
+      // apiPost rather than apiSend: this answers with how many items it
+      // requeued, and that number is the only feedback this action has ever
+      // had. apiSend discards the body.
+      apiPost<{ queued: number; scope: RefreshScope }>(
+        `/api/libraries/${libraryID}/refresh?scope=${scope}`,
+        {},
+      ),
+    onSuccess: (_res, { libraryID }) => {
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
+        active: true,
+        tasks: prev?.tasks ?? [],
+      }));
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["scan", libraryID] });
+      /*
+       * The preview is now wrong, and it is the kind of wrong that is quiet:
+       * every requeued row still matches the scope that named it, so a stale
+       * count reads as plausible for as long as anybody looks at it.
+       *
+       * Not a sibling of ["refresh"], deliberately — a key reached by a prefix
+       * invalidation somewhere else is the most-repeated bug in this project.
+       */
+      qc.invalidateQueries({ queryKey: ["refresh-preview", libraryID] });
+    },
+  });
 }
 
 /*

@@ -385,6 +385,54 @@ func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// refreshScope reads the scope parameter, defaulting to everything.
+//
+// Absent means `all`, so a client written before scopes existed keeps the
+// behaviour it had. An unknown scope is refused rather than quietly widened to
+// everything: silently doing 1,480 lookups because somebody typed `unmatced` is
+// the expensive failure this whole feature exists to prevent.
+func refreshScope(r *http.Request) (store.RefreshScope, bool) {
+	switch r.URL.Query().Get("scope") {
+	case "", "all":
+		return store.RefreshAll, true
+	case "unmatched":
+		return store.RefreshUnmatched, true
+	}
+	return "", false
+}
+
+/*
+ * refreshPreview answers how many items a refresh would re-ask about.
+ *
+ * The same split the history reset uses, for the same reason: this is not
+ * destructive, but it is *expensive* — about 1,480 provider lookups for a real
+ * film library, at five a second — and a cost that only reveals itself once
+ * committed is one people learn to avoid entirely. A number beforehand makes it
+ * a decision instead.
+ */
+func (s *Server) refreshPreview(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	scope, valid := refreshScope(r)
+	if !valid {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"that is not a scope this server knows")
+		return
+	}
+	n, err := s.st.RefreshCount(r.Context(), id, scope)
+	if err != nil {
+		s.writeInternal(w, err, "refresh preview")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": n, "scope": string(scope)})
+}
+
 func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -394,12 +442,27 @@ func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
-	if err := s.st.ClearMetadataStamp(r.Context(), id, 0); err != nil {
+	scope, valid := refreshScope(r)
+	if !valid {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"that is not a scope this server knows")
+		return
+	}
+	n, err := s.st.RefreshScoped(r.Context(), id, scope)
+	if err != nil {
 		s.writeInternal(w, err, "refresh library")
 		return
 	}
 	s.enrichSoon()
-	w.WriteHeader(http.StatusAccepted)
+	/*
+	 * 200 with a count rather than a bare 202.
+	 *
+	 * The work is still asynchronous — enrichment runs on its own — but how many
+	 * items were requeued is known now and is the only feedback this action has
+	 * ever been able to give. "Refresh metadata" was the one button on this pane
+	 * that said nothing about what it had done.
+	 */
+	writeJSON(w, http.StatusOK, map[string]any{"queued": n, "scope": string(scope)})
 }
 
 /*

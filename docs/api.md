@@ -2800,9 +2800,48 @@ Comparison is opt-in per collision because sampling three windows of a 14.6 GB
 file is cheap next to reading it and expensive next to nothing — a report is
 opened far more often than any one row in it is investigated.
 
-### `POST /api/items/{id}/refresh` · `POST /api/libraries/{id}/refresh`
+### `POST /api/items/{id}/refresh`
 
-Re-fetch metadata, honoring all field locks. Returns `202`.
+Re-fetch metadata for one item, honoring all field locks. Returns `202`.
+
+### `GET /api/libraries/{id}/refresh` · `POST /api/libraries/{id}/refresh`
+
+Re-fetch metadata for a library, honoring all field locks. Admin only.
+
+`?scope=` chooses what is re-asked about. **An absent scope means `all`**, so a
+client written before scopes existed keeps the behaviour it had. An unrecognised
+scope is `400` rather than being widened to everything — doing 1,480 provider
+lookups because somebody mistyped is the expensive failure scoping exists to
+prevent.
+
+| scope | what it re-asks about |
+| --- | --- |
+| `all` | every item a provider could answer for |
+| `unmatched` | only items no provider identified |
+
+**GET prices it without performing it**, the way the history reset does. This is
+not destructive but it *is* expensive — roughly 1,480 lookups for a real film
+library, at the configured `rate_per_sec` — and a cost that only reveals itself
+once committed is one people learn to avoid entirely.
+
+```json
+{ "count": 3, "scope": "unmatched" }
+```
+
+POST performs it and answers with how many rows it requeued, which is the only
+feedback this action can give: the work itself is asynchronous.
+
+```json
+{ "queued": 3, "scope": "unmatched" }
+```
+
+**Every scope excludes the same two sets, and callers cannot opt out.** Kinds no
+provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery`
+([ADR 0024](adr/0024-music-libraries.md)) — because counting them prices work
+that will never happen, which on a music library means quoting twelve thousand
+and doing none of it. And rows whose match is `locked`, because a refresh that
+requeued them would undo a decision somebody made, and a rescan reconciles files
+rather than re-litigating identity.
 
 ### `POST /api/libraries/{id}/reparse`
 

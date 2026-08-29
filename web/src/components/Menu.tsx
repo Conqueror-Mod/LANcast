@@ -195,12 +195,21 @@ export function ButtonMenu({
   disabled,
   className,
   actions,
+  onOpen,
 }: {
   label: string;
   disabled?: boolean;
   /** Extra classes for the trigger, so a pane can match its own buttons. */
   className?: string;
   actions: MenuAction[];
+  /*
+   * Told when the menu opens, so a caller can fetch what its labels need.
+   *
+   * The alternative is fetching on render, and on a settings pane with a dozen
+   * libraries that is two dozen requests for numbers nobody is looking at. The
+   * menu is open for as long as it takes to read them, which is long enough.
+   */
+  onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -235,7 +244,12 @@ export function ButtonMenu({
         aria-expanded={open}
         aria-label={label}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => {
+            if (!v) onOpen?.();
+            return !v;
+          });
+        }}
       >
         {/* Three dots, not an icon font: this client ships no icon dependency. */}
         ⋯

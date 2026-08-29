@@ -87,6 +87,14 @@ function mount(opts: { scanConflict?: boolean } = {}) {
           user: { id: "u1", name: "chris", role: "admin" },
         });
       }
+      // The refresh preview, which the menu asks for when it opens. Checked
+      // before /scan because both are library sub-paths.
+      if (url.includes("/refresh")) {
+        return json({
+          count: url.includes("scope=unmatched") ? 3 : 380,
+          scope: url.includes("scope=unmatched") ? "unmatched" : "all",
+        });
+      }
       if (url.includes("/scan")) return json({ state: "idle" });
       if (url.includes("/api/libraries")) return json(libraries);
       if (url.includes("/api/settings")) return json({});
@@ -161,11 +169,14 @@ describe("the library row's actions", () => {
   it("reaches every moved action through the menu", async () => {
     mount();
     await render();
-    for (const label of ["Edit", "Re-read filenames", "Refresh metadata", "Remove"]) {
+    for (const label of ["Edit", "Re-read filenames", "Refresh unmatched (3)", "Remove"]) {
       expect(buttons(label).length, `${label} before opening`).toBe(0);
     }
     openRowMenu();
-    for (const label of ["Edit", "Re-read filenames", "Refresh metadata", "Remove"]) {
+    // Settled first: two of these labels carry a count the server supplies when
+    // the menu opens, and asserting before it lands tests the loading state.
+    await settle();
+    for (const label of ["Edit", "Re-read filenames", "Refresh unmatched (3)", "Remove"]) {
       expect(buttons(label).length, `${label} after opening`).toBe(1);
     }
   });
@@ -179,14 +190,52 @@ describe("the library row's actions", () => {
     mount();
     await render();
     openRowMenu();
-    act(() => buttons("Refresh metadata")[0].click());
+    await settle();
+    act(() => buttons("Refresh everything (380)")[0].click());
     await settle();
 
-    expect(writes.some((w) => w.url.includes("/refresh"))).toBe(true);
+    expect(writes.some((w) => w.url.includes("/refresh?scope=all"))).toBe(true);
     expect(writes.some((w) => w.url.includes("/reparse"))).toBe(false);
     // The wording promises what will happen, not what has: the request only
     // clears the stamps and wakes the worker.
     expect(text()).toContain("matched against its provider again");
+  });
+
+  /*
+   * The scopes are the feature, and picking one must send that one.
+   *
+   * "Refresh metadata" cleared the stamp for a whole library — about 1,480
+   * provider lookups on a real film library, at five a second. A menu that
+   * offers a narrower scope and then sends the wide one is worse than not
+   * offering it, because the cost is invisible until it has been paid.
+   */
+  it("sends the scope that was chosen, not the one that is cheapest to send", async () => {
+    mount();
+    await render();
+    openRowMenu();
+    await settle();
+    act(() => buttons("Refresh unmatched (3)")[0].click());
+    await settle();
+
+    expect(writes.some((w) => w.url.includes("scope=unmatched"))).toBe(true);
+    expect(writes.some((w) => w.url.includes("scope=all"))).toBe(false);
+  });
+
+  /*
+   * Each scope says what it will cost before it is chosen.
+   *
+   * The same reason the history reset prices itself: this is not destructive
+   * but it is expensive, and a cost that only reveals itself once committed is
+   * one people learn to avoid entirely.
+   */
+  it("prices both scopes in the menu", async () => {
+    mount();
+    await render();
+    openRowMenu();
+    await settle();
+
+    expect(text()).toContain("Refresh unmatched (3)");
+    expect(text()).toContain("Refresh everything (380)");
   });
 
   it("says a scan was already running instead of failing silently", async () => {
@@ -216,7 +265,10 @@ describe("the library row's actions", () => {
     ) as HTMLButtonElement;
     act(() => trigger.click());
 
-    const item = buttons("Refresh metadata")[0];
+    // A label with no server-supplied number in it: this test is about focus,
+    // and coupling it to a count that arrives asynchronously would make it fail
+    // for a reason it is not about.
+    const item = buttons("Re-read filenames")[0];
     act(() => item.focus());
     expect(document.activeElement).toBe(item);
 
@@ -230,12 +282,12 @@ describe("the library row's actions", () => {
     mount();
     await render();
     openRowMenu();
-    expect(buttons("Refresh metadata").length).toBe(1);
-    act(() => buttons("Refresh metadata")[0].click());
+    expect(buttons("Re-read filenames").length).toBe(1);
+    act(() => buttons("Re-read filenames")[0].click());
     await settle();
     // A menu left standing over the answer it just produced hides the thing you
     // pressed it for.
-    expect(buttons("Refresh metadata").length).toBe(0);
+    expect(buttons("Re-read filenames").length).toBe(0);
   });
 });
 
