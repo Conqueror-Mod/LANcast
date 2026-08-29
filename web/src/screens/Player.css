@@ -263,8 +263,23 @@
  * moving the mouse to watch. */
 .pstats {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  /*
+   * Below the title bar, not on top of it.
+   *
+   * At 16px this sat exactly where `.player__top` draws the title, so the panel
+   * header and the film's name were painted over each other — "PLAYBACK" across
+   * "Airheads". Found by looking at it, which is the only way it could be
+   * found: jsdom performs no layout, so every assertion about this panel passed
+   * while it was illegible.
+   *
+   * The number clears `.player__top` as it is built — 20px padding, up to two
+   * lines of 15px text, 20px padding — with room to spare rather than exactly.
+   * It is a measurement of the current layout and not a rule the layout
+   * enforces, so a taller title bar would need it revisited; that is worth
+   * knowing rather than hiding behind a value that looks derived.
+   */
+  top: 88px;
+  left: 24px;
   z-index: 2;
   min-width: 240px;
   padding: 10px 12px;
