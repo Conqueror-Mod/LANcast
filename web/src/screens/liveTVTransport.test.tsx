@@ -237,7 +237,7 @@ describe("live tv transport", () => {
      *
      * This was the second wrong fix: the playlist is loaded independently of
      * the element, so MANIFEST_PARSED can fire while the element still has
-     * nothing. It shipped and started no channel.
+     * nothing.
      */
     await act(async () => {
       for (const h of fakeHlsInstances) h.emitManifestParsed();
@@ -250,6 +250,61 @@ describe("live tv transport", () => {
     await act(async () => {
       el.dispatchEvent(new Event("loadedmetadata"));
     });
+    await flush();
+
+    expect(play).toHaveBeenCalled();
+  });
+
+  /*
+   * The path this client actually takes, and the one every earlier fix missed.
+   *
+   * Chromium answers `maybe` for `application/vnd.apple.mpegurl`, so `livePath`
+   * reads it as a native-HLS browser and hands the element the playlist. Three
+   * fixes went into the MSE effect reasoning about hls.js, and none of them ran
+   * — the element reached readyState 4 with ten seconds buffered and sat at
+   * 0:00, because preroll starts a channel and preroll is progressive-only.
+   *
+   * This is the assertion that would have caught it on the first afternoon.
+   */
+  it("presses play on the native-HLS path too, which preroll does not cover", async () => {
+    writeDevice<LiveTransport>(LIVE_TRANSPORT_KEY, "mse");
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "maybe",
+    );
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    const el = await playFirstChannel();
+    // Confirm the premise rather than assuming it: this is the branch where
+    // the element is handed the playlist itself.
+    expect(el.getAttribute("src")).toBe("/api/channels/7/hls/index.m3u8");
+
+    await act(async () => {
+      el.dispatchEvent(new Event("loadedmetadata"));
+    });
+    await flush();
+
+    expect(play).toHaveBeenCalled();
+  });
+
+  /*
+   * Metadata that arrived before the effect did.
+   *
+   * A listener for an event that has been and gone never fires, and on a fast
+   * local server that is the ordinary case rather than the rare one.
+   */
+  it("plays a channel whose metadata arrived before the effect ran", async () => {
+    writeDevice<LiveTransport>(LIVE_TRANSPORT_KEY, "mse");
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "maybe",
+    );
+    vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(4);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    await playFirstChannel();
     await flush();
 
     expect(play).toHaveBeenCalled();

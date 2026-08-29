@@ -324,6 +324,61 @@ export function LiveTV() {
   }, [playing, path]);
 
   /*
+   * Press play on every path preroll does not cover.
+   *
+   * `preroll` starts a channel on the progressive path, after waiting for a
+   * head start. Step 4 of the ADR 0013 amendment stopped it running for
+   * anything else — correctly, because the head start is a guess about a
+   * transport that cannot report its own buffer. What went unnoticed is that
+   * preroll was doing *two* jobs and only one of them was the guess. Nothing
+   * took over pressing play, so a channel on `mse` or `native-hls` reached
+   * `readyState 4` with ten seconds buffered and sat at 0:00 for ever.
+   *
+   * `native-hls` is the one that actually bites here, and it is worth saying
+   * why it was missed for so long. Three fixes went into the MSE effect, all
+   * reasoning about when hls.js makes an element playable — and this client
+   * never takes that branch. Chromium answers `maybe` for
+   * `application/vnd.apple.mpegurl`, so `livePath` reads it as Safari and hands
+   * the element the playlist directly. The instrument said `native-hls` in its
+   * first word, and no amount of reasoning had.
+   *
+   * `loadedmetadata` rather than a library event, because it is a fact about
+   * the element and true on both paths: it does not fire until there is media.
+   * No head start is added — the reading that found this had ten seconds in
+   * hand, so there is nothing to wait for.
+   */
+  useEffect(() => {
+    if (!playing || path === "progressive") return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    const start = () => {
+      /*
+       * Every outcome is recorded, including the ones that are not failures.
+       *
+       * `NotAllowedError` is a policy decision rather than a fault and the
+       * controls are right there — but it is worth *knowing*, because on screen
+       * it is indistinguishable from a play() that never happened, and that
+       * ambiguity is what hid this.
+       */
+      setDiag((d) => ({ ...d, meta: true, asked: true }));
+      void el.play().catch((e: unknown) => {
+        const name = e instanceof Error ? e.name : String(e);
+        setDiag((d) => ({ ...d, refused: name }));
+      });
+    };
+
+    // Already there: metadata can arrive before this effect runs, and a
+    // listener for an event that has been and gone never fires.
+    if (el.readyState >= 1) {
+      start();
+    } else {
+      el.addEventListener("loadedmetadata", start, { once: true });
+    }
+    return () => el.removeEventListener("loadedmetadata", start);
+  }, [playing, path]);
+
+  /*
    * Read the element while it is not yet playing.
    *
    * Polled rather than event-driven on purpose: the question being asked is
@@ -334,6 +389,7 @@ export function LiveTV() {
   useEffect(() => {
     if (!playing) return;
     setStarted(false);
+    setDiag({ meta: false, asked: false, refused: null, ready: 0, ahead: 0 });
     const el = videoRef.current;
     if (!el) return;
     const id = window.setInterval(() => {
@@ -406,26 +462,6 @@ export function LiveTV() {
      * argument for adopting it, so a cushion measured by us would be the guess
      * coming back through a different door.
      */
-    const start = () => {
-      /*
-       * Every outcome is recorded, including the ones that used to be silent.
-       *
-       * `NotAllowedError` is not an error in the ordinary sense — a browser
-       * refusing autoplay is a policy decision and the controls are right
-       * there — but it is emphatically worth *knowing*, because it is
-       * indistinguishable on screen from a play() that never happened, and
-       * that ambiguity is what let three wrong fixes past.
-       */
-      setDiag((d) => ({ ...d, meta: true, asked: true }));
-      void el.play().catch((e: unknown) => {
-        const name = e instanceof Error ? e.name : String(e);
-        setDiag((d) => ({ ...d, refused: name }));
-      });
-    };
-
-    setDiag({ meta: false, asked: false, refused: null, ready: 0, ahead: 0 });
-    el.addEventListener("loadedmetadata", start, { once: true });
-
     void attachLiveHls(el, playing.id, (fatal, detail) => {
       if (!fatal) return;
       if (detail === OLD_SERVER) {
@@ -460,10 +496,6 @@ export function LiveTV() {
 
     return () => {
       cancelled = true;
-      // `once` only fires it once; it does not remove it on unmount. A channel
-      // changed before the first one loaded would otherwise leave a listener
-      // armed on an element now showing something else.
-      el.removeEventListener("loadedmetadata", start);
       attached?.destroy();
     };
   }, [playing, path]);
