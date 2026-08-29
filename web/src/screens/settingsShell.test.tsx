@@ -169,7 +169,7 @@ describe("the playback codecs row", () => {
     vi.restoreAllMocks();
   });
 
-  it("names what is being withheld rather than only counting it", () => {
+  it("names what is turned off rather than only counting it", () => {
     localStorage.setItem(
       "lancast:codec-denied",
       JSON.stringify({ hevc: Date.now(), ac3: Date.now() }),
@@ -179,6 +179,75 @@ describe("the playback codecs row", () => {
     const sub = codecRow()?.querySelector(".set-row__sub")?.textContent ?? "";
     expect(sub).toContain("hevc");
     expect(sub).toContain("ac3");
+  });
+
+  /*
+   * Two mechanisms, and the row used one word for both.
+   *
+   * A denial is automatic and temporary: recorded when a direct play fails,
+   * expiring after a fortnight, cleared by the button. A withholding is manual
+   * and permanent: the checkboxes below. The summary described denials as
+   * "Withheld after a failure: hevc, ac3" — the word the checkboxes own —
+   * printed directly above those same codecs shown ticked, meaning *not*
+   * withheld.
+   *
+   * Both statements were true about different things, and nothing on screen
+   * said which was which. Reported from a real install where all seven claimable
+   * codecs were denied and all seven boxes were ticked.
+   */
+  it("does not describe an automatic denial with the checkboxes' word", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    localStorage.setItem(
+      "lancast:codec-denied",
+      JSON.stringify({ hevc: Date.now() }),
+    );
+    render("/settings?pane=display");
+
+    const sub = codecRow()?.querySelector(".set-row__sub")?.textContent ?? "";
+    expect(sub).toContain("off after a failure: hevc");
+    expect(sub).not.toContain("Withheld after a failure");
+  });
+
+  it("keeps the two kinds apart when both are in play", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    localStorage.setItem(
+      "lancast:codec-denied",
+      JSON.stringify({ hevc: Date.now() }),
+    );
+    localStorage.setItem("lancast:codec-withheld", JSON.stringify(["ac3"]));
+    render("/settings?pane=display");
+
+    const sub = codecRow()?.querySelector(".set-row__sub")?.textContent ?? "";
+    expect(sub).toContain("off after a failure: hevc");
+    expect(sub).toContain("turned off by you: ac3");
+  });
+
+  /*
+   * The expensive silent state, said outright.
+   *
+   * A browser claiming nothing has every affected file converted by the server
+   * instead. Falling back is correct behaviour, so nothing fails and the only
+   * symptom is that the server seems to work hard — which is exactly how a real
+   * install came to serve a full 4K re-encode of every HEVC film unnoticed.
+   */
+  it("says so when it is claiming nothing at all", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(
+      "probably",
+    );
+    const all = ["hevc", "hevc10", "high10", "ac3", "eac3", "flacmp4", "opusmp4"];
+    localStorage.setItem(
+      "lancast:codec-denied",
+      JSON.stringify(Object.fromEntries(all.map((n) => [n, Date.now()]))),
+    );
+    render("/settings?pane=display");
+
+    const sub = codecRow()?.querySelector(".set-row__sub")?.textContent ?? "";
+    expect(sub).toContain("Claiming nothing");
+    expect(sub).toContain("the server converts");
   });
 
   it("clears them when asked, and says so", () => {
