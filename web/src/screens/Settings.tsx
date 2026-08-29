@@ -1431,18 +1431,49 @@ function CodecDenialsRow() {
     refresh();
   }
 
-  let sub: string;
+  /*
+   * Two mechanisms turn a codec off, and the summary used one word for both.
+   *
+   * A *denial* is automatic and temporary: recorded when a direct play fails,
+   * expiring after a fortnight, cleared by the button. A *withholding* is
+   * manual and permanent: the checkboxes below. The line said "Withheld after a
+   * failure: hevc, ac3" — which is a denial, described with the word the
+   * checkboxes own — directly above those same checkboxes, ticked.
+   *
+   * So the panel contradicted itself on screen: it named codecs as withheld
+   * while showing them as not withheld. Both statements were true about
+   * different things and there was no way to tell from reading it.
+   *
+   * Named rather than counted, still: "2 off" invites a shrug, and "hevc, ac3"
+   * is the thing a person can connect to a film that plays badly.
+   */
+  const parts: string[] = [];
   if (denials.length > 0) {
-    // Named rather than counted. "2 withheld" invites a shrug; "hevc, ac3" is
-    // the thing a person can connect to a film that plays badly. Kept short
-    // because .set-row__sub is one ellipsised line — all four names plus a
-    // clause ran past the end of it.
-    sub = `Withheld after a failure: ${denials.map((d) => d.name).join(", ")}.`;
+    parts.push(`off after a failure: ${denials.map((d) => d.name).join(", ")}`);
+  }
+  if (off.length > 0) {
+    parts.push(`turned off by you: ${off.join(", ")}`);
+  }
+
+  let sub: string;
+  if (offered.length > 0 && !claims) {
+    /*
+     * The state this row was built to make visible, said outright.
+     *
+     * A browser that claims nothing has every affected file converted by the
+     * server instead — a full re-encode of every HEVC film, on a real install,
+     * for as long as it went unnoticed. Nothing fails, so the only symptom is
+     * that the server seems to work hard, and the previous wording buried the
+     * cause in a word that appeared to disagree with the ticks underneath it.
+     */
+    sub = `Claiming nothing, so the server converts anything that needs these — ${parts.join("; ")}.`;
+  } else if (parts.length > 0) {
+    sub = `Claiming ${claims.split(",").join(", ")}; ${parts.join("; ")}.`;
   } else if (claims) {
     sub = `Claiming ${claims.split(",").join(", ")}.`;
   } else {
-    // No claims and no denials is the ordinary state of a browser that simply
-    // decodes none of the optional codecs, and is not a fault.
+    // No claims and nothing turned off is the ordinary state of a browser that
+    // simply decodes none of the optional codecs, and is not a fault.
     sub = "This browser decodes none of the optional codecs.";
   }
 
@@ -1453,10 +1484,15 @@ function CodecDenialsRow() {
         <div className="set-row__sub">{sub}</div>
       </div>
       <div className="set-row__actions">
+        {/* Only the automatic half. Clearing denials is not "turn everything
+            back on": a codec somebody switched off by hand stays off, because
+            that was a judgement about a picture and this button is about
+            failures. The title says so, since the label cannot. */}
         <button
           className="set-btn"
           disabled={denials.length === 0}
           onClick={reset}
+          title="Clears only the codecs turned off automatically after a failure. Ones you turned off stay off."
         >
           Try them again
         </button>
