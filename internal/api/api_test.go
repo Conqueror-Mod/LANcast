@@ -528,6 +528,59 @@ func TestDeleteItemModes(t *testing.T) {
 	wantError(t, h.do(t, "DELETE", "/api/items/"+itoa(x), nil), 400, "bad_request")
 }
 
+/*
+ * Forgetting a row whose file is already gone.
+ *
+ * A renamed file leaves the old row behind, marked missing, and the pair shows
+ * up in the collision report — 34 of 43 collisions on a real library were
+ * exactly that, with no way to resolve any of them.
+ *
+ * `ignore` is the wrong tool: it records the path so a rescan never re-adds the
+ * file, but the file is gone so there is nothing to suppress, and nothing in
+ * the API or the client ever removes an `ignored_path` entry.
+ */
+func TestForgetOnlyAppliesToAMissingFile(t *testing.T) {
+	h := newHarness(t)
+
+	// A file still on disk cannot be forgotten. A rescan would re-add the row
+	// anyway, so the only thing this mode could achieve there is confusion.
+	here := h.addFile(t, "Here.mkv", make([]byte, 16))
+	wantError(t, h.do(t, "DELETE", "/api/items/"+itoa(here)+"?mode=forget", nil),
+		409, "not_missing")
+	if resp := h.do(t, "GET", "/api/items/"+itoa(here), nil); resp.StatusCode != 200 {
+		t.Errorf("a refused forget removed the row anyway: %d", resp.StatusCode)
+	}
+
+	// The rename case: the file is gone, the row remains.
+	gone := h.addFile(t, "Gone.mkv", make([]byte, 16))
+	gonePath := filepath.Join(h.dir, "Gone.mkv")
+	if err := os.Remove(gonePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.MarkMissing(context.Background(), []int64{gone}); err != nil {
+		t.Fatal(err)
+	}
+	if resp := h.do(t, "DELETE", "/api/items/"+itoa(gone)+"?mode=forget", nil); resp.StatusCode != 204 {
+		t.Fatalf("forget status = %d, want 204", resp.StatusCode)
+	}
+	wantError(t, h.do(t, "GET", "/api/items/"+itoa(gone), nil), 404, "not_found")
+
+	/*
+	 * And it wrote no ignore entry, which is the whole reason this mode is not
+	 * `ignore`. `ignored_path` has no way back — nothing in the API or the
+	 * client removes one — so a mode that filled it with paths that do not
+	 * exist would quietly refuse to see those names again if a backup ever
+	 * restored them.
+	 */
+	ignored, err := h.st.IgnoredPaths(context.Background(), h.lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ignored[gonePath] {
+		t.Error("forget wrote an ignore entry for a path that does not exist")
+	}
+}
+
 // Deleting a movie from disk sweeps its companion files — subtitles, nfo,
 // artwork — but never a sibling's files or folder-level art.
 func TestDeleteRemovesSidecars(t *testing.T) {

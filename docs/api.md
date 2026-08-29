@@ -1248,11 +1248,31 @@ Removes a title. **Admin only.** `mode` is required:
   within its library root first, so a bad row can never delete outside the
   library; if any path fails that check nothing is deleted (`500`). A file
   already gone is not an error.
+- `forget` — the row goes and nothing else happens: no file is touched and **no
+  path is ignored**. `409 not_missing` unless the item is already marked
+  missing.
 
 A container (a show, a multi-part work) removes its whole subtree — every
 episode or part. A collection is a grouping with no file of its own, so
 removing one drops only the grouping row, never the member films. `204` on
 success, `404` if unknown, `400` if `mode` is missing or invalid.
+
+**Why `forget` is not `ignore`.** A renamed file leaves the old row behind,
+marked missing, and reported against the new one by `GET /api/collisions` — on
+one real library 34 of 43 collisions were exactly that. `ignore` records the
+path so a rescan never re-adds the file, but the file is *gone*, so there is
+nothing to suppress; and `ignored_path` has no way back, since nothing in this
+API removes an entry. Clearing those rows with `ignore` would write permanent,
+invisible entries for paths that do not exist, and silently refuse those names
+if a backup ever restored them.
+
+**The `409` is a safety property, not validation.** Scanning marks rows missing
+rather than deleting them so that an unmounted drive cannot destroy library
+data, and a mode that forgets rows on demand must not become the hole in that.
+A present file's row cannot be forgotten — a rescan would re-add it anyway.
+Clients are expected to go further and offer this only where **another member of
+the same collision is still present**, because a drive going away takes every
+member missing at once.
 
 ---
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useCollisions, useCompareCollision } from "@/api/hooks";
+import { useCollisions, useCompareCollision, useDeleteItem } from "@/api/hooks";
+import { forgettable } from "./forgettable";
 import { useFocusable } from "@/focus/FocusController";
 import type { Collision, CollisionMember } from "@/api/types";
 import "./Collisions.css";
@@ -17,6 +18,14 @@ import "./Collisions.css";
  *
  * So it shows the evidence and stops: both paths, both sizes, what each file
  * claimed to be, and — on request — whether the bytes match.
+ *
+ * **One thing it now lets you do, and it is not a decision between two files.**
+ * Renaming a file leaves the old row behind: marked missing, reported against
+ * the new one. On a real library 34 of 43 collisions were exactly that, and
+ * there was no way to resolve any of them — a report of 44 permanent entries
+ * that could only be read. Forgetting a row whose file has *gone* chooses
+ * nothing; it removes a leftover. See forgettable.ts for the rule, and
+ * particularly for why it disappears when every copy is missing.
  */
 
 function bytes(n: number | null): string {
@@ -34,7 +43,16 @@ function bytes(n: number | null): string {
   return `${u === 0 ? v : v.toFixed(1)} ${units[u]}`;
 }
 
-function MemberRow({ member }: { member: CollisionMember }) {
+function MemberRow({
+  member,
+  canForget,
+}: {
+  member: CollisionMember;
+  canForget: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const forget = useDeleteItem(member.id);
+
   return (
     <li className="collide__file">
       <div className="collide__file-head">
@@ -66,6 +84,47 @@ function MemberRow({ member }: { member: CollisionMember }) {
           {member.fingerprint.slice(0, 16)}…
         </code>
       )}
+      {/*
+        Offered only where the answer is not a judgement: this file is gone and
+        another copy of the work is still here. Confirmation is inline rather
+        than a native dialog — a frameless window cannot be trusted to give
+        keyboard focus back after one.
+      */}
+      {canForget &&
+        (confirming ? (
+          <div className="collide__confirm">
+            <span>Forget this entry? The file is already gone.</span>
+            <button
+              type="button"
+              className="collide__forget collide__forget--go"
+              disabled={forget.isPending}
+              onClick={() => forget.mutate("forget")}
+            >
+              {forget.isPending ? "Forgetting…" : "Yes, forget it"}
+            </button>
+            <button
+              type="button"
+              className="collide__forget"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="collide__forget"
+            onClick={() => setConfirming(true)}
+          >
+            Forget this entry
+          </button>
+        ))}
+      {forget.isError && (
+        <span className="collide__unreadable">
+          That entry could not be forgotten. It may have come back since this
+          page was loaded.
+        </span>
+      )}
     </li>
   );
 }
@@ -92,7 +151,11 @@ function CollisionCard({ collision }: { collision: Collision }) {
 
       <ul className="collide__files">
         {shown.members.map((m) => (
-          <MemberRow key={m.id} member={m} />
+          <MemberRow
+            key={m.id}
+            member={m}
+            canForget={forgettable(shown.members, m)}
+          />
         ))}
       </ul>
 

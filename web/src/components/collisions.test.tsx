@@ -42,16 +42,29 @@ const pair = {
   ],
 };
 
-function stub(compareAnswer?: Record<string, unknown>) {
+/** The rename shape: the old path gone, the new one still here. */
+const renamed = {
+  ...pair,
+  external_id: "324858",
+  members: [
+    { ...pair.members[0], id: 41, missing: true },
+    { ...pair.members[1], id: 88, missing: false, edition: undefined },
+  ],
+};
+
+function stub(compareAnswer?: Record<string, unknown>, use = pair) {
   asked = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
-      asked.push(String(url));
+    vi.fn(async (url: string, init?: RequestInit) => {
+      asked.push((init?.method ?? "GET") + " " + String(url));
+      if ((init?.method ?? "GET") !== "GET") {
+        return new Response(null, { status: 204 });
+      }
       const compared = String(url).includes("compare=");
       const body = compared && compareAnswer
-        ? { collisions: [{ ...pair, ...compareAnswer }] }
-        : { collisions: [pair] };
+        ? { collisions: [{ ...use, ...compareAnswer }] }
+        : { collisions: [use] };
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -186,5 +199,82 @@ describe("two files, one work", () => {
     await render(false);
     expect(asked).toEqual([]);
     expect(text()).toBe("");
+  });
+});
+
+/*
+ * Resolving the one collision that is not a judgement.
+ *
+ * ADR 0042's decision — never merge, rank or delete — is about a *server*
+ * choosing between two files, and it holds. A renamed file is not that: the old
+ * path is marked missing, the new one is added, and the pair is reported. On a
+ * real library 34 of 43 collisions were exactly that, and the report could only
+ * be read, never acted on.
+ */
+describe("forgetting a leftover row", () => {
+  it("offers nothing on a collision of two files that are both here", async () => {
+    stub();
+    await render();
+    expect(host.textContent).not.toContain("Forget this entry");
+  });
+
+  it("offers it on the row whose file has gone, and only that one", async () => {
+    stub(undefined, renamed);
+    await render();
+
+    const offers = [...host.querySelectorAll("button")].filter(
+      (b) => b.textContent?.trim() === "Forget this entry",
+    );
+    expect(offers.length).toBe(1);
+  });
+
+  /*
+   * Confirmed in the page rather than through a native dialog. A frameless
+   * Electron-style window cannot be relied on to give keyboard focus back after
+   * one, which this project has already paid for once.
+   */
+  it("asks before forgetting, and says why it is safe", async () => {
+    stub(undefined, renamed);
+    await render();
+
+    const offer = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Forget this entry",
+    )!;
+    await act(async () => {
+      offer.click();
+    });
+    expect(host.textContent).toContain("The file is already gone");
+    // Nothing has been sent yet: the first press opens the question.
+    expect(asked.some((a) => a.startsWith("DELETE"))).toBe(false);
+  });
+
+  it("forgets through the mode that records nothing", async () => {
+    stub(undefined, renamed);
+    await render();
+
+    const offer = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Forget this entry",
+    )!;
+    await act(async () => {
+      offer.click();
+    });
+    const go = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Yes, forget it",
+    )!;
+    await act(async () => {
+      go.click();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+
+    /*
+     * `forget`, not `ignore`. Ignoring records the path so a rescan never
+     * re-adds it — but the file is gone, so there is nothing to suppress, and
+     * nothing in the API or the client ever removes an ignored path.
+     */
+    const sent = asked.find((a) => a.startsWith("DELETE"));
+    expect(sent).toContain("mode=forget");
+    expect(sent).toContain("/api/items/41");
   });
 });

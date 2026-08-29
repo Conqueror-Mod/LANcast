@@ -629,12 +629,13 @@ export function useCollectionMembers(collectionID: number, enabled: boolean) {
 }
 
 // Removes a title. mode "ignore" keeps the files on disk (and skips them on
-// future scans); mode "delete" removes the files too. Every list that could be
-// showing the item is refreshed afterwards.
+// future scans); mode "delete" removes the files too; mode "forget" drops the
+// row of a file that is already gone and records nothing. Every list that could
+// be showing the item is refreshed afterwards.
 export function useDeleteItem(id: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (mode: "ignore" | "delete") =>
+    mutationFn: (mode: "ignore" | "delete" | "forget") =>
       apiSend(`/api/items/${id}?mode=${mode}`, "DELETE"),
     onSuccess: () => {
       /*
@@ -653,6 +654,11 @@ export function useDeleteItem(id: number) {
         "review",
         "children",
         "collection-members",
+        // The collision report is a list of items too, and forgetting a row is
+        // the one action taken *from* it — a card that still shows the row it
+        // just removed is the stale-view bug this project keeps shipping,
+        // arriving in the one place where the person is looking straight at it.
+        "collisions",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
