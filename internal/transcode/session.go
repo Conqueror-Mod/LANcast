@@ -51,6 +51,7 @@ type Session struct {
 	done      bool
 	err       error
 	ended     bool
+	served    int64
 }
 
 /*
@@ -91,6 +92,31 @@ func (s *Session) Touch() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastTouch = time.Now()
+}
+
+/*
+ * NoteServed records bytes handed to the client.
+ *
+ * It exists to tell two identical-looking log lines apart. Two progressive
+ * starts on one item milliseconds apart are in the log and have never been
+ * explained; `start_at` separated "reconnecting where it was" from
+ * "re-requesting the same offset", and both halves of the pair say zero, so it
+ * separates nothing here. What is left to ask is whether the superseded stream
+ * ever *delivered* anything — a first request abandoned after no bytes is a
+ * media stack sniffing the stream, and one abandoned after megabytes is a
+ * player that genuinely asked twice. Those are different faults.
+ */
+func (s *Session) NoteServed(n int) {
+	s.mu.Lock()
+	s.served += int64(n)
+	s.mu.Unlock()
+}
+
+// Served reports how many bytes this session handed to the client.
+func (s *Session) Served() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.served
 }
 
 // Idle reports how long since the session was last used.

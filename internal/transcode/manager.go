@@ -458,7 +458,25 @@ func (m *Manager) supersede(owner string, itemID int64) {
 	m.mu.Unlock()
 
 	for _, s := range dead {
-		m.log.Debug("superseding transcode", "session", s.ID, "item", itemID)
+		/*
+		 * Info, not Debug, and it carries what the session did with its life.
+		 *
+		 * The log records births at Info and recorded this death at Debug, so
+		 * a run of sessions on one item showed every start and no ending —
+		 * which is the exact unreadability the `start_at` field was added to
+		 * fix, left half-fixed. Debug logging is off on a normal server, so
+		 * the one line that explains a doubled start was the one line nobody
+		 * ever had.
+		 *
+		 * `served` is the question. A stream superseded after zero bytes and a
+		 * few milliseconds was never really watched — that is a media stack
+		 * opening the source twice, and no amount of client effect-wrangling
+		 * will change it. A stream superseded after real bytes is a player
+		 * that asked again, which is a client fault and fixable there.
+		 */
+		m.log.Info("superseding transcode", "session", s.ID, "item", itemID,
+			"age_ms", time.Since(s.Started()).Milliseconds(),
+			"served_bytes", s.Served())
 		s.Stop()
 	}
 }
@@ -625,6 +643,7 @@ func (r *sessionReader) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 {
 		r.s.Touch()
+		r.s.NoteServed(n)
 	}
 	// EOF here means ffmpeg's stdout closed, which means ffmpeg exited without
 	// being asked to. It is the difference between a complaint worth a warning
