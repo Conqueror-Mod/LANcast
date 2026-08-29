@@ -614,7 +614,7 @@ export function LiveTV() {
            * transport is the first thing it says.
            */}
           {!started && (
-            <p className="livetv__buffering" role="status">
+            <p className="livetv__diag" role="status">
               {`${path} · metadata ${diag.meta ? "yes" : "no"} · play ${
                 diag.asked ? "asked" : "not asked"
               }${diag.refused ? ` · refused ${diag.refused}` : ""} · ready ${
