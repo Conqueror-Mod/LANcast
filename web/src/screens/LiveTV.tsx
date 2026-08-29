@@ -84,6 +84,28 @@ export function LiveTV() {
   const [playing, setPlaying] = useState<Channel | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [buffering, setBuffering] = useState(false);
+  /*
+   * What the MSE path actually did, said out loud.
+   *
+   * Three fixes for "the channel does not start on its own" shipped to a real
+   * server and changed nothing on screen, because every one of them was a
+   * theory about when the element becomes playable and the screen reports the
+   * same picture — 0:00 — for every wrong answer. A rejected play(), a play()
+   * that was never called, and metadata that never arrived are indistinguishable
+   * from the sofa and were indistinguishable from here.
+   *
+   * This is the roadmap's own lesson from v0.8.23, arriving in a different
+   * room: the instruments built that night turned a fault that had cost an
+   * evening into one named in minutes. This is the live-TV version of the `i`
+   * panel, and it is a feature rather than scaffolding — a channel that will
+   * not start is a thing viewers meet, and "the picture never arrived" and
+   * "the browser refused to start it" have completely different fixes.
+   */
+  const [diag, setDiag] = useState<{
+    meta: boolean;
+    asked: boolean;
+    refused: string | null;
+  }>({ meta: false, asked: false, refused: null });
   // Whether the player is running fast to close a gap. Shown, because a speed
   // change a viewer can hear should not be a secret.
   const [catchingUp, setCatchingUp] = useState(false);
@@ -358,24 +380,22 @@ export function LiveTV() {
      */
     const start = () => {
       /*
-       * A refusal is said out loud rather than swallowed.
+       * Every outcome is recorded, including the ones that used to be silent.
        *
-       * The `.catch(() => {})` on the progressive path is right there: a
-       * browser refusing autoplay is a policy decision and the controls are
-       * visible. On this path the same silence hid two failed fixes, because a
-       * rejected play() and a play() that was never called look identical from
-       * the sofa — a channel at 0:00. Naming it costs one line and separates
-       * them.
+       * `NotAllowedError` is not an error in the ordinary sense — a browser
+       * refusing autoplay is a policy decision and the controls are right
+       * there — but it is emphatically worth *knowing*, because it is
+       * indistinguishable on screen from a play() that never happened, and
+       * that ambiguity is what let three wrong fixes past.
        */
+      setDiag((d) => ({ ...d, meta: true, asked: true }));
       void el.play().catch((e: unknown) => {
         const name = e instanceof Error ? e.name : String(e);
-        if (name === "NotAllowedError") return; // Autoplay policy. Press play.
-        setPlayError(
-          `The channel is ready but did not start (${name}). Pressing play should work.`,
-        );
+        setDiag((d) => ({ ...d, refused: name }));
       });
     };
 
+    setDiag({ meta: false, asked: false, refused: null });
     el.addEventListener("loadedmetadata", start, { once: true });
 
     void attachLiveHls(el, playing.id, (fatal, detail) => {
@@ -552,6 +572,23 @@ export function LiveTV() {
           {buffering && (
             <p className="livetv__buffering" role="status">
               Buffering…
+            </p>
+          )}
+          {/*
+           * Only while it has plainly not started, and only on the path that
+           * has this problem. A channel that is playing needs no commentary.
+           */}
+          {path === "mse" && !diag.asked && (
+            <p className="livetv__buffering" role="status">
+              Preparing the channel — the picture has not arrived yet
+              {diag.meta ? "" : " (no metadata)"}.
+            </p>
+          )}
+          {path === "mse" && diag.refused && (
+            <p className="livetv__buffering" role="status">
+              {diag.refused === "NotAllowedError"
+                ? "This browser would not start the channel by itself. Press play."
+                : `The channel was ready but would not start (${diag.refused}). Press play.`}
             </p>
           )}
           {playError && (
