@@ -72,9 +72,34 @@ func associatedSidecars(videoPath string) []string {
 //   - delete: the files are removed from disk. Each is containment-checked
 //     against its library root first (a bad row must never delete outside the
 //     library), and a file already gone is not an error.
+//   - forget: the row goes and nothing else happens — no file is touched and
+//     no path is ignored. Refused unless the item is already marked missing.
 //
 // A container (show, work) removes its whole subtree — every episode or part.
 // A collection removes only the grouping, never the member films. Admin-only.
+//
+/*
+ * Why `forget` exists rather than reusing `ignore`.
+ *
+ * A renamed file leaves a row behind: the old path is marked missing, the new
+ * one is added, and the pair shows up in the collision report. On one real
+ * library 34 of 43 collisions were exactly that, and there was no way to
+ * resolve any of them.
+ *
+ * `ignore` is the wrong tool for it. It records the path so a rescan never
+ * re-adds the file — but the file is *gone*, so there is nothing to suppress,
+ * and `ignored_path` has no way back: nothing in the API or the client removes
+ * an entry. Clearing 34 stale rows that way would write 34 permanent, invisible
+ * entries for paths that do not exist, and quietly refuse to see those names
+ * again if a backup ever restored them.
+ *
+ * Refused unless the row is missing, and that is the safety property rather
+ * than a validation nicety. "Scanning marks missing, never deletes" exists so
+ * an unmounted drive cannot destroy library data; a mode that forgets rows on
+ * demand must not become the hole in it. A present file's row cannot be
+ * forgotten — a rescan would re-add it anyway, so the only thing that mode
+ * could achieve is confusion.
+ */
 func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -82,8 +107,9 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mode := r.URL.Query().Get("mode")
-	if mode != "ignore" && mode != "delete" {
-		writeError(w, http.StatusBadRequest, "bad_request", "mode must be 'ignore' or 'delete'")
+	if mode != "ignore" && mode != "delete" && mode != "forget" {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"mode must be 'ignore', 'delete' or 'forget'")
 		return
 	}
 	// Deleting files can be switched off for the whole server. Checked before
@@ -100,6 +126,15 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
+	// The gate on `forget`, checked against the stored row rather than anything
+	// the caller said. A client that believes a file is gone and a server that
+	// knows it is are different claims, and only one of them is evidence.
+	if mode == "forget" && !it.Missing {
+		writeError(w, http.StatusConflict, "not_missing",
+			"this file is still on disk, so there is nothing to forget; remove it from the library instead")
+		return
+	}
+
 	targets, err := s.st.ItemSubtree(r.Context(), id)
 	if err != nil {
 		s.writeInternal(w, err, "item subtree")
@@ -159,7 +194,7 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 				s.log.Warn("delete file failed", "path", a, "error", err)
 			}
 		}
-	} else {
+	} else if mode == "ignore" {
 		// Ignoring records paths, not locations: the list is library-scoped and
 		// a path identifies itself.
 		paths := make([]string, 0, len(files))
@@ -181,6 +216,9 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	// files. Row count is included because removing a container takes its
 	// children with it, which is the surprising part after the fact.
 	verb := "Stopped tracking"
+	if mode == "forget" {
+		verb = "Forgot a missing file"
+	}
 	if mode == "delete" {
 		verb = "Deleted from disk"
 	}
