@@ -30,15 +30,34 @@ import { writeDevice } from "@/lib/device";
  */
 vi.mock("hls.js", () => {
   class FakeHls {
-    static Events = { ERROR: "hlsError" };
-    on() {}
+    static Events = { ERROR: "hlsError", MANIFEST_PARSED: "hlsManifestParsed" };
+    handlers = new Map<string, () => void>();
+    on(event: string, fn: () => void) {
+      this.handlers.set(event, fn);
+      fakeHlsInstances.push(this);
+    }
     loadSource() {}
+    /*
+     * Deliberately does nothing to the element.
+     *
+     * The real one does not either, not synchronously: the MediaSource reaches
+     * the element in a later task, which is exactly why a `play()` on the line
+     * after it rejects. A mock that pretended otherwise would let the wrong fix
+     * pass, which is what happened.
+     */
     attachMedia() {}
     detachMedia() {}
     destroy() {}
+    /** Stand in for the playlist arriving. */
+    emitManifestParsed() {
+      this.handlers.get("hlsManifestParsed")?.();
+    }
   }
   return { default: FakeHls };
 });
+
+type FakeHlsInstance = { emitManifestParsed: () => void };
+const fakeHlsInstances: FakeHlsInstance[] = [];
 
 declare global {
   // eslint-disable-next-line no-var
@@ -62,6 +81,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  fakeHlsInstances.length = 0;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -169,6 +189,35 @@ describe("live tv transport", () => {
    *
    * Found by watching a real channel, which is what the ADR gated step 6 on.
    */
+  it("does not press play before there is anything to play", async () => {
+    /*
+     * The assertion the first fix would have failed, and the reason it shipped
+     * to a real browser and changed nothing.
+     *
+     * `attachMedia` returns before the MediaSource reaches the element, so a
+     * `play()` on the next line runs against an element with no source at all.
+     * It rejects, the rejection is swallowed, and the channel sits at 0:00
+     * looking exactly like a channel that is off the air.
+     *
+     * A test that only asked *whether* play was called passed that version.
+     * This one asks *when*.
+     */
+    writeDevice<LiveTransport>(LIVE_TRANSPORT_KEY, "mse");
+    vi.stubGlobal("MediaSource", {
+      isTypeSupported: () => true,
+    } as unknown as typeof MediaSource);
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    await playFirstChannel();
+    await flush();
+    await flush();
+
+    expect(play).not.toHaveBeenCalled();
+  });
+
   it("presses play on the MSE path, because nothing else does", async () => {
     writeDevice<LiveTransport>(LIVE_TRANSPORT_KEY, "mse");
     vi.stubGlobal("MediaSource", {
@@ -181,6 +230,13 @@ describe("live tv transport", () => {
 
     await playFirstChannel();
     await flush();
+    await flush();
+
+    // The playlist arrives, a level is chosen, and only now is there anything
+    // for play() to act on.
+    await act(async () => {
+      for (const h of fakeHlsInstances) h.emitManifestParsed();
+    });
     await flush();
 
     expect(play).toHaveBeenCalled();

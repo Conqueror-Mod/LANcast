@@ -71,11 +71,19 @@ export function liveHlsConfig() {
  * Resolves once the library is loaded and attached, not once media is playing:
  * whether to play is the caller's decision, and on a live channel it is
  * entangled with autoplay policy the caller already handles.
+ *
+ * `onReady` is how the caller learns *when* that decision can be acted on, and
+ * it exists because the obvious moment is the wrong one. `attachMedia` returns
+ * before the MediaSource reaches the element — the object URL is set in a later
+ * task — so a `play()` on the line after it runs against an element with no
+ * source at all and rejects outright. Resolving this promise is therefore not a
+ * signal that anything is playable; `MANIFEST_PARSED` is.
  */
 export async function attachLiveHls(
   el: HTMLVideoElement,
   channelID: number,
   onError?: (fatal: boolean, detail: string) => void,
+  onReady?: () => void,
 ): Promise<LiveAttachment> {
   const mod = await import("hls.js");
   const HlsCtor = mod.default;
@@ -110,6 +118,16 @@ export async function attachLiveHls(
      */
     onError?.(data.fatal === true, `${data.type}: ${data.details}`);
   });
+
+  /*
+   * The moment there is something to play.
+   *
+   * MANIFEST_PARSED means the playlist is loaded and a level is chosen, which
+   * is the earliest point at which `play()` means anything. Nothing earlier
+   * does: between `attachMedia` and this, the element has no source, and a
+   * `play()` there rejects and is gone.
+   */
+  hls.on(HlsCtor.Events.MANIFEST_PARSED, () => onReady?.());
 
   hls.loadSource(`/api/channels/${channelID}/hls/index.m3u8`);
   hls.attachMedia(el);

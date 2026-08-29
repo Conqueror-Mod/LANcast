@@ -327,6 +327,35 @@ export function LiveTV() {
     let cancelled = false;
     let attached: { destroy: () => void } | null = null;
 
+    /*
+     * Press play, because on this path nothing else does.
+     *
+     * The element carries no `autoPlay` and nothing calls `play()` on
+     * `canplay`, both deliberately — see the comment on the element. What
+     * actually starts a channel is the preroll effect, after it has waited for
+     * a head start. That effect does not run on the MSE path (step 4 of the
+     * ADR 0013 amendment), and nothing took over the half of its job that was
+     * not a guess: a channel attached perfectly and sat at 0:00 until somebody
+     * pressed play.
+     *
+     * It has to happen on `MANIFEST_PARSED` and not a line after `attachMedia`.
+     * That was the first attempt and it changed nothing on screen: attachMedia
+     * returns before the MediaSource reaches the element, so `play()` ran
+     * against an element with no source, rejected, and was swallowed. Attaching
+     * and being playable are different moments and only one of them is
+     * observable from the caller.
+     *
+     * No head start is added. Waiting for one is the guess hls.js replaces — it
+     * holds its own buffer and knows how much it has, which is the whole
+     * argument for adopting it, so a cushion measured by us would be the guess
+     * coming back through a different door.
+     */
+    const start = () => {
+      // A rejection is left alone: a browser refusing autoplay is a policy
+      // decision, and the controls are right there.
+      void el.play().catch(() => {});
+    };
+
     void attachLiveHls(el, playing.id, (fatal, detail) => {
       if (!fatal) return;
       if (detail === OLD_SERVER) {
@@ -338,33 +367,13 @@ export function LiveTV() {
       setPlayError(
         `The channel stopped: ${detail}. It may be off the air, or the server may have run out of streams.`,
       );
-    })
+    }, start)
       .then((a) => {
         if (cancelled) {
           a.destroy();
           return;
         }
         attached = a;
-        /*
-         * Press play, because on this path nothing else does.
-         *
-         * The element carries no `autoPlay` and nothing calls `play()` on
-         * `canplay`, both deliberately — see the comment on the element. What
-         * actually starts a channel is the preroll effect, which waits for a
-         * head start first. That effect does not run on the MSE path (step 4
-         * of the ADR 0013 amendment), and nothing took over the half of its job
-         * that was not a guess: a channel attached perfectly and sat at 0:00
-         * until somebody pressed play.
-         *
-         * No head start is wanted here. Waiting for one is the guess hls.js
-         * replaces — it holds its own buffer and knows how much it has, which
-         * is the whole argument for adopting it, so a cushion measured by us
-         * would be reintroducing the guess through a different door.
-         *
-         * A rejection is left alone: a browser refusing autoplay is a policy
-         * decision, and the controls are right there.
-         */
-        void el.play().catch(() => {});
       })
       .catch((e: unknown) => {
         /*
