@@ -343,6 +343,71 @@ removes the class rather than the instance. That is evidence about the shape of
 the decision; it is not on its own an argument for moving the VOD path, which
 stays where the original ADR left it.
 
+## Measured 2026-08-29: Chromium plays HLS, and the amendment's premise does not
+
+The v0.8.25 investigation left one job outstanding — `livePath` treats any
+non-empty `canPlayType` as "this is Safari", and Chromium's `maybe` for
+`application/vnd.apple.mpegurl` looked like the same over-generous capability
+claim that `capabilities.ts` documents for `hevc10`. The intended fix was to
+tighten that test so the MSE path could be reached and the gate finally run.
+
+**The test was taken first, and there is nothing to tighten.** Chromium is
+telling the truth.
+
+Measured in Chromium 148 on Windows:
+
+| type | answer |
+| --- | --- |
+| `application/vnd.apple.mpegurl` | `maybe` |
+| `application/x-mpegURL` | `maybe` |
+| `audio/mpegurl` | `maybe` |
+| `video/mp2t` | *(empty)* |
+
+And the claim was then exercised rather than trusted, against Apple's
+`img_bipbop_adv_example_fmp4` master playlist handed straight to a bare
+element with no library of any kind:
+
+```
+loadedmetadata  readyState=4  error=none
+size=480x270    buffered=12.0s   framesDecoded=8
+```
+
+It parsed the playlist, fetched segments, learned the frame size and decoded
+video. That is native HLS, doing the whole job.
+
+**This contradicts a statement in CLAUDE.md and the premise this amendment
+rests on** — that browsers cannot play HLS without a ~300KB third-party
+library. Chromium cannot demux MPEG-TS, which is what `video/mp2t` answering
+empty says, and most IPTV sources are MPEG-TS. But **this server does not serve
+MPEG-TS**: `Args` sets `-hls_segment_type fmp4`, so LANcast's own HLS output is
+exactly the shape Chromium plays. The rule was true about the sources and was
+generalised to the output, and the output is ours to choose.
+
+What follows is a question rather than a decision, and it is deliberately left
+open here:
+
+- **hls.js may not be needed for this client at all.** It is vendored,
+  reproduced byte-identically, reviewed and dynamically imported, so it costs
+  nothing when unused — but "unused" is a different claim from "needed", and
+  step 6 proposes making the path that needs it the default.
+- **The audience for MSE is smaller than assumed.** It is browsers that have
+  `MediaSource` and *not* native HLS. Firefox is the obvious member; that is
+  reasoning from its known behaviour rather than a measurement, and no Firefox
+  was available here. It should be measured before it is relied on.
+- **Native HLS answers most of what the amendment wanted.** The case against
+  progressive was that a bare element cannot report how much it holds, cannot
+  tell starved from stalled, and cannot be seeked. An element playing a
+  *playlist* has meaningful `buffered` ranges — 12.0s was read off one above —
+  so the third transport was already most of the way there.
+
+None of this is an argument to unvendor anything or to reverse a decision that
+was made carefully. It is an argument that **step 6's "flip the default to MSE"
+is not obviously the right next step**, and that the comparison worth making now
+is native HLS against MSE rather than either against progressive.
+
+Recorded as a measurement with its numbers, in the manner of step 2 and step 3
+above, so that whoever decides has the reading rather than the recollection.
+
 ## Decision (proposed)
 
 **Adopt MSE for live TV, and only for live TV.**
