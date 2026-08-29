@@ -20,6 +20,26 @@ import { LiveTV } from "./LiveTV";
 import { LIVE_TRANSPORT_KEY, type LiveTransport } from "@/lib/liveTransport";
 import { writeDevice } from "@/lib/device";
 
+/*
+ * hls.js is mocked, not loaded.
+ *
+ * The real vendored bundle is 618 KB and needs a MediaSource jsdom does not
+ * have, so loading it here would test the environment rather than the screen.
+ * What these tests are about is what the screen does with the attachment once
+ * it has one.
+ */
+vi.mock("hls.js", () => {
+  class FakeHls {
+    static Events = { ERROR: "hlsError" };
+    on() {}
+    loadSource() {}
+    attachMedia() {}
+    detachMedia() {}
+    destroy() {}
+  }
+  return { default: FakeHls };
+});
+
 declare global {
   // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -134,6 +154,36 @@ describe("live tv transport", () => {
     );
     const el = await playFirstChannel();
     expect(el.getAttribute("src")).toBe("/api/channels/7/hls/index.m3u8");
+  });
+
+  /*
+   * The half of preroll's job that was not a guess.
+   *
+   * The element carries no `autoPlay` and nothing plays it on `canplay`, both
+   * deliberately — what starts a channel is the preroll effect, after it has
+   * waited for a head start. That effect does not run on the MSE path, and
+   * when this path was built nothing took over the *pressing play* part of it.
+   * A channel attached cleanly and sat at 0:00 until somebody clicked, which no
+   * assertion in this file could see, because every one of them was about the
+   * source.
+   *
+   * Found by watching a real channel, which is what the ADR gated step 6 on.
+   */
+  it("presses play on the MSE path, because nothing else does", async () => {
+    writeDevice<LiveTransport>(LIVE_TRANSPORT_KEY, "mse");
+    vi.stubGlobal("MediaSource", {
+      isTypeSupported: () => true,
+    } as unknown as typeof MediaSource);
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("");
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+
+    await playFirstChannel();
+    await flush();
+    await flush();
+
+    expect(play).toHaveBeenCalled();
   });
 
   it("leaves the element without a src on the MSE path, so nothing fetches the channel twice", async () => {

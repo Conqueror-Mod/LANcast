@@ -345,6 +345,26 @@ export function LiveTV() {
           return;
         }
         attached = a;
+        /*
+         * Press play, because on this path nothing else does.
+         *
+         * The element carries no `autoPlay` and nothing calls `play()` on
+         * `canplay`, both deliberately — see the comment on the element. What
+         * actually starts a channel is the preroll effect, which waits for a
+         * head start first. That effect does not run on the MSE path (step 4
+         * of the ADR 0013 amendment), and nothing took over the half of its job
+         * that was not a guess: a channel attached perfectly and sat at 0:00
+         * until somebody pressed play.
+         *
+         * No head start is wanted here. Waiting for one is the guess hls.js
+         * replaces — it holds its own buffer and knows how much it has, which
+         * is the whole argument for adopting it, so a cushion measured by us
+         * would be reintroducing the guess through a different door.
+         *
+         * A rejection is left alone: a browser refusing autoplay is a policy
+         * decision, and the controls are right there.
+         */
+        void el.play().catch(() => {});
       })
       .catch((e: unknown) => {
         /*
