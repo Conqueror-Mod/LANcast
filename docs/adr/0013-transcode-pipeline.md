@@ -302,6 +302,33 @@ Worth recording that the earlier framing was stated as a hypothesis and is now
 falsified, rather than quietly replaced. The prediction was made before the
 measurement, which is the only reason the measurement means anything.
 
+**The instrument for the remaining question now exists (v0.8.25).** The
+paragraph above names what had never been checked — whether the *first* of a
+pair is being abandoned — and the reason it had never been checked turned out
+to be prosaic: the log recorded every session's *birth* at Info and a
+superseded session's *death* at Debug, and debug logging is off on a normal
+server. So a doubled start was recorded as two births and nothing else, which
+is the same unreadability `start_at` was added to fix, left half-fixed. That
+line is now Info and carries `age_ms` and `served_bytes`.
+
+`served_bytes` is the discriminator `start_at` could not be, because `start_at`
+says zero on both halves of the pair. A stream superseded after **no bytes and
+a few milliseconds** was never watched — that is a media stack opening the
+source twice, and no client change addresses it. A stream superseded after
+**real bytes** is a player that genuinely asked again, which is a client fault
+and fixable there. The two have different fixes and neither can be chosen
+without the number.
+
+The client half was also measured rather than argued, in
+`web/src/playback/sourceRequests.test.tsx`, which counts `v.src` assignments
+through the real provider. One press of play is one request; a track change
+adds exactly one; and moving between films *after* picking a track adds exactly
+one. That last case was the live suspicion — the reset to a file's default
+audio track and the source effect are separate effects over the same change, so
+a stale index reaching the source effect would be two ffmpegs for one film — and
+it does not happen. A negative result, and worth its lines: it is what the next
+field reading would otherwise have been asked to rule out.
+
 Nothing is proposed for it here, and the refutation does not change that.
 Playback is unaffected, one process runs, and
 on a copy path a reconnect costs an ffmpeg start and a re-probe — cheap. On a
