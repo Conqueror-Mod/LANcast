@@ -327,11 +327,42 @@ func TestRefreshEndpoints(t *testing.T) {
 		t.Error("refresh did not requeue the item")
 	}
 
+	/*
+	 * The library refresh answers with a count rather than a bare 202.
+	 *
+	 * It is the only feedback this action has ever been able to give: the work
+	 * is asynchronous, but how many items were requeued is known now. "Refresh
+	 * metadata" was the one control on that pane whose success was
+	 * indistinguishable from doing nothing.
+	 */
 	resp = h.do(t, "POST", "/api/libraries/1/refresh", nil)
-	if resp.StatusCode != http.StatusAccepted {
-		t.Errorf("library refresh status = %d, want 202", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("library refresh status = %d, want 200", resp.StatusCode)
 	}
-	resp.Body.Close()
+	var queued struct {
+		Queued int64  `json:"queued"`
+		Scope  string `json:"scope"`
+	}
+	decode(t, resp, &queued)
+	if queued.Scope != "all" {
+		t.Errorf("scope = %q, want all — an absent scope keeps the old behaviour", queued.Scope)
+	}
+
+	// Priced before it is performed, the way the history reset is.
+	var priced struct {
+		Count int64  `json:"count"`
+		Scope string `json:"scope"`
+	}
+	decode(t, h.do(t, "GET", "/api/libraries/1/refresh?scope=unmatched", nil), &priced)
+	if priced.Scope != "unmatched" {
+		t.Errorf("preview scope = %q, want unmatched", priced.Scope)
+	}
+
+	// An unknown scope is refused rather than quietly widened to everything:
+	// doing every lookup because somebody mistyped is the expensive failure
+	// scoping exists to prevent.
+	wantError(t, h.do(t, "POST", "/api/libraries/1/refresh?scope=unmatced", nil), 400, "bad_request")
+	wantError(t, h.do(t, "GET", "/api/libraries/1/refresh?scope=everything", nil), 400, "bad_request")
 
 	wantError(t, h.do(t, "POST", "/api/items/9999/refresh", nil), 404, "not_found")
 	wantError(t, h.do(t, "POST", "/api/libraries/9999/refresh", nil), 404, "not_found")

@@ -24,6 +24,7 @@ import {
   useScanStatus,
   useStartScan,
   useRefreshLibrary,
+  useRefreshPreview,
   useReparseLibrary,
   useDeleteLibrary,
   useUpdateLibrary,
@@ -171,6 +172,16 @@ export function LibraryRow({ library }: { library: Library }) {
   const { data: status } = useScanStatus(library.id);
   const scan = useStartScan();
   const refresh = useRefreshLibrary();
+  /*
+   * Priced only while the menu is open.
+   *
+   * Two requests per library on a pane with a dozen of them is a lot of asking
+   * for a number nobody is reading yet, and the counts are cheap to fetch late
+   * — the menu is open for as long as it takes to read them.
+   */
+  const [pricing, setPricing] = useState(false);
+  const unmatched = useRefreshPreview(library.id, "unmatched", pricing);
+  const all = useRefreshPreview(library.id, "all", pricing);
   const reparse = useReparseLibrary();
   const del = useDeleteLibrary();
   const running = status?.state === "running";
@@ -362,6 +373,7 @@ export function LibraryRow({ library }: { library: Library }) {
             <ButtonMenu
               label={`More actions for ${library.name}`}
               className="set-btn"
+              onOpen={() => setPricing(true)}
               actions={[
                 {
                   label: editing ? "Stop editing" : "Edit",
@@ -383,12 +395,40 @@ export function LibraryRow({ library }: { library: Library }) {
                     reparse.mutate(library.id);
                   },
                 },
+                /*
+                 * Two scopes rather than one button, and each says its price.
+                 *
+                 * "Refresh metadata" cleared the stamp for the whole library:
+                 * about 1,480 provider lookups for a real film library, at five
+                 * a second. Five minutes of work to fix the handful of rows
+                 * somebody actually meant, which is how a useful action becomes
+                 * one people avoid.
+                 *
+                 * The counts come from the server rather than being guessed
+                 * from anything on this page, because what a scope means is the
+                 * server's to decide — it is the half that knows a track can
+                 * never be matched by any provider LANcast ships.
+                 */
                 {
-                  label: "Refresh metadata",
-                  disabled: refresh.isPending,
+                  label: refresh.isPending
+                    ? "Refreshing…"
+                    : `Refresh unmatched${countLabel(unmatched.data?.count)}`,
+                  // Nothing to re-ask about is a reason not to offer the
+                  // action, not a reason to run it and report nothing.
+                  disabled: refresh.isPending || unmatched.data?.count === 0,
                   onSelect: () => {
                     setReported("refresh");
-                    refresh.mutate(library.id);
+                    refresh.mutate({ libraryID: library.id, scope: "unmatched" });
+                  },
+                },
+                {
+                  label: refresh.isPending
+                    ? "Refreshing…"
+                    : `Refresh everything${countLabel(all.data?.count)}`,
+                  disabled: refresh.isPending || all.data?.count === 0,
+                  onSelect: () => {
+                    setReported("refresh");
+                    refresh.mutate({ libraryID: library.id, scope: "all" });
                   },
                 },
                 {
@@ -790,4 +830,16 @@ export function AddLibrary() {
       )}
     </form>
   );
+}
+
+/*
+ * The count beside a scope, or nothing at all while it is unknown.
+ *
+ * Nothing rather than a zero or a spinner: a label that reads "Refresh
+ * unmatched (0)" for the moment before the answer arrives is briefly wrong in
+ * exactly the direction that matters, and somebody reading fast has been told
+ * there is nothing to do.
+ */
+function countLabel(n: number | undefined): string {
+  return n === undefined ? "" : ` (${n.toLocaleString()})`;
 }
