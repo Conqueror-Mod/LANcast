@@ -434,10 +434,26 @@ commitment, and so the dependency is added late rather than early.
 5. ~~Native-HLS browsers detected and given the playlist directly~~ — **built
    in the same change**, because once `livePath` returned three answers instead
    of two the check was free. Safari is a third path rather than a second and is
-   never handed an MSE pipeline it does not need. **Unexercised**: there is no
-   native-HLS browser on the machine this was written on — the desktop client is
-   WebView2 — so this branch has unit tests and has never run. Say so rather
-   than counting it as verified.
+   never handed an MSE pipeline it does not need.
+
+   **The "unexercised" note here was wrong, and it inverted the truth.** It said
+   there was no native-HLS browser on this machine, so the branch had unit tests
+   and had never run. In fact it is the *only* branch this machine takes:
+   Chromium answers `maybe` for `application/vnd.apple.mpegurl`, `livePath`
+   treats any non-empty answer as Safari, and the desktop client is handed the
+   playlist every time the setting is on. So step 5 is the well-exercised path
+   and **step 4's MSE pipeline is the one that has barely run**, which is the
+   reverse of what was recorded.
+
+   Found by instrument rather than by argument, and expensively: three fixes for
+   "a channel does not start on its own" were written into the MSE effect and
+   shipped to a running server, and none of them executed. A diagnostic line
+   naming the transport answered it in one reading.
+
+   `maybe` for a format the browser cannot demux is the same over-generous
+   capability claim that `capabilities.ts` already documents for `hevc10`, and
+   `livePath`'s `!== ""` test is too trusting for the same reason. That is not
+   fixed here.
 6. **Gated, and this is the gate.** Nothing in step 6 begins until MSE has been
    watched playing a real channel in a real browser. jsdom performs no media, so
    the suite proves the wiring and the fallbacks and cannot prove playback. The
@@ -449,6 +465,16 @@ commitment, and so the dependency is added late rather than early.
    deletion is the acceptance test. Client tests updated in the same commit;
    note that jsdom performs no media, so this needs looking at as well as
    asserting.
+
+   **A warning for whoever does this.** `preroll` was doing two jobs and only
+   one of them was the guess it is named for. It waits for a head start — that
+   is the compensation, and MSE replaces it — and it also *presses play*, which
+   nothing else did. Step 4 stopped it running on the other paths and left both
+   of them unable to start a channel at all: the element reached `readyState 4`
+   with ten seconds buffered and sat at 0:00, ready and never asked. That is
+   fixed, and playing is now wired for every non-progressive path — but the
+   lesson stands for the deletion, because a file removed wholesale takes its
+   second job with it.
 8. `docs/api.md` in the same commit as any endpoint or contract change.
 
 ## Step 2, run 2026-08-27: the answer is no, and the fault is ours
