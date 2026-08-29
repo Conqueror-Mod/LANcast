@@ -342,6 +342,21 @@
   background: var(--space-raised);
 }
 
+/* What a channel that has not started is doing.
+   Its own class rather than reusing .livetv__buffering, which is a different
+   claim: "buffering" says the player is holding for a cushion, and this says
+   what state the element is in and how it got there. Sharing the class made
+   the rebuffer tests unable to tell them apart, which is the same conflation
+   arriving as a test failure. */
+.livetv__diag {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  background: var(--space-raised);
+}
+
 /* Shown only while the player is running fast to close a gap. Deliberately
    quiet — it explains something a viewer may hear, it is not an alarm — and
    deliberately not gold, which means where you are and nothing else. */

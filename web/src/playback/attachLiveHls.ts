@@ -71,6 +71,16 @@ export function liveHlsConfig() {
  * Resolves once the library is loaded and attached, not once media is playing:
  * whether to play is the caller's decision, and on a live channel it is
  * entangled with autoplay policy the caller already handles.
+ *
+ * Nothing here reports when the channel becomes playable, deliberately. Two
+ * attempts tried to: `play()` after `attachMedia` returns, and then `play()` on
+ * `MANIFEST_PARSED`. Both are library milestones rather than element ones, and
+ * neither implies the element has media — `attachMedia` sets the object URL in
+ * a later task, and the manifest is loaded independently of the element
+ * entirely. Both shipped, and neither started a channel.
+ *
+ * The caller waits for `loadedmetadata` on the element instead, which cannot be
+ * wrong about this: it does not fire until the element has media.
  */
 export async function attachLiveHls(
   el: HTMLVideoElement,
