@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   NO_RUN,
   UNATTENDED_ITEMS,
-  UNATTENDED_MS,
   advanced,
   attended,
   describeRun,
@@ -20,46 +19,59 @@ function run(n: number) {
 
 describe("what counts as unattended", () => {
   it("says nothing while there is no run at all", () => {
-    expect(shouldAsk(NO_RUN, T0 + UNATTENDED_MS * 10)).toBe(false);
+    expect(shouldAsk(NO_RUN)).toBe(false);
   });
 
   /*
    * The case this exists to protect: somebody watching a long film properly.
    * They chose it, they touch nothing for two hours, and interrupting them is
    * the failure mode that teaches people to hate this feature.
+   *
+   * Nothing about the *duration* protects them now that the clock is gone —
+   * what protects them is that they chose the thing, so there is no run.
    */
   it("never asks the person watching one long thing they chose", () => {
-    expect(shouldAsk(NO_RUN, T0 + 3 * UNATTENDED_MS)).toBe(false);
-    expect(shouldAsk(advanced(NO_RUN, T0), T0 + 3 * UNATTENDED_MS)).toBe(false);
+    expect(shouldAsk(NO_RUN)).toBe(false);
+    expect(shouldAsk(advanced(NO_RUN, T0))).toBe(false);
   });
 
-  it("needs the count and the clock, not either alone", () => {
-    // Enough things, not enough time — three cartoons back to back is an
-    // evening, not an absence.
-    expect(shouldAsk(run(UNATTENDED_ITEMS), T0 + 60_000)).toBe(false);
-    // Enough time, not enough things — one long film that auto-started.
-    expect(shouldAsk(run(1), T0 + UNATTENDED_MS * 2)).toBe(false);
-    // Both.
-    expect(shouldAsk(run(UNATTENDED_ITEMS), T0 + UNATTENDED_MS)).toBe(true);
+  /*
+   * The rule that replaced "the count and the clock".
+   *
+   * The clock made this nearly unreachable: three episodes of an ordinary
+   * drama clear three advances long before they clear two hours, so the count
+   * was satisfied and the prompt never came. Three things nobody chose is the
+   * signal, and how long they ran says nothing about whether anyone is there.
+   */
+  it("asks on the third automatic advance, however long they took", () => {
+    expect(shouldAsk(run(UNATTENDED_ITEMS - 1))).toBe(false);
+    expect(shouldAsk(run(UNATTENDED_ITEMS))).toBe(true);
   });
 
-  it("counts from when the run began, not from the last advance", () => {
+  it("asks after three short things as readily as three long ones", () => {
+    // Eighteen minutes of cartoons and six hours of films are the same run.
+    let quick = NO_RUN;
+    for (let i = 0; i < 3; i++) quick = advanced(quick, T0 + i * 360_000);
+    let slow = NO_RUN;
+    for (let i = 0; i < 3; i++) slow = advanced(slow, T0 + i * 7_200_000);
+    expect(shouldAsk(quick)).toBe(true);
+    expect(shouldAsk(slow)).toBe(true);
+  });
+
+  it("still remembers when the run began, because the prompt says so", () => {
     let r = NO_RUN;
     r = advanced(r, T0);
-    r = advanced(r, T0 + UNATTENDED_MS - 1);
-    r = advanced(r, T0 + UNATTENDED_MS);
-    // The third advance happened at the two-hour mark, and the run started at
-    // T0 — so the run is two hours old, which is the honest reading.
+    r = advanced(r, T0 + 3_600_000);
+    // `since` no longer gates anything; it is only what describeRun reads.
     expect(r.since).toBe(T0);
-    expect(shouldAsk(r, T0 + UNATTENDED_MS)).toBe(true);
   });
 });
 
 describe("attention resets it", () => {
   it("forgets the run when somebody does something deliberate", () => {
     const r = run(UNATTENDED_ITEMS + 5);
-    expect(shouldAsk(r, T0 + UNATTENDED_MS)).toBe(true);
-    expect(shouldAsk(attended(), T0 + UNATTENDED_MS)).toBe(false);
+    expect(shouldAsk(r)).toBe(true);
+    expect(shouldAsk(attended())).toBe(false);
   });
 
   /*
@@ -70,8 +82,8 @@ describe("attention resets it", () => {
    */
   it("gives a full run back after the prompt is answered", () => {
     let r = attended();
-    r = advanced(r, T0 + UNATTENDED_MS);
-    expect(shouldAsk(r, T0 + UNATTENDED_MS * 2)).toBe(false);
+    r = advanced(r, T0);
+    expect(shouldAsk(r)).toBe(false);
   });
 });
 

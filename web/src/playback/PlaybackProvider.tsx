@@ -1817,7 +1817,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               const now = Date.now();
               const next = advanced(runRef.current, now);
               runRef.current = next;
-              if (shouldAsk(next, now)) {
+              if (shouldAsk(next)) {
                 stillWatchingRef.current = describeRun(next, now);
                 setStillWatching(stillWatchingRef.current);
                 setPlaying(false);
