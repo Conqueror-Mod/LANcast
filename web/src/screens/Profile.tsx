@@ -55,14 +55,32 @@ export function Profile() {
       <div className="profile__stats">
         <Stat label="Started" value={stats ? String(stats.started) : "—"} />
         <Stat label="Finished" value={stats ? String(stats.finished) : "—"} />
+        {/* Shown only when it says something the card beside it does not.
+            Equal numbers mean nothing has been rewatched, and a second card
+            repeating the first is noise on most profiles.
+
+            Absent rather than zero on a server too old to report it: a client
+            newer than its server is ordinary, and "0 viewings" beside "412
+            finished" is a wrong statement rather than a missing one. */}
+        {stats?.viewings != null && stats.viewings > stats.finished && (
+          <Stat
+            label="Viewings"
+            value={String(stats.viewings)}
+            note="including rewatches"
+          />
+        )}
         <Stat
           label="Time watched"
           value={stats ? (runtime(stats.watched_ms) || "0m") : "—"}
-          /* The qualifier is the honest part. This is time actually spent, not
-             the runtime of everything opened — and it counts each item once,
-             because the server keeps one row per item and not a log of every
-             sitting. */
-          note="counted once per title"
+          /* The qualifier is the honest part, and it changed when the server
+             learned to count viewings. It used to say "counted once per title",
+             which was true of a boolean and stopped being true the moment a
+             tally sat beside it — a note that describes an older version of the
+             thing it labels is worse than none.
+
+             A title with no known runtime is still counted once, because there
+             is no measurement of how long one viewing of it was. */
+          note="every viewing counted"
         />
         <Stat
           label="Since"

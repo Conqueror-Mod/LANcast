@@ -33,12 +33,20 @@ type HistoryEntry struct {
 
 // ProfileStats are the totals behind the history.
 type ProfileStats struct {
-	Started  int `json:"started"`
+	Started int `json:"started"`
+	// Finished is how many distinct titles have been finished, and Viewings is
+	// how many times finishing happened. They are different questions and the
+	// difference is the whole point of revision 31: somebody who has seen
+	// twelve films, one of them nine times, has finished twelve things and sat
+	// through twenty. Reporting only the first is what a boolean could say.
 	Finished int `json:"finished"`
+	Viewings int `json:"viewings"`
 	// WatchedMS is time actually spent, not runtime owned: a finished item
-	// counts its duration, an unfinished one counts how far in you got. The
-	// alternative — summing the duration of everything touched — would report
-	// eleven hours for eleven films abandoned in their first minute.
+	// counts its duration *per viewing*, an unfinished one counts how far in
+	// you got. The alternative — summing the duration of everything touched —
+	// would report eleven hours for eleven films abandoned in their first
+	// minute; counting a rewatched film once, which is what this did before
+	// revision 31 was read, under-reports the opposite way.
 	WatchedMS int64 `json:"watched_ms"`
 	// FirstAt is the oldest playback this user has, so the client can say what
 	// period the numbers cover rather than implying they cover all time.
@@ -122,20 +130,38 @@ func (s *Store) History(ctx context.Context, userID string, limit, offset int) (
 // ProfileStatistics totals the same rows the history lists.
 func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileStats, error) {
 	var st ProfileStats
+	/*
+	 * Time watched counts every viewing, and the partial one on top.
+	 *
+	 * `watch_count` viewings of a title are `watch_count` durations. The
+	 * current sitting is added only when the title is *not* finished, because a
+	 * finished one has already had this viewing counted by the tally — adding
+	 * its position as well would count the last showing twice.
+	 *
+	 * A title with no known runtime falls back to how far in you got, once,
+	 * and is deliberately *not* multiplied by the tally. There is no measurement
+	 * of how long one viewing of it was, so a product would be inventing time
+	 * rather than reporting it — and inventing upward is the worse direction,
+	 * because a total that grows on its own is harder to disbelieve than one
+	 * that is missing.
+	 */
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 		  COUNT(*),
 		  COALESCE(SUM(ps.watched), 0),
+		  COALESCE(SUM(ps.watch_count), 0),
 		  COALESCE(SUM(
-		    CASE WHEN ps.watched = 1 THEN COALESCE(mi.duration_ms, ps.position_ms)
-		         ELSE ps.position_ms END
+		    CASE WHEN mi.duration_ms IS NULL THEN ps.position_ms
+		         ELSE ps.watch_count * mi.duration_ms
+		              + CASE WHEN ps.watched = 1 THEN 0 ELSE ps.position_ms END
+		    END
 		  ), 0),
 		  MIN(ps.updated_at)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
 		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)`,
 		userID,
-	).Scan(&st.Started, &st.Finished, &st.WatchedMS, &st.FirstAt)
+	).Scan(&st.Started, &st.Finished, &st.Viewings, &st.WatchedMS, &st.FirstAt)
 	if err != nil {
 		return st, fmt.Errorf("profile statistics: %w", err)
 	}
@@ -155,9 +181,9 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 	 */
 	var banked ProfileStats
 	err = s.db.QueryRowContext(ctx, `
-		SELECT started, finished, watched_ms, first_at
+		SELECT started, finished, viewings, watched_ms, first_at
 		FROM profile_totals WHERE user_id = ?`, userID,
-	).Scan(&banked.Started, &banked.Finished, &banked.WatchedMS, &banked.FirstAt)
+	).Scan(&banked.Started, &banked.Finished, &banked.Viewings, &banked.WatchedMS, &banked.FirstAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return st, nil
 	}
@@ -167,6 +193,7 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 
 	st.Started += banked.Started
 	st.Finished += banked.Finished
+	st.Viewings += banked.Viewings
 	st.WatchedMS += banked.WatchedMS
 	// The oldest playback either half knows about. A reset does not make an
 	// account younger than it is.

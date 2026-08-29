@@ -1003,7 +1003,7 @@ discover that from three round trips and three loading states.
 
 ```json
 { "user": { "id": "u_3f9", "name": "Chris", "admin": true, "secured": true },
-  "stats": { "started": 214, "finished": 168,
+  "stats": { "started": 214, "finished": 168, "viewings": 197,
              "watched_ms": 913_400_000, "first_at": 1739000000 },
   "history": [ { "item": { "id": 87, "title": "Arrival", ... },
                  "position_ms": 1284000, "watched": false,
@@ -1025,10 +1025,29 @@ Items that are `missing` are included. "What happened to the film I watched last
 week" is a question about history, and a library that lost a drive should not
 lose the answer to it.
 
+`finished` and `viewings` answer different questions and clients must not treat
+either as the other. `finished` is how many distinct titles have been finished;
+`viewings` is how many times finishing happened, so somebody who has seen twelve
+films, one of them nine times, reports `finished: 12` and `viewings: 20`.
+`viewings` is therefore always greater than or equal to `finished`.
+
+**`viewings` is absent on a server older than schema revision 32.** Absent is
+not zero: a client that renders a missing field as `0 viewings` beside
+`168 finished` states something false rather than omitting something true. Treat
+it as unknown and say nothing.
+
 `watched_ms` is time *spent*, not runtime owned: a finished item counts its
-duration, an unfinished one counts how far in you got. Summing the duration of
-everything touched would report eleven hours for eleven films abandoned in their
-first minute.
+duration **once per viewing**, an unfinished one counts how far in you got.
+Summing the duration of everything touched would report eleven hours for eleven
+films abandoned in their first minute; counting a rewatched film once
+under-reports the opposite way, which is what this did before the tally beside
+the flag was read.
+
+A title whose runtime is unknown is counted **once**, whatever its tally says.
+There is no measurement of how long one viewing of it was, so multiplying would
+invent time rather than report it — and inventing upward is the worse direction,
+because a total that grows on its own is harder to disbelieve than one that is
+missing.
 
 `secured` is `false` on an unconfigured loopback server, where there is no
 account and the history belongs to the migrated `local` id. The client says so
