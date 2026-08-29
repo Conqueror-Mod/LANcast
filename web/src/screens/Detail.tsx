@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useItem,
+  useRefreshItem,
   useTrailer,
   useChildren,
   useCollectionMembers,
@@ -80,6 +81,47 @@ function FixMatchButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button {...focusable} className="detail__fix" onClick={onOpen}>
       Fix match
+    </button>
+  );
+}
+
+/*
+ * Ask the provider again, which is a different act from correcting the match.
+ *
+ * Fix match is a manual search: you look through candidates and choose. This
+ * re-runs the automatic matching, which is what you want when the metadata is
+ * merely *stale* — a poster changed, an overview was corrected upstream —
+ * rather than wrong about which work it is.
+ *
+ * Beside Fix match rather than in a menu, because the two are the same question
+ * asked at different strengths and a person who has just found the first one
+ * unsatisfying should see the second without hunting.
+ */
+function RefreshMetaButton({ id }: { id: number }) {
+  const refresh = useRefreshItem(id);
+  const focusable = useFocusable(() => refresh.mutate());
+
+  // What happened, in the same place as the button. A refresh schedules work
+  // and shows nothing, so without this its success and its failure look
+  // identical — the fault this project keeps finding in its own controls.
+  if (refresh.isSuccess) {
+    const n = refresh.data.queued;
+    return (
+      <span className="detail__matchbadge">
+        {n === 0
+          ? "Nothing to re-ask about"
+          : `Re-asking about ${n} ${n === 1 ? "title" : "titles"}`}
+      </span>
+    );
+  }
+  return (
+    <button
+      {...focusable}
+      className="detail__fix"
+      disabled={refresh.isPending}
+      onClick={() => refresh.mutate()}
+    >
+      {refresh.isPending ? "Refreshing…" : "Refresh metadata"}
     </button>
   );
 }
@@ -618,6 +660,10 @@ export function Detail() {
                     </span>
                   )}
                 <FixMatchButton onOpen={() => setFixOpen(true)} />
+                {/* Admin only, matching the endpoint: a member cannot schedule
+                    provider work, and offering a button that answers 403 is
+                    worse than not offering it. */}
+                {isAdmin && <RefreshMetaButton id={item.id} />}
               </div>
             )}
 

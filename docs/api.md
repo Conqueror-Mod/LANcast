@@ -2822,7 +2822,31 @@ opened far more often than any one row in it is investigated.
 
 ### `POST /api/items/{id}/refresh`
 
-Re-fetch metadata for one item, honoring all field locks. Returns `202`.
+Re-fetch metadata for one item **and everything under it**, honoring all field
+locks. Admin only.
+
+```json
+{ "queued": 12 }
+```
+
+The subtree is what makes this useful. A show's own row carries a title, an
+overview and a poster, so clearing that alone does something — and leaves every
+episode as it was, which is not what "refresh this show" means. Reaching the
+episodes previously meant refreshing the whole library.
+
+The count is the only feedback available, since the work itself is
+asynchronous: pressing this on a series and being told `1` says its episodes
+are locked or unmatchable, which is worth knowing and was otherwise invisible.
+
+Excludes the same two sets the library scopes do, and callers cannot opt out:
+kinds no provider can answer for, and rows whose match is `locked`. Reaching a
+locked row through a narrower door does not make undoing somebody's decision
+more acceptable.
+
+Unlike the library scopes it does **not** exclude `missing` rows. A person
+asking to refresh one title has named it; a library-wide sweep quietly
+including titles whose files are gone would be spending lookups on things
+nobody can play.
 
 ### `GET /api/libraries/{id}/refresh` · `POST /api/libraries/{id}/refresh`
 

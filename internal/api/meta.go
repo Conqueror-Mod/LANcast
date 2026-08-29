@@ -368,6 +368,10 @@ func (s *Server) reviewQueue(w http.ResponseWriter, r *http.Request) {
 
 // refreshItem and refreshLibrary requeue metadata. Locked fields still survive;
 // this only schedules the work.
+//
+// Refreshes the item **and everything under it**, so a show carries its
+// episodes. Reaching those previously meant refreshing the whole library —
+// about 1,480 provider lookups to correct one series.
 func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -377,12 +381,21 @@ func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
-	if err := s.st.ClearMetadataStamp(r.Context(), 0, id); err != nil {
+	n, err := s.st.RefreshItemTree(r.Context(), id)
+	if err != nil {
 		s.writeInternal(w, err, "refresh item")
 		return
 	}
 	s.enrichSoon()
-	w.WriteHeader(http.StatusAccepted)
+	/*
+	 * The count, for the reason the library refresh carries one: the work is
+	 * asynchronous but how many rows were requeued is known now, and it is the
+	 * difference between refreshing a show and refreshing a show's forty
+	 * episodes. Somebody who presses this on a series and is told "1" has
+	 * learned that its episodes are locked or unmatchable, which is worth
+	 * knowing and was previously invisible.
+	 */
+	writeJSON(w, http.StatusOK, map[string]any{"queued": n})
 }
 
 // refreshScope reads the scope parameter, defaulting to everything.
