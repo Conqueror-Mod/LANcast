@@ -26,26 +26,22 @@
  * it. Choosing the next episode yourself is attention. Seeking, pausing and
  * resuming are attention. Sitting still through a film is not inattention.
  *
- * # Why a count and a clock, not one or the other
+ * # Why the count alone, and no clock
  *
- * A count alone lets a run of six-minute cartoons play for half an hour before
- * asking, and a run of feature films ask after six hours. A clock alone
- * interrupts the person half way through a long film they chose. Together they
- * mean: several things have played, *and* it has been going a while, and
- * neither of those alone is enough.
+ * There was a clock: three advances *and* two hours. It was there so that a run
+ * of short cartoons could not ask after eighteen minutes, and it made the
+ * feature untestable in practice and nearly unreachable in use — three episodes
+ * of an ordinary drama clear the count long before they clear the clock, so the
+ * prompt fired on almost nothing.
+ *
+ * The count is the honest signal on its own. Three things have played with
+ * nobody choosing any of them, and the length of those three things says
+ * nothing about whether a person is in the room. A short run of cartoons that
+ * nobody chose is exactly as unattended as a long one.
  */
 
 /** How many consecutive automatic advances before asking. */
 export const UNATTENDED_ITEMS = 3;
-
-/**
- * How long those advances have to have been running, in milliseconds.
- *
- * Two hours. Long enough that three short episodes back to back do not trigger
- * it — that is an evening, not an absence — and short enough that a television
- * left on overnight is caught within the first few hours rather than at dawn.
- */
-export const UNATTENDED_MS = 2 * 60 * 60 * 1000;
 
 /** What the player knows about the current unattended run. */
 export type WatchRun = {
@@ -62,7 +58,8 @@ export const NO_RUN: WatchRun = { autoAdvances: 0, since: null };
  *
  * `now` is passed rather than read so the rule is testable without faking a
  * clock, which is the same reason every other decision in this folder is a pure
- * function over its inputs.
+ * function over its inputs. It no longer gates the prompt — `since` survives
+ * only so the prompt can say how long it has been going.
  */
 export function advanced(run: WatchRun, now: number): WatchRun {
   return {
@@ -85,15 +82,13 @@ export function attended(): WatchRun {
 /**
  * shouldAsk decides whether to stop and put the question.
  *
- * Both conditions, deliberately. Either alone is a rule that interrupts
- * somebody who is plainly there, and an "are you still watching" prompt that
- * fires on an attentive viewer is worse than none — it trains people to reach
- * for the remote to dismiss it, which is exactly the reflex the feature is
- * trying to detect the absence of.
+ * Three automatic advances, and nothing else. What keeps this from firing on an
+ * attentive viewer is not a duration but the reset: the person who is there
+ * chose something, or paused, or seeked, and any one of those has already
+ * cleared the run.
  */
-export function shouldAsk(run: WatchRun, now: number): boolean {
-  if (run.since === null) return false;
-  return run.autoAdvances >= UNATTENDED_ITEMS && now - run.since >= UNATTENDED_MS;
+export function shouldAsk(run: WatchRun): boolean {
+  return run.autoAdvances >= UNATTENDED_ITEMS;
 }
 
 /**
