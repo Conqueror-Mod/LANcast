@@ -84,6 +84,8 @@ export function LiveTV() {
   const [playing, setPlaying] = useState<Channel | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [buffering, setBuffering] = useState(false);
+  /** Whether the picture has ever actually moved. */
+  const [started, setStarted] = useState(false);
   /*
    * What the MSE path actually did, said out loud.
    *
@@ -105,7 +107,9 @@ export function LiveTV() {
     meta: boolean;
     asked: boolean;
     refused: string | null;
-  }>({ meta: false, asked: false, refused: null });
+    ready: number;
+    ahead: number;
+  }>({ meta: false, asked: false, refused: null, ready: 0, ahead: 0 });
   // Whether the player is running fast to close a gap. Shown, because a speed
   // change a viewer can hear should not be a secret.
   const [catchingUp, setCatchingUp] = useState(false);
@@ -320,6 +324,30 @@ export function LiveTV() {
   }, [playing, path]);
 
   /*
+   * Read the element while it is not yet playing.
+   *
+   * Polled rather than event-driven on purpose: the question being asked is
+   * "what state is it stuck in", and the events that would answer it are
+   * exactly the ones that may not be firing. A reading taken on a clock cannot
+   * be silent for the same reason the fault is.
+   */
+  useEffect(() => {
+    if (!playing) return;
+    setStarted(false);
+    const el = videoRef.current;
+    if (!el) return;
+    const id = window.setInterval(() => {
+      const ahead =
+        el.buffered.length > 0
+          ? el.buffered.end(el.buffered.length - 1) - el.currentTime
+          : 0;
+      setDiag((d) => ({ ...d, ready: el.readyState, ahead }));
+      if (!el.paused && el.currentTime > 0) setStarted(true);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [playing, path]);
+
+  /*
    * Feed the element through hls.js when the MSE path is chosen.
    *
    * Only on that path. `native-hls` and `progressive` both hand the element a
@@ -395,7 +423,7 @@ export function LiveTV() {
       });
     };
 
-    setDiag({ meta: false, asked: false, refused: null });
+    setDiag({ meta: false, asked: false, refused: null, ready: 0, ahead: 0 });
     el.addEventListener("loadedmetadata", start, { once: true });
 
     void attachLiveHls(el, playing.id, (fatal, detail) => {
@@ -575,20 +603,23 @@ export function LiveTV() {
             </p>
           )}
           {/*
-           * Only while it has plainly not started, and only on the path that
-           * has this problem. A channel that is playing needs no commentary.
+           * One line, and it names everything at once.
+           *
+           * An earlier version gated this on the MSE path, which made its
+           * silence ambiguous: "this channel is not on that path" and "play was
+           * already asked for" produced exactly the same nothing. That is the
+           * same fault the line exists to cure, reproduced inside the cure.
+           *
+           * So it is unconditional while a channel has not started, and the
+           * transport is the first thing it says.
            */}
-          {path === "mse" && !diag.asked && (
+          {!started && (
             <p className="livetv__buffering" role="status">
-              Preparing the channel — the picture has not arrived yet
-              {diag.meta ? "" : " (no metadata)"}.
-            </p>
-          )}
-          {path === "mse" && diag.refused && (
-            <p className="livetv__buffering" role="status">
-              {diag.refused === "NotAllowedError"
-                ? "This browser would not start the channel by itself. Press play."
-                : `The channel was ready but would not start (${diag.refused}). Press play.`}
+              {`${path} · metadata ${diag.meta ? "yes" : "no"} · play ${
+                diag.asked ? "asked" : "not asked"
+              }${diag.refused ? ` · refused ${diag.refused}` : ""} · ready ${
+                diag.ready
+              } · buffered ${diag.ahead.toFixed(1)}s`}
             </p>
           )}
           {playError && (
