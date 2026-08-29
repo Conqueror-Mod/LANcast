@@ -1226,7 +1226,7 @@ unblocked is worth more than a tidy list.*
 
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
-| [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | Nothing today, but the argument got stronger: a channel that froze at `0:01` for three minutes while ffmpeg stayed healthy was undiagnosable from the client, because a progressive stream cannot tell *starved* from *stalled*. That is the amendment's central claim, demonstrated rather than asserted. It remains the ceiling on how good live playback can get: every client-side constant is compensation for feeding a bare media element a stream it cannot seek in |
+| [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | **The question changed on 2026-08-29 and now needs deciding again.** Steps 4 and 5 are built, but the gate on step 6 cannot be run as written: the MSE path is unreachable on this client, because **Chromium plays HLS natively** and takes step 5's branch every time. Measured — a bare element handed Apple's fMP4 playlist with no library reached `readyState 4`, `480x270`, 12.0s buffered, frames decoded. That contradicts the premise the amendment rests on, and the reason is narrow and real: Chromium cannot demux **MPEG-TS**, which most IPTV *sources* are, and this server does not serve those — `Args` sets `-hls_segment_type fmp4`, which is exactly what Chromium plays. The rule was true about the sources and got generalised to the output, and the output is ours to choose. So the comparison worth making is now **native HLS against MSE**, not either against progressive, and it wants a Firefox — the likely real audience for MSE is a browser with `MediaSource` and no native HLS, which is reasoning rather than a reading |
 | ~~[0048](adr/0048-media-tools-install-themselves-on-first-run.md)~~ | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | **Accepted 2026-08-28, narrower than proposed, and the principle survives.** The tools are a ticked option on the setup form rather than an automatic fetch: pressing *Create account* fetches them, unticking is one click. That serves the inattentive user — the one the ADR was written for — exactly as well, and the traffic follows a button somebody pressed, so no-phone-home keeps its third job and **README is unchanged**. The exception the ADR argued should be written into the principle turned out not to be needed. Not yet built |
 | [0039](adr/0039-organising-a-large-channel-list.md) | 2026-08-17 | How to make **1,862 channels** usable — a `source_id` filter, groups that open rather than filter, per-device hidden/favourite channels | The Live TV page at real size. Nothing is broken and every element works; it is a wall. Step 1 is an API contract change |
 | ~~[0042](adr/0042-two-files-one-work.md)~~ | 2026-08-17 | ~~What happens when **two files claim one work**~~ | **Accepted 2026-08-25 and built.** The collision report exists, the edition marker is kept, and nothing merges, ranks or deletes. This no longer blocks the [ADR 0041](adr/0041-a-misplaced-file-is-corrected-on-disk.md) parser fix |
@@ -1242,9 +1242,24 @@ progressive fMP4 is the default precisely so it does not have to. **That
 amendment was accepted on 2026-08-27** and the rule was satisfied rather than
 relaxed — hls.js is vendored as a bundle reproduced here and verified
 byte-identical to the published one, reviewed and signed. Steps 4 and 5 are
-built and MSE sits behind a device setting that defaults to off. Step 6, which
-flips that default and deletes the compensation code, is gated on somebody
-watching a real channel play.
+built and MSE sits behind a device setting that defaults to off.
+
+**Step 6 is not merely ungated now; it is the wrong question.** It flips the
+default to MSE and deletes the compensation code, and it was waiting on somebody
+watching a real channel play. Somebody has, twice — and both times what played
+was **step 5's native-HLS path**, because Chromium takes it every time. The
+amendment's premise, that a browser needs a third-party library to play HLS at
+all, is true of MPEG-TS sources and false of this server's own fMP4 output.
+
+Two things follow, and neither is a decision this file should make. The
+comparison worth running is native HLS against MSE. And **the sentence in
+CLAUDE.md is now too broad** — it is right about what this build refuses to
+ship and wrong about what a browser can do, and a rule that is wrong in its
+reasoning gets ignored eventually even where it is right.
+
+Recorded rather than acted on, because unvendoring a package that was reproduced
+byte-identically, reviewed and signed is a decision with a cost, and the reading
+that prompted it is one afternoon old.
 
 ## Next planning order
 
