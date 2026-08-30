@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -115,20 +116,51 @@ func (windowsManager) Stop() error {
 	})
 }
 
+/*
+ * Status asks with the least privilege that can answer, which is the whole
+ * point of it not going through withService.
+ *
+ * `mgr.Connect` requests `SC_MANAGER_ALL_ACCESS`, and the service control
+ * manager grants that to administrators only. Every other method here needs it
+ * — installing, starting, deleting are administrator acts and a consent prompt
+ * is the honest cost of them. Reading a state is not, and routing it through
+ * the same door made it fail with **"Access is denied"** on any launch that was
+ * not elevated.
+ *
+ * That is not a cosmetic difference. `installedService()` reads this and treats
+ * an error as *not installed*, so on a normal double-click the launcher decided
+ * there was no service, fell through to its "somebody else holds the name"
+ * branch, opened a browser and exited. **The entire service-aware path was dead
+ * for every unelevated launch**, which is every ordinary one — found only when
+ * a tray icon that was supposed to appear did not, and the browser opened
+ * instead exactly as it always had.
+ *
+ * `SC_MANAGER_CONNECT` plus `SERVICE_QUERY_STATUS` is what an authenticated
+ * user holds by default, and it is enough to answer "is it there, and is it
+ * running".
+ */
 func (windowsManager) Status() (string, error) {
-	var out string
-	err := withService(func(s *mgr.Service) error {
-		st, err := s.Query()
-		if err != nil {
-			return err
-		}
-		out = svcStateName(st.State)
-		return nil
-	})
+	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return "unknown", fmt.Errorf("connect to service manager: %w", err)
+	}
+	defer windows.CloseServiceHandle(scm)
+
+	name, err := windows.UTF16PtrFromString(Name)
 	if err != nil {
 		return "unknown", err
 	}
-	return out, nil
+	h, err := windows.OpenService(scm, name, windows.SERVICE_QUERY_STATUS)
+	if err != nil {
+		return "unknown", fmt.Errorf("service %q is not installed: %w", Name, err)
+	}
+	defer windows.CloseServiceHandle(h)
+
+	var st windows.SERVICE_STATUS
+	if err := windows.QueryServiceStatus(h, &st); err != nil {
+		return "unknown", fmt.Errorf("query service %q: %w", Name, err)
+	}
+	return svcStateName(svc.State(st.CurrentState)), nil
 }
 
 func svcStateName(s svc.State) string {
