@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { QUALITIES, DEFAULTS } from "@/playback/prefs";
 import { SubtitleMenu } from "./SubtitleMenu";
@@ -54,13 +55,26 @@ interface Device {
  * useAudioOutputs lists the output devices, or nothing at all where the engine
  * cannot route audio.
  *
- * Deliberately does not ask for microphone permission. Device *labels* are
- * hidden until a media permission has been granted — a privacy measure, since
- * the list of attached hardware is a fingerprint — so without it the entries
- * are anonymous and get numbered names. Prompting for a microphone in order to
- * name a pair of speakers is a trade this player is not going to ask anyone to
- * make; if the browser already has the permission for another reason, the real
- * names appear.
+ * Deliberately does not ask for microphone permission. Prompting for a
+ * microphone in order to name a pair of speakers is a trade this player is not
+ * going to ask anyone to make; if the browser already has the permission for
+ * another reason, the real devices appear.
+ *
+ * **What that costs was understated, and this is the correction.** The note here
+ * said the entries would be "anonymous and get numbered names", which reads as
+ * a naming problem. Measured in Chromium 148 with the permission denied:
+ *
+ *     audiooutputCount: 1
+ *     outputs: [{ id: "", label: "" }]
+ *
+ * One entry, with an **empty deviceId**. Not several unnamed devices — a single
+ * placeholder standing for "system default", which is what an empty id means to
+ * `setSinkId`. So the picker was not merely unlabelled, it had nothing to offer
+ * and selecting its one option did nothing.
+ *
+ * `withheld` below detects exactly that, so the row can say so instead of
+ * rendering a control that cannot work. Reported as "audio devices only display
+ * output 1", which is precisely what the fallback name made of it.
  */
 function useAudioOutputs(): { devices: Device[]; supported: boolean } {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -85,6 +99,9 @@ function useAudioOutputs(): { devices: Device[]; supported: boolean } {
             .filter((d) => d.kind === "audiooutput")
             .map((d, i) => ({
               id: d.deviceId,
+              // The number is a last resort for a device that is real but
+              // unnamed. A device with no id at all is not real, and `withheld`
+              // catches that before this label is ever shown.
               label: d.label || `Output ${i + 1}`,
             })),
         );
@@ -111,6 +128,7 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
   const pb = usePlayback();
   const { prefs, setPrefs } = pb;
   const { devices, supported: canRoute } = useAudioOutputs();
+  const routable = routableOutputs(devices);
   // The subtitle picker is the existing menu, shown in place of this panel's
   // body rather than reimplemented: it carries online search and deletion, and
   // a second, simpler track list would be a second thing to keep correct.
@@ -201,7 +219,29 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
           </Row>
         )}
 
-        {canRoute && devices.length > 0 && (
+        {/*
+          The browser is hiding the list, which is not the same as there being
+          one device. Saying so beats a picker holding a single entry that means
+          "default" and does nothing when chosen — the shape this was reported
+          as, and the class of fault this project keeps finding: a control whose
+          success is indistinguishable from doing nothing.
+
+          It does not offer to ask. The permission that unlocks the list is the
+          *microphone*, and requesting one to name a pair of speakers is a trade
+          this player does not make on somebody's behalf. What it can do is stop
+          pretending, and say where the choice really lives.
+        */}
+        {canRoute && outputsWithheld(devices) && (
+          <Row label="Audio device">
+            <span className="pbset__note">
+              This browser will not list your audio devices without microphone
+              permission, so there is nothing to choose between here. Audio
+              follows whatever your system sends it to.
+            </span>
+          </Row>
+        )}
+
+        {canRoute && routable.length > 0 && (
           <Row label="Audio device">
             <select
               className="pbset__select"
@@ -209,7 +249,7 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
               onChange={(e) => setPrefs({ audioDevice: e.target.value })}
             >
               <option value="">Auto select device</option>
-              {devices.map((d) => (
+              {routable.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
                 </option>
