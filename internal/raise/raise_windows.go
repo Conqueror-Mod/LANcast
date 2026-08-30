@@ -16,22 +16,36 @@ import (
  * also needs no privilege, where Global does; the singleton mutex has to reach
  * across sessions to find a service and pays for that, and this does not.
  */
-const eventName = `Local\LANcast-Client-Show`
+/*
+ * The two things the server's tray says to the client.
+ *
+ * A variable rather than a constant so a test can take a name of its own. These
+ * are auto-reset events and exactly one waiter wakes per signal, so a test
+ * sharing the real names loses every signal to a client that happens to be
+ * running — which is not a flake but a correct feature behaving correctly
+ * against a test that was not isolated.
+ */
+var eventPrefix = `Local\LANcast-Client`
+
+func showEventName() string { return eventPrefix + "-Show" }
+func quitEventName() string { return eventPrefix + "-Quit" }
 
 /*
  * Auto-reset, so each launch wakes the listener exactly once.
  *
- * CreateEvent takes *manualReset*, and passing 1 there is the opposite of what
- * is wanted: a manual-reset event stays signalled, so the wait returns
- * immediately for ever and the window is foregrounded in a loop — a fix worse
- * than the bug. Written the wrong way round first and caught by the test below,
- * which is why that test asserts nothing arrives unbidden rather than only that
- * signals arrive.
+ * CreateEvent takes *manualReset*, and passing 1 is the opposite of what is
+ * wanted: a manual-reset event stays signalled, so the wait returns immediately
+ * for ever and the window is foregrounded in a loop — a fix worse than the bug.
+ * Written the wrong way round first and caught by a test asserting that nothing
+ * arrives unbidden.
  */
 const manualReset = 0
 
-func signal() error {
-	name, err := windows.UTF16PtrFromString(eventName)
+func signalShow() error { return signal(showEventName()) }
+func signalQuit() error { return signal(quitEventName()) }
+
+func signal(event string) error {
+	name, err := windows.UTF16PtrFromString(event)
 	if err != nil {
 		return err
 	}
@@ -48,25 +62,26 @@ func signal() error {
 	return nil
 }
 
-func listen(show func()) (func(), error) {
-	name, err := windows.UTF16PtrFromString(eventName)
+func listen(show, quit func()) (func(), error) {
+	showH, err := openOwn(showEventName())
 	if err != nil {
 		return func() {}, err
 	}
-	h, err := windows.CreateEvent(nil, manualReset, 0, name)
+	quitH, err := openOwn(quitEventName())
 	if err != nil {
-		return func() {}, fmt.Errorf("raise: %w", err)
+		windows.CloseHandle(showH)
+		return func() {}, err
 	}
 
 	/*
-	 * A second handle purely to wake the waiter on stop.
+	 * One waiter per event rather than WaitForMultipleObjects.
 	 *
-	 * WaitForSingleObject cannot be cancelled, and closing the handle it is
-	 * waiting on is undefined rather than merely rude. Signalling it once and
-	 * having the loop notice it is stopping is the ordinary shape.
+	 * Two goroutines blocked on a handle each is the same cost and reads as
+	 * what it is; a multiple-wait would have to decode which index fired and
+	 * re-arm, which is where this kind of code goes wrong.
 	 */
 	var stopped atomic.Bool
-	go func() {
+	watch := func(h windows.Handle, fn func()) {
 		for {
 			ev, err := windows.WaitForSingleObject(h, windows.INFINITE)
 			if err != nil || ev != windows.WAIT_OBJECT_0 {
@@ -75,13 +90,46 @@ func listen(show func()) (func(), error) {
 			if stopped.Load() {
 				return
 			}
-			show()
+			fn()
 		}
-	}()
+	}
+	go watch(showH, show)
+	go watch(quitH, quit)
 
 	return func() {
 		stopped.Store(true)
-		_ = windows.SetEvent(h)
-		_ = windows.CloseHandle(h)
+		// Wake both so neither goroutine outlives the client holding a handle.
+		_ = windows.SetEvent(showH)
+		_ = windows.SetEvent(quitH)
+		_ = windows.CloseHandle(showH)
+		_ = windows.CloseHandle(quitH)
 	}, nil
+}
+
+func openOwn(event string) (windows.Handle, error) {
+	name, err := windows.UTF16PtrFromString(event)
+	if err != nil {
+		return 0, err
+	}
+	h, err := windows.CreateEvent(nil, manualReset, 0, name)
+	/*
+	 * ERROR_ALREADY_EXISTS comes back *with a valid handle*.
+	 *
+	 * It means the event was opened rather than created, which is an ordinary
+	 * state: a client already running holds these names. Treating it as a
+	 * failure — which the first version of this did — made Listen refuse
+	 * whenever anything else had the name, so the second client to start
+	 * silently could not be raised or quit.
+	 *
+	 * Caught by a test that happened to run on a machine with LANcast open.
+	 * That is luck rather than rigour, and is why the tests below now assert
+	 * against a listener rather than against an empty desktop.
+	 */
+	if err != nil && err != windows.ERROR_ALREADY_EXISTS {
+		return 0, fmt.Errorf("raise: %w", err)
+	}
+	if h == 0 {
+		return 0, fmt.Errorf("raise: no handle for %s", event)
+	}
+	return h, nil
 }

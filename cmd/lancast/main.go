@@ -180,17 +180,34 @@ func runWindow(l *launcher) {
 			 * have made the fix work only for people who had turned on an
 			 * unrelated setting.
 			 */
-			if s, err := raise.Listen(c.Show); err == nil {
+			if s, err := raise.Listen(c.Show, func() {
+				/*
+				 * Told to quit by the server's tray.
+				 *
+				 * The same path the tray item used to take: mark it a real quit
+				 * so close-to-tray does not intercept it and hide the window
+				 * instead — a Quit that hides is the worst version of this
+				 * feature, and the reason `quitting` exists at all.
+				 */
+				quitting = true
+				c.Close()
+			}); err == nil {
 				stopRaise = s
 			}
-			if !prefs.CloseToTray {
-				return
-			}
-			// The tray exists only when close-to-tray is on. An icon that
-			// appears for everyone would be a second thing to explain, and
-			// without the preference there is nothing for it to do.
+			/*
+			 * No tray icon of its own, deliberately.
+			 *
+			 * It used to appear whenever close-to-tray was on, which put a
+			 * *second* LANcast icon in the notification area beside the
+			 * server's — reported as exactly that. The two offered nearly the
+			 * same things, and the server's is the one that persists.
+			 *
+			 * Removing it needed a replacement rather than a deletion: with
+			 * close-to-tray on, the window's X hides rather than closes, so
+			 * this icon was the only way to quit the app at all. The server's
+			 * tray says Open and Quit to it now, through the signal above.
+			 */
 			tray = c
-			runWindowTray(c, &quitting)
 		},
 		// Beside the client's own config, not the server's data directory: this
 		// is one person's session and cache on one machine, and the server's
