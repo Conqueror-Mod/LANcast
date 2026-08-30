@@ -227,7 +227,29 @@ func (m *Manager) reap() {
 	m.mu.Unlock()
 
 	for _, s := range dead {
-		m.log.Debug("reaping idle transcode", "session", s.ID, "item", s.ItemID)
+		/*
+		 * Info, and carrying what the session did with its life.
+		 *
+		 * This is the third birth-at-Info, death-at-Debug pair found in this
+		 * file, and they keep costing the same thing: debug logging is off on a
+		 * normal server, so a run of sessions on one item records every start
+		 * and no ending, and the question "why did this stream stop" has no
+		 * answer anywhere.
+		 *
+		 * It was reached while trying to explain a queue that did not advance
+		 * after a long pause. A thirteen-minute pause against a ten-minute
+		 * timeout produced no reap and no new session, which either means the
+		 * reaper did not take it or something kept touching it — and neither
+		 * could be told from the log, because the only line that distinguishes
+		 * them is this one.
+		 *
+		 * `idle_seconds` rather than a bare notice: the timeout is
+		 * configurable and a session reaped at 601 seconds and one reaped at
+		 * 4,000 are different stories about what the client was doing.
+		 */
+		m.log.Info("reaping idle transcode", "session", s.ID, "item", s.ItemID,
+			"idle_seconds", int(s.Idle().Seconds()),
+			"served_bytes", s.Served())
 		s.Stop()
 		// A session can go idle *because* ffmpeg stopped producing. Whatever it
 		// said on the way out is the explanation, and this is the other path a
