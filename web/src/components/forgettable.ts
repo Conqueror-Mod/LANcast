@@ -12,6 +12,12 @@
  * is added, and the pair is reported — 34 of 43 collisions on a real library
  * were exactly that. Nothing is being chosen between there: one of the two rows
  * describes a file that no longer exists.
+ *
+ * The other case is a work removed outright: a split-cut film replaced by a
+ * single file, both halves deleted, two rows left behind pointing at nothing.
+ * Whether the drive is merely offline is not a question this file can answer,
+ * and it no longer tries — the server checks the location at the moment it is
+ * asked. See the note on forgettable.
  */
 
 import type { CollisionMember } from "@/api/types";
@@ -19,25 +25,29 @@ import type { CollisionMember } from "@/api/types";
 /**
  * forgettable reports whether this member's row can be forgotten.
  *
- * Two conditions, and the second is the safety property rather than a nicety.
+ * The row's own file must be gone, and that is now the whole of it. A present
+ * file's row would be re-added by the next scan, so forgetting it achieves
+ * nothing but confusion.
  *
- * The row's own file must be gone — a present file's row would be re-added by
- * the next scan, so forgetting it achieves nothing but confusion.
+ * **The safety property moved rather than disappeared.** This used to also
+ * require another member to still be present, on the reasoning that a drive
+ * going away takes every copy missing together — so the offer would vanish
+ * exactly when it was dangerous. True, and a proxy: it also refused somebody
+ * who had genuinely deleted both halves of a split-cut film and wanted the
+ * leftover rows gone, which is the first thing it was asked to do.
  *
- * And **another member must still be present**. "Scanning marks missing, never
- * deletes" exists so an unmounted drive cannot destroy library data, and a
- * button that forgets missing rows is exactly the hole that rule fears. When a
- * drive goes away every member of a collision goes missing together, so
- * requiring a surviving sibling means the offer disappears precisely when it
- * would be dangerous — and appears only when the work itself is safe, because
- * some other file still holds it.
+ * The server now measures the real question instead of standing in for it. It
+ * refuses `mode=forget` unless the title's location reads *at this moment*, so
+ * a sleeping drive is answered with `location_unavailable` rather than guessed
+ * at from what else is missing. That is a stronger guarantee than this rule
+ * ever gave, and it is held where it cannot be bypassed.
  */
 export function forgettable(
   members: CollisionMember[],
   member: CollisionMember,
 ): boolean {
-  if (!member.missing) return false;
-  return members.some((m) => m.id !== member.id && !m.missing);
+  void members;
+  return member.missing;
 }
 
 /**

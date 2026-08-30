@@ -35,18 +35,23 @@ describe("forgettable", () => {
   });
 
   /*
-   * The assertion that keeps this from becoming the hole in "scanning marks
-   * missing, never deletes".
+   * A work removed outright, which the first version of this rule refused.
    *
-   * An unmounted drive takes every member of a collision missing at once. If
-   * the offer appeared then, a person tidying up would delete both halves of a
-   * work that is entirely intact and merely offline.
+   * It required a surviving copy, as a proxy for "the drive is still there" —
+   * and the first thing it was asked to do was a split-cut film whose halves
+   * had both been deleted on purpose, where the proxy said no and the person
+   * was right.
+   *
+   * The guarantee moved rather than went: the server refuses `mode=forget`
+   * unless the title's location reads at that moment, so an offline drive is
+   * answered with evidence instead of inference. That is stronger than this
+   * rule ever was, and it cannot be bypassed by a client.
    */
-  it("offers nothing when every copy has gone", () => {
+  it("offers it even when every copy has gone", () => {
     const ms = [member(1, true), member(2, true)];
-    expect(forgettable(ms, ms[0])).toBe(false);
-    expect(forgettable(ms, ms[1])).toBe(false);
-    expect(resolvableByForgetting(ms)).toBe(false);
+    expect(forgettable(ms, ms[0])).toBe(true);
+    expect(forgettable(ms, ms[1])).toBe(true);
+    expect(resolvableByForgetting(ms)).toBe(true);
   });
 
   it("still offers when one of three has gone", () => {

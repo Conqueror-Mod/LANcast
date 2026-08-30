@@ -581,6 +581,41 @@ func TestForgetOnlyAppliesToAMissingFile(t *testing.T) {
 	}
 }
 
+/*
+ * A file is only gone if the place it lived can still be read.
+ *
+ * `missing` says a walk did not find it, which is equally true of every file on
+ * a drive that was asleep. This is the difference, and it is the guarantee that
+ * lets the collision report offer forgetting on a work whose every copy has
+ * gone — a split-cut film replaced by a single file, both halves deleted, two
+ * rows left pointing at nothing. The client used to refuse that case by
+ * requiring a surviving sibling, which was a proxy for this and got the first
+ * real request wrong.
+ */
+func TestForgetRefusesWhenTheLocationCannotBeRead(t *testing.T) {
+	h := newHarness(t)
+
+	gone := h.addFile(t, "Gone.mkv", make([]byte, 16))
+	if err := os.Remove(filepath.Join(h.dir, "Gone.mkv")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.MarkMissing(context.Background(), []int64{gone}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The location goes away, exactly as an unmounted drive does.
+	if err := os.RemoveAll(h.dir); err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, h.do(t, "DELETE", "/api/items/"+itoa(gone)+"?mode=forget", nil),
+		409, "location_unavailable")
+
+	// And the row survived the refusal, which is the whole point.
+	if resp := h.do(t, "GET", "/api/items/"+itoa(gone), nil); resp.StatusCode != 200 {
+		t.Errorf("a refused forget removed the row anyway: %d", resp.StatusCode)
+	}
+}
+
 // Deleting a movie from disk sweeps its companion files — subtitles, nfo,
 // artwork — but never a sibling's files or folder-level art.
 func TestDeleteRemovesSidecars(t *testing.T) {
