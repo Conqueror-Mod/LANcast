@@ -23,12 +23,16 @@ internal/enrich/   metadata enrichment worker
 internal/artwork/  content-addressed image cache
 internal/auth/     password hashing, server-side sessions
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
-internal/transcode/ ffmpeg pipeline: progressive fMP4 and HLS
+internal/transcode/ ffmpeg pipeline: segmented file output and the live path
 internal/subtitle/ discovery, WebVTT conversion
 internal/playlist/ .m3u parsing and import (pure parser + importer)
+internal/livetv/   channel lists and EPG (its own parser, not playlist's)
+internal/together/ synchronised rooms; peer/, presence/, identity/ for other servers
+internal/plugin/   wazero sandbox, deny-by-default capabilities
 internal/api/      HTTP handlers
-internal/web/      embedded client assets
-docs/adr/          decision records (13 and counting — read before re-deciding)
+internal/web/      embedded client assets (React source in web/, built to dist)
+cmd/lancast/       LANcast-Client: the window (clientwindow/, webview2/, certpin/)
+docs/adr/          decision records (50 and counting — read before re-deciding)
 ```
 
 ## Rules
@@ -111,11 +115,15 @@ sibling of the thing callers invalidate: `["items", "infinite"]` is reached by
 `["items"]`, `["items-infinite"]` is not, and the difference is invisible at
 every call site.
 
-**Progressive fMP4 is the default output, and hls.js is deliberately not
-vendored.** The server produces HLS too, but browsers cannot play it without a
-~300KB third-party library that this build will not ship unaudited — that is a
-stated trade (ADR 0013), not an oversight. Do not make HLS the default client
-path by pulling in a dependency.
+**hls.js is for live TV only, and the file path does not touch it.** A film or
+an episode is delivered as segments the browser plays with no third-party
+player library at all (ADR 0013, amended by ADR 0050 — which changed the file
+path and left that part of 0013 standing). hls.js *is* vendored, for live
+channels, behind a setting that is **off by default**; it was built from a
+pinned commit and proven byte-identical to what upstream published before being
+checked in, and it loads as its own chunk. Do not reach for it on the file path,
+and do not add a second third-party player library on the strength of the first
+one existing.
 
 ## Design work
 
@@ -153,9 +161,9 @@ sessions — everything else is repeatable.
 ## Before claiming done
 
 ```bash
-go test ./...          # ~1,270 test funcs
+go test ./...          # ~2,995 test funcs
 go build ./...
-npm --prefix web test  # ~317 client tests, vitest + jsdom
+npm --prefix web test  # ~580 client tests, vitest + jsdom
 ```
 
 All three must pass. The client suite is newer than the rest of this file: it

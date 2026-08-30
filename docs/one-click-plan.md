@@ -1,7 +1,7 @@
 # Updating and starting LANcast without a terminal — plan
 
-Status: **both built** (v0.6.14) · 2026-08-12 · follows [ADR 0022](adr/0022-desktop-modes.md),
-[ADR 0016](adr/0016-release-and-update.md)
+Status: **both built** (v0.6.14) · 2026-08-12 · follows [ADR 0022](adr/0022-client-and-server-executables.md),
+[ADR 0016](adr/0016-packaging-and-distribution.md)
 
 Two complaints, one shape: **the server does work the user cannot see, and then
 waits for them to guess.**
