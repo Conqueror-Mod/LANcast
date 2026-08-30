@@ -210,17 +210,36 @@ later* is strong.
 
 Concretely, in order:
 
-1. **The backfill, on its own.** It is required by B and C′ alike, is useful
-   under A because it makes the library able to say `Aliens — Special Edition`
-   rather than silently dropping the marker, and is the only part with no design
-   question left in it. It carries the two arguments above, both worth a test.
-2. **`complete edition` as a token**, on the same reasoning as the rest of the
-   vocabulary and with the same caveat: the list is a guess about the world, and
-   every addition widens what a title can silently lose. Finding 3 lowers that
-   risk for matched rows and does not remove it for unmatched ones.
+1. **The backfill, on its own.** ✅ **Built.** It is required by B and C′ alike,
+   is useful under A because it makes the library able to say
+   `Aliens — Special Edition` rather than silently dropping the marker, and is
+   the only part with no design question left in it. It carries the two
+   arguments above, both with a test.
+2. **`complete edition` as a token.** ✅ **Built**, on the same reasoning as the
+   rest of the vocabulary and with the same caveat: the list is a guess about
+   the world, and every addition widens what a title can silently lose. Only the
+   two-word form went in — a bare `complete` is a word ordinary titles end with.
+   Finding 3 lowers that risk for matched rows and does not remove it for
+   unmatched ones.
 3. **C′ if and when a second edition pair appears.** One instance is not
    evidence of a pattern, and the model is much easier to argue from three cases
    than from one.
+
+### What building the backfill discovered
+
+The design above assumed an empty string was available as a third state, so that
+a row could record *looked, found nothing* and never be read again. It is not:
+`Edition` is `*string` precisely so that a film with no marker stores **NULL**
+rather than an empty string, and the scanner's own test asserts an unmarked film
+comes back nil.
+
+So NULL means both *no marker* and *never looked*, and the backfill re-reads
+every unmarked film on each scan rather than converging. That was worth pricing
+rather than working around: the candidates come back in one indexed query,
+`media.Parse` is pure string work, and **a film with no marker is not written**
+— so the standing cost is one query and a few milliseconds, against changing a
+documented API contract to avoid it. The backfill therefore runs inside the
+scan, where a completed scan already refreshes the lists it changes.
 
 Nothing here is built. The measurements are, and they are the part that would
 otherwise be assumed.

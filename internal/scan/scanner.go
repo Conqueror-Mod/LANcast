@@ -754,6 +754,20 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 	if err := s.reconcileSerials(ctx, lib); err != nil {
 		s.log.Warn("serial reconciliation failed", "library", lib.ID, "error", err)
 	}
+
+	// Rows written before the edition column existed have never had their
+	// filename read for a marker, and nothing else will ever read it: the
+	// scanner upserts only files whose bytes moved (ADR 0049). This examines
+	// each film once in the life of the library and is a no-op thereafter.
+	//
+	// Non-fatal, like every pass here. An unread marker is a missing label, not
+	// a broken library, and it must not cost a scan that otherwise succeeded.
+	if res, err := BackfillEditions(ctx, s.st, lib.ID); err != nil {
+		s.log.Warn("edition backfill failed", "library", lib.ID, "error", err)
+	} else if res.Marked > 0 {
+		s.log.Info("read edition markers", "library", lib.ID,
+			"examined", res.Examined, "marked", res.Marked)
+	}
 	// After reconciliation, a container left empty by a reinterpretation (a
 	// movie work whose parts became a show's episodes) is an orphan; remove it.
 	if n, err := s.st.PruneEmptyContainers(ctx, lib.ID); err != nil {

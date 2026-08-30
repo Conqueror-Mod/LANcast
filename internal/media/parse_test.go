@@ -950,6 +950,17 @@ func TestSplitEdition(t *testing.T) {
 		{"Blade Runner (Director's Cut)", "Blade Runner", "Director's Cut"},
 		{"Dune [Extended Edition]", "Dune", "Extended Edition"},
 
+		/*
+		 * Added by ADR 0049, from this library's own naming: the file is
+		 * "Final Fantasy VII - Advent Children COMPLETE EDITION (2005)".
+		 *
+		 * Only the two-word form is in the vocabulary. A bare "complete" would
+		 * be a word ordinary titles end with, and the list is a guess about the
+		 * world -- every addition widens what a title can silently lose.
+		 */
+		{"Final Fantasy VII Advent Children COMPLETE EDITION",
+			"Final Fantasy VII Advent Children", "COMPLETE EDITION"},
+
 		// No marker: the title is the title and the edition is empty.
 		{"Fight Club", "Fight Club", ""},
 
@@ -961,6 +972,10 @@ func TestSplitEdition(t *testing.T) {
 		 */
 		{"The Final Cut", "The Final Cut", ""},
 		{"Uncut", "Uncut", ""},
+
+		// And the narrowness of the new token, asserted rather than assumed: a
+		// film whose title merely ends in the word keeps it.
+		{"Mission Complete", "Mission Complete", ""},
 	}
 	for _, c := range cases {
 		title, edition := splitEdition(c.in)
