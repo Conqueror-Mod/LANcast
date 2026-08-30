@@ -3,6 +3,7 @@ package desktopprefs
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -13,14 +14,14 @@ func TestFirstRunIsBothOff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if p.CloseToTray || p.OpenAtLogin {
+	if p.CloseToTray || p.DevTools {
 		t.Errorf("defaults = %+v, want both false", p)
 	}
 }
 
 func TestRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	want := Prefs{CloseToTray: true, OpenAtLogin: true}
+	want := Prefs{CloseToTray: true, DevTools: true}
 	if err := Save(dir, want); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +46,7 @@ func TestMalformedFileYieldsDefaultsAndAnError(t *testing.T) {
 	if err == nil {
 		t.Error("a malformed file returned no error; the failure needs a voice")
 	}
-	if p.CloseToTray || p.OpenAtLogin {
+	if p.CloseToTray || p.DevTools {
 		t.Errorf("malformed file yielded %+v, want defaults", p)
 	}
 }
@@ -58,7 +59,7 @@ func TestSaveReplacesAtomicallyAndLeavesNoTemp(t *testing.T) {
 	if err := Save(dir, Prefs{CloseToTray: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(dir, Prefs{OpenAtLogin: true}); err != nil {
+	if err := Save(dir, Prefs{DevTools: true}); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -71,8 +72,8 @@ func TestSaveReplacesAtomicallyAndLeavesNoTemp(t *testing.T) {
 		}
 	}
 	got, _ := Load(dir)
-	if got != (Prefs{OpenAtLogin: true}) {
-		t.Errorf("after second save = %+v, want only OpenAtLogin", got)
+	if got != (Prefs{DevTools: true}) {
+		t.Errorf("after second save = %+v, want only DevTools", got)
 	}
 }
 
@@ -85,5 +86,33 @@ func TestEmptyDirLoadsDefaults(t *testing.T) {
 	}
 	if err := Save("", Prefs{}); err == nil {
 		t.Error("Save(\"\") returned no error; writing nowhere should say so")
+	}
+}
+
+/*
+ * "Open at login" is not kept here, and that is the point.
+ *
+ * It used to be a field, written and never read: the run key is what actually
+ * starts anything at login, the settings page reads that, and this file only
+ * recorded what somebody last asked for through this one program. The server's
+ * tray writes the run key too and never touched this file, so the two drifted —
+ * found on a real install as `open_at_login: true` beside no run-key entry at
+ * all.
+ *
+ * A second copy of a fact, kept by one of its two owners, can only go out of
+ * date. This asserts the copy is gone rather than trusting nobody re-adds it.
+ */
+func TestOpenAtLoginIsNotStoredHere(t *testing.T) {
+	dir := t.TempDir()
+	if err := Save(dir, Prefs{CloseToTray: true, DevTools: true}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "desktop.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "open_at_login") {
+		t.Errorf("the preferences file records open_at_login again:\n%s\n\n"+
+			"the run key is the fact; a copy here can only disagree with it", b)
 	}
 }

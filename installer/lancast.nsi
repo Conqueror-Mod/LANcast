@@ -197,7 +197,12 @@ Section "Uninstall"
   ; other accounts on a shared machine, are not reached — the entry is per user
   ; and there is no machine-wide place to sweep. Those users' clients rewrite or
   ; clear their own key the next time they touch the setting.
+  ; Both run-key values. The client and the server tray each own one since
+  ; they stopped sharing a name (internal/autostart); deleting only the old
+  ; one would leave an entry pointing at a removed executable, which is a
+  ; login error dialog every morning with nothing obvious to blame.
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast Tray"
 
   DeleteRegKey HKLM "${UNINST_KEY}"
 

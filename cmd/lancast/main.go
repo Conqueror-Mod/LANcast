@@ -326,7 +326,7 @@ func (l *launcher) desktopBindings() map[string]any {
 			// it, a profile is copied between machines — and the registry is the
 			// one that decides what actually happens at login. Showing the file
 			// would be showing an intention rather than a fact.
-			atLogin, autoErr := autostart.Enabled()
+			atLogin, autoErr := autostart.Enabled(autostart.Client)
 			state := map[string]any{
 				// What this window is, so the page can compare it with what the
 				// server says it is.
@@ -378,7 +378,7 @@ func (l *launcher) desktopBindings() map[string]any {
 			if err := applyAutostart(openAtLogin); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
-			p := desktopprefs.Prefs{CloseToTray: closeToTray, OpenAtLogin: openAtLogin, DevTools: devTools}
+			p := desktopprefs.Prefs{CloseToTray: closeToTray, DevTools: devTools}
 			if err := desktopprefs.Save(dir, p); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
@@ -595,13 +595,13 @@ func (l *launcher) serverHolder() string {
 // wrong interface would look like a different bug entirely.
 func applyAutostart(on bool) error {
 	if !on {
-		return autostart.Disable()
+		return autostart.Disable(autostart.Client)
 	}
 	var args []string
 	if browserMode {
 		args = append(args, "-browser")
 	}
-	return autostart.Enable(args...)
+	return autostart.Enable(autostart.Client, args...)
 }
 
 /*
