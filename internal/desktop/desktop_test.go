@@ -1,10 +1,12 @@
 package desktop
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUIURL(t *testing.T) {
@@ -91,5 +93,65 @@ func TestResolvedURLKeepsHTTPWhenThatIsWhatServes(t *testing.T) {
 	addr := strings.TrimPrefix(srv.URL, "http://")
 	if got := ResolvedURL(addr); !strings.HasPrefix(got, "http://") {
 		t.Errorf("ResolvedURL = %q, want http", got)
+	}
+}
+
+/*
+ * A server that is still coming up is waited for, not guessed at.
+ *
+ * ResolvedURL probes once with a short timeout and falls back to a plain guess
+ * when nothing answers. The window then loads that guess, it fails, and nothing
+ * retries — reported after an install as a window showing nothing but its
+ * background, cured by closing it and opening it again.
+ *
+ * The install case is precisely when the server is busy: the installer starts
+ * the service and launches the client at it in the same breath. So the property
+ * that matters is that waiting actually notices a server which arrives late,
+ * rather than sampling once and giving up.
+ */
+func TestWaitForServerNoticesOneThatArrivesLate(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close() // nothing is listening yet
+
+	srv := &http.Server{Addr: addr, Handler: http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			return
+		}
+		_ = srv.Serve(l)
+	}()
+	defer srv.Close()
+
+	if !WaitForServer(addr, 10*time.Second) {
+		t.Error("a server that came up 300ms late was never noticed — this is " +
+			"the install case, where the client is launched at a service that " +
+			"is still starting")
+	}
+}
+
+// And it gives up rather than hanging for ever on an address nothing will ever
+// answer, because a window that never opens is worse than one that opens onto
+// the server's own unreachable state.
+func TestWaitForServerGivesUp(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	start := time.Now()
+	if WaitForServer(addr, 600*time.Millisecond) {
+		t.Error("reported a server on an address nothing is listening on")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("waited %v for a 600ms timeout", elapsed)
 	}
 }
