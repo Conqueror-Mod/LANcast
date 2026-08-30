@@ -9,8 +9,8 @@ import "errors"
 // clientwindow uses for a platform without a web view.
 var ErrUnsupported = errors.New("autostart: not supported on this platform")
 
-func enabled() (bool, error) { return false, nil }
+func enabled(Target) (bool, error) { return false, nil }
 
-func enable(args ...string) error { return ErrUnsupported }
+func enable(Target, ...string) error { return ErrUnsupported }
 
-func disable() error { return nil }
+func disable(Target) error { return nil }

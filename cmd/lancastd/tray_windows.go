@@ -267,7 +267,7 @@ func runServiceTray(addr string, svc serviceState) error {
 		mQuit := systray.AddMenuItem("Exit",
 			"Close the LANcast app and remove this icon. The LANcast server keeps running.")
 
-		if on, err := autostart.Enabled(); err == nil && on {
+		if on, err := autostart.Enabled(autostart.Tray); err == nil && on {
 			mLogin.Check()
 		}
 
@@ -341,7 +341,7 @@ func openPane(addr, pane string, log *slog.Logger) {
  */
 func toggleLogin(item *systray.MenuItem, log *slog.Logger) {
 	if item.Checked() {
-		if err := autostart.Disable(); err != nil {
+		if err := autostart.Disable(autostart.Tray); err != nil {
 			log.Warn("could not disable autostart", "error", err)
 			return
 		}
@@ -350,7 +350,7 @@ func toggleLogin(item *systray.MenuItem, log *slog.Logger) {
 	}
 	// The same arguments this launch used, or the icon comes back at login
 	// pointed at a different data directory from the one it is controlling.
-	if err := autostart.Enable("tray"); err != nil {
+	if err := autostart.Enable(autostart.Tray, "tray"); err != nil {
 		log.Warn("could not enable autostart", "error", err)
 		return
 	}

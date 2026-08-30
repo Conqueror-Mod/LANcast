@@ -31,8 +31,19 @@ const FileName = "desktop.json"
 type Prefs struct {
 	// CloseToTray hides the window instead of quitting when it is closed.
 	CloseToTray bool `json:"close_to_tray"`
-	// OpenAtLogin starts the client when the user signs in to Windows.
-	OpenAtLogin bool `json:"open_at_login"`
+	/*
+	 * OpenAtLogin is deliberately absent.
+	 *
+	 * It used to live here and was **written and never read**: the run key is
+	 * what actually starts anything at login, the settings page reads that, and
+	 * this field only ever recorded what somebody last asked for through this
+	 * one program. The tray writes the run key too and never touched this file,
+	 * so the two drifted — found on a real install as `open_at_login: true`
+	 * beside no run-key entry at all.
+	 *
+	 * A second copy of a fact, kept by one of its two owners, can only ever go
+	 * out of date. The registry is the fact.
+	 */
 	/*
 	 * DevTools opens the web view's inspector with the window.
 	 *
