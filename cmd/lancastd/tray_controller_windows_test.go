@@ -106,3 +106,48 @@ func TestTheAppIsFoundBesideTheServer(t *testing.T) {
 		t.Error("the app is not resolved beside the server executable")
 	}
 }
+
+/*
+ * Exit closes the app as well as the icon.
+ *
+ * It used to remove only the icon, leaving this process — which runs out of the
+ * install directory — resident. Reported as closing LANcast from the tray and
+ * finding the processes still running, which then fouled the next update: a
+ * held image in Program Files is exactly what an update has to move aside.
+ *
+ * The complaint underneath was a fair reading of the menu. "Quit the LANcast
+ * app" and "Exit" were two partial endings, and neither was the one somebody
+ * means by closing LANcast.
+ */
+func TestExitAlsoClosesTheApp(t *testing.T) {
+	src := traySource(t)
+	i := strings.Index(src, "func runServiceTray")
+	if i < 0 {
+		t.Fatal("the controller tray is gone")
+	}
+	body := src[i:]
+
+	j := strings.Index(body, "case <-mQuit.ClickedCh:")
+	if j < 0 {
+		t.Fatal("no Exit handler")
+	}
+	handler := body[j:]
+	k := strings.Index(handler, "systray.Quit()")
+	if k < 0 {
+		t.Fatal("Exit no longer removes the icon")
+	}
+
+	/*
+	 * Before systray.Quit, not after. Once that has run this process is on its
+	 * way out, and a Quit sent from a dying process is a race nobody needs to
+	 * debug.
+	 */
+	q := strings.Index(handler, "raise.Quit()")
+	if q < 0 {
+		t.Error("Exit removes the icon without closing the app, which leaves " +
+			"this process holding its image in the install directory")
+	} else if q > k {
+		t.Error("Exit asks the app to quit only after starting its own " +
+			"shutdown, which is a race rather than an ordering")
+	}
+}
