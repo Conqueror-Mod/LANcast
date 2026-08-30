@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lancast/internal/media"
+	"lancast/internal/scan"
 	"lancast/internal/store"
 )
 
@@ -133,6 +134,33 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "not_missing",
 			"this file is still on disk, so there is nothing to forget; remove it from the library instead")
 		return
+	}
+	/*
+	 * And the location has to be readable *now*.
+	 *
+	 * `missing` says a walk did not find the file, which is also true of every
+	 * file on a drive that was asleep at the time. This is the difference: a
+	 * location that reads fine and does not hold the file is evidence the file
+	 * has gone.
+	 *
+	 * It replaces a weaker proxy. The collision report used to offer this only
+	 * where another copy of the work survived, on the reasoning that a drive
+	 * going away takes every copy missing together — which is true, and also
+	 * refused the case where somebody had genuinely deleted both halves of a
+	 * split-cut film and wanted the leftover rows gone. Measuring the drive
+	 * answers the real question instead of standing in for it.
+	 */
+	if mode == "forget" {
+		root, err := s.st.RootForItem(r.Context(), id)
+		if err != nil {
+			s.writeInternal(w, err, "root for item")
+			return
+		}
+		if err := scan.CheckRoot(root.Path); err != nil {
+			writeError(w, http.StatusConflict, "location_unavailable",
+				"this title's location cannot be read, so the file may simply be offline rather than gone; nothing was forgotten")
+			return
+		}
 	}
 
 	targets, err := s.st.ItemSubtree(r.Context(), id)

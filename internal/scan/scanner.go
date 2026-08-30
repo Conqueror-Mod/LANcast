@@ -384,6 +384,17 @@ func (s *Scanner) recordIssue(p *Progress, root, path, reason string) {
  * for an empty directory, and only the root's own existence tells the two
  * apart.
  */
+/*
+ * CheckRoot reports whether a library location can be read right now.
+ *
+ * Exported because it is the only honest answer to "is this file really gone,
+ * or is the drive asleep" — and that question is asked outside a scan too. The
+ * API asks it before letting somebody forget a missing row: a location that
+ * reads fine and does not hold the file is evidence the file has gone, where
+ * `missing` alone is only evidence that a walk did not find it.
+ */
+func CheckRoot(root string) error { return checkRoot(root) }
+
 func checkRoot(root string) error {
 	st, err := os.Stat(root)
 	if err != nil {

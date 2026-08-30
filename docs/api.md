@@ -1250,7 +1250,8 @@ Removes a title. **Admin only.** `mode` is required:
   already gone is not an error.
 - `forget` — the row goes and nothing else happens: no file is touched and **no
   path is ignored**. `409 not_missing` unless the item is already marked
-  missing.
+  missing, and `409 location_unavailable` unless the title's library location
+  can be read at that moment.
 
 A container (a show, a multi-part work) removes its whole subtree — every
 episode or part. A collection is a grouping with no file of its own, so
@@ -1266,13 +1267,26 @@ API removes an entry. Clearing those rows with `ignore` would write permanent,
 invisible entries for paths that do not exist, and silently refuse those names
 if a backup ever restored them.
 
-**The `409` is a safety property, not validation.** Scanning marks rows missing
-rather than deleting them so that an unmounted drive cannot destroy library
+**The two `409`s are safety properties, not validation.** Scanning marks rows
+missing rather than deleting them so an unmounted drive cannot destroy library
 data, and a mode that forgets rows on demand must not become the hole in that.
-A present file's row cannot be forgotten — a rescan would re-add it anyway.
-Clients are expected to go further and offer this only where **another member of
-the same collision is still present**, because a drive going away takes every
-member missing at once.
+
+`not_missing` is the simpler half: a present file's row cannot be forgotten,
+because a rescan would re-add it anyway.
+
+`location_unavailable` is the one that matters. `missing` records that a walk
+did not find the file — which is equally true of every file on a drive that was
+asleep at the time. So the location is checked **at the moment of the request**:
+one that reads fine and does not hold the file is evidence the file has gone,
+where `missing` alone is only evidence that a walk did not see it.
+
+This replaced a weaker client-side rule, which offered forgetting only where
+another member of the same collision was still present, on the reasoning that a
+drive going away takes every member missing at once. True, and a proxy — it also
+refused a split-cut film whose halves had both been deleted on purpose, leaving
+two rows pointing at nothing and no way to clear them. Measuring the location
+answers the question the proxy was standing in for, and does it where a client
+cannot bypass it.
 
 ---
 
