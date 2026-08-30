@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { useCollisions, useCompareCollision, useDeleteItem } from "@/api/hooks";
+import {
+  useCollisions,
+  useCompareCollision,
+  useDeleteItem,
+  useDismissCollision,
+} from "@/api/hooks";
 import { forgettable } from "./forgettable";
 import { useFocusable } from "@/focus/FocusController";
 import type { Collision, CollisionMember } from "@/api/types";
@@ -139,9 +144,12 @@ function CollisionCard({ collision }: { collision: Collision }) {
   );
   const shown = compared ?? collision;
   const compare = useFocusable(() => setComparing(true));
+  const dismiss = useDismissCollision();
+  const ids = collision.members.map((m) => m.id);
+  const isDismissed = collision.dismissed_at != null;
 
   return (
-    <div className="collide">
+    <div className={"collide" + (isDismissed ? " collide--dismissed" : "")}>
       <div className="collide__head">
         <span className="collide__title">{collision.members[0]?.title}</span>
         <span className="collide__count">
@@ -160,6 +168,30 @@ function CollisionCard({ collision }: { collision: Collision }) {
       </ul>
 
       <div className="collide__verdict">
+        {/*
+          Answering the report, which it previously had no way to be.
+          
+          ADR 0042 decided a shared identity is reported and never resolved, and
+          this resolves nothing: no merge, no ranking, no deletion, and both
+          files stay exactly where they are. It records that somebody looked —
+          which the report could not represent, so a film in two parts was
+          listed again every time this page opened, for ever.
+
+          It says "I have looked at this" rather than "dismiss", because the
+          former is what the button means and the latter sounds like the entry
+          was wrong to be here.
+        */}
+        <button
+          type="button"
+          className="collide__seen"
+          disabled={dismiss.isPending}
+          onClick={() =>
+            dismiss.mutate({ itemIDs: ids, restore: isDismissed })
+          }
+        >
+          {isDismissed ? "Show this again" : "I have looked at this"}
+        </button>
+
         {/*
           Size first, because it is free and the negative answer is the strong
           one: different sizes rule out a copy outright, where equal sizes only
@@ -213,6 +245,19 @@ function CollisionCard({ collision }: { collision: Collision }) {
 export function Collisions({ enabled }: { enabled: boolean }) {
   const { data, isLoading } = useCollisions(enabled);
   const collisions = data?.collisions ?? [];
+  /*
+   * Looked-at entries move out of the way rather than disappearing.
+   *
+   * The count in the heading is of the ones still wanting attention, which is
+   * the number this section exists to make small. The rest stay reachable
+   * behind a toggle that says how many there are — an action that removes
+   * something with no trace is one nobody can check or undo, which is the
+   * failure this report already had in the other direction.
+   */
+  const [showSeen, setShowSeen] = useState(false);
+  const open = collisions.filter((c) => c.dismissed_at == null);
+  const seen = collisions.filter((c) => c.dismissed_at != null);
+  const listed = showSeen ? seen : open;
 
   if (!enabled || isLoading || collisions.length === 0) return null;
 
@@ -221,7 +266,7 @@ export function Collisions({ enabled }: { enabled: boolean }) {
       <div className="review__head">
         <span className="section-label">Two files, one work</span>
         <span className="review__rule" />
-        <span className="review__count">{collisions.length}</span>
+        <span className="review__count">{open.length}</span>
       </div>
       <p className="review__lead">
         These works are claimed by more than one file. LANcast does not merge,
@@ -229,11 +274,30 @@ export function Collisions({ enabled }: { enabled: boolean }) {
         second edition, one film in two parts, or a file that is simply wrong
         about what it is, and only you can tell which.
       </p>
+      {seen.length > 0 && (
+        <button
+          type="button"
+          className="collide__seen collide__seen-toggle"
+          onClick={() => setShowSeen((v) => !v)}
+        >
+          {showSeen
+            ? `Back to the ${open.length} still to look at`
+            : `${seen.length} you have looked at`}
+        </button>
+      )}
+
       <div className="collide-list">
-        {collisions.map((c) => (
+        {listed.map((c) => (
           <CollisionCard key={`${c.provider}:${c.external_id}`} collision={c} />
         ))}
       </div>
+      {listed.length === 0 && (
+        <p className="review__lead">
+          {showSeen
+            ? "Nothing here."
+            : "Every one of these has been looked at."}
+        </p>
+      )}
     </section>
   );
 }

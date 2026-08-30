@@ -193,3 +193,40 @@
   font-size: 12px;
   color: var(--text-faint);
 }
+
+/* A collision somebody has looked at. Dimmed rather than hidden or restyled:
+   it is the same information, no longer asking for attention. Never gold —
+   gold means where you are (docs/design.md). */
+.collide--dismissed {
+  opacity: 0.55;
+}
+
+.collide--dismissed:hover,
+.collide--dismissed:focus-within {
+  opacity: 1;
+}
+
+/* Its own class rather than .collide__compare, which is a different act: one
+   reads bytes off the disk, this records that a person looked. Sharing the
+   class made every test that reaches for "the compare button" pick this one
+   instead — two controls that mean different things should not answer to the
+   same name. */
+.collide__seen {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius, 6px);
+  border: 1px solid var(--line, #2a3346);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.collide__seen:hover,
+.collide__seen:focus-visible {
+  color: var(--text);
+  border-color: var(--line-strong, #3a4560);
+}
+
+.collide__seen-toggle {
+  margin: 0 0 12px;
+}

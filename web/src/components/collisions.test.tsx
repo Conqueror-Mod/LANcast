@@ -52,7 +52,12 @@ const renamed = {
   ],
 };
 
-function stub(compareAnswer?: Record<string, unknown>, use = pair) {
+// `use` is loosely typed so a test can add a field the fixture does not carry
+// — dismissed_at arrives from the server and the literal above predates it.
+function stub(
+  compareAnswer?: Record<string, unknown>,
+  use: Record<string, unknown> = pair,
+) {
   asked = [];
   vi.stubGlobal(
     "fetch",
@@ -143,8 +148,17 @@ describe("two files, one work", () => {
     for (const forbidden of ["merge", "delete", "remove", "keep", "hide", "ignore"]) {
       expect(labels.join(" "), `offers to ${forbidden}`).not.toContain(forbidden);
     }
-    // The only control reads bytes.
-    expect(labels).toEqual(["compare bytes"]);
+    /*
+     * Exhaustive, so a resolving control cannot arrive unnoticed under a name
+     * the list above does not forbid.
+     *
+     * "I have looked at this" is not a resolution and is why the list has two
+     * entries rather than one: nothing is merged, ranked or deleted, both files
+     * stay exactly where they are, and the only thing recorded is that somebody
+     * read the page. The report previously had no way to represent that, so a
+     * film in two parts was listed again every time it opened.
+     */
+    expect(labels).toEqual(["i have looked at this", "compare bytes"]);
   });
 
   /*
@@ -276,5 +290,41 @@ describe("forgetting a leftover row", () => {
     const sent = asked.find((a) => a.startsWith("DELETE"));
     expect(sent).toContain("mode=forget");
     expect(sent).toContain("/api/items/41");
+  });
+});
+
+/*
+ * Answering the report.
+ *
+ * ADR 0042's decision is that a shared identity is reported and never resolved,
+ * and the tests above guard that. This is the half it left out: a person who
+ * has looked and decided the pair is fine had no way to say so, so a film in
+ * two parts was listed again every time this page opened, for ever. A report
+ * that cannot be answered is one people stop reading, and that cost falls on
+ * the entries which do want attention.
+ */
+describe("looking at a collision", () => {
+  it("sends the members rather than a handle", async () => {
+    stub();
+    await render();
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".collide__seen")!.click();
+    });
+    await new Promise((r) => setTimeout(r, 5));
+
+    const sent = asked.find((u) => u.includes("/collisions/dismiss"));
+    expect(sent).toBeTruthy();
+  });
+
+  it("keeps a looked-at collision reachable rather than deleting it", async () => {
+    // Shown behind a toggle that says how many there are. An action that
+    // removes something with no trace cannot be checked or undone, which is the
+    // failure this report already had in the other direction.
+    stub(undefined, { ...pair, dismissed_at: 1_700_000_000 });
+    await render();
+
+    expect(host.textContent).toContain("you have looked at");
+    // And not in the count of things still wanting attention.
+    expect(host.querySelector(".review__count")?.textContent).toBe("0");
   });
 });

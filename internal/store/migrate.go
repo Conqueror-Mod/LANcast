@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 32
+const CurrentSchemaVersion = 33
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -71,6 +71,7 @@ var migrations = []migration{
 	{version: 30, sql: schemaRevision30},
 	{version: 31, sql: schemaRevision31},
 	{version: 32, sql: schemaRevision32},
+	{version: 33, sql: schemaRevision33},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1155,4 +1156,34 @@ UPDATE playback_state SET watch_count = 1 WHERE watched = 1;
 const schemaRevision32 = `
 ALTER TABLE profile_totals ADD COLUMN viewings INTEGER NOT NULL DEFAULT 0;
 UPDATE profile_totals SET viewings = finished;
+`
+
+/*
+ * Revision 33 — a collision somebody has looked at can stop being listed.
+ *
+ * The report exists so a human decides ([ADR 0042](../../docs/adr/0042-two-files-one-work.md)),
+ * and it had no way to record that one had. So a pair examined once, judged
+ * fine — a film in two parts, a second edition kept on purpose — was listed
+ * again every time the page opened, for ever. A report that cannot be answered
+ * is one people learn to stop reading, which costs the entries that *do* want
+ * attention.
+ *
+ * **Keyed on the members, not on the work.** `members` is the row ids of the
+ * collision, sorted and joined, so a dismissal describes exactly the set
+ * somebody accepted. Add a third copy of that film and the key no longer
+ * matches, the collision reappears, and it reappears for the right reason:
+ * what is being reported is new. Keying on `(provider, external_id, …)`
+ * instead would have hidden that silently, which is the failure this whole
+ * report exists to prevent.
+ *
+ * A dismissal outlives the rows it names only in the sense that a stale key
+ * matches nothing and is never consulted. Nothing prunes them, deliberately:
+ * they are a few dozen short strings, and a person restoring a dismissal is
+ * more likely than a database growing on them.
+ */
+const schemaRevision33 = `
+CREATE TABLE IF NOT EXISTS dismissed_collision (
+    members      TEXT PRIMARY KEY,
+    dismissed_at INTEGER NOT NULL
+);
 `

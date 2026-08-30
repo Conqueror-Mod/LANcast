@@ -2812,6 +2812,37 @@ discs, and a 1989 film wearing a 2022 film's identity from a stale `.nfo`.
 **label, never a grouping key**: the file that motivated the decision called
 itself an alternate cut and was byte-for-byte the theatrical copy.
 
+`dismissed_at` is when somebody looked at exactly these members and accepted
+them. Present on the collision rather than filtering it out of the listing, so a
+client can show it as answered rather than as gone — see the endpoint below.
+
+### `POST /api/collisions/dismiss`
+
+Records that a person has looked at a collision, or takes that back. Admin only.
+`204` on success.
+
+```json
+{ "item_ids": [41, 88] }
+{ "item_ids": [41, 88], "restore": true }
+```
+
+**This is not a resolution and does not weaken ADR 0042.** Nothing is merged,
+ranked or deleted; both files stay exactly where they are. What it records is
+that somebody read the page — which the report could not represent, so a film in
+two parts was listed again every time it was opened, for ever. A report that
+cannot be answered is one people stop reading, and that cost falls on the
+entries which do want attention.
+
+**Keyed on the members, not on the work.** The ids are sorted and stored as the
+key, so a dismissal describes exactly the set somebody saw. Add a third copy of
+that film and the key no longer matches, the collision reappears — and it
+reappears for the right reason, because what is being reported is new. Keying on
+`(provider, external_id, …)` would have hidden that silently, which is the
+failure this report exists to prevent.
+
+`400` for fewer than two ids: that is not a collision, and recording it would
+leave a key nothing can ever match.
+
 **Duration is deliberately not reported.** `duration_ms` is overwritten with the
 provider's runtime on match, so two rows sharing an id always report identical
 durations whatever the files hold — including the misfile above, where one film

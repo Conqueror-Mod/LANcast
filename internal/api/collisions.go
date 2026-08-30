@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -78,13 +80,18 @@ func (s *Server) collisions(w http.ResponseWriter, r *http.Request) {
 		 * that authorises a delete.
 		 */
 		SameBytes *bool `json:"same_bytes,omitempty"`
+		// When somebody looked at exactly these rows and accepted them.
+		// Carried rather than filtered away: a dismissal that removes an entry
+		// with no trace is indistinguishable from the entry never existing.
+		DismissedAt *int64 `json:"dismissed_at,omitempty"`
 	}
 
 	rows := make([]collision, 0, len(found))
 	for _, c := range found {
 		row := collision{
 			Provider: c.Provider, ExternalID: c.ExternalID, SameSize: c.SameSize,
-			Members: make([]member, 0, len(c.Members)),
+			DismissedAt: c.DismissedAt,
+			Members:     make([]member, 0, len(c.Members)),
 		}
 		wanted := compare != "" && compare == c.ExternalID
 
@@ -148,4 +155,42 @@ func (s *Server) fingerprintItem(r *http.Request, id int64) (string, bool) {
 		return "", false
 	}
 	return fp.Hash, true
+}
+
+/*
+ * Answering the report.
+ *
+ * ADR 0042 decided a shared identity is reported and never resolved, and this
+ * does not resolve one: nothing is merged, ranked or deleted, and both files
+ * stay exactly as they are. It records that a person looked.
+ *
+ * The members travel in the body rather than an opaque id in the path, because
+ * that is what a dismissal is *about*. A handle would have to be minted, stored
+ * and kept in step with a set that changes whenever a copy is added or removed
+ * — and the whole point is that a changed set is a different collision.
+ */
+func (s *Server) dismissCollision(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ItemIDs []int64 `json:"item_ids"`
+		Restore bool    `json:"restore"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "expected {item_ids: [...]}")
+		return
+	}
+	if req.Restore {
+		if err := s.st.RestoreCollision(r.Context(), req.ItemIDs); err != nil {
+			s.writeInternal(w, err, "restore collision")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := s.st.DismissCollision(r.Context(), req.ItemIDs, time.Now().Unix()); err != nil {
+		// The one refusal is a set of fewer than two, which is not a collision
+		// and would leave a key nothing can ever match.
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

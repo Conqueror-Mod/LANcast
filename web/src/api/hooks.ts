@@ -781,6 +781,35 @@ export function useTrailer(id: number) {
  * caller rather than guarded here, so a member never fires a request that is
  * going to 403.
  */
+/**
+ * Record that somebody has looked at exactly these rows, or take it back.
+ *
+ * Not a resolution: nothing is merged, ranked or deleted and both files stay
+ * where they are (ADR 0042). It answers a report that previously could not be
+ * answered, which is what made it something to scroll past.
+ *
+ * The members are the argument rather than a handle, because a dismissal is
+ * about that exact set — add a copy and it is a different collision, and the
+ * server keys it that way so it comes back.
+ */
+export function useDismissCollision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { itemIDs: number[]; restore?: boolean }) =>
+      apiSend("/api/collisions/dismiss", "POST", {
+        item_ids: v.itemIDs,
+        restore: v.restore ?? false,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["collisions"] });
+      // The review page shows a count of these, and a card that vanishes while
+      // the heading still counts it is the stale-view bug this project keeps
+      // shipping — in the one place somebody is looking straight at both.
+      qc.invalidateQueries({ queryKey: ["review"] });
+    },
+  });
+}
+
 export function useCollisions(enabled: boolean) {
   return useQuery({
     queryKey: ["collisions"],

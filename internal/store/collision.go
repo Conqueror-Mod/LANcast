@@ -75,6 +75,15 @@ type Collision struct {
 	 * needs no I/O.
 	 */
 	SameSize bool `json:"same_size"`
+	/*
+	 * When somebody looked at exactly these rows and accepted them, or nil.
+	 *
+	 * Carried rather than filtered away, so the caller can decide whether to
+	 * show it. A dismissal that removes an entry with no trace is the shape
+	 * this project keeps finding fault with: an action whose result is
+	 * indistinguishable from the thing never having existed.
+	 */
+	DismissedAt *int64 `json:"dismissed_at,omitempty"`
 }
 
 /*
@@ -183,8 +192,29 @@ func (s *Store) Collisions(ctx context.Context, libraryID int64) ([]Collision, e
 		return nil, fmt.Errorf("collisions: %w", err)
 	}
 
+	dismissed, err := s.dismissedKeys(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].SameSize = sameSize(out[i].Members)
+		/*
+		 * Matched on the exact member set, which is what makes a dismissal
+		 * describe what somebody actually saw.
+		 *
+		 * Add a third copy of a film whose pair was accepted and the key stops
+		 * matching, so it comes back — and it comes back for the right reason:
+		 * what is being reported is new. Keying on the work would have hidden
+		 * that silently, which is the failure this report exists to prevent.
+		 */
+		ids := make([]int64, len(out[i].Members))
+		for j, m := range out[i].Members {
+			ids[j] = m.ID
+		}
+		if at, ok := dismissed[dismissKey(ids)]; ok {
+			v := at
+			out[i].DismissedAt = &v
+		}
 	}
 	return out, nil
 }
