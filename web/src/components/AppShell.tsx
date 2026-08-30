@@ -4,6 +4,7 @@ import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
   useLibraries,
   useReview,
+  useCollisions,
   useCurrentUser,
   useLogout,
   useIsAdmin,
@@ -94,7 +95,31 @@ export function AppShell({ children }: { children: ReactNode }) {
   const logout = useLogout();
   const location = useLocation();
   const isAdmin = useIsAdmin();
+
+  /*
+   * The Review screen holds two queues, so its way in has to count both.
+   *
+   * The match queue empties; the collision report does not empty on its own,
+   * because a shared identity is reported and never resolved (ADR 0042). So a
+   * library with nothing left to confirm and two files still claiming one work
+   * had its only link to that report disappear — the screen itself had
+   * anticipated exactly this ("Nothing to review would be a lie with a
+   * collision report below it") while the nav that reaches it had not.
+   *
+   * Admin-only, because the report returns paths and the server refuses it to
+   * anyone else: counting it for a member would badge a screen whose contents
+   * they cannot be shown, and fire a 403 to find that out.
+   *
+   * Dismissed rows are excluded rather than merely styled. Being able to answer
+   * the report is the whole of v0.8.29, and a badge that keeps counting what
+   * somebody has already accepted takes it straight back.
+   */
+  const { data: collisions } = useCollisions(isAdmin);
+  const openCollisions = (collisions?.collisions ?? []).filter(
+    (c) => !c.dismissed_at,
+  ).length;
   const reviewCount = review?.total ?? 0;
+  const needsALook = reviewCount + openCollisions;
   const navigate = useNavigate();
 
   // The tooltip names the shortcut, so it reads the binding rather than a
@@ -342,14 +367,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SearchGlyph />
             <span>Search</span>
           </NavLink>
-          {reviewCount > 0 && (
+          {needsALook > 0 && (
             <NavLink
               to="/review"
               className={({ isActive }) =>
                 "app-shell__review" + (isActive ? " is-active" : "")
               }
             >
-              Review<span className="app-shell__badge">{reviewCount}</span>
+              Review<span className="app-shell__badge">{needsALook}</span>
             </NavLink>
           )}
           {/* Stays put. The activity tracker is the one thing here that is
