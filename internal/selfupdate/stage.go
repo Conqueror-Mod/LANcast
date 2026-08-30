@@ -10,9 +10,21 @@
 //	staged/LANcast-Server.exe -> LANcast-Server.exe          (move into place)
 //
 // The loaded image keeps running from the renamed file; the new binary takes
-// effect the next time the service starts. Nothing kills itself, no second
-// process is needed, and the old executable is deleted on the next startup once
-// it is no longer running.
+// effect the next time the service starts. Nothing kills itself and no second
+// process is needed.
+//
+// The renamed file is swept on a later startup, and "later" is doing real work
+// in that sentence. It used to say the old executable is deleted on the next
+// startup "once it is no longer running", which assumed the only thing running
+// it was the process being replaced. The server tray is resident and runs out
+// of the same directory, so after one update it holds the renamed file open
+// indefinitely — and a *fixed* backup name then made every subsequent update
+// fail, because the next rename had to replace a mapped image:
+//
+//	rename LANcast-Server.exe LANcast-Server.exe.old: Access is denied.
+//
+// Backups are therefore stamped and never reused. A sweep takes what it can and
+// leaves what is still mapped for the next one.
 //
 // Applied at shutdown rather than startup, which is what makes it one restart
 // instead of two. A swap at startup would still be running the old image it
@@ -28,7 +40,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // DirName is the staging directory, kept inside the data directory rather than
@@ -135,11 +149,27 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 	}
 	staging := Dir(dataDir)
 
-	// Check first. Moving half an update and discovering the rest is missing is
-	// the failure this ordering exists to prevent.
+	/*
+	 * Check first. Moving half an update and discovering the rest is missing is
+	 * the failure this ordering exists to prevent.
+	 *
+	 * And when the set *is* incomplete, the staging directory is thrown away
+	 * rather than left to be retried. A manifest naming files that are no
+	 * longer beside it can never be satisfied — every restart re-reads it,
+	 * fails here, and changes nothing — so keeping it does not preserve an
+	 * update, it preserves a permanent refusal to update.
+	 *
+	 * The comment at the end of this function used to call exactly that state
+	 * harmless. It is not: an install wedged here stays on its old version for
+	 * ever while the log repeats one line nobody reads. Clearing it costs a
+	 * re-download and puts the next check back in charge.
+	 */
 	for _, name := range m.Files {
 		if _, err := os.Stat(filepath.Join(staging, name)); err != nil {
-			return m, fmt.Errorf("selfupdate: staged %s is missing: %w", name, err)
+			_ = os.RemoveAll(staging)
+			return m, fmt.Errorf(
+				"selfupdate: staged %s is missing, so the staged update was "+
+					"discarded and will be fetched again: %w", name, err)
 		}
 	}
 
@@ -154,13 +184,36 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 		}
 	}
 
+	/*
+	 * A backup name nothing can still be holding.
+	 *
+	 * This used to be a fixed `.old`, cleared first with a best-effort Remove
+	 * and the comment "a leftover from an earlier update would make this rename
+	 * fail". That was the right worry and the wrong remedy, because the leftover
+	 * that matters cannot be removed at all.
+	 *
+	 * The server tray is a resident process running out of the install
+	 * directory. When an update renames the running image to `.old`, that
+	 * process keeps the file mapped — for as long as it lives, which is until
+	 * somebody quits it. `Remove` then fails, and the next update's rename has
+	 * to *replace* a mapped image, which Windows refuses:
+	 *
+	 *	rename LANcast-Server.exe LANcast-Server.exe.old: Access is denied.
+	 *
+	 * Measured on the reporting install: v0.8.31 and v0.8.32 applied cleanly,
+	 * v0.8.33 failed with exactly that. The first update after the tray starts
+	 * works and every one after it fails, permanently — which is the worst
+	 * shape a bug can have, because it looks like a one-off.
+	 *
+	 * A unique suffix sidesteps the whole question. Nothing is replaced, so
+	 * nothing can be held; CleanupOld sweeps whatever it can whenever it can,
+	 * and a file still mapped by a live process is simply swept later.
+	 */
+	stamp := strconv.FormatInt(time.Now().UnixNano(), 36)
+
 	for _, name := range m.Files {
 		target := filepath.Join(installDir, name)
-		backup := target + ".old"
-
-		// Clear a previous .old first: a leftover from an earlier update would
-		// make this rename fail and abort an otherwise fine install.
-		_ = os.Remove(backup)
+		backup := target + ".old." + stamp
 
 		if _, err := os.Stat(target); err == nil {
 			// Rename rather than delete. The file may be this very process's
@@ -178,11 +231,12 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 		}
 	}
 
-	// Only now is the update committed. Removing staging last means a crash
-	// between the moves and here leaves a manifest that Apply would replay,
-	// which is harmless — the files it names are already in place and the
-	// staged copies are gone, so the next Apply reports them missing and
-	// changes nothing.
+	// Only now is the update committed. A crash between the moves and here
+	// leaves a manifest naming files that are already installed and no longer
+	// staged; the next Apply finds them missing, discards the staging directory
+	// and asks for the release again. Wasteful, and recoverable, which is the
+	// property that matters — an earlier version of this comment called that
+	// state harmless and left it to wedge instead.
 	_ = os.RemoveAll(staging)
 	return m, nil
 }
@@ -199,7 +253,10 @@ func CleanupOld(installDir string) int {
 	}
 	var removed int
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".old" {
+		// Both spellings: `.old` from installs that predate the stamped name,
+		// and `.old.<stamp>` from this one. A sweep that only knew the new one
+		// would leave the very file that caused this to be written for ever.
+		if e.IsDir() || !isBackupName(e.Name()) {
 			continue
 		}
 		if os.Remove(filepath.Join(installDir, e.Name())) == nil {
@@ -207,6 +264,18 @@ func CleanupOld(installDir string) int {
 		}
 	}
 	return removed
+}
+
+// isBackupName reports whether a file is one Apply left behind.
+//
+// `x.exe.old` is what earlier versions wrote; `x.exe.old.<stamp>` is what this
+// one writes. Matching both is what stops an upgrade from stranding the file
+// whose immovability caused the stamp to exist.
+func isBackupName(name string) bool {
+	if filepath.Ext(name) == ".old" {
+		return true
+	}
+	return strings.Contains(name, ".old.")
 }
 
 // safeStagedName reports whether a name may be written into staging and later
