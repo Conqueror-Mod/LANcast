@@ -160,3 +160,57 @@ func TestQuittingNobodyIsNotAnError(t *testing.T) {
 		t.Errorf("quitting with no app running failed: %v", err)
 	}
 }
+
+/*
+ * Whether anything can bring a hidden window back.
+ *
+ * Close-to-tray hides rather than closes, which is only a feature while an icon
+ * exists to restore from. The client gave up its own icon deliberately — two
+ * LANcast icons in the notification area was the complaint — and the server's
+ * tray took over. But nothing *starts* that tray: a machine that has only
+ * booted runs the service without one, and the X then hid a window nothing
+ * could restore. Reported as the process staying open with no way to reopen it.
+ *
+ * So the client asks this before hiding, and the answer has to be false when
+ * there is genuinely no tray — the safe direction, because it makes the X mean
+ * close.
+ */
+func TestNoTrayMeansNothingCanRestoreTheWindow(t *testing.T) {
+	isolate(t)
+	if TrayPresent() {
+		t.Error("claimed a tray with none running, so the window would hide " +
+			"behind an icon that does not exist")
+	}
+}
+
+func TestAHeldTrayIsVisibleToTheClient(t *testing.T) {
+	isolate(t)
+	release, err := HoldTray()
+	if err != nil {
+		t.Fatalf("HoldTray: %v", err)
+	}
+	if !TrayPresent() {
+		t.Error("a running tray was not seen, so the X would close the app " +
+			"even though an icon was there to restore it")
+	}
+	release()
+}
+
+/*
+ * And presence ends with the tray.
+ *
+ * The reason this is a handle rather than a file or a registry key: it goes
+ * away with the process that holds it, including one that dies badly, so a
+ * crashed tray cannot leave the client hiding into nothing for ever.
+ */
+func TestPresenceEndsWhenTheTrayDoes(t *testing.T) {
+	isolate(t)
+	release, err := HoldTray()
+	if err != nil {
+		t.Fatalf("HoldTray: %v", err)
+	}
+	release()
+	if TrayPresent() {
+		t.Error("a released tray still reported itself present")
+	}
+}

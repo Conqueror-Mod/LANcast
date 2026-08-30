@@ -187,6 +187,28 @@ func runServiceTray(addr string, svc serviceState) error {
 
 	log := newLogger(false)
 
+	/*
+	 * Say that a tray exists, for as long as this one does.
+	 *
+	 * The client hides its window on close rather than closing it, and that is
+	 * only a feature while something can bring it back. Since the client gave
+	 * up its own icon — two LANcast icons was the complaint — this tray is that
+	 * something, and nothing starts it: a machine that has only booted runs the
+	 * service with no tray at all. The client asks this question before hiding,
+	 * so the answer has to be published by the thing that would do the
+	 * restoring.
+	 *
+	 * Released on the way out, and released by Windows anyway if this process
+	 * dies badly, which is the reason it is a handle rather than a file.
+	 */
+	if release, err := raise.HoldTray(); err == nil {
+		defer release()
+	} else {
+		// Not fatal. The tray still works; the client just falls back to
+		// closing on X, which is the safe direction.
+		log.Warn("could not publish the tray's presence", "error", err)
+	}
+
 	onReady := func() {
 		systray.SetIcon(branding.IconICO)
 		systray.SetTitle("LANcast")

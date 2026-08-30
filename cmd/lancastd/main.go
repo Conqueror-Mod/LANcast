@@ -512,6 +512,31 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}
 	}
 
+	/*
+	 * A staged update this build has already overtaken.
+	 *
+	 * The updater stages a release and applies it on a clean shutdown — but an
+	 * installer force-kills the service, so a staging can survive an install
+	 * that already delivered a *newer* build. It is then offered for ever as
+	 * "ready to install", naming a version older than the one running, and
+	 * applying it would be a downgrade.
+	 *
+	 * Reported as a v0.8.33 banner on a machine running v0.8.34.
+	 *
+	 * Checked here rather than in selfupdate because the comparison lives in
+	 * internal/update, which imports selfupdate — and a second opinion about
+	 * which version is newer is precisely the sort of duplicate this project
+	 * keeps paying for.
+	 */
+	if m, ok := selfupdate.Pending(cfg.DataDir); ok && !update.Newer(api.Version, m.Version) {
+		if err := selfupdate.DiscardStaged(cfg.DataDir); err != nil {
+			log.Warn("could not discard a superseded staged update", "error", err)
+		} else {
+			log.Info("discarded a staged update this version has overtaken",
+				"staged", m.Version, "running", api.Version)
+		}
+	}
+
 	updates := update.New(api.Version)
 	if settings.Get().UpdateCheck {
 		workers.Add(1)

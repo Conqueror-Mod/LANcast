@@ -279,3 +279,40 @@ func TestAnUnsatisfiableStagingIsDiscarded(t *testing.T) {
 			"repeats the same refusal and the install never updates")
 	}
 }
+
+/*
+ * A staged update the running build has already overtaken.
+ *
+ * The updater applies a staging on a clean shutdown, and an installer
+ * force-kills the service — so a staging can outlive an install that already
+ * delivered a newer build. It was then offered for ever as "ready to install",
+ * naming a version older than the one running, and applying it would have been
+ * a downgrade. Reported as a v0.8.33 banner on a machine running v0.8.34.
+ */
+func TestDiscardStagedLeavesNothingPending(t *testing.T) {
+	data := t.TempDir()
+	if err := Stage(data, "v0.8.33", map[string][]byte{
+		"LANcast-Server.exe": []byte("older"),
+	}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := Pending(data); !ok {
+		t.Fatal("nothing staged to discard")
+	}
+
+	if err := DiscardStaged(data); err != nil {
+		t.Fatalf("DiscardStaged: %v", err)
+	}
+	if _, ok := Pending(data); ok {
+		t.Error("the superseded staging survived, so the banner keeps offering " +
+			"a version older than the one running")
+	}
+}
+
+// Discarding what is not there is not an error: the check runs on every start,
+// and the overwhelmingly common case is nothing staged at all.
+func TestDiscardStagedOnAnEmptyDataDir(t *testing.T) {
+	if err := DiscardStaged(t.TempDir()); err != nil {
+		t.Errorf("DiscardStaged with nothing staged: %v", err)
+	}
+}

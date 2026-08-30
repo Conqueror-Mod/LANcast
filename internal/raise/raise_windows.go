@@ -133,3 +133,45 @@ func openOwn(event string) (windows.Handle, error) {
 	}
 	return h, nil
 }
+
+/*
+ * The tray's presence, published the same way the two verbs are addressed.
+ *
+ * A named event held open for the life of the tray. Nothing is ever signalled
+ * on it — it exists to be *openable*, which is the whole question — and it goes
+ * away with the process that holds it, including one that crashes, because
+ * Windows closes handles on exit. A file or a registry key would have to be
+ * cleaned up by the thing least able to do it.
+ */
+func trayEventName() string { return eventPrefix + "-Tray" }
+
+func trayPresent() bool {
+	name, err := windows.UTF16PtrFromString(trayEventName())
+	if err != nil {
+		return false
+	}
+	h, err := windows.OpenEvent(windows.SYNCHRONIZE, false, name)
+	if err != nil {
+		return false
+	}
+	windows.CloseHandle(h)
+	return true
+}
+
+func holdTray() (func(), error) {
+	name, err := windows.UTF16PtrFromString(trayEventName())
+	if err != nil {
+		return func() {}, err
+	}
+	h, err := windows.CreateEvent(nil, manualReset, 0, name)
+	if err != nil {
+		// ERROR_ALREADY_EXISTS means another tray holds it, and the handle is
+		// still valid — the same reasoning listen() uses. Two trays claiming
+		// presence is not a problem worth failing over; the answer to "can
+		// anything restore the window" is yes either way.
+		if h == 0 {
+			return func() {}, fmt.Errorf("raise: %w", err)
+		}
+	}
+	return func() { windows.CloseHandle(h) }, nil
+}

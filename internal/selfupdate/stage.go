@@ -241,6 +241,22 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 	return m, nil
 }
 
+/*
+ * DiscardStaged throws away a staged update without applying it.
+ *
+ * For the case a staged update stops being wanted rather than failing: an
+ * install that overtakes it. The updater stages a release and applies it on a
+ * clean shutdown, but an installer *force-kills* the service, so the staging
+ * survives an install that has already delivered a newer build — and is then
+ * offered for ever as "ready to install", naming a version older than the one
+ * running. Applying it would be a downgrade.
+ *
+ * Reported as a v0.8.33 banner on a machine running v0.8.34.
+ */
+func DiscardStaged(dataDir string) error {
+	return os.RemoveAll(Dir(dataDir))
+}
+
 // CleanupOld deletes the .old executables left by a previous Apply.
 //
 // Called at startup, when the previous image is no longer running and the file
