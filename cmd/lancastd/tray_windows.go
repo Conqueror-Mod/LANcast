@@ -18,6 +18,7 @@ import (
 	"lancast/internal/autostart"
 	"lancast/internal/branding"
 	"lancast/internal/desktop"
+	"lancast/internal/raise"
 	"lancast/internal/singleton"
 )
 
@@ -193,6 +194,21 @@ func runServiceTray(addr string, svc serviceState) error {
 
 		mOpen := systray.AddMenuItem("Open LANcast", "Open LANcast in your browser")
 		mApp := systray.AddMenuItem("Open the LANcast app", "Open the LANcast desktop window")
+		/*
+		 * Quitting the app from here, because there is nowhere else.
+		 *
+		 * The client used to carry its own tray icon whenever close-to-tray was
+		 * on, which put a second LANcast icon in the notification area beside
+		 * this one — reported as exactly that. Removing it needed a
+		 * replacement rather than a deletion: with close-to-tray on the
+		 * window's X *hides*, so that icon was the only way to quit the app at
+		 * all.
+		 *
+		 * Distinct from Exit below, and the wording carries the difference:
+		 * this closes the window, that removes this icon, and neither stops the
+		 * server.
+		 */
+		mQuitApp := systray.AddMenuItem("Quit the LANcast app", "Close the LANcast window")
 		systray.AddSeparator()
 		mLogin := systray.AddMenuItemCheckbox("Start LANcast at login",
 			"Show this icon when you sign in. The server already starts on its own.", false)
@@ -220,6 +236,12 @@ func runServiceTray(addr string, svc serviceState) error {
 				case <-mOpen.ClickedCh:
 					if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
 						log.Warn("could not open browser", "error", err)
+					}
+				case <-mQuitApp.ClickedCh:
+					// Nobody listening means no app is running, which is what
+					// somebody pressing this wanted anyway.
+					if err := raise.Quit(); err != nil {
+						log.Warn("could not ask the app to quit", "error", err)
 					}
 				case <-mApp.ClickedCh:
 					if err := openClientApp(); err != nil {
