@@ -49,6 +49,17 @@ type Decision struct {
 	TargetVideoBitRate int64 `json:"target_video_bitrate,omitempty"`
 
 	/*
+	 * SourceContainer is the box the input arrived in.
+	 *
+	 * It rides along for the same reason SourceWidth does: the decision is the
+	 * only thing that knows what the source was, and the command line is built
+	 * from the decision rather than from the file. What needs it is seeking —
+	 * some containers cannot be sought accurately, and a copied audio track is
+	 * silently wrong when they are (see SeekLosesAudioSync).
+	 */
+	SourceContainer string `json:"source_container,omitempty"`
+
+	/*
 	 * SourceWidth and SourceHeight are the frame the encoder will be handed,
 	 * before any TargetHeight scaling.
 	 *
@@ -512,6 +523,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		// limit read as a request, paying for an encode that adds no detail and
 		// costs bandwidth. Same for bitrate: capping a 3 Mbps file at 8 Mbps is
 		// a rate control constraint that can only ever be slack.
+		d.SourceContainer = r.Container
 		if video != nil {
 			// Every encode this package produces is 8-bit H.264 SDR, so an HDR
 			// source being re-encoded is always an HDR-to-SDR conversion. There
@@ -735,6 +747,51 @@ func IsHDR(s *Stream) bool {
 	}
 	switch strings.ToLower(strings.TrimSpace(s.ColorTransfer)) {
 	case "smpte2084", "arib-std-b67":
+		return true
+	}
+	return false
+}
+
+/*
+ * SeekLosesAudioSync reports whether seeking into this container leaves a
+ * copied audio track out of step with the picture.
+ *
+ * # What was measured
+ *
+ * `The Wedding Singer (1998).avi` — MPEG-4 ASP video, MP3 audio — resumed at
+ * 4343 seconds with the exact command line this package produces, video
+ * re-encoded and audio copied:
+ *
+ *	video  start_time =  0.000000
+ *	audio  start_time = -1.997143
+ *
+ * Two seconds of audio ahead of the first frame, reported as *"around a 1.8s
+ * delay between audio and video, with video being behind"*. The same command
+ * against a well-formed MP4 at the same kind of offset produced 0.000 and
+ * 0.000 — so this is the container, not the seek and not the encoder.
+ *
+ * # Why the timestamp flags do not fix it
+ *
+ * `-avoid_negative_ts make_zero` was tried first and is not a fix. It moved the
+ * gap rather than closing it — video 1.997, audio 0.000 — because the gap is
+ * not a timestamp error. AVI carries no per-frame timestamps, so an input seek
+ * lands on a video keyframe while the copied audio genuinely begins two seconds
+ * earlier. The extra audio is real data, and no flag can remove data.
+ *
+ * Re-encoding the audio does fix it, measured at 0.000 and 0.000, because
+ * decoding and re-encoding re-times the track from the seek point instead of
+ * carrying its original packets across.
+ *
+ * # Why the list is short
+ *
+ * Only what has been watched failing. AVI is here because it was measured; a
+ * container is not added because it seems similar, for the same reason the
+ * edition vocabulary is not grown on intuition — every entry costs an audio
+ * encode on every seek, and a wrong entry costs it for nothing.
+ */
+func SeekLosesAudioSync(container string) bool {
+	switch strings.ToLower(strings.TrimSpace(container)) {
+	case "avi":
 		return true
 	}
 	return false
