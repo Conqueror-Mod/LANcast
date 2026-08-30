@@ -317,11 +317,23 @@ func TestRefreshEndpoints(t *testing.T) {
 		t.Fatal("test setup: item should not be pending")
 	}
 
+	/*
+	 * An item refresh answers with how many rows it requeued, for the reason
+	 * the library one does: the work is asynchronous but the count is known
+	 * now, and it is the difference between refreshing a show and refreshing
+	 * its forty episodes.
+	 */
 	resp := h.do(t, "POST", "/api/items/"+itoa(id)+"/refresh", nil)
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("item refresh status = %d, want 202", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("item refresh status = %d, want 200", resp.StatusCode)
 	}
-	resp.Body.Close()
+	var one struct {
+		Queued int64 `json:"queued"`
+	}
+	decode(t, resp, &one)
+	if one.Queued != 1 {
+		t.Errorf("queued = %d, want 1 for a single film", one.Queued)
+	}
 
 	if pending, _ := h.st.PendingEnrichment(ctx, 10); len(pending) != 1 {
 		t.Error("refresh did not requeue the item")

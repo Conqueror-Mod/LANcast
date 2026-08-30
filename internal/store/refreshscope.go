@@ -115,3 +115,43 @@ func (s *Store) RefreshScoped(ctx context.Context, libraryID int64, scope Refres
 	}
 	return n, nil
 }
+
+/*
+ * RefreshItemTree requeues one title and everything under it.
+ *
+ * A show is the case that makes the subtree necessary. Its own row carries a
+ * title, an overview and a poster, so clearing that alone does something — and
+ * it leaves every episode exactly as it was, which is not what "refresh this
+ * show" means to anybody. Before this, reaching a show's episodes meant
+ * refreshing the entire library: about 1,480 lookups to correct one series.
+ *
+ * The same two exclusions as the library scopes, and for the same reasons, so
+ * the two cannot drift apart: kinds no provider can ever answer for, and rows
+ * whose match somebody locked. A locked row is a decision, and reaching it
+ * through a narrower door does not make undoing it more acceptable.
+ *
+ * `missing` is deliberately *not* excluded here, unlike the library scopes. A
+ * person asking to refresh one title they are looking at has named it; a
+ * library-wide sweep that quietly included rows whose files are gone would be
+ * spending lookups on titles nobody can play.
+ */
+func (s *Store) RefreshItemTree(ctx context.Context, itemID int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		WITH RECURSIVE tree(id) AS (
+			SELECT ?
+			UNION ALL
+			SELECT m.id FROM media_item m JOIN tree t ON m.parent_id = t.id
+		)
+		UPDATE media_item SET metadata_updated_at = NULL
+		WHERE id IN (SELECT id FROM tree)
+		  AND match_state != 'locked'
+		  AND `+enrichableKinds, itemID)
+	if err != nil {
+		return 0, fmt.Errorf("refresh item: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("refresh item: %w", err)
+	}
+	return n, nil
+}

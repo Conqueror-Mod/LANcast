@@ -465,6 +465,40 @@ export function useRefreshPreview(
   });
 }
 
+/**
+ * Ask the provider again about one title, and everything under it.
+ *
+ * The endpoint has existed since metadata did and **nothing in this client ever
+ * called it**: correcting one wrong title meant either Fix match, which is a
+ * manual search, or refreshing the whole library — about 1,480 provider lookups
+ * to fix one row.
+ *
+ * A show carries its episodes, which is the case that makes it worth having and
+ * why the answer is a count: pressing this on a series and being told "1" says
+ * its episodes are locked or unmatchable, which was previously invisible.
+ */
+export function useRefreshItem(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ queued: number }>(`/api/items/${id}/refresh`, {}),
+    onSuccess: () => {
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
+        active: true,
+        tasks: prev?.tasks ?? [],
+      }));
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      /*
+       * The item itself, and the review queue it may leave or join. Not the
+       * whole of ["items"]: a refresh changes nothing a grid renders until
+       * enrichment answers, and invalidating every list to schedule background
+       * work would refetch a library to show the same thing back.
+       */
+      qc.invalidateQueries({ queryKey: ["item", id] });
+      qc.invalidateQueries({ queryKey: ["review"] });
+    },
+  });
+}
+
 export function useRefreshLibrary() {
   const qc = useQueryClient();
   return useMutation({
