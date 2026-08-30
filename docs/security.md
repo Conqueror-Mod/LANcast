@@ -1,8 +1,10 @@
 # Security posture
 
-> **Status: multi-user accounts.** Each person has an account with a role
-> (admin or member); an unsecured server binds to loopback only. This document
-> describes what is protected, what is not, and what remains open.
+> **Status: multi-user accounts, an audit log, and paired servers.** Each person
+> has an account with a role (admin or member); an unsecured server binds to
+> loopback only; authorised mutations are recorded; and a server can pair with
+> another and admit its people as guests. This document describes what is
+> protected, what is not, and what remains open.
 
 ## Current model
 
@@ -131,14 +133,65 @@ the cert is trusted or replaced.
 a plaintext request with a permanent redirect to the same address over HTTPS,
 so an old bookmark upgrades transparently instead of failing a TLS handshake.
 
+**The LANcast window pins the key rather than trusting the store.** A self-signed
+certificate is the case a browser cannot resolve — it either warns, or, against
+a LAN-bound server, fails the handshake and retries so the app never loads. The
+desktop client reads the server's own `cert.pem` from local disk and pins that
+**one** public key; every other certificate is validated normally. This is the
+security property the native window was built for
+([ADR 0023](adr/0023-native-desktop-client.md)).
+
 **No ACME / Let's Encrypt.** Automatic public certificates require the server to
 be internet-reachable and to contact an external CA — public exposure and
 phone-home, both of which LANcast rejects. For a publicly trusted certificate,
 terminate TLS at a reverse proxy.
 
+## The audit log
+
+Every authorised mutation is recorded with who did it and to what — libraries,
+titles, matches, accounts, add-on trust ([ADR 0026](adr/0026-audit-log.md)).
+Readable by admins from Settings.
+
+**Browsing and playback are deliberately excluded.** An audit log that also
+records what people watched is a surveillance log wearing an operations name,
+and this project decides who may see whose viewing elsewhere and much more
+narrowly ([ADR 0035](adr/0035-who-may-see-whose-viewing.md)).
+
+## Another server, and its people
+
+Two LANcast servers can pair, see each other's presence, and admit each
+other's users as guests. This is the largest security surface added since this
+document was first written, so the properties are stated rather than implied.
+
+**A server has an identity.** A keypair and a fingerprint
+([ADR 0044](adr/0044-server-identity-and-peering.md)), which closes the half of
+ADR 0014 that ADR 0014 named itself: TLS encrypts the wire, it does not
+authenticate the server. Only the public half and the fingerprint are ever
+exported — this project ships crash reporting, and a private key that reaches a
+crash report is a key published to whoever reads it.
+
+**Pairing takes both sides.** Parsing an invite is not pairing; it exists when
+each side has added the other. A relationship one party can create alone is one
+that can be created *at* you.
+
+**Presence is never written down.** Who is watching what, right now, is shared
+only under a per-account, per-peer grant, and there is no history and
+deliberately no *last seen watching*
+([ADR 0045](adr/0045-live-presence-between-paired-servers.md)). The harm ADR
+0035 names is a record that accumulates; this one does not exist to accumulate.
+
+**A remote guest is a principal, not an account.** Admitted by a ticket their
+own server signs, default-deny in middleware — because `requireAuth` grants by
+default and withdraws by exception, which is the wrong direction for somebody
+who is not a user here. A guest may stream **only the item the room is
+playing**: allow-listing the route would not be enough, since that handler
+streams whatever id it is handed. A guest writes no state at all
+([ADR 0046](adr/0046-remote-guests.md)), and what they may be sent is capped by
+the host rather than by their own capability
+([ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md)).
+
 ## Still unprotected
 
-- **No audit trail.** Nothing records who changed what.
 - **No API rate limiting** beyond login.
 - **No per-library visibility.** Every member sees every library; a member
   cannot be scoped to a subset. Roles gate *management*, not *visibility*.
@@ -214,8 +267,12 @@ relies on.
 - **A user with filesystem access to the data directory.** They can read the
   database and the TMDB key directly; the application cannot defend against
   its own host.
-- **Malicious media files.** LANcast serves bytes and does not parse container
-  internals. This changes at M3, when ffmpeg begins processing untrusted input.
+- **Malicious media files.** ffmpeg and ffprobe process library files, which are
+  untrusted input by any strict reading. This is accepted rather than defended:
+  the files are the user's own media, the tools are the same ones every other
+  media server uses, and they run as child processes rather than linked
+  libraries. It is listed here so the acceptance is deliberate rather than
+  overlooked.
 - **Denial of service.** A large enough scan or enough concurrent streams will
   exhaust resources. Acceptable for a household server.
 
@@ -232,6 +289,9 @@ Tracked in [roadmap.md](roadmap.md):
    remains open.
 3. **Session management UI.** Listing and revoking individual sessions, rather
    than revoking a whole user's on a password change.
-4. **ffmpeg and untrusted input.** From M3, LANcast will parse media files
-   rather than only serving bytes. That is a genuinely new attack surface and
-   deserves its own review.
+4. ~~**ffmpeg and untrusted input.**~~ **Decided, not resolved** — see *Threats
+   explicitly out of scope*. Parsing library media is now routine and the
+   exposure is accepted knowingly.
+5. **Per-library visibility.** Roles gate management, not visibility. Scoping a
+   member to a subset of libraries is still unbuilt and is the oldest open item
+   here.

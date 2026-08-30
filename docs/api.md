@@ -297,6 +297,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 |---|---|
 | `GET /api/users` | `{users: [{id, name, role}]}` |
 | `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
+| `PATCH /api/users/{id}` | `{name?, role?}` — rename an account, change its role, or both. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count |
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
 | `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 
@@ -2640,6 +2641,16 @@ address**. Other loopback addresses are deliberately allowed — a tvheadend or 
 local transcoder on the same machine is one of the most ordinary sources this
 feature has, and banning loopback outright would make Live TV useless on the
 setup it suits best. What needs protecting is one origin, not one interface.
+
+### `PATCH /api/channel-sources/{id}`
+
+Sets or clears the source's guide URL, and nothing else — `{ "epg_url": "…" }`
+is the only field, and omitting it is `400`. An empty string clears the guide.
+The URL goes through the same refusal set as a channel list URL, then the guide
+is imported **in the same request**, for the same reason a `POST` imports
+immediately: the moment somebody sets it is the moment they are watching to see
+whether it worked. Answers `{ "programs": n }`, with `epg_error` beside it when
+the import failed. **Admin only.**
 
 ### `POST /api/channel-sources/{id}/refresh` · `DELETE /api/channel-sources/{id}`
 

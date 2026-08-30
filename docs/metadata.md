@@ -1,6 +1,11 @@
-# Metadata and artwork (M2)
+# Metadata and artwork
 
-> **Status: implemented.** Design reference for the M2 subsystem. Decisions are
+> **Status: implemented.** Design reference for the metadata subsystem, written
+> for M2 (film and TV) and still the contract every later source registers
+> into — external ratings ([ADR 0019](adr/0019-external-ratings.md)), music
+> ([ADR 0024](adr/0024-music-libraries.md)), pictures
+> ([ADR 0028](adr/0028-pictures-library.md)) and rating plugins all came in
+> through it without changing it. Decisions are
 > recorded in ADRs
 > [0007](adr/0007-provider-and-localsource-split.md),
 > [0008](adr/0008-field-level-locking.md),
@@ -22,7 +27,7 @@ features do. This subsystem is designed backwards from preventing that.
 |---|---|---|
 | TMDB | `Provider` | Films and TV. One free key. |
 | NFO sidecar | `LocalSource` | Kodi-compatible; migration and portability |
-| Embedded tags | `LocalSource` | Container metadata, weakest signal |
+| Embedded tags | `LocalSource` | Container metadata. The weakest signal for video — **and the strongest for a track**, see below |
 | Filename | — | `internal/media` guess; the floor |
 
 TMDB is the only network provider that ships first. One provider done properly
@@ -116,6 +121,15 @@ external id. Locked items are never re-scored, re-searched, or silently changed.
 Every field resolves independently:
 
 > user lock → NFO → provider → filename guess
+
+**Music inverts the middle of that**, deliberately. A track resolves
+
+> user lock → embedded tags → folder → filename
+
+because the file carries the answer: ID3v2, Vorbis comments and MP4 atoms were
+written by whoever made the file, where a video's container tags are usually
+whatever the encoder happened to put there. The rule that does not change is the
+one on either end — a lock still wins, and a guess is still the floor.
 
 Editing a field locks that field only. See
 [ADR 0008](adr/0008-field-level-locking.md) for why item-level locking was

@@ -102,7 +102,7 @@ grouped by album artist to preserve), duration, and a play affordance per row.
 grid. An artist keeps the grid, now square.
 
 Rows go through `useFocusable` like every other interactive element, so the
-spatial focus model ([ADR 0004](adr/0004-spatial-focus-model.md)) covers a track
+spatial focus model ([ADR 0004](adr/0004-keyboard-focus-model.md)) covers a track
 list without a second navigation idea.
 
 **Play all already exists** and needs nothing: the container path builds a
@@ -169,7 +169,7 @@ Two consequences to decide when building it, not now:
   probably yes eventually, but a docked video thumbnail is a different design
   question from a docked record sleeve.
 - **Does this deserve an ADR?** Hoisting the media element out of the route is
-  a structural decision of the kind [ADR 0004](adr/0004-spatial-focus-model.md)
+  a structural decision of the kind [ADR 0004](adr/0004-keyboard-focus-model.md)
   covers for focus. If it turns out to reshape how the client holds playback
   state, it should be written down rather than discovered later in a diff.
 

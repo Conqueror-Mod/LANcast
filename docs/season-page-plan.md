@@ -22,7 +22,7 @@ something with a spine.
   attached to items by `AttachProgress`. Nothing on this screen reads them.
 - **The row pattern itself.** `TrackList` is a list of rows with numbers, a
   title block, a duration and a play affordance, wired through `useFocusable` so
-  spatial navigation ([ADR 0004](adr/0004-spatial-focus-model.md)) covers it. A
+  spatial navigation ([ADR 0004](adr/0004-keyboard-focus-model.md)) covers it. A
   season list is that component's shape with a still on the left.
 
 ## 1. The stills were already there — this section was wrong
@@ -263,7 +263,7 @@ means what it meant — they simply stop having a page of their own.
 Two things E has to get right to be worth doing:
 
 - **The selector must be reachable by the focus model**
-  ([ADR 0004](adr/0004-spatial-focus-model.md)). A dropdown is the control most
+  ([ADR 0004](adr/0004-keyboard-focus-model.md)). A dropdown is the control most
   likely to be built mouse-first and found unusable from a remote later. Tabs
   for a handful of seasons, a list for many, both focusable.
 - **What "no season chosen" shows.** Defensible: the season holding the next

@@ -26,7 +26,8 @@ you (or an interactive run) are pointed at a different data dir. Pass the same
 Run **`LANcast-Setup-<version>.exe`** from the release. It installs both exes to
 `Program Files\LANcast`, **registers and starts the server as a service**, and
 adds a Start-menu and desktop shortcut to **LANcast** (the launcher). Double-click
-that shortcut to open the app in your browser — no terminal, ever. Uninstalling
+that shortcut to open the app in its own window — no terminal, ever. The finish
+page offers the browser instead if you would rather have a tab. Uninstalling
 removes the service and shortcuts but **leaves your library** in
 `%ProgramData%\LANcast`.
 
@@ -34,8 +35,11 @@ removes the service and shortcuts but **leaves your library** in
 
 Unzip `lancast_<version>_windows_amd64.zip` anywhere, then either:
 
-- **Just run it**: double-click `LANcast-Client.exe`. It starts the server (windowless)
-  and opens your browser, and sits in the system tray.
+- **Just run it**: double-click `LANcast-Client.exe`. It starts the server
+  (windowless) and opens LANcast in its own window. Where the server is
+  installed as a service, its tray icon is the one controller for both — start
+  and stop the service, open the app, and quit it, from one menu. There is
+  deliberately **one** LANcast icon, not two.
 - **Run it on boot as a service** (an elevated terminal):
 
   ```
@@ -85,19 +89,37 @@ Accounts and sessions go; watch history, libraries, and settings stay, and the
 new admin inherits the old one's resume points. Then create an account as
 above. See [security.md](security.md#losing-the-password).
 
-## ffmpeg (optional)
+## ffmpeg
 
-LANcast plays most files directly with no dependency. **Transcoding and
-codec-based playback decisions need ffmpeg** — install it and put it on `PATH`
-(the service records its directory so a service account finds it):
+LANcast plays most files directly with no dependency. **Conversion and
+codec-based playback decisions need ffmpeg**, and without it a server appears to
+work and then does not play things — which is the failure
+[ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md) exists to end.
+
+**You do not have to install it yourself.** The screen where you create the
+first account offers the media tools as a **ticked option**, stating what will
+be downloaded, from where, how large it is, under which licence, and that it is
+optional — before anything is fetched. Setup does not block on the download: the
+server is usable immediately and the fetch runs alongside it with progress in
+Settings, so a file that will not play *while it is still running* is
+explainable rather than mysterious. Settings → Metadata has the same button for
+later, and for a server whose admin unticked it
+([ADR 0048](adr/0048-media-tools-install-themselves-on-first-run.md)).
+
+The build is pinned and checksum-verified before it is unpacked, installed into
+the data directory by an atomic move, and a partial install reads as absent. It
+is a GPL build and is named as one.
+
+Bring your own instead if you prefer — put it on `PATH` and LANcast will find
+it (the service records its directory so a service account finds it too):
 
 ```
 winget install Gyan.FFmpeg      # Windows
 sudo apt install ffmpeg          # Debian/Ubuntu
 ```
 
-Without ffmpeg, LANcast still runs and serves direct-play files; it says so
-plainly at startup rather than failing.
+With no ffmpeg at all, LANcast still runs and serves direct-play files; it says
+so plainly rather than failing.
 
 ## When the server will not stay up
 
