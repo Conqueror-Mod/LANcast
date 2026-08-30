@@ -158,6 +158,28 @@ func runWindow(l *launcher) {
 	stopRaise := func() {}
 	defer func() { stopRaise() }()
 
+	/*
+	 * Wait for the server before handing the window a URL.
+	 *
+	 * ResolvedURL probes once, with a 1.5 second timeout, and falls back to a
+	 * plain guess when nothing answers. The web view then loads that guess, it
+	 * fails, and **nothing retries** — the window sits on its background colour
+	 * for ever, which is indistinguishable from the app being broken. Reported
+	 * exactly that way after an install, and cleared by nothing more than
+	 * closing the window and opening it again.
+	 *
+	 * The wait already existed for the case where this process starts the
+	 * server itself. It was missing from the case that installs hit: a service
+	 * that is already installed and is still coming up while the installer
+	 * launches the client at it. That is the one moment the server is
+	 * guaranteed to be busy, and it was the one path that did not wait.
+	 *
+	 * Not fatal when it times out. A window that opens and shows the server's
+	 * own "cannot reach" state is worth more than no window at all, and the
+	 * server may still arrive a moment later.
+	 */
+	desktop.WaitForServer(l.addr, 20*time.Second)
+
 	err = clientwindow.Open(clientwindow.Options{
 		URL:    desktop.ResolvedURL(l.addr),
 		Title:  "LANcast",
