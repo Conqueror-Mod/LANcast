@@ -593,7 +593,8 @@ func stripNoise(s string) string {
  */
 var reEditionSuffix = regexp.MustCompile(`(?i)[\s\-]+[\(\[]?(` +
 	`dc|se|ee|uncut|theatrical|final cut|alternate cut|ultimate edition|` +
-	`directors cut|director's cut|special edition|extended edition` +
+	`directors cut|director's cut|special edition|extended edition|` +
+	`complete edition` +
 	`)[\)\]]?$`)
 
 /*
