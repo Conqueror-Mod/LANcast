@@ -153,10 +153,24 @@ func TestACleanSessionLogsNoErrors(t *testing.T) {
  * running.
  */
 func TestStoppingARunningSessionIsNotAnError(t *testing.T) {
+	/*
+	 * stderr first, then the stdout bytes the test waits on.
+	 *
+	 * Real ffmpeg writes the broken-pipe line on the way out, so the
+	 * tempting order is stdout then stderr. That races: the test reads its
+	 * four bytes and cancels the context immediately, and the child can be
+	 * killed before it ever reaches its stderr write. It failed exactly
+	 * once, on CI, with nothing in the log but "live transcode started".
+	 *
+	 * Writing stderr first makes the stdout bytes proof that the stderr
+	 * line was already emitted, and cmd.Wait then guarantees it is drained.
+	 * What is under test is the level the text is logged at, not the order
+	 * ffmpeg happens to produce it in.
+	 */
 	bin := goFakeFFmpegImporting(t, []string{"fmt", "os", "time"},
-		"\tfmt.Print(\"some bytes\")\n"+
+		"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
+			"\tfmt.Print(\"some bytes\")\n"+
 			"\tos.Stdout.Sync()\n"+
-			"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
 			"\ttime.Sleep(30 * time.Second)")
 	m, out := loggingManager(t, bin)
 
@@ -189,10 +203,24 @@ func TestStoppingARunningSessionIsNotAnError(t *testing.T) {
  * one — which is the other way to lose an investigation.
  */
 func TestWhatAStoppedFFmpegSaidIsStillAvailableAtDebug(t *testing.T) {
+	/*
+	 * stderr first, then the stdout bytes the test waits on.
+	 *
+	 * Real ffmpeg writes the broken-pipe line on the way out, so the
+	 * tempting order is stdout then stderr. That races: the test reads its
+	 * four bytes and cancels the context immediately, and the child can be
+	 * killed before it ever reaches its stderr write. It failed exactly
+	 * once, on CI, with nothing in the log but "live transcode started".
+	 *
+	 * Writing stderr first makes the stdout bytes proof that the stderr
+	 * line was already emitted, and cmd.Wait then guarantees it is drained.
+	 * What is under test is the level the text is logged at, not the order
+	 * ffmpeg happens to produce it in.
+	 */
 	bin := goFakeFFmpegImporting(t, []string{"fmt", "os", "time"},
-		"\tfmt.Print(\"some bytes\")\n"+
+		"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
+			"\tfmt.Print(\"some bytes\")\n"+
 			"\tos.Stdout.Sync()\n"+
-			"\tfmt.Fprintln(os.Stderr, \"Error submitting a packet to the muxer: Broken pipe\")\n"+
 			"\ttime.Sleep(30 * time.Second)")
 
 	out := &safeBuf{}
