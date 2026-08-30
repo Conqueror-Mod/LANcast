@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"lancast/internal/autostart"
@@ -180,8 +181,51 @@ func runWindow(l *launcher) {
 	 */
 	desktop.WaitForServer(l.addr, 20*time.Second)
 
+	/*
+	 * A pin for an https server, or say why not.
+	 *
+	 * Beyond loopback the server is self-signed, and the web view refuses a
+	 * self-signed certificate outright unless its key is pinned. serverCertPin
+	 * reports failure by returning "" -- deliberately, because a loopback-only
+	 * server has no certificate and needs none -- and the cost of being wrong
+	 * was described there as "the window failing to load, which is loud on its
+	 * own".
+	 *
+	 * It is not loud. It is a browser security warning inside a native app
+	 * window, and clicking through it lands on a blank page: reported as
+	 * exactly that, with nothing in any log connecting the two. A silent
+	 * fallback whose failure mode is a security wall is the worst of both.
+	 *
+	 * So it is retried, because the honest reason for a missing pin is a server
+	 * still writing its certificate -- and then said out loud rather than left
+	 * for the window to imply.
+	 */
+	url := desktop.ResolvedURL(l.addr)
+	pin := l.serverCertPin()
+	if pin == "" && strings.HasPrefix(url, "https://") {
+		deadline := time.Now().Add(5 * time.Second)
+		for pin == "" && time.Now().Before(deadline) {
+			time.Sleep(250 * time.Millisecond)
+			pin = l.serverCertPin()
+		}
+		if pin == "" {
+			alert("LANcast", "LANcast could not read the server's certificate, "+
+				"so this window cannot trust it.\n\n"+
+				"You will see a security warning, and accepting it leads to a "+
+				"blank page: the certificate is pinned by key, and without it "+
+				"there is nothing to pin.\n\n"+
+				"Opening in your browser instead, where the warning can be "+
+				"accepted properly.")
+			if err := desktop.OpenBrowser(url); err != nil {
+				alert("LANcast", "could not open the browser: "+err.Error())
+			}
+			runLauncherTray(l)
+			return
+		}
+	}
+
 	err = clientwindow.Open(clientwindow.Options{
-		URL:    desktop.ResolvedURL(l.addr),
+		URL:    url,
 		Title:  "LANcast",
 		Width:  1280,
 		Height: 800,
@@ -254,7 +298,7 @@ func runWindow(l *launcher) {
 		// is one person's session and cache on one machine, and the server's
 		// directory is machine-wide and may belong to a service account.
 		DataDir:  clientDataDir(),
-		CertPin:  l.serverCertPin(),
+		CertPin:  pin,
 		DevTools: devToolsWanted(),
 		Bindings: l.desktopBindings(),
 	})

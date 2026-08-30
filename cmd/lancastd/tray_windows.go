@@ -246,7 +246,26 @@ func runServiceTray(addr string, svc serviceState) error {
 		mLibraries := systray.AddMenuItem("Update libraries…", "Open the library settings, where scanning lives")
 		mUpdates := systray.AddMenuItem("Check for updates…", "Open the update settings")
 		systray.AddSeparator()
-		mQuit := systray.AddMenuItem("Exit", "Remove this icon. The LANcast server keeps running.")
+		/*
+		 * Exit ends this session's LANcast: the window and this icon.
+		 *
+		 * It used to remove only the icon, which left the window open and — the
+		 * part that did damage — left *this* process running out of the install
+		 * directory. Reported as closing LANcast from the tray and finding the
+		 * processes still there, which then fouled the next update: a resident
+		 * image in Program Files is exactly what an update has to move aside.
+		 *
+		 * The complaint underneath it was a fair reading of the menu. "Quit the
+		 * LANcast app" and "Exit" were two partial endings and neither was the
+		 * one somebody means by closing LANcast, so whichever they chose left
+		 * something behind.
+		 *
+		 * The service is untouched and the wording says so. Stopping it is an
+		 * administrator action with a UAC prompt behind it, and a menu item
+		 * labelled Exit must not be the thing that raises one.
+		 */
+		mQuit := systray.AddMenuItem("Exit",
+			"Close the LANcast app and remove this icon. The LANcast server keeps running.")
 
 		if on, err := autostart.Enabled(); err == nil && on {
 			mLogin.Check()
@@ -279,6 +298,20 @@ func runServiceTray(addr string, svc serviceState) error {
 				case <-mUpdates.ClickedCh:
 					openPane(addr, "updates", log)
 				case <-mQuit.ClickedCh:
+					/*
+					 * The window first, then the icon.
+					 *
+					 * Ordered so the app is asked to go while something is
+					 * still here to ask it: once systray.Quit has run this
+					 * process is on its way out, and a Quit sent from a dying
+					 * process is a race nobody needs to debug.
+					 *
+					 * Nobody listening is not a failure — it means no window
+					 * was open, which is what somebody pressing this wanted.
+					 */
+					if err := raise.Quit(); err != nil {
+						log.Warn("could not ask the app to quit", "error", err)
+					}
 					systray.Quit()
 					return
 				}

@@ -278,3 +278,40 @@ func TestStopIsSafeToCallTwice(t *testing.T) {
 	stop()
 	stop()
 }
+
+/*
+ * Quit reaches a listener that is only listening for Show as well.
+ *
+ * The tray's Exit now asks the app to quit before removing its own icon, and
+ * the ordering is deliberate: once systray.Quit has run, that process is on its
+ * way out, and a Quit sent from a dying process is a race nobody needs to
+ * debug. This pins the half that can be tested here — that a Quit arriving at a
+ * live listener is delivered to the quit callback and not confused for a Show.
+ *
+ * The behaviour it protects was reported as closing LANcast from the tray and
+ * finding the processes still running, which then fouled the next update: a
+ * resident image in the install directory is exactly what an update must move
+ * aside.
+ */
+func TestQuitIsDeliveredWhenTheTrayExits(t *testing.T) {
+	isolate(t)
+	shown := make(chan struct{}, 1)
+	quit := make(chan struct{}, 1)
+	stop, err := Listen(func() { shown <- struct{}{} }, func() { quit <- struct{}{} })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	if err := Quit(); err != nil {
+		t.Fatalf("quit: %v", err)
+	}
+	select {
+	case <-quit:
+	case <-shown:
+		t.Fatal("a tray Exit showed the window instead of closing it")
+	case <-time.After(2 * time.Second):
+		t.Fatal("the app was never asked to quit, so it stays running with " +
+			"its image held in the install directory")
+	}
+}
