@@ -268,14 +268,29 @@ export function Detail() {
 
   // ---- an artist's Play all -------------------------------------------------
   const isArtist = item?.kind === "artist";
-  const albumIDs = isArtist ? (children ?? []).map((c) => c.id) : [];
+  /*
+   * What an artist's Play all has to gather.
+   *
+   * Not simply "the children", which is what this was. A file sitting in an
+   * artist's folder with no album folder around it is parented straight to the
+   * artist, so an artist's children can include *tracks* — and passing a track
+   * id where an album id was expected asked the server for its children, got
+   * none, and built an empty queue. The button then did nothing at all, beside
+   * a second Play all that worked.
+   *
+   * Both kinds are carried through in page order, and the queue builder
+   * expands the albums and keeps the tracks where they sit.
+   */
+  const artistParts = isArtist
+    ? (children ?? []).map((c) => ({ id: c.id, kind: c.kind }))
+    : [];
   const qc = useQueryClient();
   const [queueing, setQueueing] = useState(false);
   const playArtist = useCallback(async () => {
     if (queueing) return;
     setQueueing(true);
     try {
-      const queue = await fetchArtistQueue(qc, albumIDs);
+      const queue = await fetchArtistQueue(qc, artistParts);
       if (queue.length > 0) {
         navigate(`/watch/${queue[0]}?queue=${queue.join(",")}`);
       }
@@ -285,9 +300,9 @@ export function Detail() {
       // again.
       setQueueing(false);
     }
-    // albumIDs is rebuilt each render; its contents are what matter.
+    // artistParts is rebuilt each render; its contents are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qc, albumIDs.join(","), navigate, queueing]);
+  }, [qc, artistParts.map((p) => p.id).join(","), navigate, queueing]);
 
   const [fixOpen, setFixOpen] = useState(false);
   // The picture currently in the banner, and the one the viewer opened at.
@@ -750,7 +765,18 @@ export function Detail() {
                   onPlay={() => void continueShow()}
                 />
               )}
-              {container && playableChildren.length > 0 && (
+              {/*
+                Not for an artist, which has its own below.
+                
+                An artist whose children are all albums finds nothing playable
+                here and never showed this — the comment below said so, and it
+                was true of every artist with a tidy folder tree. One with a
+                loose single has a *track* among its children, so both rendered:
+                two Play all buttons, and the one that queued the whole
+                discography was the one that did nothing, because it had been
+                handed a track id where an album id was expected.
+              */}
+              {container && !isArtist && playableChildren.length > 0 && (
                 <SecondaryButton
                   label="Play all"
                   className={
@@ -774,7 +800,7 @@ export function Detail() {
                   this programme" is not, so the artist gets the two-level
                   version: every track of every album, records in the order
                   shown and tracks in the order they play. */}
-              {isArtist && albumIDs.length > 0 && (
+              {isArtist && artistParts.length > 0 && (
                 <PlayButton
                   label={queueing ? "Gathering…" : "Play all"}
                   onPlay={playArtist}

@@ -1443,9 +1443,16 @@ export function useDownloadUpdate() {
  * album, albums in the order the artist page lists them and tracks in the order
  * the record plays.
  *
- * An artist's children are albums, so the ordinary Play all — which queues a
- * container's directly-playable children — has nothing to work with and does
- * not appear. This is the two-level version.
+ * **An artist's children are usually albums, and not always.** A file sitting
+ * in an artist's folder with no album folder around it is parsed as a track
+ * belonging to that artist and nothing else, so it is parented straight to the
+ * artist — reported on a real library as two Play all buttons on one page, one
+ * of which did nothing.
+ *
+ * Those loose tracks are queued where they sit. Taking the children in the
+ * order the page lists them and expanding only the albums keeps the queue in
+ * the order somebody is looking at, which no amount of grouping afterwards
+ * recovers.
  *
  * It is a fetch rather than a hook because it runs when the button is pressed,
  * not when the page opens. A prolific artist is thirty albums, and thirty
@@ -1455,19 +1462,24 @@ export function useDownloadUpdate() {
  */
 export async function fetchArtistQueue(
   qc: QueryClient,
-  albumIDs: number[],
+  children: { id: number; kind: string }[],
 ): Promise<number[]> {
   const pages = await Promise.all(
-    albumIDs.map((id) =>
-      qc.fetchQuery({
-        // The same key useChildren uses for an album, so a record already
-        // opened is already here, and opening one later is served from this.
-        queryKey: ["children", id, "track"],
-        queryFn: () =>
-          apiGet<ItemsPage>(`/api/items?parent_id=${id}&sort=track`).then(
-            (r) => r.items,
-          ),
-      }),
+    children.map((child) =>
+      // A track under the artist is already a leaf. Asking the server for its
+      // children would be a request that can only answer "none", once per
+      // single, on every press.
+      child.kind !== "album"
+        ? Promise.resolve([child as unknown as Item])
+        : qc.fetchQuery({
+            // The same key useChildren uses for an album, so a record already
+            // opened is already here, and opening one later is served from this.
+            queryKey: ["children", child.id, "track"],
+            queryFn: () =>
+              apiGet<ItemsPage>(`/api/items?parent_id=${child.id}&sort=track`).then(
+                (r) => r.items,
+              ),
+          }),
     ),
   );
   // Only leaves. An album containing anything other than tracks is not a shape
