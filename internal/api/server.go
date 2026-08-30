@@ -364,6 +364,7 @@ func (s *Server) Handler() http.Handler {
 	// withholds. The whole value of the report is being able to go and look at
 	// the two files (ADR 0042).
 	mux.HandleFunc("GET /api/collisions", s.adminOnly(s.collisions))
+	mux.HandleFunc("POST /api/collisions/dismiss", s.adminOnly(s.dismissCollision))
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)

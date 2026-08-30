@@ -904,4 +904,7 @@ export type Collision = {
   /** Absent until compared, and absent afterwards if any member was
    *  unreadable. "Identical so far as sampled" — never "identical". */
   same_bytes?: boolean;
+  /** When somebody looked at exactly these rows and accepted them. Absent on a
+   *  server too old to record it, which reads the same as never dismissed. */
+  dismissed_at?: number;
 };
