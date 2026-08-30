@@ -40,6 +40,14 @@ import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
 import { conversionHelp } from "./conversionAvailable";
+import {
+  filePath,
+  hlsWorthTrying,
+  isUnsupportedSource,
+  rememberHLS,
+  type FilePath,
+} from "./fileTransport";
+import { mediaCapability } from "@/lib/liveTransport";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -103,6 +111,7 @@ function sourceURL(
   offset: number,
   audio?: number | null,
   quality?: string,
+  path: FilePath = "progressive",
 ): string {
   // The chosen quality ceiling, or nothing at all for Original.
   //
@@ -132,6 +141,20 @@ function sourceURL(
   // endpoint decides again from its own parameters, so a request claiming less
   // than the one before it gets a different answer — the file the server just
   // called direct-playable is re-encoded, or refused with a 409.
+  /*
+   * A playlist instead of one endless response, where the engine can take it.
+   *
+   * Same item, same parameters — `t`, `audio` and the quality ceiling all
+   * participate in the delivery decision on this endpoint exactly as they do on
+   * /transcode, so a playlist asking for less than the decision was made with
+   * gets a different answer, or a 409.
+   *
+   * What changes is what eviction costs. See fileTransport.ts: this is the fix
+   * for a stream that could only ever be re-asked from byte zero.
+   */
+  if (path === "hls") {
+    return withCapabilities(`/api/stream/${id}/hls/index.m3u8${t}`);
+  }
   return withCapabilities(`/api/stream/${id}/transcode${t}`);
 }
 
@@ -390,6 +413,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const decision = useRef<Decision>({ method: "direct", reason: "" });
   const transcoding = useRef(false);
+  /*
+   * Which delivery the current source is using, so a failure can be attributed.
+   *
+   * The element reports "this did not work" and nothing about which of the two
+   * things it was handed. Without this, a playlist an engine cannot read is
+   * indistinguishable from a transcode the server refused, and the two want
+   * opposite responses — one retries down a different path, the other must not
+   * retry at all (see transcodeFailed).
+   */
+  const chosenPath = useRef<FilePath>("progressive");
   // For a transcode, the element's clock is relative to this offset.
   const offset = useRef(0);
   const startedFrom = useRef(0);
@@ -930,12 +963,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setSubOffset(0);
       }
       setLoading(true);
+      chosenPath.current = filePath(
+        decision.current.method,
+        hlsWorthTrying(mediaCapability().canPlayType),
+      );
       v.src = sourceURL(
         item.id,
         decision.current.method,
         startedFrom.current,
         audioIndex,
         qualityRef.current,
+        chosenPath.current,
       );
       v.load();
       void v.play().catch(() => {});
@@ -1021,12 +1059,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     // Same reason as the seek below: the retry is about whichever track is
     // playing, not the file's default.
+    chosenPath.current = filePath(
+      "transcode",
+      hlsWorthTrying(mediaCapability().canPlayType),
+    );
     v.src = sourceURL(
       item.id,
       "transcode",
       startedFrom.current,
       audioIndex,
       qualityRef.current,
+      chosenPath.current,
     );
     v.load();
     void v.play().catch(() => {});
@@ -1076,12 +1119,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // about a different track than the one playing, and on a file whose
         // default track direct-plays the server answers 409 "this file can be
         // played directly" — so the seek dies, and with it the playback.
+        chosenPath.current = filePath(
+          decision.current.method,
+          hlsWorthTrying(mediaCapability().canPlayType),
+        );
         v.src = sourceURL(
           itemID,
           decision.current.method,
           t,
           audioIndex,
           qualityRef.current,
+          chosenPath.current,
         );
         v.load();
         void v.play().catch(() => {});
@@ -1728,9 +1776,50 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             onPlaying={() => {
               setLoading(false);
               setNote("");
+              // Frames from a playlist are the only proof that this engine can
+              // read one. Recorded so the question is not re-opened on every
+              // film, and so a later decode error cannot be mistaken for the
+              // engine lacking HLS altogether.
+              if (chosenPath.current === "hls") rememberHLS("playable");
             }}
             onWaiting={() => setLoading(true)}
-            onError={() => {
+            onError={(e) => {
+              /*
+               * A playlist this engine cannot read, which is not a failure of
+               * the film or the server.
+               *
+               * `canPlayType` answers "maybe" to a playlist on Chromium whether
+               * or not it will play one, so the capability cannot be asked for
+               * up front — it is discovered here, once, and remembered for the
+               * device (fileTransport.ts). Falling straight back to the
+               * progressive source means the cost of finding out is a reload
+               * rather than a dead player.
+               *
+               * Narrow deliberately: only *unsupported source* counts. A decode
+               * or network error says something about this file or this moment,
+               * and retiring the better path over one of those would be a
+               * permanent decision made from a transient fault.
+               */
+              if (
+                chosenPath.current === "hls" &&
+                isUnsupportedSource(e.currentTarget.error)
+              ) {
+                rememberHLS("refused");
+                const v = e.currentTarget;
+                chosenPath.current = "progressive";
+                setLoading(true);
+                v.src = sourceURL(
+                  itemID,
+                  decision.current.method,
+                  offset.current,
+                  audioIndex,
+                  qualityRef.current,
+                  "progressive",
+                );
+                v.load();
+                void v.play().catch(() => {});
+                return;
+              }
               // Two different failures wearing one event. A direct play that
               // fails is a claim to withdraw; a transcode that fails is the
               // server saying no, and only one of them is worth retrying.
