@@ -71,6 +71,22 @@ type Settings struct {
 	// is a thing a person should be able to say and could not before.
 	AllowMediaDeletion bool `json:"allow_media_deletion"`
 
+	/*
+	 * EmptyTrashOnScan removes rows whose files are gone, after a scan that was
+	 * in a position to know they are gone.
+	 *
+	 * Off by default, and that is the decision rather than caution. "Scanning
+	 * marks missing, never deletes" exists because an unmounted drive must not
+	 * destroy library data, and a missing row is not junk — it is the record of
+	 * a film somebody watched, with its position, rating and history. Somebody
+	 * who wants that tidied can ask; nobody gets it by not reading a page.
+	 *
+	 * The conditions under which a scan may act on it live in
+	 * `scan.MayEmptyTrash`, which is the half that knows whether the walk could
+	 * see the library at all.
+	 */
+	EmptyTrashOnScan bool `json:"empty_trash_on_scan"`
+
 	// ScanIntervalHours rescans every library on a timer. Zero is off, which is
 	// the default: LANcast scans when asked and when a library is created, and
 	// a periodic scan is for a server whose media arrives by other means —

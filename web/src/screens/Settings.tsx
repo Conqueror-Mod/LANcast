@@ -760,6 +760,34 @@ function AdminSections({ pane }: { pane: string }) {
                 leaves every file where it is. Nothing on this server can then
                 delete your media.
               </div>
+
+              {/*
+                Emptying the trash, which is about *rows* and not files.
+                Deliberately below the deletion switch and worded to keep the
+                two apart: one destroys media, this destroys the record of media
+                that is already gone.
+              */}
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.empty_trash_on_scan ?? false}
+                  onChange={(e) =>
+                    update.mutate({ empty_trash_on_scan: e.target.checked })
+                  }
+                />
+                Forget missing files after a scan
+              </label>
+              <div className="set-row__sub set-row__sub--standalone">
+                A file that has gone leaves its entry behind, marked missing, so
+                a drive that failed to mount does not cost you a library. Turn
+                this on and a scan removes those entries — along with their
+                watch history, positions and ratings, which is what makes it
+                worth asking about rather than doing quietly.
+                <br />
+                A scan that could not read a location, or that saw no files at
+                all, leaves them alone whatever this says: an empty walk is a
+                statement about the walk and not about the library.
+              </div>
             </>
           )}
         </section>

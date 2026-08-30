@@ -32,6 +32,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"continue_weeks":       cur.ContinueWeeks,
 		"continue_limit":       cur.ContinueLimit,
 		"allow_media_deletion": cur.AllowMediaDeletion,
+		"empty_trash_on_scan":  cur.EmptyTrashOnScan,
 		"scan_interval_hours":  cur.ScanIntervalHours,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
@@ -73,6 +74,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		ContinueWeeks      *int  `json:"continue_weeks"`
 		ContinueLimit      *int  `json:"continue_limit"`
 		AllowMediaDeletion *bool `json:"allow_media_deletion"`
+		EmptyTrashOnScan   *bool `json:"empty_trash_on_scan"`
 		ScanIntervalHours  *int  `json:"scan_interval_hours"`
 		AuditRetentionDays *int  `json:"audit_retention_days"`
 	}
@@ -143,6 +145,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AllowMediaDeletion != nil {
 		next.AllowMediaDeletion = *req.AllowMediaDeletion
+	}
+	if req.EmptyTrashOnScan != nil {
+		next.EmptyTrashOnScan = *req.EmptyTrashOnScan
 	}
 	if req.ScanIntervalHours != nil {
 		if *req.ScanIntervalHours < 0 || *req.ScanIntervalHours > 168 {
@@ -223,6 +228,9 @@ func changedSettings(prev, next config.Settings) []string {
 	// Worth auditing loudly: it is the switch that decides whether this server
 	// can destroy media at all.
 	add("allow_media_deletion", prev.AllowMediaDeletion != next.AllowMediaDeletion)
+	// Audited like the deletion switch beside it, and for the same reason: it
+	// changes whether the server destroys records without being asked again.
+	add("empty_trash_on_scan", prev.EmptyTrashOnScan != next.EmptyTrashOnScan)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
