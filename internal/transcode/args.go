@@ -554,7 +554,32 @@ func Args(o Options) []string {
 		}
 	}
 
-	if o.Decision.AudioAction == "copy" {
+	/*
+	 * A copied audio track survives a seek only if the container can be sought.
+	 *
+	 * Measured on `The Wedding Singer (1998).avi` resumed at 4343 seconds:
+	 * video started at 0.000 and the copied MP3 at **-1.997**, two seconds of
+	 * sound ahead of the first frame. Reported as a 1.8 second lag with the
+	 * picture behind, which is exactly what that is.
+	 *
+	 * The gap is data, not timestamps — AVI has no per-frame timestamps, so an
+	 * input seek lands on a video keyframe while the audio genuinely begins
+	 * earlier. `-avoid_negative_ts make_zero` was tried and only moved it
+	 * (video 1.997, audio 0.000). Re-encoding re-times the track from the seek
+	 * point and measures 0.000 against 0.000.
+	 *
+	 * Only when actually seeking: from the start there is nothing to be out of
+	 * step with, and the copy is free and lossless. Audio is a fraction of the
+	 * cost of video, which is the same reasoning decide.go uses for re-encoding
+	 * audio alone.
+	 */
+	copyAudio := o.Decision.AudioAction == "copy"
+	if copyAudio && o.StartAt > 0 && !o.Live &&
+		probe.SeekLosesAudioSync(o.Decision.SourceContainer) {
+		copyAudio = false
+	}
+
+	if copyAudio {
 		a = append(a, "-c:a", "copy")
 		/*
 		 * AAC out of MPEG-TS carries ADTS framing, and MP4 will not take it.
