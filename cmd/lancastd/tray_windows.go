@@ -5,11 +5,17 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"fyne.io/systray"
 
+	"lancast/internal/autostart"
 	"lancast/internal/branding"
 	"lancast/internal/desktop"
 	"lancast/internal/singleton"
@@ -40,7 +46,7 @@ func trayRun(addr, dataDir string) error {
 	 * answers.
 	 */
 	if svc := installedService(); svc.Installed {
-		return startServiceAndOpen(addr, svc)
+		return runServiceTray(addr, svc)
 	}
 
 	release, held, err := singleton.Acquire(singleton.Server)
@@ -142,14 +148,28 @@ func openExisting(addr string) error {
 	return desktop.OpenBrowser(desktop.ResolvedURL(addr))
 }
 
-// startServiceAndOpen is the launch path on a machine with the service
-// installed: make sure it is running, then open the UI.
-//
-// No tray icon of its own. The service has no session to put one in and this
-// process is about to exit — an icon that outlived the launch would be a second
-// thing claiming to be the server, which is the confusion this whole path is
-// removing.
-func startServiceAndOpen(addr string, svc serviceState) error {
+/*
+ * runServiceTray is the launch path on a machine with the service installed.
+ *
+ * It makes sure the service is running and then **stays**, as a controller for
+ * it — a tray icon that opens LANcast, launches the app, and can be told to
+ * start with Windows.
+ *
+ * It used to start the service, open a browser and exit, on the reasoning that
+ * "an icon that outlived the launch would be a second thing claiming to be the
+ * server". That reasoning was right about a process that *is* a server and
+ * wrong about this one, which is not: the server is the service, and this holds
+ * no port, no database and no lock. Reported as the executable being more or
+ * less useless — clicking it flashed a browser and vanished, so there was
+ * nothing to click a second time.
+ *
+ * The distinction is load-bearing enough to be in the words on the menu.
+ * **Exit removes the icon and leaves the server running**, because stopping a
+ * Windows service needs elevation and a tray item that silently did nothing —
+ * or worse, raised a UAC prompt for something labelled "Exit" — would be the
+ * confusion the old comment was guarding against, arriving from the other side.
+ */
+func runServiceTray(addr string, svc serviceState) error {
 	if !svc.Running {
 		if err := startInstalledService(); err != nil {
 			if errors.Is(err, errCancelled) {
@@ -163,15 +183,121 @@ func startServiceAndOpen(addr string, svc serviceState) error {
 			return nil
 		}
 	}
-	// Watching the port rather than the service state: "running" from the
-	// service manager means the process started, not that it is listening, and
-	// the browser only cares about the second one.
-	if !desktop.WaitForServer(addr, 45*time.Second) {
-		alert("LANcast", "The LANcast service was started but is not answering yet.\n\n"+
-			"Give it a moment and open LANcast again.")
-		return nil
+
+	log := newLogger(false)
+
+	onReady := func() {
+		systray.SetIcon(branding.IconICO)
+		systray.SetTitle("LANcast")
+		systray.SetTooltip("LANcast — the server runs as a Windows service")
+
+		mOpen := systray.AddMenuItem("Open LANcast", "Open LANcast in your browser")
+		mApp := systray.AddMenuItem("Open the LANcast app", "Open the LANcast desktop window")
+		systray.AddSeparator()
+		mLogin := systray.AddMenuItemCheckbox("Start LANcast at login",
+			"Show this icon when you sign in. The server already starts on its own.", false)
+		systray.AddSeparator()
+		/*
+		 * Both of these open a page rather than doing the thing, and both say
+		 * so. A scan is an admin action on an authenticated API and this
+		 * process holds no session — it is not the server and has no
+		 * credentials of its own. A menu item that quietly failed, or one that
+		 * invented a local back door into an authenticated endpoint, would be
+		 * worse than one that takes you where the button is.
+		 */
+		mLibraries := systray.AddMenuItem("Update libraries…", "Open the library settings, where scanning lives")
+		mUpdates := systray.AddMenuItem("Check for updates…", "Open the update settings")
+		systray.AddSeparator()
+		mQuit := systray.AddMenuItem("Exit", "Remove this icon. The LANcast server keeps running.")
+
+		if on, err := autostart.Enabled(); err == nil && on {
+			mLogin.Check()
+		}
+
+		go func() {
+			for {
+				select {
+				case <-mOpen.ClickedCh:
+					if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
+						log.Warn("could not open browser", "error", err)
+					}
+				case <-mApp.ClickedCh:
+					if err := openClientApp(); err != nil {
+						// Said out loud: the app is the front door (ADR 0023),
+						// and a menu item that does nothing is the failure this
+						// whole change is about.
+						alert("LANcast", "Could not open the LANcast app.\n\n"+err.Error())
+					}
+				case <-mLogin.ClickedCh:
+					toggleLogin(mLogin, log)
+				case <-mLibraries.ClickedCh:
+					openPane(addr, "libraries", log)
+				case <-mUpdates.ClickedCh:
+					openPane(addr, "updates", log)
+				case <-mQuit.ClickedCh:
+					systray.Quit()
+					return
+				}
+			}
+		}()
 	}
-	return desktop.OpenBrowser(desktop.ResolvedURL(addr))
+
+	// Nothing to cancel: this process owns no server. Exit is exactly what it
+	// says — the icon goes and the service carries on.
+	systray.Run(onReady, func() {})
+	return nil
+}
+
+// openPane opens the web UI at one settings pane.
+func openPane(addr, pane string, log *slog.Logger) {
+	if err := desktop.OpenBrowser(desktop.ResolvedURL(addr) + "/settings?pane=" + pane); err != nil {
+		log.Warn("could not open browser", "error", err)
+	}
+}
+
+/*
+ * toggleLogin flips the run key and the tick together.
+ *
+ * The tick is set from what the write actually did rather than from what was
+ * asked for: a registry write that failed and a menu that ticked anyway is a
+ * setting that lies about itself, which is worse than one that refuses.
+ */
+func toggleLogin(item *systray.MenuItem, log *slog.Logger) {
+	if item.Checked() {
+		if err := autostart.Disable(); err != nil {
+			log.Warn("could not disable autostart", "error", err)
+			return
+		}
+		item.Uncheck()
+		return
+	}
+	// The same arguments this launch used, or the icon comes back at login
+	// pointed at a different data directory from the one it is controlling.
+	if err := autostart.Enable("tray"); err != nil {
+		log.Warn("could not enable autostart", "error", err)
+		return
+	}
+	item.Check()
+}
+
+/*
+ * openClientApp launches the desktop window.
+ *
+ * Beside this executable, because that is where the installer puts it and
+ * because a PATH lookup would find whatever else is called LANcast-Client. A
+ * second launch of the client raises the window it already has rather than
+ * adding a process, so pressing this twice is harmless.
+ */
+func openClientApp() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	client := filepath.Join(filepath.Dir(exe), "LANcast-Client.exe")
+	if _, err := os.Stat(client); err != nil {
+		return fmt.Errorf("LANcast-Client.exe is not beside the server: %w", err)
+	}
+	return exec.Command(client).Start()
 }
 
 // explainStartupFailure turns the errors that actually happen into sentences
