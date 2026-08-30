@@ -48,6 +48,7 @@ import {
   type FilePath,
 } from "./fileTransport";
 import { mediaCapability } from "@/lib/liveTransport";
+import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -1067,6 +1068,123 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       item.id,
       "transcode",
       startedFrom.current,
+      audioIndex,
+      qualityRef.current,
+      chosenPath.current,
+    );
+    v.load();
+    void v.play().catch(() => {});
+  }, [item, audioIndex]);
+
+  /*
+   * ---- a direct play that is not coping -------------------------------------
+   *
+   * Measured on the reporting install: two HEVC Main 10 films dropped 19.8% and
+   * 19.9% of their frames while an H.264 film from the same folder, minutes
+   * later, dropped none. Reported as heavy frame lag, and invisible to
+   * everything that could have predicted it — `canPlayType` says "probably" and
+   * `mediaCapabilities.decodingInfo()` says smooth *and* power-efficient for
+   * the exact shape of the file that fails.
+   *
+   * So it is caught by watching. The counters are sampled while the element is
+   * genuinely playing, and the baseline is dropped whenever it is not: a paused
+   * or rebuffering element drops frames for reasons that are nothing to do with
+   * the codec, and blaming those would transcode a film because a disk was
+   * briefly busy.
+   *
+   * Only direct play is watched. A transcode already gave up the claim, and a
+   * conversion that stutters is a different problem with a different fix.
+   */
+  const decodeBase = useRef<Sample | null>(null);
+  const poorDecode = useRef(false);
+
+  useEffect(() => {
+    decodeBase.current = null;
+    poorDecode.current = false;
+  }, [itemID]);
+
+  useEffect(() => {
+    if (transcoding.current || !playing) {
+      decodeBase.current = null;
+      return;
+    }
+    const id = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v || v.paused || poorDecode.current) return;
+      // HAVE_FUTURE_DATA or better. Below that the element is starved, and
+      // frames missed while starving say nothing about the decoder.
+      if (v.readyState < 3) {
+        decodeBase.current = null;
+        return;
+      }
+      const q = v.getVideoPlaybackQuality?.();
+      if (!q) return; // Engines without the counters simply opt out.
+      const now: Sample = {
+        at: Date.now(),
+        decoded: q.totalVideoFrames,
+        dropped: q.droppedVideoFrames,
+      };
+      if (!decodeBase.current) {
+        decodeBase.current = now;
+        return;
+      }
+      if (struggling(decodeBase.current, now)) {
+        poorDecode.current = true;
+        fallBackFromPoorDecode();
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemID, playing, audioIndex]);
+
+  /*
+   * Withdraw the claim that made this direct-play, and convert instead.
+   *
+   * Deliberately the same withdrawal `retryWithoutClaims` performs, for the
+   * same reason it is narrow: only the capabilities *this file needed* are at
+   * risk, because a file cannot be ruined by a claim it never used. One
+   * unplayable file once took seven claims down with it and the server
+   * re-encoded everything for a fortnight.
+   *
+   * Resumes where the viewer is, not where they started. This fires in the
+   * middle of a film — sending them back to the beginning to fix the picture
+   * would be a worse bug than the one being fixed.
+   */
+  const fallBackFromPoorDecode = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !item || transcoding.current) return;
+
+    const claimed = capabilities();
+    if (claimed) {
+      const atRisk = capabilitiesNeededBy(item?.streams);
+      const claims = claimed.split(",");
+      let news = false;
+      for (const c of atRisk.filter((c) => claims.includes(c))) {
+        if (deny(c)) news = true;
+      }
+      if (news) resetCapabilities();
+    }
+
+    const at = v.currentTime;
+    setNote("That file was dropping frames — converting it instead");
+    decision.current = {
+      method: "transcode",
+      reason: "direct playback dropped too many frames",
+    };
+    transcoding.current = true;
+    offset.current = at;
+    startedFrom.current = at;
+    setSubOffset(at);
+    setCurrent(0);
+    setLoading(true);
+    chosenPath.current = filePath(
+      "transcode",
+      hlsWorthTrying(mediaCapability().canPlayType),
+    );
+    v.src = sourceURL(
+      item.id,
+      "transcode",
+      at,
       audioIndex,
       qualityRef.current,
       chosenPath.current,
