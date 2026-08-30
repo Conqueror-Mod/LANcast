@@ -278,6 +278,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 
 	scanner := scan.New(st, log)
+	// Read at the moment the question is asked rather than captured now: a scan
+	// takes minutes and the switch can move while one runs.
+	scanner.EmptyTrashWhen(func() bool { return settings.Get().EmptyTrashOnScan })
 	art := artwork.New(filepath.Join(cfg.DataDir, "artwork"))
 
 	// Plugins (ADR 0020) are loaded once from the data dir and registered into

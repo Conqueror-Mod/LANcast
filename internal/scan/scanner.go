@@ -155,6 +155,17 @@ type Scanner struct {
 	last     map[int64]*Progress
 	onFinish func()
 	tags     TagReader
+
+	/*
+	 * Whether a finished scan should remove what it marked missing.
+	 *
+	 * A function rather than a value, because the setting can change while the
+	 * server runs and a scan takes minutes: reading it at the moment the
+	 * question is asked is the only way the answer reflects what the setting
+	 * says now. Nil means no — a scanner nobody told is a scanner that does not
+	 * delete, which is the safe direction for a switch about destroying rows.
+	 */
+	emptyTrash func() bool
 }
 
 func New(st *store.Store, log *slog.Logger) *Scanner {
@@ -164,6 +175,20 @@ func New(st *store.Store, log *slog.Logger) *Scanner {
 		running: map[int64]bool{},
 		last:    map[int64]*Progress{},
 	}
+}
+
+/*
+ * EmptyTrashWhen tells the scanner how to find out whether to empty the trash.
+ *
+ * Injected rather than imported, so `scan` does not depend on `config`: the
+ * package that walks a filesystem has no business knowing the shape of a
+ * settings file, and the one test that matters here is about *when* it is
+ * allowed, not about where the flag is stored.
+ */
+func (s *Scanner) EmptyTrashWhen(fn func() bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.emptyTrash = fn
 }
 
 // OnFinish registers a callback invoked after every completed scan.
@@ -287,7 +312,31 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	}
 	delete(s.running, lib.ID)
 	done := s.onFinish
+	wants := s.emptyTrash
+	verdict := MayEmptyTrash(*p)
 	s.mu.Unlock()
+
+	/*
+	 * Emptying the trash, if it was asked for and this scan can be trusted.
+	 *
+	 * Outside the lock, because it is a database write and the mutex here
+	 * guards the progress map. After the shape check, because that reads the
+	 * library's own counts and the rows being removed are part of them — a
+	 * shape verdict computed against a library half-deleted would describe
+	 * neither the before nor the after.
+	 */
+	if wants != nil && wants() {
+		if !verdict.Allowed {
+			// Info rather than Debug: a switch somebody turned on and that then
+			// declines to act is exactly the state that reads as broken, and
+			// the only place it can be read is here.
+			s.log.Info("not emptying trash", "library", lib.ID, "reason", verdict.Reason)
+		} else if n, err := s.st.EmptyTrash(ctx, lib.ID); err != nil {
+			s.log.Error("empty trash", "library", lib.ID, "error", err)
+		} else if n > 0 {
+			s.log.Info("emptied trash", "library", lib.ID, "removed", n)
+		}
+	}
 
 	// Called outside the lock: the callback starts enrichment, which reads
 	// scan status, and holding the mutex here would deadlock.

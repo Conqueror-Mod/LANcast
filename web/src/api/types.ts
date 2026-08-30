@@ -328,6 +328,10 @@ export interface Settings {
   continue_weeks: number;
   continue_limit: number;
   allow_media_deletion: boolean;
+  // Optional because a server older than this field does not send it, and a
+  // client newer than its server is ordinary here. Absent reads as off, which
+  // is the safe direction for a switch that removes records.
+  empty_trash_on_scan?: boolean;
   scan_interval_hours: number;
 }
 
@@ -346,6 +350,7 @@ export interface SettingsUpdate {
   continue_weeks?: number;
   continue_limit?: number;
   allow_media_deletion?: boolean;
+  empty_trash_on_scan?: boolean;
   scan_interval_hours?: number;
 }
 
