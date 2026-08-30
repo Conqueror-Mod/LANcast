@@ -52,3 +52,35 @@ func Quit() error { return signalQuit() }
 // works perfectly as a window, and the caller is the half that knows whether
 // that is worth saying out loud.
 func Listen(show, quit func()) (stop func(), err error) { return listen(show, quit) }
+
+/*
+ * TrayPresent reports whether something is there to bring the window back.
+ *
+ * Close-to-tray hides the window rather than closing it, which is only a
+ * feature while an icon exists to restore it from. The client stopped having
+ * one of its own deliberately — two LANcast icons in the notification area was
+ * reported as exactly that — and the server's tray took over saying Open and
+ * Quit to it.
+ *
+ * But nothing *starts* the server's tray. The service runs without one, so a
+ * machine that has only ever booted has no icon anywhere: the X then hid a
+ * window nothing could restore, and the app became a process with no way in and
+ * no way out. Reported as the process staying open with no way to reopen it.
+ *
+ * So the hiding is now conditional on this. A tray that is present keeps the
+ * behaviour it was built for; a tray that is absent means the X closes, which
+ * is what a window with no icon behind it has to do.
+ *
+ * False where the mechanism does not exist, which is the safe direction: it
+ * makes closing mean closing.
+ */
+func TrayPresent() bool { return trayPresent() }
+
+/*
+ * HoldTray marks a tray as running, until the returned release is called.
+ *
+ * Held by the tray rather than published by the client, because the question is
+ * about the tray: the client is asking "if I hide, can anything bring me back",
+ * and only the thing that would bring it back can answer honestly.
+ */
+func HoldTray() (release func(), err error) { return holdTray() }

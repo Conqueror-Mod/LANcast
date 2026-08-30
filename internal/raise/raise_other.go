@@ -10,3 +10,9 @@ func signalShow() error { return nil }
 func signalQuit() error { return nil }
 
 func listen(_, _ func()) (func(), error) { return func() {}, nil }
+
+// No tray on these platforms, so nothing can restore a hidden window and
+// close-to-tray must mean close.
+func trayPresent() bool { return false }
+
+func holdTray() (func(), error) { return func() {}, nil }

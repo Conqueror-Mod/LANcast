@@ -160,3 +160,121 @@ func TestQuittingNobodyIsNotAnError(t *testing.T) {
 		t.Errorf("quitting with no app running failed: %v", err)
 	}
 }
+
+/*
+ * Whether anything can bring a hidden window back.
+ *
+ * Close-to-tray hides rather than closes, which is only a feature while an icon
+ * exists to restore from. The client gave up its own icon deliberately — two
+ * LANcast icons in the notification area was the complaint — and the server's
+ * tray took over. But nothing *starts* that tray: a machine that has only
+ * booted runs the service without one, and the X then hid a window nothing
+ * could restore. Reported as the process staying open with no way to reopen it.
+ *
+ * So the client asks this before hiding, and the answer has to be false when
+ * there is genuinely no tray — the safe direction, because it makes the X mean
+ * close.
+ */
+func TestNoTrayMeansNothingCanRestoreTheWindow(t *testing.T) {
+	isolate(t)
+	if TrayPresent() {
+		t.Error("claimed a tray with none running, so the window would hide " +
+			"behind an icon that does not exist")
+	}
+}
+
+func TestAHeldTrayIsVisibleToTheClient(t *testing.T) {
+	isolate(t)
+	release, err := HoldTray()
+	if err != nil {
+		t.Fatalf("HoldTray: %v", err)
+	}
+	if !TrayPresent() {
+		t.Error("a running tray was not seen, so the X would close the app " +
+			"even though an icon was there to restore it")
+	}
+	release()
+}
+
+/*
+ * And presence ends with the tray.
+ *
+ * The reason this is a handle rather than a file or a registry key: it goes
+ * away with the process that holds it, including one that dies badly, so a
+ * crashed tray cannot leave the client hiding into nothing for ever.
+ */
+func TestPresenceEndsWhenTheTrayDoes(t *testing.T) {
+	isolate(t)
+	release, err := HoldTray()
+	if err != nil {
+		t.Fatalf("HoldTray: %v", err)
+	}
+	release()
+	if TrayPresent() {
+		t.Error("a released tray still reported itself present")
+	}
+}
+
+/*
+ * A listener started right after another one stopped still gets its signal.
+ *
+ * This is the mechanism behind a test that failed two or three runs in ten,
+ * always on the *first* signal, and never when run alone.
+ *
+ * stop() used to close the handles without waiting for the goroutines blocked
+ * on them. Closing a handle another thread is waiting on is undefined, and the
+ * way it goes wrong is not the way one expects: the wait does not necessarily
+ * fail. Windows reuses handle *values*, so a goroutine still parked on a closed
+ * one can end up waiting on whatever was opened next — and these are auto-reset
+ * events, where exactly one waiter wakes per signal. The stale goroutine takes
+ * the wake-up, sees its own stopped flag and returns, and the signal is gone.
+ *
+ * In the field that is a tray's Open doing nothing, once, for no reason anybody
+ * can reproduce — which is why it is worth a test rather than a longer timeout.
+ *
+ * Repeated, because the failure needs the handle value to actually be reused.
+ */
+func TestASignalSurvivesAnEarlierListenerBeingStopped(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		func() {
+			isolate(t)
+
+			// A listener that is stopped, leaving goroutines to unwind.
+			stopFirst, err := Listen(func() {}, func() {})
+			if err != nil {
+				t.Fatalf("first listen: %v", err)
+			}
+			stopFirst()
+
+			// And a fresh one on the same names, immediately.
+			got := make(chan struct{}, 1)
+			stop, err := Listen(func() { got <- struct{}{} }, func() {})
+			if err != nil {
+				t.Fatalf("second listen: %v", err)
+			}
+			defer stop()
+
+			if err := Signal(); err != nil {
+				t.Fatalf("signal: %v", err)
+			}
+			select {
+			case <-got:
+			case <-time.After(2 * time.Second):
+				t.Fatalf("round %d: the signal was eaten by a goroutine from a "+
+					"listener that had already been stopped", i+1)
+			}
+		}()
+	}
+}
+
+// And stopping twice is not a double close, because a caller that stops on both
+// a tray Quit and a deferred shutdown is an ordinary shape.
+func TestStopIsSafeToCallTwice(t *testing.T) {
+	isolate(t)
+	stop, err := Listen(func() {}, func() {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	stop()
+}

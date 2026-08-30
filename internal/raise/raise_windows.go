@@ -2,7 +2,9 @@ package raise
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -81,7 +83,10 @@ func listen(show, quit func()) (func(), error) {
 	 * re-arm, which is where this kind of code goes wrong.
 	 */
 	var stopped atomic.Bool
+	var waiting sync.WaitGroup
+	waiting.Add(2)
 	watch := func(h windows.Handle, fn func()) {
+		defer waiting.Done()
 		for {
 			ev, err := windows.WaitForSingleObject(h, windows.INFINITE)
 			if err != nil || ev != windows.WAIT_OBJECT_0 {
@@ -96,13 +101,43 @@ func listen(show, quit func()) (func(), error) {
 	go watch(showH, show)
 	go watch(quitH, quit)
 
+	var once sync.Once
 	return func() {
-		stopped.Store(true)
-		// Wake both so neither goroutine outlives the client holding a handle.
-		_ = windows.SetEvent(showH)
-		_ = windows.SetEvent(quitH)
-		_ = windows.CloseHandle(showH)
-		_ = windows.CloseHandle(quitH)
+		once.Do(func() {
+			stopped.Store(true)
+			// Wake both so neither goroutine outlives the client.
+			_ = windows.SetEvent(showH)
+			_ = windows.SetEvent(quitH)
+			/*
+			 * Wait for them to leave before closing the handles.
+			 *
+			 * Closing a handle another thread is blocked on is undefined, and
+			 * the way it went wrong here is worth writing down: the wait does
+			 * not necessarily fail. Windows reuses handle *values*, so a
+			 * goroutine still parked on a closed one can end up waiting on
+			 * whatever was opened next — and these are auto-reset events, where
+			 * exactly one waiter wakes per signal. The stale goroutine takes
+			 * the wake-up, sees its own `stopped` and returns, and the signal is
+			 * gone: the new listener waits for something already consumed.
+			 *
+			 * It showed up as a test failing two or three runs in ten, always
+			 * on the *first* signal after another listener had been stopped, and
+			 * never when run alone. The same shape in the field is a tray's
+			 * Open doing nothing, once, for no reason anybody could reproduce.
+			 *
+			 * Bounded rather than infinite: a goroutine that cannot be woken
+			 * must not hang the caller shutting down. Leaking a handle is the
+			 * lesser fault, and it goes away with the process.
+			 */
+			done := make(chan struct{})
+			go func() { waiting.Wait(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+			}
+			_ = windows.CloseHandle(showH)
+			_ = windows.CloseHandle(quitH)
+		})
 	}, nil
 }
 
@@ -132,4 +167,46 @@ func openOwn(event string) (windows.Handle, error) {
 		return 0, fmt.Errorf("raise: no handle for %s", event)
 	}
 	return h, nil
+}
+
+/*
+ * The tray's presence, published the same way the two verbs are addressed.
+ *
+ * A named event held open for the life of the tray. Nothing is ever signalled
+ * on it — it exists to be *openable*, which is the whole question — and it goes
+ * away with the process that holds it, including one that crashes, because
+ * Windows closes handles on exit. A file or a registry key would have to be
+ * cleaned up by the thing least able to do it.
+ */
+func trayEventName() string { return eventPrefix + "-Tray" }
+
+func trayPresent() bool {
+	name, err := windows.UTF16PtrFromString(trayEventName())
+	if err != nil {
+		return false
+	}
+	h, err := windows.OpenEvent(windows.SYNCHRONIZE, false, name)
+	if err != nil {
+		return false
+	}
+	windows.CloseHandle(h)
+	return true
+}
+
+func holdTray() (func(), error) {
+	name, err := windows.UTF16PtrFromString(trayEventName())
+	if err != nil {
+		return func() {}, err
+	}
+	h, err := windows.CreateEvent(nil, manualReset, 0, name)
+	if err != nil {
+		// ERROR_ALREADY_EXISTS means another tray holds it, and the handle is
+		// still valid — the same reasoning listen() uses. Two trays claiming
+		// presence is not a problem worth failing over; the answer to "can
+		// anything restore the window" is yes either way.
+		if h == 0 {
+			return func() {}, fmt.Errorf("raise: %w", err)
+		}
+	}
+	return func() { windows.CloseHandle(h) }, nil
 }

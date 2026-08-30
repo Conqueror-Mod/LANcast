@@ -189,6 +189,25 @@ func runWindow(l *launcher) {
 			if quitting || !prefs.CloseToTray || tray == nil {
 				return true
 			}
+			/*
+			 * Hide only if something can bring the window back.
+			 *
+			 * This window has no icon of its own — it used to, and a second
+			 * LANcast icon beside the server's was reported as exactly that, so
+			 * the server's tray took over saying Open and Quit to it.
+			 *
+			 * Nothing starts that tray. A machine that has only booted runs the
+			 * service without one, and on such a machine the X hid a window
+			 * that nothing could restore: the app became a process with no way
+			 * in and no way out, which is how it was reported.
+			 *
+			 * So the preference asks for hiding and this decides whether hiding
+			 * is honest. With no tray the X closes, which is what a window with
+			 * nothing behind it has to mean.
+			 */
+			if !raise.TrayPresent() {
+				return true
+			}
 			tray.Hide()
 			return false
 		},
