@@ -20,6 +20,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/desktop"
 	"lancast/internal/desktopprefs"
+	"lancast/internal/raise"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
@@ -65,12 +66,32 @@ func main() {
 	_ = *window // accepted and ignored; the window is the default now
 	browserMode = *browser
 
-	// One client at a time. Launching again — a second double-click of the
-	// shortcut — reopens the UI rather than adding a duplicate process and a
-	// second tray icon.
+	/*
+	 * One client at a time. Launching again — a second press of the shortcut —
+	 * brings the running window forward rather than adding a duplicate process.
+	 *
+	 * **It used to open a browser**, under a comment saying it reopened the UI.
+	 * It did not: the browser is a different interface, without the pinned
+	 * certificate, showing the warning page the window exists to avoid
+	 * (ADR 0023). Reported from a mouse button bound to the client shortcut —
+	 * the Start menu entry opened the window, the same shortcut fired again
+	 * opened a browser beside it.
+	 *
+	 * A browser is still the honest answer when this process is *asked* for one
+	 * with -browser, and still the fallback when there is no WebView2 runtime.
+	 * Neither is true of somebody pressing their shortcut twice.
+	 */
 	release, held, err := singleton.Acquire(singleton.Client)
 	if err == nil && !held {
-		_ = desktop.OpenBrowser(desktop.ResolvedURL(*addr))
+		if *browser {
+			// Asked for a browser explicitly. A second -browser launch has
+			// nothing to raise, so it does what it was told.
+			_ = desktop.OpenBrowser(desktop.ResolvedURL(*addr))
+			return
+		}
+		// Nobody listening is not an error: it is what a client too old to
+		// listen looks like, and there is nothing useful to do about it here.
+		_ = raise.Signal()
 		return
 	}
 	defer release()
@@ -134,6 +155,8 @@ func runWindow(l *launcher) {
 	// is the worst version of this feature.
 	var quitting bool
 	var tray clientwindow.Controller
+	stopRaise := func() {}
+	defer func() { stopRaise() }()
 
 	err = clientwindow.Open(clientwindow.Options{
 		URL:    desktop.ResolvedURL(l.addr),
@@ -148,6 +171,18 @@ func runWindow(l *launcher) {
 			return false
 		},
 		OnReady: func(c clientwindow.Controller) {
+			/*
+			 * Listen for a second launch, whatever the tray preference says.
+			 *
+			 * Deliberately above the close-to-tray return: raising the window
+			 * is what a shortcut pressed twice means, and it has nothing to do
+			 * with whether closing the window hides it. Putting it after would
+			 * have made the fix work only for people who had turned on an
+			 * unrelated setting.
+			 */
+			if s, err := raise.Listen(c.Show); err == nil {
+				stopRaise = s
+			}
 			if !prefs.CloseToTray {
 				return
 			}
