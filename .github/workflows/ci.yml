@@ -43,6 +43,56 @@ jobs:
       - name: go test
         run: go test ./...
 
+  # The native worker, proven on every pull request rather than during a
+  # release (ADR 0052).
+  #
+  # This job exists because of two releases that each found one more broken
+  # link in a chain that only executes when a tag is pushed — a signing step
+  # that had never run, and an update swap that reached staging and stopped.
+  # lancast-faces is the first cgo artefact this project ships and the first
+  # thing cross-compiled with a C toolchain, so its build runs here, on the
+  # ordinary path, where a failure costs a red check instead of a release.
+  faces:
+    name: Faces worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install the mingw cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      # Native, and it must say so. A build that silently lost its cgo would
+      # still compile and still run — it would just never detect a face — so
+      # the check is that the binary reports a C toolchain, not that it exists.
+      - name: build for linux/amd64 with cgo
+        run: CGO_ENABLED=1 go build -o /tmp/lancast-faces ./cmd/lancast-faces
+
+      - name: it reports a native toolchain
+        run: |
+          caps="$(/tmp/lancast-faces capabilities)"
+          echo "$caps"
+          echo "$caps" | grep -q '"native": "gcc' || {
+            echo "the binary did not report a C toolchain — cgo was lost"
+            exit 1
+          }
+
+      # The cross-compile, which is the half that can only fail on a runner.
+      - name: cross-build for windows/amd64 with cgo
+        run: |
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc go build -o /tmp/lancast-faces.exe ./cmd/lancast-faces
+          file /tmp/lancast-faces.exe
+
+      # And the server stays free of it. This is the whole placement decision,
+      # asserted rather than trusted: if a future change imports the worker's
+      # cgo into lancastd, this fails here rather than in a release.
+      - name: lancastd still builds with cgo off
+        run: CGO_ENABLED=0 go build ./cmd/lancastd ./cmd/lancast
+
   client:
     name: Client
     runs-on: ubuntu-latest
