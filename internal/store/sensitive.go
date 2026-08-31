@@ -44,7 +44,28 @@ func (s *Store) SetSensitive(ctx context.Context, id int64, on bool) error {
 		`SELECT library_id FROM media_item WHERE id = ?`, id).Scan(&libraryID); err != nil {
 		return fmt.Errorf("set sensitive on item %d: read library: %w", id, err)
 	}
-	return s.RefreshSensitivity(ctx, libraryID)
+	if err := s.RefreshSensitivity(ctx, libraryID); err != nil {
+		return err
+	}
+
+	/*
+	 * And the faces go with it (ADR 0052).
+	 *
+	 * Marking a folder that has already been indexed must delete the faces
+	 * under it, not merely stop them being shown. An embedding is derived from
+	 * the photograph and is not less private than it — a stored one would sit
+	 * in the database and in every backup taken afterwards, and a named cluster
+	 * would still link a person to that folder by inference even if no crop
+	 * from it were ever drawn.
+	 *
+	 * Unconditional rather than only when marking. Unmarking cannot resurrect
+	 * what was deleted, and running it after a clear costs one query that
+	 * matches nothing — cheaper than a rule with an exception in it.
+	 */
+	if _, err := s.DeleteFacesUnderSensitive(ctx, libraryID); err != nil {
+		return err
+	}
+	return nil
 }
 
 /*
