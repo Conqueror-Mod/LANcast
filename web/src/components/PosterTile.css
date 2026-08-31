@@ -180,15 +180,14 @@
   gap: 0.4rem;
   padding: 0.75rem;
   text-align: center;
-  background: var(--surface-2, #23232a);
-  border: 1px solid var(--border, #35353f);
+  background: var(--space-raised);
   border-radius: inherit;
 }
 
 .poster-tile__sensitive-title {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text, #e8e8ee);
+  color: var(--text-secondary);
   /* These names truncate at two lines rather than one: the name is the only
      way to find the folder while it is covered. */
   display: -webkit-box;
@@ -200,5 +199,5 @@
 .poster-tile__sensitive-note {
   font-size: 0.7rem;
   letter-spacing: 0.02em;
-  color: var(--text-dim, #9a9aa8);
+  color: var(--text-muted);
 }
