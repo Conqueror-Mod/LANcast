@@ -26,6 +26,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
+	"lancast/internal/faces"
 	"lancast/internal/identity"
 	"lancast/internal/mediatools"
 	"lancast/internal/meta"
@@ -370,6 +371,26 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	prober := probe.New()
 	probes := probe.NewWorker(st, prober, log)
 
+	/*
+	 * The face worker, which is optional and usually absent (ADR 0052).
+	 *
+	 * Constructed unconditionally and asked nothing here: `Tool` resolves the
+	 * binary lazily and reports why it cannot when asked. Probing at startup
+	 * would launch a subprocess and load a 38MB model before the server has
+	 * answered its first request, to learn something no caller has asked for
+	 * yet — and on the overwhelmingly common install, to learn that an optional
+	 * download is not there.
+	 *
+	 * The models live under the data directory rather than beside the binary:
+	 * they are data, they are large, and Program Files is not somewhere a
+	 * server should be writing.
+	 */
+	faceTool := &faces.Tool{
+		ModelsDir: filepath.Join(cfg.DataDir, "faces"),
+		Runtime:   os.Getenv("LANCAST_ONNXRUNTIME"),
+	}
+	faceWorker := faces.NewWorker(st, faceTool, log)
+
 	// Album art comes off the disk, not from a provider: the picture embedded
 	// in a track, or a cover.jpg beside it (ADR 0024). It gets its own worker
 	// for the reason probing does — extraction spawns a process per album, and
@@ -595,6 +616,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Covers: covers, Photos: photos,
+		Faces: faceWorker, FaceTool: faceTool,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 		// Only for installs that are not a service; the service path
 		// restarts through the service manager instead.

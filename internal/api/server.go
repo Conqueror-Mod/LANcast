@@ -20,6 +20,7 @@ import (
 	"lancast/internal/coverart"
 	"lancast/internal/crashlog"
 	"lancast/internal/enrich"
+	"lancast/internal/faces"
 	"lancast/internal/identity"
 	"lancast/internal/meta"
 	"lancast/internal/photo"
@@ -52,6 +53,10 @@ type Deps struct {
 	Artwork  *artwork.Cache
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
+	// Faces is the face-grouping pass (ADR 0052). Nil where the optional
+	// worker binary is not installed, which is the ordinary case.
+	Faces    *faces.Worker
+	FaceTool *faces.Tool
 	Covers   *coverart.Worker
 	Photos   *photo.Worker
 	// ServiceManaged reports whether this process is running under a service
@@ -128,6 +133,8 @@ type Server struct {
 	art            *artwork.Cache
 	worker         *enrich.Worker
 	probes         *probe.Worker
+	facesW         *faces.Worker
+	faceTool       *faces.Tool
 	covers         *coverart.Worker
 	photos         *photo.Worker
 	serviceManaged bool
@@ -187,7 +194,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, facesW: d.Faces, faceTool: d.FaceTool, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
@@ -244,6 +251,13 @@ func (s *Server) Handler() http.Handler {
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
+
+	// Faces (ADR 0052). Reading who is in a library is available to anyone who
+	// can see the library; starting a pass and naming a group are edits.
+	mux.HandleFunc("GET /api/faces/capabilities", s.facesCapabilities)
+	mux.HandleFunc("GET /api/libraries/{id}/people", s.people)
+	mux.HandleFunc("POST /api/libraries/{id}/faces", s.adminOnly(s.startFacePass))
+	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
