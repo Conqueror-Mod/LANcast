@@ -117,3 +117,62 @@ func TestAScanEmptiesTheTrashWhenAskedTo(t *testing.T) {
 		t.Errorf("library lists %d items, want the one whose file is still on disk", total)
 	}
 }
+
+/*
+ * A scan is not finished until the trash is.
+ *
+ * `State` leaving `StateRunning` is how everything else learns a scan is over —
+ * the client polls it, and so does every test that waits for one. Emptying the
+ * trash *after* that flip meant a scan announced itself finished and then went
+ * on deleting rows, so an observer could refresh in the gap and see rows that
+ * were already condemned.
+ *
+ * That is this project's most-repeated bug in a new place: the request
+ * succeeds, the server is right, and only the picture is stale — except here
+ * the server was briefly wrong too, because it said finished before it was.
+ *
+ * It surfaced as `TestAScanEmptiesTheTrashWhenAskedTo` failing on CI and never
+ * on a desk, which is the shape of a race that needs a slow machine. Waiting
+ * for a scan and hoping cannot test the ordering, so this observes from inside
+ * the window: the predicate is consulted at the moment the decision is made,
+ * and the scan must still call itself running then.
+ */
+func TestAScanIsNotFinishedUntilTheTrashIs(t *testing.T) {
+	sc, st := newScanner(t)
+	root := t.TempDir()
+	writeFile(t, root, "Kept (2020).mkv", 16)
+	gone := writeFile(t, root, "Gone (2019).mkv", 16)
+
+	lib, err := st.CreateLibrary(context.Background(), "Media", "movie", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *lib)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *lib)
+
+	var during State
+	var asked bool
+	sc.EmptyTrashWhen(func() bool {
+		asked = true
+		// Read the way a client reads it. Everything that changes what the
+		// library holds is still ahead of this point.
+		during = sc.Status(lib.ID).State
+		return true
+	})
+	scanAndWait(t, sc, *lib)
+
+	if !asked {
+		t.Fatal("the scan never consulted the setting, so this proves nothing")
+	}
+	if during != StateRunning {
+		t.Errorf("the scan reported %q while it was still deciding whether to "+
+			"empty the trash — anything polling for completion can refresh in "+
+			"that gap and see rows that are already condemned", during)
+	}
+	if n, _ := st.TrashCount(context.Background(), lib.ID); n != 0 {
+		t.Errorf("the trash still holds %d rows", n)
+	}
+}
