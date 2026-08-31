@@ -85,6 +85,23 @@ consistency, not for user theming.
 --dur-ambient:     75s        nebula drift cycle
 ```
 
+## Text on the field
+
+**No text colour may share the field's hue.** The lower three steps of the ramp
+were blue-greys — `#c3cbe2`, `#7d88a8`, `#6f7a99` — on a blue field, and the
+result was type that sank into the background: reported as *"the blueish fonts
+that are on the already blue background"*.
+
+What makes this worth a rule is that no check catches it. `#7d88a8` on
+`#0a0f22` passes WCAG AA, passes every test in the suite, and is still hard to
+read, because the eye separates hue before it separates luminance. Contrast
+ratio is a claim about two colours; legibility here is a claim about a colour
+and a *field*.
+
+So the ramp is pulled towards neutral and lifted. Not warm — a warm grey on this
+field reads as a mistake — but neutral enough to stop being part of the nebula
+and start being written on it.
+
 ## The nebula field
 
 Three `radial-gradient` ellipses over a `linear-gradient` base — cheap,
@@ -98,6 +115,33 @@ background-image:
   radial-gradient(ellipse 120% 80% at 50% 120%, rgba(74,54,140,0.30), transparent 65%),
   linear-gradient(170deg, var(--space-raised) 0%, var(--space-deep) 55%, var(--space-void) 100%);
 ```
+
+**Stars.** The field carries a star layer, which is the intro's signature
+texture and the app had none of it. Two tile sizes at two opacities, drawn as
+radial gradients rather than an image — no request, no resolution to be wrong
+at, and nothing that can fail to load — with the tiles at coprime sizes so the
+pattern does not visibly repeat. The second pass counter-drifts against the
+nebula, so the field has parallax rather than one sheet sliding.
+
+**Range, and a vignette.** Five wisps rather than three: violet and blue above,
+a teal below, and a low warm ember. The ember does work out of proportion to its
+alpha — a field with no warm anywhere in it makes every warm thing on top of it,
+gold included, look pasted on from another document. Over all of it a vignette,
+which is the layer that makes the others read: the intro's sky is bright in the
+middle and nearly black at the corners, and that range is most of why it looks
+like depth rather than like a colour.
+
+**A screen that owns the picture turns the stars off.** The detail page does:
+its full-bleed fanart is the thing being looked at, and a drifting texture over
+it is a second thing asking for attention. The nebula stays, because the
+backdrop is tinted *into* it (see the artwork rule under Depth) — removing that
+would leave the artwork on a flat floor with the identity stopping at its edge.
+Only the stars go, because they are the layer that reads as being in front.
+
+`useStarless()` in `lib/starless.ts` sets a flag on the document element and
+clears it on unmount. The cleanup is the part with the bug in it: a one-way
+switch would take the stars from every screen visited afterwards, and nothing
+would look broken — just quieter.
 
 **Drift.** A `transform: translate3d()` animation on the gradient layer over
 `--dur-ambient`, GPU-composited. It must be imperceptible when watched directly
@@ -119,7 +163,19 @@ page floor, so a raised object reads as further from the same field rather than
 as a grey object on a blue one. Two layers per step: a tight contact shadow that
 anchors the edge, and a wide ambient one that gives the drop.
 
-**Gold is not an elevation cue.** Nothing glows, ever. Where a focused object
+**A raised surface is lit along its top edge.** Shadow alone could not carry
+elevation here and the arithmetic says why: a shadow is the absence of light,
+the floor is already almost black, and subtracting light from `#05070f` gets you
+`#05070f`. On the design bench the three elevation steps were indistinguishable,
+because to within a few values they were identical. `--rim` is one inset pixel
+of cool light at under 10% alpha, folded into the elevation tokens themselves so
+every surface that was already using them gained it.
+
+This is reflected light, not a glow — the intro's ring reads as metal because it
+is bevelled, not because it is bright — and it is emphatically not gold, so the
+rule below is untouched.
+
+**Gold is not an elevation cue.** Gold never glows. Where a focused object
 also lifts, the lift is additional to the gold ring and never a substitute — a
 lift alone is not an accessible focus indicator, which is why the reduced-motion
 query removes the lift and leaves the ring exactly as it is.
@@ -259,6 +315,24 @@ State: TanStack Query for server state, the URL for view state, a small context
 for player and theme audio. No Redux.
 
 Routes: `/` · `/library/{id}` · `/item/{id}` · `/watch/{id}` · `/settings`
+
+## The design bench
+
+`/design`, in dev builds only, ahead of the auth gate. The real components and
+stylesheets against fixtures: the type ramp on the real field, the elevation
+steps side by side, every palette token, and a detail header.
+
+It exists because the look is the one thing this project could not review the
+way it reviews everything else. jsdom performs no layout and paints no colour,
+so the suite can prove a heading exists and never that it is legible on what is
+behind it; and every screen carrying the identity sits behind a sign-in, so
+judging a palette change meant signing in to a live server and finding a title
+that happened to exercise it. Both faults above were found by looking at this
+page.
+
+Vite eliminates the branch in a production build, so it is absent from the
+shipped client rather than merely unreachable within it. There is a check for
+that in the build notes: `Design bench` must not appear in `dist`.
 
 ## Verification
 

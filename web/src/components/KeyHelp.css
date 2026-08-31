@@ -18,7 +18,7 @@
   max-width: 560px;
   border-radius: var(--radius-panel);
   border: 1px solid var(--gold-dormant);
-  background: var(--space-raised);
+  background: var(--surface-raised);
   padding: 18px 20px 20px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
 }

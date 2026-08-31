@@ -37,6 +37,13 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <FocusProvider>
           <div className="nebula-field" aria-hidden="true" />
+          <div className="starfield" aria-hidden="true">
+            {/* Four layers, each twinkling on its own clock. See global.css. */}
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
           <App />
           <Splash />
         </FocusProvider>

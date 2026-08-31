@@ -32,10 +32,145 @@ body {
   z-index: -1;
   background-color: var(--space-deep);
   background-image:
-    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(90, 74, 158, 0.38), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 20%, rgba(38, 88, 168, 0.35), transparent 62%),
-    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(74, 54, 140, 0.3), transparent 65%),
-    linear-gradient(170deg, var(--space-raised) 0%, var(--space-deep) 55%, var(--space-void) 100%);
+    /*
+     * A vignette first, because it is the layer that makes every other one
+     * read. The intro's sky is bright in the middle and almost black at the
+     * corners, and that range is most of why it looks like depth rather than
+     * like a colour. Painted over the top of the stack (listed first) so it
+     * darkens the wisps as well as the base.
+     */
+    radial-gradient(ellipse 78% 78% at 50% 42%, transparent 42%, rgba(3, 4, 10, 0.72) 100%),
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(103, 84, 184, 0.5), transparent 62%),
+    radial-gradient(ellipse 70% 50% at 85% 18%, rgba(44, 104, 196, 0.46), transparent 64%),
+    /* The cold wisp, off the left of the intro's sky. */
+    radial-gradient(ellipse 58% 48% at 80% 76%, rgba(31, 122, 140, 0.26), transparent 68%),
+    /* The ember. Low and warm, so the field has somewhere for gold to belong. */
+    radial-gradient(ellipse 68% 42% at 30% 60%, rgba(140, 56, 76, 0.2), transparent 70%),
+    radial-gradient(ellipse 120% 80% at 50% 118%, rgba(82, 60, 154, 0.36), transparent 66%),
+    linear-gradient(170deg, #0d1330 0%, var(--space-deep) 52%, var(--space-void) 100%);
+}
+
+/*
+ * The star field.
+ *
+ * The intro is mostly stars and the app had none, which is most of why the two
+ * did not look like the same product. Drawn as radial gradients on repeating
+ * tiles — no image, no request, no resolution to be wrong at, and nothing that
+ * can fail to load.
+ *
+ * **Four layers, because a twinkle cannot be done with one.** The stars are
+ * background-image tiles rather than elements, so there is no individual star
+ * to animate; fading *the layer* would dim every star on screen at the same
+ * instant, which is a strobe and reads far worse than leaving them still.
+ *
+ * So each layer holds a different set of stars and fades on its own clock, at
+ * periods of 3.7, 5.3, 8.9 and 13.7 seconds. They share no common multiple
+ * worth the name, so the layers never resync and the pattern of which stars are
+ * bright does not repeat in any sitting — the eye reads independent groups
+ * brightening and dimming as individual stars twinkling.
+ *
+ * The first draft used 7, 11, 17 and 23. Measured rather than eyeballed: over a
+ * four-second window the 23-second layer moved 0.011 of opacity and the
+ * 17-second layer 0.02, which is not a twinkle, it is a static star with extra
+ * steps. `alternate` plus `ease-in-out` also makes a layer dwell near its
+ * extremes, so the slow ones spent most of their life at one brightness.
+ *
+ * Only `opacity` and `transform` are animated, so the whole thing stays on the
+ * compositor: no layout, no paint, no script, and no requestAnimationFrame loop
+ * running behind a film for the length of the film.
+ */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/*
+ * A screen that owns the picture suppresses the stars — the detail page, whose
+ * full-bleed fanart is the thing being looked at. See lib/starless.ts. The
+ * nebula is deliberately left alone: it is what the artwork is tinted into.
+ */
+:root[data-starless] .starfield {
+  display: none;
+}
+
+.starfield i {
+  position: absolute;
+  inset: -6%;
+  display: block;
+  /*
+   * The amplitude is narrow on purpose: 0.5 to 0.95 rather than 0 to 1. A star
+   * that goes out completely does not read as a star twinkling, it reads as a
+   * rendering fault — something failing to paint. Real ones vary in brightness;
+   * they do not blink.
+   */
+  animation: twinkle var(--twinkle, 5.3s) ease-in-out infinite alternate;
+}
+
+/* The bright, sparse layer. */
+.starfield i:nth-child(1) {
+  --twinkle: 3.7s;
+  background-image:
+    radial-gradient(1.4px 1.4px at 32px 24px, var(--star-near), transparent 100%),
+    radial-gradient(1.2px 1.2px at 140px 88px, var(--star-near), transparent 100%),
+    radial-gradient(1.1px 1.1px at 196px 182px, var(--star-near), transparent 100%);
+  background-size: 227px 227px;
+}
+
+.starfield i:nth-child(2) {
+  --twinkle: 5.3s;
+  animation-delay: -1.7s;
+  background-image:
+    radial-gradient(1px 1px at 78px 168px, var(--star-far), transparent 100%),
+    radial-gradient(1px 1px at 196px 42px, var(--star-far), transparent 100%),
+    radial-gradient(0.9px 0.9px at 12px 122px, var(--star-far), transparent 100%);
+  background-size: 191px 191px;
+}
+
+.starfield i:nth-child(3) {
+  --twinkle: 8.9s;
+  animation-delay: -4.1s;
+  background-image:
+    radial-gradient(0.9px 0.9px at 54px 96px, var(--star-far), transparent 100%),
+    radial-gradient(0.8px 0.8px at 128px 18px, var(--star-far), transparent 100%),
+    radial-gradient(0.8px 0.8px at 22px 62px, var(--star-far), transparent 100%);
+  background-size: 149px 149px;
+}
+
+/*
+ * The far layer also carries the parallax: a slow counter-drift against the
+ * nebula, so the field has depth rather than one sheet sliding. Two animations
+ * on one element is fine — they touch different properties.
+ */
+.starfield i:nth-child(4) {
+  --twinkle: 13.7s;
+  animation-delay: -6.3s;
+  animation-name: twinkle, star-drift;
+  animation-duration: var(--twinkle), calc(var(--dur-ambient) * 1.6);
+  background-image:
+    radial-gradient(0.8px 0.8px at 88px 132px, var(--star-far), transparent 100%),
+    radial-gradient(0.7px 0.7px at 16px 40px, var(--star-far), transparent 100%),
+    radial-gradient(0.7px 0.7px at 150px 96px, var(--star-far), transparent 100%);
+  background-size: 173px 173px;
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+@keyframes star-drift {
+  from {
+    transform: translate3d(0.8%, 0.6%, 0);
+  }
+  to {
+    transform: translate3d(-0.8%, -0.6%, 0);
+  }
 }
 
 /*
@@ -61,6 +196,17 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /*
+   * Reduced motion stops the twinkle and the drift, and leaves the stars at a
+   * fixed brightness rather than removing them — the field is identity, not
+   * decoration, and deleting it would change what the app looks like rather
+   * than how much it moves.
+   */
+  .starfield i {
+    animation: none;
+    opacity: 0.72;
+  }
+
   .nebula-field::after {
     animation: none;
   }
