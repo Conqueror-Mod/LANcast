@@ -80,13 +80,12 @@ export function DesignBench() {
   return (
     <div className="bench">
       {/*
-        The real field, not a flat panel. Judging text against a plain dark
-        rectangle is how blue-grey type on a blue field passes review: the
-        contrast is fine against the rectangle and the rectangle is not what it
-        is read on.
+        No field of its own: main.tsx renders the nebula and the starfield for
+        every route, this one included. The bench used to draw a second copy,
+        which doubled every alpha in it — so the field looked richer on this
+        page than it does in the app, which is the one thing a design bench
+        must never do.
       */}
-      <div className="nebula-field" />
-      <div className="starfield" aria-hidden="true" />
       <header className="bench__head">
         <h1>Design bench</h1>
         <p>
