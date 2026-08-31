@@ -14,6 +14,19 @@
 *.exe~
 *.exe.bak
 
+# Every Windows executable, rather than a list of the ones we have thought of.
+#
+# The list above named binaries one at a time, which worked until a new one
+# existed: `go build ./...` from the repo root writes an executable per main
+# package into the working directory, and `lancast-faces.exe` — 2.8 MB — was
+# committed to main the day that binary was added. The comment a few lines up
+# describes the same accident with LANcast-Server.exe~.
+#
+# A pattern cannot be outgrown by adding a command. Nothing in this repository
+# is a committed .exe; the installer's inputs are copied in at build time and
+# already ignored above.
+*.exe
+
 # Installer build artifacts: the exes copied in from the release build and the
 # generated setup.exe. The .nsi script and welcome.bmp are committed source.
 installer/*.exe
