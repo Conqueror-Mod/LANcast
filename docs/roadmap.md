@@ -717,7 +717,16 @@ group is not priority.
   was about scope rather than privacy, so it is revisitable, but it should be
   revisited *consciously*: a places/map view needs GPS parsing, and GPS is the
   one EXIF field that is a privacy decision rather than a parsing chore. Also
-  unbuilt: date-grouped albums, duplicate detection, and RAW.
+  unbuilt: duplicate detection and RAW.
+
+  **Date-grouped browsing is built** — a Timeline view on a picture library,
+  grouped by EXIF capture time rather than by folder, with each month fetched
+  only when it is opened. Verified against the reporting library before it was
+  designed rather than after: 3,469 of 3,676 photographs carry a capture time
+  (94.4%), spanning 2006 to 2026, so the column is real rather than inert — the
+  check that `media_item.edition` taught this project to run first. The other
+  207 are their own bucket. Marked folders are excluded from it entirely
+  (ADR 0051, amended). Face grouping remains the large piece and is untouched.
 
 ### Metadata, ratings and discovery
 

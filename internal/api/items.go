@@ -548,6 +548,21 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		ExcludeKinds: splitCSV(q.Get("exclude_kind")),
 		// The A–Z rail: one letter, or "#" for titles starting with anything
 		// that is not a Latin letter.
+		/*
+		 * Opening a timeline bucket. `taken_month` is "2019-07";
+		 * `taken_undated=1` is the bucket for photographs carrying no capture
+		 * time at all.
+		 *
+		 * Either one also excludes sensitive folders, because the timeline's
+		 * counts do (ADR 0051, amended) — a listing that disagreed with the
+		 * count above it is a bug somebody reports as "the month says 40 and
+		 * shows 43". It is derived here rather than accepted as a parameter:
+		 * whether covered content appears is the server's decision, and a
+		 * client that could ask for it would be a client that could ask for it.
+		 */
+		TakenMonth:   q.Get("taken_month"),
+		TakenUndated: q.Get("taken_undated") == "1",
+
 		Initial:        q.Get("initial"),
 		Query:          q.Get("q"),
 		Sort:           q.Get("sort"),
@@ -578,6 +593,8 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Limit:      queryInt(r, "limit"),
 		Offset:     queryInt(r, "offset"),
 	}
+	// Derived, never accepted from the caller. See TakenMonth above.
+	f.ExcludeSensitive = f.TakenMonth != "" || f.TakenUndated
 	// parent_id fetches the children of one item — a show's episodes, a work's
 	// parts. Otherwise the grid shows top-level entries only, so a container's
 	// children never leak in loose (ADR 0010, ADR 0017). An explicit kind is

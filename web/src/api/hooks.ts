@@ -1163,6 +1163,64 @@ export function useGlobalSearch(q: string) {
   });
 }
 
+/*
+ * The photo timeline: counts by capture month, newest first (ADR 0028's
+ * `taken_at`, not `added_at`).
+ *
+ * One small response describes the whole library's shape, and a month's
+ * photographs are fetched only when that month is opened — 3,676 photographs is
+ * a page nobody wants.
+ */
+export type TimelineBucket = {
+  year: number;
+  month: number;
+  undated?: boolean;
+  count: number;
+};
+
+export function usePhotoTimeline(libraryID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["timeline", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<{ buckets: TimelineBucket[]; total: number }>(
+        `/api/libraries/${libraryID}/timeline`,
+        signal,
+      ),
+    enabled: enabled && libraryID > 0,
+  });
+}
+
+/*
+ * One month of it. `undated` is its own bucket rather than a missing month —
+ * 5% of a real library carries no capture time, and dropping them would lose
+ * them silently.
+ */
+export function usePhotosInMonth(
+  libraryID: number,
+  bucket: TimelineBucket | null,
+) {
+  const params = new URLSearchParams({
+    library_id: String(libraryID),
+    kind: "photo",
+    sort: "taken",
+    limit: "500",
+  });
+  if (bucket?.undated) {
+    params.set("taken_undated", "1");
+  } else if (bucket) {
+    params.set(
+      "taken_month",
+      `${bucket.year}-${String(bucket.month).padStart(2, "0")}`,
+    );
+  }
+  return useQuery({
+    queryKey: ["items", params.toString()],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal),
+    enabled: libraryID > 0 && bucket !== null,
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);

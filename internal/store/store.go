@@ -809,6 +809,27 @@ type ItemFilter struct {
 	// and belong under it, never loose in the grid; this is the guard ADR 0010
 	// and ADR 0017 require so a container's pieces do not leak in as if they
 	// were features. Ignored when ParentID is set.
+	/*
+	 * TakenMonth restricts to one capture month, as "2019-07", and TakenUndated
+	 * to photographs with no capture time at all. They are the two halves of
+	 * opening a timeline bucket (see PhotoTimeline) and are mutually exclusive:
+	 * a month is a month, and "undated" is the absence of one.
+	 *
+	 * A month string rather than a from/to pair, because the bucket the client
+	 * was handed *is* a month — turning it into two timestamps at the call site
+	 * would mean the client deciding where a month begins in local time, which
+	 * is the server's job and the reason the buckets are computed here.
+	 */
+	TakenMonth   string
+	TakenUndated bool
+	/*
+	 * ExcludeSensitive drops anything a sensitive folder covers (ADR 0051,
+	 * amended). Set by the timeline, whose counts already exclude them: a
+	 * listing that disagreed with the count above it would be a bug somebody
+	 * reports as "the month says 40 and shows 43".
+	 */
+	ExcludeSensitive bool
+
 	TopLevel bool
 
 	// ParentID, when non-nil, returns exactly the children of that item.
@@ -944,6 +965,24 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		for _, k := range f.ExcludeKinds {
 			args = append(args, k)
 		}
+	}
+	/*
+	 * One capture month, or the photographs that have no capture time.
+	 *
+	 * Compared in local time on both sides — the bucket was grouped by
+	 * localtime, so filtering by UTC would put a photograph taken at 8pm on the
+	 * 31st into a month the timeline never offered.
+	 */
+	if f.TakenMonth != "" {
+		where += ` AND taken_at IS NOT NULL` +
+			` AND strftime('%Y-%m', taken_at, 'unixepoch', 'localtime') = ?`
+		args = append(args, f.TakenMonth)
+	}
+	if f.TakenUndated {
+		where += ` AND taken_at IS NULL`
+	}
+	if f.ExcludeSensitive {
+		where += ` AND sensitive_effective = 0`
 	}
 	if f.Initial != "" {
 		if f.Initial == "#" {
