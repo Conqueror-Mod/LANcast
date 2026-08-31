@@ -90,6 +90,13 @@ export function Player() {
    */
   const shuffleRef = useRef(pb.shuffle);
   shuffleRef.current = pb.shuffle;
+  /*
+   * And what is playing, read the same way and for the same reason: this
+   * effect must not re-run when the item changes underneath it, because it is
+   * the thing that changes it.
+   */
+  const playingRef = useRef(pb.itemID);
+  playingRef.current = pb.itemID;
   useEffect(() => {
     if (!itemID) return;
     // Both forms of "here is the queue" count: history state, and the ?queue=
@@ -114,7 +121,12 @@ export function Player() {
      * without knowing it. See shuffleForEntry.
      */
     setShuffle(
-      shuffleForEntry(stateShuffle, suppliedQueue, shuffleRef.current),
+      shuffleForEntry(
+        stateShuffle,
+        suppliedQueue,
+        shuffleRef.current,
+        playingRef.current === itemID,
+      ),
     );
     // stateQueue is stable for a history entry; its length identifies it well
     // enough to avoid re-running on an unrelated render.

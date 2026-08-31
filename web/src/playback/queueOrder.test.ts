@@ -114,27 +114,37 @@ describe("queueAfterEntry", () => {
 
   // The mini-player round trip: navigate to /watch/11 with no queue at all.
   it("keeps the queue when re-entering with no queue information", () => {
-    expect(queueAfterEntry(album, [11], 11)).toEqual(album);
+    expect(queueAfterEntry(album, [11], 11, true)).toEqual(album);
   });
 
   it("takes a real queue when one is supplied", () => {
-    expect(queueAfterEntry(album, [20, 21], 20)).toEqual([20, 21]);
+    expect(queueAfterEntry(album, [20, 21], 20, false)).toEqual([20, 21]);
   });
 
   // Playing a single track that is not part of what is playing replaces the
   // queue — otherwise picking one song would silently inherit the last album.
   it("replaces the queue for a single item from outside it", () => {
-    expect(queueAfterEntry(album, [99], 99)).toEqual([99]);
+    expect(queueAfterEntry(album, [99], 99, false)).toEqual([99]);
   });
 
   it("replaces an empty queue", () => {
-    expect(queueAfterEntry([], [7], 7)).toEqual([7]);
+    expect(queueAfterEntry([], [7], 7, false)).toEqual([7]);
+  });
+
+  /*
+   * The other half of the same report. Randomize all fills the queue with the
+   * whole library, so "the queue already contains it" was true of every film in
+   * it — and starting one from its own page kept all of them, playlist and all.
+   */
+  it("replaces a randomized library queue when one film is started", () => {
+    const everything = [10, 11, 12, 13];
+    expect(queueAfterEntry(everything, [12], 12, false)).toEqual([12]);
   });
 
   // A playlist may contain the same track twice; re-entry must still find it.
   it("keeps a queue that holds the item more than once", () => {
     const withRepeat = [10, 11, 10];
-    expect(queueAfterEntry(withRepeat, [10], 10)).toEqual(withRepeat);
+    expect(queueAfterEntry(withRepeat, [10], 10, true)).toEqual(withRepeat);
   });
 });
 
@@ -241,13 +251,13 @@ describe("startOf", () => {
  */
 describe("shuffleForEntry", () => {
   it("obeys an explicit request either way", () => {
-    expect(shuffleForEntry(true, true, false)).toBe(true);
-    expect(shuffleForEntry(false, false, true)).toBe(false);
+    expect(shuffleForEntry(true, true, false, false)).toBe(true);
+    expect(shuffleForEntry(false, false, true, true)).toBe(false);
   });
 
   // The bug. A caller that supplies a queue is stating an order.
   it("plays a supplied queue in order when shuffle was left on", () => {
-    expect(shuffleForEntry(undefined, true, true)).toBe(false);
+    expect(shuffleForEntry(undefined, true, true, false)).toBe(false);
   });
 
   /*
@@ -256,8 +266,26 @@ describe("shuffleForEntry", () => {
    * "go back to what is playing" into "stop shuffling", which is a different
    * button.
    */
-  it("leaves the session alone when no queue is supplied", () => {
-    expect(shuffleForEntry(undefined, false, true)).toBe(true);
-    expect(shuffleForEntry(undefined, false, false)).toBe(false);
+  it("leaves the session alone when re-entering what is playing", () => {
+    expect(shuffleForEntry(undefined, false, true, true)).toBe(true);
+    expect(shuffleForEntry(undefined, false, false, true)).toBe(false);
+  });
+
+  /*
+   * Reported by Chris: Randomize all, then pick a film from the library, and
+   * the randomize is still on.
+   *
+   * Pressing Play on a film's own page supplies no queue — a single film has
+   * none to supply — which is the same shape as returning from the mini-player.
+   * It is not the same event: it starts something that was not playing. A new
+   * activity does not inherit the last one's shuffle.
+   */
+  it("clears a leftover shuffle when a different item is started", () => {
+    expect(shuffleForEntry(undefined, false, true, false)).toBe(false);
+  });
+
+  // And Randomize all itself still turns it on, since it says so explicitly.
+  it("still lets Randomize all turn shuffle on", () => {
+    expect(shuffleForEntry(true, true, false, false)).toBe(true);
   });
 });

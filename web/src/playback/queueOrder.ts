@@ -60,16 +60,26 @@ export type RepeatMode = "off" | "all" | "one";
  * reason. The queue needed the same protection and did not have it.
  *
  * A genuine single-item play still replaces the queue: it is only "keep what we
- * have" when the caller supplied nothing AND the current queue already contains
- * what is being played.
+ * have" when the caller supplied nothing AND this is the item already playing.
+ *
+ * That last clause used to be "the current queue already contains it", which is
+ * a different and much broader thing. Randomize all puts the whole film library
+ * in the queue, so *every* film in it satisfied "already contains" — pressing
+ * Play on one from its own page was read as re-entering the randomized run and
+ * kept all 400 of them. Chris asked for a single film and got the shuffle he
+ * had started an hour earlier, still running, now apparently unstoppable.
+ *
+ * Only the item that is playing can be re-entered. Everything else is a new
+ * activity, and a new activity is one film.
  */
 export function queueAfterEntry(
   existing: number[],
   incoming: number[],
   id: number,
+  resuming: boolean,
 ): number[] {
   const noInformation = incoming.length === 1 && incoming[0] === id;
-  if (noInformation && existing.includes(id)) return existing;
+  if (noInformation && resuming) return existing;
   return incoming;
 }
 
@@ -185,14 +195,28 @@ export function startOf(
  * player. That is what makes it look like the queue is broken rather than the
  * flag.
  *
+ * Supplying nothing is the remaining case, and it is two situations wearing one
+ * shape. Returning from the mini-player navigates to /watch/{id} with no queue
+ * and no state — and so does pressing Play on a film's own page, because a
+ * single film has no queue to hand over. Keeping the flag for both is what let
+ * Randomize all outlive the thing it was randomizing: turn it on, watch a film,
+ * pick a different film from the library, and it is still shuffling.
+ *
+ * The two are told apart by the only thing that actually differs — whether the
+ * id being entered is the one already playing. Coming back to what is playing
+ * keeps the flag; starting something else is a new activity and clears it.
+ *
  * So: an explicit request always wins; supplying a queue without one means "in
- * this order"; supplying nothing keeps the session's flag.
+ * this order"; supplying nothing keeps the flag only when there is nothing new
+ * to start.
  */
 export function shuffleForEntry(
   explicit: boolean | undefined,
   suppliedQueue: boolean,
   current: boolean,
+  resuming: boolean,
 ): boolean {
   if (explicit !== undefined) return explicit;
-  return suppliedQueue ? false : current;
+  if (suppliedQueue) return false;
+  return resuming ? current : false;
 }
