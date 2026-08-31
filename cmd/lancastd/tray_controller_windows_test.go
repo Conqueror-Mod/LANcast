@@ -151,3 +151,81 @@ func TestExitAlsoClosesTheApp(t *testing.T) {
 			"shutdown, which is a race rather than an ordering")
 	}
 }
+
+/*
+ * The tick shows what the setting *is*, not what was attempted.
+ *
+ * It used to be set from the outcome of the call: check after Enable returned
+ * no error, uncheck after Disable did. That reads as reasonable and it made the
+ * menu capable of lying — watched doing exactly that, with a tick appearing
+ * beside a run key that had never been written, while the only other report of
+ * the failure went to a logger with nowhere to write.
+ *
+ * Reading the state back afterwards is what makes the menu unable to claim
+ * something the machine does not agree with.
+ */
+func TestTheLoginTickIsReadBackFromTheRegistry(t *testing.T) {
+	src := traySource(t)
+	i := strings.Index(src, "func toggleLogin")
+	if i < 0 {
+		t.Fatal("toggleLogin is gone")
+	}
+	body := src[i:]
+	if j := strings.Index(body[1:], "\nfunc "); j >= 0 {
+		body = body[:j+1]
+	}
+
+	// The tick must come from a fresh read, and that read has to happen after
+	// the change rather than before it.
+	read := strings.Index(body, "autostart.Enabled(")
+	if read < 0 {
+		t.Fatal("the tick is set without reading the setting back, so it can " +
+			"show a state the registry does not have")
+	}
+	for _, call := range []string{"autostart.Enable(", "autostart.Disable("} {
+		at := strings.Index(body, call)
+		if at < 0 {
+			t.Errorf("toggleLogin no longer calls %s", call)
+			continue
+		}
+		if at > read {
+			t.Errorf("%s happens after the read-back, so the tick describes "+
+				"the state before the change", call)
+		}
+	}
+	for _, must := range []string{"item.Check()", "item.Uncheck()"} {
+		if !strings.Contains(body, must) {
+			t.Errorf("toggleLogin no longer calls %s", must)
+		}
+	}
+}
+
+/*
+ * The tray writes its warnings somewhere they can be read.
+ *
+ * newLogger writes to stderr and this is a GUI process with no console, so
+ * every warning it produced went into nothing — which is how a toggle that
+ * silently failed could be watched failing repeatedly with no way to see why.
+ *
+ * Its own file, not the server's: both rotate by renaming at a size threshold,
+ * and two processes doing that to one file ends with the server's log
+ * truncated.
+ */
+func TestTheTrayLogsToAFileOfItsOwn(t *testing.T) {
+	src := traySource(t)
+	i := strings.Index(src, "func runServiceTray")
+	if i < 0 {
+		t.Fatal("the controller tray is gone")
+	}
+	body := src[i:]
+
+	if !strings.Contains(body, "applog.OpenNamed(") {
+		t.Error("the tray does not open a log, so its warnings go nowhere")
+	}
+	if !strings.Contains(body, "applog.TrayFileName") {
+		t.Error("the tray does not use its own log name")
+	}
+	if strings.Contains(body, "applog.Open(") && !strings.Contains(body, "applog.OpenNamed(") {
+		t.Error("the tray writes the server's log, which races its rotation")
+	}
+}

@@ -39,12 +39,26 @@ type File struct {
 	n    int64
 }
 
-// Open creates or appends to the log in dir.
-func Open(dir string) (*File, error) {
+/*
+ * TrayFileName is the tray's own log, deliberately not the server's.
+ *
+ * The tray runs in the user's session while the service writes lancastd.log
+ * from session 0, and both rotate by renaming at a size threshold. Two
+ * processes rotating one file is a race that ends with the *server's* log
+ * truncated or lost — a worse fault than the silence this exists to fix.
+ */
+const TrayFileName = "lancast-tray.log"
+
+// Open creates or appends to the server's log in dir.
+func Open(dir string) (*File, error) { return OpenNamed(dir, FileName) }
+
+// OpenNamed creates or appends to a named log in dir, for a process that must
+// not share the server's file.
+func OpenNamed(dir, name string) (*File, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("log directory: %w", err)
 	}
-	path := filepath.Join(dir, FileName)
+	path := filepath.Join(dir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", path, err)
