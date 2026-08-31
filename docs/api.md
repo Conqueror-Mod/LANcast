@@ -2336,6 +2336,42 @@ indistinguishable from a bug.
 
 Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
+### `PUT /api/items/{id}/sensitive`
+
+Mark an item sensitive, or clear the mark (ADR 0051). Admin only.
+
+```json
+{ "sensitive": true }
+```
+
+Returns `200` with the value that was set. `409 not_enabled` while the
+`sensitive_marking` setting is off — the setting gates the gesture, not the
+storage, so marks made earlier survive it being turned off and are honoured
+again when it is turned back on. A body without `sensitive` is `400`: a missing
+field is not read as `false`.
+
+Marking a folder covers everything beneath it. That is resolved server-side and
+reported on every item, so a client never walks the hierarchy to find out.
+
+Two fields appear on items in **every** listing — the grid, search, the
+recently-added shelves, a collection's children:
+
+- `sensitive` — the resolved answer: this item is marked, or something above it
+  is. A client that draws a thumbnail reads this and nothing else.
+- `sensitive_own` — whether the mark is on this item itself. Only useful for
+  deciding where to offer an unmark; a photograph inside a marked folder reads
+  `sensitive: true, sensitive_own: false` and cannot be unmarked on its own.
+
+Both are omitted when false.
+
+**Acknowledgement is not part of this API.** Whether a viewer has asked to see
+covered content is held by the client for the length of its session and is
+never sent to the server: it is nobody's business, and once recorded it would
+live in backups and in the audit log permanently. A client obscures by not
+requesting the artwork, not by styling it — artwork is content-addressed and
+served `immutable`, so the server cannot vary it per viewer without poisoning
+the cache for everyone.
+
 ### `GET /api/items/{id}/candidates?q=`
 
 Search the provider for re-match candidates. **Omit `q`** to search by what the

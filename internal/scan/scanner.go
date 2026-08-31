@@ -283,6 +283,22 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing,
 			"elapsed_ms", elapsed)
 
+		/*
+		 * Inherited sensitive marks are re-resolved before the shape check
+		 * (ADR 0051), on success only and for the same reason: a partial
+		 * library is not evidence about anything.
+		 *
+		 * A scan is exactly when this can have gone stale — photos added to a
+		 * marked folder, a file moved between folders, a folder marked before
+		 * the scan that filled it — and it is a whole-library recompute rather
+		 * than an incremental update so that none of those orderings has to be
+		 * anticipated. It costs one COUNT on a library nobody has marked
+		 * anything in, which is every library by default.
+		 */
+		if err := s.st.RefreshSensitivity(ctx, lib.ID); err != nil {
+			s.log.Error("refresh sensitivity", "library", lib.ID, "error", err)
+		}
+
 		// The shape check runs on success only. A failed scan produced a
 		// partial library by definition, and telling somebody their TV library
 		// has no shows in it because the drive went away halfway through would

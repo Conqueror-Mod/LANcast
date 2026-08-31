@@ -322,6 +322,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/items/{id}", s.adminOnly(s.deleteItem))
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
 	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.adminOnly(s.deleteLock))
+	mux.HandleFunc("PUT /api/items/{id}/sensitive", s.adminOnly(s.putSensitive))
 	// Admin, like every other write that changes what the library looks like to
 	// everyone. There is one poster and everybody sees it.
 	mux.HandleFunc("PUT /api/items/{id}/poster", s.adminOnly(s.putCollectionPoster))

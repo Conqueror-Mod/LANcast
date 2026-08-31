@@ -32,6 +32,17 @@ type Settings struct {
 	// installs, and the check is a plain GET carrying no identifier. Off stops
 	// it entirely — nothing else changes.
 	UpdateCheck bool `json:"update_check"`
+	/*
+	 * SensitiveMarking turns on the sensitive mark for picture libraries
+	 * (ADR 0051): folders and photos can be marked, and anything marked is
+	 * obscured until the person looking asks to see it.
+	 *
+	 * Off by default, and turning it off again does not erase the marks — it
+	 * stops new ones and stops the obscuring. A switch that discards data the
+	 * second time it is pressed is a switch nobody can try out, and the marks
+	 * are the one thing here a rescan cannot regenerate.
+	 */
+	SensitiveMarking bool `json:"sensitive_marking"`
 
 	// ---- library and playback rules -------------------------------------
 	//

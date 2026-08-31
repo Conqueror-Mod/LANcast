@@ -198,6 +198,18 @@ export interface Item {
   overview?: string | null;
   rating?: number | null;
   content_rating?: string | null;
+  /*
+   * Sensitive is the server's resolved answer: this item is marked, or a
+   * folder above it is (ADR 0051). Every surface that draws a thumbnail reads
+   * this one field, which is why it is on the item rather than something the
+   * gallery screen works out — a picture library's thumbnails also appear on
+   * the home page, in search and in the hero.
+   *
+   * sensitive_own is whether the mark is on this item itself, which is what
+   * decides where Unmark is worth offering.
+   */
+  sensitive?: boolean;
+  sensitive_own?: boolean;
   released_at?: number | null;
   genres?: string[];
   credits?: Credit[];
@@ -317,6 +329,8 @@ export interface Settings {
   };
   rate_per_sec: number;
   write_nfo: boolean;
+  /* Whether picture folders and photos can be marked sensitive (ADR 0051). */
+  sensitive_marking: boolean;
   auto_enrich: boolean;
   update_check: boolean;
   encoder: { preference: string; active: Encoder; available: Encoder[] };
@@ -342,6 +356,7 @@ export interface SettingsUpdate {
   ffmpeg_dir?: string;
   rate_per_sec?: number;
   write_nfo?: boolean;
+  sensitive_marking?: boolean;
   auto_enrich?: boolean;
   update_check?: boolean;
   hardware_encoder?: string;
