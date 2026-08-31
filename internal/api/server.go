@@ -243,6 +243,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
+	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)

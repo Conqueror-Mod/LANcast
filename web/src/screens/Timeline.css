@@ -1,0 +1,121 @@
+/*
+ * The timeline. Deliberately quiet: the photographs are the content and the
+ * month headings are scaffolding, so the headings are small, the rule between
+ * them is a hairline, and nothing here competes with a grid of pictures.
+ */
+.timeline {
+  padding: 24px 32px 80px;
+}
+
+.timeline__bar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.timeline__back {
+  background: transparent;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.timeline__back:hover,
+.timeline__back:focus {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.timeline__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.timeline__title span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.timeline__total {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.timeline__section {
+  margin-bottom: 6px;
+}
+
+/* The heading is the control: pressing it opens the month. Full width so the
+   target is the whole line rather than the few characters of the name. */
+.timeline__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 2px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.timeline__head:hover .timeline__month,
+.timeline__head:focus .timeline__month {
+  color: var(--text-primary);
+}
+
+/* Gold is the focus signal and nothing else, so the open state is carried by
+   weight and colour rather than by an accent. */
+.timeline__head:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold-ring);
+}
+
+.timeline__head.is-open .timeline__month {
+  color: var(--text-primary);
+}
+
+.timeline__month {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.timeline__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--gold-dormant);
+}
+
+.timeline__count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-grid), 1fr));
+  gap: 16px;
+  padding: 6px 0 22px;
+}
+
+.timeline__loading,
+.timeline__empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  max-width: 52ch;
+  line-height: 1.6;
+}

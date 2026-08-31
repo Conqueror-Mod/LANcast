@@ -4,6 +4,7 @@ import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
+import { Timeline } from "@/screens/Timeline";
 import { Search } from "@/screens/Search";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
@@ -63,6 +64,8 @@ export function App() {
               library its tracks and its .m3u live in (ADR 0030). */}
           <Route path="/library/:id/playlists" element={<Playlists />} />
           <Route path="/library/:id/collections" element={<Collections />} />
+          {/* A picture library by capture date, beside its folder grid. */}
+          <Route path="/library/:id/timeline" element={<Timeline />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />

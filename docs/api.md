@@ -2336,6 +2336,45 @@ indistinguishable from a bug.
 
 Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
+### `GET /api/libraries/{id}/timeline`
+
+A picture library's photographs counted by **capture month**, newest first.
+`400 wrong_kind` on any other library kind — a timeline of a film library would
+be a list of release months, which answers a different question quietly.
+
+```json
+{ "buckets": [
+    { "year": 2024, "month": 11, "count": 3 },
+    { "year": 2019, "month": 7,  "count": 2 },
+    { "undated": true, "count": 5 }
+  ],
+  "total": 10 }
+```
+
+Counts rather than the photographs themselves: a library of several thousand is
+a payload nobody needs, and a client fetches one month at a time once it knows
+which months exist. Months are computed in the **server's local time**, which is
+what a person means by "August"; a client must not re-derive them from
+timestamps or it will disagree about where a month begins.
+
+`undated` is its own bucket and sorts last. It is not an error — on a real
+library 5% of photographs carry no capture time, and dropping them would lose
+them silently.
+
+**Marked folders are excluded** (ADR 0051, amended). Covers may only be lifted
+in the library grid or inside the folder, so timeline entries could never be
+uncovered here — and a row of covered tiles among a holiday still discloses when
+the marked photographs were taken.
+
+Open a bucket through the ordinary item listing:
+
+- `GET /api/items?library_id=5&kind=photo&sort=taken&taken_month=2019-07`
+- `GET /api/items?library_id=5&kind=photo&sort=taken&taken_undated=1`
+
+Either parameter also excludes marked folders, so a listing always agrees with
+the count above it. That exclusion is derived from the parameters and is not
+itself a parameter — whether covered content appears is the server's decision.
+
 ### `PUT /api/items/{id}/sensitive`
 
 Mark an item sensitive, or clear the mark (ADR 0051). Admin only.

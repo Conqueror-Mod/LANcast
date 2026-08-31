@@ -372,6 +372,16 @@ export function LibraryView({
             Collections
           </button>
         )}
+        {/* A picture library has a second way to be read: by when the
+            photographs were taken rather than by which folder they are in. */}
+        {isPictures && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/timeline`)}
+          >
+            Timeline
+          </button>
+        )}
         {config.playlists && (
           <button
             className="browse__playall-btn"
