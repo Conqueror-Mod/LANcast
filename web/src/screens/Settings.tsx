@@ -1987,6 +1987,36 @@ function GeneralSection() {
           </div>
         </div>
       </div>
+      {/*
+        The source link, and it is a licence obligation rather than a courtesy.
+
+        LANcast is AGPL-3.0 (ADR 0053). Section 13 requires a modified version
+        offered to people over a network to give those people its source, and
+        this server is exactly that shape — a thing other people in the house
+        use through a browser. Shipping the affordance means a fork inherits
+        compliance instead of having to remember it, which is the only version
+        of this that actually works.
+
+        A plain link rather than a bundled tarball: the licence asks for access
+        through customary means, and for a public repository this is it.
+        Somebody who forks and modifies has to point it at their own.
+      */}
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Licence</div>
+          <div className="set-row__sub">
+            AGPL-3.0 — you are entitled to the source of the version you are
+            using.{" "}
+            <a
+              href="https://github.com/Conqueror-Mod/LANcast"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Source code
+            </a>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
