@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	fyne.io/systray v1.12.2
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/yalue/onnxruntime_go v1.35.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.44.0
 	golang.org/x/sys v0.47.0

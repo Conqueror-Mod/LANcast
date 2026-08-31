@@ -17,7 +17,7 @@ import (
  */
 
 func TestCapabilitiesAreNeverReadyWithoutAModel(t *testing.T) {
-	c := caps()
+	c := caps("")
 	if c.Ready {
 		t.Error("reported ready with no model bundled — the server would queue " +
 			"the whole library against a worker that cannot answer")
@@ -31,7 +31,7 @@ func TestCapabilitiesAreNeverReadyWithoutAModel(t *testing.T) {
 // Version, OS and arch are how the server decides whether it is talking to a
 // worker it understands, so they are never blank.
 func TestCapabilitiesIdentifyTheBuild(t *testing.T) {
-	c := caps()
+	c := caps("")
 	for _, f := range []struct{ name, v string }{
 		{"version", c.Version}, {"os", c.OS}, {"arch", c.Arch}, {"native", c.Native},
 	} {

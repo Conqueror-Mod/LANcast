@@ -22,3 +22,7 @@ func nativeInfo() string { return "none (built without cgo)" }
 func detectOne(path, modelsDir string) ([]Face, error) {
 	return nil, errNoModel
 }
+
+func probeModels(dir string) error {
+	return errNoModel
+}

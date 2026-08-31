@@ -84,68 +84,100 @@ func Tensor(img *image.RGBA) []float32 {
 }
 
 /*
- * AlignedCrop cuts a face out and rotates it upright, using the eye positions.
+ * The canonical face, and why it is these five numbers.
  *
- * The embedder is trained on faces in a canonical pose, and handing it a
- * tilted one costs accuracy in the way that is hardest to notice: the
- * embeddings are still valid vectors, still cluster into something, and are
- * simply less able to tell two people apart. A head tilted thirty degrees in a
- * holiday photograph is not unusual — it is most holiday photographs.
+ * SFace — like every ArcFace-lineage embedder — is trained on 112x112 crops in
+ * which the five landmarks sit at fixed positions. These are those positions.
+ * They are not a style choice: the embedder has never seen a face anywhere else
+ * on the canvas, and handing it one is asking a question outside its
+ * experience.
  *
- * A similarity transform from the two eyes is deliberately less than the full
- * five-point Umeyama fit OpenCV uses. It corrects rotation and scale, which is
- * the bulk of the benefit, with arithmetic that can be read and checked by
- * hand. The remaining error is a shear this does not model, and if recognition
- * quality ever needs the last few percent, this function is where it goes.
+ * Order matches the detector's: right eye, left eye, nose, right mouth corner,
+ * left mouth corner.
+ */
+var canonicalFace = [5][2]float64{
+	{38.2946, 51.6963},
+	{73.5318, 51.5014},
+	{56.0252, 71.7366},
+	{41.5493, 92.3655},
+	{70.7299, 92.2041},
+}
+
+/*
+ * AlignedCrop warps a face onto the canonical positions above.
+ *
+ * The first version of this used only the two eyes — rotate to level, scale by
+ * the box, done — on the reasoning that rotation and scale are the bulk of the
+ * benefit and the rest is worth a few percent. **That was measured and it was
+ * wrong.** On a photograph of nine different people, half of the 36 pairs came
+ * back above SFace's published same-person threshold of 0.363: the embeddings
+ * of nine strangers were collapsing towards each other.
+ *
+ * The reason is that the threshold is a property of the *training crop*. Feed
+ * the model faces framed differently from the ones it learned on and the
+ * numbers it returns are still vectors, still comparable, and no longer
+ * separated at the distance anybody published. The two-eye version was not
+ * losing a few percent of accuracy — it was invalidating the constant the
+ * clustering depends on.
+ *
+ * So all five landmarks are used, in a least-squares similarity fit. For two
+ * dimensions that has a closed form and needs no SVD: with points centred on
+ * their means, `a` and `b` below are the projections of the correspondence onto
+ * rotation and onto its perpendicular, and [[a, -b], [b, a]] is exactly a
+ * rotation scaled uniformly — which is the transform class wanted. Reflection
+ * cannot be expressed in that form, which is the point: a mirrored face is not
+ * a better fit to anything.
  */
 func AlignedCrop(src image.Image, d Detection, out int) *image.RGBA {
-	rightEye := d.Landmarks[0]
-	leftEye := d.Landmarks[1]
-
-	// The angle the eye line makes with horizontal, which is what must be
-	// undone.
-	dx := float64(leftEye[0] - rightEye[0])
-	dy := float64(leftEye[1] - rightEye[1])
-	angle := math.Atan2(dy, dx)
-
-	cx := float64(d.X + d.W/2)
-	cy := float64(d.Y + d.H/2)
-	// A little wider than the box: the embedder was trained on crops that
-	// include some hair and jaw, and a tight box loses both.
-	side := math.Max(float64(d.W), float64(d.H)) * 1.3
-	if side <= 0 {
-		return image.NewRGBA(image.Rect(0, 0, out, out))
-	}
-	scale := float64(out) / side
-
 	dst := image.NewRGBA(image.Rect(0, 0, out, out))
-	/*
-	 * `+angle`, not `-angle`, and the difference is not obvious enough to trust
-	 * to reasoning — it was wrong here first, and the alignment test caught it.
-	 *
-	 * This is a *backward* map: it asks where a destination pixel came from. To
-	 * make an upright destination out of a source tilted by `angle`, the
-	 * destination offset has to be rotated *by* `angle` to find the source
-	 * point. Rotating by `-angle` tilts it further, which produces a crop that
-	 * is still a face, still centred, and rotated twice as far as it started —
-	 * a picture nobody would look at twice and an embedding measurably worse.
-	 */
-	cos, sin := math.Cos(angle), math.Sin(angle)
+
+	// The canonical positions are defined for 112; anything else scales.
+	k := float64(out) / 112.0
+
+	var mpx, mpy, mqx, mqy float64
+	for i := 0; i < 5; i++ {
+		mpx += float64(d.Landmarks[i][0])
+		mpy += float64(d.Landmarks[i][1])
+		mqx += canonicalFace[i][0] * k
+		mqy += canonicalFace[i][1] * k
+	}
+	mpx, mpy, mqx, mqy = mpx/5, mpy/5, mqx/5, mqy/5
+
+	var num1, num2, den float64
+	for i := 0; i < 5; i++ {
+		px := float64(d.Landmarks[i][0]) - mpx
+		py := float64(d.Landmarks[i][1]) - mpy
+		qx := canonicalFace[i][0]*k - mqx
+		qy := canonicalFace[i][1]*k - mqy
+		num1 += px*qx + py*qy // along the rotation
+		num2 += px*qy - py*qx // perpendicular to it
+		den += px*px + py*py
+	}
+	if den == 0 {
+		// Degenerate landmarks — every point in the same place. Nothing can be
+		// fitted, and an empty crop is better than a division by zero.
+		return dst
+	}
+	a := num1 / den
+	b := num2 / den
 
 	/*
-	 * Sampled backwards — for each destination pixel, work out where it came
-	 * from — because the forward direction leaves holes. Nearest-neighbour,
-	 * since the crop is usually an upscale of a small region and the
-	 * interpolation that would help is not what limits quality here.
+	 * Sampled backwards: for each destination pixel, find where it came from,
+	 * because the forward direction leaves holes. The inverse of the scaled
+	 * rotation [[a, -b], [b, a]] is its transpose over (a² + b²).
 	 */
+	det := a*a + b*b
+	if det == 0 {
+		return dst
+	}
 	for y := 0; y < out; y++ {
 		for x := 0; x < out; x++ {
-			// Destination centre-relative, unscaled, then un-rotated.
-			ux := (float64(x) - float64(out)/2) / scale
-			uy := (float64(y) - float64(out)/2) / scale
-			sx := cx + ux*cos - uy*sin
-			sy := cy + ux*sin + uy*cos
-			dst.Set(x, y, src.At(int(math.Round(sx)), int(math.Round(sy))))
+			qx := float64(x) - mqx
+			qy := float64(y) - mqy
+			px := (a*qx + b*qy) / det
+			py := (-b*qx + a*qy) / det
+			dst.Set(x, y, src.At(
+				int(math.Round(px+mpx)), int(math.Round(py+mpy))))
 		}
 	}
 	return dst

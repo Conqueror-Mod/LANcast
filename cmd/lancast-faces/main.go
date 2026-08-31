@@ -97,7 +97,7 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "capabilities":
-		capabilities()
+		capabilities(os.Args[2:])
 	case "detect":
 		detect(os.Args[2:])
 	case "version", "--version", "-version":
@@ -114,7 +114,8 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `lancast-faces — native face detection for LANcast (ADR 0052)
 
-  capabilities            report what this build can do, as JSON
+  capabilities [-models DIR]
+                          report what this build can do, as JSON
   detect [-models DIR]    read image paths on stdin, one per line;
                           write one JSON Result per line to stdout
   version                 print the version
@@ -124,7 +125,7 @@ thousands of them and every platform has a command-line length limit.
 `)
 }
 
-func caps() Capabilities {
+func caps(modelsDir string) Capabilities {
 	c := Capabilities{
 		Version: Version,
 		OS:      runtime.GOOS,
@@ -142,14 +143,25 @@ func caps() Capabilities {
 		c.Reason = "built without cgo, so no inference backend is linked"
 		return c
 	}
-	c.Reason = "no face model is bundled yet — see ADR 0052"
+	if modelsDir == "" {
+		c.Reason = "no model directory given — pass -models"
+		return c
+	}
+	if err := probeModels(modelsDir); err != nil {
+		c.Reason = err.Error()
+		return c
+	}
+	c.Ready = true
 	return c
 }
 
-func capabilities() {
+func capabilities(args []string) {
+	fs := flag.NewFlagSet("capabilities", flag.ExitOnError)
+	models := fs.String("models", "", "directory holding the detector and embedder models")
+	_ = fs.Parse(args)
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(caps()); err != nil {
+	if err := enc.Encode(caps(*models)); err != nil {
 		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
 		os.Exit(1)
 	}
@@ -160,7 +172,7 @@ func detect(args []string) {
 	models := fs.String("models", "", "directory holding the detector and embedder models")
 	_ = fs.Parse(args)
 
-	c := caps()
+	c := caps(*models)
 	if !c.Ready {
 		/*
 		 * Refused, loudly, rather than returning an empty result.

@@ -135,41 +135,51 @@ func TestTensorIsChannelsThenPixels(t *testing.T) {
 }
 
 /*
- * Alignment rotates a tilted face upright.
+ * Alignment puts the landmarks where the embedder expects them.
  *
- * A head tilted thirty degrees is not unusual — it is most holiday
- * photographs — and an unaligned crop costs accuracy in the way hardest to
- * notice: the embeddings are still valid vectors that still cluster into
- * something, and are simply less able to tell two people apart.
+ * This is the assertion that matters, and the earlier version of it was much
+ * weaker — it checked only that a tilted face came out level, which the
+ * two-eye transform did while still producing crops the model had never seen.
+ * Measured on a photograph of nine strangers, half of all pairs came back above
+ * SFace's published same-person threshold. The transform was "working" and the
+ * constant the clustering depends on was meaningless.
  *
- * Asserted through what the transform does to a known pixel rather than by
- * eyeballing an image: a marker placed on the eye line must land on the
- * horizontal centre line of the crop once the rotation is undone.
+ * So: a face whose landmarks are placed at known positions must come out with
+ * those landmarks *on the canonical positions*. That is the property the
+ * threshold is a property of.
  */
-func TestAlignedCropUndoesRotation(t *testing.T) {
-	// A 200x200 canvas, dark, with a bright marker at the right eye position of
-	// a face tilted 45 degrees.
-	src := solid(200, 200, color.RGBA{0, 0, 0, 255})
-	// Face centred at (100,100), 60 across. Eyes on a 45-degree line.
-	d := Detection{X: 70, Y: 70, W: 60, H: 60, Score: 0.9}
-	d.Landmarks[0] = [2]float32{85, 85}   // right eye, up-left
-	d.Landmarks[1] = [2]float32{115, 115} // left eye, down-right → 45 degrees
+func TestAlignedCropPutsLandmarksOnTheCanonicalPositions(t *testing.T) {
+	src := solid(400, 400, color.RGBA{0, 0, 0, 255})
 
-	// Mark the right eye so it can be found in the output.
-	for dy := -2; dy <= 2; dy++ {
-		for dx := -2; dx <= 2; dx++ {
-			src.Set(85+dx, 85+dy, color.RGBA{255, 255, 255, 255})
+	// A face rotated 30 degrees and scaled, with its five landmarks placed by
+	// transforming the canonical set — so the correct answer is known exactly.
+	const angle = 30 * math.Pi / 180
+	const scale = 2.5
+	const offX, offY = 120.0, 90.0
+	var d Detection
+	for i := 0; i < 5; i++ {
+		cx := canonicalFace[i][0] - 56
+		cy := canonicalFace[i][1] - 56
+		x := (cx*math.Cos(angle) - cy*math.Sin(angle)) * scale
+		y := (cx*math.Sin(angle) + cy*math.Cos(angle)) * scale
+		d.Landmarks[i] = [2]float32{float32(x + offX), float32(y + offY)}
+	}
+	d.X, d.Y, d.W, d.H = 0, 0, 200, 200
+
+	// Mark the nose — the middle landmark — so it can be found in the output.
+	nx, ny := int(d.Landmarks[2][0]), int(d.Landmarks[2][1])
+	for dy := -3; dy <= 3; dy++ {
+		for dx := -3; dx <= 3; dx++ {
+			src.Set(nx+dx, ny+dy, color.RGBA{255, 255, 255, 255})
 		}
 	}
 
 	out := AlignedCrop(src, d, 112)
 
-	// Find the marker's centre of mass in the crop.
 	var sx, sy, n float64
 	for y := 0; y < 112; y++ {
 		for x := 0; x < 112; x++ {
-			r, _, _, _ := out.At(x, y).RGBA()
-			if r > 0x8000 {
+			if r, _, _, _ := out.At(x, y).RGBA(); r > 0x8000 {
 				sx += float64(x)
 				sy += float64(y)
 				n++
@@ -177,23 +187,66 @@ func TestAlignedCropUndoesRotation(t *testing.T) {
 		}
 	}
 	if n == 0 {
-		t.Fatal("the marker did not appear in the aligned crop at all")
+		t.Fatal("the nose marker does not appear in the aligned crop at all")
 	}
-	cy := sy / n
-	// Undoing a 45-degree tilt puts both eyes on the same horizontal line,
-	// through the middle of the crop.
-	if math.Abs(cy-56) > 12 {
-		t.Errorf("the eye marker sits at y=%.1f in the crop; want it near the "+
-			"centre line (56) once the tilt is undone", cy)
-	}
-	// And it should be left of centre, since it is the right eye.
-	if sx/n >= 56 {
-		t.Errorf("the right eye landed at x=%.1f, on the wrong side of centre", sx/n)
+	gotX, gotY := sx/n, sy/n
+	wantX, wantY := canonicalFace[2][0], canonicalFace[2][1]
+	if math.Abs(gotX-wantX) > 3 || math.Abs(gotY-wantY) > 3 {
+		t.Errorf("the nose landed at (%.1f, %.1f); the embedder expects it at "+
+			"(%.1f, %.1f)", gotX, gotY, wantX, wantY)
 	}
 }
 
-// A degenerate box produces an empty crop rather than dividing by zero.
-func TestAlignedCropSurvivesAZeroSizedFace(t *testing.T) {
+/*
+ * And the transform is a *similarity* — it may rotate, scale and move a face,
+ * and it may not mirror one.
+ *
+ * Reflection would fit some landmark sets better than the true pose, and a
+ * mirrored face is not a better answer to "who is this" — it is a different
+ * question. The closed form used cannot express a reflection, and this pins
+ * that: the right eye must stay left of the left eye in the output.
+ */
+func TestAlignedCropDoesNotMirror(t *testing.T) {
+	src := solid(400, 400, color.RGBA{0, 0, 0, 255})
+	var d Detection
+	for i := 0; i < 5; i++ {
+		d.Landmarks[i] = [2]float32{
+			float32(canonicalFace[i][0] + 100),
+			float32(canonicalFace[i][1] + 100),
+		}
+	}
+	d.X, d.Y, d.W, d.H = 100, 100, 112, 112
+
+	// Mark the right eye only.
+	ex, ey := int(d.Landmarks[0][0]), int(d.Landmarks[0][1])
+	for dy := -2; dy <= 2; dy++ {
+		for dx := -2; dx <= 2; dx++ {
+			src.Set(ex+dx, ey+dy, color.RGBA{255, 255, 255, 255})
+		}
+	}
+
+	out := AlignedCrop(src, d, 112)
+	var sx, n float64
+	for y := 0; y < 112; y++ {
+		for x := 0; x < 112; x++ {
+			if r, _, _, _ := out.At(x, y).RGBA(); r > 0x8000 {
+				sx += float64(x)
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("the eye marker vanished")
+	}
+	if got := sx / n; math.Abs(got-canonicalFace[0][0]) > 3 {
+		t.Errorf("the right eye landed at x=%.1f, want %.1f — a mirrored fit "+
+			"would put it near %.1f", got, canonicalFace[0][0], canonicalFace[1][0])
+	}
+}
+
+// Degenerate landmarks — every point in the same place — produce an empty crop
+// rather than a division by zero.
+func TestAlignedCropSurvivesDegenerateLandmarks(t *testing.T) {
 	src := solid(50, 50, color.RGBA{0, 0, 0, 255})
 	out := AlignedCrop(src, Detection{}, 112)
 	if out.Bounds().Dx() != 112 {
