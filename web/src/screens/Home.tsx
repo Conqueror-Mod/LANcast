@@ -1,7 +1,8 @@
 import {
   useLibraries,
   useContinueWatching,
-  useRecentlyAdded,
+  useRecentlyAddedVideo,
+  useRecentlyAddedMusic,
   useRecentPhotos,
   useItems,
   useSetWatchedByID,
@@ -66,7 +67,16 @@ export function Home() {
   // Deeper than the row can show, because the one list is split into two. On a
   // library where a scan just added 200 tracks, the top 20 by date are all
   // music and "Recently Added" would be empty while New Music overflowed.
-  const { data: recentlyAdded } = useRecentlyAdded(40);
+  /*
+   * A window each, rather than one window split afterwards.
+   *
+   * Sharing a window meant a bulk import of one kind evicted the others: a
+   * music library arriving put 35 artists into the newest 40 rows and left the
+   * films shelf with three entries, then with none. Asking per kind is what
+   * keeps the most recent films visible however much music turns up.
+   */
+  const { data: recentlyAddedVideo } = useRecentlyAddedVideo(40);
+  const { data: recentlyAddedMusic } = useRecentlyAddedMusic(20);
   // Photos come from their own query rather than out of recentlyAdded: that one
   // is top-level, so on a picture library it answers with galleries — the same
   // 25 folders every time, which is not what "recently added" means when you
@@ -129,7 +139,7 @@ export function Home() {
     ];
   };
 
-  const hero = pickHero(continueWatching, recentlyAdded);
+  const hero = pickHero(continueWatching, recentlyAddedVideo);
 
   // The hero already shows this item at full size. Repeating it as the first
   // tile of the shelf directly beneath is the kind of duplication that makes a
@@ -150,14 +160,16 @@ export function Home() {
   const continueVideo = resumable.filter((i) => !isMusic(i));
   const continueAudio = resumable.filter(isMusic);
 
-  const recent = withoutHero(recentlyAdded);
-  const recentVideo = recent.filter((i) => !isMusic(i) && !isPicture(i));
-  const recentAudio = recent.filter(isMusic);
+  // Already the right kinds, so only the hero has to be taken out of the video
+  // row; the music row cannot contain it.
+  const recentVideo = withoutHero(recentlyAddedVideo);
+  const recentAudio = recentlyAddedMusic ?? [];
   const recentPictures = (recentPhotos ?? []).filter((i) => !i.missing);
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
-    (recentlyAdded?.length ?? 0) > 0 ||
+    (recentlyAddedVideo?.length ?? 0) > 0 ||
+    (recentlyAddedMusic?.length ?? 0) > 0 ||
     (libraries?.length ?? 0) > 0;
 
   return (
