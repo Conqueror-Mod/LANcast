@@ -230,7 +230,24 @@ TLS with a real certificate. See [docs/security.md](docs/security.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+**LANcast is © 2026 Conqueror-Mod and licensed under the
+[GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0-or-later).**
+
+You may run it, study it, change it and share it. If you distribute a modified
+version — **or run one as a service other people use over a network** — you must
+offer those people the source of your version under the same terms. That last
+clause is why this is the Affero GPL rather than the ordinary GPL: a media
+server can be run for other people without ever being *distributed*, and plain
+GPL would not reach it.
+
+**A commercial licence is available** for anyone who wants to build on LANcast
+without those obligations — see [COMMERCIAL.md](COMMERCIAL.md).
+
+*Releases up to and including v0.8.44 were published under the MIT licence and
+remain available under it. The change applies to work after that; it does not
+retract anything already released.*
+
+Third-party components keep their own licences — see [NOTICE](NOTICE).
 
 Vendored third-party code keeps its own license and notices; see
 [internal/webview2/LICENSE](internal/webview2/LICENSE),

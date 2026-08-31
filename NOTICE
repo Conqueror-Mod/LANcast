@@ -1,0 +1,47 @@
+LANcast
+Copyright (c) 2026 Conqueror-Mod
+
+This product is licensed under the GNU Affero General Public License v3.0.
+A commercial licence is also available; see COMMERCIAL.md.
+
+--------------------------------------------------------------------------------
+Third-party components
+
+This notice exists because the Apache License 2.0 requires attribution to travel
+with the work (section 4(d)), and because a list of what a binary contains is
+worth having whether or not a licence demands it.
+
+Go dependencies (see go.mod for exact versions):
+
+  fyne.io/systray                     Apache License 2.0
+  github.com/tetratelabs/wazero       Apache License 2.0
+  golang.org/x/crypto                 BSD 3-Clause
+  golang.org/x/image                  BSD 3-Clause
+  golang.org/x/sys                    BSD 3-Clause
+  modernc.org/sqlite                  BSD 3-Clause
+  modernc.org/libc                    BSD 3-Clause
+  modernc.org/mathutil                BSD 3-Clause
+  modernc.org/memory                  BSD 3-Clause
+  github.com/dustin/go-humanize       MIT
+  github.com/mattn/go-isatty          MIT
+  github.com/ncruces/go-strftime      BSD 3-Clause
+  github.com/godbus/dbus/v5           BSD 2-Clause
+  github.com/google/uuid              BSD 3-Clause
+  github.com/remyoudompheng/bigfft    BSD 3-Clause
+
+Vendored, with their own licence files beside them:
+
+  hls.js                              Apache License 2.0
+                                      web/vendor/hls.js/LICENSE
+  Microsoft WebView2 loader           Microsoft terms
+                                      internal/webview2/LICENSE
+                                      internal/webview2/PROVENANCE.md
+
+Not bundled, and deliberately so:
+
+  ffmpeg / ffprobe                    GPL or LGPL depending on the build.
+                                      LANcast invokes them as separate
+                                      processes and downloads them onto the
+                                      user's machine on request (ADR 0048).
+                                      They are not linked into LANcast and are
+                                      not redistributed with it.
