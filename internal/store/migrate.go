@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 34
+const CurrentSchemaVersion = 36
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -73,6 +73,8 @@ var migrations = []migration{
 	{version: 32, sql: schemaRevision32},
 	{version: 33, sql: schemaRevision33},
 	{version: 34, sql: schemaRevision34},
+	{version: 35, sql: schemaRevision35},
+	{version: 36, sql: schemaRevision36},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1198,6 +1200,74 @@ UPDATE profile_totals SET viewings = finished;
  * ordering — a photo inserted before it is given a parent, a folder marked
  * before the scan that fills it — cannot leave it wrong. See RefreshSensitivity.
  */
+/*
+ * When a photograph was last looked at for faces (ADR 0052).
+ *
+ * A nullable column rather than a table, because it is one timestamp per row
+ * and the alternative is a join to answer "is there anything left to do".
+ *
+ * It is what makes the pass incremental, and it has to be distinct from "this
+ * photograph has rows in `face`": a photograph with nobody in it produces no
+ * faces, and without a marker it would be re-examined on every run for ever —
+ * a library of landscapes would never stop working.
+ *
+ * Compared against `mtime`, so a photograph that is edited is looked at again
+ * and one that is not never is.
+ */
+const schemaRevision36 = `
+ALTER TABLE media_item ADD COLUMN faces_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_item_faces ON media_item(library_id, kind, faces_at);
+`
+
+/*
+ * Faces, and the people they are grouped into (ADR 0052).
+ *
+ * Two tables rather than a column, because a face is not a property of a
+ * photograph — a photograph has several, each belonging to a different person,
+ * and each has to be able to move between groups when the clustering is re-run.
+ *
+ * `face.embedding` is a blob of little-endian float32s. It is not a column
+ * anything queries on: similarity is a dot product over the whole set, done in
+ * Go, and inventing a SQL representation for a 128-dimensional vector to
+ * support a comparison SQLite cannot do would be a schema shaped by a query
+ * that never happens.
+ *
+ * `face_cluster.name_locked` is the whole point of the second table. A name a
+ * person typed is an edit, and a re-cluster may move faces, create clusters and
+ * delete empty ones — it may never rename or discard a named one. That is the
+ * locked-fields rule, and it has the same standing here as everywhere else in
+ * this project.
+ *
+ * ON DELETE CASCADE from media_item: an embedding is derived from a photograph
+ * and is not less private than it, so when the row goes, the faces go.
+ */
+const schemaRevision35 = `
+CREATE TABLE IF NOT EXISTS face_cluster (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id  INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    name        TEXT,
+    name_locked INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS face (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    cluster_id INTEGER REFERENCES face_cluster(id) ON DELETE SET NULL,
+    x          INTEGER NOT NULL,
+    y          INTEGER NOT NULL,
+    w          INTEGER NOT NULL,
+    h          INTEGER NOT NULL,
+    score      REAL    NOT NULL,
+    embedding  BLOB    NOT NULL,
+    detected_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_face_item    ON face(item_id);
+CREATE INDEX IF NOT EXISTS idx_face_cluster ON face(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_cluster_lib  ON face_cluster(library_id);
+`
+
 const schemaRevision34 = `
 ALTER TABLE media_item ADD COLUMN sensitive INTEGER;
 ALTER TABLE media_item ADD COLUMN sensitive_effective INTEGER NOT NULL DEFAULT 0;

@@ -7,6 +7,7 @@ import (
 
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
+	"lancast/internal/faces"
 	"lancast/internal/photo"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
@@ -53,6 +54,7 @@ type snapshot struct {
 	probe    probe.Stats
 	covers   coverart.Stats
 	photos   photo.Stats
+	faces    faces.Stats
 	sessions []transcode.SessionInfo
 	update   update.State
 	staged   string
@@ -90,6 +92,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.covers != nil {
 		snap.covers = s.covers.Stats()
+	}
+	if s.facesW != nil {
+		snap.faces = s.facesW.Stats()
 	}
 	if s.trans != nil {
 		snap.sessions = s.trans.Sessions()
@@ -176,6 +181,20 @@ func buildActivity(snap snapshot) []Activity {
 		tasks = append(tasks, Activity{
 			Kind: "coverart", ID: "coverart", Title: "Finding album artwork",
 			State: "running", Done: st.Found, Total: st.Total,
+			Detail: failedDetail(st.Failed),
+		})
+	}
+	if st := snap.faces; st.Running {
+		/*
+		 * Total is the photographs *examined plus remaining* rather than a
+		 * figure counted up front. A face pass discovers its own size as it
+		 * goes — the pending count changes when a folder is marked sensitive
+		 * mid-pass — and a progress bar whose total moves backwards is worse
+		 * than one that grows.
+		 */
+		tasks = append(tasks, Activity{
+			Kind: "faces", ID: "faces", Title: "Grouping faces",
+			State: "running", Done: st.Examined, Total: st.Examined + st.Remaining,
 			Detail: failedDetail(st.Failed),
 		})
 	}

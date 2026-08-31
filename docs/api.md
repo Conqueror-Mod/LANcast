@@ -2336,6 +2336,77 @@ indistinguishable from a bug.
 
 Release one lock. Returns `204`. The field resumes updating on the next refresh.
 
+### `GET /api/faces/capabilities`
+
+Whether this server can group faces, and why not when it cannot (ADR 0052).
+
+```json
+{ "version": "0.8.45", "os": "windows", "arch": "amd64",
+  "native": "gcc 16.1.0", "ready": true }
+```
+
+`ready: false` always carries a `reason` — "the face worker is not installed",
+"no face model is bundled yet", and so on. **A client must never present an
+empty people list as "nobody here" without checking this**: "nothing found" and
+"nothing looked" are the same empty array and completely different sentences.
+
+The worker is a separate optional download, in the shape ffmpeg already has
+(ADR 0048). A server without it is fully functional and says so.
+
+### `POST /api/libraries/{id}/faces`
+
+Start a face pass over a picture library. Admin only. `202` with
+`{"started": true}`.
+
+Asynchronous: a library is tens of minutes of work, and progress is read from
+`/api/activity` like every other worker — the task's `kind` is `faces`. The
+pass outlives the request that started it.
+
+`400 wrong_kind` on a library that is not a picture library. `409 not_available`
+when the worker is missing or has no models, with the reason in the message —
+"not installed" and "no model" are different problems with different fixes.
+
+The pass is incremental: a photograph already examined is skipped unless its
+file has changed. **Folders marked sensitive are never examined**, and marking
+one deletes any faces already found in it (ADR 0051, amended) — an embedding is
+derived from a photograph and is not less private than it.
+
+### `GET /api/libraries/{id}/people`
+
+The face groups in a picture library, largest first.
+
+```json
+{ "people": [
+    { "id": 3, "name": "Georgia", "name_locked": true, "count": 41,
+      "cover_face_id": 92, "cover_item_id": 5512 },
+    { "id": 7, "name": null, "name_locked": false, "count": 12,
+      "cover_face_id": 210, "cover_item_id": 5570 }
+  ],
+  "pending": 0 }
+```
+
+`pending` is how many photographs are still to be examined, and it is returned
+so a client can say "still looking" rather than "nobody here". An unnamed group
+has `name: null`; `cover_*` point at the highest-scoring face in the group, so
+a group is represented by its clearest example.
+
+### `PUT /api/faces/clusters/{id}`
+
+Name a group, or clear its name. Admin only.
+
+```json
+{ "name": "Georgia" }
+```
+
+**A name is an edit and locks the group**: re-clustering may move faces into it
+and may never rename it, merge it away, or delete it, even when it is emptied
+(ADR 0052). Faces prefer a named group at equal similarity, so naming makes a
+group more stable rather than freezing it.
+
+An empty `name` clears both the name and the lock, and the group becomes an
+ordinary cluster again — without that a typo would be permanent, and permanence
+is what makes people afraid to use a naming UI at all.
+
 ### `GET /api/libraries/{id}/timeline`
 
 A picture library's photographs counted by **capture month**, newest first.
