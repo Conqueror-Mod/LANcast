@@ -15,8 +15,10 @@ import (
 
 	"fyne.io/systray"
 
+	"lancast/internal/applog"
 	"lancast/internal/autostart"
 	"lancast/internal/branding"
+	"lancast/internal/config"
 	"lancast/internal/desktop"
 	"lancast/internal/raise"
 	"lancast/internal/singleton"
@@ -47,7 +49,7 @@ func trayRun(addr, dataDir string) error {
 	 * answers.
 	 */
 	if svc := installedService(); svc.Installed {
-		return runServiceTray(addr, svc)
+		return runServiceTray(addr, dataDir, svc)
 	}
 
 	release, held, err := singleton.Acquire(singleton.Server)
@@ -170,7 +172,7 @@ func openExisting(addr string) error {
  * or worse, raised a UAC prompt for something labelled "Exit" — would be the
  * confusion the old comment was guarding against, arriving from the other side.
  */
-func runServiceTray(addr string, svc serviceState) error {
+func runServiceTray(addr, dataDir string, svc serviceState) error {
 	if !svc.Running {
 		if err := startInstalledService(); err != nil {
 			if errors.Is(err, errCancelled) {
@@ -186,6 +188,44 @@ func runServiceTray(addr string, svc serviceState) error {
 	}
 
 	log := newLogger(false)
+
+	/*
+	 * A log that goes somewhere.
+	 *
+	 * newLogger writes to stderr, and this process is a GUI application with no
+	 * console — so every warning it has ever produced went into nothing. That
+	 * is how a tray toggle that silently failed could be watched failing, over
+	 * and over, with no way to see why: the code reported it correctly and the
+	 * report had nowhere to land.
+	 *
+	 * Its own file rather than the server's, because both rotate by renaming at
+	 * a size threshold and two processes doing that to one file is a race that
+	 * ends with the server's log truncated.
+	 *
+	 * A logging failure is reported to the void it replaces and then ignored:
+	 * not being able to write a log is not a reason to refuse to show an icon.
+	 */
+	logDir := dataDir
+	if logDir == "" {
+		// The tray subcommand defaults its data directory to the per-user
+		// config dir, and an empty string here would drop the log in whatever
+		// the working directory happens to be — which for a shortcut is
+		// anybody's guess.
+		if d, err := config.DefaultDataDir(); err == nil {
+			logDir = d
+		}
+	}
+	if lf, err := applog.OpenNamed(logDir, applog.TrayFileName); err != nil {
+		log.Warn("could not open the tray log", "error", err)
+	} else {
+		defer lf.Close()
+		// Tee rather than io.MultiWriter, for the reason the service uses it:
+		// MultiWriter stops at the first error, and with no console stderr can
+		// fail — which would silence the file too, in exactly the situation the
+		// file exists for.
+		log = slog.New(slog.NewTextHandler(applog.Tee(lf, os.Stderr), nil))
+		log.Info("tray started", "log", lf.Path())
+	}
 
 	/*
 	 * Say that a tray exists, for as long as this one does.
@@ -339,22 +379,50 @@ func openPane(addr, pane string, log *slog.Logger) {
  * asked for: a registry write that failed and a menu that ticked anyway is a
  * setting that lies about itself, which is worse than one that refuses.
  */
+/*
+ * toggleLogin flips the setting and then shows what the setting actually is.
+ *
+ * The tick used to be set from what was *attempted*: check the item after
+ * Enable returned no error, uncheck it after Disable did. That reads as
+ * reasonable and it made the menu capable of lying — a tick appeared beside a
+ * run key that had not been written, and the only other report of the failure
+ * went to a logger with nowhere to write. Watched doing exactly that: the tick
+ * moved on every click and the registry never changed.
+ *
+ * So the state is read back from the registry afterwards and the tick is set
+ * from that. It cannot then claim something the machine does not agree with,
+ * and a failure shows up as a tick that does not move — which is a symptom
+ * somebody can report.
+ */
 func toggleLogin(item *systray.MenuItem, log *slog.Logger) {
-	if item.Checked() {
-		if err := autostart.Disable(autostart.Tray); err != nil {
-			log.Warn("could not disable autostart", "error", err)
-			return
-		}
+	want := !item.Checked()
+
+	var err error
+	if want {
+		// The same arguments this launch used, or the icon comes back at login
+		// pointed at a different data directory from the one it is controlling.
+		err = autostart.Enable(autostart.Tray, "tray")
+	} else {
+		err = autostart.Disable(autostart.Tray)
+	}
+	if err != nil {
+		log.Warn("could not change autostart", "wanted", want, "error", err)
+	}
+
+	on, rerr := autostart.Enabled(autostart.Tray)
+	if rerr != nil {
+		// Nothing trustworthy to show, so show nothing new rather than guess.
+		log.Warn("could not read autostart back", "error", rerr)
+		return
+	}
+	if on {
+		item.Check()
+	} else {
 		item.Uncheck()
-		return
 	}
-	// The same arguments this launch used, or the icon comes back at login
-	// pointed at a different data directory from the one it is controlling.
-	if err := autostart.Enable(autostart.Tray, "tray"); err != nil {
-		log.Warn("could not enable autostart", "error", err)
-		return
+	if on != want {
+		log.Warn("autostart did not take", "wanted", want, "is", on)
 	}
-	item.Check()
 }
 
 /*
