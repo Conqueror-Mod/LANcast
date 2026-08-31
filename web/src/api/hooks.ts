@@ -886,13 +886,60 @@ export function useRecentPhotos(limit = 20) {
   });
 }
 
-export function useRecentlyAdded(limit = 20) {
+/*
+ * Recently added, one window per kind of thing.
+ *
+ * There used to be a single query for everything, split by kind after it
+ * arrived. That works until one kind arrives in bulk: importing a music library
+ * of 8,882 tracks put **35 artists into the newest 40 rows**, leaving three
+ * films and two collections — so the films shelf showed only what had been
+ * added *since* the import, and for a while showed nothing at all and vanished.
+ * Reported as exactly that.
+ *
+ * The window is the bug. Sorting by `added_at` across every kind means the
+ * shelf that has just had a thousand rows added silently evicts every other
+ * shelf, and the more recently you organised your library the emptier the page
+ * looks — the opposite of what it is for.
+ *
+ * `useRecentPhotos` already had its own query for a version of this reason.
+ * These two finish the job: a shelf asks for its own kinds, so nothing another
+ * shelf does can empty it.
+ *
+ * The key keeps the `recently-added` prefix on purpose. Every mutation that
+ * changes what a library holds invalidates that prefix, and both of these must
+ * be caught by it.
+ */
+
+// Music and pictures have shelves of their own, so the video window excludes
+// them rather than filtering them out after the fact — filtering after the
+// fact is what made the window the wrong size in the first place.
+const NOT_VIDEO = "artist,album,track,gallery,photo";
+
+export function useRecentlyAddedVideo(limit = 20) {
   return useQuery({
-    queryKey: ["recently-added", limit],
+    queryKey: ["recently-added", "video", limit],
     queryFn: ({ signal }) =>
-      apiGet<ItemsPage>(`/api/items?sort=added&limit=${limit}`, signal).then(
-        (r) => r.items,
-      ),
+      apiGet<ItemsPage>(
+        `/api/items?sort=added&limit=${limit}&exclude_kind=${NOT_VIDEO}`,
+        signal,
+      ).then((r) => r.items),
+    staleTime: 30_000,
+  });
+}
+
+/*
+ * Artists rather than albums or tracks: this list is top-level, and for a music
+ * library the top level is the artist (ADR 0024). Asking for the kind directly
+ * says so, where relying on the shape of a general query only appeared to.
+ */
+export function useRecentlyAddedMusic(limit = 20) {
+  return useQuery({
+    queryKey: ["recently-added", "music", limit],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(
+        `/api/items?kind=artist&sort=added&limit=${limit}`,
+        signal,
+      ).then((r) => r.items),
     staleTime: 30_000,
   });
 }
