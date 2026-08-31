@@ -41,6 +41,27 @@ func (s *Server) putSensitive(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
+	/*
+	 * Folders only, and refused on the server rather than merely hidden in the
+	 * menu (ADR 0051, amended).
+	 *
+	 * A single photograph could be marked, and that turned out to be the wrong
+	 * shape. A loose marked photo has nowhere to be *viewed* — the only place a
+	 * cover may be lifted is inside a folder — so marking one produced content
+	 * that was covered everywhere and reachable nowhere. The answer is to put it
+	 * in a folder and mark that, which is a thing the person can do and the
+	 * software cannot do for them.
+	 *
+	 * Unmarking is deliberately still allowed on anything: photographs marked
+	 * before this rule existed have to be clearable, and refusing to let
+	 * somebody undo a mark because the mark should not have been possible is
+	 * how data becomes permanent by accident.
+	 */
+	if *req.Sensitive && item.Kind != "gallery" {
+		writeError(w, http.StatusBadRequest, "folders_only",
+			"only a folder can be marked sensitive — put the photo in a folder and mark that")
+		return
+	}
 	if err := s.st.SetSensitive(r.Context(), id, *req.Sensitive); err != nil {
 		s.writeInternal(w, err, "set sensitive")
 		return

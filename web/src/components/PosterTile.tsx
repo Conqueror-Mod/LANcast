@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
-import { acknowledge, useObscured } from "@/lib/sensitiveAck";
+import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
 import { containerCountLabel, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
 import type { Item } from "@/api/types";
@@ -63,10 +63,23 @@ export function PosterTile({
    * grid where a dozen tiles might be covered.
    */
   const obscured = useObscured(item);
+  /*
+   * And whether this surface is allowed to lift a cover at all (ADR 0051,
+   * amended). The library grid and a gallery's page are; the home shelves, the
+   * hero, search and collections are not, so a covered tile there does nothing
+   * when pressed rather than uncovering itself.
+   */
+  const canReveal = useCanReveal();
   const go = onOpen ?? (() => navigate(`/item/${item.id}`));
   const open = () => {
     if (obscured) {
-      acknowledge(item.id);
+      /*
+       * Pressing does nothing where a cover may not be lifted, and that is the
+       * behaviour rather than an oversight: navigating instead would open the
+       * thing the cover exists to not show, from the screen it most needs
+       * covering on.
+       */
+      if (canReveal) acknowledge(item.id);
       return;
     }
     go();
@@ -184,7 +197,12 @@ export function PosterTile({
        */
       title={menuAt ? undefined : item.title}
       aria-label={
-        obscured ? item.title + " — sensitive, click to show" : item.title
+        obscured
+          ? item.title +
+            (canReveal
+              ? " — sensitive, click to show"
+              : " — sensitive, open it in its library to view")
+          : item.title
       }
     >
       <div
@@ -203,7 +221,7 @@ export function PosterTile({
           <div className="poster-tile__sensitive">
             <span className="poster-tile__sensitive-title">{item.title}</span>
             <span className="poster-tile__sensitive-note">
-              Sensitive — click to show
+              {canReveal ? "Sensitive — click to show" : "Sensitive"}
             </span>
           </div>
         ) : poster ? (

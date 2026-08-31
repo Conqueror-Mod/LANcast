@@ -18,7 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { PosterTile } from "./PosterTile";
-import { forgetAcknowledgements } from "@/lib/sensitiveAck";
+import { SensitiveReveal, forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type { Item } from "@/api/types";
 
 declare global {
@@ -55,7 +55,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function render(item: Item) {
+function renderIn(item: Item, allowed: boolean) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -64,7 +64,13 @@ function render(item: Item) {
       <QueryClientProvider client={client}>
         <FocusProvider>
           <MemoryRouter>
-            <PosterTile item={item} />
+            {allowed ? (
+              <SensitiveReveal>
+                <PosterTile item={item} />
+              </SensitiveReveal>
+            ) : (
+              <PosterTile item={item} />
+            )}
           </MemoryRouter>
         </FocusProvider>
       </QueryClientProvider>,
@@ -74,38 +80,40 @@ function render(item: Item) {
 
 describe("a sensitive tile", () => {
   it("renders no image at all", () => {
-    render(photo({ sensitive: true }));
+    renderIn(photo({ sensitive: true }), false);
     expect(host.querySelector("img")).toBeNull();
   });
 
   // The name is deliberately readable: hiding it too would make somebody hunt
   // through identical grey rectangles for the folder they marked themselves.
   it("still shows the name", () => {
-    render(photo({ sensitive: true }));
+    renderIn(photo({ sensitive: true }), false);
     expect(host.textContent).toContain("Kept Folder");
   });
 
   it("says what it is and how to see it", () => {
-    render(photo({ sensitive: true }));
+    renderIn(photo({ sensitive: true }), false);
     expect(host.textContent).toContain("Sensitive");
   });
 
   // An unmarked photo is untouched — the feature costs nothing to anyone who
   // has not used it.
   it("draws an unmarked photo normally", () => {
-    render(photo({}));
+    renderIn(photo({}), false);
     expect(host.querySelector("img")).not.toBeNull();
   });
 
   /*
-   * The first press reveals rather than opening.
+   * The first press reveals rather than opening — on a surface that is allowed
+   * to reveal at all.
    *
-   * A cover you can click straight through has not stopped anything. This is
-   * the whole of the interaction, so it is asserted rather than assumed from
-   * the handler being wired.
+   * A cover you can click straight through has not stopped anything. The
+   * permitting wrapper is what the library grid and a gallery's page provide
+   * and nothing else does (ADR 0051, amended); without it a press does nothing,
+   * which sensitiveSurface.test.tsx asserts from the other side.
    */
   it("reveals on the first press instead of opening", () => {
-    render(photo({ sensitive: true }));
+    renderIn(photo({ sensitive: true }), true);
     const tile = host.querySelector("button");
     expect(tile).not.toBeNull();
 

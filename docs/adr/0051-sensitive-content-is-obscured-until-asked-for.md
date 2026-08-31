@@ -1,6 +1,6 @@
 # ADR 0051 — Sensitive content is obscured until asked for
 
-**Status:** accepted
+**Status:** accepted, amended 2026-08-31
 **Date:** 2026-08-30
 
 A picture library can hold a folder whose contents are private in a way the
@@ -142,6 +142,42 @@ Answered by Chris on 2026-08-30.
 The directive the three add up to, in Chris's words: *if the option is enabled
 in settings, and a folder or photo is marked sensitive, restrict its view until
 acknowledged of its nature.*
+
+## Amendment, 2026-08-31 — after using it
+
+Two things were wrong in practice, and both were wrong in the same direction:
+the design treated acknowledgement as a fact about the *item* when it is a fact
+about *where you are standing*.
+
+**A cover could be lifted anywhere, and stayed lifted.** Accepting a folder
+uncovered it on every surface for the rest of the session — the home page
+included. So the screen most likely to have somebody else glancing at it was
+also the screen where one click uncovered the folder, permanently. That is the
+exact scenario the feature exists to prevent, arrived at through the feature.
+
+Acknowledgement is now scoped to the surface. **Two surfaces may lift a cover:
+the picture library's own grid, and a folder's own page.** Home, the shelves,
+the hero, search and collections show marked content covered and offer no way to
+uncover it — pressing does nothing, and the tile does not invite the press.
+Leaving the pictures forgets what was accepted, so returning later finds it
+covered again.
+
+The default is that a cover may *not* be lifted, and a surface opts in. That way
+a screen added next year is safe by saying nothing, and the available mistake is
+forgetting to permit — visible and harmless — rather than forgetting to forbid.
+
+**Only folders can be marked.** Single photographs could be, and it produced
+content that was covered everywhere and viewable nowhere: the only places a
+cover may be lifted are the library grid and a folder, so a loose marked photo
+had nowhere it could be seen. A person with a photograph to protect puts it in
+a folder and marks the folder, which is something they can do and the software
+cannot do for them.
+
+Refused by the server, not merely hidden in the menu — the menu is not the only
+way to reach the endpoint. **Unmarking anything is still allowed**, so a photo
+marked before this rule can be cleared; refusing to let somebody undo a mark
+because the mark should not have been possible is how data becomes permanent by
+accident.
 
 ## What it cost
 
