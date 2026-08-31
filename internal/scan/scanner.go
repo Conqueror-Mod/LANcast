@@ -257,12 +257,28 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	 * both.
 	 */
 	elapsed := end.Sub(p.started).Milliseconds()
+	/*
+	 * The outcome is decided here and *published* at the end, after the trash.
+	 *
+	 * State leaving StateRunning is how everything else learns the scan is
+	 * over — the client polls it, and so does every test that waits for one.
+	 * Emptying the trash after that flip meant a scan announced itself finished
+	 * and then went on deleting rows, so an observer could refresh in the gap
+	 * and see rows that were already condemned.
+	 *
+	 * That is this project's most-repeated bug wearing a new hat: the request
+	 * succeeds, the server is right, and only the picture is stale. Here the
+	 * server was briefly wrong too, because it said finished before it was.
+	 *
+	 * Caught as a test failing two or three runs in a hundred on CI and never
+	 * on a desk, which is the shape of a race that needs a slow machine.
+	 */
+	finalState := StateIdle
 	if err != nil {
-		p.State = StateFailed
+		finalState = StateFailed
 		p.Error = err.Error()
 		s.log.Error("scan failed", "library", lib.ID, "elapsed_ms", elapsed, "error", err)
 	} else {
-		p.State = StateIdle
 		s.log.Info("scan complete", "library", lib.ID,
 			"seen", p.FilesSeen, "changed", p.ItemsChanged, "missing", p.ItemsMissing,
 			"elapsed_ms", elapsed)
@@ -310,10 +326,12 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 			}
 		}
 	}
-	delete(s.running, lib.ID)
-	done := s.onFinish
 	wants := s.emptyTrash
-	verdict := MayEmptyTrash(*p)
+	// The verdict wants the outcome, which is not on p yet: publishing it early
+	// is the very thing this ordering exists to avoid.
+	outcome := *p
+	outcome.State = finalState
+	verdict := MayEmptyTrash(outcome)
 	s.mu.Unlock()
 
 	/*
@@ -337,6 +355,20 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 			s.log.Info("emptied trash", "library", lib.ID, "removed", n)
 		}
 	}
+
+	/*
+	 * Only now is the scan over.
+	 *
+	 * Everything that changes what the library holds has happened, so a client
+	 * that sees this and refreshes gets the library as it will stay. The finish
+	 * hook is called after the flip for the same reason it is called outside
+	 * the lock: it starts enrichment, which reads scan status.
+	 */
+	s.mu.Lock()
+	p.State = finalState
+	delete(s.running, lib.ID)
+	done := s.onFinish
+	s.mu.Unlock()
 
 	// Called outside the lock: the callback starts enrichment, which reads
 	// scan status, and holding the mutex here would deadlock.
