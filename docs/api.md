@@ -2344,6 +2344,12 @@ Mark an item sensitive, or clear the mark (ADR 0051). Admin only.
 { "sensitive": true }
 ```
 
+**Only a folder (`kind: "gallery"`) may be marked.** Marking anything else is
+`400 folders_only`: the only surfaces that may lift a cover are the picture
+library's grid and a folder's own page, so a loose marked photo would be covered
+everywhere and viewable nowhere. *Unmarking* is allowed on any item, so a mark
+made before this rule can still be cleared.
+
 Returns `200` with the value that was set. `409 not_enabled` while the
 `sensitive_marking` setting is off — the setting gates the gesture, not the
 storage, so marks made earlier survive it being turned off and are honoured
@@ -2363,6 +2369,12 @@ recently-added shelves, a collection's children:
   `sensitive: true, sensitive_own: false` and cannot be unmarked on its own.
 
 Both are omitted when false.
+
+**Acknowledgement is not part of this API, and is scoped to where the viewer
+is.** A client may only offer to lift a cover on the library grid and on a
+folder's own page; the home page, shelves, search and collections show marked
+content covered with no way to uncover it, and leaving the pictures forgets what
+was accepted.
 
 **Acknowledgement is not part of this API.** Whether a viewer has asked to see
 covered content is held by the client for the length of its session and is

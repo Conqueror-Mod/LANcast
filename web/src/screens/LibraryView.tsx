@@ -11,6 +11,7 @@ import {
   type PlayableKind,
 } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
+import { SensitiveReveal } from "@/lib/sensitiveAck";
 import { useItemActions } from "@/components/itemActions";
 import { startOf } from "@/playback/queueOrder";
 import { PhotoBanner } from "@/components/PhotoBanner";
@@ -437,9 +438,16 @@ export function LibraryView({
         className="browse__grid"
         style={{ "--tile-grid": tileWidth(tileStep) } as CSSProperties}
       >
-        {items.map((item) => (
-          <PosterTile key={item.id} item={item} actions={gridActions} />
-        ))}
+        {/*
+          The library's own grid is one of the two places a cover may be lifted
+          (ADR 0051, amended). Accepting here is how somebody reaches a folder
+          they marked; everywhere outside the pictures the cover is fixed.
+        */}
+        <SensitiveReveal>
+          {items.map((item) => (
+            <PosterTile key={item.id} item={item} actions={gridActions} />
+          ))}
+        </SensitiveReveal>
       </div>
 
       {/* The sentinel needs real height: a zero-area element never reports as

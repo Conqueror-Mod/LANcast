@@ -41,6 +41,7 @@ import { useItemActions } from "@/components/itemActions";
 import { startOf } from "@/playback/queueOrder";
 import { useStarless } from "@/lib/starless";
 import { PhotoBanner } from "@/components/PhotoBanner";
+import { SensitiveReveal } from "@/lib/sensitiveAck";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
 import { EpisodeList } from "@/components/EpisodeList";
@@ -936,6 +937,12 @@ export function Detail() {
                 playlistID={isPlaylist ? item.id : undefined}
               />
             ) : isGallery ? (
+              /*
+                Inside the folder, which is the other place a cover may be
+                lifted — and the only place the photographs themselves can be
+                reached (ADR 0051, amended).
+              */
+              <SensitiveReveal>
               <div className="detail__children-grid">
                 {children.map((child) => (
                   <PosterTile
@@ -952,6 +959,7 @@ export function Detail() {
                   />
                 ))}
               </div>
+              </SensitiveReveal>
             ) : (
               <div className="detail__children-grid">
                 {children.map((child) => (

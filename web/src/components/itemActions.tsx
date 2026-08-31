@@ -203,6 +203,14 @@ export function useItemActions(): ItemActions {
     (item: Item): MenuAction[] => {
       if (!isAdmin || !settings?.sensitive_marking) return [];
       if (!isPicture(item)) return [];
+      /*
+       * Folders only (ADR 0051, amended). A loose marked photograph had nowhere
+       * it could be viewed, since a cover may only be lifted inside a folder —
+       * so it was covered everywhere and reachable nowhere. Unmark still shows
+       * on anything already carrying a mark, or one made before this rule
+       * could never be cleared.
+       */
+      if (item.kind !== "gallery" && !item.sensitive_own) return [];
       if (item.sensitive_own) {
         return [
           {

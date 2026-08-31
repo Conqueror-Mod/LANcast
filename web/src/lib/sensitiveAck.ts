@@ -1,4 +1,11 @@
-import { useSyncExternalStore } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { Item } from "@/api/types";
 
 /*
@@ -103,4 +110,58 @@ export function useObscured(item: Item): boolean {
     () => version,
   );
   return !isRevealed(item);
+}
+
+/*
+ * Where a cover may be lifted (ADR 0051, amended).
+ *
+ * Acknowledgement used to be a property of the *item*: accept once and the
+ * photograph was uncovered everywhere it appeared, including the home page. So
+ * the one screen somebody else is most likely to be looking over your shoulder
+ * at was also the screen where a single click could uncover the folder for the
+ * rest of the session. Reported as exactly that.
+ *
+ * It is now a property of *where you are*. The default is that a cover cannot
+ * be lifted at all, and two surfaces opt in: the picture library's own grid,
+ * and a gallery's page. Home, the shelves, the hero, search and collections
+ * therefore show marked content covered and offer no way to uncover it —
+ * whatever anybody clicks.
+ *
+ * Fail-closed on purpose. A surface added next year gets the safe behaviour by
+ * saying nothing, and the mistake somebody can make is forgetting to allow it —
+ * which is visible and harmless — rather than forgetting to forbid it.
+ */
+const CanReveal = createContext(false);
+
+export function useCanReveal(): boolean {
+  return useContext(CanReveal);
+}
+
+/*
+ * SensitiveReveal marks a subtree as somewhere covers may be lifted, and drops
+ * every acknowledgement on the way out.
+ *
+ * The clear is deferred by a tick rather than run on unmount, and that is the
+ * whole reason this is not three lines: moving from the library grid into a
+ * folder unmounts one provider and mounts another, and clearing eagerly would
+ * ask again for the folder you just accepted. Deferring lets an incoming
+ * provider cancel it, so the acknowledgement survives navigation *within* the
+ * pictures and dies the moment you leave for anywhere else.
+ */
+let pendingClear: ReturnType<typeof setTimeout> | null = null;
+
+export function SensitiveReveal({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    if (pendingClear !== null) {
+      clearTimeout(pendingClear);
+      pendingClear = null;
+    }
+    return () => {
+      pendingClear = setTimeout(() => {
+        pendingClear = null;
+        forgetAcknowledgements();
+      }, 0);
+    };
+  }, []);
+  return createElement(CanReveal.Provider, { value: true }, children);
 }
