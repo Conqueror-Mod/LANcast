@@ -395,9 +395,32 @@ func openPane(addr, pane string, log *slog.Logger) {
  * somebody can report.
  */
 func toggleLogin(item *systray.MenuItem, log *slog.Logger) {
-	want := !item.Checked()
+	/*
+	 * What to do next comes from the registry, never from the widget.
+	 *
+	 * This used to read `!item.Checked()`, which is the obvious thing and is
+	 * wrong here. Windows toggles a checkbox menu item's *visible* tick itself
+	 * when it is clicked; systray's `Checked()` returns its own idea, which only
+	 * Check and Uncheck change. The two drift apart the moment the native toggle
+	 * happens, and the intent computed from the stale one is the opposite of
+	 * what the person clicking meant.
+	 *
+	 * Watched doing exactly that: the tick moved on every click, the run key
+	 * never changed, and nothing was logged — because each click was computing
+	 * "turn it off" against a setting that was already off, succeeding, and
+	 * agreeing with itself.
+	 *
+	 * The registry is the setting. Asking it removes the widget from the
+	 * decision, which is the same reason the tick is set from a read-back
+	 * rather than from what was attempted.
+	 */
+	was, err := autostart.Enabled(autostart.Tray)
+	if err != nil {
+		log.Warn("could not read autostart", "error", err)
+		return
+	}
+	want := !was
 
-	var err error
 	if want {
 		// The same arguments this launch used, or the icon comes back at login
 		// pointed at a different data directory from the one it is controlling.
