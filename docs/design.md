@@ -131,6 +131,18 @@ which is the layer that makes the others read: the intro's sky is bright in the
 middle and nearly black at the corners, and that range is most of why it looks
 like depth rather than like a colour.
 
+**A screen that owns the picture turns the stars off.** The detail page does:
+its full-bleed fanart is the thing being looked at, and a drifting texture over
+it is a second thing asking for attention. The nebula stays, because the
+backdrop is tinted *into* it (see the artwork rule under Depth) — removing that
+would leave the artwork on a flat floor with the identity stopping at its edge.
+Only the stars go, because they are the layer that reads as being in front.
+
+`useStarless()` in `lib/starless.ts` sets a flag on the document element and
+clears it on unmount. The cleanup is the part with the bug in it: a one-way
+switch would take the stars from every screen visited afterwards, and nothing
+would look broken — just quieter.
+
 **Drift.** A `transform: translate3d()` animation on the gradient layer over
 `--dur-ambient`, GPU-composited. It must be imperceptible when watched directly
 and noticeable only if you look away and back. If you can see it moving, it is

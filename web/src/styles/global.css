@@ -86,6 +86,15 @@ body {
   pointer-events: none;
 }
 
+/*
+ * A screen that owns the picture suppresses the stars — the detail page, whose
+ * full-bleed fanart is the thing being looked at. See lib/starless.ts. The
+ * nebula is deliberately left alone: it is what the artwork is tinted into.
+ */
+:root[data-starless] .starfield {
+  display: none;
+}
+
 .starfield i {
   position: absolute;
   inset: -6%;
