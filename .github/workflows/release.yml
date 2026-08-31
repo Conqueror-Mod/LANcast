@@ -41,6 +41,13 @@ jobs:
           if [ "$ok" != 1 ]; then echo "server never answered /api/health"; exit 1; fi
           echo "health check passed"
 
+      # lancast-faces is the one cgo binary (ADR 0052), and its Windows build
+      # is cross-compiled from this Linux runner. Without mingw the goreleaser
+      # step fails at the *end* of a release, after everything else has built —
+      # which is the most expensive moment to discover a missing package.
+      - name: install the mingw cross-compiler for lancast-faces
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

@@ -54,12 +54,48 @@ builds:
     ldflags:
       - -s -w -X main.Version={{ .Version }}
 
+  # ---- lancast-faces (ADR 0052) --------------------------------------------
+  #
+  # The only cgo in this repository, and the reason it is a separate binary.
+  # Every block above is CGO_ENABLED=0 and cross-compiled from one Linux
+  # runner; enabling cgo inside lancastd would drag a mingw toolchain, an
+  # aarch64 toolchain and a glibc floor into every release. Here the cost is
+  # paid by one optional artefact for the platforms it can actually serve.
+  #
+  # amd64 only, deliberately. linux/arm64 needs an aarch64 cross-compiler and
+  # a vision library built for it; a face worker nobody has asked for on a Pi
+  # is not worth holding a release for, and it can be added when it is.
+  - id: lancast-faces-windows
+    main: ./cmd/lancast-faces
+    binary: lancast-faces
+    env:
+      - CGO_ENABLED=1
+      # The mingw cross-compiler, installed by the release workflow. Named
+      # rather than left to the default: with CGO_ENABLED=1 and no CC, Go
+      # reaches for the host gcc and silently builds a Linux object for a
+      # Windows target, which fails at link time with a message about
+      # architecture that reads like a Go bug.
+      - CC=x86_64-w64-mingw32-gcc
+    goos: [windows]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+
+  - id: lancast-faces-linux
+    main: ./cmd/lancast-faces
+    binary: lancast-faces
+    env: [CGO_ENABLED=1]
+    goos: [linux]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+
 # The archive names are unchanged from the single-archive version: same
 # template, same formats per OS. Splitting the block is about what goes *in*
 # them, not what they are called.
 archives:
   - id: windows
-    ids: [lancastd-windows, lancast-windows]
+    ids: [lancastd-windows, lancast-windows, lancast-faces-windows]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [zip]
     files:
@@ -76,7 +112,11 @@ archives:
         dst: WebView2Loader.dll
 
   - id: unix
-    ids: [lancastd-unix, lancast-unix]
+    # lancast-faces is amd64-only, and goreleaser is content for an archive to
+    # include a build that does not cover every platform in the archive's own
+    # matrix — the arm64 tarball simply comes out without it, which is exactly
+    # what "optional, and not on this platform yet" should look like.
+    ids: [lancastd-unix, lancast-unix, lancast-faces-linux]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     files:
