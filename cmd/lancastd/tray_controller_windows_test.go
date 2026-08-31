@@ -127,7 +127,7 @@ func TestExitAlsoClosesTheApp(t *testing.T) {
 	}
 	body := src[i:]
 
-	j := strings.Index(body, "case <-mQuit.ClickedCh:")
+	j := strings.Index(body, "watch(mQuit.ClickedCh,")
 	if j < 0 {
 		t.Fatal("no Exit handler")
 	}
@@ -306,5 +306,64 @@ func TestTheLoginIntentDoesNotComeFromTheTick(t *testing.T) {
 	}
 	if !strings.Contains(body, "want := !was") {
 		t.Error("the wanted state is not the negation of the stored one")
+	}
+}
+
+/*
+ * Every menu item gets its own receiver.
+ *
+ * systray delivers a click with a non-blocking send on an *unbuffered* channel:
+ *
+ *	select {
+ *	case item.ClickedCh <- struct{}{}:
+ *	default:
+ *	}
+ *
+ * So a click lands only if something is blocked on that exact channel at that
+ * instant. There is no queue and no error — an undelivered click never happened.
+ *
+ * One select over every item made that a shared fate: while the single
+ * goroutine sat inside any handler, every other item's clicks were discarded.
+ * That is how "Start LANcast at login" moved its tick — which Windows draws
+ * itself — while its handler never ran and nothing was logged, through three
+ * releases of chasing it.
+ */
+func TestEveryMenuItemHasItsOwnReceiver(t *testing.T) {
+	src := traySource(t)
+	i := strings.Index(src, "func runServiceTray")
+	if i < 0 {
+		t.Fatal("the controller tray is gone")
+	}
+	body := codeOnly(src[i:])
+
+	/*
+	 * A select over more than one ClickedCh is the shape being forbidden. One
+	 * is fine — that is a dedicated receiver — so this counts.
+	 */
+	if at := strings.Index(body, "select {"); at >= 0 {
+		window := body[at:]
+		if e := strings.Index(window, "\n\t\t}"); e > 0 {
+			window = window[:e]
+		}
+		if strings.Count(window, "ClickedCh") > 1 {
+			t.Error("the tray multiplexes several ClickedCh in one select; " +
+				"systray drops a click when nothing is waiting, so any slow " +
+				"handler silently eats every other item's clicks")
+		}
+	}
+
+	// Each item must be watched, and every watch is its own goroutine.
+	for _, item := range []string{
+		"mOpen.ClickedCh", "mQuitApp.ClickedCh", "mApp.ClickedCh",
+		"mLogin.ClickedCh", "mLibraries.ClickedCh", "mUpdates.ClickedCh",
+		"mQuit.ClickedCh",
+	} {
+		if !strings.Contains(body, item) {
+			t.Errorf("%s is no longer handled at all", item)
+		}
+	}
+	if !strings.Contains(body, "for range ch {") {
+		t.Error("the watcher does not loop on its own channel, so an item " +
+			"stops responding after its first click")
 	}
 }

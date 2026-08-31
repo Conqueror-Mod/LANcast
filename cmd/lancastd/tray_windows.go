@@ -311,52 +311,71 @@ func runServiceTray(addr, dataDir string, svc serviceState) error {
 			mLogin.Check()
 		}
 
-		go func() {
-			for {
-				select {
-				case <-mOpen.ClickedCh:
-					if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
-						log.Warn("could not open browser", "error", err)
-					}
-				case <-mQuitApp.ClickedCh:
-					// Nobody listening means no app is running, which is what
-					// somebody pressing this wanted anyway.
-					if err := raise.Quit(); err != nil {
-						log.Warn("could not ask the app to quit", "error", err)
-					}
-				case <-mApp.ClickedCh:
-					if err := openClientApp(); err != nil {
-						// Said out loud: the app is the front door (ADR 0023),
-						// and a menu item that does nothing is the failure this
-						// whole change is about.
-						alert("LANcast", "Could not open the LANcast app.\n\n"+err.Error())
-					}
-				case <-mLogin.ClickedCh:
-					toggleLogin(mLogin, log)
-				case <-mLibraries.ClickedCh:
-					openPane(addr, "libraries", log)
-				case <-mUpdates.ClickedCh:
-					openPane(addr, "updates", log)
-				case <-mQuit.ClickedCh:
-					/*
-					 * The window first, then the icon.
-					 *
-					 * Ordered so the app is asked to go while something is
-					 * still here to ask it: once systray.Quit has run this
-					 * process is on its way out, and a Quit sent from a dying
-					 * process is a race nobody needs to debug.
-					 *
-					 * Nobody listening is not a failure — it means no window
-					 * was open, which is what somebody pressing this wanted.
-					 */
-					if err := raise.Quit(); err != nil {
-						log.Warn("could not ask the app to quit", "error", err)
-					}
-					systray.Quit()
-					return
+		/*
+		 * One goroutine per item, not one select over all of them.
+		 *
+		 * systray delivers a click with a **non-blocking send on an unbuffered
+		 * channel**: if nothing is blocked on that exact channel at that
+		 * instant, the click is dropped. There is no queue and no error — an
+		 * undelivered click simply never happened.
+		 *
+		 * One select over every item made that a shared fate. While the single
+		 * goroutine was inside *any* handler — opening a browser, waiting on a
+		 * modal — every other item's clicks were discarded. That is how "Start
+		 * LANcast at login" could move its tick, which Windows draws itself,
+		 * while its handler never ran and nothing was ever logged.
+		 *
+		 * A goroutine each means every channel always has a waiter, and a slow
+		 * handler can only ever delay its own item.
+		 */
+		watch := func(ch <-chan struct{}, fn func()) {
+			go func() {
+				for range ch {
+					fn()
 				}
+			}()
+		}
+
+		watch(mOpen.ClickedCh, func() {
+			if err := desktop.OpenBrowser(desktop.ResolvedURL(addr)); err != nil {
+				log.Warn("could not open browser", "error", err)
 			}
-		}()
+		})
+		watch(mQuitApp.ClickedCh, func() {
+			// Nobody listening means no app is running, which is what somebody
+			// pressing this wanted anyway.
+			if err := raise.Quit(); err != nil {
+				log.Warn("could not ask the app to quit", "error", err)
+			}
+		})
+		watch(mApp.ClickedCh, func() {
+			if err := openClientApp(); err != nil {
+				// Said out loud: the app is the front door (ADR 0023), and a
+				// menu item that does nothing is the failure this whole change
+				// is about.
+				alert("LANcast", "Could not open the LANcast app.\n\n"+err.Error())
+			}
+		})
+		watch(mLogin.ClickedCh, func() { toggleLogin(mLogin, log) })
+		watch(mLibraries.ClickedCh, func() { openPane(addr, "libraries", log) })
+		watch(mUpdates.ClickedCh, func() { openPane(addr, "updates", log) })
+		watch(mQuit.ClickedCh, func() {
+			/*
+			 * The window first, then the icon.
+			 *
+			 * Ordered so the app is asked to go while something is still here
+			 * to ask it: once systray.Quit has run this process is on its way
+			 * out, and a Quit sent from a dying process is a race nobody needs
+			 * to debug.
+			 *
+			 * Nobody listening is not a failure — it means no window was open,
+			 * which is what somebody pressing this wanted.
+			 */
+			if err := raise.Quit(); err != nil {
+				log.Warn("could not ask the app to quit", "error", err)
+			}
+			systray.Quit()
+		})
 	}
 
 	// Nothing to cancel: this process owns no server. Exit is exactly what it
