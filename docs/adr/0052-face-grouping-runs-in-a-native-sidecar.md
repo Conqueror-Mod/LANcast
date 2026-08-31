@@ -75,20 +75,48 @@ It also means:
   linux/amd64 on day one and add linux/arm64 when somebody wants it, without
   holding up a release of anything else.
 
-### Which library
+### Which library, and which models
 
-**ONNX Runtime**, not dlib.
+**ONNX Runtime, with OpenCV Zoo's YuNet and SFace.**
 
-dlib via `go-face` has the friendlier Go API and is the first result anybody
-finds. Against it: its models are a decade old, its Windows build is genuinely
-painful, and it couples detection and embedding into one dependency that is hard
-to update independently.
+ONNX Runtime takes two interchangeable model files — a detector and an embedder
+— each replaceable without touching the code that runs them, so improving
+quality later is a file swap rather than a rebuild. That matters for a feature
+whose quality *is* its model.
 
-ONNX Runtime takes two interchangeable model files — a detector (SCRFD or
-RetinaFace) and an embedder (ArcFace) — each a few tens of megabytes, each
-replaceable without touching the code that runs them. Upgrading the model later
-is a file swap rather than a rebuild, which matters for a feature whose quality
-*is* its model.
+**The model licences decide this, not the accuracy figures**, and the first
+draft of this ADR got it wrong: it named SCRFD and ArcFace, which is what
+everybody reaches for and is the wrong answer here.
+
+| model | code licence | **weights licence** | usable |
+|---|---|---|---|
+| YuNet (OpenCV Zoo) | MIT | **MIT** | yes |
+| SFace (OpenCV Zoo) | Apache-2.0 | **Apache-2.0** | yes |
+| InsightFace SCRFD / ArcFace / `buffalo_l` | MIT | **non-commercial research only** | **no** |
+| dlib `mmod_human_face_detector` | Boost | public domain | yes |
+| dlib `shape_predictor_5_face_landmarks` | Boost | unrestricted | yes |
+| dlib `dlib_face_recognition_resnet_model_v1` | Boost | public domain | yes |
+| dlib `shape_predictor_68_face_landmarks` | Boost | **non-commercial (iBUG 300-W)** | **no** |
+
+The trap is that a permissive *code* licence says nothing about the *weights*.
+InsightFace's library is MIT and its pretrained models are explicitly
+non-commercial; dlib is Boost throughout and one of its four models is
+non-commercial because of the dataset it was trained on. Both look fine to
+anybody who checks the repository licence and stops there.
+
+**dlib remains a viable second choice** and is worth studying — a working
+reference implementation exists at `AndriyKalashnykov/go-face-recognition` (MIT)
+over `go-face` (CC0-1.0), including a fully static `libdlib.a` link with no
+runtime `.so` dependencies, which is directly relevant to shipping a single
+portable worker. Its model stack is usable within our terms **provided the
+68-point predictor is avoided** — and most dlib examples use exactly that one.
+Against it: the models are a decade old, detection and embedding are coupled,
+and the Windows build is genuinely painful.
+
+**Whichever is chosen, the weights licence is a release-blocking property** and
+belongs in a check rather than in somebody's memory. A model whose terms forbid
+commercial use would silently foreclose a licensing decision this project has
+not made yet — see ADR 0053.
 
 ## What gets stored
 
@@ -152,8 +180,9 @@ be incremental on `taken_at`/`mtime` the way the music tag pass should be.
   a privacy decision rather than a parsing chore, and it is not bundled in here.
 - **Duplicate detection and RAW.** Both still open, both independent of this.
 - **Whether the model ships with the installer or is fetched on first use.**
-  ADR 0048's flow exists and probably applies, but the licence terms of the
-  chosen model decide it and no model has been chosen yet.
+  ADR 0048's flow exists and probably applies. With YuNet and SFace the terms
+  permit redistribution either way, so this became a size and update question
+  rather than a legal one.
 
 ## The risk worth stating
 
