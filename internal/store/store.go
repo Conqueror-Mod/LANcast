@@ -1566,26 +1566,64 @@ func (s *Store) EnsureSeason(ctx context.Context, libraryID, showID int64, seaso
 func (s *Store) EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error) {
 	path := fmt.Sprintf("lancast:collection:%s:%s", provider, externalID)
 	now := time.Now().Unix()
-	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO media_item
-			(library_id, kind, path, title, sort_title, provider, external_id,
-			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
-		VALUES (?, 'collection', ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
-		ON CONFLICT(path) DO NOTHING`,
-		libraryID, path, name, sortTitle, provider, externalID, now, now, now)
-	if err != nil {
-		return 0, false, fmt.Errorf("ensure collection %q: %w", externalID, err)
-	}
-	created := false
-	if n, err := res.RowsAffected(); err == nil {
-		created = n == 1
-	}
+
+	// Looked up first rather than inferred from the upsert, because "was this
+	// row created" and "did the upsert write a row" stopped being the same
+	// question once a refresh could rename an existing collection. The caller
+	// downloads artwork on `created`, and a rename must not re-download it once
+	// per member film.
 	var id int64
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM media_item WHERE path = ?`, path).Scan(&id)
+	switch {
+	case err == sql.ErrNoRows:
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO media_item
+				(library_id, kind, path, title, sort_title, provider, external_id,
+				 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
+			VALUES (?, 'collection', ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+			ON CONFLICT(path) DO NOTHING`,
+			libraryID, path, name, sortTitle, provider, externalID, now, now, now); err != nil {
+			return 0, false, fmt.Errorf("ensure collection %q: %w", externalID, err)
+		}
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT id FROM media_item WHERE path = ?`, path).Scan(&id); err != nil {
+			return 0, false, fmt.Errorf("ensure collection %q: read id: %w", externalID, err)
+		}
+		return id, true, nil
+	case err != nil:
 		return 0, false, fmt.Errorf("ensure collection %q: read id: %w", externalID, err)
 	}
-	return id, created, nil
+
+	/*
+	 * The row exists, and a refresh may correct its name.
+	 *
+	 * This used to do nothing at all, which meant a collection was named once,
+	 * at first sight, for ever — and first sight is exactly when a provider is
+	 * most likely to be wrong. A Hulk collection that arrived as "Hulk
+	 * Koleksiyonu" stayed that way through every rescan and every metadata
+	 * refresh, because nothing in the system could write the row a second time.
+	 *
+	 * Guarded by the lock, like every other provider write: a collection
+	 * somebody has renamed keeps their name. That guard is what makes this a
+	 * correction rather than a provider overruling a person, and it is the rule
+	 * that has permanent tests elsewhere in this package.
+	 */
+	if name == "" {
+		return id, false, nil
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE media_item
+		   SET title = ?, sort_title = ?, updated_at = ?
+		 WHERE id = ?
+		   AND title <> ?
+		   AND NOT EXISTS (
+			SELECT 1 FROM item_lock
+			 WHERE item_lock.item_id = media_item.id AND item_lock.field = 'title')`,
+		name, sortTitle, now, id, name); err != nil {
+		return 0, false, fmt.Errorf("ensure collection %q: rename: %w", externalID, err)
+	}
+	return id, false, nil
 }
 
 // LibraryEpisodes returns every episode row in a library, for the scanner's
