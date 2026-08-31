@@ -32,10 +32,83 @@ body {
   z-index: -1;
   background-color: var(--space-deep);
   background-image:
-    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(90, 74, 158, 0.38), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 20%, rgba(38, 88, 168, 0.35), transparent 62%),
-    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(74, 54, 140, 0.3), transparent 65%),
-    linear-gradient(170deg, var(--space-raised) 0%, var(--space-deep) 55%, var(--space-void) 100%);
+    /*
+     * A vignette first, because it is the layer that makes every other one
+     * read. The intro's sky is bright in the middle and almost black at the
+     * corners, and that range is most of why it looks like depth rather than
+     * like a colour. Painted over the top of the stack (listed first) so it
+     * darkens the wisps as well as the base.
+     */
+    radial-gradient(ellipse 78% 78% at 50% 42%, transparent 42%, rgba(3, 4, 10, 0.72) 100%),
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(103, 84, 184, 0.5), transparent 62%),
+    radial-gradient(ellipse 70% 50% at 85% 18%, rgba(44, 104, 196, 0.46), transparent 64%),
+    /* The cold wisp, off the left of the intro's sky. */
+    radial-gradient(ellipse 58% 48% at 80% 76%, rgba(31, 122, 140, 0.26), transparent 68%),
+    /* The ember. Low and warm, so the field has somewhere for gold to belong. */
+    radial-gradient(ellipse 68% 42% at 30% 60%, rgba(140, 56, 76, 0.2), transparent 70%),
+    radial-gradient(ellipse 120% 80% at 50% 118%, rgba(82, 60, 154, 0.36), transparent 66%),
+    linear-gradient(170deg, #0d1330 0%, var(--space-deep) 52%, var(--space-void) 100%);
+}
+
+/*
+ * The star field.
+ *
+ * The intro is mostly stars and the app had none, which is most of why the two
+ * did not look like the same product. Drawn as two layers of tiny radial
+ * gradients on a repeating tile — no image, no request, no resolution to be
+ * wrong at, and nothing that can fail to load.
+ *
+ * Two tile sizes at two opacities so it does not read as a regular grid: the
+ * near layer is sparse and brighter, the far layer denser and dimmer, and
+ * because the tiles are coprime sizes the pattern does not visibly repeat at
+ * any window size somebody is likely to use.
+ *
+ * It sits under the drift layer and above the gradient, at a low enough alpha
+ * that it is texture rather than decoration — you should notice it only if you
+ * look for it, or if you turn it off.
+ */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 32px 24px, var(--star-near), transparent 100%),
+    radial-gradient(1.2px 1.2px at 140px 88px, var(--star-near), transparent 100%),
+    radial-gradient(1px 1px at 78px 168px, var(--star-far), transparent 100%),
+    radial-gradient(1px 1px at 196px 42px, var(--star-far), transparent 100%),
+    radial-gradient(0.8px 0.8px at 12px 122px, var(--star-far), transparent 100%),
+    radial-gradient(0.8px 0.8px at 168px 208px, var(--star-far), transparent 100%);
+  background-size: 227px 227px;
+  opacity: 0.8;
+}
+
+/*
+ * A second pass at a different scale and offset, which is what stops the eye
+ * finding the tile. Slow counter-drift against the nebula, so the field has
+ * parallax rather than one sheet moving.
+ */
+.starfield::after {
+  content: "";
+  position: absolute;
+  inset: -6%;
+  background-image:
+    radial-gradient(1px 1px at 54px 96px, var(--star-far), transparent 100%),
+    radial-gradient(0.9px 0.9px at 128px 18px, var(--star-far), transparent 100%),
+    radial-gradient(0.7px 0.7px at 22px 62px, var(--star-far), transparent 100%);
+  background-size: 149px 149px;
+  opacity: 0.7;
+  animation: star-drift calc(var(--dur-ambient) * 1.6) ease-in-out infinite
+    alternate;
+}
+
+@keyframes star-drift {
+  from {
+    transform: translate3d(0.8%, 0.6%, 0);
+  }
+  to {
+    transform: translate3d(-0.8%, -0.6%, 0);
+  }
 }
 
 /*
@@ -61,6 +134,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .starfield::after {
+    animation: none;
+  }
+
   .nebula-field::after {
     animation: none;
   }

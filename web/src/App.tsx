@@ -19,10 +19,24 @@ import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { useAuthStatus } from "@/api/hooks";
+import { DesignBench } from "@/screens/DesignBench";
 import "@/playback/playback.css";
 
 export function App() {
   const { data: auth, isLoading } = useAuthStatus();
+
+  /*
+   * The design bench sits in front of the gate, in dev builds only.
+   *
+   * The look is the one thing this project cannot review the way it reviews
+   * everything else: jsdom paints no colour, and every screen that carries the
+   * identity is behind a sign-in. Vite eliminates this branch in a production
+   * build, so the page is absent from the shipped client rather than merely
+   * unreachable inside it.
+   */
+  if (import.meta.env.DEV && window.location.pathname === "/design") {
+    return <DesignBench />;
+  }
 
   // Hold the gate until we know: flashing the library and then yanking it back
   // to a login screen is worse than a beat of nothing over the nebula field.

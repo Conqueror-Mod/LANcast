@@ -11,7 +11,7 @@
   max-height: 46vh;
   display: flex;
   flex-direction: column;
-  background: var(--space-raised);
+  background: var(--surface-raised);
   border: 1px solid var(--gold-dormant);
   border-radius: var(--radius-panel);
   box-shadow: var(--elev-3);

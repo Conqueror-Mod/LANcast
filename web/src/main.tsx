@@ -37,6 +37,7 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <FocusProvider>
           <div className="nebula-field" aria-hidden="true" />
+          <div className="starfield" aria-hidden="true" />
           <App />
           <Splash />
         </FocusProvider>

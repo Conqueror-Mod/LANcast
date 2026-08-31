@@ -8,10 +8,32 @@
   --space-deep: #070b18;
   --space-raised: #0a0f22;
 
-  /* Nebula — the field gradient. Blues with desaturated violet wisps. */
+  /*
+   * Nebula — the field gradient. Blues with desaturated violet wisps, and now
+   * two colours taken off the intro: the teal that sits in the cold half of
+   * that sky, and the ember that warms its middle.
+   *
+   * Three cool wisps and nothing else was the whole range, which is why the
+   * field read as one colour lit unevenly rather than as a sky. The ember in
+   * particular is doing work out of proportion to its alpha — a field with no
+   * warm anywhere in it makes every warm thing on top of it (gold, artwork,
+   * skin tones in a poster) look like it was pasted on from another document.
+   */
   --nebula-blue: #2658a8;
   --nebula-violet: #5a4a9e;
   --nebula-indigo: #4a368c;
+  --nebula-teal: #1f6f80;
+  --nebula-ember: #7e3346;
+
+  /*
+   * Starlight. The intro's signature texture, and the app had none of it.
+   *
+   * Two sizes at two opacities, drawn as gradients rather than an image: it
+   * costs no request, survives any resolution, and cannot be the asset that
+   * fails to load. See .starfield in global.css.
+   */
+  --star-near: rgba(226, 236, 255, 0.85);
+  --star-far: rgba(198, 214, 255, 0.4);
 
   /* Gold — the only accent. Earned, never ambient (see the gold rule). */
   --gold: #c6a35a;
@@ -19,11 +41,25 @@
   --gold-dormant: rgba(198, 163, 90, 0.2);
   --gold-ring: rgba(198, 163, 90, 0.13);
 
-  /* Text. */
-  --text-primary: #f2f5fb;
-  --text-secondary: #c3cbe2;
-  --text-muted: #7d88a8;
-  --text-faint: #6f7a99;
+  /*
+   * Text.
+   *
+   * The lower three used to be blue-greys — #c3cbe2, #7d88a8, #6f7a99 — on a
+   * blue field, which is the fault this pass started from: *"the blueish
+   * fonts that are on the already blue background"*. Sharing a hue with the
+   * surface behind it is what makes type sink, and no amount of contrast ratio
+   * describes it, because the ratio was passing. A metadata line at #7d88a8 on
+   * #0a0f22 clears WCAG AA and is still hard to read, because the eye
+   * separates hue before it separates luminance.
+   *
+   * So the ramp is pulled towards neutral and lifted. Not warm — a warm grey
+   * on this field reads as a mistake — but neutral enough that it stops being
+   * *part of* the nebula and starts being written on it.
+   */
+  --text-primary: #f4f7fd;
+  --text-secondary: #d8dce6;
+  --text-muted: #a3aab9;
+  --text-faint: #878ea0;
 
   /* Geometry. */
   --radius-tile: 6px;
@@ -36,15 +72,47 @@
    * shadow that anchors the edge, and a wide ambient one that gives the drop.
    * Gold is not an elevation cue; nothing here glows.
    */
+  /*
+   * Rim light — the half of depth that was missing.
+   *
+   * Three elevation steps were indistinguishable on the bench, and the reason
+   * is arithmetic rather than taste: a shadow is the absence of light, the
+   * floor is already almost black, and subtracting light from #05070f gets you
+   * #05070f. Every step looked the same because every step *was* the same to
+   * within a few values.
+   *
+   * A lit top edge is what a raised object actually does — the intro's ring
+   * reads as metal because it is bevelled, not because it is bright. This is
+   * reflected light, not a glow: one pixel, inset, cool, and under 10% alpha.
+   * It has no colour of its own to spend, and it is not gold, so the rule that
+   * matters is untouched — gold is still not an elevation cue.
+   */
+  --rim: inset 0 1px 0 rgba(190, 208, 255, 0.09);
+  --rim-strong: inset 0 1px 0 rgba(190, 208, 255, 0.14);
+
   --elev-1:
-    0 1px 2px rgba(5, 7, 15, 0.5),
-    0 4px 12px rgba(5, 7, 15, 0.38);
+    var(--rim),
+    0 1px 2px rgba(3, 5, 12, 0.6),
+    0 6px 16px rgba(3, 5, 12, 0.45);
   --elev-2:
-    0 2px 4px rgba(5, 7, 15, 0.55),
-    0 10px 28px rgba(5, 7, 15, 0.46);
+    var(--rim),
+    0 2px 6px rgba(3, 5, 12, 0.62),
+    0 14px 34px rgba(3, 5, 12, 0.52);
   --elev-3:
-    0 4px 8px rgba(5, 7, 15, 0.6),
-    0 22px 60px rgba(5, 7, 15, 0.55);
+    var(--rim-strong),
+    0 6px 14px rgba(3, 5, 12, 0.66),
+    0 28px 70px rgba(3, 5, 12, 0.6);
+
+  /*
+   * A raised surface is lit from above, so it is a gradient rather than a fill.
+   * Flat fills are what made every panel read as a sticker on the field.
+   */
+  --surface-raised: linear-gradient(
+    180deg,
+    #101733 0%,
+    var(--space-raised) 58%,
+    #080d1d 100%
+  );
 
   /*
    * The hero's own geometry, referenced by both the art and the scrims.
