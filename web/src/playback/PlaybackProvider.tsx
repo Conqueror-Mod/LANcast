@@ -564,7 +564,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---- play / stop ----------------------------------------------------------
+  /*
+   * What is playing, readable from play() without making play() re-created.
+   *
+   * Both entry rules turn on whether the id being entered is the one already
+   * playing, and play() is deliberately stable — every screen that starts
+   * something depends on it, and a play() that changed identity would re-run
+   * their effects. A ref answers the question without the dependency.
+   */
+  const playingRef = useRef(itemID);
+  playingRef.current = itemID;
   const play = useCallback((id: number, q: number[]) => {
+    const resuming = playingRef.current === id;
     setItemID((prev) => {
       // Re-entering the player screen for what is already playing must not
       // restart it: that is the whole point of the element outliving the route.
@@ -574,7 +585,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Not setQueue(q): re-entering the player for something already playing
     // inside a queue must not discard the queue. See queueAfterEntry.
     setQueue((prev) => {
-      const next = queueAfterEntry(prev, q, id);
+      const next = queueAfterEntry(prev, q, id, resuming);
       /*
        * A genuinely new queue abandons anything queued against the old one.
        * Tracks lined up behind an album are about that album; carrying them

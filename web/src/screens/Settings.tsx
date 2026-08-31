@@ -53,6 +53,7 @@ import { useBigscreen } from "@/lib/bigscreen";
 import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { useLiveTransport } from "@/lib/liveTransport";
 import { AuditLog } from "@/components/AuditLog";
+import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { ApiFailure } from "@/api/client";
@@ -2168,7 +2169,29 @@ export function Settings() {
                   <UpdateCheckSection />
                 </>
               )}
-              {pane === "activity" && <AuditLog />}
+              {pane === "activity" && (
+                <>
+                  {/*
+                    Review has a permanent home here, and only a conditional one
+                    in the nav.
+
+                    The nav entry appears when something needs a look and
+                    vanishes when nothing does, which is right for a prompt and
+                    wrong for a page: the two-files-one-work report (ADR 0042)
+                    is reachable *only* from Review, and dismissing the last
+                    fixable match takes the door away with it — the collisions
+                    are still there, still listed, and no longer openable.
+                    Reported as exactly that.
+
+                    Activity is where it belongs. Both panes answer "what has
+                    this server been doing and what does it want from me", and
+                    a settings pane is allowed to be empty in a way a nav badge
+                    is not.
+                  */}
+                  <Review />
+                  <AuditLog />
+                </>
+              )}
               {pane === "logs" && (
                 <>
                   <ServerLogSection />
