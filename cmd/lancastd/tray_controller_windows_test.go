@@ -165,24 +165,22 @@ func TestExitAlsoClosesTheApp(t *testing.T) {
  * something the machine does not agree with.
  */
 func TestTheLoginTickIsReadBackFromTheRegistry(t *testing.T) {
-	src := traySource(t)
-	i := strings.Index(src, "func toggleLogin")
-	if i < 0 {
-		t.Fatal("toggleLogin is gone")
-	}
-	body := src[i:]
-	if j := strings.Index(body[1:], "\nfunc "); j >= 0 {
-		body = body[:j+1]
-	}
+	body := loginBody(t)
 
-	// The tick must come from a fresh read, and that read has to happen after
-	// the change rather than before it.
-	read := strings.Index(body, "autostart.Enabled(")
+	/*
+	 * The tick must come from a fresh read *after* the change.
+	 *
+	 * There are two reads now — one to decide what to do, one to see what
+	 * actually happened — so the read-back is the last of them. Using the first
+	 * would pass while the tick described the state before the change, which is
+	 * the bug this is here to prevent.
+	 */
+	read := strings.LastIndex(body, "autostart.Enabled(")
 	if read < 0 {
 		t.Fatal("the tick is set without reading the setting back, so it can " +
 			"show a state the registry does not have")
 	}
-	for _, call := range []string{"autostart.Enable(", "autostart.Disable("} {
+	for _, call := range []string{"autostart.Enable(autostart", "autostart.Disable("} {
 		at := strings.Index(body, call)
 		if at < 0 {
 			t.Errorf("toggleLogin no longer calls %s", call)
@@ -227,5 +225,86 @@ func TestTheTrayLogsToAFileOfItsOwn(t *testing.T) {
 	}
 	if strings.Contains(body, "applog.Open(") && !strings.Contains(body, "applog.OpenNamed(") {
 		t.Error("the tray writes the server's log, which races its rotation")
+	}
+}
+
+/*
+ * codeOnly strips comments before a source assertion looks at the text.
+ *
+ * These tests read the source because systray owns the message loop and nothing
+ * can drive one from a test. That works until a comment *quotes* the pattern it
+ * is warning about — which is exactly what happened here: the note explaining
+ * why the intent must not come from the tick contains the very expression the
+ * test forbids, and a substring search cannot tell an explanation from an
+ * instruction.
+ */
+func codeOnly(src string) string {
+	var b strings.Builder
+	for len(src) > 0 {
+		switch {
+		case strings.HasPrefix(src, "/*"):
+			if e := strings.Index(src, "*/"); e >= 0 {
+				src = src[e+2:]
+				continue
+			}
+			src = ""
+		case strings.HasPrefix(src, "//"):
+			if e := strings.IndexByte(src, '\n'); e >= 0 {
+				src = src[e:]
+				continue
+			}
+			src = ""
+		default:
+			b.WriteByte(src[0])
+			src = src[1:]
+		}
+	}
+	return b.String()
+}
+
+// loginBody is toggleLogin's code, comments removed.
+func loginBody(t *testing.T) string {
+	t.Helper()
+	src := traySource(t)
+	i := strings.Index(src, "func toggleLogin")
+	if i < 0 {
+		t.Fatal("toggleLogin is gone")
+	}
+	body := codeOnly(src[i:])
+	if j := strings.Index(body[1:], "\nfunc "); j >= 0 {
+		body = body[:j+1]
+	}
+	return body
+}
+
+/*
+ * What to toggle *to* is read from the registry, never from the tick.
+ *
+ * `!item.Checked()` is the obvious way to write this and it is wrong here.
+ * Windows toggles a checkbox menu item's visible tick itself when it is
+ * clicked; systray's Checked() returns its own idea, changed only by Check and
+ * Uncheck. The two drift the moment the native toggle happens, so an intent
+ * computed from the widget is the opposite of what the person meant.
+ *
+ * Watched doing exactly that: the tick moved on every click, the run key never
+ * changed, and nothing was logged — because each click computed "turn it off"
+ * against a setting that was already off, succeeded, and agreed with itself.
+ */
+func TestTheLoginIntentDoesNotComeFromTheTick(t *testing.T) {
+	body := loginBody(t)
+
+	if strings.Contains(body, "item.Checked()") {
+		t.Error("toggleLogin consults the widget for the setting; Windows " +
+			"toggles that tick itself, so the intent comes out backwards")
+	}
+	read := strings.Index(body, "autostart.Enabled(")
+	if read < 0 {
+		t.Fatal("toggleLogin never reads the current setting")
+	}
+	if act := strings.Index(body, "autostart.Enable(autostart"); act >= 0 && act < read {
+		t.Error("toggleLogin changes the setting before reading what it is")
+	}
+	if !strings.Contains(body, "want := !was") {
+		t.Error("the wanted state is not the negation of the stored one")
 	}
 }
