@@ -95,7 +95,7 @@ builds:
 # them, not what they are called.
 archives:
   - id: windows
-    ids: [lancastd-windows, lancast-windows, lancast-faces-windows]
+    ids: [lancastd-windows, lancast-windows]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [zip]
     files:
@@ -112,16 +112,40 @@ archives:
         dst: WebView2Loader.dll
 
   - id: unix
-    # lancast-faces is amd64-only, and goreleaser is content for an archive to
-    # include a build that does not cover every platform in the archive's own
-    # matrix — the arm64 tarball simply comes out without it, which is exactly
-    # what "optional, and not on this platform yet" should look like.
-    ids: [lancastd-unix, lancast-unix, lancast-faces-linux]
+    ids: [lancastd-unix, lancast-unix]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     files:
       - README.md
       - LICENSE
+
+  # lancast-faces gets its own archives, one per platform.
+  #
+  # It was folded into the two archives above on the reasoning that goreleaser
+  # would be content for an archive to hold a build that does not cover every
+  # platform in its matrix. It is not, and it says so: the unix tarballs would
+  # have carried three binaries on amd64 and two on arm64, and goreleaser
+  # refuses that outright — "archive has different count of binaries for each
+  # platform, which may cause your users confusion." It is right, and the
+  # comment asserting otherwise was a guess written as a fact.
+  #
+  # Its own archive is the better answer anyway, and the one ADR 0052 should
+  # have reached first. The worker is optional: somebody with no picture
+  # library has no reason to download it, and a separate artefact is what
+  # "optional" looks like on a releases page. It also lets the worker ship for
+  # the platforms it can serve without implying the server is missing from the
+  # ones it cannot.
+  - id: faces-windows
+    ids: [lancast-faces-windows]
+    name_template: "lancast-faces_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [zip]
+    files: [README.md, LICENSE, NOTICE]
+
+  - id: faces-linux
+    ids: [lancast-faces-linux]
+    name_template: "lancast-faces_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    files: [README.md, LICENSE, NOTICE]
 
 checksum:
   name_template: "checksums.txt"
