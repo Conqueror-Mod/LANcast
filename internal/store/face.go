@@ -397,3 +397,69 @@ func (s *Store) FaceClusters(ctx context.Context, libraryID int64) ([]FaceCluste
 	}
 	return out, rows.Err()
 }
+
+/*
+ * PendingFaces returns photographs that have not been examined, or have changed
+ * since they were.
+ *
+ * Ordered oldest-first by `added_at` so a first run works through the library in
+ * the order it arrived rather than in whatever order SQLite finds convenient —
+ * which matters because somebody watching the progress wants to see their
+ * oldest albums fill in, not a random scatter.
+ *
+ * Marked folders are excluded here as well as refused by RecordFaces. Two
+ * guards rather than one because they answer different questions: this one
+ * keeps the worker from ever opening the file, and that one keeps a row from
+ * being written if it somehow does.
+ */
+func (s *Store) PendingFaces(ctx context.Context, libraryID int64, limit int) ([]Item, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+itemCols+`
+		  FROM media_item
+		 WHERE library_id = ? AND kind = 'photo' AND missing = 0
+		   AND sensitive_effective = 0
+		   AND (faces_at IS NULL OR (mtime IS NOT NULL AND faces_at < mtime))
+		 ORDER BY added_at, id
+		 LIMIT ?`, libraryID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("pending faces: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+// PendingFacesCount is the same question as a number, for progress reporting.
+func (s *Store) PendingFacesCount(ctx context.Context, libraryID int64) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM media_item
+		 WHERE library_id = ? AND kind = 'photo' AND missing = 0
+		   AND sensitive_effective = 0
+		   AND (faces_at IS NULL OR (mtime IS NOT NULL AND faces_at < mtime))`,
+		libraryID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("pending faces count: %w", err)
+	}
+	return n, nil
+}
+
+/*
+ * MarkFacesDone records that a photograph has been examined.
+ *
+ * Called for every photograph the worker looked at, including ones with no
+ * faces and ones that failed to decode. A file that cannot be read will not
+ * become readable by being tried again immediately, and leaving it unmarked
+ * would put it at the front of the queue on every run — the worker would spend
+ * for ever failing on the same truncated JPEG and never reach the rest.
+ */
+func (s *Store) MarkFacesDone(ctx context.Context, itemID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE media_item SET faces_at = ? WHERE id = ?`, time.Now().Unix(), itemID)
+	if err != nil {
+		return fmt.Errorf("mark faces done for item %d: %w", itemID, err)
+	}
+	return nil
+}

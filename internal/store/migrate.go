@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 35
+const CurrentSchemaVersion = 36
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -74,6 +74,7 @@ var migrations = []migration{
 	{version: 33, sql: schemaRevision33},
 	{version: 34, sql: schemaRevision34},
 	{version: 35, sql: schemaRevision35},
+	{version: 36, sql: schemaRevision36},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1199,6 +1200,25 @@ UPDATE profile_totals SET viewings = finished;
  * ordering — a photo inserted before it is given a parent, a folder marked
  * before the scan that fills it — cannot leave it wrong. See RefreshSensitivity.
  */
+/*
+ * When a photograph was last looked at for faces (ADR 0052).
+ *
+ * A nullable column rather than a table, because it is one timestamp per row
+ * and the alternative is a join to answer "is there anything left to do".
+ *
+ * It is what makes the pass incremental, and it has to be distinct from "this
+ * photograph has rows in `face`": a photograph with nobody in it produces no
+ * faces, and without a marker it would be re-examined on every run for ever —
+ * a library of landscapes would never stop working.
+ *
+ * Compared against `mtime`, so a photograph that is edited is looked at again
+ * and one that is not never is.
+ */
+const schemaRevision36 = `
+ALTER TABLE media_item ADD COLUMN faces_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_item_faces ON media_item(library_id, kind, faces_at);
+`
+
 /*
  * Faces, and the people they are grouped into (ADR 0052).
  *
