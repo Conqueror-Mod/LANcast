@@ -38,6 +38,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
+		"sensitive_marking":    cur.SensitiveMarking,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -67,6 +68,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		WriteNFO         *bool    `json:"write_nfo"`
 		AutoEnrich       *bool    `json:"auto_enrich"`
 		UpdateCheck      *bool    `json:"update_check"`
+		SensitiveMarking *bool    `json:"sensitive_marking"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		DebugLogging       *bool `json:"debug_logging"`
@@ -109,6 +111,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.UpdateCheck != nil {
 		next.UpdateCheck = *req.UpdateCheck
+	}
+	if req.SensitiveMarking != nil {
+		next.SensitiveMarking = *req.SensitiveMarking
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
@@ -218,6 +223,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("ffmpeg_dir", prev.FFmpegDir != next.FFmpegDir)
 	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
+	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)

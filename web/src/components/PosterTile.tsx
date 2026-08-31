@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
+import { acknowledge, useObscured } from "@/lib/sensitiveAck";
 import { containerCountLabel, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
 import type { Item } from "@/api/types";
@@ -51,7 +52,25 @@ export function PosterTile({
   actions?: (item: Item) => MenuAction[];
 }) {
   const navigate = useNavigate();
-  const open = onOpen ?? (() => navigate(`/item/${item.id}`));
+  /*
+   * A sensitive tile answers the press with a question instead of the thing
+   * (ADR 0051).
+   *
+   * The first press acknowledges and reveals; the second does what the tile
+   * would have done. That ordering is the feature — a cover you can click
+   * straight through is a cover that has not stopped anything — and it is the
+   * only interaction here, because the alternative is a modal in front of a
+   * grid where a dozen tiles might be covered.
+   */
+  const obscured = useObscured(item);
+  const go = onOpen ?? (() => navigate(`/item/${item.id}`));
+  const open = () => {
+    if (obscured) {
+      acknowledge(item.id);
+      return;
+    }
+    go();
+  };
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
   // Set when the menu was summoned by the actions key, so it takes focus.
   const [byKey, setByKey] = useState(false);
@@ -78,7 +97,20 @@ export function PosterTile({
   );
   const focusable = useFocusable(open, actions ? openMenu : undefined);
 
-  const poster = artworkURL(item.artwork?.poster, "poster");
+  /*
+   * The URL is not built at all while the tile is covered.
+   *
+   * A CSS blur over the real image is a picture of a privacy feature: the bytes
+   * arrive, the element is in the DOM, and anything that drops styles — a
+   * stylesheet that has not loaded, a reader view, a devtools panel — shows the
+   * photograph the mark exists to not show, on somebody else's screen, which is
+   * the entire scenario. Not asking for it cannot fail that way.
+   *
+   * The server is not asked to withhold it instead, and deliberately: artwork
+   * is addressed by content hash and served `immutable`, so a placeholder
+   * returned under the real hash would be cached under it for a year.
+   */
+  const poster = obscured ? "" : artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
   const count = containerCountLabel(item);
@@ -151,7 +183,9 @@ export function PosterTile({
        * the tile to have a name while a menu hangs off it.
        */
       title={menuAt ? undefined : item.title}
-      aria-label={item.title}
+      aria-label={
+        obscured ? item.title + " — sensitive, click to show" : item.title
+      }
     >
       <div
         className={
@@ -159,7 +193,20 @@ export function PosterTile({
           (isSquareArt(item) ? " poster-tile__art--square" : "")
         }
       >
-        {poster ? (
+        {obscured ? (
+          /*
+           * The name stays readable. Hiding it as well would make somebody
+           * hunt through identical grey rectangles for the folder they marked,
+           * and the mark is about the pictures — a person who marked a folder
+           * knows what is in it and needs to be able to find it.
+           */
+          <div className="poster-tile__sensitive">
+            <span className="poster-tile__sensitive-title">{item.title}</span>
+            <span className="poster-tile__sensitive-note">
+              Sensitive — click to show
+            </span>
+          </div>
+        ) : poster ? (
           <img src={poster} alt="" loading="lazy" draggable={false} />
         ) : (
           <div className="poster-tile__placeholder">

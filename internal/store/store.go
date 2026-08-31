@@ -417,6 +417,21 @@ type Item struct {
 	// movie-parent of parts is not offered a dead-end Play (ADR 0017).
 	ChildCount int `json:"child_count,omitempty"`
 
+	/*
+	 * Sensitive is the resolved answer: this row is marked, or something above
+	 * it is (ADR 0051). Every surface that draws a thumbnail reads this one
+	 * field, which is the whole reason it is a field rather than a rule the
+	 * gallery screen applies — a picture library's thumbnails also appear on
+	 * the home page, in search and in the hero, and a mark only the gallery
+	 * honoured would ambush you everywhere else.
+	 *
+	 * SensitiveOwn is whether the mark is on *this* row. The two differ on
+	 * every photo inside a marked folder, and the difference is what stops
+	 * Unmark being offered where it would do nothing.
+	 */
+	Sensitive    bool `json:"sensitive,omitempty"`
+	SensitiveOwn bool `json:"sensitive_own,omitempty"`
+
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
 
@@ -813,7 +828,8 @@ const itemCols = `id, library_id, root_id, kind, path, title, sort_title, year, 
 	parent_id, overview, rating, content_rating, released_at, provider, external_id,
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
-	audio_codec, audio_channels, video_frame_rate, imdb_id, artist, taken_at`
+	audio_codec, audio_channels, video_frame_rate, imdb_id, artist, taken_at,
+	sensitive, sensitive_effective`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -839,6 +855,10 @@ func qualifyCols(cols, alias string) string {
 func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var missing int
+	// own is nullable: NULL means nobody has ever considered this row, which is
+	// not the same as somebody having said no (ADR 0051).
+	var own sql.NullInt64
+	var effective int
 	err := sc.Scan(&it.ID, &it.LibraryID, &it.RootID, &it.Kind, &it.Path, &it.Title, &it.SortTitle,
 		&it.Year, &it.Series, &it.Season, &it.Episode, &it.Edition, &it.Container, &it.SizeBytes,
 		&it.MTime, &it.DurationMS, &it.AddedAt, &missing,
@@ -846,11 +866,13 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
 		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID,
-		&it.Artist, &it.TakenAt)
+		&it.Artist, &it.TakenAt, &own, &effective)
 	if err != nil {
 		return nil, err
 	}
 	it.Missing = missing != 0
+	it.SensitiveOwn = own.Valid && own.Int64 != 0
+	it.Sensitive = effective != 0
 	return &it, nil
 }
 

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { isContainer } from "@/lib/kind";
+import { forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type {
   ActivityStatus,
   AuditPage,
@@ -119,6 +120,16 @@ export function useLogout() {
         predicate: (q) => q.queryKey[0] !== "auth-status",
       });
       qc.invalidateQueries({ queryKey: ["auth-status"] });
+      /*
+       * And whatever this person agreed to look at (ADR 0051).
+       *
+       * The acknowledgement is theirs. A session store that survives one person
+       * signing out and another signing in is a store that shows the second
+       * person what the first agreed to look at, which is the failure the whole
+       * feature exists to prevent — arriving at the exact moment somebody else
+       * is at the keyboard.
+       */
+      forgetAcknowledgements();
     },
   });
 }
@@ -185,6 +196,36 @@ export function useBrowse(path: string) {
 
 // Settings is an admin-only endpoint, so members must not fire it — a 403 on
 // mount is noise. Callers pass their admin status as `enabled`.
+/*
+ * Marking an item sensitive, or clearing the mark (ADR 0051).
+ *
+ * The mark changes what a *thumbnail* looks like, and thumbnails are drawn from
+ * every list there is — the grid, the shelves on the home page, search results,
+ * a collection. So this invalidates the lists rather than the item, which is
+ * the opposite of the instinct and the reason this project's most-repeated bug
+ * keeps happening: the write succeeds, the server is right, and the picture
+ * somebody is looking at is the stale one.
+ *
+ * `children` is invalidated too, because the mark travels down: marking a
+ * folder covers every photograph inside it, and those are what the folder page
+ * is listing.
+ */
+export function useSetSensitive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, sensitive }: { id: number; sensitive: boolean }) =>
+      apiSend(`/api/items/${id}/sensitive`, "PUT", { sensitive }),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["item", id] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["items-infinite"] });
+      qc.invalidateQueries({ queryKey: ["children"] });
+      qc.invalidateQueries({ queryKey: ["recently-added"] });
+      qc.invalidateQueries({ queryKey: ["search"] });
+    },
+  });
+}
+
 export function useSettings(enabled = true) {
   return useQuery({
     queryKey: ["settings"],

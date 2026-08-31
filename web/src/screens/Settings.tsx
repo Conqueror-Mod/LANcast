@@ -729,6 +729,30 @@ function AdminSections({ pane }: { pane: string }) {
 
           {settings && (
             <>
+              {/*
+                Sensitive marking (ADR 0051).
+
+                In Libraries rather than General because it changes what a
+                library looks like, and next to the other rules about what the
+                server shows rather than beside the metadata switches — nothing
+                about it is metadata.
+              */}
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.sensitive_marking}
+                  onChange={(e) =>
+                    update.mutate({ sensitive_marking: e.target.checked })
+                  }
+                />
+                Allow folders and photos to be marked sensitive
+              </label>
+              <p className="set-row__sub">
+                Right-click a folder or a photo in a picture library to mark it.
+                Anything marked is covered — its name still shows — until
+                somebody asks to see it, and it covers again next time the app
+                opens. Turning this off stops the covering and keeps the marks.
+              </p>
               <RuleSelect
                 title="Rescan libraries automatically"
                 sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."

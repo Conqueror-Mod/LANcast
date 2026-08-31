@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 33
+const CurrentSchemaVersion = 34
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -72,6 +72,7 @@ var migrations = []migration{
 	{version: 31, sql: schemaRevision31},
 	{version: 32, sql: schemaRevision32},
 	{version: 33, sql: schemaRevision33},
+	{version: 34, sql: schemaRevision34},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1181,6 +1182,27 @@ UPDATE profile_totals SET viewings = finished;
  * they are a few dozen short strings, and a person restoring a dismissal is
  * more likely than a database growing on them.
  */
+/*
+ * Sensitive content (ADR 0051).
+ *
+ * Two columns rather than one, because "a person marked this" and "this should
+ * be obscured" are different facts and only the first is a decision. `sensitive`
+ * is the mark itself and is NULL on a row nobody has ever considered; the
+ * resolved answer is `sensitive_effective`, which is what every list reads.
+ *
+ * Keeping them apart is what lets a folder be unmarked without unmarking a
+ * photo inside it that was marked on its own. Collapsing them into one column
+ * loses that the moment the two disagree, which is the only case that matters.
+ *
+ * The resolved column is recomputed rather than maintained incrementally, so
+ * ordering — a photo inserted before it is given a parent, a folder marked
+ * before the scan that fills it — cannot leave it wrong. See RefreshSensitivity.
+ */
+const schemaRevision34 = `
+ALTER TABLE media_item ADD COLUMN sensitive INTEGER;
+ALTER TABLE media_item ADD COLUMN sensitive_effective INTEGER NOT NULL DEFAULT 0;
+`
+
 const schemaRevision33 = `
 CREATE TABLE IF NOT EXISTS dismissed_collision (
     members      TEXT PRIMARY KEY,

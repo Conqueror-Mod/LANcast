@@ -5,7 +5,9 @@ import {
   fetchDescendantIDs,
   fetchShowEpisodes,
   useIsAdmin,
+  useSetSensitive,
   useSetWatchedByID,
+  useSettings,
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { isContainer, isMusic, isPicture, watchedVerb } from "@/lib/kind";
@@ -183,6 +185,45 @@ export function useItemActions(): ItemActions {
     [gathering, qc, setWatched],
   );
 
+  /*
+   * The sensitive gesture (ADR 0051).
+   *
+   * Offered on pictures only, and only while the setting is on. Two conditions
+   * rather than one: the setting decides whether the feature exists at all, and
+   * a library of films is not what it was built for.
+   *
+   * Unmark appears only where the mark actually is. A photograph inside a
+   * marked folder reads sensitive and *not* sensitive_own, and offering it an
+   * Unmark that would do nothing — because the folder above it is still marked
+   * — is the kind of control that teaches people the feature is broken.
+   */
+  const { data: settings } = useSettings();
+  const setSensitive = useSetSensitive();
+  const sensitiveActions = useCallback(
+    (item: Item): MenuAction[] => {
+      if (!isAdmin || !settings?.sensitive_marking) return [];
+      if (!isPicture(item)) return [];
+      if (item.sensitive_own) {
+        return [
+          {
+            label: "Not sensitive",
+            onSelect: () =>
+              setSensitive.mutate({ id: item.id, sensitive: false }),
+          },
+        ];
+      }
+      // Covered by a folder above, and nothing to do about it here.
+      if (item.sensitive) return [];
+      return [
+        {
+          label: "Mark sensitive",
+          onSelect: () => setSensitive.mutate({ id: item.id, sensitive: true }),
+        },
+      ];
+    },
+    [isAdmin, settings?.sensitive_marking, setSensitive],
+  );
+
   const actions = useCallback(
     (item: Item): MenuAction[] => {
       /*
@@ -211,15 +252,17 @@ export function useItemActions(): ItemActions {
        * removed from the detail page of a thing with no detail page.
        */
       if (isPicture(item)) {
+        const sensitive = sensitiveActions(item);
         return item.kind === "gallery"
           ? [
               {
                 label: "Go to details",
                 onSelect: () => navigate(`/item/${item.id}`),
               },
+              ...sensitive,
               ...remove,
             ]
-          : remove;
+          : [...sensitive, ...remove];
       }
 
       if (isContainer(item)) {
@@ -333,7 +376,16 @@ export function useItemActions(): ItemActions {
         ...remove,
       ];
     },
-    [navigate, setWatched, pb, isAdmin, gathering, playContainer, markAll],
+    [
+      navigate,
+      setWatched,
+      pb,
+      isAdmin,
+      gathering,
+      playContainer,
+      markAll,
+      sensitiveActions,
+    ],
   );
 
   const dialogs = (

@@ -158,3 +158,46 @@
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/*
+ * A covered tile (ADR 0051).
+ *
+ * Deliberately plain: a neutral panel with the name on it, not a warning. The
+ * mark means "not for every pair of eyes in the room", which is a courtesy
+ * rather than an alarm, and a red-and-yellow hazard treatment would announce
+ * the folder far more loudly than showing the picture would have.
+ *
+ * No gold. Gold means where you are and nothing else — the moment it also
+ * means "sensitive", the focus signal is dead.
+ */
+.poster-tile__sensitive {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  text-align: center;
+  background: var(--space-raised);
+  border-radius: inherit;
+}
+
+.poster-tile__sensitive-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  /* These names truncate at two lines rather than one: the name is the only
+     way to find the folder while it is covered. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.poster-tile__sensitive-note {
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
