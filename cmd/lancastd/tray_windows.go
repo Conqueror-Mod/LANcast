@@ -48,6 +48,24 @@ func trayRun(addr, dataDir string) error {
 	 * to run a rival copy. One UAC prompt, then the UI opens when the service
 	 * answers.
 	 */
+	/*
+	 * One tray icon, whichever path this launch takes.
+	 *
+	 * Acquired before the service check because both branches below put an icon
+	 * in the notification area, and the server's own lock says nothing about
+	 * the tray: on an installed machine the server is a service and the tray is
+	 * a user-session process controlling it. Two launches gave two identical
+	 * icons for one service, and quitting one left the other behind.
+	 *
+	 * A second launch is a request to see LANcast, not to add an icon — the
+	 * same reading `openExisting` already gives a second server launch.
+	 */
+	trayRelease, trayHeld, trayErr := singleton.Acquire(singleton.Tray)
+	if trayErr == nil && !trayHeld {
+		return openExisting(addr)
+	}
+	defer trayRelease()
+
 	if svc := installedService(); svc.Installed {
 		return runServiceTray(addr, dataDir, svc)
 	}
