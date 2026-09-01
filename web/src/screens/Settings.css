@@ -597,3 +597,21 @@
      collapses the label. */
   flex-shrink: 0;
 }
+
+/* The list of files a download would fetch, shown before it starts: a download
+   somebody cannot identify is not consent (ADR 0052). */
+.set-assets {
+  margin: 6px 0 14px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.set-assets code {
+  color: var(--text-secondary);
+}
+
+.set-row__sub--warn {
+  color: var(--danger, #ff6b6b);
+}

@@ -37,6 +37,10 @@ import {
   useHistoryCount,
   useResetHistory,
   type HistoryScope,
+  useFaceCapabilities,
+  useFaceModels,
+  useInstallFaceModels,
+  useCancelFaceModels,
 } from "@/api/hooks";
 import {
   capabilities,
@@ -729,30 +733,6 @@ function AdminSections({ pane }: { pane: string }) {
 
           {settings && (
             <>
-              {/*
-                Sensitive marking (ADR 0051).
-
-                In Libraries rather than General because it changes what a
-                library looks like, and next to the other rules about what the
-                server shows rather than beside the metadata switches — nothing
-                about it is metadata.
-              */}
-              <label className="set-toggle">
-                <input
-                  type="checkbox"
-                  checked={settings.sensitive_marking}
-                  onChange={(e) =>
-                    update.mutate({ sensitive_marking: e.target.checked })
-                  }
-                />
-                Allow folders and photos to be marked sensitive
-              </label>
-              <p className="set-row__sub">
-                Right-click a folder or a photo in a picture library to mark it.
-                Anything marked is covered — its name still shows — until
-                somebody asks to see it, and it covers again next time the app
-                opens. Turning this off stops the covering and keeps the marks.
-              </p>
               <RuleSelect
                 title="Rescan libraries automatically"
                 sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."
@@ -1963,6 +1943,166 @@ function ServerLogSection() {
  * it was configuring — the first question anyone has when something behaves
  * unexpectedly after an update.
  */
+/*
+ * Everything a picture library can be told to do (ADR 0051, ADR 0052).
+ *
+ * Its own pane because there are now two of these and there will be more —
+ * sensitivity, faces, and eventually whatever comes of dates, duplicates and
+ * places. A general pane holding two picture settings is one somebody has to
+ * read all of to find either.
+ */
+function PicturesSection() {
+  const { data: settings } = useSettings();
+  const update = useUpdateSettings();
+  const { data: caps } = useFaceCapabilities();
+  const { data: models } = useFaceModels();
+  const install = useInstallFaceModels();
+  const cancel = useCancelFaceModels();
+
+  const job = models?.job;
+  const running = job?.running ?? false;
+  const pct =
+    job && job.bytes_total > 0
+      ? Math.min(100, Math.round((job.bytes_done / job.bytes_total) * 100))
+      : 0;
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Pictures</span>
+
+      {settings && (
+        <>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.sensitive_marking}
+              onChange={(e) =>
+                update.mutate({ sensitive_marking: e.target.checked })
+              }
+            />
+            Allow folders to be marked sensitive
+          </label>
+          <p className="set-row__sub">
+            Right-click a folder in a picture library to mark it. Anything
+            marked is covered — its name still shows — and can only be uncovered
+            inside the library or the folder itself, never from the home page.
+            It covers again when you leave. Turning this off stops the covering
+            and keeps the marks.
+          </p>
+        </>
+      )}
+
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Group faces</div>
+          <div className="set-row__sub">
+            Find the people in a picture library and let you name them. It runs
+            entirely on this machine — nothing is uploaded and no account is
+            needed.
+          </div>
+        </div>
+      </div>
+
+      {/*
+        Three states, said apart. "Not installed", "no models" and "ready" have
+        different fixes, and a single "unavailable" sends somebody looking in
+        the wrong place.
+      */}
+      {models && !models.supported && (
+        <p className="set-row__sub">
+          {models.reason ??
+            "There is no face-model download for this platform yet."}
+        </p>
+      )}
+
+      {models?.supported && !models.installed && !running && (
+        <>
+          <p className="set-row__sub">
+            This needs a one-off download of{" "}
+            <strong>{formatMB(models.bytes_total ?? 0)}</strong> — two models
+            and the runtime that executes them. Nothing is fetched until you
+            press the button.
+          </p>
+          <ul className="set-assets">
+            {(models.assets ?? []).map((a) => (
+              <li key={a.name}>
+                <code>{a.name}</code> · {formatMB(a.size_bytes)} ·{" "}
+                <a href={a.licence_url} target="_blank" rel="noreferrer">
+                  {a.licence}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <button
+            className="set-btn"
+            onClick={() => install.mutate()}
+            disabled={install.isPending}
+          >
+            {install.isPending ? "Starting…" : "Download the face models"}
+          </button>
+        </>
+      )}
+
+      {running && job && (
+        <>
+          <p className="set-row__sub">
+            {job.stage === "verifying"
+              ? "Checking what arrived…"
+              : job.stage === "installing"
+                ? "Putting it in place…"
+                : `Downloading ${job.asset ?? ""}`}{" "}
+            — {pct}%
+          </p>
+          <button className="set-btn" onClick={() => cancel.mutate()}>
+            Cancel
+          </button>
+        </>
+      )}
+
+      {job?.error && !running && (
+        <p className="set-row__sub set-row__sub--warn">
+          The download did not finish: {job.error}
+        </p>
+      )}
+
+      {models?.installed && (
+        <p className="set-row__sub">
+          The models are installed in <code>{models.directory}</code>.
+          {caps?.ready ? (
+            " Face grouping is ready — open a picture library and press People."
+          ) : (
+            <>
+              {" "}
+              The worker itself is still missing:{" "}
+              <strong>{caps?.reason ?? "not installed"}</strong>. It ships with
+              the LANcast installer rather than the in-app update, so running
+              the installer for this version will supply it.
+            </>
+          )}
+        </p>
+      )}
+
+      {models?.supported && !models.installed && !running && caps && !caps.ready && (
+        <p className="set-row__sub">
+          {/*
+            Said here because it is the single most likely reason this feature
+            appears to do nothing: the in-app updater replaces the server only,
+            and the worker arrives with the installer.
+          */}
+          Note: the face worker ships with the LANcast installer. If you updated
+          from inside the app, run the installer for this version as well.
+        </p>
+      )}
+    </section>
+  );
+}
+
+// Megabytes, rounded, because nobody reading a download size wants three
+// decimal places of a hundred-megabyte number.
+function formatMB(bytes: number): string {
+  return `${Math.round(bytes / 1048576)} MB`;
+}
+
 function GeneralSection() {
   const { data: health } = useHealth();
   return (
@@ -2123,6 +2263,16 @@ interface Pane {
 const SERVER_PANES: Pane[] = [
   { id: "general", label: "General", admin: true },
   { id: "libraries", label: "Libraries", admin: true },
+  /*
+   * Pictures has its own pane rather than a corner of Libraries.
+   *
+   * Sensitive marking sat under Libraries because it was the only setting a
+   * picture library had. It is not any more — face grouping arrived with a
+   * download, a state and a switch of its own — and two of them in a general
+   * pane is the point at which somebody looking for one has to read all of it.
+   * Made a home now rather than after the third.
+   */
+  { id: "pictures", label: "Pictures", admin: true },
   { id: "metadata", label: "Metadata", admin: true },
   { id: "playback", label: "Playback", admin: true },
   { id: "users", label: "Users", admin: true },
@@ -2223,6 +2373,7 @@ export function Settings() {
                   <UpdateCheckSection />
                 </>
               )}
+              {pane === "pictures" && <PicturesSection />}
               {pane === "activity" && (
                 <>
                   {/*
