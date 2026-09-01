@@ -2019,14 +2019,14 @@ function PicturesSection() {
         <>
           <p className="set-row__sub">
             This needs a one-off download of{" "}
-            <strong>{formatMB(models.bytes_total ?? 0)}</strong> — two models
+            <strong>{formatBytes(models.bytes_total ?? 0)}</strong> — two models
             and the runtime that executes them. Nothing is fetched until you
             press the button.
           </p>
           <ul className="set-assets">
             {(models.assets ?? []).map((a) => (
               <li key={a.name}>
-                <code>{a.name}</code> · {formatMB(a.size_bytes)} ·{" "}
+                <code>{a.name}</code> · {formatBytes(a.size_bytes)} ·{" "}
                 <a href={a.licence_url} target="_blank" rel="noreferrer">
                   {a.licence}
                 </a>
@@ -2099,7 +2099,24 @@ function PicturesSection() {
 
 // Megabytes, rounded, because nobody reading a download size wants three
 // decimal places of a hundred-megabyte number.
-function formatMB(bytes: number): string {
+/*
+ * A size for the consent list, which is the only place these appear.
+ *
+ * Rounding everything to whole megabytes rendered the 227KB face detector as
+ * "0 MB" — an asset that reads as nothing at all, on the one screen whose
+ * purpose is saying what is about to be downloaded. A list somebody cannot
+ * trust the numbers on is not consent.
+ *
+ * So the unit follows the size rather than the other way round, and nothing is
+ * ever reported as zero. The kilobyte branch stops below 1000 rather than 1024
+ * so a file just under a megabyte cannot print as "1024 KB", which is a size
+ * nobody writes.
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 bytes";
+  if (bytes < 1024) return `${Math.round(bytes)} bytes`;
+  const kb = bytes / 1024;
+  if (kb < 1000) return `${Math.round(kb)} KB`;
   return `${Math.round(bytes / 1048576)} MB`;
 }
 
