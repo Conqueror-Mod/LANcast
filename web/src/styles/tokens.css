@@ -25,15 +25,6 @@
   --nebula-teal: #1f6f80;
   --nebula-ember: #7e3346;
 
-  /*
-   * Starlight. The intro's signature texture, and the app had none of it.
-   *
-   * Two sizes at two opacities, drawn as gradients rather than an image: it
-   * costs no request, survives any resolution, and cannot be the asset that
-   * fails to load. See .starfield in global.css.
-   */
-  --star-near: rgba(226, 236, 255, 0.85);
-  --star-far: rgba(198, 214, 255, 0.4);
 
   /* Gold — the only accent. Earned, never ambient (see the gold rule). */
   --gold: #c6a35a;

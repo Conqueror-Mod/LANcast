@@ -116,13 +116,6 @@ background-image:
   linear-gradient(170deg, var(--space-raised) 0%, var(--space-deep) 55%, var(--space-void) 100%);
 ```
 
-**Stars.** The field carries a star layer, which is the intro's signature
-texture and the app had none of it. Two tile sizes at two opacities, drawn as
-radial gradients rather than an image — no request, no resolution to be wrong
-at, and nothing that can fail to load — with the tiles at coprime sizes so the
-pattern does not visibly repeat. The second pass counter-drifts against the
-nebula, so the field has parallax rather than one sheet sliding.
-
 **Range, and a vignette.** Five wisps rather than three: violet and blue above,
 a teal below, and a low warm ember. The ember does work out of proportion to its
 alpha — a field with no warm anywhere in it makes every warm thing on top of it,
@@ -131,17 +124,10 @@ which is the layer that makes the others read: the intro's sky is bright in the
 middle and nearly black at the corners, and that range is most of why it looks
 like depth rather than like a colour.
 
-**A screen that owns the picture turns the stars off.** The detail page does:
-its full-bleed fanart is the thing being looked at, and a drifting texture over
-it is a second thing asking for attention. The nebula stays, because the
-backdrop is tinted *into* it (see the artwork rule under Depth) — removing that
-would leave the artwork on a flat floor with the identity stopping at its edge.
-Only the stars go, because they are the layer that reads as being in front.
-
-`useStarless()` in `lib/starless.ts` sets a flag on the document element and
-clears it on unmount. The cleanup is the part with the bug in it: a one-way
-switch would take the stars from every screen visited afterwards, and nothing
-would look broken — just quieter.
+**The field carries no stars.** They were added and then removed: on a detail
+page they drifted over the fanart, and once that page suppressed them the answer
+to "where do stars belong" turned out to be nowhere. The nebula, the ember and
+the vignette do the identity work without competing with artwork.
 
 **Drift.** A `transform: translate3d()` animation on the gradient layer over
 `--dur-ambient`, GPU-composited. It must be imperceptible when watched directly

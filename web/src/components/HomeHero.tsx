@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchShowEpisodes } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { isSquareArt } from "@/lib/kind";
@@ -95,6 +96,45 @@ function progressPct(item: Item): number {
 // this screen exists to get away from.
 export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) {
   const navigate = useNavigate();
+
+  /*
+   * Resuming a show carries on through it.
+   *
+   * This used to be `navigate("/watch/" + item.id)` with no queue, so pressing
+   * Resume on a half-watched series played that one episode and stopped — with
+   * nothing to distinguish it from a show that had actually ended. Reported as
+   * exactly that.
+   *
+   * The episodes from this one onward, not all of them: Continue means "carry
+   * on from here", and queueing the earlier ones would make the previous
+   * button walk back through episodes already finished. Same rule the detail
+   * page's Continue follows, and the same shape — history state rather than the
+   * URL, because a long series is far too many ids for a query string.
+   *
+   * A film takes the same path and simply has no episodes to fetch.
+   */
+  const resume = async () => {
+    if (item.kind !== "episode") {
+      navigate(`/watch/${item.id}`);
+      return;
+    }
+    try {
+      // The endpoint resolves an episode to its show, so the client does not
+      // walk the hierarchy — that walk is what every caller would get wrong.
+      const eps = await fetchShowEpisodes(item.id);
+      const from = eps.findIndex((e) => e.id === item.id);
+      if (from >= 0 && eps.length > 1) {
+        navigate(`/watch/${item.id}`, {
+          state: { queue: eps.slice(from).map((e) => e.id) },
+        });
+        return;
+      }
+    } catch {
+      // A failed lookup is not a reason to refuse to play. One episode is a
+      // worse outcome than a whole show and a far better one than nothing.
+    }
+    navigate(`/watch/${item.id}`);
+  };
   const reduced = usePrefersReducedMotion();
   const parallaxRef = useParallax(!reduced);
 
@@ -170,7 +210,7 @@ export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) 
             <HeroButton
               primary
               label={resuming ? "Resume" : "Play"}
-              onPress={() => navigate(`/watch/${item.id}`)}
+              onPress={resume}
             />
             <HeroButton
               label="Details"

@@ -239,6 +239,14 @@ export function Player() {
   const idleTimer = useRef<number>();
   // Set by a click on the picture, cancelled by a second one. See the handlers.
   const clickTimer = useRef<number>();
+  /*
+   * Whether the pointer is resting on the controls.
+   *
+   * A ref rather than state: it is read inside a timeout that must not be
+   * rebuilt every time the pointer crosses the bar, and nothing renders from
+   * it.
+   */
+  const overChrome = useRef(false);
   const wakeChrome = useCallback(() => {
     setChromeVisible(true);
     window.clearTimeout(idleTimer.current);
@@ -247,7 +255,23 @@ export function Player() {
     // and hiding the transport would leave a motionless screen that looks
     // frozen rather than playing.
     if (pb.isAudio) return;
-    idleTimer.current = window.setTimeout(() => {
+    idleTimer.current = window.setTimeout(function tick() {
+      /*
+       * The controls do not vanish from under the pointer.
+       *
+       * Waking was driven entirely by `mousemove`, and clicking the same spot
+       * repeatedly — next, next, next — produces no movement at all. So the
+       * timer expired with the pointer sitting on the button somebody was
+       * using, and the bar faded out beneath it. Reported after three clicks,
+       * which is exactly how long 2.5 seconds of clicking takes.
+       *
+       * Re-armed rather than cancelled, so leaving the bar without moving
+       * anywhere else still hides it a moment later.
+       */
+      if (overChrome.current) {
+        idleTimer.current = window.setTimeout(tick, 2500);
+        return;
+      }
       if (pb.playing) setChromeVisible(false);
     }, 2500);
   }, [pb.isAudio, pb.playing]);
@@ -420,7 +444,20 @@ export function Player() {
         />
       )}
 
-      <div className="player__chrome">
+      <div
+        className="player__chrome"
+        /*
+         * Hover is tracked on the chrome rather than on each control, because
+         * the gap between two buttons is still the toolbar as far as anybody
+         * using it is concerned.
+         */
+        onMouseEnter={() => {
+          overChrome.current = true;
+        }}
+        onMouseLeave={() => {
+          overChrome.current = false;
+        }}
+      >
         <div className="player__top">
           <button className="player__icon" onClick={close} aria-label="Close">
             ←

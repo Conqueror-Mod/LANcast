@@ -227,3 +227,47 @@ func (s *Store) EpisodesOf(ctx context.Context, showID int64) ([]Item, error) {
 	defer rows.Close()
 	return scanItems(rows)
 }
+
+/*
+ * ShowOf resolves whatever it is given to the show it belongs to.
+ *
+ * Given a show it returns the show. Given an episode it walks up: an episode
+ * hangs off a season and a season off the show — except on the shows whose
+ * episodes sit directly under the show row, which is why this walks rather
+ * than assuming a depth.
+ *
+ * It exists because the alternative is every client doing the same walk. The
+ * episodes endpoint's own comment already says that is a walk each client would
+ * reimplement and get wrong, and it was right: the home page's Resume button
+ * skipped it entirely and played one episode of a show with nothing after it.
+ */
+func (s *Store) ShowOf(ctx context.Context, itemID int64) (int64, error) {
+	id := itemID
+	// Three hops is one more than the deepest real hierarchy (episode →
+	// season → show). Bounded rather than `for {}` so a parent cycle — which a
+	// bad row could produce — is a wrong answer instead of a hung request.
+	for i := 0; i < 3; i++ {
+		var kind string
+		var parent *int64
+		err := s.db.QueryRowContext(ctx,
+			`SELECT kind, parent_id FROM media_item WHERE id = ?`, id).Scan(&kind, &parent)
+		if err == sql.ErrNoRows {
+			return 0, ErrNotFound
+		}
+		if err != nil {
+			return 0, fmt.Errorf("show of %d: %w", itemID, err)
+		}
+		if kind == "show" {
+			return id, nil
+		}
+		if parent == nil {
+			// An episode with no parent is one the scanner has not grouped
+			// yet. Reporting itself is the honest answer: it is the only thing
+			// anybody can play, and the caller gets a queue of one rather than
+			// an error about a show that does not exist.
+			return id, nil
+		}
+		id = *parent
+	}
+	return id, nil
+}

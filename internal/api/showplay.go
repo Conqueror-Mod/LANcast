@@ -75,7 +75,22 @@ func (s *Server) showEpisodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eps, err := s.st.EpisodesOf(r.Context(), id)
+	/*
+	 * An episode id resolves to its show.
+	 *
+	 * The comment above says a client should not have to walk the hierarchy,
+	 * and then this handler required the walk to have happened already: given
+	 * an episode it returned nothing. The home page's Resume button is the
+	 * caller that found out — it played one episode of a show with nothing
+	 * queued after it, and there was no way to tell that from a show that had
+	 * ended.
+	 */
+	showID, err := s.st.ShowOf(r.Context(), id)
+	if s.notFoundOr(w, err, "resolve show", "no such item") {
+		return
+	}
+
+	eps, err := s.st.EpisodesOf(r.Context(), showID)
 	if err != nil {
 		s.writeInternal(w, err, "show episodes")
 		return
