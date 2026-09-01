@@ -92,10 +92,23 @@ func SRTToVTT(r io.Reader) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// vttTiming matches a WebVTT cue timing line, capturing the two timestamps and
-// whatever cue settings trail them.
+/*
+ * vttTiming matches a WebVTT cue timing line, capturing the two timestamps and
+ * whatever cue settings trail them.
+ *
+ * **The hours are optional, and that is the whole point of this pattern.**
+ * WebVTT permits `mm:ss.ttt` as well as `hh:mm:ss.ttt`, and ffmpeg's own webvtt
+ * muxer writes the short form for everything under an hour — which is most of
+ * a film. Requiring hours meant this matched only the cues past the 60-minute
+ * mark, so shifting a resumed film moved the last third of its subtitles and
+ * left the rest at absolute times the player never reaches. Subtitles that
+ * "don't work" rather than subtitles that are wrong.
+ *
+ * Verified against a real extraction rather than assumed: the cues out of
+ * `Normal (2025).mkv` begin `02:46.734 --> 02:47.735`.
+ */
 var vttTiming = regexp.MustCompile(
-	`^(\d{1,2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}\.\d{3})(.*)$`)
+	`^((?:\d{1,3}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{1,3}:)?\d{2}:\d{2}\.\d{3})(.*)$`)
 
 // ShiftVTT moves every cue earlier by offset seconds, so a subtitle lines up
 // with a transcode that began partway into the film. A transcode restarts the
@@ -149,10 +162,33 @@ func ShiftVTT(vtt []byte, offset float64) []byte {
 	return out.Bytes()
 }
 
+/*
+ * parseVTTStamp reads either shape a WebVTT timestamp may take.
+ *
+ * `hh:mm:ss.ttt` and `mm:ss.ttt` are both legal, and the second is what ffmpeg
+ * writes below an hour. This used to Sscanf `%d:%d:%f`, which fails on the
+ * short form and returned **zero** — so every sub-hour cue looked like it began
+ * at the start of the film, and the shifter dropped it as already past.
+ *
+ * A zero on a malformed stamp is kept deliberately for anything that is neither
+ * shape: a cue that cannot be read is better placed at the start than used to
+ * compute a nonsense offset for the ones around it. The regex above is what
+ * stops that path being reached in practice.
+ */
 func parseVTTStamp(s string) float64 {
+	parts := strings.Split(s, ":")
 	var h, m int
 	var sec float64
-	if _, err := fmt.Sscanf(s, "%d:%d:%f", &h, &m, &sec); err != nil {
+	switch len(parts) {
+	case 3:
+		if _, err := fmt.Sscanf(s, "%d:%d:%f", &h, &m, &sec); err != nil {
+			return 0
+		}
+	case 2:
+		if _, err := fmt.Sscanf(s, "%d:%f", &m, &sec); err != nil {
+			return 0
+		}
+	default:
 		return 0
 	}
 	return float64(h*3600+m*60) + sec
