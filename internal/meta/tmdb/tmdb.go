@@ -642,7 +642,7 @@ func convertCredits(c creditsBlock) []meta.Credit {
 			break
 		}
 		out = append(out, meta.Credit{
-			Name: m.Name, Role: "actor", Character: m.Character, Order: m.Order,
+			Name: m.Name, Role: "actor", Character: characterOf(m.Character), Order: m.Order,
 			Image: profileURL(m.ProfilePath),
 		})
 	}
@@ -655,6 +655,34 @@ func convertCredits(c creditsBlock) []meta.Credit {
 		}
 	}
 	return out
+}
+
+/*
+ * characterOf drops a character name that is only a number.
+ *
+ * Observed on a real library: War Machine (2026) came back with characters
+ * "81", "7", "15", "60", "109", "96" and "122" beside four properly named ones,
+ * and the cast row rendered those digits under the actors' faces. It looks
+ * exactly like LANcast leaking an internal id, which is what made it worth
+ * fixing even though the data is TMDB's — a user cannot tell the difference
+ * between a provider's bad row and our bug, and will report ours.
+ *
+ * A row with no character at all already renders as just the actor, so treating
+ * these as absent puts them on a path that exists and is correct. Digits only:
+ * "Agent 47", "Apollo 13" and "7" mean different things, and only the last is
+ * certainly not a character.
+ */
+func characterOf(s string) string {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return ""
+	}
+	for _, r := range t {
+		if r < '0' || r > '9' {
+			return t
+		}
+	}
+	return ""
 }
 
 func artRefs(poster, backdrop string) []meta.ArtRef {
