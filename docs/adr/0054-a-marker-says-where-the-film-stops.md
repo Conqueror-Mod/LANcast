@@ -1,0 +1,161 @@
+# ADR 0054 — A marker says where the film stops
+
+Date: 2026-09-01 · Status: **proposed**
+
+Stage 1 of two. This one is about **credits**, which both films and episodes
+have. Intros are the harder half, they exist only on episodes, and they need a
+different engine — they are recorded at the end here and not decided.
+
+## The report, and what was actually wrong with it
+
+Reported as: *"a movie has to run completely through to the last second to be
+counted complete, and we have no way to skip an intro."*
+
+The first half is not what the code does. `WatchedThreshold` is 90 on the live
+server, applied server-side on every progress write
+([settings.go](../../internal/config/settings.go)), and the client marks done
+at 92% of its own duration. The live database agrees — *Tokyo Drift* at 93.9%
+and *Beetlejuice Beetlejuice* at 93.8% are both `watched = 1`, and the only
+unwatched row above 80% sits at 80.2%.
+
+**But the reporter was right that something stopped titles completing, and it
+was the denominator.** `duration_ms` had two writers: ffprobe, and TMDB's
+`runtime` in whole minutes. The provider won. Across a 40-file sample of the
+live library, one in eight disagreed with the file by more than 2%:
+
+| Title | `duration_ms` | file | error |
+|---|---|---|---|
+| Ghostbusters | 117.0 min | 133.7 min | −12.5% |
+| Jackass Presents: Bad Grandpa | 92.0 min | 102.5 min | −10.2% |
+| The Good, the Bad and the Ugly | 161.0 min | 178.8 min | −9.9% |
+| The Book of Eli | 118.0 min | 110.2 min | **+7.0%** |
+| A Charlie Brown Christmas | 25.0 min | 25.7 min | −2.8% |
+
+Every declared value is a whole number of minutes, which is what gives the
+source away. The last column is the one that hurts: when the runtime
+*overstates* the file, 90% of it lands past the end, and the title cannot be
+finished by watching it. That is the reported symptom exactly.
+
+**Fixed before this ADR was written**, because it is not a design question —
+a duration is measured, not described, and a source may now supply one only
+when nothing has measured it. Existing rows are repaired by re-probing.
+
+It is recorded here because it is the reason this ADR cannot express a marker
+as a percentage. A percentage of a wrong duration is how we got here.
+
+## What is left, and why the cheap answer does not work
+
+What remains is real: there is no way to *jump* to the end of the credits or
+past an intro, and 90% is a guess about where the credits start rather than a
+fact about this film.
+
+The obvious first move is to read container chapters in the probe worker. It
+is nearly free and the parse side is already split from the process side. It
+was measured on 25 films and 25 episodes of the live library before being
+designed around:
+
+| | has chapters | titles usable |
+|---|---|---|
+| Movies (1,200) | 9/25 | **none** |
+| Episodes (992) | 10/25 | **none** |
+
+Only ~38% carry chapters at all, and not one title names anything. They are
+raw timestamps (`00:09:25.190`) or ordinals (`Chapter 01`). A container chapter
+says where an encoder put a seek point, not what happens there.
+
+**So chapters are rejected as a source.** They cannot answer the question even
+in the minority of files that have them.
+
+## Decision
+
+**A marker is a measured timestamp stored against an item, produced by its own
+worker, and the API serves it as a fact the client draws a button from.**
+
+Four parts, and the ordering is the point.
+
+**1. Markers are their own table, not columns.** `item_marker(item_id, kind,
+start_ms, end_ms, source, confidence, created_at)`, with `kind` in
+`credits`/`intro` — intro is in the schema from the start so stage 2 does not
+need a migration, and nothing writes it yet. A side table because an item may
+carry several markers, because a marker has provenance, and because
+`media_item` is already 45 columns wide (ADR 0002 chose that shape; it did not
+choose it as a place to keep growing).
+
+**2. Detection runs in its own worker**, beside probe and enrich. It is a
+second full pass over the file's tail and folding it into probe would make
+every scan pay for it, which is the same reasoning that put probing outside
+enrichment. Process execution stays split from the decision: the ffmpeg
+invocation is one function, and the rule that turns its output into a
+timestamp is pure and tested against captured `blackdetect` output with no
+media on disk.
+
+**3. A marker is evidence before it is a feature.** The first build stores
+markers and exposes them for inspection; it does **not** move the watched
+threshold and does **not** draw a button. The reason is in the measurement —
+`blackdetect` over the last quarter of four random films found black frames in
+all four, and found them *ambiguous*:
+
+```
+Hot Tub Time Machine   86.7% (1.3s)   94.5% (8.7s)
+Memento                97.7% (9.3s)  100.2% (13.8s)
+The NeverEnding Story  85.1% … eight runs … 93.1%
+The Outsiders          93.6%  then black past the declared end
+```
+
+A single black frame is not a credits sequence. *The NeverEnding Story* offers
+eight candidates in its tail, and the honest reading of this table is that the
+selection rule — longest run, last sustained run, black plus silence — is
+**not yet known**, and picking one now would be choosing by taste and shipping
+it as a fact. Marking a dozen films by hand and scoring the candidates against
+them is cheap, and it is the only thing that turns this into a rule. `The
+Outsiders` also makes the point that a wrong duration corrupts the reading
+itself: its black frames land at 120% of what the database claimed.
+
+**4. Once a rule is proven, the marker replaces the guess.** A credits marker
+becomes the watched threshold for that item — finishing means reaching the
+credits, not 90% of a runtime — and the percentage stays as the fallback for
+every item with no marker, which will always be most of them. The setting is
+not removed.
+
+## Consequences
+
+**The API gains a contract**, so `docs/api.md` changes in the same commit.
+Markers ride on the item payload rather than needing a fetch: a client that
+must ask a second question before it can draw a button will draw it late, and
+a button that appears three seconds into the credits is worse than none.
+
+**Detection is expensive and opt-out.** It reads a quarter of every file. It is
+paced like enrichment, it never runs during a scan, and a library can decline
+it — the same shape as NFO writing, which is off by default for a comparable
+reason.
+
+**A marker is not locked and is not user-editable in this stage.** Hand
+correction is the obvious next request and it is deliberately absent: the
+locked-fields rule means adding it commits us to never overwriting it, and that
+promise should be made after the detector is trustworthy rather than as
+insurance against it not being.
+
+**Nothing here helps intros**, and the reported half about intros stays open.
+The engine for those is cross-episode audio correlation within a season — an
+intro is findable precisely because every episode shares it, which is also why
+the technique says nothing about a film. It is stage 2, it reuses this table
+and this worker, and it is not designed here.
+
+## Alternatives rejected
+
+**Container chapters** — measured above. Present on 38% of files and semantically
+empty on all of them.
+
+**A fixed offset per series, entered by hand.** Cheap, and it is what several
+clients do. Rejected because it is a fact about a *release* rather than a
+series: a season with a shortened intro, a pilot with none, and a recap before
+the titles all break it silently, and the failure mode is skipping into the
+middle of a scene, which is worse than not offering to skip.
+
+**Detection at first play.** No background cost, but the answer arrives after
+the viewer needed it. For credits specifically it is self-defeating: the first
+viewer, the one who most wants the marker, is the one guaranteed not to have it.
+
+**Asking a metadata provider.** No provider serves this, and if one did it
+would be a fact about a theatrical cut rather than about the file on disk —
+which is the mistake this ADR opened by fixing.
