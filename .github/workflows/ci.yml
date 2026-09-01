@@ -170,6 +170,11 @@ jobs:
         run: |
           : > installer/LANcast-Server.exe
           : > installer/LANcast-Client.exe
+          # The face worker, which the installer ships (ADR 0052). Adding the
+          # File line without this is what turned this job red, which is the
+          # job doing its work: the alternative was finding out during a
+          # release, where the installer is built after everything else.
+          : > installer/lancast-faces.exe
 
       # -WX turns warnings into errors. An undefined $VARIABLE is a warning in
       # NSIS and would otherwise compile straight into a shipped installer.
