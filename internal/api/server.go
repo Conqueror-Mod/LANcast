@@ -135,6 +135,7 @@ type Server struct {
 	worker         *enrich.Worker
 	probes         *probe.Worker
 	facesW         *faces.Worker
+	faceModelJob   *faceJob
 	faceTool       *faces.Tool
 	covers         *coverart.Worker
 	photos         *photo.Worker
@@ -195,7 +196,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, facesW: d.Faces, faceTool: d.FaceTool, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
@@ -261,6 +262,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
 	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.clusterFaces)
 	mux.HandleFunc("GET /api/faces/{id}/thumb", s.faceThumb)
+	// The models are an optional download, pinned in faceinstall and never a
+	// parameter — the payload is a model this server loads and a library it
+	// executes (ADR 0052, following ADR 0048).
+	mux.HandleFunc("GET /api/faces/models", s.faceModels)
+	mux.HandleFunc("POST /api/faces/models/install", s.adminOnly(s.installFaceModels))
+	mux.HandleFunc("POST /api/faces/models/install/cancel", s.adminOnly(s.cancelFaceModelsInstall))
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
