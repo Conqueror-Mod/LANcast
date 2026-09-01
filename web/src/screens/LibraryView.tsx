@@ -382,6 +382,17 @@ export function LibraryView({
             Timeline
           </button>
         )}
+        {/* Face groups. Offered whether or not the worker is installed: the
+            page itself explains an absence, which is better than a control
+            that silently is not there. */}
+        {isPictures && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/people`)}
+          >
+            People
+          </button>
+        )}
         {config.playlists && (
           <button
             className="browse__playall-btn"

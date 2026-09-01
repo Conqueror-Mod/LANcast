@@ -1221,6 +1221,96 @@ export function usePhotosInMonth(
   });
 }
 
+/*
+ * People — face groups in a picture library (ADR 0052).
+ *
+ * `pending` travels with the list on purpose. An empty people list means either
+ * "nobody is in your photographs" or "nothing has looked at them yet", and a
+ * screen that cannot tell those apart teaches somebody the feature is broken.
+ */
+/*
+ * Named FacePerson rather than Person because `Person` in this client is
+ * already an account — the sharing sense of the word. Two Persons in one
+ * codebase is a bug waiting for whoever imports the wrong one.
+ */
+export type FacePerson = {
+  id: number;
+  name: string | null;
+  name_locked: boolean;
+  count: number;
+  cover_face_id?: number;
+  cover_item_id?: number;
+};
+
+export function useFacePeople(libraryID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["people-faces", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<{ people: FacePerson[]; pending: number }>(
+        `/api/libraries/${libraryID}/people`,
+        signal,
+      ),
+    enabled: enabled && libraryID > 0,
+  });
+}
+
+/** Whether this server can group faces at all, and why not when it cannot. */
+export function useFaceCapabilities(enabled = true) {
+  return useQuery({
+    queryKey: ["face-capabilities"],
+    queryFn: ({ signal }) =>
+      apiGet<{ ready: boolean; reason?: string; version?: string }>(
+        "/api/faces/capabilities",
+        signal,
+      ),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/** One group's faces, clearest first — the examples a naming screen shows. */
+export function useClusterFaces(clusterID: number | null) {
+  return useQuery({
+    queryKey: ["cluster-faces", clusterID],
+    queryFn: ({ signal }) =>
+      apiGet<{ faces: { id: number; item_id: number; score: number }[] }>(
+        `/api/faces/clusters/${clusterID}/faces`,
+        signal,
+      ),
+    enabled: clusterID !== null,
+  });
+}
+
+/*
+ * Naming a group.
+ *
+ * Invalidates the people list rather than the group: a name changes the label
+ * on a tile in a grid somebody is looking at, and this project's most-repeated
+ * bug is a write that is right on the server and stale on the screen.
+ */
+export function useNamePerson(libraryID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      apiSend(`/api/faces/clusters/${id}`, "PUT", { name }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["people-faces", libraryID] });
+    },
+  });
+}
+
+/** Start a face pass over a picture library. Progress arrives via activity. */
+export function useStartFacePass(libraryID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend(`/api/libraries/${libraryID}/faces`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["people-faces", libraryID] });
+    },
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);

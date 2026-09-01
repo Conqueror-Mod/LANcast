@@ -259,6 +259,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/libraries/{id}/people", s.people)
 	mux.HandleFunc("POST /api/libraries/{id}/faces", s.adminOnly(s.startFacePass))
 	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
+	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.clusterFaces)
+	mux.HandleFunc("GET /api/faces/{id}/thumb", s.faceThumb)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)

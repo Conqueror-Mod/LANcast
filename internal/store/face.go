@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -462,4 +463,71 @@ func (s *Store) MarkFacesDone(ctx context.Context, itemID int64) error {
 		return fmt.Errorf("mark faces done for item %d: %w", itemID, err)
 	}
 	return nil
+}
+
+/*
+ * GetFace returns one detection and the item it was found in.
+ *
+ * Used to draw a face thumbnail, which is why it returns the item too: the
+ * caller has to resolve a file path and check containment before opening
+ * anything, and doing that needs the row rather than just the box.
+ *
+ * A face inside a marked folder is reported as not found rather than as
+ * forbidden. The distinction matters: "no such face" leaks nothing, while a
+ * 403 confirms that a face exists at that id, in a folder somebody marked
+ * precisely so its contents would not be enumerable.
+ */
+func (s *Store) GetFace(ctx context.Context, faceID int64, userID string) (Face, *Item, error) {
+	var f Face
+	var itemID int64
+	var blob []byte
+	var sensitive int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT f.id, f.item_id, f.cluster_id, f.x, f.y, f.w, f.h, f.score,
+		       f.embedding, m.sensitive_effective
+		  FROM face f JOIN media_item m ON m.id = f.item_id
+		 WHERE f.id = ?`, faceID).
+		Scan(&f.ID, &itemID, &f.ClusterID, &f.X, &f.Y, &f.W, &f.H, &f.Score,
+			&blob, &sensitive)
+	if err == sql.ErrNoRows || (err == nil && sensitive != 0) {
+		return Face{}, nil, ErrNotFound
+	}
+	if err != nil {
+		return Face{}, nil, fmt.Errorf("get face %d: %w", faceID, err)
+	}
+	f.ItemID = itemID
+	f.Embedding = decodeEmbedding(blob)
+
+	it, err := s.GetItem(ctx, itemID, userID)
+	if err != nil {
+		return Face{}, nil, err
+	}
+	return f, it, nil
+}
+
+// FacesInCluster lists a group's faces, clearest first — a naming screen shows
+// its best examples, and somebody deciding who a group is looks at those.
+func (s *Store) FacesInCluster(ctx context.Context, clusterID int64, limit int) ([]Face, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 60
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT f.id, f.item_id, f.x, f.y, f.w, f.h, f.score
+		  FROM face f JOIN media_item m ON m.id = f.item_id
+		 WHERE f.cluster_id = ? AND m.sensitive_effective = 0 AND m.missing = 0
+		 ORDER BY f.score DESC, f.id
+		 LIMIT ?`, clusterID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("faces in cluster %d: %w", clusterID, err)
+	}
+	defer rows.Close()
+	out := []Face{}
+	for rows.Next() {
+		var f Face
+		if err := rows.Scan(&f.ID, &f.ItemID, &f.X, &f.Y, &f.W, &f.H, &f.Score); err != nil {
+			return nil, fmt.Errorf("faces in cluster %d: %w", clusterID, err)
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }

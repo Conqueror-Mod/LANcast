@@ -145,3 +145,30 @@ func (s *Server) nameCluster(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "faces.name", "face_cluster", auditID(id), summary, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
+
+// clusterFaces lists a group's faces, clearest first, so a naming screen can
+// show its best examples — somebody deciding who a group is looks at those.
+func (s *Server) clusterFaces(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid cluster id")
+		return
+	}
+	faces, err := s.st.FacesInCluster(r.Context(), id, queryInt(r, "limit"))
+	if err != nil {
+		s.writeInternal(w, err, "faces in cluster")
+		return
+	}
+	out := make([]map[string]any, 0, len(faces))
+	for _, f := range faces {
+		// The box is not returned. A client draws the crop this server cut, and
+		// handing over coordinates would invite a second implementation of the
+		// cropping rules that disagreed with the first.
+		out = append(out, map[string]any{
+			"id":      f.ID,
+			"item_id": f.ItemID,
+			"score":   f.Score,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"faces": out})
+}
