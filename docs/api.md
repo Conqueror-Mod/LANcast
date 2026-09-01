@@ -2407,6 +2407,53 @@ An empty `name` clears both the name and the lock, and the group becomes an
 ordinary cluster again — without that a typo would be permanent, and permanence
 is what makes people afraid to use a naming UI at all.
 
+### `GET /api/faces/models`
+
+What face grouping would download, before anything is fetched.
+
+```json
+{ "supported": true, "installed": false, "bytes_total": 118574000,
+  "directory": "C:\ProgramData\LANcast\faces",
+  "assets": [
+    { "name": "face_detection_yunet_2023mar.onnx", "size_bytes": 232589,
+      "licence": "MIT", "licence_url": "…", "url": "…" }
+  ],
+  "job": { "running": false, "stage": "", "bytes_done": 0, "bytes_total": 0 } }
+```
+
+Every asset names its size, its licence and the address the machine would
+connect to — **a download somebody cannot identify is not consent**. Readable by
+anyone, because it describes what the server *would* do rather than doing it.
+
+`supported: false` on platforms with no pinned build, rather than a download
+that could not be used once it arrived.
+
+The worker binary is **not** in this list: it ships with the server, because a
+worker whose version can drift from the server driving it is a support question
+nobody can answer from a log.
+
+### `POST /api/faces/models/install`
+
+Start the download. Admin only. `202` with the job snapshot; progress is polled
+from `GET /api/faces/models`.
+
+Asynchronous because it is about 115 MB — holding the request open would make a
+client timeout indistinguishable from a failed install.
+
+**The URLs are pinned in the server and are never taken from the request.** The
+payload is a model this server loads and a library it executes; fetching an
+address a request chose would be the server-side request forgery the rest of
+this API refuses. Each file is verified against a pinned SHA-256 before it is
+moved into place, and a mismatch leaves nothing behind under a real name.
+
+Pressing it twice while it runs is a person, not a fault: the second call
+returns the same snapshot rather than starting a second download.
+
+### `POST /api/faces/models/install/cancel`
+
+Stop a running download. Admin only. 115 MB on a metered connection is
+something somebody may reasonably change their mind about halfway through.
+
 ### `GET /api/faces/clusters/{id}/faces`
 
 A group's faces, clearest first — what a naming screen shows.
