@@ -5,6 +5,7 @@ import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
 import { Timeline } from "@/screens/Timeline";
+import { FacePeople } from "@/screens/FacePeople";
 import { Search } from "@/screens/Search";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
@@ -66,6 +67,8 @@ export function App() {
           <Route path="/library/:id/collections" element={<Collections />} />
           {/* A picture library by capture date, beside its folder grid. */}
           <Route path="/library/:id/timeline" element={<Timeline />} />
+          {/* The people in a picture library — face groups, not accounts. */}
+          <Route path="/library/:id/people" element={<FacePeople />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />

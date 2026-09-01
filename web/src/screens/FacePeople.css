@@ -1,0 +1,273 @@
+/*
+ * The people page.
+ *
+ * Its own class namespace rather than `.people__*`, which the accounts page
+ * already owns — CSS here is global, and two screens called People sharing a
+ * prefix is a restyle of one silently changing the other.
+ *
+ * Quiet by design: the faces are the content, so the chrome is a heading and a
+ * grid, and nothing competes with a wall of photographs of people you know.
+ */
+.faces-page {
+  padding: 24px 32px 80px;
+}
+
+.faces-page__bar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.faces-page__back {
+  background: transparent;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.faces-page__back:hover,
+.faces-page__back:focus {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.faces-page__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.faces-page__title span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.faces-page__scan {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+.faces-page__scan:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.faces-page__note {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.faces-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+/* One group. The face is round, because a square crop of a head reads as a
+   document photograph and these are family pictures. */
+.faceperson {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  font: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.faceperson:hover,
+.faceperson:focus {
+  outline: none;
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faceperson:hover,
+  .faceperson:focus {
+    transform: none;
+  }
+}
+
+.faceperson__face {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  box-shadow: var(--elev-1);
+}
+
+.faceperson__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.faceperson__blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.faceperson__name {
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An unnamed group asks a question, and asking it quietly is the point: the
+   prompt should read as an invitation rather than as an error. */
+.faceperson:not(.faceperson--named) .faceperson__name {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.faceperson--named .faceperson__name {
+  color: var(--text-primary);
+}
+
+.faceperson__count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The naming panel. */
+.faces-page__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 5, 12, 0.72);
+}
+
+.facenamer {
+  width: min(520px, 92vw);
+  padding: 22px 24px 20px;
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-3);
+  border: 1px solid var(--gold-dormant);
+}
+
+/* Several faces, not one: a single bad angle is a bad basis for naming
+   somebody, and a wrong name is worse than no name. */
+.facenamer__faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.facenamer__faces img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--gold-dormant);
+}
+
+.facenamer__field {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.facenamer__field span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.facenamer__field input {
+  width: 100%;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+  background: var(--space-void);
+  border: 1px solid var(--gold-dormant);
+  border-radius: 8px;
+}
+
+.facenamer__field input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.facenamer__note {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin: 0 0 18px;
+}
+
+.facenamer__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.facenamer__save,
+.facenamer__clear,
+.facenamer__cancel {
+  padding: 8px 18px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--gold-dormant);
+  color: var(--text-secondary);
+}
+
+.facenamer__save {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.facenamer__cancel {
+  margin-left: auto;
+}
+
+.facenamer__save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

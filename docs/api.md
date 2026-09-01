@@ -2407,6 +2407,43 @@ An empty `name` clears both the name and the lock, and the group becomes an
 ordinary cluster again — without that a typo would be permanent, and permanence
 is what makes people afraid to use a naming UI at all.
 
+### `GET /api/faces/clusters/{id}/faces`
+
+A group's faces, clearest first — what a naming screen shows.
+
+```json
+{ "faces": [ { "id": 92, "item_id": 5512, "score": 0.94 } ] }
+```
+
+`limit` defaults to 60 and is capped at 200. **The bounding box is deliberately
+not returned**: a client draws the crop this server cut, and handing over
+coordinates would invite a second implementation of the cropping rules that
+disagreed with the first.
+
+Faces in folders marked sensitive are never listed, and neither are faces in
+photographs that have gone missing from disk.
+
+### `GET /api/faces/{id}/thumb`
+
+The face, cropped out of its photograph as a JPEG.
+
+Cut on demand rather than stored: a crop is derivable from a photograph and a
+box, and writing tens of thousands of small JPEGs would double a picture
+library's disk cost and need invalidating whenever a re-cluster changed which
+face represents a group.
+
+Cached for a day and ETagged on the face id, which is safe because re-running
+detection **replaces** face rows rather than editing them — an id whose crop
+could have changed does not survive to be asked about again.
+
+The crop is square and wider than the detector's box; a portrait cropped at the
+hairline reads as a mugshot rather than as a person.
+
+`404` for a face that does not exist **and** for one inside a folder marked
+sensitive — the two are deliberately indistinguishable, because a 403 would
+confirm that a face exists at that id inside a folder somebody marked precisely
+so its contents could not be enumerated.
+
 ### `GET /api/libraries/{id}/timeline`
 
 A picture library's photographs counted by **capture month**, newest first.
