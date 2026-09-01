@@ -39,7 +39,6 @@ import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions } from "@/components/itemActions";
 import { startOf } from "@/playback/queueOrder";
-import { useStarless } from "@/lib/starless";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { SensitiveReveal } from "@/lib/sensitiveAck";
 import { PhotoViewer } from "@/components/PhotoViewer";
@@ -237,19 +236,6 @@ export function Detail() {
   const itemID = Number(id);
   const navigate = useNavigate();
 
-  /*
-   * No stars on this screen.
-   *
-   * The backdrop is the best-looking thing in LANcast and it is what this page
-   * is *for*; a star texture drifting over it is a second thing asking to be
-   * looked at. The nebula stays, because the backdrop is tinted into it.
-   *
-   * Unconditional rather than only when fanart exists: an item with no backdrop
-   * is a detail page that has not been enriched yet, not a different kind of
-   * screen, and having the stars appear and vanish as metadata arrives would be
-   * stranger than either state on its own.
-   */
-  useStarless();
 
   const { data: item, isLoading, isError } = useItem(itemID);
   const { data: trailer } = useTrailer(itemID);

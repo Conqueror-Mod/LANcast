@@ -80,7 +80,7 @@ export function DesignBench() {
   return (
     <div className="bench">
       {/*
-        No field of its own: main.tsx renders the nebula and the starfield for
+        No field of its own: main.tsx renders the nebula field for
         every route, this one included. The bench used to draw a second copy,
         which doubled every alpha in it — so the field looked richer on this
         page than it does in the app, which is the one thing a design bench

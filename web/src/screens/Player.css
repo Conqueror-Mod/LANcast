@@ -26,8 +26,21 @@
   transition: opacity var(--dur-base) ease;
 }
 
+/*
+ * Invisible *and* out of reach.
+ *
+ * Only the opacity was faded, and `.player__chrome > *` restores pointer
+ * events unconditionally — so a hidden toolbar was still a clickable one.
+ * Somebody aiming at the picture hit a control they could not see, which is
+ * the worst kind of hit target: it works, and nobody can tell you why the film
+ * paused.
+ */
 .player--idle .player__chrome {
   opacity: 0;
+}
+
+.player--idle .player__chrome > * {
+  pointer-events: none;
 }
 
 .player__chrome > * {
