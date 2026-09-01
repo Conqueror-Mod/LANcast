@@ -127,10 +127,33 @@ func contains(s, sub string) bool {
 
 func load(modelsDir string) (*engine, error) {
 	engineOnce.Do(func() {
-		if lib := os.Getenv("LANCAST_ONNXRUNTIME"); lib != "" {
-			// The runtime is an optional download beside the models, exactly as
-			// ffmpeg is (ADR 0048). Naming it explicitly beats relying on it
-			// being wherever the loader happens to look.
+		/*
+		 * The runtime is *named*, never discovered.
+		 *
+		 * It is an optional download that lands beside the models, exactly as
+		 * ffmpeg is (ADR 0048) — so the models directory already answers where
+		 * it is, and the environment variable is only an override for a
+		 * development copy unpacked somewhere else.
+		 *
+		 * Leaving the path empty is not a harmless fallback. onnxruntime_go
+		 * then asks the loader for the bare name, and on Windows 11 that always
+		 * resolves: the OS ships its own `C:\Windows\System32\onnxruntime.dll`
+		 * for Windows ML, currently 1.17, and this build asks for API version
+		 * 29. So the worker bound to Microsoft's runtime, failed with
+		 *
+		 *     The requested API version [29] is not available, only API
+		 *     versions [1, 17] are supported in this build
+		 *
+		 * and reported it as a fault of *our* download — which was sitting
+		 * correct and verified in the directory it had just been handed.
+		 *
+		 * This is the ffmpeg lesson from CLAUDE.md in another costume: never
+		 * let the platform choose. `auto` picked the one hardware decoder that
+		 * cannot work as a service; the empty path picks whichever library the
+		 * search order reaches first, which is a different machine's answer on
+		 * every machine.
+		 */
+		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
 			ort.SetSharedLibraryPath(lib)
 		}
 		if err := ort.InitializeEnvironment(); err != nil {

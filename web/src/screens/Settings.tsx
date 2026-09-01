@@ -2072,11 +2072,34 @@ function PicturesSection() {
             " Face grouping is ready — open a picture library and press People."
           ) : (
             <>
-              {" "}
-              The worker itself is still missing:{" "}
-              <strong>{caps?.reason ?? "not installed"}</strong>. It ships with
-              the LANcast installer rather than the in-app update, so running
-              the installer for this version will supply it.
+              {/*
+                Two different faults, and they had one sentence between them.
+
+                A worker that never ran and a worker that ran and could not
+                start its runtime are not the same problem, and "run the
+                installer" is the fix for exactly one of them. Told the wrong
+                one, somebody reinstalls LANcast to repair a library path — and
+                when that does not help, the next thing they doubt is the
+                download that was never at fault.
+
+                `version` is the tell: the worker answers with its own version,
+                so anything in that field means the binary is present and ran.
+              */}
+              {caps?.version ? (
+                <>
+                  {" "}
+                  The worker is installed, but it could not start:{" "}
+                  <strong>{caps.reason ?? "no reason given"}</strong>
+                </>
+              ) : (
+                <>
+                  {" "}
+                  The worker itself is still missing:{" "}
+                  <strong>{caps?.reason ?? "not installed"}</strong>. It ships
+                  with the LANcast installer rather than the in-app update, so
+                  running the installer for this version will supply it.
+                </>
+              )}
             </>
           )}
         </p>

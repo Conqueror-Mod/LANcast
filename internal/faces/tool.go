@@ -42,8 +42,12 @@ type Tool struct {
 	// the large half of the download and a person may reasonably keep them on a
 	// different disk from a 6MB binary.
 	ModelsDir string
-	// Runtime is the ONNX shared library. Optional: an empty value lets the
-	// loader find it, which is right when it sits beside the binary.
+	// Runtime is the ONNX shared library. Optional only because the worker
+	// falls back to ModelsDir, which is where the download puts it — *not*
+	// because an empty value is safe to leave to the loader. On Windows 11 the
+	// bare name resolves to the OS's own Windows ML copy in System32, which is
+	// too old, so "let the loader find it" means binding to a different
+	// library than the one that was downloaded and verified.
 	Runtime string
 
 	mu     sync.Mutex
@@ -113,6 +117,25 @@ func (t *Tool) Capabilities(ctx context.Context) Capabilities {
 	t.cached, t.at = &c, time.Now()
 	t.mu.Unlock()
 	return c
+}
+
+/*
+ * Forget drops the cached answer, so the next caller asks the worker again.
+ *
+ * Capabilities are cached for a minute because probing spawns a process, and
+ * for a minute that is exactly right — nothing about a worker changes on its
+ * own. An install is the one moment it does, and it changes the *only* thing
+ * this cache holds.
+ *
+ * Without this, finishing a 113MB download left the screen saying the runtime
+ * could not be loaded for up to a minute afterwards — the answer from a probe
+ * taken while the file was still arriving, which is the reading somebody is
+ * most likely to be staring at, because they were watching the progress bar.
+ */
+func (t *Tool) Forget() {
+	t.mu.Lock()
+	t.cached, t.at = nil, time.Time{}
+	t.mu.Unlock()
 }
 
 func (t *Tool) probe(ctx context.Context) Capabilities {

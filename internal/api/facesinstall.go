@@ -169,6 +169,14 @@ func (s *Server) installFaceModels(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.log.Error("face model install", "error", err)
 		} else {
+			// The worker's readiness is cached for a minute, and this is the
+			// one event that changes it. The probe taken while the runtime was
+			// still downloading said it could not be loaded, and that is
+			// precisely the answer somebody watching the progress bar would
+			// otherwise be left reading after it finished.
+			if s.faceTool != nil {
+				s.faceTool.Forget()
+			}
 			s.log.Info("face models installed", "dir", dir)
 		}
 	}()
