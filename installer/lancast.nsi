@@ -49,15 +49,48 @@ RequestExecutionLevel admin
 ; on a machine without the WebView2 runtime, and it is what someone used to the
 ; old behaviour will look for. SHOWREADME is repurposed to carry it — NSIS gives
 ; the finish page exactly two checkboxes and no way to add a third.
-!define MUI_FINISHPAGE_RUN "$INSTDIR\LANcast-Client.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Open LANcast"
+; Both checkboxes go through a function rather than straight to the client,
+; because starting LANcast means starting the *tray* first. See StartLANcast.
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION StartLANcast
+!define MUI_FINISHPAGE_RUN_TEXT "Start LANcast"
 !define MUI_FINISHPAGE_SHOWREADME ""
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "Open LANcast in my browser instead"
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Start LANcast and open it in my browser instead"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenInBrowser
 !insertmacro MUI_PAGE_FINISH
 
+; The tray is the top of the hierarchy, and neither finish option used to start
+; it.
+;
+; The service is installed and running by this point, so LANcast *works* — but
+; the tray is how a person reaches it: start it, stop it, open it, check for an
+; update, decide whether it launches at login. Finishing the installer straight
+; into the client window left the notification area empty, so the only visible
+; LANcast was a window, and closing that window looked like closing LANcast.
+;
+; So both checkboxes start the tray first and then the surface the person asked
+; for. Starting it twice is harmless — the tray holds a lock of its own and a
+; second launch opens the UI instead of adding an icon.
+Function StartTray
+  ; The same -data pin the Start Menu shortcut uses: without it the tray reads
+  ; a relative directory and opens a second database beside the install, which
+  ; is the failure v0.4.1 was about.
+  ReadEnvStr $1 "ProgramData"
+  Exec '"$INSTDIR\LANcast-Server.exe" tray -data "$1\LANcast"'
+  ; A moment for the icon to appear before the window opens on top of it. Not a
+  ; synchronisation — nothing depends on the order — but a person watching sees
+  ; the tray populate rather than a window arriving from nowhere.
+  Sleep 400
+FunctionEnd
+
+Function StartLANcast
+  Call StartTray
+  Exec '"$INSTDIR\LANcast-Client.exe"'
+FunctionEnd
+
 Function OpenInBrowser
+  Call StartTray
   ; -browser is the documented opt-out. Launched detached so the installer can
   ; finish rather than waiting on a client the user is about to use.
   Exec '"$INSTDIR\LANcast-Client.exe" -browser'

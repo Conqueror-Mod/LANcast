@@ -12,6 +12,17 @@ package singleton
 const (
 	Server = "LANcast-Server"
 	Client = "LANcast-Client"
+	/*
+	 * The tray is its own identity, separate from the server it controls.
+	 *
+	 * On an installed machine the server is a service and the tray is a
+	 * user-session process that starts, stops and opens it — so the server lock
+	 * says nothing about whether a tray icon already exists. Without a name of
+	 * its own, launching the tray twice put two identical icons in the
+	 * notification area, each controlling the same service, and quitting one
+	 * left the other.
+	 */
+	Tray = "LANcast-Tray"
 )
 
 // Release frees a held name. Calling it when the name was not held is safe.
