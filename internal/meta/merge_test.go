@@ -126,3 +126,42 @@ func TestIsField(t *testing.T) {
 		t.Error("path must not be lockable — it is not user metadata")
 	}
 }
+
+// Duration is the one field a provider may not correct. TMDB's runtime is the
+// theatrical one in whole minutes and the file is what a viewer plays; letting
+// the first overwrite the second puts the watched threshold past the end of
+// the file, so the item cannot be finished by watching it.
+func TestMergeProviderNeverOverwritesMeasuredDuration(t *testing.T) {
+	// The Book of Eli: 110.2 minutes on disk, 118 according to TMDB.
+	current := rec("probe", Fields{DurationMS: I64(6_612_000)})
+	out := Merge(current, nil, nil, []Record{rec("tmdb", Fields{DurationMS: I64(7_080_000)})})
+
+	if *out.Fields.DurationMS != 6_612_000 {
+		t.Errorf("DurationMS = %d, want the measured 6612000 — a provider runtime must not replace a probe",
+			*out.Fields.DurationMS)
+	}
+}
+
+// The other half of the same rule: with nothing measured, a source is better
+// than no duration at all, so an NFO still covers a file ffprobe has not
+// reached yet.
+func TestMergeSourceSuppliesDurationWhenNoneMeasured(t *testing.T) {
+	out := Merge(Record{}, nil,
+		[]Record{rec("nfo", Fields{DurationMS: I64(5_400_000)})},
+		[]Record{rec("tmdb", Fields{DurationMS: I64(7_080_000)})})
+
+	if out.Fields.DurationMS == nil || *out.Fields.DurationMS != 5_400_000 {
+		t.Errorf("DurationMS = %v, want the NFO value 5400000", out.Fields.DurationMS)
+	}
+}
+
+// A locked duration stays locked, the same as every other field.
+func TestMergeLockedDurationIsUntouched(t *testing.T) {
+	current := rec("db", Fields{DurationMS: I64(6_612_000)})
+	out := Merge(current, LockedSet([]string{FieldDurationMS}), nil,
+		[]Record{rec("tmdb", Fields{DurationMS: I64(7_080_000)})})
+
+	if *out.Fields.DurationMS != 6_612_000 {
+		t.Errorf("DurationMS = %d, want the locked value preserved", *out.Fields.DurationMS)
+	}
+}
