@@ -171,6 +171,16 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 	return nil, fmt.Errorf("tmdb: unsupported kind %q", ref.Kind)
 }
 
+/*
+ * The language TMDB is asked for.
+ *
+ * A constant rather than a setting, because LANcast's own interface is English
+ * and a metadata language that disagreed with the interface would be a stranger
+ * result than either on its own. When there is a UI language there should be a
+ * setting here, and this is the one place it would go.
+ */
+const language = "en-US"
+
 func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error) {
 	var m movieDetail
 	// Keywords ride along on the same request rather than costing a second one.
@@ -206,11 +216,39 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	if m.Collection != nil && m.Collection.ID != 0 {
 		rec.Collection = &meta.CollectionRef{
 			ExternalID: strconv.Itoa(m.Collection.ID),
-			Name:       m.Collection.Name,
+			Name:       c.collectionName(ctx, m.Collection),
 			Artwork:    artRefs(m.Collection.PosterPath, m.Collection.BackdropPath),
 		}
 	}
 	return rec, nil
+}
+
+/*
+ * collectionName resolves a collection's name, in English where TMDB has one.
+ *
+ * `belongs_to_collection`, embedded in the movie response, does not reliably
+ * honour the language parameter — it carries whatever name the collection was
+ * stored under. Reported as a Hulk collection displaying as *"Hulk
+ * Koleksiyonu"*, which is Turkish, on a server whose every other field came
+ * back in English. Nothing was wrong with the match, the film, or the request;
+ * the embedded block simply is not a translated field.
+ *
+ * The dedicated `/collection/{id}` endpoint is, so it is asked. One extra
+ * request per *collection* rather than per film, and it goes through the same
+ * response cache as everything else, so a library of twelve franchises costs
+ * twelve requests once.
+ *
+ * Best-effort by construction: any failure, or an empty name, falls back to the
+ * embedded one. A franchise grouping is worth a wrong-language name and is not
+ * worth failing an enrichment over — the film is already matched by this point.
+ */
+func (c *Client) collectionName(ctx context.Context, embedded *tmdbCollection) string {
+	var full tmdbCollection
+	err := c.get(ctx, "/collection/"+strconv.Itoa(embedded.ID), nil, &full)
+	if err != nil || strings.TrimSpace(full.Name) == "" {
+		return embedded.Name
+	}
+	return full.Name
 }
 
 func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error) {
@@ -379,6 +417,16 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 	}
 
 	params.Set("api_key", c.apiKey)
+	/*
+	 * The language, stated rather than assumed.
+	 *
+	 * Every request until now sent none and took whatever TMDB's default was.
+	 * That default is en-US and it mostly looked right, which is precisely what
+	 * made it worth fixing — a behaviour nobody asked for and nobody can see is
+	 * one that changes underneath you. It is set here rather than at each call
+	 * site so a request cannot be added later that forgets it.
+	 */
+	params.Set("language", language)
 	endpoint := c.baseURL + path + "?" + params.Encode()
 
 	body, err := c.doWithRetry(ctx, endpoint)
