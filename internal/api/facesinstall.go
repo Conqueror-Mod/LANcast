@@ -36,6 +36,36 @@ type faceJob struct {
 	cancel   context.CancelFunc
 }
 
+/*
+ * reset puts the job back to "just started", field by field.
+ *
+ * Never `*j = faceJob{...}`. Assigning a fresh struct over j replaces j.mu —
+ * the very mutex the caller is holding — with the literal's zero-value one, and
+ * the Unlock that follows then releases a lock nobody holds. That is
+ * `fatal error: sync: unlock of unlocked mutex`, and it is a runtime *fatal*
+ * rather than a panic: recoverPanics cannot catch it, no crash report is
+ * written, and the trace goes to stderr, which a Windows service discards.
+ *
+ * The failure that caused was not subtle. Pressing "Download the face models"
+ * killed the server outright, every time. The service restarted itself, so the
+ * only visible symptom was every library reporting "failed to fetch" against a
+ * process that had gone — while the home page, already rendered, looked fine.
+ *
+ * `go vet` does not flag this: copylocks catches copying a lock *value*, and a
+ * composite literal carrying a zero mutex is not that. The caller must hold
+ * j.mu.
+ */
+func (j *faceJob) reset(total int64, cancel context.CancelFunc) {
+	j.running = true
+	j.stage = faceinstall.StageDownloading
+	j.asset = ""
+	j.done = 0
+	j.total = total
+	j.err = ""
+	j.finished = time.Time{}
+	j.cancel = cancel
+}
+
 func (j *faceJob) snapshot() map[string]any {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -118,8 +148,7 @@ func (s *Server) installFaceModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	*j = faceJob{running: true, stage: faceinstall.StageDownloading,
-		total: faceinstall.TotalBytes(assets), cancel: cancel}
+	j.reset(faceinstall.TotalBytes(assets), cancel)
 	j.mu.Unlock()
 
 	dir := s.faceModelsDir()
