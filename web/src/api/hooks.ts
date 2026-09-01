@@ -1311,6 +1311,73 @@ export function useStartFacePass(libraryID: number) {
   });
 }
 
+/*
+ * The face models: an optional download (ADR 0052).
+ *
+ * Polled while a download runs so a progress bar means something, and left
+ * alone otherwise — this describes what the server *would* do, so asking often
+ * costs nothing but asking constantly is rude to a machine.
+ */
+export type FaceAsset = {
+  name: string;
+  size_bytes: number;
+  licence: string;
+  licence_url: string;
+  url: string;
+};
+
+export type FaceModelState = {
+  supported: boolean;
+  reason?: string;
+  installed?: boolean;
+  assets?: FaceAsset[];
+  bytes_total?: number;
+  directory?: string;
+  job: {
+    running: boolean;
+    stage: string;
+    asset?: string;
+    bytes_done: number;
+    bytes_total: number;
+    error?: string;
+    finished_at?: number;
+  };
+};
+
+export function useFaceModels(enabled = true) {
+  return useQuery({
+    queryKey: ["face-models"],
+    queryFn: ({ signal }) =>
+      apiGet<FaceModelState>("/api/faces/models", signal),
+    enabled,
+    refetchInterval: (q) =>
+      q.state.data?.job.running ? 1000 : false,
+  });
+}
+
+export function useInstallFaceModels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/faces/models/install", "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["face-models"] });
+      // The worker's readiness changes the moment the models land, and it is
+      // cached for a minute on the server — so the client stops trusting its
+      // own copy immediately rather than showing "not set up" over a finished
+      // install.
+      qc.invalidateQueries({ queryKey: ["face-capabilities"] });
+    },
+  });
+}
+
+export function useCancelFaceModels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/faces/models/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["face-models"] }),
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);
