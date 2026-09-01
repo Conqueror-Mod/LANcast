@@ -70,6 +70,11 @@ jobs:
           sudo apt-get update && sudo apt-get install -y nsis
           cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
           cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
+          # The face worker ships with the installer (ADR 0052). Failing loudly
+          # here beats a setup.exe that silently lacks it: the feature would be
+          # unavailable on every install with nothing to say why, and the models
+          # download would succeed and then have nothing to run.
+          cp "$(find dist -name lancast-faces.exe | head -1)" installer/lancast-faces.exe
           # The WebView2 loader is read straight from third_party/ by the .nsi —
           # it is committed rather than built, so there is nothing to stage. Fail
           # loudly if it has moved: makensis would otherwise error late, and a

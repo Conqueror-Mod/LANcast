@@ -105,6 +105,16 @@ Section "LANcast"
   ; Its absence is survivable: the client says the install is incomplete and
   ; opens the browser. That is a worse app, not a broken one — which is why
   ; this is a File line and not an abort.
+  ; The face worker (ADR 0052). Three megabytes, and bundled rather than
+  ; downloaded for one reason: the wire format between it and the server is
+  ; a contract, and a worker whose version can drift from the server driving
+  ; it is a support question nobody can answer from a log. Pinning both ends
+  ; to the same release is free.
+  ;
+  ; It is useless alone — the models and the ONNX runtime it needs are about
+  ; 115 MB and are fetched on request by somebody who wants the feature.
+  ; Most installs never do, and pay nothing for it.
+  File "lancast-faces.exe"
   File "..\third_party\webview2\x64\WebView2Loader.dll"
   File "..\README.md"
   File "..\LICENSE"
@@ -168,6 +178,7 @@ Section "Uninstall"
 
   Delete "$INSTDIR\LANcast-Server.exe"
   Delete "$INSTDIR\LANcast-Client.exe"
+  Delete "$INSTDIR\lancast-faces.exe"
   Delete "$INSTDIR\WebView2Loader.dll"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"

@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -385,9 +386,21 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 * they are data, they are large, and Program Files is not somewhere a
 	 * server should be writing.
 	 */
+	faceDir := filepath.Join(cfg.DataDir, "faces")
+	faceRuntime := os.Getenv("LANCAST_ONNXRUNTIME")
+	if faceRuntime == "" {
+		// Where the optional download puts it. The environment variable stays
+		// as an override for development, where the runtime is wherever the
+		// person building it happened to unpack it.
+		faceRuntime = filepath.Join(faceDir, onnxLibName())
+	}
 	faceTool := &faces.Tool{
-		ModelsDir: filepath.Join(cfg.DataDir, "faces"),
-		Runtime:   os.Getenv("LANCAST_ONNXRUNTIME"),
+		// Dir as well as ModelsDir: a worker installed by hand belongs beside
+		// the models it needs, and looking there first means an install that
+		// somebody assembled themselves is found before one on PATH.
+		Dir:       faceDir,
+		ModelsDir: faceDir,
+		Runtime:   faceRuntime,
 	}
 	faceWorker := faces.NewWorker(st, faceTool, log)
 
@@ -1218,5 +1231,19 @@ func periodicScan(ctx context.Context, st *store.Store, scanner *scan.Scanner,
 				log.Info("periodic scan started", "library", lib.ID, "every_hours", hours)
 			}
 		}
+	}
+}
+
+// onnxLibName is what the ONNX Runtime shared library is called on this
+// platform. Named here rather than in the installer because the server has to
+// find it whether it was downloaded or put there by hand.
+func onnxLibName() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "onnxruntime.dll"
+	case "darwin":
+		return "libonnxruntime.dylib"
+	default:
+		return "libonnxruntime.so"
 	}
 }
