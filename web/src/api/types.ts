@@ -339,6 +339,7 @@ export interface Settings {
   write_nfo: boolean;
   /* Whether picture folders and photos can be marked sensitive (ADR 0051). */
   sensitive_marking: boolean;
+  detect_markers: boolean;
   auto_enrich: boolean;
   update_check: boolean;
   encoder: { preference: string; active: Encoder; available: Encoder[] };
@@ -365,6 +366,7 @@ export interface SettingsUpdate {
   rate_per_sec?: number;
   write_nfo?: boolean;
   sensitive_marking?: boolean;
+  detect_markers?: boolean;
   auto_enrich?: boolean;
   update_check?: boolean;
   hardware_encoder?: string;
