@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 36
+const CurrentSchemaVersion = 37
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -75,6 +75,7 @@ var migrations = []migration{
 	{version: 34, sql: schemaRevision34},
 	{version: 35, sql: schemaRevision35},
 	{version: 36, sql: schemaRevision36},
+	{version: 37, sql: schemaRevision37},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1278,4 +1279,54 @@ CREATE TABLE IF NOT EXISTS dismissed_collision (
     members      TEXT PRIMARY KEY,
     dismissed_at INTEGER NOT NULL
 );
+`
+
+/*
+ * Where a film or an episode stops being itself (ADR 0054).
+ *
+ * A side table rather than columns on media_item, for three reasons. An item
+ * may carry more than one marker — credits and, from stage 2, an intro. A
+ * marker has provenance: which detector produced it, and how sure it was, so a
+ * wrong one can be traced to the rule that made it rather than merely
+ * corrected. And media_item is already 45 columns wide; ADR 0002 chose that
+ * shape deliberately and did not choose it as somewhere to keep growing.
+ *
+ * `kind` allows 'intro' from the start although nothing writes one yet. The
+ * intro detector is a different engine — cross-episode audio correlation
+ * rather than black frames — but it stores the same fact about the same item,
+ * and a second migration to add one string to a CHECK constraint would be a
+ * migration written to avoid thinking about it now.
+ *
+ * `end_ms` is nullable because the two markers mean different things by it.
+ * Credits run to the end of the file and their end is not interesting; an
+ * intro has a real finish, which is the point you skip *to*.
+ *
+ * `confidence` is stored rather than thresholded at write time. The rule that
+ * decides what is good enough is expected to change, and a marker discarded
+ * for being weak cannot be re-examined when the threshold moves — the whole
+ * reason stage 1 stores evidence instead of acting on it.
+ *
+ * `detected_at` is what makes the pass incremental, and it lives on media_item
+ * rather than here for the reason faces_at does: an item with no detectable
+ * credits produces no rows, and without a marker on the item itself it would
+ * be re-examined for ever. A film that fades to nothing is a real answer and
+ * has to be remembered as one.
+ *
+ * ON DELETE CASCADE because a marker is meaningless without its item, and this
+ * is the one place a row may vanish with the media rather than being marked
+ * missing: markers are derived, and a rescan can produce them again.
+ */
+const schemaRevision37 = `
+CREATE TABLE IF NOT EXISTS item_marker (
+	item_id     INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+	kind        TEXT    NOT NULL CHECK (kind IN ('credits', 'intro')),
+	start_ms    INTEGER NOT NULL,
+	end_ms      INTEGER,
+	source      TEXT    NOT NULL,
+	confidence  REAL    NOT NULL DEFAULT 0,
+	created_at  INTEGER NOT NULL,
+	PRIMARY KEY (item_id, kind)
+);
+ALTER TABLE media_item ADD COLUMN markers_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_item_markers ON media_item(kind, markers_at, missing);
 `
