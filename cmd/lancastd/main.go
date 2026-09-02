@@ -29,6 +29,7 @@ import (
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
 	"lancast/internal/identity"
+	"lancast/internal/marker"
 	"lancast/internal/mediatools"
 	"lancast/internal/meta"
 	"lancast/internal/meta/nfo"
@@ -373,6 +374,17 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	probes := probe.NewWorker(st, prober, log)
 
 	/*
+	 * The credits detector (ADR 0054), off unless asked for.
+	 *
+	 * Constructed unconditionally so the API can report why it is idle —
+	 * "switched off" and "ffmpeg missing" are different answers and a nil
+	 * worker cannot tell them apart. Whether it does any work is decided when
+	 * a pass is triggered, not here, so turning the setting on takes effect
+	 * without a restart.
+	 */
+	markers := marker.NewWorker(st, log)
+
+	/*
 	 * The face worker, which is optional and usually absent (ADR 0052).
 	 *
 	 * Constructed unconditionally and asked nothing here: `Tool` resolves the
@@ -475,6 +487,33 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer probeMu.Unlock()
 			if err := probes.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("probe pass failed", "error", err)
+			}
+		}()
+	}
+
+	/*
+	 * Credits detection, after probing rather than beside it.
+	 *
+	 * It needs the file's real duration to know where 88% of it is, and that
+	 * only exists once ffprobe has written one — until v0.8.51 duration_ms was
+	 * the provider's runtime on every film in a real library, which is the
+	 * wrong number by up to twelve per cent.
+	 *
+	 * Serialised behind its own mutex like the others, and cheap to call: a
+	 * pass with the setting off returns without touching the disk.
+	 */
+	var markerMu sync.Mutex
+	markerSoon := func() {
+		if !settings.Get().DetectMarkers || !markers.Available() {
+			return
+		}
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			markerMu.Lock()
+			defer markerMu.Unlock()
+			if err := markers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("credits detection pass failed", "error", err)
 			}
 		}()
 	}
@@ -628,7 +667,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	apiSrv := api.New(api.Deps{
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
-		Worker: worker, Probes: probes, Covers: covers, Photos: photos,
+		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
 		Faces: faceWorker, FaceTool: faceTool,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 		// Only for installs that are not a service; the service path
@@ -655,6 +694,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		ReloadPlugins: reloadPlugins,
 		Enrich:        enrichSoon,
 		Probe:         probeSoon,
+		DetectMarkers: markerSoon,
 		Cover:         coverSoon,
 	})
 
@@ -672,6 +712,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		enrichSoon()
 		coverSoon()
 		photoSoon()
+		// Last, and it will mostly find nothing to do on this pass: the items
+		// this scan added are not probed yet, so they become eligible on the
+		// next one rather than this one. That is the ordering being honest
+		// about itself rather than a race worth engineering around — nothing
+		// waits on a marker.
+		markerSoon()
 	})
 
 	// The persisted level. Only ever raises here: -v already set debug on the
@@ -706,6 +752,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Pick up anything left pending from a previous run.
 	probeSoon()
 	enrichSoon()
+	markerSoon()
 
 	// Bind before serving so a port clash is a clear startup failure rather
 	// than a background error nobody sees. An older instance still holding the
