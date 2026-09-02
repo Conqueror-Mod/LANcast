@@ -593,7 +593,7 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 ```json
 { "library_id": 1, "state": "running", "files_seen": 318,
   "items_changed": 12, "items_missing": 0, "skipped": 2,
-  "skipped_kind": 0, "skipped_extras": 14,
+  "skipped_kind": 0, "skipped_extras": 14, "skipped_untagged": 0,
   "episodes_in_movie_library": 0,
   "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
   "started_at": 1753228800 }
@@ -614,6 +614,18 @@ folder were empty.
 
 Only files that are media of the other sort are counted. Artwork, `.nfo`
 sidecars and subtitles are ignored by every library and would bury the signal.
+
+`skipped_untagged` counts tracks whose tags could not be read, whose title and
+album therefore come from the folder and the filename. Not part of `skipped`,
+for the third time and the same reason: nothing failed, the file imported and
+it plays.
+
+It has its own number because it was folded into `skipped` and that was
+reported as a bug from a real install — a music library said **38 skipped**,
+the issues list beside it was empty, and nothing in the interface could account
+for the number. Every genuine `skipped` records an `issue` naming the file;
+an untagged track records none, because there is no failure to name. A count a
+client offers to explain and then cannot is worse than no count.
 
 `skipped_extras` counts trailers, featurettes, deleted scenes and sample files
 left out of a video library ([ADR 0038](adr/0038-extras-are-not-works.md)). Also

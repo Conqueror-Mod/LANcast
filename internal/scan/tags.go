@@ -168,8 +168,11 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	if untagged > 0 {
 		s.log.Info("tracks without usable tags", "library", lib.ID, "count", untagged,
 			"note", "titles and albums for these come from folder and filename")
+		// Not Skipped: these files imported and play. Counting them as
+		// skipped made a music library report 38 failures it could not name,
+		// because a failure records an Issue and this is not one.
 		s.mu.Lock()
-		p.Skipped += untagged
+		p.SkippedUntagged += untagged
 		s.mu.Unlock()
 	}
 

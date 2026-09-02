@@ -170,8 +170,18 @@ func TestScanUntaggedTrackKeepsFilenameAndIsReported(t *testing.T) {
 	if it.Episode == nil || *it.Episode != 3 {
 		t.Errorf("track = %v, want 3 from the filename", it.Episode)
 	}
-	if p.Skipped == 0 {
+	if p.SkippedUntagged == 0 {
 		t.Error("an untagged track was not reported; a library that looks wrong must say why")
+	}
+	// The other half, and the reason this has its own field: nothing failed.
+	// Counted as Skipped it became a failure the UI offered to explain and
+	// then could not, because a failure records an Issue and this records
+	// none.
+	if p.Skipped != 0 {
+		t.Errorf("Skipped = %d, want 0 — an untagged track is not a failure", p.Skipped)
+	}
+	if len(p.Issues) != 0 {
+		t.Errorf("Issues = %+v, want none to explain", p.Issues)
 	}
 }
 

@@ -427,6 +427,11 @@ export interface ScanStatus {
   // library (ADR 0038). Not a failure and not part of `skipped`: nothing went
   // wrong reading them, they are simply not works.
   skipped_extras: number;
+  // Tracks whose tags could not be read, taking their title and album from the
+  // folder and filename instead. Not part of `skipped` and not a failure: the
+  // file imported and plays. It has its own number because counting it as
+  // skipped made a library report failures it could not name.
+  skipped_untagged: number;
   /** Files that parsed as episodes in a library that says it holds films. */
   episodes_in_movie_library?: number;
   /**
@@ -582,6 +587,14 @@ export interface Activity {
 export interface ActivityStatus {
   active: boolean;
   tasks: Activity[];
+  /**
+   * When background work last finished, in unix seconds. 0 means nothing has
+   * ever finished, which is not the same as "just now".
+   *
+   * Watched instead of the active-to-idle edge, because work shorter than the
+   * idle poll interval is never seen as active and produces no edge at all.
+   */
+  completed_at?: number;
   /**
    * The version waiting to be applied on the next restart, when there is one.
    *

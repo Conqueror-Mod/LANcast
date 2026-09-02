@@ -48,6 +48,22 @@ type Progress struct {
 	// no way to discover where the extra ones came from. Saying "189 extras" is
 	// the whole explanation.
 	SkippedExtras int `json:"skipped_extras"`
+	/*
+	 * SkippedUntagged counts tracks whose tags could not be read, whose title
+	 * and album therefore come from the folder and the filename.
+	 *
+	 * Its own number for the reason SkippedKind and SkippedExtras have theirs:
+	 * **nothing went wrong**. The file imported, it plays, and it appears in
+	 * the library — it simply describes itself less well.
+	 *
+	 * It was folded into Skipped, and that was reported as a bug from a real
+	 * install: a music library said "38 skipped", the issues list beside it was
+	 * empty, and the count could not be explained by anything the UI could
+	 * show. Skipped means a file the scan could not process, and every one of
+	 * those records an Issue naming it; untagged tracks record none, because
+	 * there is no failure to name.
+	 */
+	SkippedUntagged int `json:"skipped_untagged"`
 	// EpisodesInMovieLibrary counts files in a `movie` library that parsed as
 	// episodes — S01E02, 1x02, and the rest.
 	//

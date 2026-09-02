@@ -220,6 +220,9 @@ export function LibraryRow({ library }: { library: Library }) {
   // ignored, and the setting that ignored it.
   const skippedKind = status?.skipped_kind ?? 0;
   const skippedExtras = status?.skipped_extras ?? 0;
+  // Tracks that imported without usable tags. Stated beside the other two for
+  // the same reason: it explains a number nobody can otherwise account for.
+  const skippedUntagged = status?.skipped_untagged ?? 0;
   // Live progress first, the stored row second: the in-memory one is fresher
   // during and just after a scan, and the row is what is left after a restart.
   const warning = status?.shape_warning ?? library.shape_warning;
@@ -327,6 +330,14 @@ export function LibraryRow({ library }: { library: Library }) {
               {skippedExtras.toLocaleString()} extra
               {skippedExtras === 1 ? "" : "s"} not imported — trailers,
               featurettes, deleted scenes and sample files are not works.
+            </div>
+          )}
+          {!running && skippedUntagged > 0 && (
+            <div className="set-row__note">
+              {skippedUntagged.toLocaleString()} track
+              {skippedUntagged === 1 ? "" : "s"} had no readable tags — their
+              titles and albums come from the folder and filename. They are in
+              the library and they play; nothing failed.
             </div>
           )}
           {!running && skippedKind > 0 && (
