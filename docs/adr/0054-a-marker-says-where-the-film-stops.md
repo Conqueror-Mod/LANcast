@@ -120,18 +120,40 @@ one, and constraining the search to start at 88% moved every one of them to a
 plausible position — *The Beastmaster* 77.9% → 93.9%, *Blow* 77.6% → 95.4%,
 *Generation X* 84.2% → 97.2%.
 
-**That 88% is tuned on the same 40 films it was derived from, which is not
-evidence.** A held-out sample of 40 films the constant has never seen is being
-gathered, with the rule frozen beforehand so the result cannot be fitted to.
-Until that reports, the rule is a hypothesis with a good first showing and
-nothing more — which is exactly why this stage stores markers rather than
-acting on them.
+**That 88% was tuned on the same 40 films it came from, which is not
+evidence — so it was tested on 40 it had never seen**, with the rule and its
+constants frozen in code before the second sample was gathered:
 
-And a clean held-out result would still only prove the rule is **consistent**,
-not that it is **right**. Nobody has yet watched a film and written down where
-its credits begin. That is the only ground truth there is, it is the reason
-stage 1 exposes markers for inspection, and no amount of agreement between
-detectors substitutes for it.
+| | tuned (sample 1) | **held out (sample 2)** |
+|---|---|---|
+| answered | 39/40 | **38/40** |
+| median boundary | 94.1% | **94.3%** |
+| range | 88.3–99.3% | **89.3–99.2%** |
+| outside the window | 0 | **0** |
+| pressed against the 88% floor | 1 | **0** |
+
+**The floor is not doing the deciding.** That was the specific way this could
+have been overfitted, and it is why the validator counts it: if 88% were a
+number fitted to the first sample, the second would pile up against it. Nothing
+does. The lowest held-out answer is 89.3%, a full point clear, and 26 of the 38
+sit between 92% and 96%.
+
+**Both abstentions are principled**, which matters more than the count. *Jackass
+2.5* is a clip film whose longest tail black run is 1.8s, under the 2s
+fallback. *At World's End* has **one** black run in its entire tail, at 99.9% —
+its credits begin on a cut, not a fade. That is the real limit of this method
+and no threshold fixes it: a film that does not fade into its credits has
+nothing here to detect.
+
+Lowering the fallback to 1.5s would answer *Jackass 2.5*. It is **not** being
+lowered, because that number would then have been chosen by looking at the
+held-out set, and the honest version of this table would no longer exist.
+
+What all of this proves is that the rule is **consistent**, not that it is
+**right**. Nobody has yet watched a film and written down where its credits
+begin. That is the only ground truth there is, it is the reason stage 1 exposes
+markers for inspection rather than acting on them, and no amount of agreement
+between detectors substitutes for it.
 
 Two things are settled regardless. The median boundary sits at **94%**, so the
 90% threshold was never a credits estimate and a marker is not a refinement of
