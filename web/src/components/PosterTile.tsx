@@ -9,9 +9,23 @@ import { episodeLabel, rating } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
+/*
+ * The row that carries the progress is not always the row on the tile.
+ *
+ * On Continue Watching a show tile stands for its next episode: the show has
+ * no position of its own and no duration either, so reading the show would
+ * draw an empty bar under a half-watched series. Read whichever row actually
+ * holds a position — the episode when there is one, the item itself
+ * otherwise.
+ */
+function progressSource(item: Item): Item {
+  return item.next_episode ?? item;
+}
+
 function progressPct(item: Item): number {
-  const pos = item.progress?.position_ms ?? 0;
-  const dur = item.duration_ms ?? 0;
+  const src = progressSource(item);
+  const pos = src.progress?.position_ms ?? 0;
+  const dur = src.duration_ms ?? 0;
   if (!pos || !dur) return 0;
   return Math.min(100, (pos / dur) * 100);
 }
@@ -134,7 +148,13 @@ export function PosterTile({
    * a shelf — the episode title alone is not an identification. "Stray Dog
    * Strut · 1998" reads as an obscure film; it is Cowboy Bebop S01E02.
    */
-  const episode = episodeLabel(item);
+  /*
+   * A show on Continue Watching labels itself with the episode it would play,
+   * not with nothing. The show carries no season or episode number, so asking
+   * it directly returns empty and the tile loses the one line that says where
+   * you are in the series.
+   */
+  const episode = episodeLabel(item.next_episode ?? item);
   const score = rating(item.rating);
 
   return (

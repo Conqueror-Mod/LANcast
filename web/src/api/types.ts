@@ -234,6 +234,14 @@ export interface Item {
   height?: number | null;
   taken_at?: number | null;
   progress?: Progress | null;
+  /*
+   * The episode a show would play next. Set only on the Continue Watching
+   * shelf, where the row is the show rather than the episode.
+   *
+   * Its own progress is the episode's — the show has no position of its own,
+   * so a tile draws its resume bar from here.
+   */
+  next_episode?: Item | null;
 }
 
 // The anatomy of a candidate's score: sub-scores (0..1) that combine by their

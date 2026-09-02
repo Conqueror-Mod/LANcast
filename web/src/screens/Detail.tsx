@@ -11,9 +11,9 @@ import {
   fetchArtistQueue,
   usePlaylistEntries,
   useDeletePlaylist,
-  fetchShowContinue,
   fetchShowEpisodes,
 } from "@/api/hooks";
+import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { CastRow } from "./CastRow";
 import { useFocusable, useBackHandler } from "@/focus/FocusController";
@@ -447,41 +447,29 @@ export function Detail() {
     setShowBusy("continue");
     setShowNote(null);
     try {
-      const next = await fetchShowContinue(item.id);
-      if (next.exhausted) {
+      const target = await showContinueTarget(item.id);
+      if (target.kind === "exhausted") {
         // Said rather than silently replayed. Finishing a show is an outcome,
         // and a button that quietly restarts the finale is one nobody trusts
         // afterwards.
         setShowNote("You have watched every episode. Use Play to start again.");
         return;
       }
-      if (!next.episode) {
+      if (target.kind === "empty") {
         setShowNote("This show has no episodes yet.");
         return;
       }
       /*
-       * Continue hands over the rest of the show, not one episode.
+       * Continue hands over the rest of the show, not one episode, and the
+       * queue it hands over is built in one place — showContinueTarget, which
+       * the Continue Watching shelf presses too. Two callers deciding
+       * separately what follows an episode is how they come to disagree.
        *
-       * It used to navigate with no queue at all, and the player falls back to
-       * a queue of the single item it was given — so the episode you resumed
-       * played and the show stopped dead, because there was nothing after it to
-       * advance to. With repeat on it was worse: a one-item queue wraps onto
-       * itself, and the same episode replayed for ever. That is how it was
-       * found.
-       *
-       * The episodes from this one onward rather than all of them, because
-       * Continue means "carry on from here" — putting the earlier ones in the
-       * queue would make the *previous* button walk back through episodes the
-       * viewer has already finished, which Play from the top is for.
-       *
-       * Same shape as playShow, deliberately: history state rather than the
-       * URL, since a long-running show is far too many ids for a query string.
+       * History state rather than the URL, since a long-running show is far
+       * too many ids for a query string.
        */
-      const eps = await fetchShowEpisodes(item.id);
-      const from = eps.findIndex((e) => e.id === next.episode!.id);
-      const queue = from >= 0 ? eps.slice(from) : [next.episode];
-      navigate(`/watch/${next.episode.id}`, {
-        state: { queue: queue.map((e) => e.id) },
+      navigate(`/watch/${target.episodeID}`, {
+        state: { queue: target.queue },
       });
     } finally {
       setShowBusy(null);

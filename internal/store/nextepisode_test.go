@@ -225,3 +225,112 @@ func TestEpisodesAreQueuedInPlayingOrder(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The Continue Watching shelf holds shows, not episodes.
+ *
+ * Both of these failed before the shelf collapsed episodes to their show, and
+ * the second one is the reason it had to: finishing an episode is the ordinary
+ * way to stop watching television, and it was the one way to fall off the
+ * shelf entirely.
+ */
+
+func TestShelfShowsTheShowRatherThanTheEpisode(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	show, eps := seedShow(t, st)
+	markInProgress(t, st, eps[0], "u", 5000)
+
+	got, err := st.ContinueWatching(ctx, "u", 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1", len(got))
+	}
+	if got[0].ID != show {
+		t.Errorf("row is item %d, want the show %d — the shelf lists shows", got[0].ID, show)
+	}
+	if got[0].Kind != "show" {
+		t.Errorf("Kind = %q, want show", got[0].Kind)
+	}
+	if got[0].NextEpisode == nil {
+		t.Fatal("NextEpisode is nil — the tile has nothing to play")
+	}
+	if got[0].NextEpisode.ID != eps[0] {
+		t.Errorf("NextEpisode = %d, want the in-progress episode %d",
+			got[0].NextEpisode.ID, eps[0])
+	}
+	// The bar is the episode's; a show has no position of its own.
+	if got[0].NextEpisode.Progress == nil || got[0].NextEpisode.Progress.PositionMS == 0 {
+		t.Errorf("NextEpisode.Progress = %+v, want the saved position",
+			got[0].NextEpisode.Progress)
+	}
+}
+
+// The regression that motivated the change: two watched episodes, none in
+// progress, and the show had no place on the shelf at all.
+func TestShelfKeepsAShowBetweenEpisodes(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	show, eps := seedShow(t, st)
+	markWatched(t, st, eps[0], "u")
+	markWatched(t, st, eps[1], "u")
+
+	got, err := st.ContinueWatching(ctx, "u", 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1 — a finished episode must not remove the show", len(got))
+	}
+	if got[0].ID != show {
+		t.Errorf("row is %d, want the show %d", got[0].ID, show)
+	}
+	if got[0].NextEpisode == nil || got[0].NextEpisode.ID != eps[2] {
+		t.Errorf("NextEpisode = %v, want the next unwatched episode %d",
+			got[0].NextEpisode, eps[2])
+	}
+}
+
+// The other end of the same rule: nothing left to continue means no row, which
+// matches the show page refusing to replay the finale.
+func TestShelfDropsAFullyWatchedShow(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	_, eps := seedShow(t, st)
+	for _, e := range eps {
+		markWatched(t, st, e, "u")
+	}
+
+	got, err := st.ContinueWatching(ctx, "u", 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d rows, want none — every episode is watched", len(got))
+	}
+}
+
+// One row per show however many episodes have been touched, or a binge fills
+// the shelf with itself.
+func TestShelfCollapsesManyEpisodesToOneRow(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	_, eps := seedShow(t, st)
+	markWatched(t, st, eps[0], "u")
+	markWatched(t, st, eps[1], "u")
+	markInProgress(t, st, eps[2], "u", 9000)
+
+	got, err := st.ContinueWatching(ctx, "u", 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1", len(got))
+	}
+	if got[0].NextEpisode == nil || got[0].NextEpisode.ID != eps[2] {
+		t.Errorf("NextEpisode = %v, want the in-progress episode %d",
+			got[0].NextEpisode, eps[2])
+	}
+}

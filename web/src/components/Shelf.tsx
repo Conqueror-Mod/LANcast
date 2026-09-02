@@ -18,13 +18,27 @@ interface Props {
    * shelf is not the thing that knows which of those it is.
    */
   itemActions?: (item: Item) => MenuAction[];
+  /*
+   * What pressing a tile does, when the default is wrong for this shelf.
+   *
+   * Continue Watching needs it: its rows are shows, and opening a show's
+   * detail page is not continuing it. Returning undefined for an item leaves
+   * that tile with the ordinary behaviour, so one shelf can mix the two.
+   */
+  itemOpen?: (item: Item) => (() => void) | undefined;
 }
 
 // A horizontally scrolling hub row. The header pairs a wide-tracked label with a
 // gold-to-transparent hairline trailing right, per design.md. Tiles reuse the
 // same PosterTile as the grid, so focus, the gold rule, and progress bars are
 // identical everywhere.
-export function Shelf({ title, items, seeAllTo, itemActions }: Props) {
+export function Shelf({
+  title,
+  items,
+  seeAllTo,
+  itemActions,
+  itemOpen,
+}: Props) {
   const track = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState<Edges>({ left: false, right: false });
 
@@ -106,7 +120,11 @@ export function Shelf({ title, items, seeAllTo, itemActions }: Props) {
         <div className="shelf__track" ref={track} onScroll={measure}>
           {items.map((item) => (
             <div className="shelf__item" key={item.id}>
-              <PosterTile item={item} actions={itemActions} />
+              <PosterTile
+                item={item}
+                actions={itemActions}
+                onOpen={itemOpen?.(item)}
+              />
             </div>
           ))}
         </div>

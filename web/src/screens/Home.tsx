@@ -16,6 +16,7 @@ import { HomeMasthead } from "@/components/HomeMasthead";
 import { TrendingShelf } from "@/components/TrendingShelf";
 import { isMusic, isPicture, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
+import { showContinueTarget } from "@/lib/continueShow";
 import "./Home.css";
 
 // One library's own shelf. A component per library so each owns its query
@@ -166,6 +167,40 @@ export function Home() {
   const recentAudio = recentlyAddedMusic ?? [];
   const recentPictures = (recentPhotos ?? []).filter((i) => !i.missing);
 
+  /*
+   * Pressing a show on this shelf continues the show; pressing a film opens
+   * the film, which is what the default already does.
+   *
+   * The tile carries `next_episode` so it can draw the right title and bar,
+   * and deliberately does not use it to decide what to play — showContinueTarget
+   * re-asks the server, because this list is up to ten seconds old and landing
+   * on an episode already finished is the exact failure that endpoint refuses
+   * to cache against.
+   *
+   * A failure here navigates to the show instead of dying silently: the shelf
+   * is not a page that can grow an error banner, and the show page can both
+   * explain itself and offer Play.
+   */
+  const continueOpen = (item: Item) => {
+    if (item.kind !== "show") return undefined;
+    return () => {
+      void (async () => {
+        try {
+          const target = await showContinueTarget(item.id);
+          if (target.kind !== "play") {
+            navigate(`/item/${item.id}`);
+            return;
+          }
+          navigate(`/watch/${target.episodeID}`, {
+            state: { queue: target.queue },
+          });
+        } catch {
+          navigate(`/item/${item.id}`);
+        }
+      })();
+    };
+  };
+
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
     (recentlyAddedVideo?.length ?? 0) > 0 ||
@@ -187,6 +222,7 @@ export function Home() {
           title="Continue Watching"
           items={continueVideo}
           itemActions={continueActions}
+          itemOpen={continueOpen}
         />
         <Shelf
           title="Continue Listening"
