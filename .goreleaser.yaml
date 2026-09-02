@@ -101,6 +101,15 @@ archives:
     files:
       - README.md
       - LICENSE
+    # NOTICE carries the attribution Apache-2.0 asks of the Go dependencies,
+    # and COMMERCIAL.md is the offer NOTICE points at — shipping NOTICE
+    # without it leaves a dangling reference in the archive somebody actually
+    # downloaded. Both were added to the faces archives when those were
+    # written and never backfilled here, so every release from v0.8.45 (the
+    # AGPL move, ADR 0053) to v0.8.51 shipped the licence without the
+    # attribution that accompanies it.
+      - NOTICE
+      - COMMERCIAL.md
       # Microsoft's WebView2 loader shim, which the client's window mode calls
       # into (ADR 0023 stage 1). It has to sit beside LANcast-Client.exe.
       #
@@ -118,6 +127,8 @@ archives:
     files:
       - README.md
       - LICENSE
+      - NOTICE
+      - COMMERCIAL.md
 
   # lancast-faces gets its own archives, one per platform.
   #
@@ -139,13 +150,13 @@ archives:
     ids: [lancast-faces-windows]
     name_template: "lancast-faces_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [zip]
-    files: [README.md, LICENSE, NOTICE]
+    files: [README.md, LICENSE, NOTICE, COMMERCIAL.md]
 
   - id: faces-linux
     ids: [lancast-faces-linux]
     name_template: "lancast-faces_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
-    files: [README.md, LICENSE, NOTICE]
+    files: [README.md, LICENSE, NOTICE, COMMERCIAL.md]
 
 checksum:
   name_template: "checksums.txt"
