@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 37
+const CurrentSchemaVersion = 38
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -76,6 +76,7 @@ var migrations = []migration{
 	{version: 35, sql: schemaRevision35},
 	{version: 36, sql: schemaRevision36},
 	{version: 37, sql: schemaRevision37},
+	{version: 38, sql: schemaRevision38},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1329,4 +1330,22 @@ CREATE TABLE IF NOT EXISTS item_marker (
 );
 ALTER TABLE media_item ADD COLUMN markers_at INTEGER;
 CREATE INDEX IF NOT EXISTS idx_item_markers ON media_item(kind, markers_at, missing);
+`
+
+/*
+ * When an episode was last examined for an intro (ADR 0055).
+ *
+ * Its own stamp rather than reusing markers_at, because the two passes are
+ * different shapes and one column cannot express both. Credits are decided per
+ * file; an intro is decided per *season*, and an episode may be examined for
+ * credits long before its season has enough siblings to compare it against.
+ * Sharing a column would let either pass claim the other had run.
+ *
+ * Nullable and unindexed beyond the composite below: the query that reads it
+ * groups by show and season and is bounded by the number of seasons in a
+ * library, which is small.
+ */
+const schemaRevision38 = `
+ALTER TABLE media_item ADD COLUMN intros_at INTEGER;
+CREATE INDEX IF NOT EXISTS idx_item_intros ON media_item(kind, missing, intros_at);
 `

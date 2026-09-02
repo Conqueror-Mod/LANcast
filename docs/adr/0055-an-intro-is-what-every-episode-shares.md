@@ -5,7 +5,14 @@ Date: 2026-09-02 · Status: **proposed**
 Stage 2 of [ADR 0054](0054-a-marker-says-where-the-film-stops.md), which
 recorded intros as a second stage and deliberately did not design them. It
 reuses 0054's `item_marker` table and its worker shape; `kind = 'intro'` has
-been permitted since revision 37 precisely so this needs no migration.
+been permitted since revision 37 precisely so no marker table change is needed.
+
+It does add **revision 38**, a single `intros_at` stamp on `media_item`. That
+is not the table 0054 anticipated, and it is separate from `markers_at` rather
+than shared with it because the two passes are different shapes: credits are
+decided per file, an intro per *season*. An episode may be examined for credits
+long before its season has enough siblings to compare it against, and one
+column could not say so without letting either pass claim the other had run.
 
 ## Why credits detection says nothing about intros
 
@@ -48,6 +55,31 @@ theme is long and musical and returns runs from 5.8 to 48.9 seconds; Futurama
 answers on four episodes of five. Neither is failure, but neither is a marker
 anybody should skip to yet.
 
+## What it produces on a real library
+
+Run end to end against a copy of a real database — migration, queue, decode,
+fingerprint, rule and stored markers — the pass answers on roughly half the
+episodes it examines and refuses the rest:
+
+```
+Black Books S1   5 of 6    ~0.5s → ~27s      lengths 24–28s
+Futurama S2      8 of 20   ~0.8s → ~29s      lengths 13–28s
+Futurama S3      8 of 15   ~0.7s → ~29s      lengths 21–28s
+Blue Mountain State S1/S2  0 of 26
+```
+
+Both shapes in that table are the design working. The positions cluster near
+zero where a show opens on its titles and jump where it does not — Black Books
+*Fever* at 62.1s, Futurama *Insane in the Mainframe* at 10.7s — which is the
+variable cold open that made a fixed timestamp impossible.
+
+The refusals are the majority rule being conservative: three of four
+comparisons must agree, and an episode where only two do is left unmarked
+rather than guessed at. Blue Mountain State produces nothing at all across 26
+episodes, which is either a show whose episodes share too little audio or a
+limit of the fingerprint on that material; it has not been established which,
+and the honest record is that it is not known.
+
 ## What nearly buried it, and is worth recording
 
 The first run over real episodes found almost nothing: inconsistent offsets, no
@@ -81,11 +113,23 @@ agree, and it is stored per episode rather than per show.**
 between seasons, and a rule that compared across a whole run would find the
 weakest thing common to all of them or nothing at all.
 
-**2. Agreement is required, and by length rather than position.** The
-measurement says the length of the shared block is stable to within a second
-while its position moves by minutes. A candidate is accepted when a majority of
-compared pairs return runs of consistent length; its position is then taken
-from that episode's own match and never from an average.
+**2. Agreement is required, and by where the candidates begin.** A majority of
+an episode's comparisons must return runs starting within a few seconds of each
+other; the marker is then the median start and median end of that group.
+
+This was written the other way round first — agreement by *length* — and the
+implementation disproved it. Reading the raw candidates rather than their
+summary: Black Books S1E01 matched its four siblings at lengths **23.4, 15.1,
+24.9 and 28.2** seconds, a thirteen-second spread, while starting at **4, 3, 2
+and 0**. A length is the difference of two noisy quantities and carries both
+errors; a start carries one. Clustering on length refused four episodes in six
+of that season, and clustering on start finds them.
+
+The first rule came from conflating two facts. Sunny's positions vary between
+44s and 193s **across** episodes, which is why no marker may assume a fixed
+timestamp — but *within* one episode every candidate describes that same
+episode's intro, so those starts agree. Both statements are true and only the
+first was in evidence when the rule was written.
 
 **3. Both ends are stored.** `start_ms` and `end_ms`, because unlike credits an
 intro has a real finish — the point a viewer would skip *to*. This is what

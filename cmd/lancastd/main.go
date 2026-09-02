@@ -515,6 +515,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			if err := markers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("credits detection pass failed", "error", err)
 			}
+			// Intros after credits, under the same setting and the same
+			// mutex. A season is the unit here rather than a file (ADR 0055),
+			// so it is a separate pass rather than another branch inside the
+			// first one.
+			if err := markers.RunIntros(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("intro detection pass failed", "error", err)
+			}
 		}()
 	}
 
