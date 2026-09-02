@@ -124,9 +124,25 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	 * which case reopening runs the same binary, the versions still differ, and
 	 * the advice repeats for ever.
 	 */
+	/*
+	 * `completed_at` is how a client learns that work happened, and it exists
+	 * because `active` cannot tell it.
+	 *
+	 * A client polls this endpoint every eight seconds while idle and watches
+	 * for the active-to-idle edge. Work shorter than that gap is never seen as
+	 * active at all, so no edge occurs and nothing is invalidated: an
+	 * incremental music scan finishing in four seconds left Recently Added
+	 * showing its old contents until something happened to remount it. The
+	 * server was right, the request succeeded, and only the picture was stale
+	 * — which is this project's most-repeated bug and always this quiet.
+	 *
+	 * A monotonic stamp is immune to that. It does not matter whether the
+	 * client saw the work, only that the stamp is later than the one it holds.
+	 */
 	body := map[string]any{
-		"active": len(tasks) > 0,
-		"tasks":  tasks,
+		"active":       len(tasks) > 0,
+		"tasks":        tasks,
+		"completed_at": lastCompleted(snap),
 	}
 	if snap.staged != "" {
 		body["staged"] = snap.staged
@@ -258,4 +274,26 @@ func photoDetail(st photo.Stats) string {
 	default:
 		return failedDetail(st.Failed)
 	}
+}
+
+/*
+ * lastCompleted is the most recent moment any background work finished.
+ *
+ * Scans are the only worker that records a finish time today, which is enough:
+ * they are what changes what a list holds. Enrichment and probing alter rows a
+ * list already contains, and those surfaces refetch on their own.
+ *
+ * Zero when nothing has ever finished, which a client must read as "no
+ * information" rather than as "just now" — the difference matters on a fresh
+ * install, where treating it as a completion would invalidate every query on
+ * the first poll.
+ */
+func lastCompleted(snap snapshot) int64 {
+	var latest int64
+	for _, sc := range snap.scans {
+		if sc.progress.FinishedAt != nil && *sc.progress.FinishedAt > latest {
+			latest = *sc.progress.FinishedAt
+		}
+	}
+	return latest
 }

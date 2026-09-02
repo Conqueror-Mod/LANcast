@@ -1613,9 +1613,34 @@ export function useActivity() {
     queryKey: ["activity"],
     queryFn: async ({ signal }) => {
       const s = await apiGet<ActivityStatus>("/api/activity", signal);
-      // Work finishing changes item counts, so the nav is refreshed once here
-      // rather than every poll.
-      if (!s.active && qc.getQueryData<ActivityStatus>(["activity"])?.active) {
+      const prev = qc.getQueryData<ActivityStatus>(["activity"]);
+
+      /*
+       * Two ways to notice that work finished, and the second is the one that
+       * actually catches it.
+       *
+       * The active-to-idle edge only fires if a poll happened to land while
+       * the work was running. This polls every eight seconds when idle, so a
+       * scan that takes four never appears active at all — which is exactly
+       * what a small incremental music scan does. Recently Added went on
+       * showing its old contents until something remounted it, because
+       * nothing had invalidated anything.
+       *
+       * `completed_at` is monotonic, so it does not matter whether the work
+       * was ever observed. A stamp later than the one held means something
+       * finished in between, however briefly it ran.
+       *
+       * The first poll of a session has no previous stamp and must not
+       * invalidate: there is nothing stale yet, and treating "I have not
+       * looked before" as "work just finished" would refetch everything on
+       * every launch.
+       */
+      const finishedSinceLastLook =
+        prev?.completed_at !== undefined &&
+        (s.completed_at ?? 0) > prev.completed_at;
+      const wentIdle = !s.active && prev?.active === true;
+
+      if (finishedSinceLastLook || wentIdle) {
         for (const key of workFinishedKeys) {
           qc.invalidateQueries({ queryKey: [key] });
         }
