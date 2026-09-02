@@ -91,25 +91,52 @@ media on disk.
 
 **3. A marker is evidence before it is a feature.** The first build stores
 markers and exposes them for inspection; it does **not** move the watched
-threshold and does **not** draw a button. The reason is in the measurement —
-`blackdetect` over the last quarter of four random films found black frames in
-all four, and found them *ambiguous*:
+threshold and does **not** draw a button.
 
-```
-Hot Tub Time Machine   86.7% (1.3s)   94.5% (8.7s)
-Memento                97.7% (9.3s)  100.2% (13.8s)
-The NeverEnding Story  85.1% … eight runs … 93.1%
-The Outsiders          93.6%  then black past the declared end
-```
+That was originally written because the selection rule was unknown —
+`blackdetect` over four film tails found candidates in all four and eight in
+one of them. Rather than leave it at that, a harness gathered black and silent
+stretches from the tails of **40 films**, and scoring six rules against them
+eliminated three outright:
 
-A single black frame is not a credits sequence. *The NeverEnding Story* offers
-eight candidates in its tail, and the honest reading of this table is that the
-selection rule — longest run, last sustained run, black plus silence — is
-**not yet known**, and picking one now would be choosing by taste and shipping
-it as a fact. Marking a dozen films by hand and scoring the candidates against
-them is cheap, and it is the only thing that turns this into a rule. `The
-Outsiders` also makes the point that a wrong duration corrupts the reading
-itself: its black frames land at 120% of what the database claimed.
+| rule | answers | median | too early | past 99.5% |
+|---|---|---|---|---|
+| earliest ≥5s within 88–99.5%, else ≥2s | **39/40** | **94.1%** | **0** | **0** |
+| earliest ≥5s, refusing the last 0.5% | 32/40 | 94.0% | 1 | 0 |
+| earliest ≥2s | 40/40 | 93.1% | 3 | 1 |
+| longest black run | 40/40 | 95.5% | 1 | 4 |
+| earliest ≥5s overlapping silence | 20/40 | 96.3% | — | 7 |
+| last ≥5s | 33/40 | 99.7% | 0 | **20** |
+
+**The last black run is the file ending, not the credits starting** — 20 of its
+33 answers land in the final half-percent. **Silence is worse than useless
+here**: it answers for half the sample and lands late when it does, because
+credits have music over them. *Hollow Man* has exactly one silent stretch in
+its entire tail. And the **longest** run is usually the final fade-out.
+
+What survives is the *earliest* sustained black run, and its one failure mode
+has a name: a deliberate fade-to-black inside the third act. Five films picked
+one, and constraining the search to start at 88% moved every one of them to a
+plausible position — *The Beastmaster* 77.9% → 93.9%, *Blow* 77.6% → 95.4%,
+*Generation X* 84.2% → 97.2%.
+
+**That 88% is tuned on the same 40 films it was derived from, which is not
+evidence.** A held-out sample of 40 films the constant has never seen is being
+gathered, with the rule frozen beforehand so the result cannot be fitted to.
+Until that reports, the rule is a hypothesis with a good first showing and
+nothing more — which is exactly why this stage stores markers rather than
+acting on them.
+
+And a clean held-out result would still only prove the rule is **consistent**,
+not that it is **right**. Nobody has yet watched a film and written down where
+its credits begin. That is the only ground truth there is, it is the reason
+stage 1 exposes markers for inspection, and no amount of agreement between
+detectors substitutes for it.
+
+Two things are settled regardless. The median boundary sits at **94%**, so the
+90% threshold was never a credits estimate and a marker is not a refinement of
+it. And *The Outsiders* shows that a wrong duration corrupts the reading
+itself: its black frames landed at 120% of what the database claimed.
 
 **4. Once a rule is proven, the marker replaces the guess.** A credits marker
 becomes the watched threshold for that item — finishing means reaching the
