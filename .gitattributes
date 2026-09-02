@@ -1,3 +1,53 @@
+# Line endings are decided here rather than by whoever happens to clone.
+#
+# Without a global rule the answer comes from each machine's core.autocrlf,
+# which is true on a Windows install and false on CI. The cost is not tidiness:
+# a Go file checked out with CRLF makes `gofmt -l .` list nearly every file in
+# the repository — 312 of 483 before this — so the one local check that would
+# catch real formatting drift is drowned, and the offender is found by CI going
+# red instead.
+#
+# This rule is first on purpose. Later rules win in a .gitattributes, so every
+# specific declaration below still overrides it.
+* text=auto eol=lf
+
+# Windows-only scripts, where LF makes a batch file misbehave in ways that look
+# like the script being wrong.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Declared binary rather than left to `text=auto` detection, because for these
+# a wrong guess corrupts the file instead of formatting it oddly.
+#
+# The .wasm entries are the ones that matter most. A plugin bundle's identity is
+# a SHA-256 over its manifest and module (ADR 0021), and its signature is
+# checked before it is ever compiled — so a single byte changed by line-ending
+# conversion does not produce a subtly wrong plugin, it produces one that no
+# longer verifies. The .syso files are COFF objects the linker reads byte for
+# byte, and the installer bitmap likewise.
+*.wasm binary
+*.syso binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.bmp binary
+*.mp4 binary
+*.webm binary
+*.mp3 binary
+*.flac binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.onnx binary
+
 # The embedded client bundle is a generated build artifact (committed so
 # `go build` is self-contained). Keep it out of general line-ending churn, but
 # pin its text files to LF so a Windows build and a Linux CI build produce
