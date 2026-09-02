@@ -25,7 +25,23 @@ func Merge(current Record, locked map[string]bool, locals, remotes []Record) Rec
 	pick(locked, FieldRating, &out.Fields.Rating, ordered, func(r Record) *float64 { return r.Fields.Rating })
 	pick(locked, FieldContentRating, &out.Fields.ContentRating, ordered, func(r Record) *string { return r.Fields.ContentRating })
 	pick(locked, FieldReleasedAt, &out.Fields.ReleasedAt, ordered, func(r Record) *int64 { return r.Fields.ReleasedAt })
-	pick(locked, FieldDurationMS, &out.Fields.DurationMS, ordered, func(r Record) *int64 { return r.Fields.DurationMS })
+
+	// Duration is measured, not described, and this is the one field where a
+	// provider is answering a different question. TMDB's runtime is the
+	// theatrical one in whole minutes; the file is what a viewer actually
+	// plays, and across a 40-file sample of this library one in eight
+	// disagreed by more than 2%: The Book of Eli declared 118 minutes against
+	// a 110.2-minute file, Ghostbusters 117 against 133.7.
+	//
+	// That corrupts every percentage computed from a duration, and the watched
+	// threshold worst of all, because it is a denominator. An overstated
+	// runtime puts 90% past the end of the file, so the item cannot be
+	// finished by watching it — which is exactly how it was reported.
+	//
+	// So a source may supply a duration only when nothing has measured one.
+	// An NFO still carries a file ffprobe has not reached yet, and stops
+	// arguing with ffprobe the moment it has.
+	fill(locked, FieldDurationMS, &out.Fields.DurationMS, ordered, func(r Record) *int64 { return r.Fields.DurationMS })
 	pick(locked, FieldSeries, &out.Fields.Series, ordered, func(r Record) *string { return r.Fields.Series })
 	pick(locked, FieldSeason, &out.Fields.Season, ordered, func(r Record) *int { return r.Fields.Season })
 	pick(locked, FieldEpisode, &out.Fields.Episode, ordered, func(r Record) *int { return r.Fields.Episode })
@@ -80,6 +96,15 @@ func pick[T any](locked map[string]bool, field string, dst **T, sources []Record
 			return
 		}
 	}
+}
+
+// fill is pick for a field the file itself owns: a source may offer a value
+// when there is none, and may never replace one that exists.
+func fill[T any](locked map[string]bool, field string, dst **T, sources []Record, get func(Record) *T) {
+	if *dst != nil {
+		return
+	}
+	pick(locked, field, dst, sources, get)
 }
 
 // LockedSet turns a slice of field names into the set Merge expects, ignoring
