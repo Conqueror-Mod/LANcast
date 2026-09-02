@@ -988,13 +988,39 @@ The user's in-progress items, most recently played first — the home screen's
 first shelf. `limit` defaults to 20 (max 100).
 
 ```json
-{ "items": [ { "id": 87, "title": "Arrival", ...,
-  "progress": { "position_ms": 1284000, "watched": false } } ] }
+{ "items": [
+  { "id": 87, "title": "Arrival", "kind": "movie", ...,
+    "progress": { "position_ms": 1284000, "watched": false } },
+  { "id": 500, "title": "Futurama", "kind": "show", ...,
+    "next_episode": { "id": 9114, "kind": "episode", "season": 2, "episode": 1,
+      "progress": { "position_ms": 80252, "watched": false } } }
+] }
 ```
 
-"In progress" is a saved position past zero with `watched` unset: an item played
-to the end drops off rather than inviting a replay. Progress and artwork are
-included so a tile draws its resume bar and poster without a second call.
+**A show appears as the show, not as an episode.** Episodes collapse to the show
+they belong to, and `next_episode` carries the one the show would play — the
+same answer `GET /api/items/{id}/continue` gives, computed by the same query, so
+the shelf and a show's Continue button cannot disagree.
+
+A show qualifies on **any** episode activity, watched or in progress. Finishing
+an episode is the ordinary way to stop watching a series, and a shelf that
+dropped the show at that moment answered "which episode did I stop inside"
+rather than "what am I watching". A show with every episode watched has nothing
+to continue and is absent.
+
+`next_episode` carries its own `progress` and `duration_ms`, which is what a
+resume bar is drawn from: a show has no position of its own.
+
+For everything else — films, tracks — "in progress" is unchanged: a saved
+position past zero with `watched` unset, so an item played to the end drops off
+rather than inviting a replay. Progress and artwork are included so a tile draws
+its bar and poster without a second call.
+
+**`next_episode` is for drawing, not for deciding.** This response is cacheable
+and a client may hold it; what a client must *not* do is play from it. Ask
+`GET /api/items/{id}/continue` on the press — it is `no-store` for the reason
+described there, and resuming from a list a few seconds old is how a viewer
+lands on an episode they have already finished.
 
 ### `GET /api/profile`
 

@@ -450,6 +450,23 @@ type Item struct {
 	Ratings      []ItemRating `json:"ratings,omitempty"`
 
 	Progress *Progress `json:"progress,omitempty"`
+
+	/*
+	 * NextEpisode is the episode a show would play next, set only on the
+	 * Continue Watching shelf.
+	 *
+	 * The shelf is a list of *shows*, not of episodes, so the row carries the
+	 * show's identity and this carries what pressing it does. It arrives with
+	 * the shelf rather than behind a second request because a tile that must
+	 * ask before it can draw its resume bar draws it late, and because a
+	 * client that fetched it separately would be free to disagree with
+	 * NextEpisodeFor about what comes next — which is the one thing this
+	 * field exists to prevent.
+	 *
+	 * Its own Progress is the episode's, which is what the bar reflects: the
+	 * show has no position of its own and never did.
+	 */
+	NextEpisode *Item `json:"next_episode,omitempty"`
 }
 
 // Credit is one person's involvement in an item.
@@ -2149,32 +2166,120 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`
-		FROM media_item mi
-		JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
-		WHERE ps.position_ms > 0 AND ps.watched = 0 AND mi.missing = 0
-		  AND (? = 0 OR ps.updated_at >= ?)
-		ORDER BY ps.updated_at DESC
-		LIMIT ?`, userID, sinceUnix, sinceUnix, limit)
+
+	/*
+	 * An episode is not what you are continuing; the show is.
+	 *
+	 * The first version of this listed episodes, and it was wrong twice over.
+	 * The tile was the episode, so a shelf of half-watched television read as
+	 * a list of titles nobody recognises. And the row only existed while an
+	 * episode was *unfinished*, so finishing one removed the show — measured
+	 * on a real library, Lanterns had two watched episodes, none in progress,
+	 * and no place on the shelf at all. Finishing an episode is the most
+	 * ordinary way to stop watching, and it was the one way to fall off.
+	 *
+	 * So episodes collapse to their show here, and a show qualifies on *any*
+	 * episode activity rather than an unfinished one. Which episode it offers
+	 * is NextEpisodeFor's answer and nothing else's: the shelf and the show
+	 * page's Continue button must not be able to disagree about what comes
+	 * next, and the only way to guarantee that is to ask the same question.
+	 *
+	 * Movies, tracks and anything else keep the old rule — they have no next,
+	 * so a finished one is finished.
+	 */
+	const q = `
+		SELECT id, updated_at, is_show FROM (
+			SELECT mi.id AS id, ps.updated_at AS updated_at, 0 AS is_show
+			FROM media_item mi
+			JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
+			WHERE ps.position_ms > 0 AND ps.watched = 0 AND mi.missing = 0
+			  AND mi.kind != 'episode'
+			  AND (? = 0 OR ps.updated_at >= ?)
+
+			UNION ALL
+
+			SELECT sh.id AS id, MAX(ps.updated_at) AS updated_at, 1 AS is_show
+			FROM media_item e
+			JOIN playback_state ps ON ps.item_id = e.id AND ps.user_id = ?
+			LEFT JOIN media_item se ON se.id = e.parent_id
+			JOIN media_item sh ON sh.id = COALESCE(se.parent_id, e.parent_id)
+			WHERE e.kind = 'episode' AND e.missing = 0 AND sh.missing = 0
+			  AND sh.kind = 'show'
+			  AND (ps.position_ms > 0 OR ps.watched = 1)
+			  AND (? = 0 OR ps.updated_at >= ?)
+			GROUP BY sh.id
+		)
+		ORDER BY updated_at DESC
+		LIMIT ?`
+
+	/*
+	 * Over-fetch, because a show whose every episode is watched is dropped
+	 * below and dropping after the limit is the bug this query's ancestor
+	 * already carries a comment about. Trimming a full shelf down is fine;
+	 * trimming first and then removing rows leaves it short.
+	 */
+	fetch := limit*2 + 10
+	if fetch > 200 {
+		fetch = 200
+	}
+
+	rows, err := s.db.QueryContext(ctx, q,
+		userID, sinceUnix, sinceUnix,
+		userID, sinceUnix, sinceUnix,
+		fetch)
 	if err != nil {
 		return nil, fmt.Errorf("continue watching: %w", err)
 	}
-	defer rows.Close()
+
+	type row struct {
+		id     int64
+		isShow bool
+	}
+	var order []row
+	for rows.Next() {
+		var r row
+		var updated int64
+		if err := rows.Scan(&r.id, &updated, &r.isShow); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("continue watching: %w", err)
+		}
+		order = append(order, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
 
 	out := []Item{}
-	for rows.Next() {
-		it, err := scanItem(rows)
+	for _, r := range order {
+		if len(out) == limit {
+			break
+		}
+		it, err := s.GetItem(ctx, r.id, userID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("continue watching: %w", err)
+		}
+		if !r.isShow {
+			out = append(out, *it)
+			continue
+		}
+
+		next, err := s.NextEpisodeFor(ctx, r.id, userID)
 		if err != nil {
 			return nil, fmt.Errorf("continue watching: %w", err)
 		}
+		// A show watched to the end has nothing to continue. Saying so by
+		// absence is the same answer the show page gives by refusing to
+		// replay the finale.
+		if next.Exhausted || next.Item == nil {
+			continue
+		}
+		it.NextEpisode = next.Item
 		out = append(out, *it)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// Reuse the one progress-attach path rather than widening the scan.
-	if err := s.AttachProgress(ctx, out, userID); err != nil {
-		return nil, err
 	}
 	return out, nil
 }
