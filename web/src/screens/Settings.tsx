@@ -827,6 +827,26 @@ function AdminSections({ pane }: { pane: string }) {
               <label className="set-toggle">
                 <input
                   type="checkbox"
+                  checked={settings.detect_markers}
+                  disabled={!settings.media_tools?.probe_available}
+                  onChange={(e) =>
+                    update.mutate({ detect_markers: e.target.checked })
+                  }
+                />
+                Detect where the credits start
+              </label>
+              <p className="set-row__sub">
+                Looks at the end of each film and episode in the background and
+                records where the credits appear to begin. Off by default
+                because it reads a quarter of every file, which takes hours on
+                a large library. Nothing uses it yet — playback and what counts
+                as watched are unchanged — so this only fills in what a later
+                release will be able to skip to. Only files that have been
+                read are examined.
+              </p>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
                   checked={settings.auto_enrich}
                   onChange={(e) =>
                     update.mutate({ auto_enrich: e.target.checked })
