@@ -138,6 +138,15 @@ func main() {
 				run: marker.Seconds(m.Frames),
 			})
 		}
+		// Every candidate, not the median: the spread within one episode is
+		// what the aggregation rule has to survive, and it is not the same
+		// quantity as the spread of medians across episodes.
+		fmt.Printf("  E%02d %-28s ", a.number, trunc(a.title, 28))
+		for _, c := range cands {
+			fmt.Printf("[%.0f-%.0fs %.1fs] ", c.at, c.to, c.run)
+		}
+		fmt.Println()
+
 		if len(cands) == 0 {
 			fmt.Printf("  E%02d %-34s no shared stretch\n", a.number, trunc(a.title, 34))
 			continue
