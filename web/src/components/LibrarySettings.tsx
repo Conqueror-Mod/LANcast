@@ -26,6 +26,7 @@ import {
   useRefreshLibrary,
   useRefreshPreview,
   useReparseLibrary,
+  useReprobeLibrary,
   useDeleteLibrary,
   useUpdateLibrary,
   useCreateLibrary,
@@ -36,7 +37,12 @@ import {
 import { LIBRARY_KINDS, kindLabel } from "@/screens/libraryConfig";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { navCount } from "./AppShell";
-import type { Library, LibraryRoot, ReparseResult } from "@/api/types";
+import type {
+  Library,
+  LibraryRoot,
+  ReparseResult,
+  ReprobeResult,
+} from "@/api/types";
 import "./LibrarySettings.css";
 
 function whenScanned(ts: number | null): string {
@@ -97,11 +103,13 @@ function RowFeedback({
   scan,
   refresh,
   reparse,
+  reprobe,
 }: {
-  reported: "scan" | "refresh" | "reparse" | null;
+  reported: "scan" | "refresh" | "reparse" | "reprobe" | null;
   scan: { isError: boolean; error: unknown };
   refresh: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown };
   reparse: { isSuccess: boolean; isError: boolean; error: unknown; data?: ReparseResult };
+  reprobe: { isSuccess: boolean; isError: boolean; error: unknown; data?: ReprobeResult };
 }) {
   if (reported === "scan" && scan.isError) {
     /*
@@ -165,6 +173,33 @@ function RowFeedback({
     }
   }
 
+  /*
+   * Say how many files were queued, including when the answer is none.
+   *
+   * Silence here is what made the settings row's narrow scope misleading: it
+   * matched nothing, said everything was up to date, and the person who ran it
+   * to fix something reasonably read that as done.
+   */
+  if (reported === "reprobe") {
+    if (reprobe.isError) {
+      return (
+        <p className="set-note">
+          {(reprobe.error as Error)?.message ?? "Could not re-read the files."}
+        </p>
+      );
+    }
+    if (reprobe.isSuccess && reprobe.data) {
+      const n = reprobe.data.queued;
+      return (
+        <p className="set-note">
+          {n === 0
+            ? "Nothing to re-read in this library."
+            : `Re-reading ${n.toLocaleString()} file${n === 1 ? "" : "s"} — this runs in the background and playback keeps working.`}
+        </p>
+      );
+    }
+  }
+
   return null;
 }
 
@@ -183,6 +218,7 @@ export function LibraryRow({ library }: { library: Library }) {
   const unmatched = useRefreshPreview(library.id, "unmatched", pricing);
   const all = useRefreshPreview(library.id, "all", pricing);
   const reparse = useReparseLibrary();
+  const reprobeLib = useReprobeLibrary();
   const del = useDeleteLibrary();
   const running = status?.state === "running";
   const [showIssues, setShowIssues] = useState(false);
@@ -206,7 +242,9 @@ export function LibraryRow({ library }: { library: Library }) {
    * is where they answer. This names the last one asked, so the row has exactly
    * one place to look.
    */
-  const [reported, setReported] = useState<"scan" | "refresh" | "reparse" | null>(
+  const [reported, setReported] = useState<
+    "scan" | "refresh" | "reparse" | "reprobe" | null
+  >(
     null,
   );
 
@@ -407,6 +445,27 @@ export function LibraryRow({ library }: { library: Library }) {
                   },
                 },
                 /*
+                 * Re-reading the media itself, for this library alone.
+                 *
+                 * The settings row above offers "incomplete" and "everything",
+                 * and neither is this. Incomplete means files missing a
+                 * pix_fmt, which on a library where every file has one matches
+                 * nothing and answers that everything is up to date — which is
+                 * how a re-probe run to correct film durations did nothing and
+                 * looked like it had worked. Everything means every library,
+                 * including music and photographs with nothing to learn.
+                 */
+                {
+                  label: reprobeLib.isPending
+                    ? "Re-reading files…"
+                    : "Re-read this library's files",
+                  disabled: running || reprobeLib.isPending,
+                  onSelect: () => {
+                    setReported("reprobe");
+                    reprobeLib.mutate(library.id);
+                  },
+                },
+                /*
                  * Two scopes rather than one button, and each says its price.
                  *
                  * "Refresh metadata" cleared the stamp for the whole library:
@@ -458,6 +517,7 @@ export function LibraryRow({ library }: { library: Library }) {
         scan={scan}
         refresh={refresh}
         reparse={reparse}
+        reprobe={reprobeLib}
       />
       {editing && (
         <LibraryEditor

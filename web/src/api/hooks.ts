@@ -267,6 +267,33 @@ export function useReprobe() {
   });
 }
 
+/*
+ * Re-read one library's files.
+ *
+ * The two scopes the settings row offers are "incomplete" and "everything",
+ * and neither is what somebody usually wants. "Incomplete" means items whose
+ * video stream lacks a pix_fmt — a technical criterion from one past fix,
+ * which on a library where every file has one matches nothing and reports that
+ * everything is up to date. "Everything" is every library, including music and
+ * photographs that have nothing to learn.
+ *
+ * Reported from a real install: a re-probe was run to correct film durations,
+ * the narrow scope matched zero items, and the answer read as success. The
+ * server was right and the request succeeded; what was missing was any way to
+ * ask the question actually being asked.
+ */
+export function useReprobeLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (libraryID: number) =>
+      apiPost<ReprobeResult>(
+        `/api/probe/refresh?scope=all&library=${libraryID}`,
+        {},
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["probe"] }),
+  });
+}
+
 export function useCreateLibrary() {
   const qc = useQueryClient();
   return useMutation({
