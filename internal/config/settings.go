@@ -44,6 +44,22 @@ type Settings struct {
 	 */
 	SensitiveMarking bool `json:"sensitive_marking"`
 
+	/*
+	 * DetectMarkers runs the credits detector over the library (ADR 0054).
+	 *
+	 * Off by default, and the default is the decision rather than caution. It
+	 * decodes the last quarter of every film and episode — a second full pass
+	 * over media that probing only read the header of — and nothing in LANcast
+	 * yet reads a marker to make a decision. Spending hours of somebody's CPU
+	 * to populate a table that changes nothing they can see is not a default,
+	 * it is a surprise.
+	 *
+	 * Turning it off does not delete what was found, the same shape
+	 * SensitiveMarking has: a switch that discards data the second time it is
+	 * pressed is a switch nobody can try out.
+	 */
+	DetectMarkers bool `json:"detect_markers"`
+
 	// ---- library and playback rules -------------------------------------
 	//
 	// These four are the server's opinion about what a client shows, and they

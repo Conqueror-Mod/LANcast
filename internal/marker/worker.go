@@ -49,7 +49,14 @@ type Worker struct {
 	st  Store
 	log *slog.Logger
 
-	// FFmpegPath is the binary to run, or empty to find it on PATH.
+	/*
+	 * FFmpegPath is the binary to run, or empty to find it on PATH.
+	 *
+	 * Empty is the ordinary case and not an oversight: mediatools.Ensure has
+	 * already put the configured directory at the front of this process's
+	 * PATH by the time a worker exists, which is what lets a service running
+	 * as LocalSystem resolve the tools it cannot otherwise see.
+	 */
 	FFmpegPath string
 	// Concurrency is how many files are decoded at once.
 	Concurrency int

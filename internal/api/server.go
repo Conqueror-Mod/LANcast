@@ -23,6 +23,7 @@ import (
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
 	"lancast/internal/identity"
+	"lancast/internal/marker"
 	"lancast/internal/meta"
 	"lancast/internal/photo"
 	"lancast/internal/presence"
@@ -54,6 +55,8 @@ type Deps struct {
 	Artwork  *artwork.Cache
 	Worker   *enrich.Worker
 	Probes   *probe.Worker
+	// Markers is the credits detector (ADR 0054), nil when it is switched off.
+	Markers *marker.Worker
 	// Faces is the face-grouping pass (ADR 0052). Nil where the optional
 	// worker binary is not installed, which is the ordinary case.
 	Faces    *faces.Worker
@@ -112,6 +115,8 @@ type Deps struct {
 	// Probe triggers a background probe pass, so a re-probe an operator asked
 	// for starts now rather than at the next scan.
 	Probe func()
+	// DetectMarkers triggers a credits-detection pass (ADR 0054).
+	DetectMarkers func()
 	// Cover triggers a background album-art pass, for the same reason.
 	Cover func()
 	// LANBound reports whether the server is actually listening beyond
@@ -134,6 +139,7 @@ type Server struct {
 	art            *artwork.Cache
 	worker         *enrich.Worker
 	probes         *probe.Worker
+	markers        *marker.Worker
 	facesW         *faces.Worker
 	faceModelJob   *faceJob
 	faceTool       *faces.Tool
@@ -154,6 +160,8 @@ type Server struct {
 	reloadPlugins func() error
 	enrich        func()
 	probe         func()
+	// detectMarkers kicks a marker pass an operator asked for.
+	detectMarkers func()
 	coversSoon    func()
 	lanBound      bool
 	restartWidens bool
@@ -196,7 +204,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
@@ -205,7 +213,7 @@ func New(d Deps) *Server {
 		rosterAt:   map[string]time.Time{},
 		goodAddr:   map[string]string{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
-		probe: d.Probe, coversSoon: d.Cover,
+		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 		crashes:  crashlog.New(d.DataDir, Version),
@@ -403,6 +411,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/update/download", s.adminOnly(s.downloadUpdate))
 	mux.HandleFunc("POST /api/update/restart", s.adminOnly(s.restartForUpdate))
 	mux.HandleFunc("POST /api/probe/refresh", s.adminOnly(s.reprobe))
+	mux.HandleFunc("GET /api/items/{id}/markers", s.itemMarkers)
+	mux.HandleFunc("GET /api/markers", s.markerStatus)
+	mux.HandleFunc("POST /api/markers/refresh", s.adminOnly(s.refreshMarkers))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)

@@ -1792,6 +1792,69 @@ decision for it falls back to direct play.
 
 Returns `503` if ffprobe is not installed and `400` for an unknown scope.
 
+### `GET /api/items/{id}/markers`
+
+The boundaries detected on one item — where its credits begin (ADR 0054).
+
+```json
+{ "markers": [ { "kind": "credits", "start_ms": 5634000, "source": "blackdetect",
+  "confidence": 0.9, "created_at": 1788300000 } ] }
+```
+
+`kind` is `credits` or `intro`; **nothing writes `intro` yet**, and it is in the
+contract so that when it does, a client written today does not have to change
+shape to accept it.
+
+`end_ms` is absent for credits, which run to the end of the file. An intro has a
+real end — the point you would skip *to* — and will carry one.
+
+`confidence` is `0.9` for a boundary found by a black stretch over five seconds
+and `0.5` where only a shorter one existed. It is reported rather than
+thresholded away because the rule that decides what is good enough is expected
+to change.
+
+An item with no detectable boundary returns an empty list, which is a real
+answer rather than a missing one: a film whose credits begin on a cut rather
+than a fade has nothing to detect.
+
+**This is an inspection surface, and stage 1 acts on none of it.** No playback
+decision reads a marker, the watched threshold is unaffected, and no client
+should draw a skip control from this yet. The rule behind these timestamps has
+been shown consistent across two independent samples of forty films and has
+never been checked against a person watching one.
+
+### `GET /api/markers`
+
+Detection progress.
+
+```json
+{ "enabled": true, "available": true, "running": false,
+  "examined": 812, "found": 774, "failed": 0, "remaining": 388 }
+```
+
+`enabled` is the `detect_markers` setting; `available` is whether ffmpeg was
+found. They are separate because "switched off" and "ffmpeg missing" are
+different answers and a client that conflates them cannot tell somebody how to
+fix it.
+
+### `POST /api/markers/refresh`
+
+Queues every examined item to be looked at again, and starts a pass. Admin only.
+
+```json
+{ "queued": 1200 }
+```
+
+Far more expensive than re-probing: this decodes the last quarter of every film
+and episode, where a probe reads a header. It exists because the detector's
+window and length thresholds are tuned numbers, and a build that moves them has
+to be able to ask every item the new question — a library holding answers from a
+rule that no longer exists is worse than one holding none.
+
+Returns `503` when ffmpeg is not installed, and `409` when `detect_markers` is
+off: turning it off is how somebody says they do not want their CPU spent on
+this, and queueing anyway would spend it at the next restart instead.
+
 ### `GET /api/activity`
 
 What the server is doing right now, in one request.
@@ -3319,6 +3382,7 @@ to "have I watched this".
 | `allow_media_deletion` | `true` | — | When false, `DELETE /api/items/{id}?mode=delete` is **403**. `mode=ignore` is unaffected: it writes no file and deletes nothing from disk |
 | `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |
 | `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
+| `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime |
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending
