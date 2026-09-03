@@ -60,6 +60,7 @@ import { AuditLog } from "@/components/AuditLog";
 import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
+import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
   AuthUser,
@@ -788,10 +789,9 @@ function AdminSections({ pane }: { pane: string }) {
                 this on and a scan removes those entries — along with their
                 watch history, positions and ratings, which is what makes it
                 worth asking about rather than doing quietly.
-                <br />
-                A scan that could not read a location, or that saw no files at
-                all, leaves them alone whatever this says: an empty walk is a
-                statement about the walk and not about the library.
+                <br />A scan that could not read a location, or that saw no
+                files at all, leaves them alone whatever this says: an empty
+                walk is a statement about the walk and not about the library.
               </div>
             </>
           )}
@@ -838,11 +838,11 @@ function AdminSections({ pane }: { pane: string }) {
               <p className="set-row__sub">
                 Looks at the end of each film and episode in the background and
                 records where the credits appear to begin. Off by default
-                because it reads a quarter of every file, which takes hours on
-                a large library. Nothing uses it yet — playback and what counts
-                as watched are unchanged — so this only fills in what a later
-                release will be able to skip to. Only files that have been
-                read are examined.
+                because it reads a quarter of every file, which takes hours on a
+                large library. Nothing uses it yet — playback and what counts as
+                watched are unchanged — so this only fills in what a later
+                release will be able to skip to. Only files that have been read
+                are examined.
               </p>
               <label className="set-toggle">
                 <input
@@ -2125,17 +2125,22 @@ function PicturesSection() {
         </p>
       )}
 
-      {models?.supported && !models.installed && !running && caps && !caps.ready && (
-        <p className="set-row__sub">
-          {/*
+      {models?.supported &&
+        !models.installed &&
+        !running &&
+        caps &&
+        !caps.ready && (
+          <p className="set-row__sub">
+            {/*
             Said here because it is the single most likely reason this feature
             appears to do nothing: the in-app updater replaces the server only,
             and the worker arrives with the installer.
           */}
-          Note: the face worker ships with the LANcast installer. If you updated
-          from inside the app, run the installer for this version as well.
-        </p>
-      )}
+            Note: the face worker ships with the LANcast installer. If you
+            updated from inside the app, run the installer for this version as
+            well.
+          </p>
+        )}
     </section>
   );
 }
@@ -2339,6 +2344,15 @@ const SERVER_PANES: Pane[] = [
   { id: "livetv", label: "Live TV", admin: true },
   { id: "addons", label: "Add-ons", admin: true },
   { id: "updates", label: "Updates", admin: true },
+  /*
+   * Backup has its own pane rather than a corner of Logs.
+   *
+   * Maintenance next door is explicitly about throwing away things the server
+   * can make again. This is the opposite — the things it can never make again
+   * — and filing them together would put "protect what cannot be rebuilt"
+   * under a heading that means "discard what can".
+   */
+  { id: "backup", label: "Backup", admin: true },
   { id: "activity", label: "Activity", admin: true },
   { id: "logs", label: "Logs", admin: true },
 ];
@@ -2457,6 +2471,7 @@ export function Settings() {
                   <AuditLog />
                 </>
               )}
+              {pane === "backup" && <BackupSettings />}
               {pane === "logs" && (
                 <>
                   <ServerLogSection />

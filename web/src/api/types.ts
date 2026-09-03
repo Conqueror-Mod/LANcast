@@ -2,11 +2,7 @@
 // server's JSON — the API contract in docs/api.md is the source of truth.
 
 export type MatchState =
-  | "matched"
-  | "review"
-  | "unmatched"
-  | "locked"
-  | "local";
+  "matched" | "review" | "unmatched" | "locked" | "local";
 
 /** One place a library's files live (ADR 0034). */
 export interface LibraryRoot {
@@ -639,7 +635,6 @@ export interface AuditPage {
   actions: string[];
 }
 
-
 // GET /api/update. `can_verify` is whether this build can check a release's
 // signature at all — false means automatic installation is unavailable no
 // matter what the setting says, and the UI must say so rather than offering a
@@ -663,7 +658,12 @@ export interface UpdateStatus {
   // available means decide, staged means restart.
   staged?: string;
   staged_at?: number;
-  downloading?: { active: boolean; done: number; total: number; stage?: string };
+  downloading?: {
+    active: boolean;
+    done: number;
+    total: number;
+    stage?: string;
+  };
 }
 
 // GET /api/profile. Identity, totals and history in one response — a page that
@@ -946,3 +946,28 @@ export type Collision = {
    *  server too old to record it, which reads the same as never dismissed. */
   dismissed_at?: number;
 };
+
+/*
+ * Backups (ADR 0058). A backup is the database and nothing else: no artwork,
+ * which is re-fetchable, and no sessions, which are cleared when it is written.
+ */
+export interface BackupFile {
+  name: string;
+  bytes: number;
+  taken_at: number;
+  schema_version: number;
+  // Whether *this build* could restore it. Migrations are one-way, so a backup
+  // from a newer LANcast cannot be, and `problem` says so in a sentence.
+  restorable: boolean;
+  problem?: string;
+}
+
+export interface BackupsResponse {
+  backups: BackupFile[];
+  // Where the files are, shown so somebody can copy one off this disk.
+  folder: string;
+  // What to type to restore. The client cannot perform one — restoring
+  // replaces the database the server is reading — so it shows the command
+  // rather than a button that would have to lie.
+  restore_command: string;
+}
