@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -155,11 +156,14 @@ func TestRestoreWithNoExistingDatabase(t *testing.T) {
 }
 
 /*
+ * A backup taken before the ADR 0058 amendment carries its sessions, and stays
+ * restorable — that is the point of having backups. The restore-time clearing
+ * is what covers those, and it is the only thing that can.
+ *
  * Sessions are server-side precisely so they can be revoked. A restore handing
- * back the logins the backup was carrying would undo that — anyone holding a
- * cookie from the backup's era would be signed in again.
+ * back the logins an old backup was carrying would undo that.
  */
-func TestRestoreClearsSessions(t *testing.T) {
+func TestRestoreClearsSessionsFromAPreAmendmentBackup(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "lancast.db")
@@ -173,15 +177,15 @@ func TestRestoreClearsSessions(t *testing.T) {
 	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	for _, h := range []string{"hash-a", "hash-b"} {
-		if err := src.CreateSession(ctx, h, "u_1", time.Hour); err != nil {
-			t.Fatal(err)
-		}
-	}
 	if _, err := src.Snapshot(ctx, snap); err != nil {
 		t.Fatal(err)
 	}
 	src.Close()
+
+	// Put the sessions back into the backup, which is what a backup written by
+	// an older build looks like. Written directly rather than through the
+	// store, because the store no longer produces one of these.
+	putSessionsInSnapshot(t, snap, "hash-a", "hash-b")
 
 	res, err := RestoreSnapshot(ctx, db, snap)
 	if err != nil {
@@ -211,6 +215,61 @@ func TestRestoreClearsSessions(t *testing.T) {
 	}
 	if users != 1 {
 		t.Errorf("users after restore = %d, want 1", users)
+	}
+}
+
+// A backup taken by this build carries none in the first place, so a restore
+// from one has nothing to clear. Asserted so the two halves cannot silently
+// drift into each other doing the same job.
+func TestRestoreOfACurrentBackupHasNoSessionsToClear(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db := filepath.Join(dir, "lancast.db")
+	snapSrc := filepath.Join(dir, "source.db")
+	snap := filepath.Join(dir, "backup.db")
+
+	src, err := Open(snapSrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.CreateSession(ctx, "hash-a", "u_1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Snapshot(ctx, snap); err != nil {
+		t.Fatal(err)
+	}
+	src.Close()
+
+	res, err := RestoreSnapshot(ctx, db, snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.SessionsCleared != 0 {
+		t.Errorf("sessions cleared = %d, want 0 — the backup should not have carried any",
+			res.SessionsCleared)
+	}
+}
+
+// putSessionsInSnapshot writes session rows straight into a backup file, which
+// is the only way to produce one that looks like an older build's.
+func putSessionsInSnapshot(t *testing.T, path string, hashes ...string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now()
+	for _, h := range hashes {
+		if _, err := db.Exec(`
+			INSERT INTO session (token_hash, user_id, created_at, expires_at, last_seen)
+			VALUES (?, ?, ?, ?, ?)`,
+			h, "u_1", now.Unix(), now.Add(time.Hour).Unix(), now.Unix()); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

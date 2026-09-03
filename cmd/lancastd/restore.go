@@ -126,7 +126,15 @@ Without -yes this reports what it would do and changes nothing.
 		fmt.Printf("migrated forward from schema version %d to %d\n",
 			snap.SchemaVersion, res.SchemaVersionAfter)
 	}
-	fmt.Printf("signed out %s\n", plural(res.SessionsCleared, "session"))
+	// Everyone is signed out either way, because the sessions belonged to the
+	// database that was just replaced. The count is about what the *backup*
+	// carried, which is zero for anything this build wrote — printing "signed
+	// out 0 sessions" would read as the restore having failed to do something.
+	fmt.Println("everyone is signed out — those sessions belonged to the database that was replaced")
+	if res.SessionsCleared > 0 {
+		fmt.Printf("the backup itself carried %s, from before backups stopped keeping them; cleared\n",
+			plural(res.SessionsCleared, "session"))
+	}
 	fmt.Println()
 	fmt.Println("start LANcast and sign in again.")
 	fmt.Println("posters and other artwork are not in a backup and will be re-fetched over the")
