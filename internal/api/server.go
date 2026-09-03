@@ -152,7 +152,11 @@ type Server struct {
 	subs           *subtitle.Extractor
 	settings       *config.SettingsStore
 	// tools is the one media-tools install that may be running (ADR 0043).
-	tools         toolsJob
+	tools toolsJob
+	// backupMu serialises taking a backup. Two at once would race for a name
+	// whose timestamp is only second-resolution, and a double-clicked button
+	// should take one backup rather than produce an error (ADR 0058).
+	backupMu      sync.Mutex
 	dataDir       string
 	log           *slog.Logger
 	web           http.Handler
@@ -281,6 +285,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
 	mux.HandleFunc("GET /api/libraries/{id}/cast", s.libraryCast)
+
+	/*
+	 * Backups (ADR 0058). Admin-only throughout: a backup is a complete copy of
+	 * the library including every account row, so fetching one is reading the
+	 * database.
+	 *
+	 * There is no restore endpoint, and that is the decision rather than a gap.
+	 * Restoring replaces the database this process is reading, so it is
+	 * `lancastd restore` on the machine, with the server stopped.
+	 */
+	mux.HandleFunc("GET /api/backups", s.adminOnly(s.listBackups))
+	mux.HandleFunc("POST /api/backups", s.adminOnly(s.createBackup))
+	mux.HandleFunc("GET /api/backups/{name}", s.adminOnly(s.downloadBackup))
+	mux.HandleFunc("DELETE /api/backups/{name}", s.adminOnly(s.deleteBackup))
 
 	// Media tools. Admin-only: this makes the server download a binary and then
 	// execute it (ADR 0043). The URL is pinned in mediatools, never a parameter.
