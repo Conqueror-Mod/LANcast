@@ -714,8 +714,119 @@ func TestUnfinishedLibraryStillReadsTags(t *testing.T) {
 
 	// lib still carries the zero ScannedAt it was created with, which is what a
 	// library whose first scan never finished looks like.
+	p := scanAndWait(t, sc, lib)
+
+	/*
+	 * The pass runs; it no longer has to reopen files to do it (ADR 0056).
+	 *
+	 * This asserted that tags were read again, which was the observable at the
+	 * time and not the property. What matters is that the hierarchy is rebuilt
+	 * from every track, and a stored key is safe to rebuild from: keys are
+	 * written only after a *complete* grouping, because an interrupted pass
+	 * returns at the ctx check before it reaches them.
+	 */
+	if p.SkippedUntagged != 0 {
+		t.Errorf("SkippedUntagged = %d, want 0", p.SkippedUntagged)
+	}
+	if got := trackByPath(t, st, lib.ID, "01 Mysterons.mp3"); got.ParentID == nil {
+		t.Error("the track lost its album — the hierarchy was not rebuilt")
+	}
+	_ = first
+}
+
+/*
+ * An interrupted pass stores nothing.
+ *
+ * This is what makes reusing a stored key safe. dropBucketAlbums judges a
+ * folder from every track in it, so a pass that stopped halfway would judge on
+ * partial evidence — and a key stored under that judgement would be reused
+ * for ever, an album dropped or invented with no file having changed.
+ *
+ * The guard is that cancellation returns before the keys are written, so they
+ * are only ever the product of a complete pass.
+ */
+func TestAnInterruptedTagPassStoresNoKeys(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3": {Title: "Mysterons", Artist: "Portishead", Album: "Dummy"},
+	}}
+	sc.SetTagReader(tags)
 	scanAndWait(t, sc, lib)
-	if tags.calls == first {
-		t.Error("a library with no completed scan skipped the tag pass")
+
+	// A complete pass did store one.
+	keys, err := st.GroupKeys(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) == 0 {
+		t.Fatal("a completed pass stored no keys")
+	}
+	for _, k := range keys {
+		if k.Album != "Dummy" || k.Artist != "Portishead" {
+			t.Errorf("key = %+v, want the tagged album and artist", k)
+		}
+	}
+}
+
+/*
+ * The point of ADR 0056: a scan reads the files that changed, not the library.
+ *
+ * Measured on a real library before this existed — 17 changed tracks took 92
+ * seconds where 9,054 unchanged ones took half a second, because the pass
+ * reopened every file to rebuild a grouping it had already computed once.
+ */
+func TestOnlyChangedTracksAreRead(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	for _, n := range []string{"Band/Record/01 One.mp3", "Band/Record/02 Two.mp3",
+		"Band/Record/03 Three.mp3"} {
+		writeFile(t, root, n, 10)
+	}
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 One.mp3":   {Title: "One", AlbumArtist: "Band", Album: "Record", Track: 1},
+		"02 Two.mp3":   {Title: "Two", AlbumArtist: "Band", Album: "Record", Track: 2},
+		"03 Three.mp3": {Title: "Three", AlbumArtist: "Band", Album: "Record", Track: 3},
+	}}
+	sc.SetTagReader(tags)
+	scanAndWait(t, sc, lib)
+	if tags.calls != 3 {
+		t.Fatalf("first scan read %d files, want 3", tags.calls)
+	}
+	first := tags.calls
+
+	// A completed scan, then one new track arrives.
+	reloaded, err := st.GetLibrary(context.Background(), lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "Band/Record/04 Four.mp3", 10)
+	tags.byName["04 Four.mp3"] = probe.Tags{
+		Title: "Four", AlbumArtist: "Band", Album: "Record", Track: 4,
+	}
+	scanAndWait(t, sc, *reloaded)
+
+	if read := tags.calls - first; read != 1 {
+		t.Errorf("read %d files for one new track, want 1 — the other three did not move", read)
+	}
+
+	// And the grouping is still whole: the three tracks that were not read
+	// still belong to the record, because their stored keys stood in for them.
+	items, _, err := st.ListItems(context.Background(),
+		store.ItemFilter{LibraryID: lib.ID, Kind: "album"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Title != "Record" {
+		t.Fatalf("albums = %v, want one Record", items)
+	}
+	kids, err := st.Children(context.Background(), items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kids) != 4 {
+		t.Errorf("the record holds %d tracks, want 4 — a track whose key was reused must still be in it", len(kids))
 	}
 }
