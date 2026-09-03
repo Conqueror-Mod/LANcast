@@ -229,6 +229,36 @@ func runWindow(l *launcher) {
 		Title:  "LANcast",
 		Width:  1280,
 		Height: 800,
+		// Where it was last time, if anywhere. Width and Height above stay the
+		// first-run answer: a remembered placement that cannot be honoured is
+		// refused rather than forced, and a centred default window is always
+		// on a screen somebody is looking at.
+		Placement: placementFromPrefs(prefs.Window),
+		OnPlacement: func(pl clientwindow.Placement) {
+			/*
+			 * Written on the way out, and not fatal if it fails.
+			 *
+			 * Re-read from disk first rather than saving the copy loaded at
+			 * startup: the settings page writes this same file through a
+			 * binding while the window is open, so the in-memory prefs may be
+			 * stale by now and writing them back would silently undo a
+			 * tickbox somebody changed this session.
+			 */
+			dir := clientDataDir()
+			cur, err := desktopprefs.Load(dir)
+			if err != nil {
+				cur = prefs
+			}
+			cur.Window = &desktopprefs.WindowPlacement{
+				Monitor: pl.Monitor, X: pl.X, Y: pl.Y,
+				Width: pl.Width, Height: pl.Height, Maximized: pl.Maximized,
+			}
+			// Ignored on purpose. This is a windowsgui binary with nowhere to
+			// print, it runs as the window is closing, and the cost of failing
+			// is that the next launch opens where it always used to. Nothing
+			// here is worth interrupting a shutdown for.
+			_ = desktopprefs.Save(dir, cur)
+		},
 		OnClose: func() bool {
 			if quitting || !prefs.CloseToTray || tray == nil {
 				return true
@@ -417,6 +447,23 @@ func (l *launcher) serverCertPin() string {
 // clientDataDir is where the window keeps its profile — the session cookie
 // lives here, so it has to be the same directory on every launch or signing in
 // would not stick.
+/*
+ * placementFromPrefs converts the stored record into what the window wants.
+ *
+ * The two types are deliberately separate — desktopprefs owns a file format
+ * that later versions read, clientwindow owns behaviour — so this is the seam
+ * where they meet, and it is four lines rather than an import cycle.
+ */
+func placementFromPrefs(w *desktopprefs.WindowPlacement) clientwindow.Placement {
+	if w == nil {
+		return clientwindow.Placement{}
+	}
+	return clientwindow.Placement{
+		Monitor: w.Monitor, X: w.X, Y: w.Y,
+		Width: w.Width, Height: w.Height, Maximized: w.Maximized,
+	}
+}
+
 func clientDataDir() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {

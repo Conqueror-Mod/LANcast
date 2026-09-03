@@ -80,6 +80,23 @@ type Options struct {
 	// another thread can show it again. It is called before the message loop
 	// starts and must not block.
 	OnReady func(Controller)
+
+	// Placement is where the window was last time, or the zero value to let
+	// the system choose. An unrecognisable one is ignored rather than refused:
+	// the default position is always on screen, which no remembered position
+	// can promise.
+	Placement Placement
+
+	/*
+	 * OnPlacement is called with the window's position as it closes.
+	 *
+	 * On close rather than on every move: a window being dragged produces
+	 * hundreds of positions a second, and writing a file for each would turn a
+	 * gesture into disk traffic. The cost is that a window open when the
+	 * machine loses power is not remembered, which is the right thing to
+	 * trade away.
+	 */
+	OnPlacement func(Placement)
 }
 
 // Controller manipulates a window that is already open, from any goroutine.
