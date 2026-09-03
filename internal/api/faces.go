@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 /*
@@ -199,4 +200,60 @@ func (s *Server) clusterSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"people": people})
+}
+
+/*
+ * rejectFace removes one face from a group, and remembers why it is gone.
+ *
+ * DELETE on the membership rather than on the face: the photograph and the
+ * detection both survive, and the face is free to be grouped with whoever it
+ * actually is. Nothing here deletes anything a person would miss.
+ *
+ * The important part is on the store side. Detaching alone would be undone by
+ * the next pass, which sees the same embedding and reaches the same wrong
+ * conclusion, so the refusal is recorded and outranks similarity from then on.
+ */
+func (s *Server) rejectFace(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid cluster id")
+		return
+	}
+	faceID, err := strconv.ParseInt(r.PathValue("face"), 10, 64)
+	if err != nil || faceID <= 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid face id")
+		return
+	}
+	err = s.st.RejectFace(r.Context(), id, faceID)
+	if s.notFoundOr(w, err, "reject face", "no such face in that group") {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+/*
+ * rejectSuggestion says no to a whole suggested group, and means it next time.
+ *
+ * A suggestion that can only be accepted is a list that never gets shorter:
+ * the near-misses that are genuinely somebody else are exactly the ones that
+ * stay near, so they are re-offered on every visit, and a question that
+ * reappears after being answered reads as a broken feature rather than a
+ * careful one.
+ */
+func (s *Server) rejectSuggestion(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid cluster id")
+		return
+	}
+	other, err := strconv.ParseInt(r.PathValue("other"), 10, 64)
+	if err != nil || other <= 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid group id")
+		return
+	}
+	err = s.st.RejectCluster(r.Context(), id, other)
+	if s.notFoundOr(w, err, "reject suggestion", "no such group") {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

@@ -1364,6 +1364,50 @@ export function useNamePerson(libraryID: number) {
   });
 }
 
+/*
+ * Removing one face from a person: that is not them.
+ *
+ * Three lists change and all three are invalidated, which is the rule this
+ * project has broken six times: the group's own faces lose one, the people
+ * page's count drops by one, and the freed face may become a group of its own
+ * — so the page that lists groups is a different page afterwards.
+ *
+ * `cluster-faces` is invalidated by prefix rather than for one id, because the
+ * face may have been shown under a group other than the one open when a person
+ * has several. The list is small and refetching all of it is cheaper than
+ * being wrong about which one to refetch.
+ */
+export function useRejectFace(libraryID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clusterID, faceID }: { clusterID: number; faceID: number }) =>
+      apiSend(`/api/faces/clusters/${clusterID}/faces/${faceID}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cluster-faces"] });
+      qc.invalidateQueries({ queryKey: ["people-faces", libraryID] });
+      qc.invalidateQueries({ queryKey: ["cluster-suggestions"] });
+    },
+  });
+}
+
+/*
+ * Dismissing a suggested group: none of these are that person.
+ *
+ * Only the suggestion list changes — nothing is moved, renamed or detached, so
+ * the people page is unaffected. Saying no is recorded on the server, which is
+ * what stops the same near-miss being offered on the next visit.
+ */
+export function useDismissSuggestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clusterID, otherID }: { clusterID: number; otherID: number }) =>
+      apiSend(`/api/faces/clusters/${clusterID}/suggestions/${otherID}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cluster-suggestions"] });
+    },
+  });
+}
+
 /** Start a face pass over a picture library. Progress arrives via activity. */
 export function useStartFacePass(libraryID: number) {
   const qc = useQueryClient();

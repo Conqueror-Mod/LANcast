@@ -365,3 +365,69 @@
 .facenamer__suggestion[data-taken] img {
   opacity: 0.45;
 }
+
+/*
+ * Taking a face out of a group.
+ *
+ * The control is small and sits on the face, not beside it: the answer to
+ * "which of these is not this person" is given by pointing at one, and a
+ * separate list of remove buttons would break that. It appears on hover and on
+ * keyboard focus — the second matters as much as the first, because a control
+ * that only exists under a mouse does not exist for everyone.
+ */
+.facenamer__face {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+
+.facenamer__remove,
+.facenamer__dismiss {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.8rem;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.8);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.facenamer__face:hover .facenamer__remove,
+.facenamer__remove:focus-visible,
+.facenamer__suggestion-wrap:hover .facenamer__dismiss,
+.facenamer__dismiss:focus-visible {
+  opacity: 1;
+}
+
+.facenamer__remove:hover,
+.facenamer__dismiss:hover,
+.facenamer__remove:focus-visible,
+.facenamer__dismiss:focus-visible {
+  border-color: var(--gold);
+}
+
+/*
+ * A removed face and a dismissed suggestion both fade rather than vanish.
+ *
+ * The refetch is a moment away and will take the tile out properly; removing
+ * it instantly would reflow the row under the pointer, so the next click lands
+ * on whatever slid into the gap. Fading says the press was heard without
+ * moving anything.
+ */
+.facenamer__face[data-gone],
+.facenamer__suggestion-wrap[data-gone] {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.facenamer__suggestion-wrap {
+  position: relative;
+}

@@ -6,7 +6,9 @@ import {
   useFaceCapabilities,
   useClusterFaces,
   useClusterSuggestions,
+  useDismissSuggestion,
   useNamePerson,
+  useRejectFace,
   useStartFacePass,
   useIsAdmin,
 } from "@/api/hooks";
@@ -97,6 +99,8 @@ function NamePanel({
   const primary = person.clusterIDs[0];
   const { data } = useClusterFaces(primary);
   const name = useNamePerson(libraryID);
+  const reject = useRejectFace(libraryID);
+  const dismiss = useDismissSuggestion();
   const [value, setValue] = useState(person.name ?? "");
 
   /*
@@ -124,6 +128,13 @@ function NamePanel({
    * as unclickable.
    */
   const [taken, setTaken] = useState<Set<number>>(new Set());
+  /*
+   * Faces taken out of this group, held for the same reason `taken` is: to
+   * make the press land before the refetch confirms it.
+   */
+  const [removed, setRemoved] = useState<Set<number>>(new Set());
+  /** Suggestions said no to, hidden before the refetch drops them. */
+  const [dropped, setDropped] = useState<Set<number>>(new Set());
 
   const submit = () => {
     const given = value.trim();
@@ -148,9 +159,34 @@ function NamePanel({
 
   return (
     <div className="facenamer" role="dialog" aria-label="Name this person">
+      {/*
+        * Each face can be taken out, because grouping is sometimes wrong and
+        * there was previously no way to say so. Removing does not delete the
+        * photograph or the detection — the face goes back to being ungrouped,
+        * free to join whoever it actually is, and the server remembers the
+        * refusal so the next pass cannot quietly undo it.
+        */}
       <div className="facenamer__faces">
         {(data?.faces ?? []).slice(0, 12).map((f) => (
-          <img key={f.id} src={faceThumb(f.id)} alt="" loading="lazy" />
+          <div key={f.id} className="facenamer__face" data-gone={removed.has(f.id) || undefined}>
+            <img src={faceThumb(f.id)} alt="" loading="lazy" />
+            <button
+              className="facenamer__remove"
+              aria-label="Not this person"
+              title="Not this person — remove from this group"
+              disabled={removed.has(f.id)}
+              onClick={() => {
+                // Marked here as well as refetched, for the reason accepting a
+                // suggestion is: the refetch is the truth and arrives in a
+                // moment, and without this there is a gap in which a pressed
+                // control looks like one that did nothing.
+                setRemoved((s) => new Set(s).add(f.id));
+                reject.mutate({ clusterID: primary, faceID: f.id });
+              }}
+            >
+              ×
+            </button>
+          </div>
         ))}
       </div>
 
@@ -191,24 +227,50 @@ function NamePanel({
           </p>
           <div className="facenamer__suggestions">
             {suggestions.data?.people?.map((p) => (
-              <button
+              /*
+               * Two answers, not one.
+               *
+               * A suggestion that can only be accepted is a list that never
+               * gets shorter: the near-misses that are genuinely somebody else
+               * are exactly the ones that stay near, so they were re-offered
+               * on every visit with no way to say no. Dismissing is recorded,
+               * so the question is not asked twice.
+               */
+              <div
                 key={p.id}
-                className="facenamer__suggestion"
-                data-taken={taken.has(p.id) || undefined}
-                onClick={() => {
-                  // Marked before the request answers. The refetch confirms it
-                  // and removes the tile; this is what makes the press land.
-                  setTaken((s) => new Set(s).add(p.id));
-                  name.mutate({ id: p.id, name: named });
-                }}
-                disabled={taken.has(p.id)}
-                title={taken.has(p.id) ? `Named ${named}` : `Also ${named}`}
+                className="facenamer__suggestion-wrap"
+                data-gone={dropped.has(p.id) || undefined}
               >
-                {p.cover_face_id != null && (
-                  <img src={faceThumb(p.cover_face_id)} alt="" loading="lazy" />
-                )}
-                <span>{taken.has(p.id) ? "✓" : p.count}</span>
-              </button>
+                <button
+                  className="facenamer__suggestion"
+                  data-taken={taken.has(p.id) || undefined}
+                  onClick={() => {
+                    // Marked before the request answers. The refetch confirms
+                    // it and removes the tile; this makes the press land.
+                    setTaken((s) => new Set(s).add(p.id));
+                    name.mutate({ id: p.id, name: named });
+                  }}
+                  disabled={taken.has(p.id) || dropped.has(p.id)}
+                  title={taken.has(p.id) ? `Named ${named}` : `Also ${named}`}
+                >
+                  {p.cover_face_id != null && (
+                    <img src={faceThumb(p.cover_face_id)} alt="" loading="lazy" />
+                  )}
+                  <span>{taken.has(p.id) ? "✓" : p.count}</span>
+                </button>
+                <button
+                  className="facenamer__dismiss"
+                  aria-label={`Not ${named}`}
+                  title={`Not ${named} — do not ask again`}
+                  disabled={taken.has(p.id) || dropped.has(p.id)}
+                  onClick={() => {
+                    setDropped((s) => new Set(s).add(p.id));
+                    dismiss.mutate({ clusterID: primary, otherID: p.id });
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         </div>
