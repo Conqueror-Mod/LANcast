@@ -1,0 +1,780 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LANcast HTTP API",
+    "version": "1",
+    "summary": "The contract third-party clients build against.",
+    "description": "The machine-readable half of the LANcast contract. `docs/api.md` remains the narrative companion and explains *why* each endpoint behaves as it does; this file is what tooling reads.\n\nAuthored as JSON rather than YAML on purpose: Go's standard library parses JSON and has no YAML parser, and `internal/api/openapi_test.go` checks this document against the router on every `go test ./...`. Adding a YAML dependency to a repository that hand-rolled an EXIF reader to avoid one was the wrong trade. The cost is that JSON has no comments — which is fine, because prose belongs in `description` fields, where `openapi-typescript` carries it out to JSDoc on the generated client types. A comment would have been lost; a description is delivered.\n\n`/api` is permanently version 1 (ADR 0018). Additive changes ship at any time, so **clients must ignore unknown response fields** and **must tolerate unknown `kind`, `match_state` and error `code` values**. Enum-typed strings in this document are therefore documented as open sets: they list what the server emits today, not what it may emit tomorrow.\n\nTimes are Unix seconds. Durations and positions are milliseconds.",
+    "license": {
+      "name": "AGPL-3.0-or-later",
+      "identifier": "AGPL-3.0-or-later"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Relative to the server's own origin. An unsecured server binds 127.0.0.1 only; TLS turns on when the socket reaches beyond this machine (ADR 0014)."
+    }
+  ],
+  "security": [{ "sessionCookie": [] }],
+  "tags": [
+    { "name": "health", "description": "Liveness and contract revision." },
+    { "name": "auth", "description": "Sessions, first-run setup, and passwords." },
+    { "name": "identity", "description": "Who this server is, cryptographically (ADR 0044)." },
+    { "name": "libraries", "description": "Libraries and the locations their files live in (ADR 0034)." }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": ["health"],
+        "summary": "Liveness, application version, and contract revision",
+        "description": "One of the five endpoints that does not require a session.\n\n`version` is the application release, stamped from the release tag at build time (ADR 0016); a build from source reports `dev`. `api_version` is the HTTP contract revision and changes only when a new `/api/vN` prefix ships.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The server is up.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Health" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/status": {
+      "get": {
+        "operationId": "getAuthStatus",
+        "tags": ["auth"],
+        "summary": "What the client should render: setup, login, or the library",
+        "description": "Does not require a session, and answers differently depending on whether one is present.\n\nThis is the one response every screen already fetches, which is why several unrelated facts are reported here rather than from an endpoint of their own.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Always. An unauthenticated caller gets the same shape without `user`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthStatus" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/setup": {
+      "post": {
+        "operationId": "postAuthSetup",
+        "tags": ["auth"],
+        "summary": "Create the first administrator",
+        "description": "Only while the server is unconfigured; once an account exists this answers `409 conflict`. Issues a session cookie on success.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SetupRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The administrator was created and this caller is now signed in as them.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SetupResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": {
+            "description": "An account already exists, so there is no first administrator to create.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "postAuthLogin",
+        "tags": ["auth"],
+        "summary": "Exchange a username and password for a session",
+        "description": "Throttled per client IP. **A wrong username and a wrong password are reported identically** as `401 unauthorized`, deliberately: distinguishing them tells an attacker which half they got right.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in. The session cookie is set on this response.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": {
+            "description": "Incorrect username or password — the two are not distinguished.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "409": {
+            "description": "No accounts exist yet; the caller wants `/auth/setup`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts from this client; wait a few minutes.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "postAuthLogout",
+        "tags": ["auth"],
+        "summary": "End this session only",
+        "description": "Ends the calling session and no other. Contrast `/auth/password`, which revokes every session this account holds.",
+        "responses": {
+          "200": {
+            "description": "The session is gone and the cookie has been cleared.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password": {
+      "post": {
+        "operationId": "postAuthPassword",
+        "tags": ["auth"],
+        "summary": "Change your own password",
+        "description": "Changes the calling account's password and **revokes every session that account holds, including this one**. That is the point of server-side sessions, not a bug to smooth over — a client must expect the next request to be answered `401` and send the user back to the login screen.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changed. Every session for this account, including the caller's, is now invalid.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/identity": {
+      "get": {
+        "operationId": "getIdentity",
+        "tags": ["identity"],
+        "summary": "This server's own cryptographic identity",
+        "description": "Who this server is when it talks to another one (ADR 0044). `fingerprint_display` is the same value grouped for a human to read aloud or compare by eye.",
+        "responses": {
+          "200": {
+            "description": "This server's identity.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Identity" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/libraries": {
+      "get": {
+        "operationId": "listLibraries",
+        "tags": ["libraries"],
+        "summary": "Every library on this server",
+        "responses": {
+          "200": {
+            "description": "All libraries, with their counts and last-scan verdict.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryList" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "operationId": "createLibrary",
+        "tags": ["libraries"],
+        "summary": "Create a library",
+        "description": "Administrators only.\n\n`roots` is the multi-location form (ADR 0034). `path` remains accepted and means exactly the same as a single-element `roots` array, so every client that predates multi-root libraries keeps working unchanged. Send one or the other.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateLibraryRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Library" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": {
+            "description": "A library already covers that path.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/libraries/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/LibraryId" }],
+      "patch": {
+        "operationId": "patchLibrary",
+        "tags": ["libraries"],
+        "summary": "Rename a library, move it, or change its kind",
+        "description": "Administrators only. Every field is optional; an omitted field is left alone, which is why they are nullable pointers on the server rather than plain strings.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PatchLibraryRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The library as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Library" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteLibrary",
+        "tags": ["libraries"],
+        "summary": "Delete a library and its rows",
+        "description": "Administrators only. Removes the library's **records**. It does not touch the media on disk — the server never owns the files.",
+        "responses": {
+          "200": {
+            "description": "Deleted.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/libraries/{id}/roots": {
+      "parameters": [{ "$ref": "#/components/parameters/LibraryId" }],
+      "get": {
+        "operationId": "listLibraryRoots",
+        "tags": ["libraries"],
+        "summary": "The locations this library's files live in",
+        "responses": {
+          "200": {
+            "description": "Every root, each carrying the number of rows that would go with it if it were removed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RootList" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "post": {
+        "operationId": "addLibraryRoot",
+        "tags": ["libraries"],
+        "summary": "Add a location to this library",
+        "description": "Administrators only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RootRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Added.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryRoot" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": {
+            "description": "That path is already covered by a library.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/libraries/{id}/roots/{rootID}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/LibraryId" },
+        { "$ref": "#/components/parameters/RootId" }
+      ],
+      "patch": {
+        "operationId": "patchLibraryRoot",
+        "tags": ["libraries"],
+        "summary": "Point a location somewhere else",
+        "description": "Administrators only. Used when a drive letter changes or a share moves.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RootRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The root as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryRoot" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteLibraryRoot",
+        "tags": ["libraries"],
+        "summary": "Remove a location from this library",
+        "description": "Administrators only. Removes the rows that came from that location; the files are untouched.",
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "lancast_session",
+        "description": "A server-side session (ADR 0011). Set by `/auth/setup` and `/auth/login`.\n\nState-changing methods are additionally origin-checked: `POST`, `PUT`, `PATCH` and `DELETE` must carry an `Origin` or `Referer` matching the request host or the call is refused `403`. A request carrying **neither** header is allowed, so non-browser clients work normally. CSRF is defended twice — this and `SameSite=Strict` — and both are load-bearing."
+      }
+    },
+    "parameters": {
+      "LibraryId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The library's id.",
+        "schema": { "type": "integer", "format": "int64" }
+      },
+      "RootId": {
+        "name": "rootID",
+        "in": "path",
+        "required": true,
+        "description": "The root's id.",
+        "schema": { "type": "integer", "format": "int64" }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed body or invalid parameter.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "No session, or a session that is no longer valid.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Signed in, but not permitted — an administrator-only route, or a state-changing request whose `Origin` did not match.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "description": "The single error shape. Handlers never surface raw SQL errors.",
+        "required": ["error"],
+        "properties": {
+          "error": { "$ref": "#/components/schemas/Error" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A stable, switchable identifier. **An open set** — a new code is an additive change (ADR 0018), so a client must tolerate one it does not know. Codes in use: `bad_request` (400), `unauthorized` (401), `forbidden` (403), `not_found` (404), `conflict` (409), `too_many_requests` (429), `unsupported_api_version` (400), `unavailable` (503), `canceled` (499), `internal` (500).",
+            "examples": ["not_found"]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, and not intended to be parsed.",
+            "examples": ["no item with id 412"]
+          }
+        }
+      },
+      "Acknowledged": {
+        "type": "object",
+        "description": "A bare acknowledgement. Present so that a client that decodes every response has something to decode.",
+        "properties": {
+          "ok": { "type": "boolean" }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status", "version", "api_version", "api_versions"],
+        "properties": {
+          "status": { "type": "string", "examples": ["ok"] },
+          "version": {
+            "type": "string",
+            "description": "The application release, semver, stamped from the release tag at build time. A build straight from source reports `dev`, which is the honest label for it.",
+            "examples": ["0.8.58", "dev"]
+          },
+          "api_version": {
+            "type": "integer",
+            "description": "The contract revision being served. Permanently 1 at `/api`.",
+            "examples": [1]
+          },
+          "api_versions": {
+            "type": "array",
+            "description": "Every revision this build can serve. A list, because a future v2 server keeps answering v1 for at least one release — \"which versions do you speak\" is a different question from \"which one am I getting\".",
+            "items": { "type": "integer" }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": ["id", "name", "role"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "**A string, not a number.** Item and library ids are integers; user ids are not.",
+            "examples": ["u_3f9"]
+          },
+          "name": { "type": "string" },
+          "role": {
+            "type": "string",
+            "description": "An open set. `admin` and `member` today (ADR 0015).",
+            "examples": ["admin", "member"]
+          },
+          "sharing": {
+            "type": "boolean",
+            "description": "This account's own activity-sharing choice (ADR 0035). Carried on `/auth/status` only, and **absent rather than false** when the server could not read it.\n\nIt is here because there is nowhere else it could be: `GET /api/people` excludes the caller by design, so a client had no way to read back a setting it could write, and the toggle rendered unticked for somebody who had opted in. For a privacy control that is the worst direction to be wrong in."
+          },
+          "visible_to_peers": {
+            "type": "boolean",
+            "description": "Whether this account appears in the roster handed to paired servers. `/auth/status` only, and absent rather than false when unreadable."
+          }
+        }
+      },
+      "AuthStatus": {
+        "type": "object",
+        "required": ["configured", "authenticated", "lan_enabled", "restart_required", "can_convert"],
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on."
+          },
+          "authenticated": { "type": "boolean" },
+          "lan_enabled": {
+            "type": "boolean",
+            "description": "Whether the socket actually reaches beyond this machine — **not** whether a password is set. An unsecured server is always `false` because it is forced onto loopback; a secured server the operator deliberately bound to a loopback address is also `false`, and stays plain HTTP. TLS turns on at the same boundary that gates LAN binding (ADR 0014)."
+          },
+          "restart_required": {
+            "type": "boolean",
+            "description": "True only when restarting would actually bind wider than the server is bound right now: the loopback restriction is what is holding it back, *and* the configured address reaches further once lifted.\n\n**Not the inverse of `lan_enabled`.** A server deliberately bound to loopback reports `false`, because a restart would change nothing there and a client that promises otherwise sends somebody to do something that cannot work."
+          },
+          "can_convert": {
+            "type": "boolean",
+            "description": "Whether ffmpeg is present (ADR 0048). Reported to every caller, not only administrators — the install button is admin-only and correctly so, but the *fact* is not a secret and the person most affected is a member who cannot open Settings at all.\n\nA client must use this to explain the failure **before** attempting playback: a `<video>` element handed a refused request reports a bare error with no status, so a client that waits to be told cannot be told, and the viewer sees a black rectangle instead of a reason.\n\n**Absent must read as capable.** A client older than the server, or a server older than the client, may not see this field; assuming otherwise puts a warning in front of somebody whose playback works."
+          },
+          "user": {
+            "$ref": "#/components/schemas/User",
+            "description": "Present only when a session is active."
+          }
+        }
+      },
+      "SetupRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string" },
+          "password": { "type": "string", "format": "password" },
+          "install_media_tools": {
+            "type": "boolean",
+            "description": "Optional, and **absent means no** — absent and `false` are deliberately different. Absent means the caller never saw the question, which is true of an older client and of any script.\n\nSending `true` starts a one-off background download of ffmpeg: around 160MB, pinned URL, checksum verified (ADR 0048). This is the one place the server may fetch anything on its own initiative, which is why it is an optional field rather than a boolean with a default. Only a client that displayed what would be downloaded, from where, how large and under which licence may send `true` — that disclosure *is* the consent, and it stands in for the admin gate that cannot exist before any account does.\n\nSetup does not wait for the download, and a fetch that cannot start never fails the request. Nothing is fetched when ffmpeg is already present."
+          }
+        }
+      },
+      "SetupResponse": {
+        "type": "object",
+        "required": ["configured", "authenticated", "media_tools_installing", "restart_required", "user"],
+        "properties": {
+          "configured": { "type": "boolean" },
+          "authenticated": { "type": "boolean" },
+          "media_tools_installing": {
+            "type": "boolean",
+            "description": "Whether a download actually started. Poll `GET /api/media-tools` for progress. False when ffmpeg was already present, or when `install_media_tools` was not sent."
+          },
+          "restart_required": { "type": "boolean" },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string" },
+          "password": { "type": "string", "format": "password" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": ["authenticated", "user"],
+        "properties": {
+          "authenticated": { "type": "boolean" },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["current_password", "new_password"],
+        "properties": {
+          "current_password": { "type": "string", "format": "password" },
+          "new_password": { "type": "string", "format": "password" }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "required": ["fingerprint", "fingerprint_display", "name"],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "This server's public-key fingerprint (ADR 0044)."
+          },
+          "fingerprint_display": {
+            "type": "string",
+            "description": "The same value, grouped for a human to read aloud or compare by eye."
+          },
+          "name": { "type": "string" }
+        }
+      },
+      "ShapeWarning": {
+        "type": "object",
+        "description": "The last scan's verdict, when it had one. Carried on the library rather than only in live scan progress — which dies with the server process, and a warning about a kind that cannot be changed needs to outlive a restart.",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "remedy": { "type": "string" }
+        }
+      },
+      "LibraryRoot": {
+        "type": "object",
+        "description": "One place a library's files live (ADR 0034).",
+        "required": ["id", "library_id", "path", "created_at", "item_count"],
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "library_id": { "type": "integer", "format": "int64" },
+          "path": { "type": "string" },
+          "created_at": { "type": "integer", "format": "int64", "description": "Unix seconds." },
+          "item_count": {
+            "type": "integer",
+            "description": "Rows that would go with this location if it were removed."
+          }
+        }
+      },
+      "Library": {
+        "type": "object",
+        "required": ["id", "name", "kind", "path", "created_at", "scanned_at", "item_count", "media_count"],
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "description": "**An open set.** `movie`, `show`, `music` and `picture` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
+          },
+          "path": {
+            "type": "string",
+            "description": "The library's first location.\n\nKept by the server so clients that predate multi-root libraries keep working, and superseded by `roots`. Read `roots` for anything that has to be right about a library in more than one place; this stays correct for the single-location case, which is most of them."
+          },
+          "roots": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LibraryRoot" }
+          },
+          "created_at": { "type": "integer", "format": "int64", "description": "Unix seconds." },
+          "scanned_at": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Unix seconds, or null if it has never been scanned."
+          },
+          "item_count": {
+            "type": "integer",
+            "description": "Tiles in the grid."
+          },
+          "media_count": {
+            "type": "integer",
+            "description": "Files in the library — songs, photos, films, episodes — as against `item_count`, which is tiles in the grid. They differ wherever a library groups its media: 1,171 artists holding tens of thousands of songs."
+          },
+          "shape_warning": { "$ref": "#/components/schemas/ShapeWarning" }
+        }
+      },
+      "LibraryList": {
+        "type": "object",
+        "required": ["libraries"],
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Library" }
+          }
+        }
+      },
+      "RootList": {
+        "type": "object",
+        "required": ["roots"],
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LibraryRoot" }
+          }
+        }
+      },
+      "CreateLibraryRequest": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "description": "`movie`, `show`, `music` or `picture`. Validated on the way in, so this is a closed set for *requests* even though it is open for responses."
+          },
+          "path": {
+            "type": "string",
+            "description": "The single-location form. Means the same as a one-element `roots`."
+          },
+          "roots": {
+            "type": "array",
+            "description": "The multi-location form (ADR 0034).",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "PatchLibraryRequest": {
+        "type": "object",
+        "description": "Every field optional; an omitted field is left alone.",
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "kind": { "type": "string" }
+        }
+      },
+      "RootRequest": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string" }
+        }
+      }
+    }
+  }
+}

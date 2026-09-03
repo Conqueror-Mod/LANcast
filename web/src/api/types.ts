@@ -1,49 +1,25 @@
-// Shapes returned by the LANcast HTTP API. Kept deliberately close to the
-// server's JSON — the API contract in docs/api.md is the source of truth.
+// Shapes returned by the LANcast HTTP API.
+//
+// Types that docs/openapi.json specifies are re-exported from the generated
+// schema.ts rather than restated here, so there is exactly one description of
+// each shape and the client cannot disagree with the contract. The spec is
+// checked against the router by internal/api/openapi_test.go, and schema.ts is
+// checked against the spec by schema.test.ts — so a shape that reaches this
+// file has been verified end to end.
+//
+// The rest are still hand-written, and are migrated a section at a time as the
+// spec grows. `pendingSpec` in internal/api/openapi_test.go is the list of what
+// has not been reached yet.
+
+import type { components } from "./schema";
 
 export type MatchState =
   "matched" | "review" | "unmatched" | "locked" | "local";
 
 /** One place a library's files live (ADR 0034). */
-export interface LibraryRoot {
-  id: number;
-  library_id: number;
-  path: string;
-  created_at: number;
-  /** Rows that would go with this location if it were removed. */
-  item_count: number;
-}
+export type LibraryRoot = components["schemas"]["LibraryRoot"];
 
-export interface Library {
-  id: number;
-  name: string;
-  kind: string;
-  /**
-   * The library's first location.
-   *
-   * Kept by the server so clients that predate multi-root libraries keep
-   * working, and superseded by `roots`. Read `roots` for anything that has to
-   * be right about a library in more than one place; this stays correct for
-   * the single-location case, which is most of them.
-   */
-  path: string;
-  roots?: LibraryRoot[];
-  created_at: number;
-  scanned_at: number | null;
-  item_count: number;
-  /**
-   * Files in the library — songs, photos, films, episodes — as against
-   * `item_count`, which is tiles in the grid. They differ wherever a library
-   * groups its media: 1,171 artists holding tens of thousands of songs.
-   */
-  media_count: number;
-  /**
-   * The last scan's verdict, when it had one. Carried on the library rather
-   * than only in live scan progress, which dies with the server process — a
-   * warning about a kind that cannot be changed needs to outlive a restart.
-   */
-  shape_warning?: ShapeWarning;
-}
+export type Library = components["schemas"]["Library"];
 
 export interface Artwork {
   poster?: string;
@@ -389,11 +365,7 @@ export interface ScanIssue {
  * hear: a library's kind cannot be changed, so the only fix is to remove it and
  * add it again.
  */
-export interface ShapeWarning {
-  code: string;
-  message: string;
-  remedy?: string;
-}
+export type ShapeWarning = components["schemas"]["ShapeWarning"];
 
 /**
  * What scanning every library at once answered.
