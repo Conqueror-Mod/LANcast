@@ -85,6 +85,18 @@ func main() {
 		return
 	}
 
+	// `lancastd restore -from FILE` replaces the database with a backup
+	// (ADR 0058). Offline by nature — the server cannot swap the file it is
+	// reading — and console output only, for the reason above.
+	if len(os.Args) > 1 && os.Args[1] == "restore" {
+		attachConsole()
+		if err := runRestore(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancastd restore:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// `lancastd relaunch <pid> [args…]` finishes a staged update on an install
 	// that is not a service: it waits for the old server to exit and starts it
 	// again. Never typed by a person — it is a step in an update.
