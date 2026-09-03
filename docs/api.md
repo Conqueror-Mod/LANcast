@@ -3449,6 +3449,97 @@ a client claiming "not watched" at 98% has an out-of-date idea of finished.
 
 ---
 
+## Backups
+
+A backup is a snapshot of the database and nothing else
+([ADR 0058](adr/0058-a-backup-is-the-database.md)). **Admin only** throughout: a
+backup is a complete copy of the library including every account row, so being
+able to fetch one is being able to read the database.
+
+**There is no restore endpoint, and that is the decision rather than a gap.**
+Restoring replaces the database the server is reading, so it is offline — the
+server stops, the file is replaced, the server starts. Clients must not offer a
+restore button; `GET /api/backups` returns the command to show instead.
+
+**Artwork is not included.** The cache is roughly forty-six times the database's
+size and is re-fetchable, so after a restore posters arrive again over the
+following hours. **A backup holds no sessions** — they are cleared when it is
+written, so a backup file cannot sign anyone in.
+
+### `GET /api/backups`
+
+```json
+{
+  "backups": [
+    { "name": "lancast-backup-20260903-144529.db",
+      "bytes": 102834176,
+      "taken_at": 1788452729,
+      "schema_version": 39,
+      "restorable": true }
+  ],
+  "folder": "C:\\ProgramData\\LANcast\\backups",
+  "restore_command": "LANcast-Server.exe restore -from <file> -yes"
+}
+```
+
+Newest first. A server that has never taken one answers `backups: []` — not an
+error.
+
+`folder` is where the files are, so a person can copy one somewhere that is not
+this disk. A backup that only exists on the drive it protects against is not
+really a backup.
+
+`restorable` is whether **this build** could restore that file, and it is not
+decorative: each entry is opened and its recorded `schema_version` read.
+Migrations are one-way, so a backup from a newer LANcast cannot be restored by
+an older one. When it is `false`, `problem` carries a sentence saying why —
+`"taken by a newer LANcast — update before restoring it"`, or that the file is
+not a readable backup.
+
+**An unreadable backup is listed and marked, never omitted.** A backup that has
+gone bad is the single most important thing this endpoint can report, and a list
+that quietly dropped it would say the opposite of the truth.
+
+### `POST /api/backups`
+
+Takes one. No body. Answers `201` with the new entry, in the same shape as a
+list element:
+
+```json
+{ "name": "lancast-backup-20260903-144529.db", "bytes": 102834176,
+  "taken_at": 1788452729, "schema_version": 39, "restorable": true }
+```
+
+**Synchronous**, and deliberately not a background job with progress: it is
+`VACUUM INTO`, measured at **441 ms on a 103 MB library**, from a live server
+with no downtime and no interruption to playback. An activity entry and a poll
+would be more machinery than the operation.
+
+Serialised server-side — two requests at once produce two backups, not a name
+collision. A full disk answers `507` with code `no_space` rather than a generic
+internal error, because that is the likely failure on a home server and
+"unexpected server error" would send somebody looking for a bug in LANcast
+instead of at their disk.
+
+Recorded in the audit log as `backup.create`.
+
+### `GET /api/backups/{name}`
+
+Downloads one, as `application/vnd.sqlite3` with
+`Content-Disposition: attachment`. Supports range requests, so a 100 MB file
+over a home network resumes rather than restarting.
+
+`{name}` must be a bare backup filename — `lancast-backup-….db` — resolved
+inside the backup folder and re-verified to be there after `filepath.Abs`.
+Anything else is `400 bad_request`, including a name that traverses, is
+absolute, or names the live database. A name that is well-formed but absent is
+`404 not_found`.
+
+### `DELETE /api/backups/{name}`
+
+Removes one. `204` on success, `400` for a name that is not a backup name,
+`404` when there is no such file. Recorded as `backup.delete`.
+
 ## Plugins
 
 > M4. Trust model: [ADR 0021](adr/0021-plugin-distribution-and-trust.md).

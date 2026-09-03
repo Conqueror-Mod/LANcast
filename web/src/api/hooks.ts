@@ -7,6 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
+import type { BackupFile, BackupsResponse } from "./types";
 import { isContainer } from "@/lib/kind";
 import { forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type {
@@ -548,7 +549,8 @@ export function useRefreshPreview(
 export function useRefreshItem(id: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiPost<{ queued: number }>(`/api/items/${id}/refresh`, {}),
+    mutationFn: () =>
+      apiPost<{ queued: number }>(`/api/items/${id}/refresh`, {}),
     onSuccess: () => {
       qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
         active: true,
@@ -1303,7 +1305,10 @@ export function useFaceCapabilities(enabled = true) {
  * question is answerable: "is this also Carl?" needs a Carl. Asking before
  * would be a list of strangers next to an empty field.
  */
-export function useClusterSuggestions(clusterID: number | null, enabled: boolean) {
+export function useClusterSuggestions(
+  clusterID: number | null,
+  enabled: boolean,
+) {
   return useQuery({
     queryKey: ["cluster-suggestions", clusterID],
     queryFn: ({ signal }) =>
@@ -1410,8 +1415,7 @@ export function useFaceModels(enabled = true) {
     queryFn: ({ signal }) =>
       apiGet<FaceModelState>("/api/faces/models", signal),
     enabled,
-    refetchInterval: (q) =>
-      q.state.data?.job.running ? 1000 : false,
+    refetchInterval: (q) => (q.state.data?.job.running ? 1000 : false),
   });
 }
 
@@ -1893,9 +1897,9 @@ export async function fetchArtistQueue(
             // opened is already here, and opening one later is served from this.
             queryKey: ["children", child.id, "track"],
             queryFn: () =>
-              apiGet<ItemsPage>(`/api/items?parent_id=${child.id}&sort=track`).then(
-                (r) => r.items,
-              ),
+              apiGet<ItemsPage>(
+                `/api/items?parent_id=${child.id}&sort=track`,
+              ).then((r) => r.items),
           }),
     ),
   );
@@ -2771,6 +2775,46 @@ export function useGrantPresence() {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["peer-presence"] });
       void qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+/*
+ * Backups (ADR 0058).
+ *
+ * The query key is `["backups"]` and nothing is a sibling of it. This project's
+ * most-repeated bug is a write that changes what a list holds without
+ * invalidating that list — it has shipped four times, always quietly, because
+ * the request succeeds and only the picture is stale. Taking and deleting both
+ * change what this list holds, so both invalidate exactly this key.
+ */
+export function useBackups(enabled = true) {
+  return useQuery({
+    queryKey: ["backups"],
+    queryFn: ({ signal }) => apiGet<BackupsResponse>("/api/backups", signal),
+    // Admin-only: a member asking gets a refusal, so callers that are not sure
+    // pass false rather than filling the console on every page load.
+    enabled,
+  });
+}
+
+export function useTakeBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<BackupFile>("/api/backups", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backups"] });
+    },
+  });
+}
+
+export function useDeleteBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiSend(`/api/backups/${encodeURIComponent(name)}`, "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backups"] });
     },
   });
 }
