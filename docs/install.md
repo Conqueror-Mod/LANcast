@@ -106,9 +106,13 @@ Same Administrator requirement as `reset-auth`, and for the same reason.
 
 The database being replaced is **kept** beside it as
 `lancast.db.replaced-<timestamp>`, so restoring the wrong backup can be undone;
-delete it once you are satisfied. Everyone is signed out — sessions are
-server-side so they can be revoked, and a restore handing back the logins the
-backup was carrying would undo that.
+delete it once you are satisfied. Everyone is signed out, because the sessions
+belonged to the database that was replaced.
+
+A backup itself holds **no logins**: they are cleared when the backup is
+written, so a backup file copied to a stick cannot sign anyone in
+([ADR 0058](adr/0058-a-backup-is-the-database.md), as amended). Backups written
+before that are cleared on restore instead.
 
 A backup taken by a **newer** LANcast is refused by name, before anything is
 moved, because migrations are one-way. Update first, then restore. A backup

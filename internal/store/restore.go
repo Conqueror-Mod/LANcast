@@ -47,9 +47,14 @@ type Restore struct {
 	// SchemaVersionAfter is the revision after migrating forward, which may be
 	// higher than the snapshot's own if the backup came from an older build.
 	SchemaVersionAfter int `json:"schema_version_after"`
-	// SessionsCleared is how many logins the backup carried that no longer
-	// work. Sessions are server-side precisely so they can be revoked, and a
-	// restore handing them back would undo that.
+	// SessionsCleared is how many logins the backup carried, which for a
+	// backup taken by this build is zero — they are cleared at snapshot time
+	// (ADR 0058, as amended), so the property belongs to the file rather than
+	// to whoever restores it.
+	//
+	// This is not therefore dead: a backup written before that amendment
+	// carries its sessions and stays restorable, which is the point of having
+	// backups, and this is the only thing that covers one.
 	SessionsCleared int `json:"sessions_cleared"`
 }
 
