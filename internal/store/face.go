@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -530,4 +532,150 @@ func (s *Store) FacesInCluster(ctx context.Context, clusterID int64, limit int) 
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+/*
+ * SuggestedForCluster returns unnamed clusters that look like a named one.
+ *
+ * The point is the 126 faces on a real library that grouped with nothing at
+ * all. They are not false detections — measured at the same detector
+ * confidence as every other face — they are simply harder: smaller on average,
+ * odder angles, and just short of the threshold. Clustering cannot lower that
+ * threshold to catch them, because erring low attaches somebody's face to
+ * somebody else's name and that is the failure worth avoiding.
+ *
+ * A person can answer what the threshold cannot. So the machine offers its
+ * near-misses and a human decides, which is exactly the shape of every other
+ * uncertain-match surface in this project: the review queue proposes and a
+ * person disposes.
+ *
+ * `SameFaceCosine` is deliberately not the bar here. These are the ones that
+ * already failed it — anything above it is in the group already — so the
+ * suggestion band sits below, and the results are ordered so the strongest
+ * candidate is first. Nothing is merged automatically at any score.
+ */
+func (s *Store) SuggestedForCluster(ctx context.Context, clusterID int64, limit int) ([]FaceCluster, error) {
+	if limit <= 0 || limit > 24 {
+		limit = 6
+	}
+
+	target, libraryID, err := s.clusterCentroid(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return []FaceCluster{}, nil
+	}
+
+	// Every unnamed cluster's centroid, in one pass. A library has hundreds of
+	// clusters and thousands of faces, so this is a scan over the small number.
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT f.cluster_id, f.embedding
+		FROM face f
+		JOIN face_cluster c ON c.id = f.cluster_id
+		WHERE c.library_id = ? AND c.id != ?
+		  AND (c.name IS NULL OR c.name = '')`, libraryID, clusterID)
+	if err != nil {
+		return nil, fmt.Errorf("suggested for cluster: %w", err)
+	}
+	defer rows.Close()
+
+	centroids := map[int64][]float32{}
+	counts := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var blob []byte
+		if err := rows.Scan(&id, &blob); err != nil {
+			return nil, fmt.Errorf("suggested for cluster: %w", err)
+		}
+		c := centroids[id]
+		n := counts[id]
+		accumulate(c, decodeEmbedding(blob), &c, &n)
+		centroids[id], counts[id] = c, n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	type scored struct {
+		id  int64
+		sim float64
+	}
+	var best []scored
+	for id, c := range centroids {
+		sim := cosine(target, c)
+		/*
+		 * A floor as well as a ceiling.
+		 *
+		 * Without one the list is simply the least-dissimilar strangers in the
+		 * library, offered with the same confidence as a real near-miss — and a
+		 * suggestion that is usually wrong trains somebody to dismiss the
+		 * feature rather than to read it. Two thirds of the threshold is close
+		 * enough to be worth a glance and far enough below it to be a genuine
+		 * question rather than an answer.
+		 */
+		if sim < SameFaceCosine*0.66 || sim >= SameFaceCosine {
+			continue
+		}
+		best = append(best, scored{id, sim})
+	}
+	sort.Slice(best, func(i, j int) bool { return best[i].sim > best[j].sim })
+	if len(best) > limit {
+		best = best[:limit]
+	}
+
+	// Reuse the one lister rather than a second query that would have to be
+	// kept in step with it — the cover face and the count are decided there.
+	all, err := s.FaceClusters(ctx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]FaceCluster, len(all))
+	for _, c := range all {
+		byID[c.ID] = c
+	}
+
+	out := make([]FaceCluster, 0, len(best))
+	for _, b := range best {
+		if c, ok := byID[b.id]; ok {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+// clusterCentroid is a cluster's mean embedding, and the library it belongs to.
+func (s *Store) clusterCentroid(ctx context.Context, clusterID int64) ([]float32, int64, error) {
+	var libraryID int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT library_id FROM face_cluster WHERE id = ?`, clusterID).Scan(&libraryID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("cluster centroid: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT embedding FROM face WHERE cluster_id = ?`, clusterID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("cluster centroid: %w", err)
+	}
+	defer rows.Close()
+
+	var centroid []float32
+	n := 0
+	for rows.Next() {
+		var blob []byte
+		if err := rows.Scan(&blob); err != nil {
+			return nil, 0, fmt.Errorf("cluster centroid: %w", err)
+		}
+		accumulate(centroid, decodeEmbedding(blob), &centroid, &n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if n == 0 {
+		return nil, libraryID, nil
+	}
+	return centroid, libraryID, nil
 }

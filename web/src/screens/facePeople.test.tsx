@@ -16,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
+import type { FacePerson } from "@/api/hooks";
 import { FacePeople } from "./FacePeople";
 
 declare global {
@@ -250,5 +251,51 @@ describe("naming", () => {
       tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(host.textContent).toContain("never rename");
+  });
+});
+
+/*
+ * A group of one is held back until asked for.
+ *
+ * Measured on a real library: 126 of 343 groups hold a single face — 37% of
+ * the groups and 2.7% of the faces. Every tile is the same size, so that
+ * minority filled as much of the page as the groups of 301 and 222 that are
+ * the reason to be on it, and the page read as mostly noise.
+ */
+describe("groups of one", () => {
+  const many = [
+    { id: 1, name: null, count: 301, cover_face_id: 11 },
+    { id: 2, name: null, count: 1, cover_face_id: 12 },
+    { id: 3, name: null, count: 1, cover_face_id: 13 },
+  ] as unknown as FacePerson[];
+
+  it("keeps them out of the grid until asked", async () => {
+    mount({ ready: true, people: many, pending: 0 });
+    await render();
+    // The offer names how many, because 126 and 2 are different decisions.
+    expect(host.textContent).toMatch(/Show 2 faces that matched nobody else/i);
+  });
+
+  it("shows them when asked", async () => {
+    mount({ ready: true, people: many, pending: 0 });
+    await render();
+    const button = [...host.querySelectorAll("button")].find((b) =>
+      /matched nobody else/i.test(b.textContent ?? ""),
+    );
+    if (!button) throw new Error("no toggle");
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(host.textContent).toMatch(/Hide 2 faces that matched nobody else/i);
+  });
+
+  it("says nothing when every group has company", async () => {
+    mount({
+      ready: true,
+      pending: 0,
+      people: [{ id: 1, name: null, count: 12, cover_face_id: 11 }] as unknown as FacePerson[],
+    });
+    await render();
+    expect(host.textContent).not.toMatch(/matched nobody else/i);
   });
 });
