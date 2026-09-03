@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"lancast/internal/media"
 	"lancast/internal/probe"
@@ -94,10 +95,22 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		return nil
 	}
 
+	/*
+	 * Phase timings, because "the tag pass is slow" is not a finding.
+	 *
+	 * Measured on a real library, a scan that changed 17 tracks took 92
+	 * seconds while an unchanged one took 0.5 — so the cost is unrelated to
+	 * what changed, and the question is which phase owns it. Logged at info
+	 * rather than debug: this is the number anybody diagnosing a slow scan
+	 * needs, and it is one line per scan.
+	 */
+	phaseStart := time.Now()
+
 	tracks, err := s.st.LibraryTracks(ctx, lib.ID)
 	if err != nil {
 		return err
 	}
+	loadMS := time.Since(phaseStart).Milliseconds()
 	// Each track's own location. Folder-derived artist and album are relative to
 	// the location the file is in, and using the library's first one gives a
 	// cross-volume filepath.Rel failure — which is not an error here, it is a
@@ -113,6 +126,7 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		return s.reconcileMusic(ctx, lib, nil)
 	}
 
+	readStart := time.Now()
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
@@ -164,6 +178,7 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	}
 	close(work)
 	wg.Wait()
+	readMS := time.Since(readStart).Milliseconds()
 
 	if untagged > 0 {
 		s.log.Info("tracks without usable tags", "library", lib.ID, "count", untagged,
@@ -179,9 +194,16 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	// The folder-derived albums are re-examined once every track has been seen:
 	// whether a folder is a record or an alphabetical bucket is only visible
 	// across the whole folder, never from one file inside it.
+	groupStart := time.Now()
 	dropBucketAlbums(groups)
-
-	return s.reconcileMusic(ctx, lib, groups)
+	err = s.reconcileMusic(ctx, lib, groups)
+	s.log.Info("music tag pass", "library", lib.ID,
+		"tracks", len(tracks),
+		"changed", p.ItemsChanged,
+		"load_ms", loadMS,
+		"read_tags_ms", readMS,
+		"reconcile_ms", time.Since(groupStart).Milliseconds())
+	return err
 }
 
 // trackGroup is one track and the artist and album it belongs under.
