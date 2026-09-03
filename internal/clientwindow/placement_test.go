@@ -211,3 +211,55 @@ func TestCaptureAndResolveRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The close handler has to record the position *and* respect the answer.
+ *
+ * This exists because the first version never ran at all. It was installed
+ * after the window had been constructed with the original callback — which
+ * takes it by value — so the webview kept the original, the wrapper was dead
+ * code, and the position was silently never saved. It shipped, and the fifteen
+ * tests above all passed, because they cover the rules rather than the wiring
+ * that reaches them.
+ */
+
+func TestClosingRecordsThePositionFirst(t *testing.T) {
+	order := []string{}
+	h := closeHandler(
+		func() { order = append(order, "capture") },
+		func() bool { order = append(order, "user"); return true },
+	)
+	if !h() {
+		t.Error("the caller said close and the wrapper said otherwise")
+	}
+	if len(order) != 2 || order[0] != "capture" || order[1] != "user" {
+		t.Errorf("order = %v, want capture then user — the position must be read "+
+			"before anything decides to tear the window down", order)
+	}
+}
+
+// Close-to-tray keeps the window alive by answering false. The position is
+// still recorded: the window is at a real place at that moment, and the
+// alternative is remembering wherever it was last genuinely closed.
+func TestAHideStillRecordsThePosition(t *testing.T) {
+	captured := false
+	h := closeHandler(func() { captured = true }, func() bool { return false })
+	if h() {
+		t.Error("returned true; close-to-tray must be able to keep the window")
+	}
+	if !captured {
+		t.Error("a hide recorded nothing — a window hidden for a week would " +
+			"remember wherever it was last closed")
+	}
+}
+
+func TestNoCallerHandlerStillCloses(t *testing.T) {
+	captured := false
+	h := closeHandler(func() { captured = true }, nil)
+	if !h() {
+		t.Error("returned false with no caller handler; the default is to close")
+	}
+	if !captured {
+		t.Error("nothing was captured")
+	}
+}
