@@ -126,12 +126,45 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 		return s.reconcileMusic(ctx, lib, nil)
 	}
 
+	/*
+	 * Stored keys stand in for the files that did not change (ADR 0056).
+	 *
+	 * The walk has just proven that no unchanged file's size or mtime moved,
+	 * and tags live inside the file, so the key it produced last time is still
+	 * the right one. Every track still contributes a group, because
+	 * dropBucketAlbums judges a *folder* — one track's absence would change
+	 * what its folder looks like.
+	 *
+	 * A track with no stored key is read: rows written before revision 39 have
+	 * none, so an upgrade pays one full pass and then stops paying.
+	 */
+	/*
+	 * Only a library with a completed scan may reuse anything.
+	 *
+	 * The same guard the whole-pass skip uses, and for the same reason: until
+	 * a reconcile has finished, nothing about this library's grouping is known
+	 * to be the product of a complete pass. Reusing keys there would extend
+	 * trust to exactly the state the existing rule already refuses to trust.
+	 *
+	 * It also keeps the assumption honest. Reuse rests on "the walk proved the
+	 * file did not move, and tags live inside the file" — which holds for a
+	 * file on disk and not for a library nobody has finished reading yet.
+	 */
+	var stored map[int64]store.GroupKey
+	if lib.ScannedAt != nil {
+		stored, err = s.st.GroupKeys(ctx, lib.ID)
+		if err != nil {
+			return err
+		}
+	}
+
 	readStart := time.Now()
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
 		untagged int
 		groups   []trackGroup
+		reused   int
 	)
 	work := make(chan store.Item)
 
@@ -155,11 +188,16 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 				if err := s.st.ApplyTrackTags(ctx, it.ID, trackTagsFrom(tags)); err != nil {
 					s.log.Warn("apply tags", "item", it.ID, "error", err)
 				}
-				// The grouping key is collected here, while the album artist is
-				// still in hand. It is not stored on the track — it belongs to
-				// the album, and persisting it per row to read it back one step
-				// later would be a column that exists only to survive a function
-				// boundary.
+				// The grouping key is collected here, while the album artist
+				// is still in hand, and stored on the track once the whole
+				// library's groups are assembled (ADR 0056).
+				//
+				// It was deliberately not stored, on the reasoning that a
+				// column existing only to carry a value between two functions
+				// in one pass is a bad column. That was right while the pass
+				// always ran. Once the unchanged case became free, the key
+				// stopped being a value in flight and became the only reason
+				// to reopen files the walk had just proven unmoved.
 				mu.Lock()
 				groups = append(groups, groupFromTags(rootOf(roots, it.RootID), it, tags))
 				mu.Unlock()
@@ -168,6 +206,19 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	}
 
 	for _, it := range tracks {
+		// Reuse the stored key unless this track is one the walk wrote.
+		if k, ok := stored[it.ID]; ok && (p == nil || !p.changed[it.ID]) {
+			groups = append(groups, trackGroup{
+				itemID:          it.ID,
+				artist:          k.Artist,
+				album:           k.Album,
+				dir:             k.Dir,
+				albumFromFolder: k.AlbumFromFolder,
+				albumAtRoot:     k.AlbumAtRoot,
+			})
+			reused++
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			close(work)
@@ -196,10 +247,45 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	// across the whole folder, never from one file inside it.
 	groupStart := time.Now()
 	dropBucketAlbums(groups)
+
+	/*
+	 * The keys are stored *before* reconcile, and after dropBucketAlbums has
+	 * had its say.
+	 *
+	 * After, because a folder-derived album that did not survive the bucket
+	 * check must not be stored as though it had — the next scan would reuse a
+	 * key this one rejected, and the album would come back without any file
+	 * having changed.
+	 *
+	 * Every grouped track is written, including the ones whose key was reused
+	 * unchanged. One statement each keeps the invariant plain: a track the
+	 * scanner grouped has a stored key, and there is no second rule about
+	 * which ones do.
+	 */
+	keys := make(map[int64]store.GroupKey, len(groups))
+	for _, g := range groups {
+		keys[g.itemID] = store.GroupKey{
+			Artist:          g.artist,
+			Album:           g.album,
+			Dir:             g.dir,
+			AlbumFromFolder: g.albumFromFolder,
+			AlbumAtRoot:     g.albumAtRoot,
+		}
+	}
+	if err := s.st.SaveGroupKeys(ctx, keys); err != nil {
+		// Not fatal: the grouping this pass computed is still correct, and the
+		// only cost of failing to store it is that the next scan reads the
+		// files again. Failing the scan over a cache write would trade a slow
+		// scan for no scan.
+		s.log.Warn("storing group keys", "library", lib.ID, "error", err)
+	}
+
 	err = s.reconcileMusic(ctx, lib, groups)
 	s.log.Info("music tag pass", "library", lib.ID,
 		"tracks", len(tracks),
 		"changed", p.ItemsChanged,
+		"tags_read", len(tracks)-reused,
+		"keys_reused", reused,
 		"load_ms", loadMS,
 		"read_tags_ms", readMS,
 		"reconcile_ms", time.Since(groupStart).Milliseconds())

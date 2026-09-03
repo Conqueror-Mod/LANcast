@@ -130,6 +130,21 @@ type Progress struct {
 	 * UI and a polling loop to learn a number the scan already knew.
 	 */
 	started time.Time
+
+	/*
+	 * The items this walk actually wrote, so the music pass knows whose tags
+	 * to read (ADR 0056).
+	 *
+	 * A count cannot answer that: seventeen changed tracks and nine thousand
+	 * unchanged ones are the same number to `ItemsChanged`, which is how the
+	 * pass came to reopen every file in the library to learn about seventeen.
+	 *
+	 * Unexported, so it stays out of the serialized Progress every client
+	 * polls. It is working state for one pass, not a fact about the scan worth
+	 * reporting — and a list of ids is exactly the shape of thing that becomes
+	 * an accidental contract once somebody can see it.
+	 */
+	changed map[int64]bool
 }
 
 // Issue is a file or directory the scan could not fully process. It carries a
@@ -689,6 +704,10 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 					_ = s.st.ClearMetadataStamp(ctx, lib.ID, st.ID)
 					s.mu.Lock()
 					p.ItemsChanged++
+					if p.changed == nil {
+						p.changed = map[int64]bool{}
+					}
+					p.changed[st.ID] = true
 					s.mu.Unlock()
 				}
 			}
@@ -712,6 +731,10 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		}
 		s.mu.Lock()
 		p.ItemsChanged++
+		if p.changed == nil {
+			p.changed = map[int64]bool{}
+		}
+		p.changed[id] = true
 		s.mu.Unlock()
 		return nil
 	})

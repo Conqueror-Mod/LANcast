@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 38
+const CurrentSchemaVersion = 39
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -77,6 +77,7 @@ var migrations = []migration{
 	{version: 36, sql: schemaRevision36},
 	{version: 37, sql: schemaRevision37},
 	{version: 38, sql: schemaRevision38},
+	{version: 39, sql: schemaRevision39},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1348,4 +1349,30 @@ CREATE INDEX IF NOT EXISTS idx_item_markers ON media_item(kind, markers_at, miss
 const schemaRevision38 = `
 ALTER TABLE media_item ADD COLUMN intros_at INTEGER;
 CREATE INDEX IF NOT EXISTS idx_item_intros ON media_item(kind, missing, intros_at);
+`
+
+/*
+ * A track's grouping key, so a scan need not reopen every file (ADR 0056).
+ *
+ * Scanner working state that turned out to be worth keeping, not truth about
+ * the record — the album *item* is that truth, and nothing outside the scanner
+ * reads these. They are the values a tag read produced and then threw away:
+ * a 17-track import re-read all 9,054 files to recover them, at 92 seconds
+ * against half a second for a scan where nothing changed.
+ *
+ * The last three exist for dropBucketAlbums, which decides whether a folder is
+ * really a record. Its tells are cohesion and depth, both properties of a
+ * *folder* rather than a track, which is why every track has to contribute a
+ * group even when only one of them changed.
+ *
+ * All nullable. A row written before this revision has none, and the pass
+ * reads its file — which is exactly the old behaviour, so an upgrade costs one
+ * full pass and then stops costing anything.
+ */
+const schemaRevision39 = `
+ALTER TABLE media_item ADD COLUMN group_artist           TEXT;
+ALTER TABLE media_item ADD COLUMN group_album            TEXT;
+ALTER TABLE media_item ADD COLUMN group_dir              TEXT;
+ALTER TABLE media_item ADD COLUMN group_album_from_folder INTEGER;
+ALTER TABLE media_item ADD COLUMN group_album_at_root    INTEGER;
 `
