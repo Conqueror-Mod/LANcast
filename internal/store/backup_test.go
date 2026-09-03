@@ -285,14 +285,18 @@ func TestInspectSnapshotMissingFile(t *testing.T) {
 }
 
 /*
- * Sessions ride along in the snapshot, and are cleared by the *restore*
- * (ADR 0058). This pins the current half of that: the file carries them.
+ * A backup carries records, not credentials.
  *
- * It is here so the restore work has a counterpart to change rather than a
- * property nobody asserted, and because it is the one thing in a backup that
- * is a live credential rather than a record.
+ * Sessions are server-side precisely so they can be revoked, and a backup that
+ * held them would be a file that signs people in — anyone holding a cookie
+ * from the backup's era would be back in the moment it was restored.
+ *
+ * Cleared at snapshot time rather than at restore time, because the ADR's own
+ * picture of a backup is a file somebody copies to a stick, and a file put
+ * back by hand never runs restore's code. The property has to belong to the
+ * file to be true when it matters.
  */
-func TestSnapshotCarriesSessionsForRestoreToClear(t *testing.T) {
+func TestSnapshotCarriesNoSessions(t *testing.T) {
 	ctx := context.Background()
 	src := openTestStore(t)
 	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
@@ -316,8 +320,50 @@ func TestSnapshotCarriesSessionsForRestoreToClear(t *testing.T) {
 	if err := restored.db.QueryRow(`SELECT COUNT(*) FROM session`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Fatalf("session rows in snapshot = %d, want 1", n)
+	if n != 0 {
+		t.Fatalf("session rows in snapshot = %d, want 0", n)
+	}
+	// The accounts must survive. A backup that lost them would be a backup
+	// that cannot be restored onto a working server.
+	users, err := restored.CountUsers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if users != 1 {
+		t.Errorf("users in snapshot = %d, want 1", users)
+	}
+
+	// The live database is untouched — taking a backup must not sign anybody
+	// out of the server they are using.
+	live, err := src.CountSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live != 1 {
+		t.Errorf("sessions on the live server after a backup = %d, want 1", live)
+	}
+}
+
+// Clearing reopens the snapshot to write to it, and a backup whose contents
+// depend on a sidecar is a backup somebody copies half of.
+func TestSnapshotIsOneSelfContainedFile(t *testing.T) {
+	ctx := context.Background()
+	src := openTestStore(t)
+	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.CreateSession(ctx, "tokenhash", "u_1", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "alone.db")
+	if _, err := src.Snapshot(ctx, dst); err != nil {
+		t.Fatal(err)
+	}
+	for _, sidecar := range []string{dst + "-wal", dst + "-shm", dst + "-journal"} {
+		if _, err := os.Stat(sidecar); err == nil {
+			t.Errorf("taking a backup left %s beside it", filepath.Base(sidecar))
+		}
 	}
 }
 

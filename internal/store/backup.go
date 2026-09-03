@@ -111,6 +111,14 @@ func (s *Store) Snapshot(ctx context.Context, path string) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("snapshot %s: %w", abs, err)
 	}
 
+	// A backup that still held sessions would be a file that signs people in,
+	// and it must never be handed back as good. Anything that goes wrong here
+	// takes the snapshot with it.
+	if err := clearSnapshotSessions(abs); err != nil {
+		os.Remove(abs)
+		return Snapshot{}, err
+	}
+
 	fi, err := os.Stat(abs)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("snapshot %s: %w", abs, err)
@@ -125,6 +133,43 @@ func (s *Store) Snapshot(ctx context.Context, path string) (Snapshot, error) {
 		Bytes:         fi.Size(),
 		TakenAt:       time.Now().Unix(),
 	}, nil
+}
+
+/*
+ * clearSnapshotSessions removes the live logins from a freshly written
+ * snapshot, so the backup carries records and not credentials.
+ *
+ * Done here rather than on restore, which is where ADR 0058 first put it. The
+ * ADR's own picture of a backup is a file somebody copies to a USB stick — and
+ * a file copied and put back by hand never runs restore's code at all, so a
+ * restore-time rule would be absent in exactly the case that most wants it.
+ * Clearing at snapshot time makes it a property of the file, which travels
+ * with the file.
+ *
+ * `journal_mode(DELETE)` is not a preference. A WAL-journalled write would
+ * leave a `-wal` beside the backup, and a snapshot whose contents depend on a
+ * sidecar is a snapshot somebody copies half of. VACUUM INTO already produces
+ * a delete-journalled database, so this states what is already true rather
+ * than changing it — and the rollback journal it does use exists only inside
+ * the transaction, leaving one self-contained file.
+ *
+ * The restored database's journal mode is not affected: Open sets WAL on every
+ * open, which is where that decision belongs.
+ */
+func clearSnapshotSessions(path string) error {
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(DELETE)&_pragma=busy_timeout(5000)", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)
+	}
+	if _, err := db.Exec(`DELETE FROM session`); err != nil {
+		db.Close()
+		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)
+	}
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)
+	}
+	return nil
 }
 
 /*

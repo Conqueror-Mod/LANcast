@@ -80,7 +80,8 @@ regardless, so excluding it would be a special case that saves nothing.
 **Sessions ride along too, and should not.** A restored backup would carry
 live session rows, so anyone holding a cookie from the backup's era is signed
 in again. Sessions are server-side precisely so they can be revoked; a restore
-handing them back undoes that. They are cleared on restore.
+handing them back undoes that. They are cleared — see the amendment below,
+which moves *when*.
 
 ## Alternatives rejected
 
@@ -105,3 +106,50 @@ default that decides whether anybody backs up at all.
 is a home server whose failure mode is a disk dying or a person moving
 machines, not a transaction lost in the last second. A snapshot somebody can
 copy to a USB stick is the shape of backup that gets used.
+
+## Amendment — sessions are cleared at snapshot time, 2026-09-03
+
+Status: **accepted**, amending the consequence above.
+
+The original said sessions are cleared **on restore**. That is the wrong end,
+and this ADR's own last paragraph is what gives it away: the shape of backup
+this decision is built around is *"a snapshot somebody can copy to a USB
+stick"*. A file copied to a stick and put back by hand never executes restore's
+code at all — so a restore-time rule would be absent in exactly the case the
+whole decision was designed for.
+
+Worse, it would be absent silently. The backup would look identical, restore
+cleanly by hand, and hand back every login it was carrying, with nothing
+anywhere reporting that it had.
+
+**Sessions are therefore cleared in the snapshot itself, immediately after
+`VACUUM INTO`, before the file is reported as good.** A backup carries records,
+not credentials, and that is now a property of the *file* rather than of the
+code that happens to read it. It survives being copied, renamed, moved between
+machines, and restored by somebody who never ran `lancastd restore`.
+
+Three things make this cheap rather than a second mechanism to maintain.
+
+**The snapshot is already delete-journalled.** `VACUUM INTO` produces a
+database in `delete` mode, not WAL — checked, not assumed, the same way the
+snapshot timing was. So writing to it leaves no `-wal` sidecar, and a backup
+whose contents depend on a sidecar is a backup somebody copies half of. The
+write is stated as `journal_mode(DELETE)` anyway, because relying on an
+inherited default is how that stops being true later.
+
+**A failure takes the snapshot with it.** A backup that still held sessions
+must never be handed back as good, so anything going wrong in the clearing
+removes the file. There is no state in which the operation reports success and
+the property does not hold.
+
+**The live server is untouched.** Taking a backup does not sign anybody out of
+the server they are using — the deletion happens in the copy.
+
+The restore path still clears sessions as well. That is deliberate and is not
+redundancy for its own sake: backups written before this amendment carry
+sessions, and they stay restorable for as long as the schema allows, which is
+the entire point of having backups. The restore-time clearing is what covers
+them.
+
+Nothing else in the decision changes. Restoring is still offline, artwork is
+still excluded, and a backup from a newer build is still refused by name.
