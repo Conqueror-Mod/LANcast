@@ -1342,6 +1342,19 @@ export function useNamePerson(libraryID: number) {
       apiSend(`/api/faces/clusters/${id}`, "PUT", { name }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people-faces", libraryID] });
+      /*
+       * And the suggestions, which are a list of *unnamed* groups.
+       *
+       * Naming one takes it out of that list by definition, and without this
+       * the tile stayed exactly where it was — so accepting a suggestion did
+       * the work, changed nothing visible, and read as a button that could not
+       * be clicked. Reported precisely that way.
+       *
+       * The rule CLAUDE.md states: a write that changes what a list holds must
+       * invalidate that list. This is the same fault it has always been, on a
+       * list that did not exist until yesterday.
+       */
+      qc.invalidateQueries({ queryKey: ["cluster-suggestions"] });
     },
   });
 }

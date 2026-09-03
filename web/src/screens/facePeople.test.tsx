@@ -30,6 +30,7 @@ type Scenario = {
   reason?: string;
   people?: unknown[];
   pending?: number;
+  suggestions?: unknown[];
 };
 
 let host: HTMLDivElement;
@@ -63,6 +64,9 @@ function mount(s: Scenario) {
       }
       if (url.includes("/api/faces/capabilities")) {
         return json({ ready: s.ready, reason: s.reason });
+      }
+      if (url.includes("/suggestions")) {
+        return json({ people: s.suggestions ?? [] });
       }
       if (url.includes("/people")) {
         return json({ people: s.people ?? [], pending: s.pending ?? 0 });
@@ -297,5 +301,144 @@ describe("groups of one", () => {
     });
     await render();
     expect(host.textContent).not.toMatch(/matched nobody else/i);
+  });
+});
+
+/*
+ * Accepting a suggestion has to look like it did something.
+ *
+ * Reported as "none of the additional matching faces can be selected". They
+ * could: the click named the group server-side and returned. What did not
+ * happen was anything visible — the suggestion list was never invalidated, so
+ * the tile stayed exactly where it was, and a button that does the work and
+ * changes nothing is indistinguishable from one that is broken.
+ *
+ * The rule CLAUDE.md states, on a list that did not exist until yesterday: a
+ * write that changes what a list holds must invalidate that list.
+ */
+describe("accepting a suggested match", () => {
+  it("marks the face as taken straight away", async () => {
+    mount({
+      ready: true,
+      pending: 0,
+      people: [{ id: 1, name: null, count: 40, cover_face_id: 11 }] as unknown as FacePerson[],
+      suggestions: [{ id: 2, name: null, count: 1, cover_face_id: 22 }],
+    });
+    await render();
+
+    // Open the naming panel and give a name.
+    const tile = host.querySelector<HTMLElement>(".faceperson");
+    if (!tile) throw new Error("no person tile");
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const input = host.querySelector(".facenamer__field input") as HTMLInputElement | null;
+    if (!input) throw new Error("no name field");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(input, "Georgia");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save",
+    );
+    if (!save) throw new Error("no save button");
+    await act(async () => {
+      save.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // The suggestions are only asked for once a name exists, so they arrive a
+    // tick after the save resolves.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+    const suggestion = host.querySelector<HTMLButtonElement>(
+      ".facenamer__suggestion",
+    );
+    if (!suggestion) throw new Error("no suggestion offered");
+    expect(suggestion.dataset.taken).toBeUndefined();
+
+    await act(async () => {
+      suggestion.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const after = host.querySelector<HTMLButtonElement>(
+      ".facenamer__suggestion",
+    );
+    // Either it is gone (the refetch landed) or it is marked. Both are
+    // feedback; neither is the tile sitting there unchanged.
+    if (after) {
+      expect(after.dataset.taken).toBe("true");
+    }
+  });
+});
+
+/*
+ * A person named across several groups is one tile.
+ *
+ * Reported: "Georgia Bowles" three times, at 80, 1 and 1 — the result of
+ * accepting near-miss suggestions, which names a group rather than merging it.
+ * The page read as three people who happened to share a name.
+ */
+describe("a person spread across groups", () => {
+  const split = [
+    { id: 1, name: "Georgia Bowles", count: 80, cover_face_id: 11 },
+    { id: 2, name: "Georgia Bowles", count: 1, cover_face_id: 22 },
+    { id: 3, name: "Georgia Bowles", count: 1, cover_face_id: 33 },
+  ] as unknown as FacePerson[];
+
+  it("appears once, with every face counted", async () => {
+    mount({ ready: true, people: split, pending: 0 });
+    await render();
+    const names = [...host.querySelectorAll(".faceperson__name")].map(
+      (n) => n.textContent,
+    );
+    expect(names.filter((n) => n === "Georgia Bowles")).toHaveLength(1);
+
+    const counts = [...host.querySelectorAll(".faceperson__count")].map(
+      (n) => n.textContent,
+    );
+    expect(counts).toContain("82");
+  });
+
+  /*
+   * Renaming has to reach every group. Renaming one of three would split her
+   * back into two people — the fault collapsing exists to fix, by another
+   * route.
+   */
+  it("renames every group behind that one tile", async () => {
+    mount({ ready: true, people: split, pending: 0 });
+    await render();
+    const tile = host.querySelector(".faceperson") as HTMLButtonElement;
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const input = host.querySelector(
+      ".facenamer__field input",
+    ) as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(input, "Georgia B");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save",
+    )!;
+    await act(async () => {
+      save.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const named = sent.filter((r) => r.body.includes("Georgia B"));
+    expect(named).toHaveLength(3);
+    for (const id of [1, 2, 3]) {
+      expect(named.some((r) => r.url.includes(`/clusters/${id}`))).toBe(true);
+    }
   });
 });
