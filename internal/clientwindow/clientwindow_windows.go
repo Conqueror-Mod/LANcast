@@ -39,8 +39,35 @@ func open(o Options) error {
 		return err
 	}
 
-	w := webview2.NewWithOptions(webview2.WebViewOptions{
-		OnClose: o.OnClose,
+	/*
+	 * The window, and the close handler, declared before either is built.
+	 *
+	 * The handler has to reach the window to read its position, and the window
+	 * needs the handler at construction — so the closure captures the variable
+	 * and reads it when it runs, by which time it is set.
+	 *
+	 * Order is the whole point here. This wrapper was originally installed
+	 * *after* NewWithOptions, which takes the callback by value: the webview
+	 * kept the original, the wrapper was never called, and the window position
+	 * was silently never saved. It shipped that way, because the rules it
+	 * guards are pure and well tested while the wiring that reaches them was
+	 * not tested at all.
+	 */
+	var w webview2.WebView
+	var placed placement
+
+	userClose := o.OnClose
+	onClose := closeHandler(
+		func() {
+			if w != nil {
+				placed.capture(uintptr(w.Window()))
+			}
+		},
+		userClose,
+	)
+
+	w = webview2.NewWithOptions(webview2.WebViewOptions{
+		OnClose: onClose,
 		WindowOptions: webview2.WindowOptions{
 			Title:  o.Title,
 			Width:  uint(o.Width),
@@ -56,33 +83,6 @@ func open(o Options) error {
 		return errors.New("client window: the web view could not be created")
 	}
 	defer w.Destroy()
-
-	/*
-	 * The last position the window was seen at, recorded while it is alive.
-	 *
-	 * Guarded because it is written from the window thread and read after the
-	 * loop ends, and because the tray's Close dispatches onto that thread from
-	 * another one.
-	 */
-	var placed placement
-
-	/*
-	 * Capture before deciding whether to close.
-	 *
-	 * Deliberately also on a close-to-tray hide, which is not a close at all.
-	 * The window is at a real position at that moment, and recording it costs
-	 * nothing; the alternative is a window hidden to the tray for a week and
-	 * then quit from the tray, whose remembered position would be from
-	 * whenever it was last genuinely closed.
-	 */
-	userClose := o.OnClose
-	o.OnClose = func() bool {
-		placed.capture(uintptr(w.Window()))
-		if userClose == nil {
-			return true
-		}
-		return userClose()
-	}
 
 	// Fullscreen is the host's job, not the page's.
 	//

@@ -217,3 +217,29 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+/*
+ * closeHandler wraps a caller's close callback so the window's position is
+ * recorded first.
+ *
+ * Extracted so the ordering can be tested. The first version of this was
+ * installed *after* the window was constructed with the original callback,
+ * which takes it by value — so the wrapper never ran and the position was
+ * never saved. Nothing failed, nothing logged, and the fifteen tests covering
+ * the placement rules all passed, because the fault was in reaching them.
+ *
+ * capture runs even when the caller keeps the window alive: a close-to-tray
+ * hide is not a close, but the window is at a real position at that moment,
+ * and the alternative is remembering wherever it was last genuinely closed.
+ */
+func closeHandler(capture func(), userClose func() bool) func() bool {
+	return func() bool {
+		if capture != nil {
+			capture()
+		}
+		if userClose == nil {
+			return true
+		}
+		return userClose()
+	}
+}
