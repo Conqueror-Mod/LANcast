@@ -181,7 +181,9 @@ func TestScanReconcileRacesBackgroundWrites(t *testing.T) {
 	}
 }
 
-func openTestStore(t *testing.T) *Store {
+// testing.TB rather than *testing.T so benchmarks can use it too: every
+// method it calls — Helper, TempDir, Fatal, Cleanup — is on the interface.
+func openTestStore(t testing.TB) *Store {
 	t.Helper()
 	st, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
