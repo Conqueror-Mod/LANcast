@@ -383,6 +383,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 * without a restart.
 	 */
 	markers := marker.NewWorker(st, log)
+	// Checked before every file rather than once per pass, so switching the
+	// setting off stops the work now instead of at the end of a batch.
+	markers.Enabled = func() bool { return settings.Get().DetectMarkers }
 
 	/*
 	 * The face worker, which is optional and usually absent (ADR 0052).

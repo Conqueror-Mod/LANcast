@@ -67,6 +67,9 @@ func (w *Worker) RunIntros(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if !w.stillWanted() {
+			return nil
+		}
 		if err := w.examineSeason(ctx, st, se); err != nil {
 			w.log.Warn("intro detection failed",
 				"show", se.ShowName, "season", se.Season, "error", err)
@@ -98,6 +101,9 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 	for i, ep := range se.Episodes {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if !w.stillWanted() {
+			return nil
 		}
 		samples, err := w.decodeHead(ctx, ep.Path, IntroHeadSeconds)
 		if err != nil {
@@ -181,6 +187,10 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 func (w *Worker) decodeHead(ctx context.Context, path string, secs int) ([]float64, error) {
 	out, err := exec.CommandContext(ctx, w.bin(),
 		"-hide_banner", "-nostats", "-v", "error",
+		// Capped for the same reason the credits scan is: one ffmpeg with a
+		// filter attached will take the whole machine, and nothing waits on a
+		// marker.
+		"-threads", strconv.Itoa(w.threads()),
 		"-t", strconv.Itoa(secs),
 		"-i", path,
 		"-vn",

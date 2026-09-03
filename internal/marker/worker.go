@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -62,6 +64,31 @@ type Worker struct {
 	Concurrency int
 	BatchSize   int
 
+	/*
+	 * Threads caps what one ffmpeg may take, and it is the difference between
+	 * a background job and a machine nobody can watch a film on.
+	 *
+	 * Concurrency alone does not do it. One ffmpeg decoding 10-bit HEVC with a
+	 * filter attached will use every core it can find — measured at **15 of 24
+	 * busy** on a real machine, while somebody was trying to watch something
+	 * else. The worker was correctly limited to one file at a time and that
+	 * one file took most of the computer.
+	 *
+	 * Zero means a quarter of the cores, minimum one. Nothing waits on a
+	 * marker, so this pass has no claim on the machine at all.
+	 */
+	Threads int
+
+	/*
+	 * Enabled is checked before every file, not once per pass.
+	 *
+	 * A pass is a batch, so a setting consulted only at the start keeps
+	 * decoding for the rest of it — up to twenty-five films after somebody has
+	 * switched it off and is waiting for the noise to stop. Turning something
+	 * off should stop it now.
+	 */
+	Enabled func() bool
+
 	mu      sync.Mutex
 	running bool
 	stats   Stats
@@ -76,6 +103,22 @@ func (w *Worker) Stats() Stats {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.stats
+}
+
+// threads is how many ffmpeg may use, defaulting to a quarter of the machine.
+func (w *Worker) threads() int {
+	if w.Threads > 0 {
+		return w.Threads
+	}
+	if n := runtime.NumCPU() / 4; n > 0 {
+		return n
+	}
+	return 1
+}
+
+// stillWanted reports whether the pass should keep going.
+func (w *Worker) stillWanted() bool {
+	return w.Enabled == nil || w.Enabled()
 }
 
 func (w *Worker) bin() string {
@@ -138,6 +181,9 @@ func (w *Worker) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			break
 		}
+		if !w.stillWanted() {
+			break
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(it store.Item) {
@@ -165,13 +211,40 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 
 	stderr, err := w.scanTail(ctx, it.Path, ScanFrom(dur))
 	if err != nil {
-		// Not stamped: a file that could not be read is not a file with no
-		// credits, and conflating them would retire it permanently on a
-		// transient failure — an unmounted drive, a busy machine.
 		w.mu.Lock()
 		w.stats.Failed++
 		w.mu.Unlock()
-		w.log.Warn("marker detection failed", "item", it.ID, "error", err)
+
+		/*
+		 * Whether to stamp turns on one question: is the file there?
+		 *
+		 * Originally nothing was stamped on failure, so that an unmounted
+		 * drive could not retire a library permanently. That was right about
+		 * the drive and wrong about the file. Two damaged films in a real
+		 * library — one with an unreadable EBML header, one with no moov atom
+		 * — were re-decoded on every pass for ever, logging the same warning
+		 * each time. ffmpeg will never read them, and asking again nightly is
+		 * not patience, it is a loop.
+		 *
+		 * A file we cannot even see is the drive; a file we can see and ffmpeg
+		 * cannot read is the file. Absence stays transient, which is the same
+		 * distinction the scanner makes when it marks missing rather than
+		 * deleting — and probing already stamps a failure for exactly this
+		 * reason, which is why these two left the probe queue and not this one.
+		 *
+		 * A stamped failure is not permanent: POST /api/markers/refresh clears
+		 * every stamp, so a replaced file is re-examined when somebody says so.
+		 */
+		if _, statErr := os.Stat(it.Path); statErr != nil {
+			w.log.Warn("marker detection failed", "item", it.ID,
+				"error", err, "note", "file unreachable; will try again")
+			return
+		}
+		w.log.Warn("marker detection failed", "item", it.ID, "error", err,
+			"note", "file is present but unreadable; not asking again")
+		if err := w.st.SaveMarkers(ctx, it.ID, []string{store.MarkerCredits}, nil); err != nil {
+			w.log.Warn("saving markers failed", "item", it.ID, "error", err)
+		}
 		return
 	}
 
@@ -220,6 +293,7 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 func (w *Worker) scanTail(ctx context.Context, path string, startSec float64) (string, error) {
 	cmd := exec.CommandContext(ctx, w.bin(),
 		"-hide_banner", "-nostats",
+		"-threads", strconv.Itoa(w.threads()),
 		"-ss", strconv.FormatFloat(startSec, 'f', 3, 64),
 		"-i", path,
 		"-an",
