@@ -84,6 +84,37 @@ func open(o Options) error {
 	}
 	defer w.Destroy()
 
+	/*
+	 * Put the window back where it was, as early as we are able to.
+	 *
+	 * Reported: it opens on the primary display for a moment and then jumps to
+	 * the remembered one. That is real and only partly fixable from here. The
+	 * vendored web view creates the window, shows it, and embeds the browser
+	 * inside NewWithOptions — so by the time this line runs it has already
+	 * been on screen, centred, for as long as embedding took.
+	 *
+	 * Hiding it around the move is what removes the *jump*: the window
+	 * disappears and comes back in the right place rather than sliding across
+	 * the desk, and doing it here rather than after the bindings and Navigate
+	 * cuts most of the time it spends in the wrong position.
+	 *
+	 * Removing the appearance entirely means the window being created at the
+	 * right coordinates, which means `WindowOptions` carrying an X and a Y.
+	 * That is a change to a package PROVENANCE.md deliberately keeps as an
+	 * unmodified trimmed copy, and it is not worth spending that property on a
+	 * flicker without saying so out loud first.
+	 *
+	 * Center: true stays the fallback. Resolve refuses a placement it cannot
+	 * honour, and a centred window is always on a screen somebody is looking
+	 * at, which no remembered position can promise.
+	 */
+	if o.Placement.Valid() {
+		hwnd := uintptr(w.Window())
+		_, _, _ = procShowWindow.Call(hwnd, swHide)
+		applyPlacement(hwnd, o.Placement)
+		_, _, _ = procShowWindow.Call(hwnd, swShow)
+	}
+
 	// Fullscreen is the host's job, not the page's.
 	//
 	// WebView2 tells its host that a page wants fullscreen and the host is what
@@ -111,18 +142,6 @@ func open(o Options) error {
 
 	if o.OnReady != nil {
 		o.OnReady(&controller{w: w, placed: &placed})
-	}
-
-	/*
-	 * Put the window back where it was, before it is shown.
-	 *
-	 * Center: true above is what happens when there is nothing remembered, and
-	 * it stays the fallback rather than being replaced: Resolve refuses a
-	 * placement it cannot honour, and a centred window is always on a screen
-	 * somebody is looking at, which no remembered position can promise.
-	 */
-	if o.Placement.Valid() {
-		applyPlacement(uintptr(w.Window()), o.Placement)
 	}
 
 	w.Navigate(o.URL)

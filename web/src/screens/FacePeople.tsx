@@ -107,6 +107,15 @@ function NamePanel({
    */
   const [named, setNamed] = useState("");
   const suggestions = useClusterSuggestions(person.id, named !== "");
+  /*
+   * Which suggestions have been accepted, held here as well as refetched.
+   *
+   * The refetch is the truth and arrives in a moment; this is what makes the
+   * click feel like it did something *now*. Without it there is a gap where a
+   * pressed face is unchanged, which is the gap that made the whole row read
+   * as unclickable.
+   */
+  const [taken, setTaken] = useState<Set<number>>(new Set());
 
   const submit = () => {
     const given = value.trim();
@@ -168,14 +177,20 @@ function NamePanel({
               <button
                 key={p.id}
                 className="facenamer__suggestion"
-                onClick={() => name.mutate({ id: p.id, name: named })}
-                disabled={name.isPending}
-                title={`Also ${named}`}
+                data-taken={taken.has(p.id) || undefined}
+                onClick={() => {
+                  // Marked before the request answers. The refetch confirms it
+                  // and removes the tile; this is what makes the press land.
+                  setTaken((s) => new Set(s).add(p.id));
+                  name.mutate({ id: p.id, name: named });
+                }}
+                disabled={taken.has(p.id)}
+                title={taken.has(p.id) ? `Named ${named}` : `Also ${named}`}
               >
                 {p.cover_face_id != null && (
                   <img src={faceThumb(p.cover_face_id)} alt="" loading="lazy" />
                 )}
-                <span>{p.count}</span>
+                <span>{taken.has(p.id) ? "✓" : p.count}</span>
               </button>
             ))}
           </div>
