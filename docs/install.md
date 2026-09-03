@@ -89,6 +89,37 @@ Accounts and sessions go; watch history, libraries, and settings stay, and the
 new admin inherits the old one's resume points. Then create an account as
 above. See [security.md](security.md#losing-the-password).
 
+### Restoring a backup
+
+A backup is the database and nothing else ([ADR 0058](adr/0058-a-backup-is-the-database.md)).
+Restoring is offline, because swapping the database out from under a running
+server is how a restore becomes the incident:
+
+```
+Stop-Service lancastd
+LANcast-Server.exe restore -from "D:\Backups\lancast-backup.db"        # shows what it would do
+LANcast-Server.exe restore -from "D:\Backups\lancast-backup.db" -yes   # does it
+Start-Service lancastd
+```
+
+Same Administrator requirement as `reset-auth`, and for the same reason.
+
+The database being replaced is **kept** beside it as
+`lancast.db.replaced-<timestamp>`, so restoring the wrong backup can be undone;
+delete it once you are satisfied. Everyone is signed out — sessions are
+server-side so they can be revoked, and a restore handing back the logins the
+backup was carrying would undo that.
+
+A backup taken by a **newer** LANcast is refused by name, before anything is
+moved, because migrations are one-way. Update first, then restore. A backup
+from an older build is migrated forward and is fine.
+
+**Artwork is not in a backup.** The cache is roughly forty-six times the
+database's size and is re-fetchable, so posters arrive again over the following
+hours. If the media now lives at a different path, edit the library's location
+in Settings and scan — a scan reconciles *files*, and every correction, rating
+and watch position in the backup is kept.
+
 ## ffmpeg
 
 LANcast plays most files directly with no dependency. **Conversion and
