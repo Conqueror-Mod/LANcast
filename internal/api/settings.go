@@ -208,6 +208,23 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		s.trans.DetectHardware(r.Context(), next.HardwareEncoder)
 	}
 
+	/*
+	 * Turning marker detection on starts it, rather than waiting.
+	 *
+	 * The pass was only kicked at startup and after a scan, so switching the
+	 * setting on with the server already running did nothing at all until the
+	 * next nightly scan. Reported exactly that way: the setting was on, and
+	 * hours later not one item had been examined. A switch whose effect waits
+	 * on something unrelated is a switch that looks broken, and there is no
+	 * way to tell the difference from outside.
+	 *
+	 * Only on the transition on, and only forward: turning it off stops new
+	 * work at the next pass and never discards what was found.
+	 */
+	if next.DetectMarkers && !prev.DetectMarkers && s.detectMarkers != nil {
+		s.detectMarkers()
+	}
+
 	s.getSettings(w, r)
 }
 
