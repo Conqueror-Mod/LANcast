@@ -1050,3 +1050,72 @@ func TestHigh10ClaimDoesNotDisturbOrdinaryH264(t *testing.T) {
 		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
 	}
 }
+
+/*
+ * The 10-bit fallback has to know HEVC's profile names, not only H.264's.
+ *
+ * The guard above `isTenBit` exists *for* 10-bit HEVC, and the fallback it
+ * leans on when pix_fmt is missing listed `high 10` and friends — all H.264 —
+ * and none of HEVC's. So on a row with no pix_fmt, a Main 10 file read as
+ * 8-bit and direct-played into exactly the judder the guard was written to
+ * prevent.
+ *
+ * It hid because pix_fmt is populated on anything a current build probed.
+ * pix_fmt arrived in schema revision 12; a row probed before it has an empty
+ * one until something re-probes, and those rows are the ones that fall here.
+ */
+func TestTenBitHEVCIsCaughtByProfileWhenPixFmtIsMissing(t *testing.T) {
+	s := video("hevc", 1080)
+	s.Profile = "Main 10"
+	s.PixFmt = "" // a row probed before pix_fmt was recorded
+
+	p := WithCapabilities(BrowserProfile(), []string{"hevc"}) // 8-bit claim only
+	if d := Decide(result("mp4", s, audio("aac", 2)), p); d.Method == DirectPlay {
+		t.Errorf("Method = %q (%s), want a re-encode — Main 10 with an 8-bit claim",
+			d.Method, d.Reason)
+	}
+}
+
+// The claim still decides. A client that answered for Main 10 keeps its direct
+// play, whether the depth was learned from pix_fmt or from the profile name.
+func TestTenBitHEVCFromProfileStillHonoursTheClaim(t *testing.T) {
+	s := video("hevc", 1080)
+	s.Profile = "Main 10"
+	s.PixFmt = ""
+
+	p := WithCapabilities(BrowserProfile(), []string{"hevc", "hevc10"})
+	if d := Decide(result("mp4", s, audio("aac", 2)), p); d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play — the client claimed hevc10",
+			d.Method, d.Reason)
+	}
+}
+
+// 8-bit HEVC must not be swept up. "Main" and "Main Still Picture" are 8-bit,
+// and re-encoding them would undo the direct play most HEVC files get.
+func TestEightBitHEVCProfilesAreNotTreatedAsTenBit(t *testing.T) {
+	for _, profile := range []string{"Main", "Main Still Picture"} {
+		s := video("hevc", 1080)
+		s.Profile = profile
+		s.PixFmt = ""
+
+		p := WithCapabilities(BrowserProfile(), []string{"hevc"})
+		if d := Decide(result("mp4", s, audio("aac", 2)), p); d.Method != DirectPlay {
+			t.Errorf("profile %q: Method = %q (%s), want direct play for 8-bit HEVC",
+				profile, d.Method, d.Reason)
+		}
+	}
+}
+
+// The deeper HEVC profiles carry more than ten bits and belong on the same side.
+func TestHEVCProfilesDeeperThanTenBitAreCaught(t *testing.T) {
+	for _, profile := range []string{"Main 12", "Main 4:2:2 10", "Main 4:4:4 12"} {
+		s := video("hevc", 1080)
+		s.Profile = profile
+		s.PixFmt = ""
+
+		p := WithCapabilities(BrowserProfile(), []string{"hevc"})
+		if d := Decide(result("mp4", s, audio("aac", 2)), p); d.Method == DirectPlay {
+			t.Errorf("profile %q direct-played with an 8-bit claim (%s)", profile, d.Reason)
+		}
+	}
+}

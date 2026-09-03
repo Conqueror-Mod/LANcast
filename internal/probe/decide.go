@@ -669,12 +669,23 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	return true, ""
 }
 
-// isTenBit reports whether a stream carries more than 8 bits per component.
-//
-// pix_fmt is the reliable signal (yuv420p10le and friends); the profile name
-// is the fallback for a probe that did not report one. Matched exactly rather
-// than by substring — "10" appears in profile strings that have nothing to do
-// with bit depth, and a false positive here is a needless full re-encode.
+/*
+ * isTenBit reports whether a stream carries more than 8 bits per component.
+ *
+ * pix_fmt is the reliable signal (yuv420p10le and friends); the profile name
+ * is the fallback for a probe that did not report one. Matched exactly rather
+ * than by substring — "10" appears in profile strings that have nothing to do
+ * with bit depth, and a false positive here is a needless full re-encode.
+ *
+ * The fallback listed H.264's profile names and none of HEVC's, which made it
+ * silently one-sided: the guard above it exists *for* 10-bit HEVC, and the
+ * fallback it relies on could not recognise "Main 10". It went unnoticed
+ * because pix_fmt is populated on anything a current build probed, so the
+ * fallback almost never runs. Almost never is the problem — pix_fmt arrived in
+ * schema revision 12, and a row probed before it has an empty one until
+ * something re-probes. On those rows a Main 10 file reads as 8-bit and
+ * direct-plays into the judder this guard was written to prevent.
+ */
 func isTenBit(s *Stream) bool {
 	pix := strings.ToLower(s.PixFmt)
 	if strings.Contains(pix, "p10") || strings.Contains(pix, "p12") ||
@@ -682,8 +693,16 @@ func isTenBit(s *Stream) bool {
 		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(s.Profile)) {
+	// H.264.
 	case "high 10", "high 10 intra", "high 4:2:2", "high 4:2:2 intra",
 		"high 4:4:4 predictive", "high 4:4:4 intra":
+		return true
+	// HEVC. "Main" and "Main Still Picture" are 8-bit and deliberately absent;
+	// everything here carries at least ten.
+	case "main 10", "main 10 intra", "main 10 still picture",
+		"main 12", "main 12 intra",
+		"main 4:2:2 10", "main 4:2:2 10 intra", "main 4:2:2 12",
+		"main 4:4:4 10", "main 4:4:4 10 intra", "main 4:4:4 12":
 		return true
 	}
 	return false
