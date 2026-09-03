@@ -1,6 +1,6 @@
 # ADR 0058 — A backup is the database
 
-Date: 2026-09-03 · Status: **proposed**
+Date: 2026-09-03 · Status: **accepted**
 
 The roadmap's *"backup and restore — rebuild a library without a full rescan"*,
 unplanned since M3.
