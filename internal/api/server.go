@@ -269,6 +269,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/libraries/{id}/faces", s.adminOnly(s.startFacePass))
 	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
 	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.clusterFaces)
+	mux.HandleFunc("GET /api/faces/clusters/{id}/suggestions", s.clusterSuggestions)
 	mux.HandleFunc("GET /api/faces/{id}/thumb", s.faceThumb)
 	// The models are an optional download, pinned in faceinstall and never a
 	// parameter — the payload is a model this server loads and a library it

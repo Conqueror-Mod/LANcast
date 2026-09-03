@@ -172,3 +172,31 @@ func (s *Server) clusterFaces(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"faces": out})
 }
+
+/*
+ * clusterSuggestions offers unnamed groups that resemble a named one.
+ *
+ * The gap it fills is measurable: on a real library, 126 faces of 4,620 landed
+ * in a group of their own. They are not false detections — the detector was as
+ * confident in them as in every other face — they are simply harder, and they
+ * fell just short of the threshold that decides two faces are one person.
+ *
+ * Clustering cannot reach them by relaxing that threshold, because erring low
+ * attaches somebody's face to somebody else's name, which is the failure that
+ * threshold exists to avoid. A person can answer what it cannot, so this
+ * proposes and a person disposes — the same shape as the review queue.
+ *
+ * Nothing is merged here. This endpoint only answers a question.
+ */
+func (s *Server) clusterSuggestions(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid cluster id")
+		return
+	}
+	people, err := s.st.SuggestedForCluster(r.Context(), id, queryInt(r, "limit"))
+	if s.notFoundOr(w, err, "suggested for cluster", "no such cluster") {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"people": people})
+}

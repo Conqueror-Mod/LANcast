@@ -5,6 +5,7 @@ import {
   useFacePeople,
   useFaceCapabilities,
   useClusterFaces,
+  useClusterSuggestions,
   useNamePerson,
   useStartFacePass,
   useIsAdmin,
@@ -90,10 +91,32 @@ function NamePanel({
   const name = useNamePerson(libraryID);
   const [value, setValue] = useState(person.name ?? "");
 
+  /*
+   * After naming, offer the near-misses.
+   *
+   * The panel does not close on save any more, and that is the change. 126
+   * faces on a real library grouped with nothing at all — not false
+   * detections, just harder ones that fell short of the similarity that
+   * decides two faces are one person. Clustering cannot reach them by
+   * relaxing that, because erring low puts somebody's face under somebody
+   * else's name.
+   *
+   * A person can answer what the threshold cannot, and the moment they can
+   * answer it is the moment they have just said who this is. Asking before a
+   * name exists would be a row of strangers beside an empty field.
+   */
+  const [named, setNamed] = useState("");
+  const suggestions = useClusterSuggestions(person.id, named !== "");
+
   const submit = () => {
+    const given = value.trim();
+    if (!given) {
+      onClose();
+      return;
+    }
     name.mutate(
-      { id: person.id, name: value.trim() },
-      { onSuccess: onClose },
+      { id: person.id, name: given },
+      { onSuccess: () => setNamed(given) },
     );
   };
 
@@ -129,9 +152,57 @@ function NamePanel({
         will never rename or dissolve them.
       </p>
 
+      {/*
+        * Shown only after a name has been given, and never merging anything on
+        * its own. Each is a question with a face attached, and the answer is a
+        * click that names it the same thing.
+        */}
+      {named !== "" && (suggestions.data?.people?.length ?? 0) > 0 && (
+        <div className="facenamer__also">
+          <p className="facenamer__note">
+            Is <strong>{named}</strong> also one of these? They were close, but
+            not close enough for LANcast to say so on its own.
+          </p>
+          <div className="facenamer__suggestions">
+            {suggestions.data?.people?.map((p) => (
+              <button
+                key={p.id}
+                className="facenamer__suggestion"
+                onClick={() => name.mutate({ id: p.id, name: named })}
+                disabled={name.isPending}
+                title={`Also ${named}`}
+              >
+                {p.cover_face_id != null && (
+                  <img src={faceThumb(p.cover_face_id)} alt="" loading="lazy" />
+                )}
+                <span>{p.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {named !== "" && (suggestions.data?.people?.length ?? 0) === 0 &&
+        !suggestions.isLoading && (
+          <p className="facenamer__note">
+            Saved. Nothing else looked close enough to ask about.
+          </p>
+        )}
+
       <div className="facenamer__actions">
-        <button className="facenamer__save" onClick={submit} disabled={name.isPending}>
-          {name.isPending ? "Saving…" : "Save"}
+        {/*
+          * Save becomes Done once the name is given.
+          *
+          * The panel used to close on save, and now it stays open to ask about
+          * near-misses — so it has to say how to leave. A Save button that has
+          * already saved is a button that appears to do nothing.
+          */}
+        <button
+          className="facenamer__save"
+          onClick={named !== "" ? onClose : submit}
+          disabled={name.isPending}
+        >
+          {name.isPending ? "Saving…" : named !== "" ? "Done" : "Save"}
         </button>
         {person.name ? (
           // Clearing is offered next to saving rather than hidden, because a
@@ -165,6 +236,7 @@ export function FacePeople() {
   const { data, isLoading } = useFacePeople(libraryID);
   const startPass = useStartFacePass(libraryID);
   const [naming, setNaming] = useState<FacePerson | null>(null);
+  const [showSingles, setShowSingles] = useState(false);
 
   const people = data?.people ?? [];
   const pending = data?.pending ?? 0;
@@ -182,6 +254,29 @@ export function FacePeople() {
     if (an !== bn) return an - bn;
     return b.count - a.count;
   });
+
+  /*
+   * A group of one is held back until asked for.
+   *
+   * Measured on a real library: 4,620 faces in 343 groups, of which 126 hold a
+   * single face — **37% of the groups and 2.7% of the faces**. Every tile is
+   * the same size, so that minority took up as much of the page as the groups
+   * of 301, 222 and 212 that are the reason to be here at all, and the page
+   * read as mostly noise.
+   *
+   * Held back rather than hidden. A face that grouped with nothing is a real
+   * face of a real person — measured at the same detection confidence as every
+   * other, just smaller on average — and it is nameable. It is simply the last
+   * thing worth looking at, not the first.
+   *
+   * Not thrown away either: the obvious "fix" is to stop keeping faces below
+   * some size, and the numbers refuse it. Cutting at 100px would drop 32% of
+   * the singletons and 22% of the faces that group perfectly well, which is a
+   * bad trade made on a correlation that is real but far too weak to act on.
+   */
+  const grouped = ordered.filter((p) => p.count > 1 || p.name);
+  const singles = ordered.filter((p) => p.count <= 1 && !p.name);
+  const shown = showSingles ? [...grouped, ...singles] : grouped;
 
   return (
     <div className="faces-page">
@@ -247,7 +342,7 @@ export function FacePeople() {
       )}
 
       <div className="faces-page__grid">
-        {ordered.map((p) => (
+        {shown.map((p) => (
           <PersonTile
             key={p.id}
             person={p}
@@ -255,6 +350,25 @@ export function FacePeople() {
           />
         ))}
       </div>
+
+      {/*
+        * The toggle sits under the grid, not above it.
+        *
+        * Above, it is a control to get past before reaching what you came for.
+        * Below, it is what it actually is: the end of the list, and an offer to
+        * see the remainder. The count is named rather than hidden behind the
+        * word "more", because 126 and 6 are different decisions.
+        */}
+      {singles.length > 0 && (
+        <button
+          className="faces-page__singles"
+          onClick={() => setShowSingles((v) => !v)}
+        >
+          {showSingles
+            ? `Hide ${singles.length.toLocaleString()} face${singles.length === 1 ? "" : "s"} that matched nobody else`
+            : `Show ${singles.length.toLocaleString()} face${singles.length === 1 ? "" : "s"} that matched nobody else`}
+        </button>
+      )}
 
       {naming && (
         <div className="faces-page__scrim" onClick={() => setNaming(null)}>

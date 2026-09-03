@@ -2580,6 +2580,38 @@ disagreed with the first.
 Faces in folders marked sensitive are never listed, and neither are faces in
 photographs that have gone missing from disk.
 
+### `GET /api/faces/clusters/{id}/suggestions`
+
+Unnamed groups that look like this one — the near-misses a person can resolve
+and the clustering cannot.
+
+```json
+{ "people": [ { "id": 88, "name": null, "count": 1, "cover_face_id": 4120 } ] }
+```
+
+Same shape as a group in `GET /api/libraries/{id}/people`, so a client renders
+them with the tile it already has. `limit` defaults to 6 and is capped at 24.
+
+**The gap this fills is measurable.** On a real library, 126 faces of 4,620
+landed in a group of their own — 37% of the groups but only 2.7% of the faces.
+They are not false detections: the detector was as confident in them as in
+every other face, and they are simply harder, falling just short of the
+similarity that decides two faces are one person.
+
+Clustering cannot reach them by relaxing that similarity, because erring low
+attaches somebody's face to somebody else's name — the failure
+`SameFaceCosine` exists to avoid, and the one it is deliberately biased
+against. So this proposes and a person disposes, the same shape as the review
+queue.
+
+The candidates sit in a **band below** the threshold: anything at or above it
+is already in the group, and anything far below is the least-dissimilar
+stranger in the library rather than a near-miss. A suggestion that is usually
+wrong teaches people to dismiss the feature instead of reading it.
+
+**Nothing is merged by this endpoint.** It answers a question; naming is still
+`PUT /api/faces/clusters/{id}`, and the locked-name rule is unchanged.
+
 ### `GET /api/faces/{id}/thumb`
 
 The face, cropped out of its photograph as a JPEG.

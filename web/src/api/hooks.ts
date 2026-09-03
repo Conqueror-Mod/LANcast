@@ -1296,6 +1296,26 @@ export function useFaceCapabilities(enabled = true) {
 }
 
 /** One group's faces, clearest first — the examples a naming screen shows. */
+/*
+ * Unnamed groups that resemble this one, offered after naming it.
+ *
+ * Fetched only once a name has been given, because that is the moment the
+ * question is answerable: "is this also Carl?" needs a Carl. Asking before
+ * would be a list of strangers next to an empty field.
+ */
+export function useClusterSuggestions(clusterID: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["cluster-suggestions", clusterID],
+    queryFn: ({ signal }) =>
+      apiGet<{ people: FacePerson[] }>(
+        `/api/faces/clusters/${clusterID}/suggestions`,
+        signal,
+      ),
+    enabled: enabled && clusterID !== null,
+    staleTime: 0,
+  });
+}
+
 export function useClusterFaces(clusterID: number | null) {
   return useQuery({
     queryKey: ["cluster-faces", clusterID],
