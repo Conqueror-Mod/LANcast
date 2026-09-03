@@ -59,6 +59,43 @@ type Prefs struct {
 	 * appearing not to work.
 	 */
 	DevTools bool `json:"devtools"`
+
+	/*
+	 * Window is where the window was when it last closed: which screen, and
+	 * where on it.
+	 *
+	 * Here rather than in server settings for the reason the package comment
+	 * gives, and more obviously than anything else in this file. "Which of my
+	 * three monitors" is a fact about a desk, not about an account — putting it
+	 * in /api/settings would move one household member's window onto another
+	 * person's screen, and mean nothing at all to a phone in the kitchen.
+	 *
+	 * Stored as an opaque record rather than interpreted here: the rules about
+	 * unplugged monitors and windows larger than their new screen belong to the
+	 * window, and this package's job is to remember, not to decide.
+	 */
+	Window *WindowPlacement `json:"window,omitempty"`
+}
+
+/*
+ * WindowPlacement is the last position of the desktop window.
+ *
+ * A copy of clientwindow.Placement rather than the type itself, because
+ * desktopprefs is the file format and clientwindow is the behaviour: a
+ * preferences package that imported the window package would make the JSON
+ * shape hostage to a Win32 refactor, and this file is written to disk and read
+ * by later versions.
+ *
+ * The position is relative to its monitor's work area, which is what lets a
+ * rearranged desk still put the window where it was *on that screen*.
+ */
+type WindowPlacement struct {
+	Monitor   string `json:"monitor,omitempty"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Maximized bool   `json:"maximized,omitempty"`
 }
 
 // Load reads preferences from dir.

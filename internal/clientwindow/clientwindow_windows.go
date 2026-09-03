@@ -57,6 +57,33 @@ func open(o Options) error {
 	}
 	defer w.Destroy()
 
+	/*
+	 * The last position the window was seen at, recorded while it is alive.
+	 *
+	 * Guarded because it is written from the window thread and read after the
+	 * loop ends, and because the tray's Close dispatches onto that thread from
+	 * another one.
+	 */
+	var placed placement
+
+	/*
+	 * Capture before deciding whether to close.
+	 *
+	 * Deliberately also on a close-to-tray hide, which is not a close at all.
+	 * The window is at a real position at that moment, and recording it costs
+	 * nothing; the alternative is a window hidden to the tray for a week and
+	 * then quit from the tray, whose remembered position would be from
+	 * whenever it was last genuinely closed.
+	 */
+	userClose := o.OnClose
+	o.OnClose = func() bool {
+		placed.capture(uintptr(w.Window()))
+		if userClose == nil {
+			return true
+		}
+		return userClose()
+	}
+
 	// Fullscreen is the host's job, not the page's.
 	//
 	// WebView2 tells its host that a page wants fullscreen and the host is what
@@ -83,11 +110,42 @@ func open(o Options) error {
 	}
 
 	if o.OnReady != nil {
-		o.OnReady(&controller{w: w})
+		o.OnReady(&controller{w: w, placed: &placed})
+	}
+
+	/*
+	 * Put the window back where it was, before it is shown.
+	 *
+	 * Center: true above is what happens when there is nothing remembered, and
+	 * it stays the fallback rather than being replaced: Resolve refuses a
+	 * placement it cannot honour, and a centred window is always on a screen
+	 * somebody is looking at, which no remembered position can promise.
+	 */
+	if o.Placement.Valid() {
+		applyPlacement(uintptr(w.Window()), o.Placement)
 	}
 
 	w.Navigate(o.URL)
 	w.Run()
+
+	/*
+	 * Deliver the position captured on the way out, not one read here.
+	 *
+	 * Run() returns when the message loop ends, by which time the window is
+	 * being torn down and its handle answers for nothing — reading the
+	 * rectangle at this point gets a destroyed window, and a plausible
+	 * rectangle from a destroyed window is worse than none, because it would
+	 * be saved.
+	 *
+	 * So the position is taken while the window is demonstrably alive: in the
+	 * close handler, and in the tray's Close. Both are the moment a person
+	 * decided to stop, which is also the position worth remembering.
+	 */
+	if o.OnPlacement != nil {
+		if p, ok := placed.get(); ok {
+			o.OnPlacement(p)
+		}
+	}
 	return nil
 }
 
@@ -177,7 +235,12 @@ const (
 	swRestore = 9
 )
 
-type controller struct{ w webview2.WebView }
+type controller struct {
+	w webview2.WebView
+	// placed is the same recorder open() reads after the loop ends, so a quit
+	// from the tray remembers where the window was rather than losing it.
+	placed *placement
+}
 
 func (c *controller) Show() {
 	c.w.Dispatch(func() {
@@ -207,7 +270,14 @@ func (c *controller) Hide() {
 // on screen. Going through Dispatch puts it on the window's own thread, where
 // the quit belongs.
 func (c *controller) Close() {
-	c.w.Dispatch(func() { c.w.Terminate() })
+	c.w.Dispatch(func() {
+		// On the window's thread and before Terminate, which is the last
+		// moment the handle means anything.
+		if c.placed != nil {
+			c.placed.capture(uintptr(c.w.Window()))
+		}
+		c.w.Terminate()
+	})
 }
 
 /*

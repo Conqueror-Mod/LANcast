@@ -116,3 +116,57 @@ func TestOpenAtLoginIsNotStoredHere(t *testing.T) {
 			"the run key is the fact; a copy here can only disagree with it", b)
 	}
 }
+
+/*
+ * The window placement survives a round trip through the file.
+ *
+ * It is the first field here that is a struct rather than a bool, and the
+ * first that is optional — a pointer, so "never recorded" and "recorded at
+ * 0,0" are different things. A file written by an older build has no `window`
+ * key at all and must still load.
+ */
+func TestWindowPlacementRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	want := Prefs{
+		CloseToTray: true,
+		Window: &WindowPlacement{
+			Monitor: `\.\DISPLAY2`, X: 100, Y: 50,
+			Width: 1280, Height: 720, Maximized: true,
+		},
+	}
+	if err := Save(dir, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Window == nil {
+		t.Fatal("Window is nil after a round trip")
+	}
+	if *got.Window != *want.Window {
+		t.Errorf("Window = %+v, want %+v", *got.Window, *want.Window)
+	}
+	if !got.CloseToTray {
+		t.Error("CloseToTray was lost")
+	}
+}
+
+// A preferences file from before this existed must load, with no placement.
+func TestPrefsWithoutAWindowKeyStillLoad(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, FileName),
+		[]byte(`{"close_to_tray":true,"devtools":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Window != nil {
+		t.Errorf("Window = %+v, want nil — nothing was ever recorded", got.Window)
+	}
+	if !got.CloseToTray {
+		t.Error("CloseToTray was lost")
+	}
+}
