@@ -238,6 +238,18 @@ func (s *Store) ClusterLibrary(ctx context.Context, libraryID int64) error {
 		return err
 	}
 
+	/*
+	 * What a person has said is *not* somebody, which outranks every score
+	 * below. Similarity is evidence and this is testimony, and where they
+	 * disagree the person wins — otherwise removing a face from a group is
+	 * undone by the next pass, and a correction that does not survive a
+	 * re-cluster is not a correction.
+	 */
+	refused, err := s.rejections(ctx, libraryID)
+	if err != nil {
+		return err
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("cluster library %d: %w", libraryID, err)
@@ -247,7 +259,11 @@ func (s *Store) ClusterLibrary(ctx context.Context, libraryID int64) error {
 	now := time.Now().Unix()
 	for _, f := range unassigned {
 		best, bestSim := (*cluster)(nil), -1.0
+		no := refused[f.ID]
 		for _, c := range clusters {
+			if no[c.id] {
+				continue
+			}
 			sim := cosine(f.Embedding, c.centroid)
 			/*
 			 * A named cluster wins a tie. The comparison is `>` for unnamed and
@@ -549,6 +565,12 @@ func (s *Store) FacesInCluster(ctx context.Context, clusterID int64, limit int) 
  * uncertain-match surface in this project: the review queue proposes and a
  * person disposes.
  *
+ * A group holding any face this person has already refused is not offered
+ * again, and the whole group goes rather than the one face. The suggestion is
+ * a group and it is accepted as a group, so offering one that a person has
+ * partly said no to asks them to accept a face they have already refused —
+ * and a question that has been answered is not a question.
+ *
  * `SameFaceCosine` is deliberately not the bar here. These are the ones that
  * already failed it — anything above it is in the group already — so the
  * suggestion band sits below, and the results are ordered so the strongest
@@ -574,7 +596,11 @@ func (s *Store) SuggestedForCluster(ctx context.Context, clusterID int64, limit 
 		FROM face f
 		JOIN face_cluster c ON c.id = f.cluster_id
 		WHERE c.library_id = ? AND c.id != ?
-		  AND (c.name IS NULL OR c.name = '')`, libraryID, clusterID)
+		  AND (c.name IS NULL OR c.name = '')
+		  AND NOT EXISTS (
+		        SELECT 1 FROM face_rejection r
+		         WHERE r.cluster_id = ? AND r.face_id = f.id)`,
+		libraryID, clusterID, clusterID)
 	if err != nil {
 		return nil, fmt.Errorf("suggested for cluster: %w", err)
 	}
@@ -678,4 +704,119 @@ func (s *Store) clusterCentroid(ctx context.Context, clusterID int64) ([]float32
 		return nil, libraryID, nil
 	}
 	return centroid, libraryID, nil
+}
+
+/*
+ * RejectFace records that a face is not the person it was grouped with.
+ *
+ * Two writes, and the second one is the one that matters. Detaching the face
+ * fixes what is on screen; the rejection is what stops the next pass putting it
+ * back, because the embedding that caused the mistake is unchanged and will
+ * score exactly as well the second time. Without the row this is a correction
+ * with a shelf life.
+ *
+ * The face is left unassigned rather than moved anywhere. Where it *does*
+ * belong is a question the clustering can answer on its own once it is no
+ * longer allowed the wrong answer, and guessing here would replace one
+ * unrequested decision with another.
+ */
+func (s *Store) RejectFace(ctx context.Context, clusterID, faceID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reject face %d: %w", faceID, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Only from the cluster it is actually in. A stale page whose face has
+	// already moved should not silently write a rejection against a group the
+	// face has nothing to do with.
+	var have sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT cluster_id FROM face WHERE id = ?`, faceID).Scan(&have)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("reject face %d: %w", faceID, err)
+	}
+	if !have.Valid || have.Int64 != clusterID {
+		return ErrNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO face_rejection (face_id, cluster_id, rejected_at) VALUES (?, ?, ?)
+		ON CONFLICT (face_id, cluster_id) DO NOTHING`,
+		faceID, clusterID, time.Now().Unix()); err != nil {
+		return fmt.Errorf("reject face %d: %w", faceID, err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE face SET cluster_id = NULL WHERE id = ?`, faceID); err != nil {
+		return fmt.Errorf("reject face %d: %w", faceID, err)
+	}
+	return tx.Commit()
+}
+
+/*
+ * RejectCluster dismisses a suggested group: not this person, none of them.
+ *
+ * Recorded per face rather than as a pair of clusters, so that one table
+ * carries the whole idea. A suggestion is an unnamed cluster and a re-cluster
+ * may dissolve it, scattering its faces — and a rejection stored against the
+ * cluster would vanish with it, so the same faces would be offered again under
+ * a new id. Stored against the faces, the answer survives the regrouping,
+ * which is the only way "I have already said no to this" can mean anything.
+ *
+ * The faces stay where they are. The person said who they are not; they did
+ * not say the group is wrong about itself.
+ */
+func (s *Store) RejectCluster(ctx context.Context, clusterID, otherID int64) error {
+	if clusterID == otherID {
+		return ErrNotFound
+	}
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO face_rejection (face_id, cluster_id, rejected_at)
+		SELECT f.id, ?, ? FROM face f WHERE f.cluster_id = ?
+		ON CONFLICT (face_id, cluster_id) DO NOTHING`,
+		clusterID, time.Now().Unix(), otherID)
+	if err != nil {
+		return fmt.Errorf("reject cluster %d from %d: %w", otherID, clusterID, err)
+	}
+	// An empty group is one whose photographs have gone; there is nothing to
+	// say no to and nothing to record, and reporting success would tell the
+	// caller a suggestion had been suppressed when it had not.
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+/*
+ * rejections is every "not this person" in a library, as face → clusters.
+ *
+ * Read once per pass and held in memory for the same reason the centroids are:
+ * the alternative is a query inside the loop that runs once per unassigned
+ * face per cluster. The table is small — one row per correction a human has
+ * actually made — so this is the cheapest part of clustering.
+ */
+func (s *Store) rejections(ctx context.Context, libraryID int64) (map[int64]map[int64]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT r.face_id, r.cluster_id
+		  FROM face_rejection r
+		  JOIN face_cluster c ON c.id = r.cluster_id
+		 WHERE c.library_id = ?`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("rejections: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]map[int64]bool{}
+	for rows.Next() {
+		var face, cluster int64
+		if err := rows.Scan(&face, &cluster); err != nil {
+			return nil, fmt.Errorf("rejections: %w", err)
+		}
+		if out[face] == nil {
+			out[face] = map[int64]bool{}
+		}
+		out[face][cluster] = true
+	}
+	return out, rows.Err()
 }

@@ -31,6 +31,7 @@ type Scenario = {
   people?: unknown[];
   pending?: number;
   suggestions?: unknown[];
+  faces?: unknown[];
 };
 
 let host: HTMLDivElement;
@@ -67,6 +68,11 @@ function mount(s: Scenario) {
       }
       if (url.includes("/suggestions")) {
         return json({ people: s.suggestions ?? [] });
+      }
+      // After /suggestions, deliberately: every faces URL contains "/faces",
+      // including "/api/faces/clusters/1/suggestions".
+      if (/\/clusters\/\d+\/faces$/.test(url)) {
+        return json({ faces: s.faces ?? [] });
       }
       if (url.includes("/people")) {
         return json({ people: s.people ?? [], pending: s.pending ?? 0 });
@@ -440,5 +446,151 @@ describe("a person spread across groups", () => {
     for (const id of [1, 2, 3]) {
       expect(named.some((r) => r.url.includes(`/clusters/${id}`))).toBe(true);
     }
+  });
+});
+
+/*
+ * Saying no.
+ *
+ * Until now every control on this panel was an "yes": name this group, accept
+ * this near-miss. Grouping is sometimes wrong — reported as dozens of faces of
+ * one person appearing under somebody else's name — and a screen that can only
+ * agree with the machine leaves the person looking at it with nothing to do
+ * about that.
+ *
+ * jsdom cannot see that the control is on the face rather than beside it. What
+ * these check is that a refusal is sent, to the right place, for the right
+ * thing.
+ */
+describe("removing a face from a person", () => {
+  const scenario = {
+    ready: true,
+    pending: 0,
+    people: [
+      { id: 7, name: "Chris Bowles", name_locked: true, count: 40, cover_face_id: 11 },
+    ] as unknown as FacePerson[],
+    faces: [
+      { id: 501, item_id: 1, score: 0.9 },
+      { id: 502, item_id: 2, score: 0.8 },
+    ],
+  };
+
+  it("deletes that face from that group and nothing else", async () => {
+    mount(scenario);
+    await render();
+
+    const tile = host.querySelector<HTMLElement>(".faceperson");
+    if (!tile) throw new Error("no person tile");
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const remove = host.querySelector<HTMLButtonElement>(".facenamer__remove");
+    expect(remove, "no way to take a face out of a group").not.toBeNull();
+    await act(async () => {
+      remove!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const del = sent.find((s) => s.url.includes("/api/faces/clusters/7/faces/501"));
+    expect(
+      del,
+      `no rejection was sent; requests: ${JSON.stringify(sent)}`,
+    ).toBeTruthy();
+  });
+
+  /*
+   * The press has to land before the refetch answers.
+   *
+   * This is the same fault as the suggestion tiles, which were reported as
+   * unclickable while working perfectly: a control that does the work and
+   * changes nothing visible is indistinguishable from a broken one.
+   */
+  it("marks the face as gone straight away", async () => {
+    mount(scenario);
+    await render();
+    const tile = host.querySelector<HTMLElement>(".faceperson");
+    await act(async () => {
+      tile!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    const remove = host.querySelector<HTMLButtonElement>(".facenamer__remove");
+    await act(async () => {
+      remove!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const face = host.querySelector(".facenamer__face");
+    expect(face?.getAttribute("data-gone")).toBe("true");
+  });
+});
+
+/*
+ * A suggestion you can only accept is a list that never gets shorter.
+ *
+ * The near-misses that are genuinely somebody else are exactly the ones that
+ * stay near, so they come back on every visit. Dismissing is recorded on the
+ * server, which is what makes the answer stick.
+ */
+describe("dismissing a suggested match", () => {
+  it("sends the refusal against the named group", async () => {
+    mount({
+      ready: true,
+      pending: 0,
+      people: [
+        { id: 1, name: null, count: 40, cover_face_id: 11 },
+      ] as unknown as FacePerson[],
+      suggestions: [{ id: 2, name: null, count: 1, cover_face_id: 22 }],
+    });
+    await render();
+
+    const tile = host.querySelector<HTMLElement>(".faceperson");
+    await act(async () => {
+      tile!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const input = host.querySelector(".facenamer__field input") as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(input, "Georgia");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save",
+    );
+    await act(async () => {
+      save!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+    const dismiss = host.querySelector<HTMLButtonElement>(".facenamer__dismiss");
+    expect(dismiss, "no way to say a suggestion is wrong").not.toBeNull();
+    await act(async () => {
+      dismiss!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const del = sent.find((s) =>
+      s.url.includes("/api/faces/clusters/1/suggestions/2"),
+    );
+    expect(
+      del,
+      `no dismissal was sent; requests: ${JSON.stringify(sent)}`,
+    ).toBeTruthy();
+    // And it is a refusal, not a rename: nothing may name the suggested group.
+    const named = sent.find((s) => s.url.endsWith("/api/faces/clusters/2"));
+    expect(named, "dismissing a suggestion named it instead").toBeFalsy();
   });
 });

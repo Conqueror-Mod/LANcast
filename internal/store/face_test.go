@@ -337,3 +337,202 @@ func TestCosine(t *testing.T) {
 		t.Errorf("empty = %v, want 0", got)
 	}
 }
+
+/*
+ * The other half of the locked-fields rule, and the one that was missing.
+ *
+ * Grouping could be told who somebody is. It could not be told who somebody is
+ * *not*, and detaching a face is not the same fact: the embedding is unchanged,
+ * so the next pass scores it identically and puts it straight back. This test
+ * is the one that would fail if the rejection were ever reduced to a detach.
+ */
+func TestARejectedFaceIsNotRegroupedByTheNextPass(t *testing.T) {
+	s := openTestStore(t)
+	fx := makeFaceLibrary(t, s)
+	ctx := context.Background()
+
+	a1 := fx.photo(t, s, "a1.jpg", fx.folder)
+	a2 := fx.photo(t, s, "a2.jpg", fx.folder)
+	wrong := fx.photo(t, s, "wrong.jpg", fx.folder)
+
+	// Three faces the machine believes are one person — which for two of them
+	// it is right about, and the third is the mistake being corrected.
+	for i, id := range []int64{a1, a2, wrong} {
+		if err := s.RecordFaces(ctx, id, []Face{{Score: 0.9, Embedding: person(0, i, 8)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+	group := clusterOf(t, s, a1)
+	if clusterOf(t, s, wrong) != group {
+		t.Fatal("fixture: the three faces did not group together")
+	}
+	if err := s.NameCluster(ctx, group, "Georgia Bowles"); err != nil {
+		t.Fatal(err)
+	}
+
+	var faceID int64
+	if err := s.db.QueryRow(`SELECT id FROM face WHERE item_id = ?`, wrong).Scan(&faceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RejectFace(ctx, group, faceID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Gone immediately: the thing on screen is fixed.
+	faces, err := s.FacesInCluster(ctx, group, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range faces {
+		if f.ID == faceID {
+			t.Fatal("the rejected face is still listed under that person")
+		}
+	}
+
+	// And still gone after a re-cluster, which is the part that matters. The
+	// embedding has not changed, so a pass that consulted similarity alone
+	// would put it back and quietly undo the correction.
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+	var back *int64
+	if err := s.db.QueryRow(`SELECT cluster_id FROM face WHERE id = ?`, faceID).Scan(&back); err != nil {
+		t.Fatal(err)
+	}
+	if back != nil && *back == group {
+		t.Error("a re-cluster put back a face a person had removed — a " +
+			"correction that does not survive a re-cluster is not a correction")
+	}
+	if back == nil {
+		t.Error("the rejected face was left in no group at all; it should be " +
+			"free to group with whoever it actually is")
+	}
+}
+
+// Rejecting from one person says nothing about any other. The face is usually
+// removed because it belongs somewhere else.
+func TestRejectionIsAboutOnePersonOnly(t *testing.T) {
+	s := openTestStore(t)
+	fx := makeFaceLibrary(t, s)
+	ctx := context.Background()
+
+	a1 := fx.photo(t, s, "a1.jpg", fx.folder)
+	b1 := fx.photo(t, s, "b1.jpg", fx.folder)
+	b2 := fx.photo(t, s, "b2.jpg", fx.folder)
+	_ = s.RecordFaces(ctx, a1, []Face{{Score: 0.9, Embedding: person(0, 0, 8)}})
+	_ = s.RecordFaces(ctx, b1, []Face{{Score: 0.9, Embedding: person(4, 0, 8)}})
+	_ = s.RecordFaces(ctx, b2, []Face{{Score: 0.9, Embedding: person(4, 1, 8)}})
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+	mine := clusterOf(t, s, b1)
+	if err := s.NameCluster(ctx, mine, "Chris Bowles"); err != nil {
+		t.Fatal(err)
+	}
+
+	var faceID int64
+	_ = s.db.QueryRow(`SELECT id FROM face WHERE item_id = ?`, b2).Scan(&faceID)
+	if err := s.RejectFace(ctx, mine, faceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+
+	var back *int64
+	_ = s.db.QueryRow(`SELECT cluster_id FROM face WHERE id = ?`, faceID).Scan(&back)
+	if back == nil {
+		t.Fatal("the face ended up in no group at all")
+	}
+	if *back == mine {
+		t.Error("rejected, and put back anyway")
+	}
+	// It may stand alone or join somebody else — either is a real answer. What
+	// it may not be is barred from every group in the library, which is what a
+	// rejection stored against the face rather than the pair would produce.
+}
+
+// A face can only be rejected from the group it is actually in — a stale page
+// must not write a refusal against a person the face has nothing to do with.
+func TestRejectingAFaceFromAGroupItIsNotIn(t *testing.T) {
+	s := openTestStore(t)
+	fx := makeFaceLibrary(t, s)
+	ctx := context.Background()
+
+	a1 := fx.photo(t, s, "a1.jpg", fx.folder)
+	b1 := fx.photo(t, s, "b1.jpg", fx.folder)
+	_ = s.RecordFaces(ctx, a1, []Face{{Score: 0.9, Embedding: person(0, 0, 8)}})
+	_ = s.RecordFaces(ctx, b1, []Face{{Score: 0.9, Embedding: person(4, 0, 8)}})
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+	var faceID int64
+	_ = s.db.QueryRow(`SELECT id FROM face WHERE item_id = ?`, a1).Scan(&faceID)
+
+	if err := s.RejectFace(ctx, clusterOf(t, s, b1), faceID); err == nil {
+		t.Error("a face was rejected from a group it was never in")
+	}
+}
+
+/*
+ * A dismissed suggestion stays dismissed.
+ *
+ * Suggestions are the near-misses, so the ones that are genuinely somebody
+ * else are exactly the ones that stay near — and are re-offered on every visit
+ * unless saying no is recorded. A question that comes back after being
+ * answered reads as a broken feature rather than a careful one.
+ */
+func TestADismissedSuggestionIsNotOfferedAgain(t *testing.T) {
+	s := openTestStore(t)
+	fx := makeFaceLibrary(t, s)
+	ctx := context.Background()
+
+	mine := fx.photo(t, s, "mine.jpg", fx.folder)
+	near := fx.photo(t, s, "near.jpg", fx.folder)
+	_ = s.RecordFaces(ctx, mine, []Face{{Score: 0.9, Embedding: person(0, 0, 8)}})
+	// Built from the threshold rather than from a number chosen by eye, so the
+	// fixture cannot drift out of the band it is meant to sit in.
+	_ = s.RecordFaces(ctx, near, []Face{{Score: 0.9, Embedding: atCosine(SameFaceCosine * 0.8)}})
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+	group := clusterOf(t, s, mine)
+	suggested := clusterOf(t, s, near)
+	if group == suggested {
+		t.Fatal("fixture: the near-miss grouped after all")
+	}
+	if err := s.NameCluster(ctx, group, "Chris Bowles"); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := s.SuggestedForCluster(ctx, group, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 1 || before[0].ID != suggested {
+		t.Fatalf("fixture: expected the near-miss to be suggested, got %+v", before)
+	}
+
+	if err := s.RejectCluster(ctx, group, suggested); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.SuggestedForCluster(ctx, group, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 0 {
+		t.Errorf("a dismissed suggestion was offered again: %+v", after)
+	}
+}
+
+// atCosine builds a unit vector at a given cosine to person(0, …), so a fixture
+// can sit in the suggestion band by construction.
+func atCosine(c float64) []float32 {
+	v := make([]float32, 8)
+	v[0] = float32(c)
+	v[1] = float32(math.Sqrt(1 - c*c))
+	return v
+}

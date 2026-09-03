@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 39
+const CurrentSchemaVersion = 40
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -78,6 +78,7 @@ var migrations = []migration{
 	{version: 37, sql: schemaRevision37},
 	{version: 38, sql: schemaRevision38},
 	{version: 39, sql: schemaRevision39},
+	{version: 40, sql: schemaRevision40},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1375,4 +1376,39 @@ ALTER TABLE media_item ADD COLUMN group_album            TEXT;
 ALTER TABLE media_item ADD COLUMN group_dir              TEXT;
 ALTER TABLE media_item ADD COLUMN group_album_from_folder INTEGER;
 ALTER TABLE media_item ADD COLUMN group_album_at_root    INTEGER;
+`
+
+/*
+ * A face a person said is not this person (ADR 0059).
+ *
+ * Clustering can be told who somebody is; until now it could not be told who
+ * somebody is *not*, and those are different facts. Setting `face.cluster_id`
+ * back to NULL is not the second one: the embedding has not changed, so the
+ * next pass computes the same similarity and puts the face straight back where
+ * it was taken from. A correction that a re-cluster undoes is not a correction.
+ *
+ * So the rejection is stored, and it outranks similarity. This is the
+ * locked-fields rule reaching the last part of face grouping that lacked it —
+ * a rescan reconciles files, it does not re-litigate decisions, and "that is
+ * not me" is a decision.
+ *
+ * Keyed on the pair, because the fact is about the pair. A face rejected from
+ * one person is not rejected from every person; it is usually rejected from
+ * one and belongs in another, which is the whole point of removing it.
+ *
+ * CASCADE on both sides. When the photograph goes the rejection is meaningless,
+ * and when an unnamed cluster is dissolved by a re-cluster the group the
+ * rejection referred to no longer exists. A *named* cluster is never dissolved
+ * (see ClusterLibrary), so a rejection from a person is permanent — which is
+ * the case this table was built for.
+ */
+const schemaRevision40 = `
+CREATE TABLE IF NOT EXISTS face_rejection (
+    face_id     INTEGER NOT NULL REFERENCES face(id) ON DELETE CASCADE,
+    cluster_id  INTEGER NOT NULL REFERENCES face_cluster(id) ON DELETE CASCADE,
+    rejected_at INTEGER NOT NULL,
+    PRIMARY KEY (face_id, cluster_id)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_face_rejection_cluster ON face_rejection(cluster_id);
 `

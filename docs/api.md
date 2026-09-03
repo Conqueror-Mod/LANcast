@@ -2612,6 +2612,59 @@ wrong teaches people to dismiss the feature instead of reading it.
 **Nothing is merged by this endpoint.** It answers a question; naming is still
 `PUT /api/faces/clusters/{id}`, and the locked-name rule is unchanged.
 
+### `DELETE /api/faces/clusters/{id}/faces/{face}`
+
+Takes one face out of a group: that is not this person. Admin only.
+
+```json
+{ "ok": true }
+```
+
+404 when the face is not in that group — including when it has already been
+moved, so a stale page cannot write a refusal against a person the face has
+nothing to do with.
+
+**Nothing is deleted.** The photograph and the detection both survive; the face
+becomes ungrouped and is free to be grouped with whoever it actually is. The
+name is on the group, not on the face, so removing a face never touches a name.
+
+**The refusal is stored, and it outranks similarity.** Detaching alone would be
+undone by the next pass: the embedding has not changed, so clustering computes
+the same score and puts the face straight back. This is the locked-fields rule
+reaching the last part of face grouping that lacked it — the API could be told
+who somebody *is* and could not be told who somebody is *not*, and those are
+different facts. A correction a re-cluster undoes is not a correction.
+
+The refusal is about **the pair**, not the face. A face removed from one person
+is not barred from every group in the library; it is usually removed precisely
+because it belongs to somebody else.
+
+### `DELETE /api/faces/clusters/{id}/suggestions/{other}`
+
+Dismisses a suggested group: none of these are that person. Admin only.
+
+```json
+{ "ok": true }
+```
+
+404 when the suggested group holds no faces — there is nothing to refuse, and
+reporting success would say a suggestion had been suppressed when it had not.
+
+Recorded per face rather than as a pair of groups. A suggestion is an *unnamed*
+group and a re-cluster may dissolve it, scattering its faces into new groups
+with new ids — so an answer stored against the group would vanish with it and
+the same faces would be offered again under a different number. Stored against
+the faces, the answer survives the regrouping, which is the only way "I have
+already said no to this" can mean anything.
+
+A group holding **any** face this person has refused is not offered again, and
+the whole group goes rather than the one face: a suggestion is offered as a
+group and accepted as a group, so re-offering a partly-refused one asks
+somebody to accept a face they have already declined.
+
+The faces themselves are not moved. Saying who they are not is not a claim that
+the group is wrong about itself.
+
 ### `GET /api/faces/{id}/thumb`
 
 The face, cropped out of its photograph as a JPEG.
