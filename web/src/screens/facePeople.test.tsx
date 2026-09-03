@@ -134,6 +134,23 @@ describe("the three empty people pages", () => {
     expect(host.textContent).toContain("1,204");
     expect(host.textContent).not.toContain("No faces yet");
   });
+
+  /*
+   * It has to say *when* people appear, because it used to say the wrong
+   * thing.
+   *
+   * "Groups appear as they are found" is not what happens: grouping runs once,
+   * after every photograph has been examined. Reported from a real library —
+   * 2,810 faces found, no groups, and the only reading available was that the
+   * search had stopped, so it was pressed again. The work was fine and the
+   * sentence was wrong, which is the worst combination because nothing fails.
+   */
+  it("says the page stays empty until the search finishes", async () => {
+    mount({ ready: true, people: [], pending: 1204 });
+    await render();
+    expect(host.textContent).not.toContain("Groups appear as they are found");
+    expect(host.textContent).toMatch(/once every photograph has been looked at/i);
+  });
 });
 
 describe("the grid", () => {
