@@ -223,10 +223,26 @@ export function FacePeople() {
         </p>
       )}
 
+      {/*
+        * Says when groups appear, because it used to say the wrong thing.
+        *
+        * "Groups appear as they are found" is not what happens: grouping runs
+        * once, after every photograph has been examined, and deliberately —
+        * a face is compared against everything already known, so grouping per
+        * batch would redo the work and let a half-finished library form groups
+        * the rest of it then has to be fitted around.
+        *
+        * The old sentence made a running pass look like a stalled one. With
+        * 2,810 faces found and no groups yet, the only reading available was
+        * that it had stopped, so it was pressed again — reported exactly that
+        * way. The work was fine; the sentence was wrong.
+        */}
       {pending > 0 && (
         <p className="faces-page__note">
           Still looking — {pending.toLocaleString()} photograph
-          {pending === 1 ? "" : "s"} to go. Groups appear as they are found.
+          {pending === 1 ? "" : "s"} to go. People appear once every photograph
+          has been looked at, so this page stays empty until it finishes. You
+          can leave it running.
         </p>
       )}
 
