@@ -9,8 +9,8 @@ import {
   useNamePerson,
   useStartFacePass,
   useIsAdmin,
-  type FacePerson,
 } from "@/api/hooks";
+import { collapsePeople, type CollapsedPerson } from "@/lib/collapsePeople";
 import { useFocusable } from "@/focus/FocusController";
 import "./FacePeople.css";
 
@@ -41,7 +41,7 @@ function PersonTile({
   person,
   onOpen,
 }: {
-  person: FacePerson;
+  person: CollapsedPerson;
   onOpen: () => void;
 }) {
   const focusable = useFocusable(onOpen);
@@ -56,8 +56,8 @@ function PersonTile({
       }
     >
       <span className="faceperson__face">
-        {person.cover_face_id ? (
-          <img src={faceThumb(person.cover_face_id)} alt="" loading="lazy" />
+        {person.coverFaceID ? (
+          <img src={faceThumb(person.coverFaceID)} alt="" loading="lazy" />
         ) : (
           <span className="faceperson__blank" />
         )}
@@ -84,10 +84,18 @@ function NamePanel({
   onClose,
 }: {
   libraryID: number;
-  person: FacePerson;
+  person: CollapsedPerson;
   onClose: () => void;
 }) {
-  const { data } = useClusterFaces(person.id);
+  /*
+   * The largest group represents the person here.
+   *
+   * Its faces are the clearest examples, and it is the one a re-cluster draws
+   * others toward, so it is the right one to show and the right one to ask
+   * suggestions about. Renaming still reaches every group — see submit.
+   */
+  const primary = person.clusterIDs[0];
+  const { data } = useClusterFaces(primary);
   const name = useNamePerson(libraryID);
   const [value, setValue] = useState(person.name ?? "");
 
@@ -106,7 +114,7 @@ function NamePanel({
    * name exists would be a row of strangers beside an empty field.
    */
   const [named, setNamed] = useState("");
-  const suggestions = useClusterSuggestions(person.id, named !== "");
+  const suggestions = useClusterSuggestions(primary, named !== "");
   /*
    * Which suggestions have been accepted, held here as well as refetched.
    *
@@ -123,10 +131,19 @@ function NamePanel({
       onClose();
       return;
     }
-    name.mutate(
-      { id: person.id, name: given },
-      { onSuccess: () => setNamed(given) },
-    );
+    /*
+     * Every group under this person, not just the one on screen.
+     *
+     * Renaming one of four groups called Georgia Bowles would split her back
+     * into two people — the exact fault collapsing exists to fix, arriving by
+     * a different route.
+     */
+    for (const id of person.clusterIDs) {
+      name.mutate(
+        { id, name: given },
+        id === primary ? { onSuccess: () => setNamed(given) } : undefined,
+      );
+    }
   };
 
   return (
@@ -224,9 +241,17 @@ function NamePanel({
           // typo that cannot be undone is what makes people afraid to type.
           <button
             className="facenamer__clear"
-            onClick={() =>
-              name.mutate({ id: person.id, name: "" }, { onSuccess: onClose })
-            }
+            onClick={() => {
+              // Every group, for the reason renaming touches every group:
+              // clearing one of four would leave the other three named, which
+              // is a person who half exists.
+              person.clusterIDs.forEach((id, i) =>
+                name.mutate(
+                  { id, name: "" },
+                  i === 0 ? { onSuccess: onClose } : undefined,
+                ),
+              );
+            }}
           >
             Clear name
           </button>
@@ -250,7 +275,7 @@ export function FacePeople() {
   const { data: caps } = useFaceCapabilities();
   const { data, isLoading } = useFacePeople(libraryID);
   const startPass = useStartFacePass(libraryID);
-  const [naming, setNaming] = useState<FacePerson | null>(null);
+  const [naming, setNaming] = useState<CollapsedPerson | null>(null);
   const [showSingles, setShowSingles] = useState(false);
 
   const people = data?.people ?? [];
@@ -289,8 +314,17 @@ export function FacePeople() {
    * the singletons and 22% of the faces that group perfectly well, which is a
    * bad trade made on a correlation that is real but far too weak to act on.
    */
-  const grouped = ordered.filter((p) => p.count > 1 || p.name);
-  const singles = ordered.filter((p) => p.count <= 1 && !p.name);
+  /*
+   * Collapsed before anything else looks at the list.
+   *
+   * Naming does not merge groups — a re-cluster seeds named ones as anchors
+   * and never dissolves them — so accepting three suggestions leaves four
+   * groups called Georgia Bowles. Reported as her appearing three times, at
+   * 80, 1 and 1, which reads as three people who share a name.
+   */
+  const collapsed = collapsePeople(ordered);
+  const grouped = collapsed.filter((p) => p.count > 1 || p.name);
+  const singles = collapsed.filter((p) => p.count <= 1 && !p.name);
   const shown = showSingles ? [...grouped, ...singles] : grouped;
 
   return (
@@ -359,7 +393,7 @@ export function FacePeople() {
       <div className="faces-page__grid">
         {shown.map((p) => (
           <PersonTile
-            key={p.id}
+            key={p.key}
             person={p}
             onOpen={() => isAdmin && setNaming(p)}
           />

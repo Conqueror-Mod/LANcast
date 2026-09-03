@@ -376,3 +376,69 @@ describe("accepting a suggested match", () => {
     }
   });
 });
+
+/*
+ * A person named across several groups is one tile.
+ *
+ * Reported: "Georgia Bowles" three times, at 80, 1 and 1 — the result of
+ * accepting near-miss suggestions, which names a group rather than merging it.
+ * The page read as three people who happened to share a name.
+ */
+describe("a person spread across groups", () => {
+  const split = [
+    { id: 1, name: "Georgia Bowles", count: 80, cover_face_id: 11 },
+    { id: 2, name: "Georgia Bowles", count: 1, cover_face_id: 22 },
+    { id: 3, name: "Georgia Bowles", count: 1, cover_face_id: 33 },
+  ] as unknown as FacePerson[];
+
+  it("appears once, with every face counted", async () => {
+    mount({ ready: true, people: split, pending: 0 });
+    await render();
+    const names = [...host.querySelectorAll(".faceperson__name")].map(
+      (n) => n.textContent,
+    );
+    expect(names.filter((n) => n === "Georgia Bowles")).toHaveLength(1);
+
+    const counts = [...host.querySelectorAll(".faceperson__count")].map(
+      (n) => n.textContent,
+    );
+    expect(counts).toContain("82");
+  });
+
+  /*
+   * Renaming has to reach every group. Renaming one of three would split her
+   * back into two people — the fault collapsing exists to fix, by another
+   * route.
+   */
+  it("renames every group behind that one tile", async () => {
+    mount({ ready: true, people: split, pending: 0 });
+    await render();
+    const tile = host.querySelector(".faceperson") as HTMLButtonElement;
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const input = host.querySelector(
+      ".facenamer__field input",
+    ) as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(input, "Georgia B");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Save",
+    )!;
+    await act(async () => {
+      save.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const named = sent.filter((r) => r.body.includes("Georgia B"));
+    expect(named).toHaveLength(3);
+    for (const id of [1, 2, 3]) {
+      expect(named.some((r) => r.url.includes(`/clusters/${id}`))).toBe(true);
+    }
+  });
+});
