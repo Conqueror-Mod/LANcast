@@ -757,6 +757,303 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List directories, for a folder picker
+         * @description Administrators only. Omit `path` to get the roots — drive letters on Windows, `/` elsewhere.
+         *
+         *     This discloses filesystem layout, which is why it is admin-gated. It grants no capability `POST /api/libraries` did not already have — that endpoint accepts and scans any path — but it makes enumeration convenient.
+         */
+        get: operations["browseDirectories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a scan of every library
+         * @description Administrators only. **Always `202`, never `409`** — unlike the single-library form, where the caller named one library and a conflict is the whole answer. Here the body says which libraries did what.
+         *
+         *     A library is also scanned automatically when it is created, so this is for "check everything for new media" rather than for setup.
+         */
+        post: operations["scanAllLibraries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /** Live scan progress */
+        get: operations["getScanStatus"];
+        put?: never;
+        /**
+         * Start an asynchronous scan
+         * @description Administrators only. Returns `202` immediately. **Scans are never queued.**
+         *
+         *     `kind` is permanent and there is no endpoint to change it: it decides which files are scanned at all — a `music` library indexes audio, a `picture` library images, everything else video — and it biases matching between films and TV. Altering it would mean a rescan re-litigating identity for an entire library, which is what field locking exists to prevent. Remove the library and add it again.
+         */
+        post: operations["scanLibrary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /** The filter values this library's browse view offers */
+        get: operations["getLibraryFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/cast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The people credited in one library
+         * @description A search endpoint rather than another array on `/facets`, because the two differ by three orders of magnitude: a library has a dozen genres and thousands of credited people, and shipping all of them on every browse load would be a megabyte of JSON populating a control most visits never open.
+         *
+         *     Ordered by how much of the library each person is in, then by name — **a total order**, so a list re-fetched as you type cannot appear to shuffle itself.
+         */
+        get: operations["searchLibraryCast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/trending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /** What this library's people have been playing lately */
+        get: operations["getLibraryTrending"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A picture library's photographs counted by capture month
+         * @description Open a bucket through the ordinary item listing:
+         *
+         *     - `GET /api/items?library_id=5&kind=photo&sort=taken&taken_month=2019-07`
+         *     - `GET /api/items?library_id=5&kind=photo&sort=taken&taken_undated=1`
+         *
+         *     Either parameter also excludes marked folders, so a listing always agrees with the count above it.
+         */
+        get: operations["getLibraryTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Price a metadata refresh without performing it
+         * @description Administrators only. **Prices it without performing it**, the way the history reset does.
+         *
+         *     This is not destructive but it *is* expensive — roughly 1,480 lookups for a real film library, at the configured `rate_per_sec` — and a cost that only reveals itself once committed is one people learn to avoid entirely.
+         */
+        get: operations["priceLibraryRefresh"];
+        put?: never;
+        /**
+         * Re-fetch metadata for a library, honouring all field locks
+         * @description Administrators only. The work itself is asynchronous.
+         */
+        post: operations["refreshLibrary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/reparse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-run the filename heuristics over uncertain rows
+         * @description Administrators only.
+         *
+         *     **Distinct from `refresh`, and the distinction is the point.** Refresh asks the provider the same question again; this corrects the question. A film whose year lived only in its folder name was searched with no year at all, and no number of refreshes would have changed that answer.
+         *
+         *     Scope is deliberately narrow: only `review` and `unmatched` rows are touched (a `matched` row's title came from a provider, which is better evidence than any filename); `locked` and `local` rows are never offered; field locks are honoured **individually**, so an item whose title a person corrected still has its year re-parsed; and an empty guess never clears a populated field.
+         *
+         *     **A row is re-parsed once.** Each row examined is stamped, whether or not it changed, and stamped rows are not offered again — that is what makes a second call free.
+         *
+         *     The stamp is load-bearing rather than an optimisation. Enrichment writes the provider's answer back over the guess for any row that stays uncertain, so "never re-parsed" and "re-parsed a minute ago" both disagree with their filename and cannot be told apart by comparing titles. Without the stamp every call rewrote the same rows and asked the provider the same question again — measured on a real library, 32 rows flipping back and forth on every press.
+         */
+        post: operations["reparseLibrary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Items whose identity is uncertain */
+        get: operations["getReviewQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Works claimed by more than one row
+         * @description **Administrators only**, because it is the one response in this API that returns `path`.
+         */
+        get: operations["getCollisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/collisions/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record that somebody has looked at a collision, or take that back
+         * @description Administrators only.
+         */
+        post: operations["dismissCollision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A snapshot of the enrichment worker */
+        get: operations["getEnrichStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1460,6 +1757,252 @@ export interface components {
             empty_trash_on_scan?: boolean;
             scan_interval_hours?: number;
             audit_retention_days?: number;
+        };
+        /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
+        ScanIssue: {
+            /** @description Library-relative. */
+            path: string;
+            reason: string;
+        };
+        /** @description A location the scan could not read — an unplugged drive, a disconnected share. **Not a failure when others were readable**: the scan did real work on the rest, and this is what stops it looking complete when it covered half the library (ADR 0034). */
+        SkippedRoot: {
+            /** Format: int64 */
+            id: number;
+            path: string;
+        };
+        /** @description Live scan progress. **Scanning marks missing, never deletes** — an unmounted drive must not destroy library data. */
+        ScanStatus: {
+            /** Format: int64 */
+            library_id: number;
+            /** @description `idle`, `running` or `failed`. **There is no `complete`** — a finished scan is `idle` with `finished_at` set. */
+            state: string;
+            files_seen: number;
+            items_changed: number;
+            items_missing: number;
+            /** @description Files something went wrong reading. */
+            skipped: number;
+            /** @description Media the library's own kind excludes: audio in a video library, video in a music library. **Kept apart from `skipped` because it is not a failure** — nothing went wrong reading these files — but it is the one number that explains an empty library, and silence here is what let a music library created as a movie library report "0 items · scanned" over 1,592 tracks. */
+            skipped_kind: number;
+            /**
+             * @description Trailers, featurettes, deleted scenes and sample files left out of a video library (ADR 0038).
+             *
+             *     Reported for the same reason as `skipped_kind` and with more force: this number is the difference between a library that says 1,381 films and one that says 1,192, and a person comparing those against another server has no way to discover where the extra ones came from. Saying "189 extras" is the whole explanation.
+             */
+            skipped_extras: number;
+            /** @description Tracks whose tags could not be read, taking their title and album from the folder and filename instead. Not a failure: the file imported and plays. It has its own number because counting it as skipped made a library report failures it could not name. */
+            skipped_untagged: number;
+            /**
+             * @description Files in a `movie` library that parsed as episodes — S01E02, 1x02, and the rest.
+             *
+             *     A *music* library created as a movie library says so because its audio is discarded outright. A *shows* library created as a movie library imports everything and looks fine: every episode becomes a film, sitting loose in the grid with no series and no seasons, and nothing anywhere says why. Kind cannot be changed, so the mistake is unrecoverable except by removing and re-adding the library — which makes being loud at the moment it happens the only defence there is.
+             */
+            episodes_in_movie_library: number;
+            /** @description Playlists seeded from `.m3u` files found in the library (ADR 0030). Reported for the same reason as `skipped_kind`: a scan that quietly imported nothing, or quietly imported forty, should not have to be inferred from the library page afterwards. */
+            playlists_imported: number;
+            /** @description How many of the library's locations this scan actually read. */
+            roots_scanned: number;
+            roots_skipped?: components["schemas"]["SkippedRoot"][];
+            /**
+             * @description Present when a finished scan produced something that does not look like the kind it was scanned as.
+             *
+             *     **The sentence is written server-side and rendered as given.** A client that assembles its own from `episodes_in_movie_library` works for the one case it knows about and can say nothing about the other — a shows library that produced no shows is not visible in any count the client receives. Prose the client reconstructs is prose that drifts from the rule that decided it.
+             */
+            shape_warning?: components["schemas"]["ShapeWarning"];
+            issues?: components["schemas"]["ScanIssue"][];
+            /** Format: int64 */
+            started_at: number;
+            /** Format: int64 */
+            finished_at?: number;
+            error?: string;
+        };
+        /** @description **Both halves matter to the caller.** A sweep that started nothing because every library was already scanning is indistinguishable from a sweep that did nothing at all, unless `busy` is reported alongside `started`. */
+        ScanAllResult: {
+            started: components["schemas"]["ScanStatus"][];
+            /** @description Library ids already scanning. **Listed rather than refused**, and the rest still start: asking for everything while two of five are mid-scan should start the other three, not fail because the request could not be carried out in full. This is also what the rescan timer does — it skips a busy library and never queues behind it. */
+            busy: number[];
+        };
+        /**
+         * @description One resolution tier. **Buckets over the probed width, not a stored field** — nothing in the database says "4K".
+         *
+         *     Bucketed on width because height is what varies: a 2.39:1 film at 4K is 3840×1608 and a 16:9 one is 3840×2160, heights 550px apart, and a height rule files every scope film a tier too low. The boundaries sit below the nominal widths for the same reason — real 1080p is often 1912 after cropping.
+         *
+         *     A file with no width has **not been probed** and is absent from every tier rather than counted as SD.
+         */
+        ResolutionBucket: {
+            /** @description Stable; this is what goes in the query string. */
+            key: string;
+            /** @description What the client shows. Taken from here rather than from a copy in the client, so a tier cannot be called "4K" in one place and "UHD" in another. */
+            label: string;
+            /** @description Inclusive. */
+            min_width: number;
+            /** @description Inclusive; 0 means no upper bound. */
+            max_width: number;
+        };
+        CollectionFacet: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description The number that separates a franchise from a two-film pairing when picking one from a list. */
+            members: number;
+        };
+        /** @description The filter values a library's browse view offers — **only values actually present**, so a chosen filter never yields an empty grid. Genres and content ratings are sorted; decades, years and resolutions are widest/newest-first. */
+        Facets: {
+            /** @description First letters present, `#` first. Drives the A–Z rail, so a client never offers a letter that finds nothing. */
+            initials: string[];
+            genres: string[];
+            decades: number[];
+            content_ratings: string[];
+            /** @description Offered **alongside** `decades`, not instead of it: a decade is how you browse and a year is how you find. A library spanning a century has too many years for a row of chips and exactly the right number for a searchable list. */
+            years: number[];
+            resolutions: components["schemas"]["ResolutionBucket"][];
+            /** @description Most-populated first. */
+            collections: components["schemas"]["CollectionFacet"][];
+            /** @description The highest rating present, so a client offers only thresholds that can match: a library topping out at 8.4 has no business showing a 9+ filter guaranteed to return nothing. */
+            max_rating: number;
+            /** @description True when the caller has finished at least one top-level item, so the unwatched-only toggle is offered **only when it would actually remove something** rather than being a silent no-op. */
+            has_watched: boolean;
+            /** @description Follows the `has_watched` rule. */
+            has_in_progress: boolean;
+            /** @description Follows the `has_watched` rule. */
+            has_unmatched: boolean;
+        };
+        CastMember: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description `actor`, `director`, and others. */
+            role: string;
+            /** @description How much of the library this person is in. */
+            items: number;
+        };
+        CastList: {
+            people: components["schemas"]["CastMember"][];
+        };
+        TrendingItem: {
+            item: components["schemas"]["Item"];
+            /** @description **Accounts, not plays.** Playback state holds one row per item per user, so this is how many people have played something recently rather than how many times it has been played. */
+            viewers: number;
+            /** @description Reported beside `viewers` because a title many people start and nobody finishes is a different fact from one everybody finished, and a single popularity number destroys the difference. */
+            finishers: number;
+            /** Format: int64 */
+            last_at: number;
+        };
+        /**
+         * @description What this library's people have been playing recently. Ranked by `viewers` descending, then by most recent activity — **the tie-break is not decoration**: without it a page of items that all have one viewer returns in whatever order SQLite chooses, and the shelf reshuffles itself on every refresh.
+         *
+         *     Containers — shows, seasons, artists, albums, galleries, playlists — are excluded. A season is not a thing anybody played; it is where the episodes live.
+         *
+         *     **Not admin-gated, and it names no accounts.** Which titles are popular is a fact about a shared library; who watched them is a fact about a person, and this endpoint deliberately cannot answer the second.
+         */
+        Trending: {
+            items: components["schemas"]["TrendingItem"][];
+            /** @description How many accounts contributed. **This is why exposing the counts is safe**: with one account every count is 1 and the list is honestly "recently played", not a trend — so the client is given what it needs to say the true thing instead of being handed a list that calls itself trending regardless. A number meaning different things at different scales carries its scale with it. */
+            contributors: number;
+            window_days: number;
+        };
+        TimelineBucket: {
+            year?: number;
+            month?: number;
+            /** @description Its own bucket, and it sorts last. **Not an error** — on a real library 5% of photographs carry no capture time, and dropping them would lose them silently. */
+            undated?: boolean;
+            count: number;
+        };
+        /**
+         * @description A picture library's photographs counted by **capture month**, newest first.
+         *
+         *     Counts rather than the photographs themselves: a library of several thousand is a payload nobody needs, and a client fetches one month at a time once it knows which months exist.
+         *
+         *     Months are computed in the **server's local time**, which is what a person means by "August". A client must not re-derive them from timestamps or it will disagree about where a month begins.
+         *
+         *     **Marked folders are excluded** (ADR 0051). Covers may only be lifted in the library grid or inside the folder, so timeline entries could never be uncovered here — and a row of covered tiles among a holiday still discloses when the marked photographs were taken.
+         */
+        Timeline: {
+            buckets: components["schemas"]["TimelineBucket"][];
+            total: number;
+        };
+        /**
+         * @description Items in `review` or `unmatched` state, with the parsed filename alongside the proposed match so the two can be compared directly.
+         *
+         *     **Seasons are excluded.** A season has no identity of its own — its name is "Season 1", a position within a show rather than the name of a work — so a provider search for it fails at 0% on every season in the library, for ever. A real TV library listed 55 of them, each offering a Fix button leading to a search that cannot succeed. Shows are still listed: a show's title is a real title, and a wrong match on one is worth correcting.
+         */
+        ReviewQueue: {
+            total: number;
+            items: components["schemas"]["Item"][];
+        };
+        CollisionMember: {
+            /** Format: int64 */
+            id: number;
+            title: string;
+            /** @description **The one place this API returns a filesystem path.** The whole value of the report is being able to go and look at the two files; a collision the reader cannot locate on disk is a notification rather than a report. Admin only for that reason. */
+            path: string;
+            edition?: string;
+            /** Format: int64 */
+            size_bytes: number | null;
+            /** Format: int64 */
+            library_id: number;
+            missing: boolean;
+        };
+        /**
+         * @description A work claimed by more than one row.
+         *
+         *     **The work key is `(provider, external_id, season, episode)`**, and the last two are not decoration: every episode of a show carries the *show's* external id, so without them every episode of a series would collide with every other.
+         */
+        Collision: {
+            provider: string;
+            external_id: string;
+            /** Format: int64 */
+            season?: number;
+            /** Format: int64 */
+            episode?: number;
+            /** @description Whether the members are byte-identical in size — the cheapest signal that two files are the same copy twice rather than two editions (ADR 0042). */
+            same_size: boolean;
+            /** Format: int64 */
+            dismissed_at?: number;
+            members: components["schemas"]["CollisionMember"][];
+        };
+        CollisionList: {
+            collisions: components["schemas"]["Collision"][];
+        };
+        /** @description **Not a resolution, and it does not weaken ADR 0042.** Nothing is merged, ranked or deleted; both files stay exactly where they are. What it records is that somebody read the page — which the report could not represent, so a film in two parts was listed again every time it was opened, for ever. */
+        DismissCollisionRequest: {
+            item_ids: number[];
+            /** @description Take the dismissal back. */
+            restore?: boolean;
+        };
+        RefreshCount: {
+            count: number;
+            scope: string;
+        };
+        RefreshResult: {
+            /** @description Rows requeued. The work itself is asynchronous. */
+            queued: number;
+            scope: string;
+        };
+        ReparseResult: {
+            examined: number;
+            changed: number;
+        };
+        /** @description A snapshot of the enrichment worker, for the activity display. Poll while `running`. */
+        EnrichStatus: {
+            running: boolean;
+            enriched: number;
+            /** @description Items the providers could not identify, **which is information rather than an error**: an unmatched file is a review-queue entry, not a fault. */
+            failed: number;
+            remaining: number;
+            total: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        BrowseEntry: {
+            name: string;
+            path: string;
+        };
+        /** @description **Directories only** — never files, and never file contents. Dotfiles and Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and `System Volume Information` are not offered as library candidates. */
+        BrowseResult: {
+            path: string;
+            /** @description `null` at the root listing and `""` at a filesystem root, so "up" always leads somewhere rather than stranding the picker on one drive. */
+            parent: string | null;
+            entries: components["schemas"]["BrowseEntry"][];
         };
     };
     responses: {
@@ -3067,6 +3610,468 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    browseDirectories: {
+        parameters: {
+            query?: {
+                /** @description The directory to list. Omit for the roots. */
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The directory's subdirectories. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrowseResult"];
+                };
+            };
+            /** @description The path could not be resolved. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    scanAllLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What started, and what was already running. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanAllResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getScanStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress, whether or not a scan is running. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    scanLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scan that started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description A scan is already running — and the body is **the running scan's progress, in the same shape as the `202`**, not the error envelope every other failure uses.
+             *
+             *     That is deliberate and worth stating plainly, because a client parsing it as an error finds no `code` and no `message`: the useful answer to "start a scan" when one is already going is *how far that one has got*, and this endpoint gives it. **Branch on the status, not on the body.**
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanStatus"];
+                };
+            };
+        };
+    };
+    getLibraryFacets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Only values actually present. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Facets"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    searchLibraryCast: {
+        parameters: {
+            query?: {
+                /** @description Prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too. */
+                q?: string;
+                /** @description Scopes the search to one side of the camera (`actor`, `director`). **Unvalidated on purpose**: an unknown role matches nobody and returns an empty list, which is the truthful answer — rejecting it would turn a filter nobody can satisfy into an error page. */
+                role?: string;
+                /**
+                 * @description **Repeatable**, and resolves specific people *instead of* searching — which is what lets a filter pill render a name. Filter state lives in the URL, so a bookmarked `?person=12` arrives with an id and nothing else, and a pill reading "person 12" is not a filter anybody can read.
+                 *
+                 *     Answers in the order asked for, so pills do not reorder between reloads; an id with no row is skipped rather than returned blank.
+                 */
+                id?: number[];
+                /** @description Defaults to 50, maximum 200. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching people. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CastList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryTrending: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 12, maximum 50. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ranked titles, with the scale to read them at. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trending"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Buckets, newest first, with `undated` last. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            /** @description `wrong_kind` on any library that is not a picture library — a timeline of a film library would be a list of release months, which answers a different question quietly. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    priceLibraryRefresh: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 *
+                 *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
+                 *
+                 *     **Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.
+                 */
+                scope?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many rows the refresh would touch. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshCount"];
+                };
+            };
+            /** @description Unrecognised scope. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    refreshLibrary: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 *
+                 *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
+                 *
+                 *     **Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.
+                 */
+                scope?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many rows were requeued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshResult"];
+                };
+            };
+            /** @description Unrecognised scope. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    reparseLibrary: {
+        parameters: {
+            query?: {
+                /** @description Re-offer rows that have already been re-parsed. It exists for the one thing the stamp cannot see: the filename heuristics themselves improving, so rows parsed under the old rules deserve another pass. */
+                force?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were examined, and how many changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReparseResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getReviewQueue: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one library. */
+                library_id?: number;
+                /** @description Page size. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewQueue"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getCollisions: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one library. */
+                library_id?: number;
+                /** @description What counts as the same work. */
+                compare?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collisions, each with its members. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollisionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    dismissCollision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissCollisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorded. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getEnrichStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }

@@ -121,46 +121,14 @@ export type ItemsPage = components["schemas"]["ItemsPage"];
 // The filter values a library's browse view offers. Only values actually
 // present are returned, so a chosen filter never empties the grid. has_watched
 // gates the unwatched-only toggle: offered only when it would remove something.
-export interface Facets {
-  /** First letters present in this library, "#" first. Drives the A–Z rail. */
-  initials?: string[];
-  genres: string[];
-  decades: number[];
-  content_ratings: string[];
-  has_watched: boolean;
-  /** Exact years present, newest first. Searchable rather than chipped. */
-  years: number[];
-  /** Resolution tiers present, widest first. Labels come from the server so
-   *  the client never invents a name for a bucket it did not define. */
-  resolutions: ResolutionBucket[];
-  has_in_progress: boolean;
-  has_unmatched: boolean;
-  /** Collections in this library, most-populated first. */
-  collections: CollectionFacet[];
-  /** The highest rating present, so no threshold is offered that cannot match. */
-  max_rating: number;
-}
+export type Facets = components["schemas"]["Facets"];
 
-export interface CollectionFacet {
-  id: number;
-  name: string;
-  members: number;
-}
+export type CollectionFacet = components["schemas"]["CollectionFacet"];
 
-export interface ResolutionBucket {
-  key: string;
-  label: string;
-  min_width: number;
-  max_width: number;
-}
+export type ResolutionBucket = components["schemas"]["ResolutionBucket"];
 
 /** One credited person, with how much of the library they are in. */
-export interface CastMember {
-  id: number;
-  name: string;
-  role: string;
-  items: number;
-}
+export type CastMember = components["schemas"]["CastMember"];
 
 export type Encoder = components["schemas"]["Encoder"];
 
@@ -168,10 +136,7 @@ export type Settings = components["schemas"]["Settings"];
 
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 
-export interface ScanIssue {
-  path: string; // library-relative
-  reason: string;
-}
+export type ScanIssue = components["schemas"]["ScanIssue"];
 
 /**
  * A finished scan's verdict on its own output (GET /api/libraries/{id}/scan).
@@ -191,71 +156,13 @@ export type ShapeWarning = components["schemas"]["ShapeWarning"];
  * library was already scanning is indistinguishable from a sweep that did
  * nothing at all, unless `busy` is reported alongside `started`.
  */
-export interface ScanAllResult {
-  started: ScanStatus[];
-  /** Library ids that were already scanning and were left to finish. */
-  busy: number[];
-}
+export type ScanAllResult = components["schemas"]["ScanAllResult"];
 
-export interface ScanStatus {
-  library_id: number;
-  state: string; // idle | running | complete | failed
-  files_seen: number;
-  items_changed: number;
-  items_missing: number;
-  skipped: number;
-  // Media the library's kind excludes — audio in a video library, video in a
-  // music library. Not a failure, which is why it is not part of `skipped`:
-  // it answers "why is this library empty", not "what went wrong".
-  skipped_kind: number;
-  // Trailers, featurettes, deleted scenes and sample files left out of a video
-  // library (ADR 0038). Not a failure and not part of `skipped`: nothing went
-  // wrong reading them, they are simply not works.
-  skipped_extras: number;
-  // Tracks whose tags could not be read, taking their title and album from the
-  // folder and filename instead. Not part of `skipped` and not a failure: the
-  // file imported and plays. It has its own number because counting it as
-  // skipped made a library report failures it could not name.
-  skipped_untagged: number;
-  /** Files that parsed as episodes in a library that says it holds films. */
-  episodes_in_movie_library?: number;
-  /**
-   * The verdict those counts feed: present when a finished scan produced
-   * something that does not look like the kind it was scanned as.
-   *
-   * The sentence is written server-side and rendered as given. The client used
-   * to assemble its own from `episodes_in_movie_library`, which worked for the
-   * one case it knew about and could say nothing about the other — a shows
-   * library that produced no shows is not visible in any count the client
-   * receives. Prose the client reconstructs is prose that drifts from the rule
-   * that decided it.
-   */
-  shape_warning?: ShapeWarning;
-  /** How many of the library's locations this scan actually read (ADR 0034). */
-  roots_scanned?: number;
-  /**
-   * Locations the scan could not read — an unplugged drive, a disconnected
-   * share. Not a failure when others were readable: the scan did real work on
-   * the rest, and this is what stops it looking complete when it covered half
-   * the library.
-   */
-  roots_skipped?: { id: number; path: string }[];
-  issues?: ScanIssue[];
-  started_at: number;
-  finished_at?: number;
-  error?: string;
-}
+export type ScanStatus = components["schemas"]["ScanStatus"];
 
-export interface BrowseEntry {
-  name: string;
-  path: string;
-}
+export type BrowseEntry = components["schemas"]["BrowseEntry"];
 
-export interface BrowseResult {
-  path: string;
-  parent: string | null;
-  entries: BrowseEntry[];
-}
+export type BrowseResult = components["schemas"]["BrowseResult"];
 
 export interface ApiError {
   error: { code: string; message: string };
@@ -337,10 +244,7 @@ export interface ReprobeResult {
  * examined 0 found nothing left to do. Reporting only `changed` makes those two
  * outcomes read identically as "0".
  */
-export interface ReparseResult {
-  examined: number;
-  changed: number;
-}
+export type ReparseResult = components["schemas"]["ReparseResult"];
 
 // One thing the server is doing right now (GET /api/activity). Every worker —
 // scan, enrich, probe, coverart, transcode — reports this one shape, so the

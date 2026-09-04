@@ -21,6 +21,10 @@ import {
 import type { Facets } from "@/api/types";
 
 const facets: Facets = {
+  // Every facet array is initialised server-side, so all of them are always
+  // present and empty rather than absent — which is why this fixture carries
+  // `initials` even though nothing here reads it.
+  initials: [],
   genres: ["Drama"],
   decades: [1990],
   content_ratings: ["R"],
