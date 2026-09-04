@@ -4,6 +4,14 @@
 > section remains unbuilt and is marked as such.
 >
 > This file and `internal/api/` must agree exactly — update both in the same commit.
+>
+> **There is now a machine-readable half.** [`openapi.json`](openapi.json)
+> specifies the same contract as an OpenAPI 3.1 document, and it is what
+> generates the client's types. It covers every endpoint except live TV, which
+> is parked. This file is the narrative companion and explains *why* each
+> endpoint behaves as it does; the spec is what tooling reads. Both are checked
+> against the router by tests in `internal/api/`, in both directions — the prose
+> by path, the spec by method, path-parameter name and response shape.
 
 Base path: `/api`. All request and response bodies are JSON except media
 streams. Times are Unix seconds. Durations and positions are milliseconds.
