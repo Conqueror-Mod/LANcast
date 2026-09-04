@@ -430,6 +430,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Runtime:   faceRuntime,
 	}
 	faceWorker := faces.NewWorker(st, faceTool, log)
+	// Semantic search shares the worker binary and nothing else — its own
+	// indexer, its own models, its own progress (ADR 0060).
+	embedder := faces.NewIndexer(st, faceTool, log)
 
 	// Album art comes off the disk, not from a provider: the picture embedded
 	// in a track, or a cover.jpg beside it (ADR 0024). It gets its own worker
@@ -690,7 +693,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
-		Faces: faceWorker, FaceTool: faceTool,
+		Faces: faceWorker, FaceTool: faceTool, Embedder: embedder,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 		// Only for installs that are not a service; the service path
 		// restarts through the service manager instead.

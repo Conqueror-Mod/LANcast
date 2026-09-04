@@ -61,6 +61,7 @@ type Deps struct {
 	// worker binary is not installed, which is the ordinary case.
 	Faces    *faces.Worker
 	FaceTool *faces.Tool
+	Embedder *faces.Indexer
 	Covers   *coverart.Worker
 	Photos   *photo.Worker
 	// ServiceManaged reports whether this process is running under a service
@@ -131,26 +132,30 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
-	ident          identity.Identity
-	listenAddr     string
-	st             *store.Store
-	scanner        *scan.Scanner
-	reg            *meta.Registry
-	art            *artwork.Cache
-	worker         *enrich.Worker
-	probes         *probe.Worker
-	markers        *marker.Worker
-	facesW         *faces.Worker
-	faceModelJob   *faceJob
-	faceTool       *faces.Tool
-	covers         *coverart.Worker
-	photos         *photo.Worker
-	serviceManaged bool
-	relaunch       func() error
-	trans          *transcode.Manager
-	updates        *update.Checker
-	subs           *subtitle.Extractor
-	settings       *config.SettingsStore
+	ident        identity.Identity
+	listenAddr   string
+	st           *store.Store
+	scanner      *scan.Scanner
+	reg          *meta.Registry
+	art          *artwork.Cache
+	worker       *enrich.Worker
+	probes       *probe.Worker
+	markers      *marker.Worker
+	facesW       *faces.Worker
+	faceModelJob *faceJob
+	// A second job, not a second flag on the first: two optional downloads can
+	// be in flight at once, and one byte count cannot describe both.
+	semanticModelJob *faceJob
+	embedder         *faces.Indexer
+	faceTool         *faces.Tool
+	covers           *coverart.Worker
+	photos           *photo.Worker
+	serviceManaged   bool
+	relaunch         func() error
+	trans            *transcode.Manager
+	updates          *update.Checker
+	subs             *subtitle.Extractor
+	settings         *config.SettingsStore
 	// tools is the one media-tools install that may be running (ADR 0043).
 	tools toolsJob
 	// backupMu serialises taking a backup. Two at once would race for a name
@@ -208,7 +213,7 @@ func New(d Deps) *Server {
 	}
 	return &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, semanticModelJob: &faceJob{}, embedder: d.Embedder, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
@@ -283,6 +288,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/faces/models", s.faceModels)
 	mux.HandleFunc("POST /api/faces/models/install", s.adminOnly(s.installFaceModels))
 	mux.HandleFunc("POST /api/faces/models/install/cancel", s.adminOnly(s.cancelFaceModelsInstall))
+
+	// Semantic photograph search (ADR 0060). Its own routes rather than a mode
+	// on the face ones, because they are two optional downloads and a server
+	// may have either, both or neither.
+	mux.HandleFunc("GET /api/photos/semantic/capabilities", s.semanticCapabilities)
+	mux.HandleFunc("GET /api/photos/semantic/models", s.semanticModels)
+	mux.HandleFunc("POST /api/photos/semantic/models/install", s.adminOnly(s.installSemanticModels))
+	mux.HandleFunc("POST /api/photos/semantic/models/install/cancel", s.adminOnly(s.cancelSemanticModelsInstall))
+	mux.HandleFunc("POST /api/libraries/{id}/photos/index", s.adminOnly(s.startSemanticPass))
+	mux.HandleFunc("GET /api/libraries/{id}/photos/search", s.searchPhotos)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)

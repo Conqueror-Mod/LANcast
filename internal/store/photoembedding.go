@@ -22,10 +22,14 @@ import (
  * formats in one package would be two things to get wrong.
  */
 
-// SearchHit is one photograph and how well it matched.
+// SearchHit is one photograph and how well it matched. It is serialized as a
+// type rather than unpacked into a map, so the tags are the wire.
 type SearchHit struct {
-	Item  Item
-	Score float64
+	Item Item `json:"item"`
+	// Score is a cosine between unit vectors: bounded, comparable within one
+	// answer, and close to meaningless across two. It travels so a client can
+	// tell an obvious first from a distant fifth.
+	Score float64 `json:"score"`
 }
 
 /*
