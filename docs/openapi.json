@@ -81,6 +81,10 @@
     {
       "name": "plugins",
       "description": "Third-party code in a deny-by-default sandbox (ADRs 0020, 0021). Administrators only."
+    },
+    {
+      "name": "faces",
+      "description": "Grouping faces in a picture library, in an optional native sidecar (ADR 0052)."
     }
   ],
   "paths": {
@@ -4594,6 +4598,506 @@
           }
         }
       }
+    },
+    "/faces/capabilities": {
+      "get": {
+        "operationId": "getFaceCapabilities",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Whether this server can group faces",
+        "responses": {
+          "200": {
+            "description": "Capability, and the reason when there is none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceCapabilities"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/libraries/{id}/faces": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
+      "post": {
+        "operationId": "startFacePass",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Start a face pass over a picture library",
+        "description": "Administrators only. Asynchronous: a library is tens of minutes of work, progress is read from `GET /api/activity` like every other worker (the task's `kind` is `faces`), and the pass outlives the request that started it.\n\nThe pass is **incremental** — a photograph already examined is skipped unless its file has changed.\n\n**Folders marked sensitive are never examined**, and marking one deletes any faces already found in it (ADR 0051): an embedding is derived from a photograph and is not less private than it.",
+        "responses": {
+          "202": {
+            "description": "The pass has started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Started"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`wrong_kind` — not a picture library.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`not_available` — the worker is missing or has no models, with the reason in the message. \"Not installed\" and \"no model\" are different problems with different fixes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/libraries/{id}/people": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
+      "get": {
+        "operationId": "getLibraryFaceClusters",
+        "tags": [
+          "faces"
+        ],
+        "summary": "The face groups in a picture library, largest first",
+        "responses": {
+          "200": {
+            "description": "The groups, and how many photographs remain unexamined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceClusterList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/faces/clusters/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterId"
+        }
+      ],
+      "put": {
+        "operationId": "nameFaceCluster",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Name a group, or clear its name",
+        "description": "Administrators only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameClusterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The group as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceCluster"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/faces/clusters/{id}/faces": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterId"
+        }
+      ],
+      "get": {
+        "operationId": "getClusterFaces",
+        "tags": [
+          "faces"
+        ],
+        "summary": "A group's faces, clearest first",
+        "description": "What a naming screen shows.\n\nFaces in folders marked sensitive are never listed, and neither are faces in photographs that have gone missing from disk.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 60, capped at 200.",
+            "schema": {
+              "type": "integer",
+              "default": 60,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group's faces.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/faces/clusters/{id}/faces/{face}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterId"
+        },
+        {
+          "name": "face",
+          "in": "path",
+          "required": true,
+          "description": "The face's id.",
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "detachFace",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Take one face out of a group: that is not this person",
+        "description": "Administrators only.\n\n**Nothing is deleted.** The photograph and the detection both survive; the face becomes ungrouped and is free to be grouped with whoever it actually is. The name is on the group, not on the face, so removing a face never touches a name.\n\n**The refusal is stored, and it outranks similarity.** Detaching alone would be undone by the next pass: the embedding has not changed, so clustering computes the same score and puts the face straight back. This is the locked-fields rule reaching the last part of face grouping that lacked it — the API could be told who somebody *is* and could not be told who somebody is *not*, and those are different facts. A correction a re-cluster undoes is not a correction.\n\nThe refusal is about **the pair**, not the face. A face removed from one person is not barred from every group in the library; it is usually removed precisely because it belongs to somebody else.",
+        "responses": {
+          "200": {
+            "description": "Detached, and the refusal recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "The face is not in that group — **including when it has already been moved**, so a stale page cannot write a refusal against a person the face has nothing to do with.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/faces/clusters/{id}/suggestions": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterId"
+        }
+      ],
+      "get": {
+        "operationId": "getClusterSuggestions",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Unnamed groups that look like this one",
+        "description": "The near-misses a person can resolve and the clustering cannot.\n\n**The gap this fills is measurable.** On a real library, 126 faces of 4,620 landed in a group of their own — 37% of the groups but only 2.7% of the faces. They are not false detections: the detector was as confident in them as in every other face, and they are simply harder, falling just short of the similarity that decides two faces are one person.\n\nClustering cannot reach them by relaxing that similarity, because erring low attaches somebody's face to somebody else's name — the failure the threshold exists to avoid, and the one it is deliberately biased against. So this proposes and a person disposes, the same shape as the review queue.\n\nThe candidates sit in a **band below** the threshold: anything at or above it is already in the group, and anything far below is the least-dissimilar stranger in the library rather than a near-miss. A suggestion that is usually wrong teaches people to dismiss the feature instead of reading it.\n\n**Nothing is merged by this endpoint.** It answers a question; naming is still `PUT /api/faces/clusters/{id}`, and the locked-name rule is unchanged.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 6, capped at 24.",
+            "schema": {
+              "type": "integer",
+              "default": 6,
+              "maximum": 24
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/faces/clusters/{id}/suggestions/{other}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ClusterId"
+        },
+        {
+          "name": "other",
+          "in": "path",
+          "required": true,
+          "description": "The suggested group's id.",
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "dismissFaceSuggestion",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Dismiss a suggested group: none of these are that person",
+        "description": "Administrators only.\n\n**Recorded per face rather than as a pair of groups.** A suggestion is an *unnamed* group and a re-cluster may dissolve it, scattering its faces into new groups with new ids — so an answer stored against the group would vanish with it and the same faces would be offered again under a different number. Stored against the faces, the answer survives the regrouping, which is the only way \"I have already said no to this\" can mean anything.\n\nA group holding **any** refused face is not offered again, and the whole group goes rather than the one face: a suggestion is offered as a group and accepted as a group, so re-offering a partly-refused one asks somebody to accept a face they have already declined.\n\nThe faces themselves are not moved. Saying who they are not is not a claim that the group is wrong about itself.",
+        "responses": {
+          "200": {
+            "description": "Dismissed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "The suggested group holds no faces — there is nothing to refuse, and reporting success would say a suggestion had been suppressed when it had not.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/faces/{id}/thumb": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The face's id.",
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getFaceThumb",
+        "tags": [
+          "faces"
+        ],
+        "summary": "The cropped face",
+        "description": "The crop this server cut, which is why no bounding box is returned anywhere else.",
+        "responses": {
+          "200": {
+            "description": "The crop.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/faces/models": {
+      "get": {
+        "operationId": "getFaceModels",
+        "tags": [
+          "faces"
+        ],
+        "summary": "What face grouping would download, before anything is fetched",
+        "responses": {
+          "200": {
+            "description": "Each asset, its licence, and any running job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceModels"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/faces/models/install": {
+      "post": {
+        "operationId": "installFaceModels",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Start the model download",
+        "description": "Administrators only. Asynchronous because it is about 115 MB — holding the request open would make a client timeout indistinguishable from a failed install. Progress is polled from `GET /api/faces/models`.\n\n**The URLs are pinned in the server and are never taken from the request.** The payload is a model this server loads and a library it executes; fetching an address a request chose would be the server-side request forgery the rest of this API refuses. Each file is verified against a pinned SHA-256 before it is moved into place, and a mismatch leaves nothing behind under a real name.\n\n**Pressing it twice while it runs is a person, not a fault**: the second call returns the same snapshot rather than starting a second download.",
+        "responses": {
+          "200": {
+            "description": "An install was already running; the same snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceModelJob"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The download has started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceModelJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`unsupported` — no pinned build for this platform.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/faces/models/install/cancel": {
+      "post": {
+        "operationId": "cancelFaceModelInstall",
+        "tags": [
+          "faces"
+        ],
+        "summary": "Stop a running model download",
+        "description": "Administrators only. 115 MB on a metered connection is something somebody may reasonably change their mind about halfway through.",
+        "responses": {
+          "200": {
+            "description": "Cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4766,6 +5270,16 @@
         "description": "The plugin's name.",
         "schema": {
           "type": "string"
+        }
+      },
+      "ClusterId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The face group's id.",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -8334,6 +8848,276 @@
             "items": {
               "$ref": "#/components/schemas/Plugin"
             }
+          }
+        }
+      },
+      "FaceCapabilities": {
+        "type": "object",
+        "description": "Whether this server can group faces, and why not when it cannot (ADR 0052).\n\nThe worker is a separate optional download, in the shape ffmpeg already has (ADR 0048). A server without it is fully functional and says so.",
+        "required": [
+          "version",
+          "os",
+          "arch",
+          "native",
+          "ready"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "arch": {
+            "type": "string"
+          },
+          "native": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "**A client must never present an empty people list as \"nobody here\" without checking this.** \"Nothing found\" and \"nothing looked\" are the same empty array and completely different sentences."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Always present when `ready` is false — \"the face worker is not installed\", \"no face model is bundled yet\", and so on."
+          }
+        }
+      },
+      "FaceCluster": {
+        "type": "object",
+        "description": "A group of faces the server believes are one person.",
+        "required": [
+          "id",
+          "name",
+          "name_locked",
+          "count"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null for an unnamed group."
+          },
+          "name_locked": {
+            "type": "boolean",
+            "description": "**A name is an edit and locks the group** (ADR 0052): re-clustering may move faces into it and may never rename it, merge it away, or delete it, even when it is emptied. Faces prefer a named group at equal similarity, so naming makes a group more stable rather than freezing it."
+          },
+          "count": {
+            "type": "integer"
+          },
+          "cover_face_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The highest-scoring face, so a group is represented by its clearest example."
+          },
+          "cover_item_id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "FaceClusterList": {
+        "type": "object",
+        "required": [
+          "people",
+          "pending"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FaceCluster"
+            },
+            "description": "Largest first."
+          },
+          "pending": {
+            "type": "integer",
+            "description": "How many photographs are still to be examined, returned so a client can say \"still looking\" rather than \"nobody here\"."
+          }
+        }
+      },
+      "FaceSuggestionList": {
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FaceCluster"
+            },
+            "description": "Same shape as a group, so a client renders them with the tile it already has."
+          }
+        }
+      },
+      "Face": {
+        "type": "object",
+        "description": "**The bounding box is deliberately not returned.** A client draws the crop this server cut, and handing over coordinates would invite a second implementation of the cropping rules that disagreed with the first.",
+        "required": [
+          "id",
+          "item_id",
+          "score"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "score": {
+            "type": "number"
+          }
+        }
+      },
+      "FaceList": {
+        "type": "object",
+        "required": [
+          "faces"
+        ],
+        "properties": {
+          "faces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Face"
+            },
+            "description": "Clearest first."
+          }
+        }
+      },
+      "NameClusterRequest": {
+        "type": "object",
+        "description": "**An empty name clears both the name and the lock**, and the group becomes an ordinary cluster again — without that a typo would be permanent, and permanence is what makes people afraid to use a naming UI at all.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "FaceModelAsset": {
+        "type": "object",
+        "description": "Every asset names its size, its licence and the address the machine would connect to — **a download somebody cannot identify is not consent**.",
+        "required": [
+          "name",
+          "size_bytes",
+          "licence",
+          "licence_url",
+          "url"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "licence": {
+            "type": "string"
+          },
+          "licence_url": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "FaceModelJob": {
+        "type": "object",
+        "required": [
+          "running",
+          "stage",
+          "bytes_done",
+          "bytes_total"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "bytes_done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "FaceModels": {
+        "type": "object",
+        "description": "What face grouping **would** download, before anything is fetched. Readable by anyone, because it describes what the server would do rather than doing it.\n\nThe worker binary is **not** in this list: it ships with the server, because a worker whose version can drift from the server driving it is a support question nobody can answer from a log.",
+        "required": [
+          "supported"
+        ],
+        "properties": {
+          "supported": {
+            "type": "boolean",
+            "description": "False on platforms with no pinned build — rather than offering a download that could not be used once it arrived."
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FaceModelAsset"
+            }
+          },
+          "job": {
+            "$ref": "#/components/schemas/FaceModelJob"
+          }
+        }
+      },
+      "Started": {
+        "type": "object",
+        "required": [
+          "started"
+        ],
+        "properties": {
+          "started": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Ok": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
           }
         }
       }
