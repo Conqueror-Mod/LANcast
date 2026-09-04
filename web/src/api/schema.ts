@@ -1054,6 +1054,318 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/together": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open watch-together rooms
+         * @description **Any signed-in account may use these routes — no particular role.** Watching something with the people you live with is not an administrative act.
+         */
+        get: operations["listTogetherSessions"];
+        put?: never;
+        /**
+         * Open a room and become its host
+         * @description A room around an item that does not exist is refused, because everybody who joined would sit looking at a player that cannot load with nothing to say why.
+         *
+         *     **Any signed-in account may use these routes — no particular role.** Watching something with the people you live with is not an administrative act.
+         */
+        post: operations["createTogetherSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/together/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The follower's synchronisation input, and a heartbeat
+         * @description **This doubles as the signal that the member is still present.** Nobody presses "leave" — they close the laptop — so a room drops members who stop polling for 90 seconds and closes when the host goes quiet.
+         *
+         *     A `404` once a room has ended is the client's cue to stop following.
+         */
+        get: operations["getTogetherSession"];
+        /**
+         * The host reports position and paused state
+         * @description **Only the host** — `403 forbidden` for anyone else. Two people scrubbing the same film is not synchronised playback, it is a fight, and the loser cannot tell it from a bug.
+         */
+        put: operations["updateTogetherSession"];
+        post?: never;
+        /**
+         * Leave the room
+         * @description **The host leaving ends the room** rather than promoting somebody. Promotion sounds generous and is worse: the film keeps playing in three houses under a driver nobody chose, and the person who started it cannot stop what they began.
+         */
+        delete: operations["leaveTogetherSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/together/{id}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add the caller to a room
+         * @description **Rejoining is not an error and does not duplicate anybody**: a refresh, a dropped connection and a second tab all arrive here.
+         */
+        post: operations["joinTogetherSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The servers this one has been introduced to
+         * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
+         */
+        get: operations["listPeers"];
+        put?: never;
+        /**
+         * Add a peer from a pasted invite
+         * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
+         *
+         *     **This records an introduction and does not complete a pairing.** The peer stays `added` until the far side is confirmed to hold us too.
+         */
+        post: operations["addPeer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * This server's own invite, to hand out
+         * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
+         */
+        get: operations["getPeerInvite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Un-pair
+         * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
+         *
+         *     **This is the revocation mechanism.** The peer's addresses and roster go with it through the schema's cascade, and so does every grant naming one of its people (ADR 0046).
+         */
+        delete: operations["removePeer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The other accounts on this server
+         * @description "Find Friends" on a self-hosted household server means the people already on it — there is no directory to search and no second server to federate with.
+         */
+        get: operations["listPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * What one person has published
+         * @description Answers only for an account that has opted into sharing (ADR 0035). There is no route that answers "what has this person been watching" for somebody who has not.
+         */
+        get: operations["getPersonActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paired servers, their people, and what they are doing
+         * @description **Presence is a third disclosure category and no existing opt-in widens into it** (ADR 0045 §1): agreeing to publish what you have finished is not agreeing to be watched in real time. It is off by default, and there is no migration in which anybody starts being visible.
+         *
+         *     Presence is **never persisted**: there is no history, no "last seen watching", and no route that could answer either. Revocation takes effect on the next poll, mid-film.
+         */
+        get: operations["getPeerPresence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/people/peers/{fingerprint}/{person}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+                /** @description The person's id in that peer's roster. */
+                person: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grant or revoke your presence to one named person
+         * @description **A grant names a person, never a server**, which is why the route carries both a fingerprint and a person id.
+         *
+         *     Granting is self-service and reads the caller's id from their session: there is no route that accepts a subject, and therefore no way for an administrator to grant presence on somebody's behalf (ADR 0045 §6).
+         *
+         *     The person must already be in that peer's roster, which is itself a per-account opt-in — an account that has not opted in cannot be named by anybody's grant, in either direction, and **the schema enforces that rather than a handler**.
+         */
+        put: operations["putPresenceGrant"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Playback stopped; drop the caller's live presence now */
+        delete: operations["dropPresence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a peer's person may see
+         * @description **Peer-to-peer, and not a session route.** Its caller is a server, authenticated by the **mutual-TLS pin** (ADR 0044 §4): the connection must present the identity key already recorded for that peer, and a request arriving without a peer certificate is refused. Which *person* is asking is the calling server's word, on the same basis a pairing already rests on.
+         *
+         *     Peer connections are told apart from browsers by an ALPN marker in the ClientHello, so they share the ordinary port and no browser is ever asked for a certificate.
+         */
+        get: operations["getFederationPresence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The accounts here that have opted into being listed
+         * @description **Peer-to-peer, and not a session route.** Its caller is a server, authenticated by the **mutual-TLS pin** (ADR 0044 §4): the connection must present the identity key already recorded for that peer, and a request arriving without a peer certificate is refused. Which *person* is asking is the calling server's word, on the same basis a pairing already rests on.
+         *
+         *     Peer connections are told apart from browsers by an ALPN marker in the ClientHello, so they share the ordinary port and no browser is ever asked for a certificate.
+         *
+         *     **Fetching a peer's roster is what establishes that a pairing is mutual.** This server reaches that handler only for a fingerprint the far side already holds, so a successful call proves both sides hold each other, and it is what moves a peer from `added` to `paired` (ADR 0044 §3).
+         *
+         *     A roster is stored wholesale, so somebody who turns their visibility off disappears from it on the next refresh and every grant naming them cascades away.
+         */
+        get: operations["getFederationRoster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2004,6 +2316,169 @@ export interface components {
             parent: string | null;
             entries: components["schemas"]["BrowseEntry"][];
         };
+        TogetherMember: {
+            user_id: string;
+            name: string;
+            host: boolean;
+            /**
+             * Format: int64
+             * @description When this member last polled. Reported because "who is actually here" is the question a room list answers, and a member who closed their laptop is still in the map until the sweep.
+             */
+            last_seen: number;
+        };
+        /**
+         * @description Several people playing the same thing at the same position.
+         *
+         *     **The server owns the truth** — what is playing, where it is, whether it is paused — and clients converge on it. The alternative, each client broadcasting its own position, makes the last writer win, and on a lossy connection that is whoever lagged worst.
+         *
+         *     **Live state, no schema.** A session means nothing after a restart; persisting one would resurrect a film nobody is watching and invite a client to rejoin a room whose members went home hours ago.
+         *
+         *     **Polling, not sockets.** Nothing else in this stack streams, and a socket layer for one feature is the dependency argument ADR 0013 settled. A second of drift is acceptable for "we are watching this together"; frame accuracy is not the goal and could not be delivered to three devices over a LAN anyway.
+         */
+        TogetherSession: {
+            id: string;
+            /** Format: int64 */
+            item_id: number;
+            /** @description Who drives. **Transport control is deliberately not shared**: two people scrubbing the same film is not synchronised playback, it is a fight, and the loser cannot tell it from a bug. */
+            host_id: string;
+            /** Format: int64 */
+            position_ms: number;
+            paused: boolean;
+            /**
+             * Format: int64
+             * @description When the host last reported, so a follower can work out how far the film has moved since. Without it every poll would land one interval behind and never catch up.
+             */
+            updated_at: number;
+            members: components["schemas"]["TogetherMember"][];
+            /** Format: int64 */
+            created_at: number;
+        };
+        TogetherSessionList: {
+            sessions: components["schemas"]["TogetherSession"][];
+        };
+        CreateTogetherRequest: {
+            /** Format: int64 */
+            item_id: number;
+            /** Format: int64 */
+            position_ms?: number;
+        };
+        /** @description The host reporting where the film is. **Only the host** — anyone else gets `403`. */
+        TogetherHostUpdate: {
+            /** Format: int64 */
+            position_ms: number;
+            paused: boolean;
+        };
+        /**
+         * @description Another server this one has been introduced to (ADR 0044).
+         *
+         *     **A pairing permits nothing.** It records that two servers know who each other are, and every later capability is granted separately.
+         */
+        Peer: {
+            /** @description Canonical, and what any comparison is made against. */
+            fingerprint: string;
+            /** @description The grouped rendering, so a client shows the readable form without inventing its own grouping — a second opinion about where the separators go is how two screens end up disagreeing about whether a fingerprint matched. */
+            fingerprint_display: string;
+            name: string;
+            /**
+             * @description `added` until the far side is confirmed to hold us too, then `paired`.
+             *
+             *     **Accepting an invite is not a pairing** (ADR 0044 §3 — introduction is mutual). Only the transport can move it: this server reaches the peer's roster handler only for a fingerprint the far side already holds, so a successful call proves both sides hold each other.
+             */
+            state: string;
+            /** @description Hints, not identity. The fingerprint is the identity (ADR 0044 §5), so a failure at one address is a reason to try the next rather than a verdict about the peer. */
+            addrs: string[];
+            /** Format: int64 */
+            added_at: number;
+            /**
+             * Format: int64
+             * @description **0 for a peer that has never answered**, which is a different statement from one that answered three days ago. Always present, so the two can be told apart.
+             */
+            last_seen: number;
+        };
+        PeerList: {
+            peers: components["schemas"]["Peer"][];
+        };
+        /** @description This server's own invite, to hand out. */
+        PeerInvite: {
+            invite: string;
+            fingerprint: string;
+            fingerprint_display: string;
+            name: string;
+            addrs: string[];
+        };
+        AddPeerRequest: {
+            /** @description An invite pasted from another server. */
+            invite: string;
+        };
+        PeerPresence: {
+            fingerprint: string;
+            name: string;
+            state: string;
+            /** @description Whether this peer answered just now. */
+            reachable: boolean;
+            people: components["schemas"]["PeerPerson"][];
+        };
+        PeerPresenceList: {
+            peers: components["schemas"]["PeerPresence"][];
+        };
+        PresenceGrantRequest: {
+            on: boolean;
+        };
+        /** @description Another account on this server. **The caller is excluded by design** — a row for yourself in a list of other people is noise — which is why your own sharing setting is read from `user.sharing` on `GET /api/auth/status` and not from here. */
+        Person: {
+            id: string;
+            name: string;
+            role: string;
+            /** @description Whether they publish their activity (ADR 0035). */
+            sharing: boolean;
+            watched: number;
+            /** Format: int64 */
+            joined_at: number;
+        };
+        PersonList: {
+            people: components["schemas"]["Person"][];
+        };
+        ActivityList: {
+            activity: components["schemas"]["HistoryEntry"][];
+        };
+        /** @description What a peer's person may see. The payload is bounded by ADR 0045 §3 and carries nothing else — no position, no episode, no history. */
+        FederationPerson: {
+            /** @description The answering account's own id, which is exactly the id the asking server already holds for them in its roster — that is what makes it the join key. Matching on the display name instead would break on two people called Sam, and would quietly re-point a grant when somebody renamed themselves. It discloses nothing: the asker was given this id in the roster before any of this. */
+            id: string;
+            name: string;
+            online: boolean;
+            /** @description The work's title, or absent when idle. */
+            watching?: string;
+        };
+        FederationPersonList: {
+            people: components["schemas"]["FederationPerson"][];
+        };
+        /** @description An account here that has opted into being listed to peers. */
+        RosterPerson: {
+            id: string;
+            name: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        RosterList: {
+            people: components["schemas"]["RosterPerson"][];
+        };
+        /**
+         * @description One person on a paired server.
+         *
+         *     **`granted`, `shares: false`, and `shares: true` with `online` are three different statements** — *has not shared with you*, *offline*, and *online and idle* — and a client must not collapse them. A choice and an absence are not the same thing.
+         */
+        PeerPerson: {
+            id: string;
+            name: string;
+            /** @description Whether **you** have granted this person your presence. */
+            granted: boolean;
+            /** @description Whether they share presence with you. When false, `online` and `watching` are absent — not false, absent. */
+            shares: boolean;
+            online?: boolean;
+            /** @description **The work, by title, or empty.** Never an episode ("Cowboy Bebop", not "Cowboy Bebop S01E02"), never music or photographs, and never a position — ADR 0045 §3 bounds the disclosure exhaustively and the payload carries nothing else. */
+            watching?: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -2118,6 +2593,10 @@ export interface components {
         HistoryScope: string;
         /** @description Narrow to an item and everything beneath it, recursively — so forgetting a show is one call rather than a client walking its episodes. */
         HistoryUnder: number;
+        /** @description The room's id. */
+        TogetherId: string;
+        /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+        PeerFingerprint: string;
     };
     requestBodies: never;
     headers: never;
@@ -4072,6 +4551,513 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listTogetherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every open room. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSessionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTogetherRequest"];
+            };
+        };
+        responses: {
+            /** @description The new room. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such item. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room as it now stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No such room, or it has ended. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    updateTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TogetherHostUpdate"];
+            };
+        };
+        responses: {
+            /** @description The room as it now stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller is not the host. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No such room. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    leaveTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such room. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    joinTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                id: components["parameters"]["TogetherId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room, now including the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such room. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listPeers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every peer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addPeer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPeerRequest"];
+            };
+        };
+        responses: {
+            /** @description The peer, in state `added`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Peer"];
+                };
+            };
+            /** @description `bad_invite` for a damaged invite, with a message written for the person holding the paste, or `self` when it is this server's own invite. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getPeerInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invite and the identity behind it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerInvite"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `not_reachable` — this server has no address another machine could reach, so it cannot introduce itself. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    removePeer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Un-paired. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listPeople: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Everyone but the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getPersonActivity: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 20, maximum 100. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What they have published. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPeerPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each peer, with its people and their state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerPresenceList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putPresenceGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+                /** @description The person's id in that peer's roster. */
+                person: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresenceGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Acknowledged"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such peer, or no such person in its roster. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    dropPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dropped. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getFederationPresence: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. */
+                person: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Only what that person has been granted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FederationPersonList"];
+                };
+            };
+            /** @description No peer certificate, or one that is not recognised. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getFederationRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The opted-in accounts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterList"];
+                };
+            };
+            /** @description No peer certificate, or one that is not recognised. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

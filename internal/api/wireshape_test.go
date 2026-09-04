@@ -90,6 +90,13 @@ import (
 // probe.Stats, update.State, presence.State and identity.Identity all reach the
 // client under keys written at the call site, so their Go field names are not
 // on the wire and reporting them would be three false alarms each.
+//
+// store.Peer is the subtlest of them. peerJSON builds the map, and it does not
+// merely rename: it adds fingerprint_display, which the struct has no field
+// for, and it always writes last_seen where the struct carries omitempty. The
+// contract says last_seen must be 0 rather than absent for a peer that has
+// never answered — "never" and "three days ago" being different statements —
+// so the map is right and serializing the struct would be wrong.
 var wireTypes = []struct {
 	where string
 	value any
@@ -140,7 +147,6 @@ var wireTypes = []struct {
 
 	// Accounts and peers.
 	{"GET /api/users", managedUserView{}},
-	{"GET /api/peers", store.Peer{}},
 
 	// Subsystems.
 	{"GET /api/faces/capabilities", faces.Capabilities{}},

@@ -435,24 +435,9 @@ export type RatedItem = components["schemas"]["RatedItem"];
 
 // GET /api/together — a watch-together room. The server owns position and
 // paused; clients converge on them rather than each broadcasting their own.
-export interface TogetherMember {
-  user_id: string;
-  name: string;
-  host: boolean;
-  last_seen: number;
-}
+export type TogetherMember = components["schemas"]["TogetherMember"];
 
-export interface TogetherSession {
-  id: string;
-  item_id: number;
-  host_id: string;
-  position_ms: number;
-  paused: boolean;
-  /** When the host last reported, so a follower can allow for the time since. */
-  updated_at: number;
-  members: TogetherMember[];
-  created_at: number;
-}
+export type TogetherSession = components["schemas"]["TogetherSession"];
 
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".
@@ -519,14 +504,7 @@ export interface GuideNow {
 // GET /api/people — the other accounts on this server (ADR 0035). `sharing` is
 // reported even when false, so a page can say "has not shared" rather than
 // showing an empty list that reads as "watches nothing".
-export interface Person {
-  id: string;
-  name: string;
-  role: Role;
-  sharing: boolean;
-  watched: number;
-  joined_at: number;
-}
+export type Person = components["schemas"]["Person"];
 
 /** A pinned media-tools build, as offered before it is downloaded. A download
  *  the user cannot identify is not consent, so this is shown, not implied. */
@@ -563,26 +541,9 @@ export interface MediaToolsState {
  * them apart first — collapsing them into one optional string is how a choice
  * gets rendered as an absence.
  */
-export interface PeerPerson {
-  id: string;
-  name: string;
-  /** Whether you have granted them your presence. Your decision, not theirs. */
-  granted: boolean;
-  /** Whether they have granted you theirs. */
-  shares: boolean;
-  online?: boolean;
-  /** The work, by title. Never an episode, never a position. */
-  watching?: string;
-}
+export type PeerPerson = components["schemas"]["PeerPerson"];
 
-export interface PeerPresence {
-  fingerprint: string;
-  name: string;
-  state: string;
-  /** Whether this server answered just now. Distinct from anybody being online. */
-  reachable: boolean;
-  people: PeerPerson[];
-}
+export type PeerPresence = components["schemas"]["PeerPresence"];
 
 /*
  * A work claimed by more than one file (ADR 0042).

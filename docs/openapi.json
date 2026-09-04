@@ -53,6 +53,14 @@
     {
       "name": "settings",
       "description": "Server-wide configuration."
+    },
+    {
+      "name": "together",
+      "description": "Synchronised rooms: several people playing the same thing at the same position."
+    },
+    {
+      "name": "peers",
+      "description": "Paired servers, the people on them, and live presence (ADRs 0044–0046)."
     }
   ],
   "paths": {
@@ -2662,6 +2670,653 @@
           }
         }
       }
+    },
+    "/together": {
+      "get": {
+        "operationId": "listTogetherSessions",
+        "tags": [
+          "together"
+        ],
+        "summary": "Open watch-together rooms",
+        "description": "**Any signed-in account may use these routes — no particular role.** Watching something with the people you live with is not an administrative act.",
+        "responses": {
+          "200": {
+            "description": "Every open room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSessionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTogetherSession",
+        "tags": [
+          "together"
+        ],
+        "summary": "Open a room and become its host",
+        "description": "A room around an item that does not exist is refused, because everybody who joined would sit looking at a player that cannot load with nothing to say why.\n\n**Any signed-in account may use these routes — no particular role.** Watching something with the people you live with is not an administrative act.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTogetherRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/together/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TogetherId"
+        }
+      ],
+      "get": {
+        "operationId": "getTogetherSession",
+        "tags": [
+          "together"
+        ],
+        "summary": "The follower's synchronisation input, and a heartbeat",
+        "description": "**This doubles as the signal that the member is still present.** Nobody presses \"leave\" — they close the laptop — so a room drops members who stop polling for 90 seconds and closes when the host goes quiet.\n\nA `404` once a room has ended is the client's cue to stop following.",
+        "responses": {
+          "200": {
+            "description": "The room as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No such room, or it has ended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateTogetherSession",
+        "tags": [
+          "together"
+        ],
+        "summary": "The host reports position and paused state",
+        "description": "**Only the host** — `403 forbidden` for anyone else. Two people scrubbing the same film is not synchronised playback, it is a fight, and the loser cannot tell it from a bug.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TogetherHostUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The room as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "The caller is not the host.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "leaveTogetherSession",
+        "tags": [
+          "together"
+        ],
+        "summary": "Leave the room",
+        "description": "**The host leaving ends the room** rather than promoting somebody. Promotion sounds generous and is worse: the film keeps playing in three houses under a driver nobody chose, and the person who started it cannot stop what they began.",
+        "responses": {
+          "204": {
+            "description": "Left. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/together/{id}/join": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TogetherId"
+        }
+      ],
+      "post": {
+        "operationId": "joinTogetherSession",
+        "tags": [
+          "together"
+        ],
+        "summary": "Add the caller to a room",
+        "description": "**Rejoining is not an error and does not duplicate anybody**: a refresh, a dropped connection and a second tab all arrive here.",
+        "responses": {
+          "200": {
+            "description": "The room, now including the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers": {
+      "get": {
+        "operationId": "listPeers",
+        "tags": [
+          "peers"
+        ],
+        "summary": "The servers this one has been introduced to",
+        "description": "Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).",
+        "responses": {
+          "200": {
+            "description": "Every peer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addPeer",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Add a peer from a pasted invite",
+        "description": "Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).\n\n**This records an introduction and does not complete a pairing.** The peer stays `added` until the far side is confirmed to hold us too.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPeerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The peer, in state `added`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Peer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_invite` for a damaged invite, with a message written for the person holding the paste, or `self` when it is this server's own invite.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/peers/invite": {
+      "get": {
+        "operationId": "getPeerInvite",
+        "tags": [
+          "peers"
+        ],
+        "summary": "This server's own invite, to hand out",
+        "description": "Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).",
+        "responses": {
+          "200": {
+            "description": "The invite and the identity behind it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerInvite"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`not_reachable` — this server has no address another machine could reach, so it cannot introduce itself.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "delete": {
+        "operationId": "removePeer",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Un-pair",
+        "description": "Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).\n\n**This is the revocation mechanism.** The peer's addresses and roster go with it through the schema's cascade, and so does every grant naming one of its people (ADR 0046).",
+        "responses": {
+          "204": {
+            "description": "Un-paired. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/people": {
+      "get": {
+        "operationId": "listPeople",
+        "tags": [
+          "peers"
+        ],
+        "summary": "The other accounts on this server",
+        "description": "\"Find Friends\" on a self-hosted household server means the people already on it — there is no directory to search and no second server to federate with.",
+        "responses": {
+          "200": {
+            "description": "Everyone but the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/people/{id}/activity": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The account id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getPersonActivity",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What one person has published",
+        "description": "Answers only for an account that has opted into sharing (ADR 0035). There is no route that answers \"what has this person been watching\" for somebody who has not.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 20, maximum 100.",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What they have published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/people/peers": {
+      "get": {
+        "operationId": "getPeerPresence",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Paired servers, their people, and what they are doing",
+        "description": "**Presence is a third disclosure category and no existing opt-in widens into it** (ADR 0045 §1): agreeing to publish what you have finished is not agreeing to be watched in real time. It is off by default, and there is no migration in which anybody starts being visible.\n\nPresence is **never persisted**: there is no history, no \"last seen watching\", and no route that could answer either. Revocation takes effect on the next poll, mid-film.",
+        "responses": {
+          "200": {
+            "description": "Each peer, with its people and their state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerPresenceList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/people/peers/{fingerprint}/{person}/presence": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        },
+        {
+          "name": "person",
+          "in": "path",
+          "required": true,
+          "description": "The person's id in that peer's roster.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "putPresenceGrant",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Grant or revoke your presence to one named person",
+        "description": "**A grant names a person, never a server**, which is why the route carries both a fingerprint and a person id.\n\nGranting is self-service and reads the caller's id from their session: there is no route that accepts a subject, and therefore no way for an administrator to grant presence on somebody's behalf (ADR 0045 §6).\n\nThe person must already be in that peer's roster, which is itself a per-account opt-in — an account that has not opted in cannot be named by anybody's grant, in either direction, and **the schema enforces that rather than a handler**.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresenceGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such peer, or no such person in its roster.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/presence": {
+      "delete": {
+        "operationId": "dropPresence",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Playback stopped; drop the caller's live presence now",
+        "responses": {
+          "204": {
+            "description": "Dropped. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/federation/presence": {
+      "get": {
+        "operationId": "getFederationPresence",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What a peer's person may see",
+        "description": "**Peer-to-peer, and not a session route.** Its caller is a server, authenticated by the **mutual-TLS pin** (ADR 0044 §4): the connection must present the identity key already recorded for that peer, and a request arriving without a peer certificate is refused. Which *person* is asking is the calling server's word, on the same basis a pairing already rests on.\n\nPeer connections are told apart from browsers by an ALPN marker in the ClientHello, so they share the ordinary port and no browser is ever asked for a certificate.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Only what that person has been granted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FederationPersonList"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not recognised.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/federation/roster": {
+      "get": {
+        "operationId": "getFederationRoster",
+        "tags": [
+          "peers"
+        ],
+        "summary": "The accounts here that have opted into being listed",
+        "description": "**Peer-to-peer, and not a session route.** Its caller is a server, authenticated by the **mutual-TLS pin** (ADR 0044 §4): the connection must present the identity key already recorded for that peer, and a request arriving without a peer certificate is refused. Which *person* is asking is the calling server's word, on the same basis a pairing already rests on.\n\nPeer connections are told apart from browsers by an ALPN marker in the ClientHello, so they share the ordinary port and no browser is ever asked for a certificate.\n\n**Fetching a peer's roster is what establishes that a pairing is mutual.** This server reaches that handler only for a fingerprint the far side already holds, so a successful call proves both sides hold each other, and it is what moves a peer from `added` to `paired` (ADR 0044 §3).\n\nA roster is stored wholesale, so somebody who turns their visibility off disappears from it on the next refresh and every grant naming them cascades away.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The opted-in accounts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RosterList"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not recognised.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2779,6 +3434,24 @@
         "schema": {
           "type": "integer",
           "format": "int64"
+        }
+      },
+      "TogetherId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The room's id.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PeerFingerprint": {
+        "name": "fingerprint",
+        "in": "path",
+        "required": true,
+        "description": "The peer's fingerprint, in either the canonical or the grouped form.",
+        "schema": {
+          "type": "string"
         }
       }
     },
@@ -5204,6 +5877,455 @@
             "items": {
               "$ref": "#/components/schemas/BrowseEntry"
             }
+          }
+        }
+      },
+      "TogetherMember": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "name",
+          "host",
+          "last_seen"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "boolean"
+          },
+          "last_seen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When this member last polled. Reported because \"who is actually here\" is the question a room list answers, and a member who closed their laptop is still in the map until the sweep."
+          }
+        }
+      },
+      "TogetherSession": {
+        "type": "object",
+        "description": "Several people playing the same thing at the same position.\n\n**The server owns the truth** — what is playing, where it is, whether it is paused — and clients converge on it. The alternative, each client broadcasting its own position, makes the last writer win, and on a lossy connection that is whoever lagged worst.\n\n**Live state, no schema.** A session means nothing after a restart; persisting one would resurrect a film nobody is watching and invite a client to rejoin a room whose members went home hours ago.\n\n**Polling, not sockets.** Nothing else in this stack streams, and a socket layer for one feature is the dependency argument ADR 0013 settled. A second of drift is acceptable for \"we are watching this together\"; frame accuracy is not the goal and could not be delivered to three devices over a LAN anyway.",
+        "required": [
+          "id",
+          "item_id",
+          "host_id",
+          "position_ms",
+          "paused",
+          "updated_at",
+          "members",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "host_id": {
+            "type": "string",
+            "description": "Who drives. **Transport control is deliberately not shared**: two people scrubbing the same film is not synchronised playback, it is a fight, and the loser cannot tell it from a bug."
+          },
+          "position_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When the host last reported, so a follower can work out how far the film has moved since. Without it every poll would land one interval behind and never catch up."
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TogetherMember"
+            }
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TogetherSessionList": {
+        "type": "object",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TogetherSession"
+            }
+          }
+        }
+      },
+      "CreateTogetherRequest": {
+        "type": "object",
+        "required": [
+          "item_id"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "position_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TogetherHostUpdate": {
+        "type": "object",
+        "description": "The host reporting where the film is. **Only the host** — anyone else gets `403`.",
+        "required": [
+          "position_ms",
+          "paused"
+        ],
+        "properties": {
+          "position_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "paused": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Peer": {
+        "type": "object",
+        "description": "Another server this one has been introduced to (ADR 0044).\n\n**A pairing permits nothing.** It records that two servers know who each other are, and every later capability is granted separately.",
+        "required": [
+          "fingerprint",
+          "fingerprint_display",
+          "name",
+          "state",
+          "addrs",
+          "added_at",
+          "last_seen"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "Canonical, and what any comparison is made against."
+          },
+          "fingerprint_display": {
+            "type": "string",
+            "description": "The grouped rendering, so a client shows the readable form without inventing its own grouping — a second opinion about where the separators go is how two screens end up disagreeing about whether a fingerprint matched."
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "`added` until the far side is confirmed to hold us too, then `paired`.\n\n**Accepting an invite is not a pairing** (ADR 0044 §3 — introduction is mutual). Only the transport can move it: this server reaches the peer's roster handler only for a fingerprint the far side already holds, so a successful call proves both sides hold each other."
+          },
+          "addrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hints, not identity. The fingerprint is the identity (ADR 0044 §5), so a failure at one address is a reason to try the next rather than a verdict about the peer."
+          },
+          "added_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_seen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "**0 for a peer that has never answered**, which is a different statement from one that answered three days ago. Always present, so the two can be told apart."
+          }
+        }
+      },
+      "PeerList": {
+        "type": "object",
+        "required": [
+          "peers"
+        ],
+        "properties": {
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Peer"
+            }
+          }
+        }
+      },
+      "PeerInvite": {
+        "type": "object",
+        "description": "This server's own invite, to hand out.",
+        "required": [
+          "invite",
+          "fingerprint",
+          "fingerprint_display",
+          "name",
+          "addrs"
+        ],
+        "properties": {
+          "invite": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "fingerprint_display": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "addrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AddPeerRequest": {
+        "type": "object",
+        "required": [
+          "invite"
+        ],
+        "properties": {
+          "invite": {
+            "type": "string",
+            "description": "An invite pasted from another server."
+          }
+        }
+      },
+      "PeerPresence": {
+        "type": "object",
+        "required": [
+          "fingerprint",
+          "name",
+          "state",
+          "reachable",
+          "people"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "reachable": {
+            "type": "boolean",
+            "description": "Whether this peer answered just now."
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerPerson"
+            }
+          }
+        }
+      },
+      "PeerPresenceList": {
+        "type": "object",
+        "required": [
+          "peers"
+        ],
+        "properties": {
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeerPresence"
+            }
+          }
+        }
+      },
+      "PresenceGrantRequest": {
+        "type": "object",
+        "required": [
+          "on"
+        ],
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Person": {
+        "type": "object",
+        "description": "Another account on this server. **The caller is excluded by design** — a row for yourself in a list of other people is noise — which is why your own sharing setting is read from `user.sharing` on `GET /api/auth/status` and not from here.",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "sharing",
+          "watched",
+          "joined_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "sharing": {
+            "type": "boolean",
+            "description": "Whether they publish their activity (ADR 0035)."
+          },
+          "watched": {
+            "type": "integer"
+          },
+          "joined_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PersonList": {
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          }
+        }
+      },
+      "ActivityList": {
+        "type": "object",
+        "required": [
+          "activity"
+        ],
+        "properties": {
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntry"
+            }
+          }
+        }
+      },
+      "FederationPerson": {
+        "type": "object",
+        "description": "What a peer's person may see. The payload is bounded by ADR 0045 §3 and carries nothing else — no position, no episode, no history.",
+        "required": [
+          "id",
+          "name",
+          "online"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The answering account's own id, which is exactly the id the asking server already holds for them in its roster — that is what makes it the join key. Matching on the display name instead would break on two people called Sam, and would quietly re-point a grant when somebody renamed themselves. It discloses nothing: the asker was given this id in the roster before any of this."
+          },
+          "name": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "watching": {
+            "type": "string",
+            "description": "The work's title, or absent when idle."
+          }
+        }
+      },
+      "FederationPersonList": {
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FederationPerson"
+            }
+          }
+        }
+      },
+      "RosterPerson": {
+        "type": "object",
+        "description": "An account here that has opted into being listed to peers.",
+        "required": [
+          "id",
+          "name",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RosterList": {
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RosterPerson"
+            }
+          }
+        }
+      },
+      "PeerPerson": {
+        "type": "object",
+        "description": "One person on a paired server.\n\n**`granted`, `shares: false`, and `shares: true` with `online` are three different statements** — *has not shared with you*, *offline*, and *online and idle* — and a client must not collapse them. A choice and an absence are not the same thing.",
+        "required": [
+          "id",
+          "name",
+          "granted",
+          "shares"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "granted": {
+            "type": "boolean",
+            "description": "Whether **you** have granted this person your presence."
+          },
+          "shares": {
+            "type": "boolean",
+            "description": "Whether they share presence with you. When false, `online` and `watching` are absent — not false, absent."
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "watching": {
+            "type": "string",
+            "description": "**The work, by title, or empty.** Never an episode (\"Cowboy Bebop\", not \"Cowboy Bebop S01E02\"), never music or photographs, and never a position — ADR 0045 §3 bounds the disclosure exhaustively and the payload carries nothing else."
           }
         }
       }
