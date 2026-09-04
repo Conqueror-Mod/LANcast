@@ -246,6 +246,10 @@
 }
 
 .facenamer__save,
+/* The way to a person's photographs sits with the other secondary actions:
+   Save is the primary one, and gold means where you are, never what a button
+   does (docs/design.md). */
+.facenamer__photos,
 .facenamer__clear,
 .facenamer__cancel {
   padding: 8px 18px;

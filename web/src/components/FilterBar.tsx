@@ -35,6 +35,7 @@ export function FilterBar({
   facets,
   params,
   castNames,
+  faceNames,
   onToggle,
   onSet,
   onClear,
@@ -45,6 +46,9 @@ export function FilterBar({
   /** Names for the person ids in the URL, so a bookmarked filter renders as a
    *  name rather than as "person 12". */
   castNames?: Map<string, string>;
+  /** The same for face groups, which are a separate population — see
+   *  PillContext in browseFilters.ts for why they are not one map. */
+  faceNames?: Map<string, string>;
   onToggle: (key: string, value: string) => void;
   onSet: (key: string, value: string) => void;
   onClear: () => void;
@@ -113,7 +117,7 @@ export function FilterBar({
     }
   };
 
-  const pills = activePills(params, { facets, castNames });
+  const pills = activePills(params, { facets, castNames, faceNames });
 
   return (
     <div className="fbar" ref={wrap}>
@@ -160,7 +164,12 @@ export function FilterBar({
               // takes the filter off.
               aria-label={`Remove filter ${p.label}`}
               onClick={() =>
-                p.key === "status" || p.key === "watched"
+                // face_cluster joins these: its pill stands for a whole
+                // person, who may be several groups, so removing it clears the
+                // key rather than one id out of three.
+                p.key === "status" ||
+                p.key === "watched" ||
+                p.key === "face_cluster"
                   ? onSet(p.key, "")
                   : onToggle(p.key, p.value)
               }

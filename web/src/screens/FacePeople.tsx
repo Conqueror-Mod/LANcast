@@ -97,6 +97,7 @@ function NamePanel({
    * suggestions about. Renaming still reaches every group — see submit.
    */
   const primary = person.clusterIDs[0];
+  const navigate = useNavigate();
   const { data } = useClusterFaces(primary);
   const name = useNamePerson(libraryID);
   const reject = useRejectFace(libraryID);
@@ -316,6 +317,33 @@ function NamePanel({
             }}
           >
             Clear name
+          </button>
+        ) : null}
+        {person.name ? (
+          /*
+           * The payoff, offered from the panel rather than from the tile.
+           *
+           * The tile was the obvious place and is the wrong one: it already
+           * opens this panel, which is where a person is renamed, cleared, and
+           * told who they are not (ADR 0052). Navigating away from it instead
+           * would have taken all three away to add one, and the suite said so.
+           *
+           * Every group goes into the URL. A person is routinely two or three
+           * because naming does not merge them, and passing only the largest
+           * shows most of somebody's photographs while looking like a whole
+           * answer — 277 of 350 on a real library.
+           */
+          <button
+            className="facenamer__photos"
+            onClick={() => {
+              const q = new URLSearchParams();
+              for (const id of person.clusterIDs) {
+                q.append("face_cluster", String(id));
+              }
+              navigate(`/library/${libraryID}?${q}`);
+            }}
+          >
+            View photographs
           </button>
         ) : null}
         <button className="facenamer__cancel" onClick={onClose}>

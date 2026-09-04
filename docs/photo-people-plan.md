@@ -39,7 +39,7 @@ From [CLAUDE.md](../CLAUDE.md) and the ADRs:
 
 ## Does this need an ADR?
 
-**No, as scoped.** Every decision it makes is already made somewhere: the filter
+**No, and building it did not change that.** Every decision it makes is already made somewhere: the filter
 is additive (0018), the exclusion rule is 0051's, and the identity model is
 0052's. Nothing here re-litigates any of them.
 
@@ -65,7 +65,16 @@ Nothing failed; it was simply wrong for as long as both existed. Two concepts
 sharing one word is how that happens, and the cheapest moment to stop it is
 before either name ships.
 
-**Recommendation: `face_cluster=`.** It matches the table (`face_cluster`), it
+**Built as `face_cluster=`, and repeatable — not single-valued as first
+planned.** That changed on a fact rather than a preference: `CollapsedPerson`
+carries `clusterIDs`, plural, because naming does not merge groups, and the
+face-fracture measurement puts one person's photographs at 277/73 across two of
+them. Single-valued would have shown 277 of 350 and looked like an answer. So
+repeated means OR, which is both the house rule and what a person needs; **AND —
+two different people in one photograph — would be a separate parameter**, the
+way `actor` and `director` are separate rather than a mode on `person`.
+
+**Recommendation as first written: `face_cluster=`.** It matches the table (`face_cluster`), it
 matches [ADR 0052](adr/0052-face-grouping-runs-in-a-native-sidecar.md), and it
 cannot be misread as a credit. `cluster=` is the terser alternative and is
 unambiguous within this API today; it is worse the first time anything else
@@ -141,8 +150,13 @@ that one is a rule, not a behaviour.
 
 `web/src`
 
-- A person tile navigates to the library grid with `face_cluster` set. The
-  people screen keeps its job — naming — and stops being a dead end.
+- **Offered from the name panel, not the tile — the tile was the wrong place.**
+  It already opens that panel, which is where a person is renamed, cleared, and
+  told who they are not (ADR 0052), so navigating away from it would have taken
+  three things away to add one. The existing face-removal tests went red saying
+  so, which is the suite doing its job. A named person's panel gains
+  *View photographs*; an unnamed one does not, because there is nothing to find
+  yet.
 - The pill row resolves the id to a name, exactly as the cast pill does:
 
   ```ts
@@ -156,6 +170,8 @@ that one is a rule, not a behaviour.
 - The pill says the person's name and nothing about faces. "Georgia" is the
   filter; that it is implemented by clustering embeddings is not the viewer's
   business.
+- **One pill per person, not per group**, and removing it clears the whole
+  parameter rather than one id out of three.
 - An unnamed cluster is reachable the same way and its pill reads
   *Unnamed person* — the id is meaningless to a reader and the tile is already
   the only way to get there.

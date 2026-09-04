@@ -58,9 +58,9 @@ func TestPhotographsOfOnePerson(t *testing.T) {
 	}
 
 	got := listedIDs(t, s, ItemFilter{
-		LibraryID:   fx.library,
-		Kind:        "photo",
-		FaceCluster: clusterOf(t, s, mine),
+		LibraryID:      fx.library,
+		Kind:           "photo",
+		FaceClusterIDs: []int64{clusterOf(t, s, mine)},
 	})
 	if !contains(got, mine) {
 		t.Errorf("the filter did not return the photograph the person is in: %v", got)
@@ -95,7 +95,7 @@ func TestOnePhotographWithTwoFacesOfOnePersonAppearsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := ItemFilter{LibraryID: fx.library, Kind: "photo", FaceCluster: clusterOf(t, s, p)}
+	f := ItemFilter{LibraryID: fx.library, Kind: "photo", FaceClusterIDs: []int64{clusterOf(t, s, p)}}
 	got := listedIDs(t, s, f)
 	if len(got) != 1 {
 		t.Errorf("one photograph with two faces of one person listed %d times: %v", len(got), got)
@@ -157,9 +157,9 @@ func TestAMarkedFolderIsNotReachableThroughAPersonFilter(t *testing.T) {
 	}
 
 	got := listedIDs(t, s, ItemFilter{
-		LibraryID:   fx.library,
-		Kind:        "photo",
-		FaceCluster: cluster,
+		LibraryID:      fx.library,
+		Kind:           "photo",
+		FaceClusterIDs: []int64{cluster},
 	})
 	if contains(got, hidden) {
 		t.Error("a photograph in a marked folder was returned by a person filter — " +
@@ -226,7 +226,7 @@ func TestAPersonTileCountsWhatTheirGridHolds(t *testing.T) {
 	}
 
 	_, total, err := s.ListItems(ctx, ItemFilter{
-		LibraryID: fx.library, Kind: "photo", FaceCluster: cluster,
+		LibraryID: fx.library, Kind: "photo", FaceClusterIDs: []int64{cluster},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -238,5 +238,71 @@ func TestAPersonTileCountsWhatTheirGridHolds(t *testing.T) {
 	if tile != 2 {
 		t.Errorf("count = %d, want 2 — two photographs, one of which holds the "+
 			"same person twice, and one marked folder that counts for nothing", tile)
+	}
+}
+
+/*
+ * One person, several groups, all their photographs.
+ *
+ * Naming does not merge groups — a re-cluster seeds a named one as an anchor
+ * and never dissolves it, which is the locked-fields rule applied to identity —
+ * so a person routinely *is* several groups. collapsePeople.ts already puts
+ * them on one tile and renames them together.
+ *
+ * Measured on a real library it is not an edge case: one person's photographs
+ * split 277/73 across two groups, the smaller one almost entirely a single
+ * photo shoot. A single-valued filter would have shown 277 of 350 and said
+ * nothing about the missing 73 — the failure being that it looks like an
+ * answer.
+ *
+ * This is why the parameter is repeatable and why repeated means OR. AND —
+ * photographs with two *different* people in them — is a separate question and
+ * would be a separate parameter.
+ */
+func TestAPersonSpanningTwoGroupsGetsAllTheirPhotographs(t *testing.T) {
+	s := openTestStore(t)
+	fx := makeFaceLibrary(t, s)
+	ctx := context.Background()
+
+	everyday := fx.photo(t, s, "everyday.jpg", fx.folder)
+	shoot := fx.photo(t, s, "shoot.jpg", fx.folder)
+	stranger := fx.photo(t, s, "stranger.jpg", fx.folder)
+
+	// Two directions far enough apart to cluster separately — the shape a photo
+	// shoot makes — plus a third person who must not be swept in.
+	if err := s.RecordFaces(ctx, everyday, []Face{{Score: 0.9, Embedding: person(0, 0, 8)}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordFaces(ctx, shoot, []Face{{Score: 0.9, Embedding: person(1, 0, 8)}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordFaces(ctx, stranger, []Face{{Score: 0.9, Embedding: person(2, 0, 8)}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClusterLibrary(ctx, fx.library); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both groups are the same person, the way naming two of them makes them.
+	both := []int64{clusterOf(t, s, everyday), clusterOf(t, s, shoot)}
+	for _, id := range both {
+		if err := s.NameCluster(ctx, id, "Georgia"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := listedIDs(t, s, ItemFilter{
+		LibraryID:      fx.library,
+		Kind:           "photo",
+		FaceClusterIDs: both,
+	})
+	if !contains(got, everyday) || !contains(got, shoot) {
+		t.Errorf("a person's two groups did not both contribute: %v", got)
+	}
+	if contains(got, stranger) {
+		t.Errorf("somebody else was swept in: %v", got)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d photographs, want 2: %v", len(got), got)
 	}
 }
