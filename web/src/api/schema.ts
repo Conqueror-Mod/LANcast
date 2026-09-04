@@ -5093,6 +5093,18 @@ export interface operations {
                 actor?: number[];
                 /** @description The person filter scoped to directing credits. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 director?: number[];
+                /**
+                 * @description Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page.
+                 *
+                 *     **This is not `person`.** A credit is what a provider said about a film; a face group is a cluster of embeddings this server computed from photographs. Nothing joins them and nothing should — a filter that quietly answered both would be answering neither.
+                 *
+                 *     **Single-valued**, and that is a decision rather than a limitation. Every repeatable filter here is OR within its facet, so two would widen the grid — but for faces the query worth having is almost certainly the other one, *photographs with both people in them*. A parameter that shipped meaning OR could not later mean AND without breaking every client that used it (ADR 0018), so one value answers the question anybody has today and a second needs deciding first.
+                 *
+                 *     **Marked folders are excluded, and the caller cannot opt in.** Being able to ask who is in a folder you cannot open is the disclosure ADR 0051 covers, by another route. Enforced in the query rather than by the handler, so it does not depend on a caller remembering.
+                 *
+                 *     A non-numeric or non-positive value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything.
+                 */
+                face_cluster?: number;
                 /** @description Restrict to members of a collection. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it (ADR 0017). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 collection?: number[];
                 /** @description `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined. */

@@ -765,6 +765,24 @@ type ItemFilter struct {
 	ActorIDs    []int64
 	DirectorIDs []int64
 
+	/*
+	 * FaceCluster restricts to photographs a face group appears in (ADR 0052).
+	 *
+	 * A separate field from PersonIDs above, and separately named on the wire,
+	 * because they are two unrelated notions of "person": one is a credit a
+	 * provider supplied for a film, the other is a cluster of embeddings this
+	 * server computed from photographs. Nothing joins them and nothing should —
+	 * a filter that quietly answered both would be answering neither.
+	 *
+	 * Single-valued on purpose. Every repeatable filter here is OR within its
+	 * facet, and for faces the query worth having is almost certainly AND —
+	 * photographs with both people in them. Those are different features, and
+	 * shipping one spelling of a parameter that later has to mean the other is
+	 * the breaking change ADR 0018 exists to avoid. One value answers the
+	 * question anybody has today; a second needs deciding first.
+	 */
+	FaceCluster int64
+
 	// CollectionIDs restricts to members of a collection. A collection is
 	// itself a media_item, so this is the membership table rather than
 	// parent_id: a film belongs to a franchise without being inside it, which
@@ -998,7 +1016,25 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	if f.TakenUndated {
 		where += ` AND taken_at IS NULL`
 	}
-	if f.ExcludeSensitive {
+	/*
+	 * A face filter implies the exclusion; it is not asked for.
+	 *
+	 * The timeline sets ExcludeSensitive from the handler, which is fine for a
+	 * count that has to agree with a listing. This one is a security property,
+	 * and a security property that depends on every caller remembering to set a
+	 * bool is one caller away from not being one — so it is enforced here,
+	 * where the clause is written, rather than up in the handler that happens to
+	 * be the only caller today.
+	 *
+	 * Faces under a marked folder are deleted when it is marked, so ordinarily
+	 * no row survives for this to catch. That is the first line and this is the
+	 * second: the face table's guarantee depends on marking and indexing never
+	 * interleaving badly, and this one depends on nothing. ADR 0051's argument
+	 * is that an embedding is derived from a photograph and is not less private
+	 * than it — so being able to ask *who is in the folder you cannot open* is
+	 * the same disclosure by another route.
+	 */
+	if f.ExcludeSensitive || f.FaceCluster != 0 {
 		where += ` AND sensitive_effective = 0`
 	}
 	if f.Initial != "" {
@@ -1113,6 +1149,16 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	credited(f.PersonIDs, "")
 	credited(f.ActorIDs, "actor")
 	credited(f.DirectorIDs, "director")
+	if f.FaceCluster != 0 {
+		// EXISTS for exactly the reason `credited` gives above: one photograph
+		// can hold the same person's face twice — a mirror, a photograph of a
+		// photograph, a group shot the detector fires twice on — and a join
+		// would return that picture twice and count it twice with it.
+		where += ` AND EXISTS (
+			SELECT 1 FROM face
+			WHERE face.item_id = media_item.id AND face.cluster_id = ?)`
+		args = append(args, f.FaceCluster)
+	}
 	if f.InProgress {
 		// Started and not finished: a position past the start with the watched
 		// flag still clear. Position alone would include a film opened for two

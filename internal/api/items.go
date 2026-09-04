@@ -533,6 +533,18 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid collection")
 		return
 	}
+	// face_cluster is a face group (ADR 0052), not a credit. Single-valued —
+	// see ItemFilter.FaceCluster for why a second value is a decision rather
+	// than a loop. Malformed is a 400 on the same reasoning as `person`.
+	var faceCluster int64
+	if v := q.Get("face_cluster"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid face_cluster")
+			return
+		}
+		faceCluster = n
+	}
 	// An unparseable rating widens rather than 400s: it is a threshold typed
 	// into a URL, not an id, and showing the library is a better answer than an
 	// error page.
@@ -583,6 +595,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		ActorIDs:      actors,
 		DirectorIDs:   directors,
 		CollectionIDs: collections,
+		FaceCluster:   faceCluster,
 		MinRating:     minRating,
 		// status is a single value rather than a set. The two are not
 		// combinable in any useful way -- an item cannot be both unmatched and
@@ -593,7 +606,16 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Limit:      queryInt(r, "limit"),
 		Offset:     queryInt(r, "offset"),
 	}
-	// Derived, never accepted from the caller. See TakenMonth above.
+	/*
+	 * Derived, never accepted from the caller. See TakenMonth above.
+	 *
+	 * face_cluster is deliberately NOT here. It implies the same exclusion, and
+	 * for a stronger reason — being able to ask who is in a folder you cannot
+	 * open is the disclosure ADR 0051 covers, by another route — so the store
+	 * enforces it where the clause is written rather than trusting this line.
+	 * A security property that every caller has to remember is one caller away
+	 * from not being one. See ItemFilter.FaceCluster.
+	 */
 	f.ExcludeSensitive = f.TakenMonth != "" || f.TakenUndated
 	// parent_id fetches the children of one item — a show's episodes, a work's
 	// parts. Otherwise the grid shows top-level entries only, so a container's

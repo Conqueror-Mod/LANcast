@@ -81,13 +81,15 @@ The **response** side needs no new name: a cluster is already `people` on
 `internal/store`
 
 - `ItemFilter` gains `FaceCluster int64`, single-valued.
-- The query joins `face` on `cluster_id`, and selects **distinct** `item_id`.
-  The index exists already (`idx_face_cluster ON face(cluster_id)`), so this is
-  a lookup rather than a scan.
-- **Distinct is not an optimisation.** One photograph can hold two faces of the
-  same person — a mirror, a photograph of a photograph, a group shot where the
-  detector fires twice — and without `DISTINCT` the grid shows that picture
-  twice and the total is wrong.
+- The query uses `EXISTS` against `face` on `cluster_id`. **Built as `EXISTS`,
+  not the `DISTINCT` this plan first said** — that is the house idiom and the
+  existing `credited` helper already carries the reason, in a comment about the
+  identical problem: "a person credited twice on one item… must not duplicate
+  the row or double the total."
+- **It is not an optimisation.** One photograph can hold two faces of the same
+  person — a mirror, a photograph of a photograph, a group shot where the
+  detector fires twice — and a plain join shows that picture twice and counts
+  it twice with it.
 
 `internal/api`
 
@@ -103,14 +105,23 @@ The **response** side needs no new name: a cluster is already `people` on
   f.ExcludeSensitive = f.TakenMonth != "" || f.TakenUndated
   ```
 
-  It gains `|| f.FaceCluster != 0`. This is the security property: faces inside
+  **Built one layer lower than that.** The rule is enforced in the store where
+  the clause is written, not derived in the handler, because a security property
+  that every caller has to remember to set is one caller away from not being
+  one — and the test that proved it went red when the store did not own it. The
+  handler line is unchanged and says why. This is the security property: faces inside
   marked folders are never listed by
   `GET /api/faces/clusters/{id}/faces`, and a person filter that did not apply
   the same rule would be a way to enumerate marked photographs through a
   different door. An embedding is derived from a photograph and is not less
   private than it — 0051's own argument, applied one endpoint along.
-- Missing photographs are excluded on the same reasoning the faces listing
-  already uses.
+- **Missing photographs are *not* excluded, contrary to what this plan first
+  said.** The grid's base clause is `WHERE 1=1` — every other filter lists a
+  missing item with its flag rather than hiding it — and a person filter that
+  alone dropped them would be inconsistent with the surface it appears on. The
+  faces *listing* does exclude them, and that is a different question: it draws
+  crops it cannot render from a file that is gone, where this lists pictures
+  somebody is in.
 
 Contract, in the same commit: `docs/api.md` gains the parameter beside `person`,
 saying plainly that the two are different questions; `docs/openapi.json` gains
@@ -172,8 +183,10 @@ tile above it still claiming 41.
 
 The tile's label already says "photographs".
 
-- Count `DISTINCT f.item_id`, and apply the same two exclusions the listing
-  uses, so the number means what the label says.
+- Count `DISTINCT f.item_id` and exclude what a marked folder covers, so the
+  number means what the label says. **One exclusion, not the two this plan first
+  said** — missing photographs stay counted, because the grid still lists them,
+  and the tile's job is to agree with the grid it opens.
 - Expect the number to **fall** on a real library — that is the count becoming
   correct, not the feature losing anything, and it is worth saying in the commit
   so it is not read as a regression.
