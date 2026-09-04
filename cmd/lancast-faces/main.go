@@ -65,6 +65,29 @@ type Capabilities struct {
 	Native string `json:"native"`
 	Ready  bool   `json:"ready"`
 	Reason string `json:"reason,omitempty"`
+
+	/*
+	 * Semantic search reports separately (ADR 0060), because the models are a
+	 * separate download and a server may have either, both or neither.
+	 *
+	 * Folded into `Ready` it would mean face grouping refusing to start because
+	 * a *different* feature is not installed, reported as neither — and the
+	 * server has no way to tell those apart from one boolean.
+	 */
+	SemanticReady  bool   `json:"semantic_ready"`
+	SemanticReason string `json:"semantic_reason,omitempty"`
+	// SemanticModel names the coordinate system this build produces vectors in.
+	// The server stores it beside every embedding and compares it, so a swapped
+	// model is something a pass notices rather than a library silently ranked
+	// against a mixture of two spaces.
+	SemanticModel string `json:"semantic_model,omitempty"`
+}
+
+// Embedding is one line of `embed` output: one photograph, one unit vector.
+type Embedding struct {
+	Path   string    `json:"path"`
+	Vector []float32 `json:"vector,omitempty"`
+	Error  string    `json:"error,omitempty"`
 }
 
 // Face is one detection. The embedding is carried as raw float32s rather than
@@ -100,6 +123,10 @@ func main() {
 		capabilities(os.Args[2:])
 	case "detect":
 		detect(os.Args[2:])
+	case "embed":
+		embed(os.Args[2:])
+	case "embed-text":
+		embedText(os.Args[2:])
 	case "version", "--version", "-version":
 		fmt.Println(Version)
 	case "help", "--help", "-h":
@@ -118,6 +145,10 @@ func usage() {
                           report what this build can do, as JSON
   detect [-models DIR]    read image paths on stdin, one per line;
                           write one JSON Result per line to stdout
+  embed [-models DIR]     the same, for semantic search (ADR 0060): one JSON
+                          Embedding per line, each vector unit length
+  embed-text [-models DIR] -q QUERY
+                          embed one typed query into the same space, as JSON
   version                 print the version
 
 Paths arrive on stdin rather than as arguments because a library is tens of
@@ -132,6 +163,24 @@ func caps(modelsDir string) Capabilities {
 		Arch:    runtime.GOARCH,
 		Native:  nativeInfo(),
 	}
+	/*
+	 * Semantic readiness is answered first, and unconditionally.
+	 *
+	 * It sits above the face verdict's early returns rather than below them
+	 * because the two features are independent downloads: a build with CLIP
+	 * models and no face models has to say so, and — the fault this ordering
+	 * was written to fix after running the binary — a report of
+	 * `semantic_ready: false` with no reason beside it is exactly the
+	 * uninspectable answer the comment below objects to. It was below, and it
+	 * returned that.
+	 */
+	c.SemanticModel = ClipModelName
+	if err := clipModels(modelsDir); err != nil {
+		c.SemanticReason = err.Error()
+	} else {
+		c.SemanticReady = true
+	}
+
 	/*
 	 * Not ready, and specific about why.
 	 *
@@ -214,3 +263,87 @@ func detect(args []string) {
 // Named rather than inline so the two build variants cannot drift into
 // describing the same situation two ways.
 var errNoModel = fmt.Errorf("no face model bundled (ADR 0052)")
+
+// And its counterpart for semantic search, separate because the two downloads
+// are separate and a server may have one without the other.
+var errNoClipModel = fmt.Errorf("no semantic-search model installed (ADR 0060)")
+
+/*
+ * embed reads photograph paths and writes one unit vector each.
+ *
+ * Shaped exactly like `detect` — paths on stdin because a library is tens of
+ * thousands of them and every platform has a command-line length limit, one
+ * JSON object per line so the server can consume them as they arrive rather
+ * than waiting for a pass that takes an hour.
+ *
+ * A photograph that cannot be read is that photograph's error and not the
+ * batch's, for the reason detect gives: a library contains a truncated JPEG
+ * eventually, and stopping there means the pass never finishes.
+ */
+func embed(args []string) {
+	fs := flag.NewFlagSet("embed", flag.ExitOnError)
+	models := fs.String("models", "", "directory holding the models")
+	_ = fs.Parse(args)
+
+	c := caps(*models)
+	if !c.SemanticReady {
+		// Exit 3 is this binary's "cannot run", so a caller tells it apart from
+		// a crash — and refusing beats returning empty vectors, which would read
+		// as a library where nothing matches anything.
+		fmt.Fprintf(os.Stderr, "lancast-faces: cannot embed: %s\n", c.SemanticReason)
+		os.Exit(3)
+	}
+
+	in := bufio.NewScanner(os.Stdin)
+	in.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	out := json.NewEncoder(os.Stdout)
+	for in.Scan() {
+		path := strings.TrimSpace(in.Text())
+		if path == "" {
+			continue
+		}
+		v, err := embedImageFile(path, *models)
+		e := Embedding{Path: path, Vector: v}
+		if err != nil {
+			e.Error = err.Error()
+		}
+		if err := out.Encode(e); err != nil {
+			fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+			os.Exit(1)
+		}
+	}
+	if err := in.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+		os.Exit(1)
+	}
+}
+
+/*
+ * embedText embeds one typed query into the same space as the photographs.
+ *
+ * An argument rather than stdin, because it is one short string and a search is
+ * one call — the stdin protocol exists for batches of tens of thousands.
+ */
+func embedText(args []string) {
+	fs := flag.NewFlagSet("embed-text", flag.ExitOnError)
+	models := fs.String("models", "", "directory holding the models")
+	query := fs.String("q", "", "the text to embed")
+	_ = fs.Parse(args)
+
+	c := caps(*models)
+	if !c.SemanticReady {
+		fmt.Fprintf(os.Stderr, "lancast-faces: cannot embed text: %s\n", c.SemanticReason)
+		os.Exit(3)
+	}
+
+	v, err := embedQuery(*query, *models)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+		os.Exit(1)
+	}
+	enc := json.NewEncoder(os.Stdout)
+	if err := enc.Encode(Embedding{Vector: v}); err != nil {
+		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+		os.Exit(1)
+	}
+}

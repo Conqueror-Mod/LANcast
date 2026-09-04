@@ -97,3 +97,87 @@ func TestAFailedPhotographIsReportedNotFatal(t *testing.T) {
 			"a photograph with no faces in it")
 	}
 }
+
+/*
+ * Semantic readiness answers separately, and never silently (ADR 0060).
+ *
+ * Two independent downloads: a server may have face models, CLIP models,
+ * either, or neither. One boolean covering both would mean face grouping
+ * refusing to start because a *different* feature is missing, reported as
+ * neither working.
+ *
+ * The no-reason case is the one worth the test. This block sat below the face
+ * verdict's early returns at first, so `capabilities` with no model directory
+ * answered `semantic_ready: false` with nothing beside it — the uninspectable
+ * report the file's own comment objects to, and indistinguishable from a
+ * missing worker, a wrong version, or a deleted model. Running the binary is
+ * what found it.
+ */
+func TestSemanticReadinessAlwaysCarriesItsReason(t *testing.T) {
+	for _, dir := range []string{"", "/nonexistent/models"} {
+		c := caps(dir)
+		if c.SemanticReady {
+			t.Errorf("caps(%q) reported semantic search ready with no model", dir)
+		}
+		if c.SemanticReason == "" {
+			t.Errorf("caps(%q) reported semantic_ready:false with no reason — "+
+				"that cannot be told from a missing worker or a deleted model", dir)
+		}
+		if c.SemanticModel == "" {
+			t.Errorf("caps(%q) did not name the model space; the server compares "+
+				"it against what is stored", dir)
+		}
+	}
+}
+
+// The two readiness verdicts are independent, so neither may be derived from
+// the other. A build with one set of models and not the other must say exactly
+// that.
+func TestTheTwoReadinessVerdictsAreIndependent(t *testing.T) {
+	c := caps("")
+	if c.Ready != c.SemanticReady {
+		return // already distinct in this build; nothing to prove
+	}
+	// Both false here. What must not happen is one being *reported* from the
+	// other's reason.
+	if c.Reason != "" && c.Reason == c.SemanticReason {
+		t.Error("both features reported the same reason; one is being derived " +
+			"from the other rather than answered")
+	}
+}
+
+// An Embedding survives the wire the way a Result does — the server reads these
+// one line at a time as a pass produces them.
+func TestAnEmbeddingRoundTripsAsOneLine(t *testing.T) {
+	in := Embedding{Path: `W:\pics\a.jpg`, Vector: []float32{0.5, -0.5}}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "\n") {
+		t.Error("an embedding encoded with a newline in it; the protocol is one per line")
+	}
+	var out Embedding
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Path != in.Path || len(out.Vector) != 2 || out.Vector[0] != 0.5 {
+		t.Errorf("round trip changed the embedding: %+v", out)
+	}
+}
+
+// A photograph that cannot be embedded is that photograph's error, not the
+// batch's — the same rule detect follows, for the same reason.
+func TestAFailedEmbeddingIsReportedNotFatal(t *testing.T) {
+	b, err := json.Marshal(Embedding{Path: "bad.jpg", Error: "decode: unexpected EOF"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "error") {
+		t.Error("an embedding failure did not survive encoding")
+	}
+	if strings.Contains(string(b), "vector") {
+		t.Error("a failed embedding carried a vector field; an empty one would " +
+			"be stored as though it meant something")
+	}
+}
