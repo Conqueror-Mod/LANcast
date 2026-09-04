@@ -85,6 +85,14 @@
     {
       "name": "faces",
       "description": "Grouping faces in a picture library, in an optional native sidecar (ADR 0052)."
+    },
+    {
+      "name": "subtitles",
+      "description": "Embedded, sidecar and downloaded subtitle tracks."
+    },
+    {
+      "name": "markers",
+      "description": "Detected boundaries — where the credits begin (ADR 0054)."
     }
   ],
   "paths": {
@@ -5098,6 +5106,391 @@
           }
         }
       }
+    },
+    "/items/{id}/subtitles": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "listSubtitles",
+        "tags": [
+          "subtitles"
+        ],
+        "summary": "Every subtitle track for an item",
+        "responses": {
+          "200": {
+            "description": "Embedded and external, including unavailable ones.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitleTrackList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/items/{id}/subtitles/{key}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        },
+        {
+          "name": "key",
+          "in": "path",
+          "required": true,
+          "description": "The track key. Fetching appends `.vtt`.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSubtitleTrack",
+        "tags": [
+          "subtitles"
+        ],
+        "summary": "One track as WebVTT",
+        "description": "WebVTT is the only subtitle format browsers render. SubRip is converted in Go; ASS and embedded tracks go through ffmpeg. Results are cached.",
+        "responses": {
+          "200": {
+            "description": "The track.",
+            "content": {
+              "text/vtt": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "description": "`unsupported` — a bitmap track, which has no text to convert.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ffmpeg is needed for this track and is absent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSubtitle",
+        "tags": [
+          "subtitles"
+        ],
+        "summary": "Remove a downloaded subtitle",
+        "description": "**Only downloaded subtitles can be removed.** An embedded track lives inside the video, and a sidecar lives in the user's library — deleting files there is the line the scanner refuses to cross (*marks missing, never deletes*). A wrong download is entirely the server's own, so it is the one safe case.",
+        "responses": {
+          "204": {
+            "description": "Removed, row and file. No body."
+          },
+          "400": {
+            "description": "An embedded or malformed key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "A sidecar, which lives in the user's library.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The key belongs to another item; the lookup is scoped to this one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/subtitles/search": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "searchSubtitles",
+        "tags": [
+          "subtitles"
+        ],
+        "summary": "Search the subtitle provider",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Override the query.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Override the language.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scored candidates, best first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitleSearchResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "description": "The daily provider quota is spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No provider API key is configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/subtitles/download": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "post": {
+        "operationId": "downloadSubtitle",
+        "tags": [
+          "subtitles"
+        ],
+        "summary": "Download and attach a subtitle",
+        "description": "Files are written to the data directory, **never beside the media** — the same rule NFO writing follows.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadSubtitleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new track's key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadedSubtitle"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "description": "The daily provider quota is spent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No provider API key is configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/markers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getItemMarkers",
+        "tags": [
+          "markers"
+        ],
+        "summary": "The boundaries detected on one item",
+        "responses": {
+          "200": {
+            "description": "Markers, possibly none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkerList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/markers": {
+      "get": {
+        "operationId": "getMarkerProgress",
+        "tags": [
+          "markers"
+        ],
+        "summary": "Detection progress",
+        "responses": {
+          "200": {
+            "description": "Progress, and why it is idle when it is.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkerProgress"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/markers/refresh": {
+      "post": {
+        "operationId": "refreshMarkers",
+        "tags": [
+          "markers"
+        ],
+        "summary": "Queue every examined item to be looked at again",
+        "description": "Administrators only.\n\n**Far more expensive than re-probing**: this decodes the last quarter of every film and episode, where a probe reads a header. It exists because the detector's window and length thresholds are tuned numbers, and a build that moves them has to be able to ask every item the new question — a library holding answers from a rule that no longer exists is worse than one holding none.",
+        "responses": {
+          "200": {
+            "description": "How many were queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkerRefreshResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`detect_markers` is off. Turning it off is how somebody says they do not want their CPU spent on this, and queueing anyway would spend it at the next restart instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ffmpeg is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9118,6 +9511,283 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "SubtitleTrack": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "source",
+          "forced",
+          "default",
+          "available"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Opaque; use it to fetch or delete the track."
+          },
+          "label": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "`embedded`, `sidecar` or `downloaded`."
+          },
+          "codec": {
+            "type": "string"
+          },
+          "forced": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "**Unavailable tracks are listed, not hidden.** PGS and VOBSUB are images of text, so there is nothing to convert without OCR — but omitting them would leave a viewer wondering why a film they know has subtitles appears to have none."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why it is unavailable, written for a viewer."
+          }
+        }
+      },
+      "SubtitleTrackList": {
+        "type": "object",
+        "required": [
+          "item_id",
+          "tracks"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubtitleTrack"
+            },
+            "description": "Embedded and external, in one list."
+          }
+        }
+      },
+      "SubtitleCandidate": {
+        "type": "object",
+        "required": [
+          "file_id",
+          "release",
+          "language",
+          "download_count",
+          "hash_match",
+          "score"
+        ],
+        "properties": {
+          "file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "download_count": {
+            "type": "integer",
+            "description": "**A tiebreak worth at most 0.10**, which can never carry a candidate over the auto-apply line — the most-downloaded entry is frequently for a different release."
+          },
+          "fps": {
+            "type": "number"
+          },
+          "hash_match": {
+            "type": "boolean",
+            "description": "The subtitle was timed against these exact bytes, so it scores 1.0 and short-circuits the rest."
+          },
+          "hearing_impaired": {
+            "type": "boolean"
+          },
+          "uploader": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "description": "Without a hash match, candidates score on what predicts sync: frame rate (0.35), edition (0.25), source (0.20), release group (0.15), resolution (0.05)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why it scored as it did. A reason beginning `different title` or `different year` marks a **demoted** candidate that can never auto-apply."
+          }
+        }
+      },
+      "SubtitleSearchResult": {
+        "type": "object",
+        "description": "The provider's movie hash — file size plus the first and last 64KB — is computed and sent with every search.\n\n**A candidate for a different film is rejected before anything else is weighed.** A hash query returns whatever is tagged with that hash and a title query returns near-title noise, so subtitles for other films routinely appear; if their release traits happen to agree they would otherwise score past the auto-apply line. The parsed title is cross-checked against the item's, and a disagreement overrides every other signal — including a claimed hash match, since a hash mapping to another film's file is bad provider data. Such candidates stay listed, in case the item's own title is wrong.\n\nThe **year** is checked the same way and for the same reason: \"Aladdin (1992)\" and \"Aladdin (2019)\" share a title but not a single cue timing. A candidate that omits its year is not penalised.",
+        "required": [
+          "item_id",
+          "hash_used",
+          "auto_match",
+          "candidates"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "hash_used": {
+            "type": "boolean"
+          },
+          "auto_match": {
+            "type": "boolean",
+            "description": "True only at 0.90 or above. **A subtitle that does not sync is distracting for two hours; a prompt costs one click.**"
+          },
+          "auto_match_key": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubtitleCandidate"
+            }
+          }
+        }
+      },
+      "DownloadSubtitleRequest": {
+        "type": "object",
+        "required": [
+          "file_id"
+        ],
+        "properties": {
+          "file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "language": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          }
+        }
+      },
+      "DownloadedSubtitle": {
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        }
+      },
+      "Marker": {
+        "type": "object",
+        "description": "A boundary detected on one item (ADR 0054).",
+        "required": [
+          "kind",
+          "start_ms",
+          "source",
+          "confidence",
+          "created_at"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`credits` or `intro`. **Nothing writes `intro` yet**, and it is in the contract so that when it does, a client written today does not have to change shape to accept it."
+          },
+          "start_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "end_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "**Absent for credits**, which run to the end of the file. An intro has a real end — the point you would skip *to* — and will carry one."
+          },
+          "source": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "`0.9` for a boundary found by a black stretch over five seconds and `0.5` where only a shorter one existed. **Reported rather than thresholded away**, because the rule that decides what is good enough is expected to change."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "MarkerList": {
+        "type": "object",
+        "description": "**This is an inspection surface, and stage 1 acts on none of it.** No playback decision reads a marker, the watched threshold is unaffected, and no client should draw a skip control from this yet. The rule behind these timestamps has been shown consistent across two independent samples of forty films and has never been checked against a person watching one.\n\nAn item with no detectable boundary returns an empty list, which is a real answer rather than a missing one: a film whose credits begin on a cut rather than a fade has nothing to detect.",
+        "required": [
+          "markers"
+        ],
+        "properties": {
+          "markers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            }
+          }
+        }
+      },
+      "MarkerProgress": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "available",
+          "running",
+          "examined",
+          "found",
+          "failed",
+          "remaining"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "The `detect_markers` setting."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Whether ffmpeg was found. **Separate from `enabled` because \"switched off\" and \"ffmpeg missing\" are different answers**, and a client that conflates them cannot tell somebody how to fix it."
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "examined": {
+            "type": "integer"
+          },
+          "found": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          }
+        }
+      },
+      "MarkerRefreshResult": {
+        "type": "object",
+        "required": [
+          "queued"
+        ],
+        "properties": {
+          "queued": {
+            "type": "integer"
           }
         }
       }

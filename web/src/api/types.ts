@@ -50,40 +50,11 @@ export interface Trailer {
   name?: string;
 }
 
-export interface SubtitleCandidate {
-  file_id: number;
-  file_name: string;
-  release: string;
-  language: string;
-  download_count: number;
-  fps?: number;
-  hash_match: boolean;
-  hearing_impaired: boolean;
-  forced: boolean;
-  uploader?: string;
-  score: number;
-  reason?: string;
-}
+export type SubtitleCandidate = components["schemas"]["SubtitleCandidate"];
 
-export interface SubtitleSearchResult {
-  item_id: number;
-  hash_used: boolean;
-  candidates: SubtitleCandidate[];
-  auto_match: boolean;
-  auto_match_key: number;
-}
+export type SubtitleSearchResult = components["schemas"]["SubtitleSearchResult"];
 
-export interface SubtitleTrack {
-  key: string;
-  label: string;
-  language?: string;
-  source: string; // embedded | sidecar | downloaded
-  codec?: string;
-  forced: boolean;
-  default: boolean;
-  available: boolean;
-  reason?: string;
-}
+export type SubtitleTrack = components["schemas"]["SubtitleTrack"];
 
 // One track inside a media file, as the probe found it. `index` is absolute
 // within the file, which is what `?audio=` takes (docs/api.md).

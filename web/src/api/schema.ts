@@ -2296,6 +2296,157 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/subtitles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /** Every subtitle track for an item */
+        get: operations["listSubtitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/subtitles/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The track key. Fetching appends `.vtt`. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One track as WebVTT
+         * @description WebVTT is the only subtitle format browsers render. SubRip is converted in Go; ASS and embedded tracks go through ffmpeg. Results are cached.
+         */
+        get: operations["getSubtitleTrack"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a downloaded subtitle
+         * @description **Only downloaded subtitles can be removed.** An embedded track lives inside the video, and a sidecar lives in the user's library — deleting files there is the line the scanner refuses to cross (*marks missing, never deletes*). A wrong download is entirely the server's own, so it is the one safe case.
+         */
+        delete: operations["deleteSubtitle"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/subtitles/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /** Search the subtitle provider */
+        get: operations["searchSubtitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/subtitles/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download and attach a subtitle
+         * @description Files are written to the data directory, **never beside the media** — the same rule NFO writing follows.
+         */
+        post: operations["downloadSubtitle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/markers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /** The boundaries detected on one item */
+        get: operations["getItemMarkers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/markers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detection progress */
+        get: operations["getMarkerProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/markers/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue every examined item to be looked at again
+         * @description Administrators only.
+         *
+         *     **Far more expensive than re-probing**: this decodes the last quarter of every film and episode, where a probe reads a header. It exists because the detector's window and length thresholds are tuned numbers, and a build that moves them has to be able to ask every item the new question — a library holding answers from a rule that no longer exists is worse than one holding none.
+         */
+        post: operations["refreshMarkers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3787,6 +3938,110 @@ export interface components {
         };
         Ok: {
             ok: boolean;
+        };
+        SubtitleTrack: {
+            /** @description Opaque; use it to fetch or delete the track. */
+            key: string;
+            label: string;
+            language?: string;
+            /** @description `embedded`, `sidecar` or `downloaded`. */
+            source: string;
+            codec?: string;
+            forced: boolean;
+            default: boolean;
+            /** @description **Unavailable tracks are listed, not hidden.** PGS and VOBSUB are images of text, so there is nothing to convert without OCR — but omitting them would leave a viewer wondering why a film they know has subtitles appears to have none. */
+            available: boolean;
+            /** @description Why it is unavailable, written for a viewer. */
+            reason?: string;
+        };
+        SubtitleTrackList: {
+            /** Format: int64 */
+            item_id: number;
+            /** @description Embedded and external, in one list. */
+            tracks: components["schemas"]["SubtitleTrack"][];
+        };
+        SubtitleCandidate: {
+            /** Format: int64 */
+            file_id: number;
+            file_name?: string;
+            release: string;
+            language: string;
+            /** @description **A tiebreak worth at most 0.10**, which can never carry a candidate over the auto-apply line — the most-downloaded entry is frequently for a different release. */
+            download_count: number;
+            fps?: number;
+            /** @description The subtitle was timed against these exact bytes, so it scores 1.0 and short-circuits the rest. */
+            hash_match: boolean;
+            hearing_impaired?: boolean;
+            uploader?: string;
+            /** @description Without a hash match, candidates score on what predicts sync: frame rate (0.35), edition (0.25), source (0.20), release group (0.15), resolution (0.05). */
+            score: number;
+            /** @description Why it scored as it did. A reason beginning `different title` or `different year` marks a **demoted** candidate that can never auto-apply. */
+            reason?: string;
+        };
+        /**
+         * @description The provider's movie hash — file size plus the first and last 64KB — is computed and sent with every search.
+         *
+         *     **A candidate for a different film is rejected before anything else is weighed.** A hash query returns whatever is tagged with that hash and a title query returns near-title noise, so subtitles for other films routinely appear; if their release traits happen to agree they would otherwise score past the auto-apply line. The parsed title is cross-checked against the item's, and a disagreement overrides every other signal — including a claimed hash match, since a hash mapping to another film's file is bad provider data. Such candidates stay listed, in case the item's own title is wrong.
+         *
+         *     The **year** is checked the same way and for the same reason: "Aladdin (1992)" and "Aladdin (2019)" share a title but not a single cue timing. A candidate that omits its year is not penalised.
+         */
+        SubtitleSearchResult: {
+            /** Format: int64 */
+            item_id: number;
+            hash_used: boolean;
+            /** @description True only at 0.90 or above. **A subtitle that does not sync is distracting for two hours; a prompt costs one click.** */
+            auto_match: boolean;
+            /** Format: int64 */
+            auto_match_key?: number;
+            candidates: components["schemas"]["SubtitleCandidate"][];
+        };
+        DownloadSubtitleRequest: {
+            /** Format: int64 */
+            file_id: number;
+            language?: string;
+            file_name?: string;
+        };
+        DownloadedSubtitle: {
+            key: string;
+        };
+        /** @description A boundary detected on one item (ADR 0054). */
+        Marker: {
+            /** @description `credits` or `intro`. **Nothing writes `intro` yet**, and it is in the contract so that when it does, a client written today does not have to change shape to accept it. */
+            kind: string;
+            /** Format: int64 */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description **Absent for credits**, which run to the end of the file. An intro has a real end — the point you would skip *to* — and will carry one.
+             */
+            end_ms?: number;
+            source: string;
+            /** @description `0.9` for a boundary found by a black stretch over five seconds and `0.5` where only a shorter one existed. **Reported rather than thresholded away**, because the rule that decides what is good enough is expected to change. */
+            confidence: number;
+            /** Format: int64 */
+            created_at: number;
+        };
+        /**
+         * @description **This is an inspection surface, and stage 1 acts on none of it.** No playback decision reads a marker, the watched threshold is unaffected, and no client should draw a skip control from this yet. The rule behind these timestamps has been shown consistent across two independent samples of forty films and has never been checked against a person watching one.
+         *
+         *     An item with no detectable boundary returns an empty list, which is a real answer rather than a missing one: a film whose credits begin on a cut rather than a fade has nothing to detect.
+         */
+        MarkerList: {
+            markers: components["schemas"]["Marker"][];
+        };
+        MarkerProgress: {
+            /** @description The `detect_markers` setting. */
+            enabled: boolean;
+            /** @description Whether ffmpeg was found. **Separate from `enabled` because "switched off" and "ffmpeg missing" are different answers**, and a client that conflates them cannot tell somebody how to fix it. */
+            available: boolean;
+            running: boolean;
+            examined: number;
+            found: number;
+            failed: number;
+            remaining: number;
+        };
+        MarkerRefreshResult: {
+            queued: number;
         };
     };
     responses: {
@@ -7696,6 +7951,310 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listSubtitles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Embedded and external, including unavailable ones. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubtitleTrackList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getSubtitleTrack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The track key. Fetching appends `.vtt`. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The track. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/vtt": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description `unsupported` — a bitmap track, which has no text to convert. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ffmpeg is needed for this track and is absent. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteSubtitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The track key. Fetching appends `.vtt`. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed, row and file. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An embedded or malformed key. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description A sidecar, which lives in the user's library. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The key belongs to another item; the lookup is scoped to this one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    searchSubtitles: {
+        parameters: {
+            query?: {
+                /** @description Override the query. */
+                q?: string;
+                /** @description Override the language. */
+                language?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scored candidates, best first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubtitleSearchResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The daily provider quota is spent. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No provider API key is configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    downloadSubtitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DownloadSubtitleRequest"];
+            };
+        };
+        responses: {
+            /** @description The new track's key. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadedSubtitle"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The daily provider quota is spent. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No provider API key is configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getItemMarkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Markers, possibly none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getMarkerProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress, and why it is idle when it is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    refreshMarkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerRefreshResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `detect_markers` is off. Turning it off is how somebody says they do not want their CPU spent on this, and queueing anyway would spend it at the next restart instead. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ffmpeg is not installed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }
