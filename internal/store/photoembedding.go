@@ -254,3 +254,26 @@ func (s *Store) EmbeddedPhotoCount(ctx context.Context, libraryID int64, model s
 	}
 	return n, nil
 }
+
+// PhotosPendingEmbeddingCount is the same question as a number, for progress
+// reporting. Re-asked between batches rather than counted down from a total
+// measured once: a scan can add photographs while a pass runs, and marking a
+// folder removes some from the queue entirely, so a counter that only fell
+// would drift from the truth in both directions. The activity view has been
+// bitten once already by a total that was measured at the start and never
+// revised.
+func (s *Store) PhotosPendingEmbeddingCount(ctx context.Context, libraryID int64, model string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		  FROM media_item
+		 WHERE library_id = ? AND kind = 'photo' AND missing = 0
+		   AND sensitive_effective = 0
+		   AND NOT EXISTS (
+			SELECT 1 FROM photo_embedding e
+			 WHERE e.item_id = media_item.id AND e.model = ?)`, libraryID, model).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("photos pending embedding count: %w", err)
+	}
+	return n, nil
+}
