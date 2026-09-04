@@ -2780,6 +2780,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Photographs taken on today's date in an earlier year
+         * @description Not admin-gated: photographs a viewer may already browse, on a shelf they already see.
+         */
+        get: operations["getMemories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4480,6 +4500,23 @@ export interface components {
         };
         QueuedResult: {
             queued: number;
+        };
+        /**
+         * @description Photographs taken on **today's date in an earlier year** — the home page's "On this day" shelf.
+         *
+         *     **Three exclusions, and one is stricter than the timeline's.** Marked folders never appear (ADR 0051): the timeline is somewhere you navigated to, where a memory is unsolicited and lands on the home page in front of whoever is in the room. The current year is excluded, because a photograph from this morning is not a memory and a card imported today would otherwise be the whole shelf. Missing files are excluded, because a shelf is for looking at.
+         *
+         *     An empty list is the ordinary answer on most days, and a client shows nothing rather than an empty shelf — a heading over no tiles is the shape of something broken.
+         */
+        Memories: {
+            /** @description Newest first. */
+            items: components["schemas"]["Item"][];
+            /**
+             * @description The date the server resolved as today, `MM-DD`.
+             *
+             *     **Returned rather than assumed**, so a client left open overnight can notice it has crossed midnight and the shelf it is drawing is yesterday's. It is also the reason this is a route rather than a `taken_on` filter on `/api/items`: a parameter would put a calendar date in the client's hands, and a client computing one resolves to tomorrow through a US evening, because `toISOString()` is UTC. The day comes from the same clock the photographs were filed under.
+             */
+            on: string;
         };
     };
     responses: {
@@ -9201,6 +9238,30 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getMemories: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 40, capped at 200. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shelf, possibly empty. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Memories"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }

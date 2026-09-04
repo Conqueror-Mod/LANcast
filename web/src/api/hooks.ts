@@ -955,6 +955,33 @@ export function useContinueWatching(limit = 20) {
 // not what "recently added" means to anyone looking at a photo library. An
 // explicit kind is treated server-side as a deliberate cross-cutting query and
 // is not forced top-level (ADR 0028).
+/*
+ * "On this day" — photographs from today's date in an earlier year.
+ *
+ * Its own endpoint rather than a filter on /api/items, because the day is the
+ * server's to decide. A client working out a calendar date is the fault this
+ * codebase has already met: `toISOString().slice(0,10)` is UTC, so through a US
+ * evening it resolves to *tomorrow*, and the shelf would show the wrong day for
+ * several hours every night while looking perfectly fine.
+ *
+ * `on` comes back with the items for the same reason. A home page left open
+ * overnight would otherwise keep drawing yesterday's shelf under today's
+ * heading, and nothing about it would look stale.
+ */
+export function useMemories(limit = 40) {
+  return useQuery({
+    queryKey: ["memories", limit],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[]; on: string }>(
+        `/api/memories?limit=${limit}`,
+        signal,
+      ),
+    // Long, because the answer changes once a day. Short enough that a machine
+    // left running crosses midnight within an hour of it mattering.
+    staleTime: 15 * 60_000,
+  });
+}
+
 export function useRecentPhotos(limit = 20) {
   return useQuery({
     queryKey: ["recent-photos", limit],

@@ -1,6 +1,7 @@
 import {
   useLibraries,
   useContinueWatching,
+  useMemories,
   useRecentlyAddedVideo,
   useRecentlyAddedMusic,
   useRecentPhotos,
@@ -83,6 +84,7 @@ export function Home() {
   // 25 folders every time, which is not what "recently added" means when you
   // are looking at photographs.
   const { data: recentPhotos } = useRecentPhotos(20);
+  const { data: memories } = useMemories(20);
 
   const setWatched = useSetWatchedByID();
   const navigate = useNavigate();
@@ -166,6 +168,15 @@ export function Home() {
   const recentVideo = withoutHero(recentlyAddedVideo);
   const recentAudio = recentlyAddedMusic ?? [];
   const recentPictures = (recentPhotos ?? []).filter((i) => !i.missing);
+  /*
+   * On this day. Empty on most days, and the Shelf renders nothing when it is —
+   * a heading over no tiles is the shape of something broken.
+   *
+   * Not filtered for `missing` the way recentPictures is: the server already
+   * excludes them, along with marked folders and this year's photographs, and a
+   * second opinion here would be a rule in two places that can disagree.
+   */
+  const onThisDay = memories?.items ?? [];
 
   /*
    * Pressing a show on this shelf continues the show; pressing a film opens
@@ -232,6 +243,10 @@ export function Home() {
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />
         <Shelf title="Recently Added Photos" items={recentPictures} />
+        {/* After the recent shelves rather than before: "what is new" is the
+            question somebody opened the page with, and "what happened on this
+            date years ago" is the one worth finding once they are here. */}
+        <Shelf title="On this day" items={onThisDay} />
         {/* Activity before catalogue: what people have been playing is a
             livelier answer to "what now" than the same alphabetical grid the
             library page already gives. */}

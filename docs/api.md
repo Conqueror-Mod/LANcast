@@ -1047,6 +1047,40 @@ and a client may hold it; what a client must *not* do is play from it. Ask
 described there, and resuming from a list a few seconds old is how a viewer
 lands on an episode they have already finished.
 
+### `GET /api/memories`
+
+Photographs taken on **today's date in an earlier year**, newest first — the
+home page's "On this day" shelf. `?limit=` defaults to 40 and is capped at 200.
+
+```json
+{ "on": "09-04",
+  "items": [ { "id": 5512, "kind": "photo", "title": "IMG_2291",
+               "taken_at": 1662300000, "…": "…" } ] }
+```
+
+**The server decides what day it is, and that is why this is a route rather
+than a filter on `/api/items`.** A `taken_on=MM-DD` parameter would put a
+calendar date in the client's hands, and a client computing one is a fault this
+project has met: `toISOString().slice(0,10)` is UTC, so through a US evening it
+resolves to *tomorrow* and the shelf would show the wrong day for several hours
+every night. The day comes from the same clock the photographs were filed
+under, exactly as `GET /api/libraries/{id}/timeline` computes its months.
+
+`on` is that date, returned rather than assumed so a client left open overnight
+can notice it has crossed midnight and the shelf it is drawing is yesterday's.
+
+**Three exclusions, and one of them is stricter than the timeline's.** Marked
+folders never appear ([ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md)) —
+the timeline is somewhere you navigated to, where a memory is unsolicited and
+lands on the home page in front of whoever is in the room. The current year is
+excluded, because a photograph from this morning is not a memory and a card
+imported today would otherwise be the whole shelf. Missing files are excluded,
+because a shelf is for looking at.
+
+An empty list is the ordinary answer on most days. A client shows nothing at
+all rather than an empty shelf: a heading over no tiles is the shape of
+something broken.
+
 ### `GET /api/profile`
 
 Who the caller is, what they have watched, and the totals behind it — in one

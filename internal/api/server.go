@@ -314,6 +314,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)
+	// Photographs from today's date in an earlier year (ADR 0028).
+	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
