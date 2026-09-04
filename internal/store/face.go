@@ -386,17 +386,38 @@ func (s *Store) NameCluster(ctx context.Context, clusterID int64, name string) e
 	return nil
 }
 
-// FaceClusters lists a library's people, largest first — an unnamed group of
-// forty faces is worth naming before an unnamed group of one.
+/*
+ * FaceClusters lists a library's people, largest first — an unnamed group of
+ * forty faces is worth naming before an unnamed group of one.
+ *
+ * The count is **photographs, not faces**, and it excludes what a marked folder
+ * covers. Both were wrong until the person filter gave the number somewhere to
+ * disagree with: the tile's label has always read "photographs", while the
+ * count was COUNT(f.id) over every face in the group including the ones under
+ * folders nobody may open. A group shot the detector fired twice on counted
+ * twice, and a tile could promise forty and open a grid of thirty-eight.
+ *
+ * Expect the number to fall on a library that has marked anything. That is the
+ * count becoming true rather than the feature losing photographs.
+ *
+ * Missing photographs are still counted, because the grid still lists them —
+ * they are shown with their flag rather than hidden, the way every other
+ * listing in this API treats them. The faces listing excludes them instead, and
+ * that is not an inconsistency: it draws crops it cannot render from a file
+ * that is gone, and this counts pictures somebody is in.
+ */
 func (s *Store) FaceClusters(ctx context.Context, libraryID int64) ([]FaceCluster, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.name, c.name_locked, COUNT(f.id) AS n,
+		SELECT c.id, c.name, c.name_locked,
+		       COUNT(DISTINCT CASE WHEN mi.sensitive_effective = 0
+		                           THEN f.item_id END) AS n,
 		       (SELECT f2.id FROM face f2 WHERE f2.cluster_id = c.id
 		         ORDER BY f2.score DESC LIMIT 1),
 		       (SELECT f2.item_id FROM face f2 WHERE f2.cluster_id = c.id
 		         ORDER BY f2.score DESC LIMIT 1)
 		  FROM face_cluster c
 		  LEFT JOIN face f ON f.cluster_id = c.id
+		  LEFT JOIN media_item mi ON mi.id = f.item_id
 		 WHERE c.library_id = ?
 		 GROUP BY c.id, c.name, c.name_locked
 		 ORDER BY n DESC, c.id`, libraryID)

@@ -67,6 +67,17 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
 export const FILTER_PARAM_KEYS = [
   ...FILTER_CATEGORIES.map((c) => c.key),
   "watched",
+  /*
+   * face_cluster is a filter without a category, which is why it is listed by
+   * hand rather than derived from FILTER_CATEGORIES above.
+   *
+   * It has no panel because it could not usefully have one: a picture library
+   * has hundreds of people, which is the same three-orders-of-magnitude
+   * argument that made cast a search endpoint rather than an array on /facets.
+   * The way in is the People page, and the way out is this pill — so it belongs
+   * in "clear all" even though nothing in the bar can set it.
+   */
+  "face_cluster",
 ];
 
 /** One active filter, as shown in the pill row. */
@@ -81,6 +92,17 @@ export interface PillContext {
   /** Names for the person ids currently filtered on. A pill whose name has not
    *  arrived yet is held back rather than shown as a raw id. */
   castNames?: Map<string, string>;
+  /*
+   * Names for face groups, which are a different population from castNames
+   * above and deliberately a separate map.
+   *
+   * A credit id and a face-group id are both small integers and mean nothing to
+   * each other. One map keyed by both would resolve `face_cluster=3` to
+   * whichever person happened to be credit 3, and label the pill with a
+   * confident wrong name — which is worse than no pill, because nothing about
+   * it looks broken.
+   */
+  faceNames?: Map<string, string>;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -127,6 +149,37 @@ export function activePills(
       if (!name) continue;
       push(key, id, key === "director" ? `${name} (director)` : name);
     }
+  }
+
+  /*
+   * The face pill, which is the only way back out of a person filter.
+   *
+   * Unlike a credit pill it is shown even when the name has not arrived, and
+   * even when the group has no name at all — because there is no other control
+   * that can clear it. A credit pill held back for a moment is invisible beside
+   * nine others and the grid still says why it is narrow; this one held back
+   * leaves somebody looking at a fraction of their library with nothing on
+   * screen explaining it and nothing to press.
+   *
+   * "Unnamed person" rather than the id for the same reason the credit pills
+   * refuse to render one: a number is not a name, and nobody knows who 3 is.
+   */
+  const faces = params.getAll("face_cluster");
+  if (faces.length > 0) {
+    /*
+     * One pill for the person, not one per group.
+     *
+     * The groups collapsed onto a tile are one person — naming does not merge
+     * them, so somebody routinely *is* two or three — and a row of three
+     * identical "Georgia" pills would suggest three filters where there is one
+     * decision. Removing it clears the whole parameter, which is why FilterBar
+     * routes this key through onSet rather than toggling a single value off and
+     * leaving the rest of the person behind.
+     *
+     * The name comes from whichever group has one; they share it by definition.
+     */
+    const named = faces.map((id) => ctx.faceNames?.get(id)).find(Boolean);
+    push("face_cluster", faces.join(","), named || "Unnamed person");
   }
 
   for (const c of params.getAll("content_rating")) push("content_rating", c, c);

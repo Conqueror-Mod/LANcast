@@ -1114,6 +1114,16 @@ export interface ItemQuery {
   directors?: number[];
   /** Collection ids; membership, not parenthood. */
   collections?: number[];
+  /*
+   * Face group ids (ADR 0052) — photographs this person appears in.
+   *
+   * Not `people` above, which is film credits. Plural because one person is
+   * often several groups: naming does not merge them, so a collapsed row on the
+   * People page carries every id and all of them belong in the filter. Passing
+   * only the largest shows most of somebody's photographs and says nothing
+   * about the rest.
+   */
+  faceClusters?: number[];
   /** Rated at least this highly, out of ten. Unrated items are excluded. */
   minRating?: number;
   /** in_progress | unmatched. Single-valued; the two cannot be combined. */
@@ -1143,6 +1153,7 @@ function itemsParams({
   actors = [],
   directors = [],
   collections = [],
+  faceClusters = [],
   minRating = 0,
   status,
   excludeKind,
@@ -1170,6 +1181,7 @@ function itemsParams({
   for (const a of actors) params.append("actor", String(a));
   for (const d of directors) params.append("director", String(d));
   for (const c of collections) params.append("collection", String(c));
+  for (const c of faceClusters) params.append("face_cluster", String(c));
   if (minRating > 0) params.set("min_rating", String(minRating));
   if (status) params.set("status", status);
   if (unwatched) params.set("watched", "false");

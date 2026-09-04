@@ -5,6 +5,7 @@ import {
   useInfiniteItems,
   useFacets,
   useCastByIDs,
+  useFacePeople,
   useRecentPhotos,
   fetchLibraryTracks,
   playableKindFor,
@@ -62,6 +63,14 @@ export function LibraryView({
   const actors = params.getAll("actor");
   const directors = params.getAll("director");
   const collections = params.getAll("collection");
+  /*
+   * Face groups (ADR 0052), set from the People page rather than the bar.
+   *
+   * Plural because one person is often several groups — naming does not merge
+   * them — so a tile hands over every id it collapsed and they are all this
+   * person.
+   */
+  const faceClusters = params.getAll("face_cluster");
   const minRating = Number(params.get("min_rating") ?? 0);
   const status = params.get("status") ?? "";
   const unwatched = params.get("watched") === "false";
@@ -146,6 +155,7 @@ export function LibraryView({
     actors: actors.map(Number),
     directors: directors.map(Number),
     collections: collections.map(Number),
+    faceClusters: faceClusters.map(Number),
     minRating,
     status,
     /*
@@ -255,6 +265,26 @@ export function LibraryView({
     return m;
   }, [castLookup.data]);
 
+  /*
+   * And the name for a face-group pill.
+   *
+   * Fetched only while such a filter is active — the list is every person in
+   * the library, and a movie library asking for it on every mount would be a
+   * request that can never answer anything.
+   *
+   * A separate map from castNames on purpose. Both are keyed by small integers
+   * from unrelated populations, so one map would resolve face group 3 to
+   * whichever person happened to be credit 3 and print a confident wrong name.
+   */
+  const facePeople = useFacePeople(libraryID, faceClusters.length > 0);
+  const faceNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of facePeople.data?.people ?? []) {
+      if (p.name) m.set(String(p.id), p.name);
+    }
+    return m;
+  }, [facePeople.data]);
+
   const filtered =
     !!q ||
     genres.length > 0 ||
@@ -266,6 +296,7 @@ export function LibraryView({
     actors.length > 0 ||
     directors.length > 0 ||
     collections.length > 0 ||
+    faceClusters.length > 0 ||
     minRating > 0 ||
     !!status ||
     unwatched;
@@ -420,6 +451,7 @@ export function LibraryView({
           facets={facets}
           params={params}
           castNames={castNames}
+          faceNames={faceNames}
           onToggle={toggleParam}
           onSet={setParam}
           onClear={clearFilters}

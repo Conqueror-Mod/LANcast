@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import type { FacePerson } from "@/api/hooks";
 import { FacePeople } from "./FacePeople";
@@ -33,6 +33,22 @@ type Scenario = {
   suggestions?: unknown[];
   faces?: unknown[];
 };
+
+/*
+ * Where the router went.
+ *
+ * MemoryRouter keeps its own history and never touches window.location, so a
+ * test that read window.location would pass whatever the app did. This records
+ * the destination from a route the app actually renders.
+ */
+let landed = "";
+function LocationProbe() {
+  landed = useLocation().search;
+  return <div data-testid="landed" />;
+}
+function lastSearch() {
+  return landed;
+}
 
 let host: HTMLDivElement;
 let root: Root;
@@ -98,6 +114,7 @@ afterEach(() => {
 });
 
 async function render() {
+  landed = "";
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -108,6 +125,7 @@ async function render() {
           <MemoryRouter initialEntries={["/library/5/people"]}>
             <Routes>
               <Route path="/library/:id/people" element={<FacePeople />} />
+              <Route path="/library/:id" element={<LocationProbe />} />
             </Routes>
           </MemoryRouter>
         </FocusProvider>
@@ -592,5 +610,80 @@ describe("dismissing a suggested match", () => {
     // And it is a refusal, not a rename: nothing may name the suggested group.
     const named = sent.find((s) => s.url.endsWith("/api/faces/clusters/2"));
     expect(named, "dismissing a suggestion named it instead").toBeFalsy();
+  });
+});
+
+/*
+ * The way to a person's photographs.
+ *
+ * This is the whole point of naming — the screen's own first paragraph says a
+ * named group is how somebody finds a photograph — and until the face_cluster
+ * filter existed it led nowhere.
+ *
+ * It is offered from the name panel rather than from the tile, and that was not
+ * the first design. Making the tile navigate took away renaming, clearing and
+ * telling it who somebody is not, all of which live behind that same tile — and
+ * the tests below for removing a face went red saying so.
+ *
+ * The property worth pinning is that *every* group goes into the link. Naming
+ * does not merge groups, so a person is routinely two or three, and passing
+ * only the largest shows most of somebody's photographs while looking like a
+ * complete answer. On a real library that was 277 of 350.
+ */
+describe("opening a person's photographs", () => {
+  const twoGroups: FacePerson[] = [
+    { id: 6, name: "Georgia", name_locked: true, count: 277, cover_face_id: 1 },
+    { id: 51, name: "Georgia", name_locked: true, count: 73, cover_face_id: 2 },
+  ];
+
+  it("links to every group the person was collapsed from", async () => {
+    mount({ ready: true, people: twoGroups, faces: [{ id: 1, item_id: 9, score: 0.9 }] });
+    await render();
+
+    // Open the person, the way somebody would.
+    const tile = [...host.querySelectorAll("button")].find((b) =>
+      (b.getAttribute("aria-label") ?? "").startsWith("Georgia"),
+    );
+    if (!tile) throw new Error("no tile for the named person");
+    await act(async () => {
+      tile.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const view = [...host.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === "View photographs",
+    );
+    expect(view, "a named person should offer a way to their photographs").toBeTruthy();
+
+    await act(async () => {
+      view!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // MemoryRouter keeps its own history, so the destination is read from what
+    // the app rendered next rather than from window.location.
+    const q = new URLSearchParams(lastSearch());
+    expect(q.getAll("face_cluster").sort()).toEqual(["51", "6"].sort());
+  });
+
+  it("offers nothing of the kind for an unnamed group", async () => {
+    // There is nothing to find yet: an unnamed group is a curiosity, and the
+    // useful action is still naming it.
+    mount({
+      ready: true,
+      people: [{ id: 9, name: null, name_locked: false, count: 4, cover_face_id: 3 }],
+      faces: [{ id: 3, item_id: 9, score: 0.9 }],
+    });
+    await render();
+
+    const tile = [...host.querySelectorAll("button")].find((b) =>
+      (b.getAttribute("aria-label") ?? "") === "Unnamed person",
+    );
+    await act(async () => {
+      tile!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const view = [...host.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === "View photographs",
+    );
+    expect(view).toBeUndefined();
   });
 });

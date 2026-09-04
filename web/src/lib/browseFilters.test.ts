@@ -214,3 +214,53 @@ describe("collections", () => {
     expect(matchCollections(facets.collections, "a ")).toHaveLength(2);
   });
 });
+
+/*
+ * The face pill.
+ *
+ * It is the only way out of a person filter — nothing in the bar can set or
+ * clear it, because a picture library has hundreds of people and the way in is
+ * the People page. So it has two rules the credit pills do not.
+ */
+describe("the face pill", () => {
+  it("is one pill per person, however many groups they are", () => {
+    // Naming does not merge groups, so somebody routinely is two or three.
+    // Three identical "Georgia" pills would suggest three filters where there
+    // is one decision.
+    const params = new URLSearchParams(
+      "face_cluster=6&face_cluster=51&face_cluster=88",
+    );
+    const pills = activePills(params, {
+      faceNames: new Map([["51", "Georgia"]]),
+    });
+    const face = pills.filter((p) => p.key === "face_cluster");
+    expect(face).toHaveLength(1);
+    expect(face[0].label).toBe("Georgia");
+  });
+
+  it("is shown even when the name has not arrived", () => {
+    /*
+     * Unlike a credit pill, which is held back until its name resolves.
+     * A credit pill held back is invisible beside nine others and the grid
+     * still says why it is narrow; this one held back leaves somebody looking
+     * at a fraction of their library with nothing on screen explaining it and
+     * nothing to press.
+     */
+    const pills = activePills(new URLSearchParams("face_cluster=6"), {});
+    const face = pills.filter((p) => p.key === "face_cluster");
+    expect(face).toHaveLength(1);
+    expect(face[0].label).toBe("Unnamed person");
+  });
+
+  it("never renders a raw id as a name", () => {
+    const pills = activePills(new URLSearchParams("face_cluster=6"), {});
+    expect(pills.some((p) => p.label === "6")).toBe(false);
+  });
+});
+
+// Clearing filters must reach it, even though no category owns it.
+describe("clearing filters", () => {
+  it("includes face_cluster", () => {
+    expect(FILTER_PARAM_KEYS).toContain("face_cluster");
+  });
+});

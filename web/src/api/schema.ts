@@ -5093,6 +5093,22 @@ export interface operations {
                 actor?: number[];
                 /** @description The person filter scoped to directing credits. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 director?: number[];
+                /**
+                 * @description Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page.
+                 *
+                 *     **This is not `person`.** A credit is what a provider said about a film; a face group is a cluster of embeddings this server computed from photographs. Nothing joins them and nothing should — a filter that quietly answered both would be answering neither.
+                 *
+                 *     **Repeatable, OR within the facet — and the reason is not consistency.** One person is often several groups: naming does not merge them, because a re-cluster seeds a named group as an anchor and never dissolves one, so accepting three near-miss suggestions leaves four groups sharing a name. Clients collapse those onto one row and should pass every id.
+                 *
+                 *     Measured on a real library that is not an edge case — one person's photographs split 277/73 across two groups, the smaller almost entirely a single photo shoot. Passing one id would show 277 of 350 and say nothing about the rest, which is worse than an error because it looks like an answer.
+                 *
+                 *     **AND — photographs with two *different* people in them — is a separate question and would be a separate parameter**, the way `actor` and `director` are separate rather than a mode on `person`. Re-meaning this one would break every client using it (ADR 0018).
+                 *
+                 *     **Marked folders are excluded, and the caller cannot opt in.** Being able to ask who is in a folder you cannot open is the disclosure ADR 0051 covers, by another route. Enforced in the query rather than by the handler, so it does not depend on a caller remembering.
+                 *
+                 *     A non-numeric value is `400`.
+                 */
+                face_cluster?: number[];
                 /** @description Restrict to members of a collection. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it (ADR 0017). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 collection?: number[];
                 /** @description `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined. */

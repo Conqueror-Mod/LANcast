@@ -919,6 +919,7 @@ rather than matching everybody.
 | `resolution` | Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. **Repeatable**. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page |
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
+| `face_cluster` | Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page. **Not `person`**, which is a film credit: a credit is what a provider said about a film, a face group is a cluster of embeddings this server computed from photographs, and nothing joins them. **Repeatable**, OR within the facet like every other — see below, because the reason is not consistency. A non-numeric value is `400`. **Marked folders are excluded and the caller cannot opt in**: being able to ask who is in a folder you cannot open is the disclosure [ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md) covers, by another route |
 | `status` | `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined |
 | `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | `min_rating` | Rated at least this highly, out of ten. **Unrated items are excluded, not sunk**: a film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s |
@@ -931,6 +932,10 @@ widen the grid, adding a decade narrows it. A blank value (`genre=`) is dropped
 rather than treated as a filter for the empty string. `watched` keys off the
 leaf's own play state, so it filters movies and episodes; a container (a show)
 carries no watched flag and is unaffected.
+
+**`face_cluster` is repeatable because one person is often several groups.** Naming does not merge them — a re-cluster seeds a named group as an anchor and never dissolves one, so accepting three near-miss suggestions leaves four groups sharing a name — and the client already collapses those onto one tile and renames them together. On a real library one person's photographs split 277/73 across two groups, the smaller almost entirely a single photo shoot, so a single-valued filter would have shown 277 of 350 and said nothing about the rest.
+
+So OR is what *photographs of this person* needs. **AND — photographs with two different people in them — is a separate question and would be a separate parameter**, the way `actor` and `director` are separate rather than a mode on `person`. Re-meaning this one later would break every client using it ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
 
 **By default the listing is top-level only** — rows with no parent. Children
 (seasons, episodes, and the `part`/`chapter` pieces of a multi-part work) have a
