@@ -22,12 +22,27 @@ import (
  * height-based rule silently files every scope film one tier too low.
  */
 
-// ResolutionBucket is the browse label for a video width.
+// ResolutionBucket is the browse label for a video width — one tier on the
+// browse filter.
+//
+// The json tags are load-bearing and were missing until 2026-09-03. This struct
+// is serialized straight to the client inside Facets, so without them the wire
+// carried Key, Label, MinWidth and MaxWidth — while docs/api.md documented
+// key/label/min_width/max_width and the client read the same. Every resolution
+// chip therefore rendered with an undefined label and an undefined value, and
+// pressing one sent `resolution=undefined`, which the contract says is ignored
+// rather than rejected. So the filter was a silent no-op.
+//
+// Neither suite could see it. The Go test asserted b.MinWidth, which is the
+// struct and not the JSON; the client test built its fixture in snake_case,
+// which is what the client believed rather than what it received. Each half was
+// correct about itself and nothing asked whether they agreed — which is why
+// TestResolutionBucketWireShape now tests the bytes.
 type ResolutionBucket struct {
-	Key      string // stable, used in the query string
-	Label    string // what the UI shows
-	MinWidth int    // inclusive
-	MaxWidth int    // inclusive; 0 means no upper bound
+	Key      string `json:"key"`       // stable, used in the query string
+	Label    string `json:"label"`     // what the UI shows
+	MinWidth int    `json:"min_width"` // inclusive
+	MaxWidth int    `json:"max_width"` // inclusive; 0 means no upper bound
 }
 
 /*

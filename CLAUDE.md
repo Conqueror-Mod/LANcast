@@ -55,9 +55,21 @@ library data.
 **Schema changes need a migration and an ADR** if they change the shape of the
 data model rather than adding a nullable column.
 
-**API changes are contract changes.** Update `docs/api.md` in the same commit.
-That doc drifting from the handlers is the most damaging documentation failure
-in this project, because it is what third-party clients build against.
+**API changes are contract changes.** Update `docs/api.md` **and**
+`docs/openapi.json` in the same commit. That contract drifting from the handlers
+is the most damaging documentation failure in this project, because it is what
+third-party clients build against.
+
+Both are enforced, and neither check is optional. `apidoc_test.go` matches the
+prose by path; `openapi_test.go` matches the spec by method, path-parameter name
+and `$ref`, and `web/src/api/schema.test.ts` regenerates the client types and
+fails if the committed ones are stale. A new endpoint that is in neither the
+spec nor `pendingSpec` fails the build, and `pendingSpec` is closed — it holds
+the parked live-TV routes and nothing may be added to it.
+
+Writing the spec is also how you find out the handlers are wrong. It has already
+turned up a filter that had never worked, a client type that merged two
+different concepts, and three response shapes the client did not know existed.
 
 **Locked fields are never overwritten.** From M2, editing a field locks it. No
 provider refresh, rescan, or merge may touch a locked field, and a `locked`
