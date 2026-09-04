@@ -292,10 +292,22 @@ export interface paths {
         get: operations["getItem"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a title
+         * @description Administrators only. A container removes its whole subtree — every episode or part. A collection is a grouping with no file of its own, so removing one drops only the grouping row, never the member films.
+         *
+         *     **Why `forget` is not `ignore`.** A renamed file leaves the old row behind, marked missing — on one real library 34 of 43 collisions were exactly that. `ignore` records the path so a rescan never re-adds the file, but the file is *gone*, so there is nothing to suppress; and an ignored path has no way back, since nothing in this API removes an entry. Clearing those rows with `ignore` would write permanent, invisible entries for paths that do not exist, and silently refuse those names if a backup ever restored them.
+         *
+         *     **The two `409`s are safety properties, not validation.** Scanning marks rows missing rather than deleting them so an unmounted drive cannot destroy library data, and a mode that forgets rows on demand must not become the hole in that.
+         */
+        delete: operations["deleteItem"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit fields, locking each one
+         * @description Administrators only. Audited as `item.edit`.
+         */
+        patch: operations["editItem"];
         trace?: never;
     };
     "/items/{id}/progress": {
@@ -2447,6 +2459,327 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/locks/{field}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The field to unlock. */
+                field: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Release one field lock
+         * @description Administrators only. The field resumes updating on the next refresh. Audited as `item.unlock`.
+         */
+        delete: operations["releaseFieldLock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Search the provider for re-match candidates
+         * @description Administrators only.
+         *
+         *     **Omit `q`** to search by what the file is *named* — the identity re-derived from the filename — not by the current stored title, which after a wrong match *is* the wrong film; scoring against it would make the search circle the wrong identity. A title the user locked by hand is honoured instead.
+         *
+         *     **The search spans both film and television**, regardless of the item's own kind. A TV miniseries scanned into a movie library can only be corrected if the search can reach the provider's TV data; a movie-scoped search returns only the wrong, same-named film.
+         */
+        get: operations["searchMatchCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply a chosen candidate
+         * @description Administrators only. Fetches that exact record and applies it immediately, honouring locked fields, then sets `match_state` to `locked` so the item is never re-scored or re-searched by any later scan.
+         *
+         *     **Applying is synchronous and deliberately does not go through the background pass**, which skips locked items and re-searches — that would re-pick the rejected candidate.
+         *
+         *     Audited as `item.match`.
+         */
+        post: operations["applyMatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-ask the provider about one item
+         * @description Administrators only. Honours field locks.
+         */
+        post: operations["refreshItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose which of a collection's films it wears
+         * @description **Administrators only** — there is one poster and everybody sees it, so this is shared state rather than a per-viewer preference.
+         *
+         *     A collection with no artwork of its own borrows its **earliest** film's poster, read-time and flagged `inherited` (ADR 0025). That is right for almost every franchise and wrong for some. This is the disagreement.
+         *
+         *     It is a **selection, not a copy**: artwork is content-addressed and shared, so the collection points at the film's existing image. Nothing is downloaded, and the two pictures cannot drift apart.
+         *
+         *     **It locks.** Setting a poster writes an `artwork` field lock (ADR 0008), because storing any new image deselects every poster row before selecting its own — so a provider refresh would otherwise replace the choice, and a choice a refresh can undo is not a choice. Clearing removes the lock, so the default resumes and improves with it: a franchise whose first film arrives later starts wearing it again.
+         */
+        put: operations["setCollectionPoster"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/sensitive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark an item sensitive, or clear the mark
+         * @description Administrators only (ADR 0051).
+         *
+         *     **Only a folder (`kind: "gallery"`) may be marked.** Marking anything else is `400 folders_only`: the only surfaces that may lift a cover are the picture library's grid and a folder's own page, so a loose marked photo would be covered everywhere and viewable nowhere. *Unmarking* is allowed on any item, so a mark made before this rule can still be cleared.
+         *
+         *     Marking a folder covers everything beneath it. That is resolved server-side and reported on every item, so a client never walks the hierarchy to find out.
+         */
+        put: operations["setSensitive"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A show's episodes in playing order
+         * @description Season, then episode, then row id **so the order is total**. Progress is attached, so a list can show what has been watched without a request per episode.
+         *
+         *     Ordered identically to the continue endpoint, so "next" and "the queue" cannot disagree about what follows what.
+         *
+         *     **`Cache-Control: no-store`**: this is what Randomize queues, and a cached copy would shuffle episodes whose watched flags are out of date.
+         */
+        get: operations["getShowEpisodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where a show should resume
+         * @description **Never cached** — the response carries `Cache-Control: no-store`, and that is the feature rather than a precaution. Ask this on the press: resuming from the Continue shelf's `next_episode`, which is cacheable and may be seconds old, is how a viewer lands on an episode they have already finished.
+         *
+         *     Progress is per user, so one person finishing a season does not move anybody else.
+         */
+        get: operations["getShowContinue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/trailer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /** The trailer for an identified item */
+        get: operations["getTrailer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The picture itself, at full resolution
+         * @description Photos only; anything else is `404`.
+         *
+         *     Serves the **original file** when a browser can render it — jpeg, png, webp, gif, bmp — and the cached rendition when it cannot.
+         *
+         *     Containment is re-verified against the owning library root after path resolution, the way every handler that turns a row into a path must.
+         */
+        get: operations["getPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/artwork/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One cached image
+         * @description Derived sizes are generated on first request and cached.
+         *
+         *     Served with `ETag` and `Cache-Control: public, max-age=31536000, immutable`. **Content addressing makes indefinite caching safe** — the bytes behind a hash cannot change.
+         *
+         *     That is also why a covered thumbnail is obscured by a client not requesting it rather than by the server varying it: artwork is shared, so a per-viewer response would poison the cache for everyone.
+         */
+        get: operations["getArtwork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Background album-art progress */
+        get: operations["getCoverArtProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverart/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue albums to be looked at again
+         * @description Administrators only. The counterpart to `POST /api/probe/refresh`, and needed for the same reason: the pending queue is "not yet looked at", and an album is stamped whether or not anything was found — otherwise an artless album would be re-examined on every pass forever and the queue would never drain.
+         */
+        post: operations["refreshCoverArt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4043,6 +4376,104 @@ export interface components {
         MarkerRefreshResult: {
             queued: number;
         };
+        /** @description **Every edited field is locked**, and a locked field is never overwritten by a provider refresh (ADR 0008). Responses carry `locked_fields` so a client can show lock indicators — a lock the user cannot see or release is indistinguishable from a bug. */
+        EditItemRequest: {
+            title?: string;
+            year?: number;
+            overview?: string;
+            content_rating?: string;
+            series?: string;
+            season?: number;
+            episode?: number;
+        };
+        /** @description The sub-scores that combine, by their weights (title 0.60, year 0.30, popularity 0.10), into the total. This is what lets a UI explain a score — "title matched, but the year is 27 off" — rather than present a bare number. */
+        ScoreBreakdown: {
+            title: number;
+            year: number;
+            popularity: number;
+            total: number;
+            /** @description |wanted - got| in years, 0 when either is unknown. */
+            year_gap: number;
+        };
+        /**
+         * @description **The field names here are PascalCase, and that is the published contract rather than an accident to be worked around.** The server serialises its provider candidate type directly and `docs/api.md` has always documented these names, so server, document and client agree. Renaming them would be a breaking change under ADR 0018 and would need `/api/v2`.
+         *
+         *     `Breakdown`'s own keys are lower_snake_case, because that type does carry json tags. The inconsistency is real and is recorded rather than tidied.
+         */
+        MatchCandidate: {
+            Provider: string;
+            ExternalID: string;
+            /** @description `movie` or `show`. */
+            Kind: string;
+            Title: string;
+            Year: number;
+            Overview: string;
+            Popularity: number;
+            PosterURL: string;
+            Score: number;
+            Breakdown: components["schemas"]["ScoreBreakdown"];
+        };
+        ApplyMatchRequest: {
+            provider: string;
+            external_id: string;
+            /** @description The chosen candidate's kind, which **may differ from the item's own** — this is how a movie-scanned miniseries is corrected to its TV entry, fetched from the provider's TV endpoint. Omit it to fetch as the item's existing kind. */
+            kind?: string;
+        };
+        SetPosterRequest: {
+            /**
+             * Format: int64
+             * @description **0 clears the override** and returns the collection to the default.
+             */
+            from_item_id: number;
+        };
+        /** @description **A body without `sensitive` is `400`**: a missing field is not read as `false`. */
+        SetSensitiveRequest: {
+            sensitive: boolean;
+        };
+        SensitiveResult: {
+            sensitive: boolean;
+        };
+        Trailer: {
+            /** @example YouTube */
+            site: string;
+            key: string;
+            name?: string;
+        };
+        /**
+         * @description `trailer` is **null** when the item has no external id, the provider has no trailer for it, or the lookup failed — all three are the same answer to a client, which is "do not offer a trailer button".
+         *
+         *     **A failed lookup is `200` with a null, never an error**: a provider being unreachable must not turn a detail page into an error page over something optional.
+         */
+        TrailerEnvelope: {
+            trailer: components["schemas"]["Trailer"] | null;
+        };
+        /**
+         * @description Where a show should resume for the calling user.
+         *
+         *     The rule, in order: an episode **in progress** wins, most recently touched first — that is what was being watched, whatever the numbering says. Otherwise the first unwatched episode **after the furthest one watched** — deliberately *not* "the earliest unwatched", because skipping episode 5 and watching through 13 would then send you back to 5 on every press. Nothing watched: the first episode. Everything watched: `exhausted`, with no episode, so a client offers to start again rather than silently replaying the finale.
+         */
+        ContinueEpisode: {
+            /** @description Absent when exhausted. */
+            episode?: components["schemas"]["Item"];
+            /** @description True when this episode was already started, so a client can say "resume" rather than "play" and the player can seek. */
+            resume: boolean;
+            exhausted: boolean;
+        };
+        /** @description Album covers come off the disk rather than from a provider (ADR 0024): the picture embedded in a track first, then a `cover.jpg` or `folder.jpg` beside it. **Embedded wins because it travels with the record** — it was attached by whoever tagged the files and cannot be about a different album, where a loose image in a directory can be anything. */
+        CoverArtProgress: {
+            available: boolean;
+            running: boolean;
+            found: number;
+            /** @description **An album with no cover has not failed**, and a status that merged this with `failed` would make a library of untagged rips look broken. */
+            none: number;
+            /** @description Something went wrong — an unreadable file, an image the cache could not store. */
+            failed: number;
+            remaining: number;
+            total: number;
+        };
+        QueuedResult: {
+            queued: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -4719,6 +5150,103 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteItem: {
+        parameters: {
+            query: {
+                /**
+                 * @description **Required.**
+                 *
+                 *     `ignore` — the files stay on disk; their paths are added to a per-library ignore list so a rescan never re-adds them. The non-destructive "stop tracking this".
+                 *
+                 *     `delete` — the files are removed from disk. Each is re-verified as contained within its library root first, so a bad row can never delete outside the library; if any path fails that check **nothing is deleted**. A file already gone is not an error. Refused `403` when `allow_media_deletion` is off.
+                 *
+                 *     `forget` — the row goes and nothing else happens: no file is touched and **no path is ignored**.
+                 */
+                mode: string;
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `mode` is missing or invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description `not_missing` — a present file's row cannot be forgotten, because a rescan would re-add it anyway. Or `location_unavailable` — the title's library location could not be read at that moment.
+             *
+             *     The second is the one that matters. `missing` records that a walk did not find the file, which is equally true of every file on a drive that was asleep at the time. So the location is checked **at the moment of the request**: one that reads fine and does not hold the file is evidence the file has gone, where `missing` alone is only evidence that a walk did not see it.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description A path failed its containment check; nothing was deleted. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    editItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditItemRequest"];
+            };
+        };
+        responses: {
+            /** @description The item, with `locked_fields` updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -8255,6 +8783,401 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    releaseFieldLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The field to unlock. */
+                field: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    searchMatchCandidates: {
+        parameters: {
+            query?: {
+                /** @description Overrides the title and drops the year, for a fresh user-driven search. A provider id or URL targets exactly. */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scored candidates. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchCandidate"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    applyMatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated item, already carrying the new metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    refreshItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item as it now stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setCollectionPoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPosterRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated collection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description The item is not a collection, `from_item_id` is not one of its members, or that member has no poster of its own. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setSensitive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSensitiveRequest"];
+            };
+        };
+        responses: {
+            /** @description The value that was set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensitiveResult"];
+                };
+            };
+            /** @description `folders_only`, or a body with no `sensitive` field. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `not_enabled` — the `sensitive_marking` setting is off. **The setting gates the gesture, not the storage**, so marks made earlier survive it being turned off and are honoured again when it is turned back on. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getShowEpisodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every episode, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getShowContinue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The episode to play, or `exhausted`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinueEpisode"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTrailer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trailer, or null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrailerEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The file is missing from disk. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getArtwork: {
+        parameters: {
+            query?: {
+                /** @description `thumb`, `poster`, `poster2x`, `fanart` or `original`. */
+                size?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image. */
+            200: {
+                headers: {
+                    /** @description The hash. */
+                    ETag?: string;
+                    /** @description `public, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            /** @description Unchanged, which it always is. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCoverArtProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress, with found and none reported separately. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverArtProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    refreshCoverArt: {
+        parameters: {
+            query?: {
+                /** @description Narrow to one library. */
+                library?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuedResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

@@ -44,11 +44,7 @@ export type Credit = components["schemas"]["Credit"];
  */
 export type ExternalRating = components["schemas"]["ItemRating"];
 
-export interface Trailer {
-  site: string;
-  key: string;
-  name?: string;
-}
+export type Trailer = components["schemas"]["Trailer"];
 
 export type SubtitleCandidate = components["schemas"]["SubtitleCandidate"];
 
@@ -64,28 +60,11 @@ export type Item = components["schemas"]["Item"];
 
 // The anatomy of a candidate's score: sub-scores (0..1) that combine by their
 // weights into the total. Nested keys are lowercase (the Go struct tags them).
-export interface ScoreBreakdown {
-  title: number;
-  year: number;
-  popularity: number;
-  total: number;
-  year_gap: number;
-}
+export type ScoreBreakdown = components["schemas"]["ScoreBreakdown"];
 
 // A possible metadata match from a provider. Fields are PascalCase because the
 // server serializes meta.Candidate without json tags.
-export interface MatchCandidate {
-  Provider: string;
-  ExternalID: string;
-  Kind: string;
-  Title: string;
-  Year: number;
-  Overview: string;
-  Popularity: number;
-  PosterURL: string;
-  Score: number;
-  Breakdown: ScoreBreakdown;
-}
+export type MatchCandidate = components["schemas"]["MatchCandidate"];
 
 export type ItemsPage = components["schemas"]["ItemsPage"];
 

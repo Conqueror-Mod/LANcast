@@ -48,18 +48,20 @@ const specBase = "/api"
 
 // pendingSpec is every route not yet in docs/openapi.json.
 //
-// One shared reason rather than one each: they are all the same reason, which
-// is that the spec is being written a section at a time and this section has
-// not been reached. An entry here is a promise, not an exemption — delete it
-// when the endpoint is specified.
+// What is left is **live TV, and only live TV**. That is not an oversight and
+// not a section nobody got to: channels and the guide were parked on
+// 2026-08-29 on investigation cost, so specifying them would be writing a
+// contract for a surface nobody is changing — and the spec would then be the
+// only part of the project still moving.
+//
+// They stay listed rather than allowlisted because the distinction matters: an
+// allowlist says "this will never be specified", and this says "not while it is
+// parked". If live TV is picked up again, these are specified with it.
 //
 // Nothing new may be added to this list. A new endpoint gets specified in the
 // commit that adds it, the way docs/api.md already has to be.
 var pendingSpec = []string{
 	"DELETE /api/channel-sources/{id}",
-	"DELETE /api/items/{id}",
-	"DELETE /api/items/{id}/locks/{field}",
-	"GET /api/artwork/{hash}",
 	"GET /api/channel-sources",
 	"GET /api/channels",
 	"GET /api/channels/{id}/guide",
@@ -67,22 +69,10 @@ var pendingSpec = []string{
 	"GET /api/channels/{id}/hls/{session}/{name}",
 	"GET /api/channels/{id}/live",
 	"GET /api/channels/{id}/stream",
-	"GET /api/coverart",
 	"GET /api/guide",
-	"GET /api/items/{id}/candidates",
-	"GET /api/items/{id}/continue",
-	"GET /api/items/{id}/episodes",
-	"GET /api/items/{id}/photo",
-	"GET /api/items/{id}/trailer",
 	"PATCH /api/channel-sources/{id}",
-	"PATCH /api/items/{id}",
 	"POST /api/channel-sources",
 	"POST /api/channel-sources/{id}/refresh",
-	"POST /api/coverart/refresh",
-	"POST /api/items/{id}/match",
-	"POST /api/items/{id}/refresh",
-	"PUT /api/items/{id}/poster",
-	"PUT /api/items/{id}/sensitive",
 }
 
 // openapiDoc mirrors only the parts of the document these tests read.
