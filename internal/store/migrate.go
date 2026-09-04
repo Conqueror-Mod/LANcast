@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 40
+const CurrentSchemaVersion = 41
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -79,6 +79,7 @@ var migrations = []migration{
 	{version: 38, sql: schemaRevision38},
 	{version: 39, sql: schemaRevision39},
 	{version: 40, sql: schemaRevision40},
+	{version: 41, sql: schemaRevision41},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1411,4 +1412,43 @@ CREATE TABLE IF NOT EXISTS face_rejection (
 ) WITHOUT ROWID;
 
 CREATE INDEX IF NOT EXISTS idx_face_rejection_cluster ON face_rejection(cluster_id);
+`
+
+/*
+ * Revision 41 — what a photograph looks like (ADR 0060).
+ *
+ * A CLIP embedding per photograph, so a picture library can be searched by
+ * what is in the picture rather than by a filename that reads DSC_0042.
+ *
+ * Its own table rather than a column on media_item, for the reason `face` is
+ * its own table: it is 2KB of blob per row that almost no query wants, and
+ * every `SELECT itemCols` in this package would otherwise carry it. A join is
+ * cheaper than making the common read heavier.
+ *
+ * ON DELETE CASCADE from media_item, and that is the ADR 0051 argument rather
+ * than tidiness — an embedding is derived from the photograph and is not less
+ * private than it, so it goes when the photograph goes and does not linger in
+ * the backups taken afterwards.
+ *
+ * `model` is stored beside the vector because vectors from two models are not
+ * comparable. Swapping the model is meant to be a file swap (ADR 0052's reason
+ * for choosing ONNX), and the day that happens every stored vector is stale —
+ * this is what lets the pass find them rather than silently ranking a library
+ * against a mixture of two coordinate systems.
+ *
+ * `dims` for the same reason, one level down: it makes a truncated or
+ * mismatched blob a detectable row rather than an arithmetic error.
+ */
+const schemaRevision41 = `
+CREATE TABLE IF NOT EXISTS photo_embedding (
+    item_id     INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    model       TEXT    NOT NULL,
+    dims        INTEGER NOT NULL,
+    embedding   BLOB    NOT NULL,
+    embedded_at INTEGER NOT NULL
+) WITHOUT ROWID;
+
+-- The pass asks "which photographs has this model not seen", and the search
+-- asks for every row of one model. Both are answered by the model.
+CREATE INDEX IF NOT EXISTS idx_photo_embedding_model ON photo_embedding(model);
 `
