@@ -21,71 +21,28 @@ export type LibraryRoot = components["schemas"]["LibraryRoot"];
 
 export type Library = components["schemas"]["Library"];
 
-export interface Artwork {
-  poster?: string;
-  fanart?: string;
-  /*
-   * An episode still, 16:9.
-   *
-   * Declared before it is served on purpose. TMDB already returns `still_path`
-   * for every episode and the provider already maps it to a thumb, which is
-   * then discarded — persisting it is step 3 of season-page-plan.md, and the
-   * episode row is built to fill in without changing shape when it lands.
-   * Until then this is absent and every row draws its number instead.
-   */
-  thumb?: string;
-  /*
-   * True when this image is borrowed rather than owned.
-   *
-   * A container with no image of its own wears a child's — an artist an album
-   * sleeve, a gallery a photo, a collection its earliest film (ADR 0025). The
-   * server has always sent this and the client never declared it, so nothing
-   * could tell "showing Iron Man because it is first" from "showing Iron Man
-   * because somebody chose it". That distinction is what lets a picker offer to
-   * reset only when there is something to reset.
-   */
-  inherited?: boolean;
-}
+export type Artwork = components["schemas"]["Artwork"];
 
-export interface Progress {
-  position_ms: number;
-  watched: boolean;
-  /*
-   * How many times this has been finished — not whether it has.
-   *
-   * It only ever grows. Marking something unwatched puts it back on the list
-   * rather than claiming it was never seen, so a title can read `watched:
-   * false` while carrying a count of four.
-   *
-   * Optional because the client updates independently of the server: the
-   * installer replaces this bundle while an in-app update replaces only
-   * `LANcast-Server.exe`, so a client newer than its server is an ordinary
-   * state rather than a broken one. Absent means "this server does not count
-   * yet", which reads the same as zero and must not be shown as one.
-   */
-  watch_count?: number;
-}
+export type Progress = components["schemas"]["Progress"];
 
-export interface Credit {
-  name: string;
-  role: string;
-  character?: string;
-  /** Content-addressed hash of this person's picture, when there is one. */
-  thumb?: string;
-  /** The id the browse filter is keyed on, so a face can be a filter control. */
-  person_id?: number;
-}
+export type Credit = components["schemas"]["Credit"];
 
-// One external score (ADR 0019). `source` is an open set — imdb, rotten_tomatoes,
-// metacritic, and more later — so the client renders whatever arrives rather
-// than switching on a fixed list. `score` is normalized 0–10; `display` is the
-// source-native string ("88%", "81", "8.0").
-export interface Rating {
-  source: string;
-  score: number;
-  display: string;
-  votes?: number;
-}
+/*
+ * One external score (ADR 0019). Documented on the generated type.
+ *
+ * Named ExternalRating rather than Rating because it was `Rating`, and so is
+ * the caller's *own* rating further down this file. Two interfaces of the same
+ * name in one module do not collide — TypeScript merges them — so the two
+ * became a single type requiring `source`, `display`, `item_id` and
+ * `updated_at` all at once, and neither endpoint ever sends that. Nothing
+ * failed, because a response is cast to the type rather than checked against
+ * it.
+ *
+ * docs/api.md is explicit that these are distinct: "Three numbers about one
+ * film is one too many to leave unlabelled, so they are never merged into a
+ * single field." Two of them had been merged for as long as both existed.
+ */
+export type ExternalRating = components["schemas"]["ItemRating"];
 
 export interface Trailer {
   site: string;
@@ -130,91 +87,9 @@ export interface SubtitleTrack {
 
 // One track inside a media file, as the probe found it. `index` is absolute
 // within the file, which is what `?audio=` takes (docs/api.md).
-export interface MediaStream {
-  index: number;
-  kind: string; // video | audio | subtitle
-  codec: string;
-  profile?: string;
-  language?: string;
-  title?: string;
-  default: boolean;
-  forced: boolean;
-  channels?: number;
-}
+export type MediaStream = components["schemas"]["MediaStream"];
 
-export interface Item {
-  id: number;
-  library_id: number;
-  kind: string;
-  title: string;
-  year: number | null;
-  // On a track these three are read in the music sense (ADR 0024): `series` is
-  // the album, `season` the disc, `episode` the track number.
-  series: string | null;
-  season: number | null;
-  episode: number | null;
-  // The track's own performer, present only on music. Distinct from the album
-  // artist that groups the record — on a compilation they differ, which is the
-  // whole reason both exist.
-  artist?: string | null;
-  duration_ms: number | null;
-  // The file's container and size. Both have always been in the item JSON and
-  // no client had asked for either until the download button needed to propose
-  // a filename and the downloads list needed to say how big the file was.
-  container?: string | null;
-  size_bytes?: number | null;
-  added_at: number;
-  missing: boolean;
-  parent_id: number | null;
-  child_count?: number;
-  overview?: string | null;
-  rating?: number | null;
-  content_rating?: string | null;
-  /*
-   * Sensitive is the server's resolved answer: this item is marked, or a
-   * folder above it is (ADR 0051). Every surface that draws a thumbnail reads
-   * this one field, which is why it is on the item rather than something the
-   * gallery screen works out — a picture library's thumbnails also appear on
-   * the home page, in search and in the hero.
-   *
-   * sensitive_own is whether the mark is on this item itself, which is what
-   * decides where Unmark is worth offering.
-   */
-  sensitive?: boolean;
-  sensitive_own?: boolean;
-  released_at?: number | null;
-  genres?: string[];
-  credits?: Credit[];
-  provider?: string | null;
-  external_id?: string | null;
-  match_state?: MatchState;
-  match_score?: number | null;
-  metadata_updated_at?: number | null;
-  file_name?: string;
-  locked_fields?: string[] | null;
-  ratings?: Rating[];
-  artwork?: Artwork;
-  // Present on a detail response: the full track list, including alternate
-  // audio. Absent from list responses, which is why the player reads it from
-  // the item it fetched rather than from the grid row that opened it.
-  streams?: MediaStream[];
-  // Pictures (ADR 0028). width/height describe the photo as it will be seen —
-  // a quarter-turned phone photo reports its rotated dimensions, so a layout
-  // can reserve the right box before the image loads. taken_at is EXIF capture
-  // time, absent when the file carries none.
-  width?: number | null;
-  height?: number | null;
-  taken_at?: number | null;
-  progress?: Progress | null;
-  /*
-   * The episode a show would play next. Set only on the Continue Watching
-   * shelf, where the row is the show rather than the episode.
-   *
-   * Its own progress is the episode's — the show has no position of its own,
-   * so a tile draws its resume bar from here.
-   */
-  next_episode?: Item | null;
-}
+export type Item = components["schemas"]["Item"];
 
 // The anatomy of a candidate's score: sub-scores (0..1) that combine by their
 // weights into the total. Nested keys are lowercase (the Go struct tags them).
@@ -241,10 +116,7 @@ export interface MatchCandidate {
   Breakdown: ScoreBreakdown;
 }
 
-export interface ItemsPage {
-  items: Item[];
-  total: number;
-}
+export type ItemsPage = components["schemas"]["ItemsPage"];
 
 // The filter values a library's browse view offers. Only values actually
 // present are returned, so a chosen filter never empties the grid. has_watched

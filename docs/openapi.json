@@ -16,18 +16,40 @@
       "description": "Relative to the server's own origin. An unsecured server binds 127.0.0.1 only; TLS turns on when the socket reaches beyond this machine (ADR 0014)."
     }
   ],
-  "security": [{ "sessionCookie": [] }],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
   "tags": [
-    { "name": "health", "description": "Liveness and contract revision." },
-    { "name": "auth", "description": "Sessions, first-run setup, and passwords." },
-    { "name": "identity", "description": "Who this server is, cryptographically (ADR 0044)." },
-    { "name": "libraries", "description": "Libraries and the locations their files live in (ADR 0034)." }
+    {
+      "name": "health",
+      "description": "Liveness and contract revision."
+    },
+    {
+      "name": "auth",
+      "description": "Sessions, first-run setup, and passwords."
+    },
+    {
+      "name": "identity",
+      "description": "Who this server is, cryptographically (ADR 0044)."
+    },
+    {
+      "name": "libraries",
+      "description": "Libraries and the locations their files live in (ADR 0034)."
+    },
+    {
+      "name": "items",
+      "description": "Browsing media, item detail, and play position."
+    }
   ],
   "paths": {
     "/health": {
       "get": {
         "operationId": "getHealth",
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "Liveness, application version, and contract revision",
         "description": "One of the five endpoints that does not require a session.\n\n`version` is the application release, stamped from the release tag at build time (ADR 0016); a build from source reports `dev`. `api_version` is the HTTP contract revision and changes only when a new `/api/vN` prefix ships.",
         "security": [],
@@ -36,7 +58,9 @@
             "description": "The server is up.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Health" }
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
               }
             }
           }
@@ -46,7 +70,9 @@
     "/auth/status": {
       "get": {
         "operationId": "getAuthStatus",
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "What the client should render: setup, login, or the library",
         "description": "Does not require a session, and answers differently depending on whether one is present.\n\nThis is the one response every screen already fetches, which is why several unrelated facts are reported here rather than from an endpoint of their own.",
         "security": [],
@@ -55,7 +81,9 @@
             "description": "Always. An unauthenticated caller gets the same shape without `user`.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/AuthStatus" }
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatus"
+                }
               }
             }
           }
@@ -65,7 +93,9 @@
     "/auth/setup": {
       "post": {
         "operationId": "postAuthSetup",
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Create the first administrator",
         "description": "Only while the server is unconfigured; once an account exists this answers `409 conflict`. Issues a session cookie on success.",
         "security": [],
@@ -73,7 +103,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/SetupRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
             }
           }
         },
@@ -82,16 +114,22 @@
             "description": "The administrator was created and this caller is now signed in as them.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SetupResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/SetupResponse"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "409": {
             "description": "An account already exists, so there is no first administrator to create.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           }
@@ -101,7 +139,9 @@
     "/auth/login": {
       "post": {
         "operationId": "postAuthLogin",
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Exchange a username and password for a session",
         "description": "Throttled per client IP. **A wrong username and a wrong password are reported identically** as `401 unauthorized`, deliberately: distinguishing them tells an attacker which half they got right.",
         "security": [],
@@ -109,7 +149,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
             }
           }
         },
@@ -118,16 +160,22 @@
             "description": "Signed in. The session cookie is set on this response.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/LoginResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "description": "Incorrect username or password — the two are not distinguished.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           },
@@ -135,7 +183,9 @@
             "description": "No accounts exist yet; the caller wants `/auth/setup`.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           },
@@ -143,7 +193,9 @@
             "description": "Too many attempts from this client; wait a few minutes.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           }
@@ -153,7 +205,9 @@
     "/auth/logout": {
       "post": {
         "operationId": "postAuthLogout",
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "End this session only",
         "description": "Ends the calling session and no other. Contrast `/auth/password`, which revokes every session this account holds.",
         "responses": {
@@ -161,7 +215,9 @@
             "description": "The session is gone and the cookie has been cleared.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
               }
             }
           }
@@ -171,14 +227,18 @@
     "/auth/password": {
       "post": {
         "operationId": "postAuthPassword",
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Change your own password",
         "description": "Changes the calling account's password and **revokes every session that account holds, including this one**. That is the point of server-side sessions, not a bug to smooth over — a client must expect the next request to be answered `401` and send the user back to the login screen.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
             }
           }
         },
@@ -187,20 +247,30 @@
             "description": "Changed. Every session for this account, including the caller's, is now invalid.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
         }
       }
     },
     "/identity": {
       "get": {
         "operationId": "getIdentity",
-        "tags": ["identity"],
+        "tags": [
+          "identity"
+        ],
         "summary": "This server's own cryptographic identity",
         "description": "Who this server is when it talks to another one (ADR 0044). `fingerprint_display` is the same value grouped for a human to read aloud or compare by eye.",
         "responses": {
@@ -208,41 +278,55 @@
             "description": "This server's identity.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Identity" }
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
         }
       }
     },
     "/libraries": {
       "get": {
         "operationId": "listLibraries",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Every library on this server",
         "responses": {
           "200": {
             "description": "All libraries, with their counts and last-scan verdict.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/LibraryList" }
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryList"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
         }
       },
       "post": {
         "operationId": "createLibrary",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Create a library",
         "description": "Administrators only.\n\n`roots` is the multi-location form (ADR 0034). `path` remains accepted and means exactly the same as a single-element `roots` array, so every client that predates multi-root libraries keeps working unchanged. Send one or the other.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateLibraryRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/CreateLibraryRequest"
+              }
             }
           }
         },
@@ -251,18 +335,28 @@
             "description": "Created.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Library" }
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "409": {
             "description": "A library already covers that path.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           }
@@ -270,17 +364,25 @@
       }
     },
     "/libraries/{id}": {
-      "parameters": [{ "$ref": "#/components/parameters/LibraryId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
       "patch": {
         "operationId": "patchLibrary",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Rename a library, move it, or change its kind",
         "description": "Administrators only. Every field is optional; an omitted field is left alone, which is why they are nullable pointers on the server rather than plain strings.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/PatchLibraryRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/PatchLibraryRequest"
+              }
             }
           }
         },
@@ -289,19 +391,31 @@
             "description": "The library as it now stands.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Library" }
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       },
       "delete": {
         "operationId": "deleteLibrary",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Delete a library and its rows",
         "description": "Administrators only. Removes the library's **records**. It does not touch the media on disk — the server never owns the files.",
         "responses": {
@@ -309,45 +423,69 @@
             "description": "Deleted.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       }
     },
     "/libraries/{id}/roots": {
-      "parameters": [{ "$ref": "#/components/parameters/LibraryId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
       "get": {
         "operationId": "listLibraryRoots",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "The locations this library's files live in",
         "responses": {
           "200": {
             "description": "Every root, each carrying the number of rows that would go with it if it were removed.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RootList" }
+                "schema": {
+                  "$ref": "#/components/schemas/RootList"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       },
       "post": {
         "operationId": "addLibraryRoot",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Add a location to this library",
         "description": "Administrators only.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RootRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/RootRequest"
+              }
             }
           }
         },
@@ -356,19 +494,31 @@
             "description": "Added.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/LibraryRoot" }
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryRoot"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
           "409": {
             "description": "That path is already covered by a library.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
               }
             }
           }
@@ -377,19 +527,27 @@
     },
     "/libraries/{id}/roots/{rootID}": {
       "parameters": [
-        { "$ref": "#/components/parameters/LibraryId" },
-        { "$ref": "#/components/parameters/RootId" }
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        },
+        {
+          "$ref": "#/components/parameters/RootId"
+        }
       ],
       "patch": {
         "operationId": "patchLibraryRoot",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Point a location somewhere else",
         "description": "Administrators only. Used when a drive letter changes or a share moves.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RootRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/RootRequest"
+              }
             }
           }
         },
@@ -398,19 +556,31 @@
             "description": "The root as it now stands.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/LibraryRoot" }
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryRoot"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
         }
       },
       "delete": {
         "operationId": "deleteLibraryRoot",
-        "tags": ["libraries"],
+        "tags": [
+          "libraries"
+        ],
         "summary": "Remove a location from this library",
         "description": "Administrators only. Removes the rows that came from that location; the files are untouched.",
         "responses": {
@@ -418,13 +588,402 @@
             "description": "Removed.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Acknowledged" }
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "tags": [
+          "items"
+        ],
+        "summary": "The browse grid: filtered, sorted, paged media",
+        "description": "**By default the listing is top-level only** — rows with no parent. Children (seasons, episodes, and the `part`/`chapter` pieces of a multi-part work) have a parent and are reached through `parent_id`, never returned loose in the grid, so a container's pieces do not appear as if they were features (ADR 0010, ADR 0017). Passing an explicit `kind` lifts that default.\n\n**A collection is listed only when it groups at least two present members.** A provider supplies a franchise even when the library holds a single film from it, and a collection of one is just a duplicate tile of that film with a \"Play all\" button. That rule applies to every listing, not only the top-level grid — it was once a property of the grid alone, which made `kind=collection` the one listing that showed the singletons everything else refused. Fetching a collection's own members with `collection_id` is unaffected: the rule hides a collection from listings *of* collections, never what is inside one.",
+        "parameters": [
+          {
+            "name": "library_id",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to one library.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initial",
+            "in": "query",
+            "required": false,
+            "description": "The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on the item's sort title, case-insensitively.\n\nA **filter, not a scroll offset** — the grid pages in as you scroll, so \"jump to S\" cannot mean \"scroll to a row that has not loaded\". `GET /api/libraries/{id}/facets` returns the letters actually present, so a client never offers one that finds nothing.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to one kind. Passing this also **lifts the top-level-only default**, for a deliberate cross-cutting query such as every episode.\n\n**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "exclude_kind",
+            "in": "query",
+            "required": false,
+            "description": "Drop kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page. A single value still means what it always did.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent_id",
+            "in": "query",
+            "required": false,
+            "description": "Return the children of one item — a show's episodes, a work's parts.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "collection_id",
+            "in": "query",
+            "required": false,
+            "description": "Return a collection's members. Membership is many-to-many and is **not** `parent_id`, which is always empty for a collection (ADR 0017).",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "playlist_id",
+            "in": "query",
+            "required": false,
+            "description": "Return a playlist's entries **in playing order** (ADR 0030). The only listing that may repeat an item id, which is why a playlist is keyed on position rather than on id.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to items carrying this exact genre name. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "decade",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to a decade — `1990` means 1990–1999. A non-numeric value is `400`. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "content_rating",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to this exact release year. A non-numeric value is `400`. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "resolution",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to items this person is credited on, **in any role**. Ids come from the library's cast list, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "description": "The person filter scoped to acting credits. \"Who is in this\" and \"who made this\" are different questions, and `person` answers both without saying which was meant. Somebody who does both matches under both, once in each. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "director",
+            "in": "query",
+            "required": false,
+            "description": "The person filter scoped to directing credits. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to members of a collection. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it (ADR 0017). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "`in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_rating",
+            "in": "query",
+            "required": false,
+            "description": "Rated at least this highly, out of ten.\n\n**Unrated items are excluded, not sunk.** A film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "watched",
+            "in": "query",
+            "required": false,
+            "description": "`watched=false` restricts to items the calling user has not finished; any other value is ignored. Keys off the leaf's own play state, so it filters movies and episodes — a container carries no watched flag and is unaffected.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), or `track` (disc then track number).\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
+            "schema": {
+              "type": "string",
+              "default": "title"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Defaults to 100, maximum 500.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Page offset.",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of items, plus the total before paging.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/items/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getItem",
+        "tags": [
+          "items"
+        ],
+        "summary": "One item, with the detail-only fields",
+        "description": "The list shape plus `genres`, `credits`, `artwork`, `locked_fields`, `ratings`, `streams` and `file_name`.\n\nAn item flagged `missing` still returns `200` with `\"missing\": true`, so the UI can explain the situation rather than pretend the item was never there.",
+        "responses": {
+          "200": {
+            "description": "The item, including a missing one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/items/{id}/progress": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "putItemProgress",
+        "tags": [
+          "items"
+        ],
+        "summary": "Save a play position",
+        "description": "Clients should throttle to roughly one call per five seconds during playback.\n\nProgress is per account (ADR 0006).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgressUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/continue": {
+      "get": {
+        "operationId": "getContinue",
+        "tags": [
+          "items"
+        ],
+        "summary": "In-progress items, most recently played first",
+        "description": "The home screen's first shelf.\n\n**A show appears as the show, not as an episode.** Episodes collapse to the show they belong to, and `next_episode` carries the one the show would play — the same answer `GET /api/items/{id}/continue` gives, computed by the same query, so the shelf and a show's Continue button cannot disagree.\n\nA show qualifies on **any** episode activity, watched or in progress. Finishing an episode is the ordinary way to stop watching a series, and a shelf that dropped the show at that moment answered \"which episode did I stop inside\" rather than \"what am I watching\". A show with every episode watched has nothing to continue and is absent.\n\nFor everything else — films, tracks — \"in progress\" is a saved position past zero with `watched` unset, so an item played to the end drops off rather than inviting a replay.\n\nProgress and artwork are included so a tile draws its bar and poster without a second call.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 20, maximum 100.",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The shelf.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
         }
       }
     }
@@ -444,14 +1003,30 @@
         "in": "path",
         "required": true,
         "description": "The library's id.",
-        "schema": { "type": "integer", "format": "int64" }
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
       },
       "RootId": {
         "name": "rootID",
         "in": "path",
         "required": true,
         "description": "The root's id.",
-        "schema": { "type": "integer", "format": "int64" }
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "ItemId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The item's id.",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
       }
     },
     "responses": {
@@ -459,7 +1034,9 @@
         "description": "Malformed body or invalid parameter.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
           }
         }
       },
@@ -467,7 +1044,9 @@
         "description": "No session, or a session that is no longer valid.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
           }
         }
       },
@@ -475,7 +1054,9 @@
         "description": "Signed in, but not permitted — an administrator-only route, or a state-changing request whose `Origin` did not match.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
           }
         }
       },
@@ -483,7 +1064,9 @@
         "description": "No such resource.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
           }
         }
       }
@@ -492,24 +1075,35 @@
       "ErrorEnvelope": {
         "type": "object",
         "description": "The single error shape. Handlers never surface raw SQL errors.",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
-          "error": { "$ref": "#/components/schemas/Error" }
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
         }
       },
       "Error": {
         "type": "object",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
           "code": {
             "type": "string",
             "description": "A stable, switchable identifier. **An open set** — a new code is an additive change (ADR 0018), so a client must tolerate one it does not know. Codes in use: `bad_request` (400), `unauthorized` (401), `forbidden` (403), `not_found` (404), `conflict` (409), `too_many_requests` (429), `unsupported_api_version` (400), `unavailable` (503), `canceled` (499), `internal` (500).",
-            "examples": ["not_found"]
+            "examples": [
+              "not_found"
+            ]
           },
           "message": {
             "type": "string",
             "description": "Human-readable, and not intended to be parsed.",
-            "examples": ["no item with id 412"]
+            "examples": [
+              "no item with id 412"
+            ]
           }
         }
       },
@@ -517,45 +1111,75 @@
         "type": "object",
         "description": "A bare acknowledgement. Present so that a client that decodes every response has something to decode.",
         "properties": {
-          "ok": { "type": "boolean" }
+          "ok": {
+            "type": "boolean"
+          }
         }
       },
       "Health": {
         "type": "object",
-        "required": ["status", "version", "api_version", "api_versions"],
+        "required": [
+          "status",
+          "version",
+          "api_version",
+          "api_versions"
+        ],
         "properties": {
-          "status": { "type": "string", "examples": ["ok"] },
+          "status": {
+            "type": "string",
+            "examples": [
+              "ok"
+            ]
+          },
           "version": {
             "type": "string",
             "description": "The application release, semver, stamped from the release tag at build time. A build straight from source reports `dev`, which is the honest label for it.",
-            "examples": ["0.8.58", "dev"]
+            "examples": [
+              "0.8.58",
+              "dev"
+            ]
           },
           "api_version": {
             "type": "integer",
             "description": "The contract revision being served. Permanently 1 at `/api`.",
-            "examples": [1]
+            "examples": [
+              1
+            ]
           },
           "api_versions": {
             "type": "array",
             "description": "Every revision this build can serve. A list, because a future v2 server keeps answering v1 for at least one release — \"which versions do you speak\" is a different question from \"which one am I getting\".",
-            "items": { "type": "integer" }
+            "items": {
+              "type": "integer"
+            }
           }
         }
       },
       "User": {
         "type": "object",
-        "required": ["id", "name", "role"],
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
         "properties": {
           "id": {
             "type": "string",
             "description": "**A string, not a number.** Item and library ids are integers; user ids are not.",
-            "examples": ["u_3f9"]
+            "examples": [
+              "u_3f9"
+            ]
           },
-          "name": { "type": "string" },
+          "name": {
+            "type": "string"
+          },
           "role": {
             "type": "string",
             "description": "An open set. `admin` and `member` today (ADR 0015).",
-            "examples": ["admin", "member"]
+            "examples": [
+              "admin",
+              "member"
+            ]
           },
           "sharing": {
             "type": "boolean",
@@ -569,13 +1193,21 @@
       },
       "AuthStatus": {
         "type": "object",
-        "required": ["configured", "authenticated", "lan_enabled", "restart_required", "can_convert"],
+        "required": [
+          "configured",
+          "authenticated",
+          "lan_enabled",
+          "restart_required",
+          "can_convert"
+        ],
         "properties": {
           "configured": {
             "type": "boolean",
             "description": "Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on."
           },
-          "authenticated": { "type": "boolean" },
+          "authenticated": {
+            "type": "boolean"
+          },
           "lan_enabled": {
             "type": "boolean",
             "description": "Whether the socket actually reaches beyond this machine — **not** whether a password is set. An unsecured server is always `false` because it is forced onto loopback; a secured server the operator deliberately bound to a loopback address is also `false`, and stays plain HTTP. TLS turns on at the same boundary that gates LAN binding (ADR 0014)."
@@ -596,10 +1228,18 @@
       },
       "SetupRequest": {
         "type": "object",
-        "required": ["username", "password"],
+        "required": [
+          "username",
+          "password"
+        ],
         "properties": {
-          "username": { "type": "string" },
-          "password": { "type": "string", "format": "password" },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          },
           "install_media_tools": {
             "type": "boolean",
             "description": "Optional, and **absent means no** — absent and `false` are deliberately different. Absent means the caller never saw the question, which is true of an older client and of any script.\n\nSending `true` starts a one-off background download of ffmpeg: around 160MB, pinned URL, checksum verified (ADR 0048). This is the one place the server may fetch anything on its own initiative, which is why it is an optional field rather than a boolean with a default. Only a client that displayed what would be downloaded, from where, how large and under which licence may send `true` — that disclosure *is* the consent, and it stands in for the admin gate that cannot exist before any account does.\n\nSetup does not wait for the download, and a fetch that cannot start never fails the request. Nothing is fetched when ffmpeg is already present."
@@ -608,45 +1248,87 @@
       },
       "SetupResponse": {
         "type": "object",
-        "required": ["configured", "authenticated", "media_tools_installing", "restart_required", "user"],
+        "required": [
+          "configured",
+          "authenticated",
+          "media_tools_installing",
+          "restart_required",
+          "user"
+        ],
         "properties": {
-          "configured": { "type": "boolean" },
-          "authenticated": { "type": "boolean" },
+          "configured": {
+            "type": "boolean"
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
           "media_tools_installing": {
             "type": "boolean",
             "description": "Whether a download actually started. Poll `GET /api/media-tools` for progress. False when ffmpeg was already present, or when `install_media_tools` was not sent."
           },
-          "restart_required": { "type": "boolean" },
-          "user": { "$ref": "#/components/schemas/User" }
+          "restart_required": {
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
         }
       },
       "LoginRequest": {
         "type": "object",
-        "required": ["username", "password"],
+        "required": [
+          "username",
+          "password"
+        ],
         "properties": {
-          "username": { "type": "string" },
-          "password": { "type": "string", "format": "password" }
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
         }
       },
       "LoginResponse": {
         "type": "object",
-        "required": ["authenticated", "user"],
+        "required": [
+          "authenticated",
+          "user"
+        ],
         "properties": {
-          "authenticated": { "type": "boolean" },
-          "user": { "$ref": "#/components/schemas/User" }
+          "authenticated": {
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
         }
       },
       "ChangePasswordRequest": {
         "type": "object",
-        "required": ["current_password", "new_password"],
+        "required": [
+          "current_password",
+          "new_password"
+        ],
         "properties": {
-          "current_password": { "type": "string", "format": "password" },
-          "new_password": { "type": "string", "format": "password" }
+          "current_password": {
+            "type": "string",
+            "format": "password"
+          },
+          "new_password": {
+            "type": "string",
+            "format": "password"
+          }
         }
       },
       "Identity": {
         "type": "object",
-        "required": ["fingerprint", "fingerprint_display", "name"],
+        "required": [
+          "fingerprint",
+          "fingerprint_display",
+          "name"
+        ],
         "properties": {
           "fingerprint": {
             "type": "string",
@@ -656,28 +1338,57 @@
             "type": "string",
             "description": "The same value, grouped for a human to read aloud or compare by eye."
           },
-          "name": { "type": "string" }
+          "name": {
+            "type": "string"
+          }
         }
       },
       "ShapeWarning": {
         "type": "object",
         "description": "The last scan's verdict, when it had one. Carried on the library rather than only in live scan progress — which dies with the server process, and a warning about a kind that cannot be changed needs to outlive a restart.",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
-          "code": { "type": "string" },
-          "message": { "type": "string" },
-          "remedy": { "type": "string" }
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "remedy": {
+            "type": "string"
+          }
         }
       },
       "LibraryRoot": {
         "type": "object",
         "description": "One place a library's files live (ADR 0034).",
-        "required": ["id", "library_id", "path", "created_at", "item_count"],
+        "required": [
+          "id",
+          "library_id",
+          "path",
+          "created_at",
+          "item_count"
+        ],
         "properties": {
-          "id": { "type": "integer", "format": "int64" },
-          "library_id": { "type": "integer", "format": "int64" },
-          "path": { "type": "string" },
-          "created_at": { "type": "integer", "format": "int64", "description": "Unix seconds." },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "library_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "path": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          },
           "item_count": {
             "type": "integer",
             "description": "Rows that would go with this location if it were removed."
@@ -686,10 +1397,24 @@
       },
       "Library": {
         "type": "object",
-        "required": ["id", "name", "kind", "path", "created_at", "scanned_at", "item_count", "media_count"],
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "path",
+          "created_at",
+          "scanned_at",
+          "item_count",
+          "media_count"
+        ],
         "properties": {
-          "id": { "type": "integer", "format": "int64" },
-          "name": { "type": "string" },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
           "kind": {
             "type": "string",
             "description": "**An open set.** `movie`, `show`, `music` and `picture` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
@@ -700,11 +1425,20 @@
           },
           "roots": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/LibraryRoot" }
+            "items": {
+              "$ref": "#/components/schemas/LibraryRoot"
+            }
           },
-          "created_at": { "type": "integer", "format": "int64", "description": "Unix seconds." },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          },
           "scanned_at": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Unix seconds, or null if it has never been scanned."
           },
@@ -716,34 +1450,49 @@
             "type": "integer",
             "description": "Files in the library — songs, photos, films, episodes — as against `item_count`, which is tiles in the grid. They differ wherever a library groups its media: 1,171 artists holding tens of thousands of songs."
           },
-          "shape_warning": { "$ref": "#/components/schemas/ShapeWarning" }
+          "shape_warning": {
+            "$ref": "#/components/schemas/ShapeWarning"
+          }
         }
       },
       "LibraryList": {
         "type": "object",
-        "required": ["libraries"],
+        "required": [
+          "libraries"
+        ],
         "properties": {
           "libraries": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Library" }
+            "items": {
+              "$ref": "#/components/schemas/Library"
+            }
           }
         }
       },
       "RootList": {
         "type": "object",
-        "required": ["roots"],
+        "required": [
+          "roots"
+        ],
         "properties": {
           "roots": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/LibraryRoot" }
+            "items": {
+              "$ref": "#/components/schemas/LibraryRoot"
+            }
           }
         }
       },
       "CreateLibraryRequest": {
         "type": "object",
-        "required": ["name", "kind"],
+        "required": [
+          "name",
+          "kind"
+        ],
         "properties": {
-          "name": { "type": "string" },
+          "name": {
+            "type": "string"
+          },
           "kind": {
             "type": "string",
             "description": "`movie`, `show`, `music` or `picture`. Validated on the way in, so this is a closed set for *requests* even though it is open for responses."
@@ -755,7 +1504,9 @@
           "roots": {
             "type": "array",
             "description": "The multi-location form (ADR 0034).",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -763,16 +1514,558 @@
         "type": "object",
         "description": "Every field optional; an omitted field is left alone.",
         "properties": {
-          "name": { "type": "string" },
-          "path": { "type": "string" },
-          "kind": { "type": "string" }
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
         }
       },
       "RootRequest": {
         "type": "object",
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "properties": {
-          "path": { "type": "string" }
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "Progress": {
+        "type": "object",
+        "description": "One account's play state for one item. Progress is per account, like watch counts.",
+        "required": [
+          "position_ms",
+          "watched"
+        ],
+        "properties": {
+          "position_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Milliseconds."
+          },
+          "watched": {
+            "type": "boolean",
+            "description": "Whether this has been finished."
+          },
+          "watch_count": {
+            "type": "integer",
+            "description": "How many times this has been finished — **not whether it has**. It only ever grows.\n\nMarking something unwatched puts it back on the list to be watched again rather than claiming it was never seen, so an item can read `watched: false` while carrying a count of four. A client showing the count must not infer it from the flag in either direction.\n\nCounts begin at 1 for anything already finished when the server upgraded to schema revision 31: history predating the column cannot be recovered, and one is the honest minimum rather than a guess. A server older than that omits the field entirely, which reads the same as zero and must not be shown as one.\n\n**Optional in this contract even though a current server always sends it.** The client updates independently of the server — the installer replaces the web bundle while an in-app update replaces only the server executable — so a client newer than its server is an ordinary state rather than a broken one, and a required field would make the generated type lie about it."
+          }
+        }
+      },
+      "Artwork": {
+        "type": "object",
+        "description": "Content-addressed hashes for an item's images. Fetch one from `GET /api/artwork/{hash}`.",
+        "properties": {
+          "poster": {
+            "type": "string",
+            "description": "Portrait cover art."
+          },
+          "fanart": {
+            "type": "string",
+            "description": "Landscape backdrop."
+          },
+          "thumb": {
+            "type": "string",
+            "description": "An episode still, 16:9."
+          },
+          "inherited": {
+            "type": "boolean",
+            "description": "True when this image is **borrowed rather than owned** — a container wearing a child's picture (ADR 0025). Today that is an artist wearing one of its albums' covers, because nothing on disk is an artist photograph: the images that do sit in an artist folder turn out to be a media player's per-album art cache rather than a picture of anyone.\n\nThe borrowed album is the one with the most tracks, so a record is chosen over a stray single, with sort title and id as tie-breakers so a tile does not change its face between two reads.\n\nReported rather than hidden so a client can treat it as the placeholder it is. Nothing is stored — the fallback stops applying by itself the moment a real image exists, so a future provider needs nothing cleaned up. A container whose children all lack art has no `artwork` at all, which is the honest state rather than an invented one."
+          }
+        }
+      },
+      "Credit": {
+        "type": "object",
+        "required": [
+          "name",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`actor`, `director`, and others. An open set."
+          },
+          "character": {
+            "type": "string",
+            "description": "Who they played, on an acting credit."
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Content-addressed hash of this person's picture.\n\nOn the credit rather than behind a separate endpoint because a cast list is read as a whole — twelve faces on a detail page is one request with the names, or thirteen without.\n\nAbsent is the ordinary case and always will be: a provider has a headshot for the billed cast and nothing for the stunt double, so a missing image is not a failure and the client draws a name."
+          },
+          "person_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The id the browse filter is keyed on, so a face can be a filter control. By id because a name is not an identity — two people share one, and one person is spelled two ways across providers."
+          }
+        }
+      },
+      "ItemRating": {
+        "type": "object",
+        "description": "One external score (ADR 0019).",
+        "required": [
+          "source",
+          "score",
+          "display"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "**An open set** — `imdb`, `rotten_tomatoes`, `metacritic`, and more later — so a client renders whatever arrives rather than switching on a fixed list."
+          },
+          "score": {
+            "type": "number",
+            "description": "Normalised 0–10, so sources can be ordered against each other."
+          },
+          "display": {
+            "type": "string",
+            "description": "The source-native string: `88%`, `81`, `8.0`."
+          },
+          "votes": {
+            "type": "integer",
+            "description": "Vote count, where the source publishes one."
+          }
+        }
+      },
+      "MediaStream": {
+        "type": "object",
+        "description": "One track inside the file, from ffprobe. Detail responses only.",
+        "required": [
+          "index",
+          "kind",
+          "codec",
+          "default",
+          "forced"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`video`, `audio` or `subtitle`."
+          },
+          "codec": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "pix_fmt": {
+            "type": "string"
+          },
+          "color_transfer": {
+            "type": "string",
+            "description": "Colour, for telling HDR from SDR (ADR 0033). **Absent means not probed since schema revision 19, which is not the same as SDR** — both answer \"not HDR\", so an unprobed library reads exactly as it did before."
+          },
+          "color_primaries": {
+            "type": "string"
+          },
+          "color_space": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "forced": {
+            "type": "boolean"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "channels": {
+            "type": "integer"
+          },
+          "bit_rate": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Item": {
+        "type": "object",
+        "description": "One row of media. `path` is deliberately **not** exposed: clients have no use for server filesystem paths, and withholding them keeps the layout private when the server is reachable beyond the LAN.\n\nFields marked detail-only are absent from list responses.",
+        "required": [
+          "id",
+          "library_id",
+          "kind",
+          "title",
+          "year",
+          "series",
+          "season",
+          "episode",
+          "container",
+          "size_bytes",
+          "duration_ms",
+          "added_at",
+          "missing",
+          "parent_id",
+          "overview",
+          "rating",
+          "content_rating",
+          "released_at",
+          "provider",
+          "external_id",
+          "match_state",
+          "match_score",
+          "metadata_updated_at",
+          "probed_at",
+          "video_codec",
+          "video_profile",
+          "width",
+          "height",
+          "video_bitrate",
+          "frame_rate",
+          "audio_codec",
+          "audio_channels"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "library_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string",
+            "description": "**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "On a track, read in the music sense (ADR 0024): `series` is the album, `season` the disc, `episode` the track number."
+          },
+          "season": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "episode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "artist": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A music track's own performer, present only on music. Distinct from the album artist that groups the record — on a compilation they differ, which is the whole reason both exist."
+          },
+          "edition": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The edition marker the filename claimed (ADR 0042), or absent.\n\nDisplayed so two editions of one work can be told apart in a grid; **never a grouping key**. The file that motivated that decision called itself an alternate cut and was byte-for-byte the theatrical copy — the marker is a thing the user wrote, so show it, do not believe it."
+          },
+          "container": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file's container, e.g. `mkv`."
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "added_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds — when it reached this disk."
+          },
+          "missing": {
+            "type": "boolean",
+            "description": "The file was not found on the last scan. **Scanning marks missing, never deletes**, so an unmounted drive does not destroy library data. A missing item still returns `200` from the detail endpoint so a client can explain the situation rather than pretend the item was never there."
+          },
+          "parent_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "child_count": {
+            "type": "integer",
+            "description": "How many present items name this one as parent — or, for a collection, how many join-table members it has, so a client can treat any container uniformly. **Omitted when zero.**\n\nA client uses it to tell a container from a leaf: a container opens its children and offers no Play, so a `movie`-kind parent of `part` children — a two-part film (ADR 0017) — is not given a dead-end Play button. `kind` alone cannot express that, which is why the count is part of the item shape."
+          },
+          "overview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The single provider scalar, 0–10. Independent of `ratings`."
+          },
+          "content_rating": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "released_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "match_state": {
+            "type": "string",
+            "description": "`matched` (confident, applied silently), `review` (applied but uncertain — the UI should say so), `unmatched` (looked and found nothing good enough), `locked` (user-confirmed, never re-scored) or `local` (resolved from an NFO sidecar, nothing to review).\n\n**An open set** — a client must tolerate a value it does not know.\n\n**Check `metadata_updated_at` before treating `unmatched` as \"no match found\".** It is the default value, so a freshly scanned item carries it before anything has looked at the item at all, and reporting those as match failures buries the real ones."
+          },
+          "match_score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "metadata_updated_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "**Null until enrichment has run.** See `match_state`."
+          },
+          "probed_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Null until the file has been inspected by ffprobe."
+          },
+          "video_codec": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a photo (ADR 0028), the dimensions **as it will be seen** — a quarter-turned phone photo reports its rotated dimensions, so a layout can reserve the right box before the image loads."
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "video_bitrate": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "frame_rate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "audio_codec": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "audio_channels": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "taken_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "EXIF capture time for a photo, absent when the file carries none — which is most of a wallpaper library. **Distinct from `added_at`**: one is when the picture was made, the other when it reached this disk.\n\nGPS is deliberately not read and there is no parser for it in the server at all (ADR 0028). Not having one is a stronger guarantee than choosing not to call it."
+          },
+          "sensitive": {
+            "type": "boolean",
+            "description": "The server's **resolved** answer: this item is marked, or a folder above it is (ADR 0051). Omitted when false.\n\nEvery surface that draws a thumbnail reads this one field, which is why it is on the item rather than something the gallery screen works out — a picture library's thumbnails also appear on the home page, in search and in the hero, and a mark only the gallery honoured would ambush you everywhere else."
+          },
+          "sensitive_own": {
+            "type": "boolean",
+            "description": "Whether the mark is on **this** item rather than inherited. The two differ on every photo inside a marked folder, and the difference is what stops Unmark being offered where it would do nothing."
+          },
+          "genres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Detail responses only."
+          },
+          "credits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Credit"
+            },
+            "description": "Detail responses only."
+          },
+          "artwork": {
+            "$ref": "#/components/schemas/Artwork"
+          },
+          "locked_fields": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Fields a human has edited, which no provider refresh, rescan or merge may overwrite (ADR 0008). A rescan reconciles *files*; it does not re-litigate *identity*."
+          },
+          "ratings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemRating"
+            },
+            "description": "External scores (ADR 0019), highest normalised `score` first. **Omitted when none are known** — no provider key, or a title the source does not cover — which is a normal state, not an error."
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaStream"
+            },
+            "description": "The full track list including alternate audio. **Detail responses only**, which is why the player reads it from the item it fetched rather than from the grid row that opened it."
+          },
+          "file_name": {
+            "type": "string",
+            "description": "The **base name** of the file, detail responses only.\n\nThe full path stays private — it would disclose the server's filesystem layout — but the name alone is what identifies a title whose metadata is wrong. Without it a mis-scanned file (`01 Magnetic Rose`) cannot be told apart from its siblings well enough to correct it."
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "next_episode": {
+            "$ref": "#/components/schemas/Item",
+            "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
+          }
+        }
+      },
+      "ItemsPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Matches before `limit`/`offset`."
+          }
+        }
+      },
+      "ItemList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          }
+        }
+      },
+      "ProgressUpdate": {
+        "type": "object",
+        "description": "**The body does not carry `watch_count`, and clients must not try to set it.** The server maintains it, and it moves on the *transition* from unfinished to finished rather than on the level — a player posting `watched: true` every five seconds through the credits records one viewing, not twelve.\n\nStarting something again is what makes the next viewing countable, and nothing has to announce it: an early position posts as not watched, which returns the row to unfinished, and reaching the end counts again. So a rewatch is counted without any client doing anything differently.",
+        "required": [
+          "position_ms",
+          "watched"
+        ],
+        "properties": {
+          "position_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "watched": {
+            "type": "boolean"
+          }
         }
       }
     }

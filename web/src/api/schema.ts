@@ -251,6 +251,106 @@ export interface paths {
         patch: operations["patchLibraryRoot"];
         trace?: never;
     };
+    "/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The browse grid: filtered, sorted, paged media
+         * @description **By default the listing is top-level only** — rows with no parent. Children (seasons, episodes, and the `part`/`chapter` pieces of a multi-part work) have a parent and are reached through `parent_id`, never returned loose in the grid, so a container's pieces do not appear as if they were features (ADR 0010, ADR 0017). Passing an explicit `kind` lifts that default.
+         *
+         *     **A collection is listed only when it groups at least two present members.** A provider supplies a franchise even when the library holds a single film from it, and a collection of one is just a duplicate tile of that film with a "Play all" button. That rule applies to every listing, not only the top-level grid — it was once a property of the grid alone, which made `kind=collection` the one listing that showed the singletons everything else refused. Fetching a collection's own members with `collection_id` is unaffected: the rule hides a collection from listings *of* collections, never what is inside one.
+         */
+        get: operations["listItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One item, with the detail-only fields
+         * @description The list shape plus `genres`, `credits`, `artwork`, `locked_fields`, `ratings`, `streams` and `file_name`.
+         *
+         *     An item flagged `missing` still returns `200` with `"missing": true`, so the UI can explain the situation rather than pretend the item was never there.
+         */
+        get: operations["getItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save a play position
+         * @description Clients should throttle to roughly one call per five seconds during playback.
+         *
+         *     Progress is per account (ADR 0006).
+         */
+        put: operations["putItemProgress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * In-progress items, most recently played first
+         * @description The home screen's first shelf.
+         *
+         *     **A show appears as the show, not as an episode.** Episodes collapse to the show they belong to, and `next_episode` carries the one the show would play — the same answer `GET /api/items/{id}/continue` gives, computed by the same query, so the shelf and a show's Continue button cannot disagree.
+         *
+         *     A show qualifies on **any** episode activity, watched or in progress. Finishing an episode is the ordinary way to stop watching a series, and a shelf that dropped the show at that moment answered "which episode did I stop inside" rather than "what am I watching". A show with every episode watched has nothing to continue and is absent.
+         *
+         *     For everything else — films, tracks — "in progress" is a saved position past zero with `watched` unset, so an item played to the end drops off rather than inviting a replay.
+         *
+         *     Progress and artwork are included so a tile draws its bar and poster without a second call.
+         */
+        get: operations["getContinue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -454,6 +554,240 @@ export interface components {
         RootRequest: {
             path: string;
         };
+        /** @description One account's play state for one item. Progress is per account, like watch counts. */
+        Progress: {
+            /**
+             * Format: int64
+             * @description Milliseconds.
+             */
+            position_ms: number;
+            /** @description Whether this has been finished. */
+            watched: boolean;
+            /**
+             * @description How many times this has been finished — **not whether it has**. It only ever grows.
+             *
+             *     Marking something unwatched puts it back on the list to be watched again rather than claiming it was never seen, so an item can read `watched: false` while carrying a count of four. A client showing the count must not infer it from the flag in either direction.
+             *
+             *     Counts begin at 1 for anything already finished when the server upgraded to schema revision 31: history predating the column cannot be recovered, and one is the honest minimum rather than a guess. A server older than that omits the field entirely, which reads the same as zero and must not be shown as one.
+             *
+             *     **Optional in this contract even though a current server always sends it.** The client updates independently of the server — the installer replaces the web bundle while an in-app update replaces only the server executable — so a client newer than its server is an ordinary state rather than a broken one, and a required field would make the generated type lie about it.
+             */
+            watch_count?: number;
+        };
+        /** @description Content-addressed hashes for an item's images. Fetch one from `GET /api/artwork/{hash}`. */
+        Artwork: {
+            /** @description Portrait cover art. */
+            poster?: string;
+            /** @description Landscape backdrop. */
+            fanart?: string;
+            /** @description An episode still, 16:9. */
+            thumb?: string;
+            /**
+             * @description True when this image is **borrowed rather than owned** — a container wearing a child's picture (ADR 0025). Today that is an artist wearing one of its albums' covers, because nothing on disk is an artist photograph: the images that do sit in an artist folder turn out to be a media player's per-album art cache rather than a picture of anyone.
+             *
+             *     The borrowed album is the one with the most tracks, so a record is chosen over a stray single, with sort title and id as tie-breakers so a tile does not change its face between two reads.
+             *
+             *     Reported rather than hidden so a client can treat it as the placeholder it is. Nothing is stored — the fallback stops applying by itself the moment a real image exists, so a future provider needs nothing cleaned up. A container whose children all lack art has no `artwork` at all, which is the honest state rather than an invented one.
+             */
+            inherited?: boolean;
+        };
+        Credit: {
+            name: string;
+            /** @description `actor`, `director`, and others. An open set. */
+            role: string;
+            /** @description Who they played, on an acting credit. */
+            character?: string;
+            /**
+             * @description Content-addressed hash of this person's picture.
+             *
+             *     On the credit rather than behind a separate endpoint because a cast list is read as a whole — twelve faces on a detail page is one request with the names, or thirteen without.
+             *
+             *     Absent is the ordinary case and always will be: a provider has a headshot for the billed cast and nothing for the stunt double, so a missing image is not a failure and the client draws a name.
+             */
+            thumb?: string;
+            /**
+             * Format: int64
+             * @description The id the browse filter is keyed on, so a face can be a filter control. By id because a name is not an identity — two people share one, and one person is spelled two ways across providers.
+             */
+            person_id?: number;
+        };
+        /** @description One external score (ADR 0019). */
+        ItemRating: {
+            /** @description **An open set** — `imdb`, `rotten_tomatoes`, `metacritic`, and more later — so a client renders whatever arrives rather than switching on a fixed list. */
+            source: string;
+            /** @description Normalised 0–10, so sources can be ordered against each other. */
+            score: number;
+            /** @description The source-native string: `88%`, `81`, `8.0`. */
+            display: string;
+            /** @description Vote count, where the source publishes one. */
+            votes?: number;
+        };
+        /** @description One track inside the file, from ffprobe. Detail responses only. */
+        MediaStream: {
+            index: number;
+            /** @description `video`, `audio` or `subtitle`. */
+            kind: string;
+            codec: string;
+            profile?: string;
+            pix_fmt?: string;
+            /** @description Colour, for telling HDR from SDR (ADR 0033). **Absent means not probed since schema revision 19, which is not the same as SDR** — both answer "not HDR", so an unprobed library reads exactly as it did before. */
+            color_transfer?: string;
+            color_primaries?: string;
+            color_space?: string;
+            language?: string;
+            title?: string;
+            default: boolean;
+            forced: boolean;
+            width?: number;
+            height?: number;
+            channels?: number;
+            /** Format: int64 */
+            bit_rate?: number;
+        };
+        /**
+         * @description One row of media. `path` is deliberately **not** exposed: clients have no use for server filesystem paths, and withholding them keeps the layout private when the server is reachable beyond the LAN.
+         *
+         *     Fields marked detail-only are absent from list responses.
+         */
+        Item: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            library_id: number;
+            /** @description **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
+            kind: string;
+            title: string;
+            year: number | null;
+            /** @description On a track, read in the music sense (ADR 0024): `series` is the album, `season` the disc, `episode` the track number. */
+            series: string | null;
+            season: number | null;
+            episode: number | null;
+            /** @description A music track's own performer, present only on music. Distinct from the album artist that groups the record — on a compilation they differ, which is the whole reason both exist. */
+            artist?: string | null;
+            /**
+             * @description The edition marker the filename claimed (ADR 0042), or absent.
+             *
+             *     Displayed so two editions of one work can be told apart in a grid; **never a grouping key**. The file that motivated that decision called itself an alternate cut and was byte-for-byte the theatrical copy — the marker is a thing the user wrote, so show it, do not believe it.
+             */
+            edition?: string | null;
+            /** @description The file's container, e.g. `mkv`. */
+            container: string | null;
+            /** Format: int64 */
+            size_bytes: number | null;
+            /** Format: int64 */
+            duration_ms: number | null;
+            /**
+             * Format: int64
+             * @description Unix seconds — when it reached this disk.
+             */
+            added_at: number;
+            /** @description The file was not found on the last scan. **Scanning marks missing, never deletes**, so an unmounted drive does not destroy library data. A missing item still returns `200` from the detail endpoint so a client can explain the situation rather than pretend the item was never there. */
+            missing: boolean;
+            /** Format: int64 */
+            parent_id: number | null;
+            /**
+             * @description How many present items name this one as parent — or, for a collection, how many join-table members it has, so a client can treat any container uniformly. **Omitted when zero.**
+             *
+             *     A client uses it to tell a container from a leaf: a container opens its children and offers no Play, so a `movie`-kind parent of `part` children — a two-part film (ADR 0017) — is not given a dead-end Play button. `kind` alone cannot express that, which is why the count is part of the item shape.
+             */
+            child_count?: number;
+            overview: string | null;
+            /** @description The single provider scalar, 0–10. Independent of `ratings`. */
+            rating: number | null;
+            content_rating: string | null;
+            /** Format: int64 */
+            released_at: number | null;
+            provider: string | null;
+            external_id: string | null;
+            /**
+             * @description `matched` (confident, applied silently), `review` (applied but uncertain — the UI should say so), `unmatched` (looked and found nothing good enough), `locked` (user-confirmed, never re-scored) or `local` (resolved from an NFO sidecar, nothing to review).
+             *
+             *     **An open set** — a client must tolerate a value it does not know.
+             *
+             *     **Check `metadata_updated_at` before treating `unmatched` as "no match found".** It is the default value, so a freshly scanned item carries it before anything has looked at the item at all, and reporting those as match failures buries the real ones.
+             */
+            match_state: string;
+            match_score: number | null;
+            /**
+             * Format: int64
+             * @description **Null until enrichment has run.** See `match_state`.
+             */
+            metadata_updated_at: number | null;
+            /**
+             * Format: int64
+             * @description Null until the file has been inspected by ffprobe.
+             */
+            probed_at: number | null;
+            video_codec: string | null;
+            video_profile: string | null;
+            /** @description For a photo (ADR 0028), the dimensions **as it will be seen** — a quarter-turned phone photo reports its rotated dimensions, so a layout can reserve the right box before the image loads. */
+            width: number | null;
+            height: number | null;
+            /** Format: int64 */
+            video_bitrate: number | null;
+            frame_rate: number | null;
+            audio_codec: string | null;
+            audio_channels: number | null;
+            /**
+             * Format: int64
+             * @description EXIF capture time for a photo, absent when the file carries none — which is most of a wallpaper library. **Distinct from `added_at`**: one is when the picture was made, the other when it reached this disk.
+             *
+             *     GPS is deliberately not read and there is no parser for it in the server at all (ADR 0028). Not having one is a stronger guarantee than choosing not to call it.
+             */
+            taken_at?: number | null;
+            /**
+             * @description The server's **resolved** answer: this item is marked, or a folder above it is (ADR 0051). Omitted when false.
+             *
+             *     Every surface that draws a thumbnail reads this one field, which is why it is on the item rather than something the gallery screen works out — a picture library's thumbnails also appear on the home page, in search and in the hero, and a mark only the gallery honoured would ambush you everywhere else.
+             */
+            sensitive?: boolean;
+            /** @description Whether the mark is on **this** item rather than inherited. The two differ on every photo inside a marked folder, and the difference is what stops Unmark being offered where it would do nothing. */
+            sensitive_own?: boolean;
+            /** @description Detail responses only. */
+            genres?: string[];
+            /** @description Detail responses only. */
+            credits?: components["schemas"]["Credit"][];
+            artwork?: components["schemas"]["Artwork"];
+            /** @description Fields a human has edited, which no provider refresh, rescan or merge may overwrite (ADR 0008). A rescan reconciles *files*; it does not re-litigate *identity*. */
+            locked_fields?: string[] | null;
+            /** @description External scores (ADR 0019), highest normalised `score` first. **Omitted when none are known** — no provider key, or a title the source does not cover — which is a normal state, not an error. */
+            ratings?: components["schemas"]["ItemRating"][];
+            /** @description The full track list including alternate audio. **Detail responses only**, which is why the player reads it from the item it fetched rather than from the grid row that opened it. */
+            streams?: components["schemas"]["MediaStream"][];
+            /**
+             * @description The **base name** of the file, detail responses only.
+             *
+             *     The full path stays private — it would disclose the server's filesystem layout — but the name alone is what identifies a title whose metadata is wrong. Without it a mis-scanned file (`01 Magnetic Rose`) cannot be told apart from its siblings well enough to correct it.
+             */
+            file_name?: string;
+            progress?: components["schemas"]["Progress"];
+            /**
+             * @description The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.
+             *
+             *     Its own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.
+             *
+             *     **For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished.
+             */
+            next_episode?: components["schemas"]["Item"];
+        };
+        ItemsPage: {
+            items: components["schemas"]["Item"][];
+            /** @description Matches before `limit`/`offset`. */
+            total: number;
+        };
+        ItemList: {
+            items: components["schemas"]["Item"][];
+        };
+        /**
+         * @description **The body does not carry `watch_count`, and clients must not try to set it.** The server maintains it, and it moves on the *transition* from unfinished to finished rather than on the level — a player posting `watched: true` every five seconds through the credits records one viewing, not twelve.
+         *
+         *     Starting something again is what makes the next viewing countable, and nothing has to announce it: an early position posts as not watched, which returns the row to unfinished, and reaching the end counts again. So a rewatch is counted without any client doing anything differently.
+         */
+        ProgressUpdate: {
+            /** Format: int64 */
+            position_ms: number;
+            watched: boolean;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -498,6 +832,8 @@ export interface components {
         LibraryId: number;
         /** @description The root's id. */
         RootId: number;
+        /** @description The item's id. */
+        ItemId: number;
     };
     requestBodies: never;
     headers: never;
@@ -937,6 +1273,169 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listItems: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one library. */
+                library_id?: number;
+                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. */
+                q?: string;
+                /**
+                 * @description The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on the item's sort title, case-insensitively.
+                 *
+                 *     A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns the letters actually present, so a client never offers one that finds nothing.
+                 */
+                initial?: string;
+                /**
+                 * @description Restrict to one kind. Passing this also **lifts the top-level-only default**, for a deliberate cross-cutting query such as every episode.
+                 *
+                 *     **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give.
+                 */
+                kind?: string;
+                /** @description Drop kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page. A single value still means what it always did. */
+                exclude_kind?: string;
+                /** @description Return the children of one item — a show's episodes, a work's parts. */
+                parent_id?: number;
+                /** @description Return a collection's members. Membership is many-to-many and is **not** `parent_id`, which is always empty for a collection (ADR 0017). */
+                collection_id?: number;
+                /** @description Return a playlist's entries **in playing order** (ADR 0030). The only listing that may repeat an item id, which is why a playlist is keyed on position rather than on id. */
+                playlist_id?: number;
+                /** @description Restrict to items carrying this exact genre name. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                genre?: string[];
+                /** @description Restrict to a decade — `1990` means 1990–1999. A non-numeric value is `400`. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                decade?: number[];
+                /** @description Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                content_rating?: string[];
+                /** @description Restrict to this exact release year. A non-numeric value is `400`. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                year?: number[];
+                /** @description Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                resolution?: string[];
+                /** @description Restrict to items this person is credited on, **in any role**. Ids come from the library's cast list, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                person?: number[];
+                /** @description The person filter scoped to acting credits. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant. Somebody who does both matches under both, once in each. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                actor?: number[];
+                /** @description The person filter scoped to directing credits. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                director?: number[];
+                /** @description Restrict to members of a collection. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it (ADR 0017). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
+                collection?: number[];
+                /** @description `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined. */
+                status?: string;
+                /**
+                 * @description Rated at least this highly, out of ten.
+                 *
+                 *     **Unrated items are excluded, not sunk.** A film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s.
+                 */
+                min_rating?: number;
+                /** @description `watched=false` restricts to items the calling user has not finished; any other value is ignored. Keys off the leaf's own play state, so it filters movies and episodes — a container carries no watched flag and is unaffected. */
+                watched?: boolean;
+                /**
+                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), or `track` (disc then track number).
+                 *
+                 *     **A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.
+                 */
+                sort?: string;
+                /** @description Page size. Defaults to 100, maximum 500. */
+                limit?: number;
+                /** @description Page offset. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items, plus the total before paging. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item, including a missing one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putItemProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProgressUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getContinue: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 20, maximum 100. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shelf. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }
