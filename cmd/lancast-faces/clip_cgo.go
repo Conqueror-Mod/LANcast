@@ -39,15 +39,26 @@ import (
  */
 
 const (
-	// clipVisualIO / clipTextIO are the names the pinned export uses. The
-	// install flow places those files; a hand-placed export from elsewhere may
-	// disagree, and will say so at load rather than at the first photograph.
-	clipVisualInput  = "pixel_values"
-	clipVisualOutput = "image_embeds"
+	/*
+	 * The names the pinned export actually uses, read out of the graph rather
+	 * than assumed.
+	 *
+	 * They were written here as "pixel_values"/"image_embeds" and
+	 * "input_ids"/"attention_mask"/"text_embeds" first, because that is what a
+	 * transformers-exported CLIP is called everywhere it is written about. This
+	 * export is OpenCLIP's own, and it names them "image", "text" and
+	 * "embedding" — and its text tower takes **one** input, with no attention
+	 * mask at all.
+	 *
+	 * The install flow places these files; a hand-placed export from elsewhere
+	 * may disagree, and will say so at load rather than at the first
+	 * photograph.
+	 */
+	clipVisualInput  = "image"
+	clipVisualOutput = "embedding"
 
-	clipTextIDs    = "input_ids"
-	clipTextMask   = "attention_mask"
-	clipTextOutput = "text_embeds"
+	clipTextInput  = "text"
+	clipTextOutput = "embedding"
 
 	// ClipModelName identifies the coordinate system a stored vector belongs
 	// to. It travels with every embedding, because two models are two spaces
@@ -138,7 +149,7 @@ func loadClip(modelsDir string) (*clipEngine, error) {
 			return
 		}
 		txt, err := ort.NewDynamicAdvancedSession(textPath,
-			[]string{clipTextIDs, clipTextMask}, []string{clipTextOutput}, nil)
+			[]string{clipTextInput}, []string{clipTextOutput}, nil)
 		if err != nil {
 			clipErr = fmt.Errorf("load clip textual: %w", err)
 			return
@@ -224,7 +235,17 @@ func embedQuery(query, modelsDir string) ([]float32, error) {
 		return nil, err
 	}
 
-	ids, mask, err := eng.tok.Encode(query)
+	/*
+	 * The mask is computed and not sent.
+	 *
+	 * This export's text tower takes ids alone: it finds the end-of-text token
+	 * by argmax over the ids themselves and reads the sequence there, so
+	 * padding is already excluded and a mask would have nowhere to go. Encode
+	 * still returns one because it is the honest description of what it
+	 * produced, and because an export that does want a mask is a plausible
+	 * future pin.
+	 */
+	ids, _, err := eng.tok.Encode(query)
 	if err != nil {
 		return nil, err
 	}
@@ -234,14 +255,9 @@ func embedQuery(query, modelsDir string) ([]float32, error) {
 		return nil, err
 	}
 	defer idsT.Destroy()
-	maskT, err := ort.NewTensor(ort.NewShape(1, ContextLength), mask)
-	if err != nil {
-		return nil, err
-	}
-	defer maskT.Destroy()
 
 	out := make([]ort.Value, 1)
-	if err := eng.text.Run([]ort.Value{idsT, maskT}, out); err != nil {
+	if err := eng.text.Run([]ort.Value{idsT}, out); err != nil {
 		return nil, err
 	}
 	defer out[0].Destroy()

@@ -57,10 +57,12 @@ const (
 	startOfText = "<|startoftext|>"
 	endOfText   = "<|endoftext|>"
 
-	// mergeCount is how many merges the reference reads from the file:
-	// 49152 - 256 - 2 + 1. Stated as the arithmetic rather than as 48894 so it
-	// is checkable against the source it came from.
-	mergeCount = 49152 - 256 - 2 + 1
+	// mergeCount is how many merges the reference reads from the file. It
+	// slices the *lines* as [1:49152-256-2+1], and index 0 is the version
+	// banner — so the count of merges is one fewer than that bound. Stated as
+	// the arithmetic rather than as 48894 so it is checkable against the source
+	// it came from, and counted here after the banner has already been skipped.
+	mergeCount = 49152 - 256 - 2
 )
 
 // clipPattern is the reference pre-tokenisation regex. Go's regexp is RE2,
