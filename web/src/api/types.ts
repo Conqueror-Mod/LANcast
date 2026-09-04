@@ -162,11 +162,7 @@ export interface CastMember {
   items: number;
 }
 
-export interface Encoder {
-  name: string;
-  label: string;
-  hardware: boolean;
-}
+export type Encoder = components["schemas"]["Encoder"];
 
 export interface Settings {
   tmdb: { configured: boolean };
@@ -377,14 +373,7 @@ export interface AuthStatus {
 
 // Background probing progress. `available` is false when ffprobe is not
 // installed, which is a supported configuration rather than an error.
-export interface ProbeStatus {
-  available: boolean;
-  running: boolean;
-  probed: number;
-  failed: number;
-  remaining: number;
-  total: number;
-}
+export type ProbeStatus = components["schemas"]["ProbeStatus"];
 
 // What a re-probe queued. `scope` echoes back which one ran, since the default
 // is the narrow one and the caller should be able to tell them apart.

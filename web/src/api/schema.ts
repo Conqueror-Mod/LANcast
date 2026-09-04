@@ -351,6 +351,225 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * How this file would be delivered, and why
+         * @description **Call it with the parameters you intend to stream with.** An explanation of a decision the server would not actually make sends you looking in the wrong place.
+         *
+         *     Two rules apply on top of whatever the profile allows, and both are about what happens *after* the decision rather than what the client can decode:
+         *
+         *     - **10-bit H.264 is never direct-played.** The codec name matches and browsers advertise H.264 support, but High 10 is outside every browser's baseline. Detected from `pix_fmt` where the probe reports one. HEVC, VP9 and AV1 carry 10-bit fine and are not penalised.
+         *     - **A stream is only copied if MP4 can carry it.** Every non-direct path rewraps into fragmented MP4, and "the client decodes this codec" is not the same claim as "MP4 holds it". VP8, Vorbis, FLAC and Opus are re-encoded rather than copied even when the profile allows them — ffmpeg refuses to start on an impossible mux, which surfaces as a dead player with no reason.
+         */
+        get: operations["getPlaybackDecision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The original file, as an attachment
+         * @description Same bytes as `GET /api/stream/{id}`, different intent. A stream is for a player and every browser treats it as one; this carries `Content-Disposition: attachment` with a filename built from the item's **metadata** rather than from its path — `Arrival (2016).mkv`, or `Storm of the Century - S02E07 - Pilot.mkv` for an episode, because `Pilot.mkv` collides with every other pilot ever made. The name is given in both the quoted `filename=` form and the RFC 5987 `filename*=UTF-8''` form, so a title outside ASCII survives.
+         *
+         *     **Never transcoded.** The transcoder exists so a device that cannot play a file can still watch it; a download that quietly returned a re-encoded copy would be a lie about what you have, and the one operation where the original matters most is the one that takes it off the server.
+         *
+         *     Range requests are honoured, so an interrupted transfer resumes — which is the case a nine-gigabyte file is in.
+         */
+        get: operations["downloadItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stream/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The media file, direct play only
+         * @description Bytes served as stored, with range support. **`Range` is what makes seeking work, and it is the first thing to test when playback misbehaves.**
+         *
+         *     Files a client cannot play use the transcode endpoints, chosen by the client after consulting `/playback`.
+         */
+        get: operations["streamItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stream/{id}/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A progressive fragmented MP4, produced on demand
+         * @description Plays in any browser with no client library — the file path deliberately touches no third-party player (ADR 0013, amended by ADR 0050).
+         *
+         *     `Accept-Ranges: none`: a live transcode has no length and cannot be range-served, since bytes do not exist until ffmpeg produces them. Seeking forward restarts the stream from a new `t`.
+         *
+         *     **A client must render the refusals.** Both `409` and `429` are handed to a `<video>` element as a failed request, which the element reports as a bare `error` with no status and nothing to display — so a player that does not act on them shows a spinner for ever, which is indistinguishable from converting slowly. Retrying is not a recovery: the same request under a narrower profile is the same request.
+         */
+        get: operations["streamTranscode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stream/{id}/hls/index.m3u8": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The same transcode as an HLS playlist with fMP4 segments
+         * @description For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
+         *
+         *     **This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.
+         */
+        get: operations["streamHLSPlaylist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stream/{id}/hls/{session}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The session id from the playlist. */
+                session: string;
+                /** @description The segment or init-segment filename from the playlist. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One HLS segment
+         * @description Clients follow these from the playlist rather than constructing them.
+         */
+        get: operations["streamHLSSegment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Running transcode sessions, and whether ffmpeg is available */
+        get: operations["getTranscodeStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Background probing progress */
+        get: operations["getProbeStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/probe/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue already-probed items to be probed again
+         * @description Administrators only.
+         *
+         *     Needed because a probe is only as good as the build that made it. The pending queue is "never probed", so when the prober learns to record a field the decision engine depends on, every item probed by an older build keeps a decision made without it and nothing revisits them.
+         *
+         *     Stream rows are kept while an item is queued. Deleting them would widen the window in which an item has no codec information at all and every playback decision for it falls back to direct play.
+         *
+         *     **Pick the scope by what you are trying to correct, not by cost.** `incomplete` is defined by one technical criterion — a video stream stored without `pix_fmt` — and on a library where every file has one it matches **nothing** and answers `{"queued": 0}`. That is a correct answer to a different question, and it has been read as "everything is already up to date" by somebody re-probing to fix stored durations. Use `scope=all` with `library` for a library whose stored *values* are wrong.
+         */
+        post: operations["refreshProbes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -788,6 +1007,94 @@ export interface components {
             position_ms: number;
             watched: boolean;
         };
+        /**
+         * @description How a file would be delivered, and why (ADR 0012).
+         *
+         *     The actions matter **independently**: a `transcode` with `video_action: "copy"` re-encodes only the audio, which is a fraction of the cost of a full re-encode and covers about a third of a typical library.
+         */
+        Decision: {
+            /** @description `direct`, `remux` or `transcode`. */
+            method: string;
+            /** @description **Always populated.** "Why is this transcoding" should not require reading server logs. */
+            reason: string;
+            /** @description `copy` or `encode`. */
+            video_action: string;
+            /** @description `copy` or `encode`. */
+            audio_action: string;
+            target_format?: string;
+            /**
+             * @description True when the file has no video stream — a music track, or a video file stripped to its audio. **Embedded cover art does not count**: it is stored as a video stream and is ignored, because treating a still frame as the picture would have ffmpeg encode it for the length of the track.
+             *
+             *     It travels on the decision because the ffmpeg command line must not map a video stream that does not exist — `-map 0:v:0` against a music file is a hard failure, not a degraded stream, and the caller has no other way to know. A client can use it to attach the source to an `<audio>` element; a non-direct stream of audio-only content is served as `audio/mp4` rather than `video/mp4`.
+             */
+            audio_only?: boolean;
+            /** @description The ceiling the re-encode will come in under. **Present only when `video_action` is `encode` and a quality ceiling actually constrained it.** A copy carries neither this nor `target_video_bitrate`: nothing re-encodes, so no ceiling reached a pixel, and reporting one would have a client believe a cap applied that did not. */
+            target_height?: number;
+            /** Format: int64 */
+            target_video_bitrate?: number;
+            /**
+             * @description True when the source is HDR — PQ or HLG by its transfer function — and the re-encode will convert it to SDR (ADR 0033). Like the targets above, only on `video_action: "encode"`: a copy delivers the source's own video bytes, which are HDR and correctly described as such.
+             *
+             *     **Do not read this as "the output is HDR".** It means the opposite: the delivered stream is BT.709 SDR and is tagged BT.709 throughout. Whether the conversion itself runs depends on the ffmpeg build — the CPU tonemap needs `zscale`, which is not in every build — and a server that cannot convert still labels the output consistently rather than emitting a file whose colour tags disagree with each other.
+             */
+            tonemap_hdr?: boolean;
+            /** @description The box the input arrived in. It rides along because the command line is built from the decision rather than from the file, and seeking needs it — some containers cannot be sought accurately, and a copied audio track is silently wrong when they are. */
+            source_container?: string;
+            source_width?: number;
+            source_height?: number;
+            source_frame_rate?: number;
+        };
+        PlaybackDecision: {
+            /** Format: int64 */
+            item_id: number;
+            /** @description Whether the file has been inspected. **An unprobed item returns `direct`** — the behaviour LANcast had before probing existed, rather than guessing at a transcode for a file nothing has looked at. */
+            probed: boolean;
+            /** @description The resolved profile, echoed back. */
+            profile: string;
+            decision: components["schemas"]["Decision"];
+        };
+        ProbeStatus: {
+            /** @description False when ffprobe is not installed. **That is a supported configuration, not an error**: playback decisions fall back to direct play. */
+            available: boolean;
+            running: boolean;
+            probed: number;
+            failed: number;
+            remaining: number;
+            total: number;
+        };
+        /** @description One way to produce H.264. Chosen by a **real encode at startup** rather than from a capability list, which makes it evidence about this session rather than a claim about the hardware. */
+        Encoder: {
+            /** @description The ffmpeg encoder, e.g. `h264_nvenc`. */
+            name: string;
+            /** @description What a person reads. */
+            label: string;
+            /** @description False only for libx264. */
+            hardware: boolean;
+        };
+        TranscodeSession: {
+            id: string;
+            /** Format: int64 */
+            item_id: number;
+            output: string;
+            /** @description Distinguishes a real re-encode from a remux. */
+            encoding: boolean;
+            /** @description Offset in seconds this session began at. */
+            start_at: number;
+            idle_seconds: number;
+            running_seconds: number;
+            finished: boolean;
+            error?: string;
+        };
+        TranscodeStatus: {
+            /** @description Whether ffmpeg is installed. */
+            available: boolean;
+            encoder: components["schemas"]["Encoder"];
+            sessions: components["schemas"]["TranscodeSession"][];
+        };
+        ReprobeResult: {
+            scope: string;
+            queued: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -834,6 +1141,66 @@ export interface components {
         RootId: number;
         /** @description The item's id. */
         ItemId: number;
+        /**
+         * @description What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.
+         *
+         *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
+         *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
+         *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+         *
+         *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
+         *
+         *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+         */
+        Profile: string;
+        /**
+         * @description Comma-separated extra capabilities, applied **on top of** the named profile.
+         *
+         *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+         *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
+         *     - `ac3`, `eac3`, `dts` — that audio codec
+         *     - `matroska` — the container alone, for a client with a real demuxer
+         *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
+         *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
+         *
+         *     `hevc` and `hevc10` are separate because they are separate questions and the answers differ: a browser can answer "probably" for Main profile and still decode Main 10 badly. That was found on a real film — direct-played with perfect audio and a stuttering picture, from a client that had probed `hvc1.1.6` (8-bit) and been read as covering Main 10 too. Probe `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for it.
+         *
+         *     `high10` trusts **no** native profile listing, unlike `hevc10` which trusts `tv` and `safari`. H.264 is listed by every profile including the browser floor, so applying the same rule would hand High 10 to a set-top box on the strength of it decoding 8-bit H.264 — and High 10 is absent from most fixed-function decoders that manage High profile perfectly. Probe `video/mp4; codecs="avc1.6e0033"`.
+         *
+         *     `flacmp4` and `opusmp4` ask a different question from "can you decode FLAC" — every browser in the floor can, which is why a `.flac` file direct-plays — but "can you decode it *in an MP4*". Those differ. FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file whose only fault was its container had its audio re-encoded, turning lossless into AAC to change a box. ALAC needs no claim: MP4 is its native home.
+         *
+         *     **It only ever widens.** A claim cannot remove anything the profile already allows, an unrecognised claim is ignored rather than refused, and an absent parameter behaves exactly as before — so this is additive (ADR 0018) and a client that never learns about it is unaffected.
+         *
+         *     **Send it to every endpoint that decides, or none.** Claiming HEVC on `/playback` and not on `/transcode` means being told "direct play" and then handed a re-encode, or getting `409` for a transcode the server no longer thinks is needed.
+         *
+         *     **A claim is a claim.** `canPlayType` answers "probably", and HEVC support depends on the GPU and sometimes on an OS codec extension. A client that claims something it cannot decode gets a failure only it sees — nothing else on the LAN is affected — and is expected to stop claiming it and ask again. The shipped client drops the capability, remembers the refusal, and re-requests the file as a conversion.
+         * @example hevc,ac3
+         */
+        Can: string;
+        /**
+         * @description Select an audio track by **absolute stream index**.
+         *
+         *     This participates in the delivery decision rather than only in stream mapping: the decision is made about *that* track. A file whose default track is TrueHD and whose second track is AAC direct-plays when you ask for the second, and re-encodes when you do not.
+         *
+         *     An index naming a track that does not exist returns `400 bad_request` rather than silently playing a different one.
+         */
+        AudioTrack: number;
+        /**
+         * @description Pixels. Video taller than this is scaled down to it.
+         *
+         *     **It only ever narrows** — the mirror image of `can`, and the reason the two are separate parameters rather than one. A ceiling can force an encode that would not otherwise have happened; it can never talk the server into direct-playing something the client cannot decode. Where a named profile carries its own ceiling, the lower of the two wins.
+         *
+         *     **A ceiling is not a target.** A file already under it is untouched: no upscale, and no rate control that could only ever be slack. Asking for 1080p on a 480p file direct-plays exactly as it would with no parameter at all.
+         */
+        MaxHeight: number;
+        /**
+         * @description **Bits** per second, not kilobits — the same unit the profile uses internally. Video above this rate is re-encoded under it. Absent, zero, or unparseable means no ceiling.
+         *
+         *     Narrows only, on the same terms as `max_height`.
+         */
+        MaxBitrate: number;
+        /** @description Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served. */
+        StartOffset: number;
     };
     requestBodies: never;
     headers: never;
@@ -1436,6 +1803,535 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getPlaybackDecision: {
+        parameters: {
+            query?: {
+                /**
+                 * @description What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.
+                 *
+                 *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
+                 *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
+                 *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *
+                 *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
+                 *
+                 *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 */
+                profile?: components["parameters"]["Profile"];
+                /**
+                 * @description Comma-separated extra capabilities, applied **on top of** the named profile.
+                 *
+                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
+                 *     - `ac3`, `eac3`, `dts` — that audio codec
+                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
+                 *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
+                 *
+                 *     `hevc` and `hevc10` are separate because they are separate questions and the answers differ: a browser can answer "probably" for Main profile and still decode Main 10 badly. That was found on a real film — direct-played with perfect audio and a stuttering picture, from a client that had probed `hvc1.1.6` (8-bit) and been read as covering Main 10 too. Probe `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for it.
+                 *
+                 *     `high10` trusts **no** native profile listing, unlike `hevc10` which trusts `tv` and `safari`. H.264 is listed by every profile including the browser floor, so applying the same rule would hand High 10 to a set-top box on the strength of it decoding 8-bit H.264 — and High 10 is absent from most fixed-function decoders that manage High profile perfectly. Probe `video/mp4; codecs="avc1.6e0033"`.
+                 *
+                 *     `flacmp4` and `opusmp4` ask a different question from "can you decode FLAC" — every browser in the floor can, which is why a `.flac` file direct-plays — but "can you decode it *in an MP4*". Those differ. FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file whose only fault was its container had its audio re-encoded, turning lossless into AAC to change a box. ALAC needs no claim: MP4 is its native home.
+                 *
+                 *     **It only ever widens.** A claim cannot remove anything the profile already allows, an unrecognised claim is ignored rather than refused, and an absent parameter behaves exactly as before — so this is additive (ADR 0018) and a client that never learns about it is unaffected.
+                 *
+                 *     **Send it to every endpoint that decides, or none.** Claiming HEVC on `/playback` and not on `/transcode` means being told "direct play" and then handed a re-encode, or getting `409` for a transcode the server no longer thinks is needed.
+                 *
+                 *     **A claim is a claim.** `canPlayType` answers "probably", and HEVC support depends on the GPU and sometimes on an OS codec extension. A client that claims something it cannot decode gets a failure only it sees — nothing else on the LAN is affected — and is expected to stop claiming it and ask again. The shipped client drops the capability, remembers the refusal, and re-requests the file as a conversion.
+                 * @example hevc,ac3
+                 */
+                can?: components["parameters"]["Can"];
+                /**
+                 * @description Select an audio track by **absolute stream index**.
+                 *
+                 *     This participates in the delivery decision rather than only in stream mapping: the decision is made about *that* track. A file whose default track is TrueHD and whose second track is AAC direct-plays when you ask for the second, and re-encodes when you do not.
+                 *
+                 *     An index naming a track that does not exist returns `400 bad_request` rather than silently playing a different one.
+                 */
+                audio?: components["parameters"]["AudioTrack"];
+                /**
+                 * @description Pixels. Video taller than this is scaled down to it.
+                 *
+                 *     **It only ever narrows** — the mirror image of `can`, and the reason the two are separate parameters rather than one. A ceiling can force an encode that would not otherwise have happened; it can never talk the server into direct-playing something the client cannot decode. Where a named profile carries its own ceiling, the lower of the two wins.
+                 *
+                 *     **A ceiling is not a target.** A file already under it is untouched: no upscale, and no rate control that could only ever be slack. Asking for 1080p on a 480p file direct-plays exactly as it would with no parameter at all.
+                 */
+                max_height?: components["parameters"]["MaxHeight"];
+                /**
+                 * @description **Bits** per second, not kilobits — the same unit the profile uses internally. Video above this rate is re-encoded under it. Absent, zero, or unparseable means no ceiling.
+                 *
+                 *     Narrows only, on the same terms as `max_height`.
+                 */
+                max_bitrate?: components["parameters"]["MaxBitrate"];
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The decision, and the profile it was made under. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackDecision"];
+                };
+            };
+            /** @description `audio` named a track that does not exist. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    /** @description `attachment`, with the metadata-derived filename in both forms. */
+                    "Content-Disposition"?: string;
+                    /** @description `bytes`. */
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description A range of the file. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No file, or its path does not resolve inside the location it was scanned under. Containment is re-verified on every request that turns a database row into a filesystem path. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The file is missing from disk. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    streamItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            /** @description A range of the file. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The file is gone from disk. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    streamTranscode: {
+        parameters: {
+            query?: {
+                /**
+                 * @description What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.
+                 *
+                 *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
+                 *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
+                 *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *
+                 *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
+                 *
+                 *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 */
+                profile?: components["parameters"]["Profile"];
+                /**
+                 * @description Comma-separated extra capabilities, applied **on top of** the named profile.
+                 *
+                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
+                 *     - `ac3`, `eac3`, `dts` — that audio codec
+                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
+                 *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
+                 *
+                 *     `hevc` and `hevc10` are separate because they are separate questions and the answers differ: a browser can answer "probably" for Main profile and still decode Main 10 badly. That was found on a real film — direct-played with perfect audio and a stuttering picture, from a client that had probed `hvc1.1.6` (8-bit) and been read as covering Main 10 too. Probe `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for it.
+                 *
+                 *     `high10` trusts **no** native profile listing, unlike `hevc10` which trusts `tv` and `safari`. H.264 is listed by every profile including the browser floor, so applying the same rule would hand High 10 to a set-top box on the strength of it decoding 8-bit H.264 — and High 10 is absent from most fixed-function decoders that manage High profile perfectly. Probe `video/mp4; codecs="avc1.6e0033"`.
+                 *
+                 *     `flacmp4` and `opusmp4` ask a different question from "can you decode FLAC" — every browser in the floor can, which is why a `.flac` file direct-plays — but "can you decode it *in an MP4*". Those differ. FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file whose only fault was its container had its audio re-encoded, turning lossless into AAC to change a box. ALAC needs no claim: MP4 is its native home.
+                 *
+                 *     **It only ever widens.** A claim cannot remove anything the profile already allows, an unrecognised claim is ignored rather than refused, and an absent parameter behaves exactly as before — so this is additive (ADR 0018) and a client that never learns about it is unaffected.
+                 *
+                 *     **Send it to every endpoint that decides, or none.** Claiming HEVC on `/playback` and not on `/transcode` means being told "direct play" and then handed a re-encode, or getting `409` for a transcode the server no longer thinks is needed.
+                 *
+                 *     **A claim is a claim.** `canPlayType` answers "probably", and HEVC support depends on the GPU and sometimes on an OS codec extension. A client that claims something it cannot decode gets a failure only it sees — nothing else on the LAN is affected — and is expected to stop claiming it and ask again. The shipped client drops the capability, remembers the refusal, and re-requests the file as a conversion.
+                 * @example hevc,ac3
+                 */
+                can?: components["parameters"]["Can"];
+                /**
+                 * @description Select an audio track by **absolute stream index**.
+                 *
+                 *     This participates in the delivery decision rather than only in stream mapping: the decision is made about *that* track. A file whose default track is TrueHD and whose second track is AAC direct-plays when you ask for the second, and re-encodes when you do not.
+                 *
+                 *     An index naming a track that does not exist returns `400 bad_request` rather than silently playing a different one.
+                 */
+                audio?: components["parameters"]["AudioTrack"];
+                /**
+                 * @description Pixels. Video taller than this is scaled down to it.
+                 *
+                 *     **It only ever narrows** — the mirror image of `can`, and the reason the two are separate parameters rather than one. A ceiling can force an encode that would not otherwise have happened; it can never talk the server into direct-playing something the client cannot decode. Where a named profile carries its own ceiling, the lower of the two wins.
+                 *
+                 *     **A ceiling is not a target.** A file already under it is untouched: no upscale, and no rate control that could only ever be slack. Asking for 1080p on a 480p file direct-plays exactly as it would with no parameter at all.
+                 */
+                max_height?: components["parameters"]["MaxHeight"];
+                /**
+                 * @description **Bits** per second, not kilobits — the same unit the profile uses internally. Video above this rate is re-encoded under it. Absent, zero, or unparseable means no ceiling.
+                 *
+                 *     Narrows only, on the same terms as `max_height`.
+                 */
+                max_bitrate?: components["parameters"]["MaxBitrate"];
+                /** @description Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served. */
+                t?: components["parameters"]["StartOffset"];
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The converted stream. `audio/mp4` when the decision is audio-only. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                    "audio/mp4": string;
+                };
+            };
+            /** @description `audio` named a track that does not exist. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The file can be played directly, so transcoding it would be wasted CPU. Use `/api/stream/{id}`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Past the concurrent-transcode limit. Logged with how many sessions are running against the ceiling, since that number is what separates "the limit is working" from "sessions are leaking". */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ffmpeg is not installed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    streamHLSPlaylist: {
+        parameters: {
+            query?: {
+                /**
+                 * @description What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.
+                 *
+                 *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
+                 *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
+                 *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *
+                 *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
+                 *
+                 *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 */
+                profile?: components["parameters"]["Profile"];
+                /**
+                 * @description Comma-separated extra capabilities, applied **on top of** the named profile.
+                 *
+                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
+                 *     - `ac3`, `eac3`, `dts` — that audio codec
+                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
+                 *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
+                 *
+                 *     `hevc` and `hevc10` are separate because they are separate questions and the answers differ: a browser can answer "probably" for Main profile and still decode Main 10 badly. That was found on a real film — direct-played with perfect audio and a stuttering picture, from a client that had probed `hvc1.1.6` (8-bit) and been read as covering Main 10 too. Probe `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for it.
+                 *
+                 *     `high10` trusts **no** native profile listing, unlike `hevc10` which trusts `tv` and `safari`. H.264 is listed by every profile including the browser floor, so applying the same rule would hand High 10 to a set-top box on the strength of it decoding 8-bit H.264 — and High 10 is absent from most fixed-function decoders that manage High profile perfectly. Probe `video/mp4; codecs="avc1.6e0033"`.
+                 *
+                 *     `flacmp4` and `opusmp4` ask a different question from "can you decode FLAC" — every browser in the floor can, which is why a `.flac` file direct-plays — but "can you decode it *in an MP4*". Those differ. FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file whose only fault was its container had its audio re-encoded, turning lossless into AAC to change a box. ALAC needs no claim: MP4 is its native home.
+                 *
+                 *     **It only ever widens.** A claim cannot remove anything the profile already allows, an unrecognised claim is ignored rather than refused, and an absent parameter behaves exactly as before — so this is additive (ADR 0018) and a client that never learns about it is unaffected.
+                 *
+                 *     **Send it to every endpoint that decides, or none.** Claiming HEVC on `/playback` and not on `/transcode` means being told "direct play" and then handed a re-encode, or getting `409` for a transcode the server no longer thinks is needed.
+                 *
+                 *     **A claim is a claim.** `canPlayType` answers "probably", and HEVC support depends on the GPU and sometimes on an OS codec extension. A client that claims something it cannot decode gets a failure only it sees — nothing else on the LAN is affected — and is expected to stop claiming it and ask again. The shipped client drops the capability, remembers the refusal, and re-requests the file as a conversion.
+                 * @example hevc,ac3
+                 */
+                can?: components["parameters"]["Can"];
+                /**
+                 * @description Select an audio track by **absolute stream index**.
+                 *
+                 *     This participates in the delivery decision rather than only in stream mapping: the decision is made about *that* track. A file whose default track is TrueHD and whose second track is AAC direct-plays when you ask for the second, and re-encodes when you do not.
+                 *
+                 *     An index naming a track that does not exist returns `400 bad_request` rather than silently playing a different one.
+                 */
+                audio?: components["parameters"]["AudioTrack"];
+                /**
+                 * @description Pixels. Video taller than this is scaled down to it.
+                 *
+                 *     **It only ever narrows** — the mirror image of `can`, and the reason the two are separate parameters rather than one. A ceiling can force an encode that would not otherwise have happened; it can never talk the server into direct-playing something the client cannot decode. Where a named profile carries its own ceiling, the lower of the two wins.
+                 *
+                 *     **A ceiling is not a target.** A file already under it is untouched: no upscale, and no rate control that could only ever be slack. Asking for 1080p on a 480p file direct-plays exactly as it would with no parameter at all.
+                 */
+                max_height?: components["parameters"]["MaxHeight"];
+                /**
+                 * @description **Bits** per second, not kilobits — the same unit the profile uses internally. Video above this rate is re-encoded under it. Absent, zero, or unparseable means no ceiling.
+                 *
+                 *     Narrows only, on the same terms as `max_height`.
+                 */
+                max_bitrate?: components["parameters"]["MaxBitrate"];
+                /** @description Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served. */
+                t?: components["parameters"]["StartOffset"];
+            };
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The playlist. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description ffmpeg is not installed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    streamHLSSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The session id from the playlist. */
+                session: string;
+                /** @description The segment or init-segment filename from the playlist. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The segment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/iso.segment": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTranscodeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions and the selected encoder. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getProbeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress, and whether ffprobe is installed at all. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    refreshProbes: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `incomplete` (default) re-probes only items a current build would learn something from — today, video streams stored without `pix_fmt`. This is the narrow, cheap option and the one to reach for.
+                 *
+                 *     `all` re-probes everything, optionally narrowed with `library`. Re-probing a large library is hours of ffprobe, which is why it has to be asked for by name and is never something the server decides to do on its own.
+                 */
+                scope?: string;
+                /** @description Narrow `scope=all` to one library. */
+                library?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReprobeResult"];
+                };
+            };
+            /** @description Unknown scope. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description ffprobe is not installed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

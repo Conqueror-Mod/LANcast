@@ -41,6 +41,10 @@
     {
       "name": "items",
       "description": "Browsing media, item detail, and play position."
+    },
+    {
+      "name": "playback",
+      "description": "The direct-play / remux / transcode decision, and the endpoints that deliver bytes (ADR 0012)."
     }
   ],
   "paths": {
@@ -986,6 +990,530 @@
           }
         }
       }
+    },
+    "/items/{id}/playback": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getPlaybackDecision",
+        "tags": [
+          "playback"
+        ],
+        "summary": "How this file would be delivered, and why",
+        "description": "**Call it with the parameters you intend to stream with.** An explanation of a decision the server would not actually make sends you looking in the wrong place.\n\nTwo rules apply on top of whatever the profile allows, and both are about what happens *after* the decision rather than what the client can decode:\n\n- **10-bit H.264 is never direct-played.** The codec name matches and browsers advertise H.264 support, but High 10 is outside every browser's baseline. Detected from `pix_fmt` where the probe reports one. HEVC, VP9 and AV1 carry 10-bit fine and are not penalised.\n- **A stream is only copied if MP4 can carry it.** Every non-direct path rewraps into fragmented MP4, and \"the client decodes this codec\" is not the same claim as \"MP4 holds it\". VP8, Vorbis, FLAC and Opus are re-encoded rather than copied even when the profile allows them — ffmpeg refuses to start on an impossible mux, which surfaces as a dead player with no reason.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Profile"
+          },
+          {
+            "$ref": "#/components/parameters/Can"
+          },
+          {
+            "$ref": "#/components/parameters/AudioTrack"
+          },
+          {
+            "$ref": "#/components/parameters/MaxHeight"
+          },
+          {
+            "$ref": "#/components/parameters/MaxBitrate"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The decision, and the profile it was made under.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`audio` named a track that does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/items/{id}/download": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "downloadItem",
+        "tags": [
+          "playback"
+        ],
+        "summary": "The original file, as an attachment",
+        "description": "Same bytes as `GET /api/stream/{id}`, different intent. A stream is for a player and every browser treats it as one; this carries `Content-Disposition: attachment` with a filename built from the item's **metadata** rather than from its path — `Arrival (2016).mkv`, or `Storm of the Century - S02E07 - Pilot.mkv` for an episode, because `Pilot.mkv` collides with every other pilot ever made. The name is given in both the quoted `filename=` form and the RFC 5987 `filename*=UTF-8''` form, so a title outside ASCII survives.\n\n**Never transcoded.** The transcoder exists so a device that cannot play a file can still watch it; a download that quietly returned a re-encoded copy would be a lie about what you have, and the one operation where the original matters most is the one that takes it off the server.\n\nRange requests are honoured, so an interrupted transfer resumes — which is the case a nine-gigabyte file is in.",
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment`, with the metadata-derived filename in both forms.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "description": "`bytes`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No file, or its path does not resolve inside the location it was scanned under. Containment is re-verified on every request that turns a database row into a filesystem path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The file is missing from disk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "streamItem",
+        "tags": [
+          "playback"
+        ],
+        "summary": "The media file, direct play only",
+        "description": "Bytes served as stored, with range support. **`Range` is what makes seeking work, and it is the first thing to test when playback misbehaves.**\n\nFiles a client cannot play use the transcode endpoints, chosen by the client after consulting `/playback`.",
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The file is gone from disk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/{id}/transcode": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "streamTranscode",
+        "tags": [
+          "playback"
+        ],
+        "summary": "A progressive fragmented MP4, produced on demand",
+        "description": "Plays in any browser with no client library — the file path deliberately touches no third-party player (ADR 0013, amended by ADR 0050).\n\n`Accept-Ranges: none`: a live transcode has no length and cannot be range-served, since bytes do not exist until ffmpeg produces them. Seeking forward restarts the stream from a new `t`.\n\n**A client must render the refusals.** Both `409` and `429` are handed to a `<video>` element as a failed request, which the element reports as a bare `error` with no status and nothing to display — so a player that does not act on them shows a spinner for ever, which is indistinguishable from converting slowly. Retrying is not a recovery: the same request under a narrower profile is the same request.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Profile"
+          },
+          {
+            "$ref": "#/components/parameters/Can"
+          },
+          {
+            "$ref": "#/components/parameters/AudioTrack"
+          },
+          {
+            "$ref": "#/components/parameters/MaxHeight"
+          },
+          {
+            "$ref": "#/components/parameters/MaxBitrate"
+          },
+          {
+            "$ref": "#/components/parameters/StartOffset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The converted stream. `audio/mp4` when the decision is audio-only.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "audio/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`audio` named a track that does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The file can be played directly, so transcoding it would be wasted CPU. Use `/api/stream/{id}`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Past the concurrent-transcode limit. Logged with how many sessions are running against the ceiling, since that number is what separates \"the limit is working\" from \"sessions are leaking\".",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ffmpeg is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/{id}/hls/index.m3u8": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "streamHLSPlaylist",
+        "tags": [
+          "playback"
+        ],
+        "summary": "The same transcode as an HLS playlist with fMP4 segments",
+        "description": "For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.\n\n**This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Profile"
+          },
+          {
+            "$ref": "#/components/parameters/Can"
+          },
+          {
+            "$ref": "#/components/parameters/AudioTrack"
+          },
+          {
+            "$ref": "#/components/parameters/MaxHeight"
+          },
+          {
+            "$ref": "#/components/parameters/MaxBitrate"
+          },
+          {
+            "$ref": "#/components/parameters/StartOffset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The playlist.",
+            "content": {
+              "application/vnd.apple.mpegurl": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "ffmpeg is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/{id}/hls/{session}/{name}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        },
+        {
+          "name": "session",
+          "in": "path",
+          "required": true,
+          "description": "The session id from the playlist.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "description": "The segment or init-segment filename from the playlist.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "streamHLSSegment",
+        "tags": [
+          "playback"
+        ],
+        "summary": "One HLS segment",
+        "description": "Clients follow these from the playlist rather than constructing them.",
+        "responses": {
+          "200": {
+            "description": "The segment.",
+            "content": {
+              "video/iso.segment": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/transcode": {
+      "get": {
+        "operationId": "getTranscodeStatus",
+        "tags": [
+          "playback"
+        ],
+        "summary": "Running transcode sessions, and whether ffmpeg is available",
+        "responses": {
+          "200": {
+            "description": "Sessions and the selected encoder.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/probe": {
+      "get": {
+        "operationId": "getProbeStatus",
+        "tags": [
+          "playback"
+        ],
+        "summary": "Background probing progress",
+        "responses": {
+          "200": {
+            "description": "Progress, and whether ffprobe is installed at all.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/probe/refresh": {
+      "post": {
+        "operationId": "refreshProbes",
+        "tags": [
+          "playback"
+        ],
+        "summary": "Queue already-probed items to be probed again",
+        "description": "Administrators only.\n\nNeeded because a probe is only as good as the build that made it. The pending queue is \"never probed\", so when the prober learns to record a field the decision engine depends on, every item probed by an older build keeps a decision made without it and nothing revisits them.\n\nStream rows are kept while an item is queued. Deleting them would widen the window in which an item has no codec information at all and every playback decision for it falls back to direct play.\n\n**Pick the scope by what you are trying to correct, not by cost.** `incomplete` is defined by one technical criterion — a video stream stored without `pix_fmt` — and on a library where every file has one it matches **nothing** and answers `{\"queued\": 0}`. That is a correct answer to a different question, and it has been read as \"everything is already up to date\" by somebody re-probing to fix stored durations. Use `scope=all` with `library` for a library whose stored *values* are wrong.",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "description": "`incomplete` (default) re-probes only items a current build would learn something from — today, video streams stored without `pix_fmt`. This is the narrow, cheap option and the one to reach for.\n\n`all` re-probes everything, optionally narrowed with `library`. Re-probing a large library is hours of ffprobe, which is why it has to be asked for by name and is never something the server decides to do on its own.",
+            "schema": {
+              "type": "string",
+              "default": "incomplete"
+            }
+          },
+          {
+            "name": "library",
+            "in": "query",
+            "required": false,
+            "description": "Narrow `scope=all` to one library.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How many were queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReprobeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "description": "ffprobe is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1026,6 +1554,63 @@
         "schema": {
           "type": "integer",
           "format": "int64"
+        }
+      },
+      "Profile": {
+        "name": "profile",
+        "in": "query",
+        "required": false,
+        "description": "What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.\n\n- `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav\n- `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for\n- `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers\n\n**`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.\n\nThe bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.",
+        "schema": {
+          "type": "string",
+          "default": "browser"
+        }
+      },
+      "Can": {
+        "name": "can",
+        "in": "query",
+        "required": false,
+        "description": "Comma-separated extra capabilities, applied **on top of** the named profile.\n\n- `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in\n- `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own\n- `ac3`, `eac3`, `dts` — that audio codec\n- `matroska` — the container alone, for a client with a real demuxer\n- `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own\n- `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own\n\n`hevc` and `hevc10` are separate because they are separate questions and the answers differ: a browser can answer \"probably\" for Main profile and still decode Main 10 badly. That was found on a real film — direct-played with perfect audio and a stuttering picture, from a client that had probed `hvc1.1.6` (8-bit) and been read as covering Main 10 too. Probe `hvc1.2.4.L120.B0` separately and send `hevc10` only if the engine answers for it.\n\n`high10` trusts **no** native profile listing, unlike `hevc10` which trusts `tv` and `safari`. H.264 is listed by every profile including the browser floor, so applying the same rule would hand High 10 to a set-top box on the strength of it decoding 8-bit H.264 — and High 10 is absent from most fixed-function decoders that manage High profile perfectly. Probe `video/mp4; codecs=\"avc1.6e0033\"`.\n\n`flacmp4` and `opusmp4` ask a different question from \"can you decode FLAC\" — every browser in the floor can, which is why a `.flac` file direct-plays — but \"can you decode it *in an MP4*\". Those differ. FLAC in fragmented MP4 is legal by spec and not universally decodable, so a file whose only fault was its container had its audio re-encoded, turning lossless into AAC to change a box. ALAC needs no claim: MP4 is its native home.\n\n**It only ever widens.** A claim cannot remove anything the profile already allows, an unrecognised claim is ignored rather than refused, and an absent parameter behaves exactly as before — so this is additive (ADR 0018) and a client that never learns about it is unaffected.\n\n**Send it to every endpoint that decides, or none.** Claiming HEVC on `/playback` and not on `/transcode` means being told \"direct play\" and then handed a re-encode, or getting `409` for a transcode the server no longer thinks is needed.\n\n**A claim is a claim.** `canPlayType` answers \"probably\", and HEVC support depends on the GPU and sometimes on an OS codec extension. A client that claims something it cannot decode gets a failure only it sees — nothing else on the LAN is affected — and is expected to stop claiming it and ask again. The shipped client drops the capability, remembers the refusal, and re-requests the file as a conversion.",
+        "schema": {
+          "type": "string"
+        },
+        "example": "hevc,ac3"
+      },
+      "AudioTrack": {
+        "name": "audio",
+        "in": "query",
+        "required": false,
+        "description": "Select an audio track by **absolute stream index**.\n\nThis participates in the delivery decision rather than only in stream mapping: the decision is made about *that* track. A file whose default track is TrueHD and whose second track is AAC direct-plays when you ask for the second, and re-encodes when you do not.\n\nAn index naming a track that does not exist returns `400 bad_request` rather than silently playing a different one.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "MaxHeight": {
+        "name": "max_height",
+        "in": "query",
+        "required": false,
+        "description": "Pixels. Video taller than this is scaled down to it.\n\n**It only ever narrows** — the mirror image of `can`, and the reason the two are separate parameters rather than one. A ceiling can force an encode that would not otherwise have happened; it can never talk the server into direct-playing something the client cannot decode. Where a named profile carries its own ceiling, the lower of the two wins.\n\n**A ceiling is not a target.** A file already under it is untouched: no upscale, and no rate control that could only ever be slack. Asking for 1080p on a 480p file direct-plays exactly as it would with no parameter at all.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "MaxBitrate": {
+        "name": "max_bitrate",
+        "in": "query",
+        "required": false,
+        "description": "**Bits** per second, not kilobits — the same unit the profile uses internally. Video above this rate is re-encoded under it. Absent, zero, or unparseable means no ceiling.\n\nNarrows only, on the same terms as `max_height`.",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "StartOffset": {
+        "name": "t",
+        "in": "query",
+        "required": false,
+        "description": "Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served.",
+        "schema": {
+          "type": "number"
         }
       }
     },
@@ -2065,6 +2650,230 @@
           },
           "watched": {
             "type": "boolean"
+          }
+        }
+      },
+      "Decision": {
+        "type": "object",
+        "description": "How a file would be delivered, and why (ADR 0012).\n\nThe actions matter **independently**: a `transcode` with `video_action: \"copy\"` re-encodes only the audio, which is a fraction of the cost of a full re-encode and covers about a third of a typical library.",
+        "required": [
+          "method",
+          "reason",
+          "video_action",
+          "audio_action"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "`direct`, `remux` or `transcode`."
+          },
+          "reason": {
+            "type": "string",
+            "description": "**Always populated.** \"Why is this transcoding\" should not require reading server logs."
+          },
+          "video_action": {
+            "type": "string",
+            "description": "`copy` or `encode`."
+          },
+          "audio_action": {
+            "type": "string",
+            "description": "`copy` or `encode`."
+          },
+          "target_format": {
+            "type": "string"
+          },
+          "audio_only": {
+            "type": "boolean",
+            "description": "True when the file has no video stream — a music track, or a video file stripped to its audio. **Embedded cover art does not count**: it is stored as a video stream and is ignored, because treating a still frame as the picture would have ffmpeg encode it for the length of the track.\n\nIt travels on the decision because the ffmpeg command line must not map a video stream that does not exist — `-map 0:v:0` against a music file is a hard failure, not a degraded stream, and the caller has no other way to know. A client can use it to attach the source to an `<audio>` element; a non-direct stream of audio-only content is served as `audio/mp4` rather than `video/mp4`."
+          },
+          "target_height": {
+            "type": "integer",
+            "description": "The ceiling the re-encode will come in under. **Present only when `video_action` is `encode` and a quality ceiling actually constrained it.** A copy carries neither this nor `target_video_bitrate`: nothing re-encodes, so no ceiling reached a pixel, and reporting one would have a client believe a cap applied that did not."
+          },
+          "target_video_bitrate": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tonemap_hdr": {
+            "type": "boolean",
+            "description": "True when the source is HDR — PQ or HLG by its transfer function — and the re-encode will convert it to SDR (ADR 0033). Like the targets above, only on `video_action: \"encode\"`: a copy delivers the source's own video bytes, which are HDR and correctly described as such.\n\n**Do not read this as \"the output is HDR\".** It means the opposite: the delivered stream is BT.709 SDR and is tagged BT.709 throughout. Whether the conversion itself runs depends on the ffmpeg build — the CPU tonemap needs `zscale`, which is not in every build — and a server that cannot convert still labels the output consistently rather than emitting a file whose colour tags disagree with each other."
+          },
+          "source_container": {
+            "type": "string",
+            "description": "The box the input arrived in. It rides along because the command line is built from the decision rather than from the file, and seeking needs it — some containers cannot be sought accurately, and a copied audio track is silently wrong when they are."
+          },
+          "source_width": {
+            "type": "integer"
+          },
+          "source_height": {
+            "type": "integer"
+          },
+          "source_frame_rate": {
+            "type": "number"
+          }
+        }
+      },
+      "PlaybackDecision": {
+        "type": "object",
+        "required": [
+          "item_id",
+          "probed",
+          "profile",
+          "decision"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "probed": {
+            "type": "boolean",
+            "description": "Whether the file has been inspected. **An unprobed item returns `direct`** — the behaviour LANcast had before probing existed, rather than guessing at a transcode for a file nothing has looked at."
+          },
+          "profile": {
+            "type": "string",
+            "description": "The resolved profile, echoed back."
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          }
+        }
+      },
+      "ProbeStatus": {
+        "type": "object",
+        "required": [
+          "available",
+          "running",
+          "probed",
+          "failed",
+          "remaining",
+          "total"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False when ffprobe is not installed. **That is a supported configuration, not an error**: playback decisions fall back to direct play."
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "probed": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "Encoder": {
+        "type": "object",
+        "description": "One way to produce H.264. Chosen by a **real encode at startup** rather than from a capability list, which makes it evidence about this session rather than a claim about the hardware.",
+        "required": [
+          "name",
+          "label",
+          "hardware"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The ffmpeg encoder, e.g. `h264_nvenc`."
+          },
+          "label": {
+            "type": "string",
+            "description": "What a person reads."
+          },
+          "hardware": {
+            "type": "boolean",
+            "description": "False only for libx264."
+          }
+        }
+      },
+      "TranscodeSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "item_id",
+          "output",
+          "encoding",
+          "start_at",
+          "idle_seconds",
+          "running_seconds",
+          "finished"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "output": {
+            "type": "string"
+          },
+          "encoding": {
+            "type": "boolean",
+            "description": "Distinguishes a real re-encode from a remux."
+          },
+          "start_at": {
+            "type": "number",
+            "description": "Offset in seconds this session began at."
+          },
+          "idle_seconds": {
+            "type": "integer"
+          },
+          "running_seconds": {
+            "type": "integer"
+          },
+          "finished": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "TranscodeStatus": {
+        "type": "object",
+        "required": [
+          "available",
+          "encoder",
+          "sessions"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether ffmpeg is installed."
+          },
+          "encoder": {
+            "$ref": "#/components/schemas/Encoder"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscodeSession"
+            }
+          }
+        }
+      },
+      "ReprobeResult": {
+        "type": "object",
+        "required": [
+          "scope",
+          "queued"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "queued": {
+            "type": "integer"
           }
         }
       }
