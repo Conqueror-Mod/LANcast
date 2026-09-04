@@ -249,22 +249,7 @@ export type ReparseResult = components["schemas"]["ReparseResult"];
 // One thing the server is doing right now (GET /api/activity). Every worker —
 // scan, enrich, probe, coverart, transcode — reports this one shape, so the
 // activity panel renders a list rather than five special cases.
-export interface Activity {
-  kind: "scan" | "enrich" | "probe" | "coverart" | "transcode" | "update";
-  id: string;
-  title: string;
-  // "available" is the odd one: it is not work in progress but something the
-  // server is waiting for the reader to do, and it renders as an action rather
-  // than a progress bar.
-  state: "running" | "failed" | "available";
-  done: number;
-  // 0 means indeterminate: a scan knows what it has seen, never what is left.
-  total: number;
-  detail?: string;
-  library_id?: number;
-  started_at?: number;
-  error?: string;
-}
+export type Activity = components["schemas"]["ActivityTask"];
 
 export interface ActivityStatus {
   active: boolean;
@@ -291,27 +276,13 @@ export interface ActivityStatus {
 // GET /api/logs. `complete` is false when older lines exist that this response
 // does not carry — the difference between "this is the log" and "this is the
 // end of the log".
-export interface ServerLog {
-  lines: string[];
-  complete: boolean;
-  path: string;
-}
+export type ServerLog = components["schemas"]["ServerLog"];
 
 // GET /api/audit — one recorded act (ADR 0026). `summary` and `actor_name` are
 // resolved server-side at write time, so an event stays readable after the
 // account and the row it names are both gone. The client renders them, never
 // reconstructs them.
-export interface AuditEvent {
-  id: number;
-  at: number;
-  actor_id: string;
-  actor_name: string;
-  action: string;
-  target_kind?: string;
-  target_id?: string;
-  summary: string;
-  detail?: string;
-}
+export type AuditEvent = components["schemas"]["AuditEvent"];
 
 export interface AuditPage {
   events: AuditEvent[];
@@ -441,13 +412,7 @@ export type TogetherSession = components["schemas"]["TogetherSession"];
 
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".
-export interface ManagedUser {
-  id: string;
-  name: string;
-  role: Role;
-  created_at: number;
-  sessions: number;
-}
+export type ManagedUser = components["schemas"]["ManagedUser"];
 
 // GET /api/channels — Live TV. A channel is deliberately not an Item: it has no
 // duration, no file and no identity a provider could match. The upstream URL is
@@ -508,28 +473,10 @@ export type Person = components["schemas"]["Person"];
 
 /** A pinned media-tools build, as offered before it is downloaded. A download
  *  the user cannot identify is not consent, so this is shown, not implied. */
-export interface MediaToolsSource {
-  version: string;
-  licence: string;
-  licence_url: string;
-  size_bytes: number;
-  url: string;
-}
+export type MediaToolsSource = components["schemas"]["MediaToolsSource"];
 
 /** The state of fetching ffmpeg (ADR 0043). */
-export interface MediaToolsState {
-  running: boolean;
-  stage: "" | "downloading" | "verifying" | "installing";
-  bytes_done: number;
-  bytes_total: number;
-  error?: string;
-  finished_at?: number;
-  probe_available: boolean;
-  transcode_available: boolean;
-  directory?: string;
-  /** Absent where there is no pinned build for the platform. */
-  available_source?: MediaToolsSource;
-}
+export type MediaToolsState = components["schemas"]["MediaToolsState"];
 
 /*
  * Somebody on a paired server, and what ADR 0045 §3 permits to be said of them.

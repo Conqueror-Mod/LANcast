@@ -1366,6 +1366,343 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every account
+         * @description Administrators only.
+         */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create an account
+         * @description Administrators only.
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an account
+         * @description Administrators only.
+         */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename an account or change its role
+         * @description Administrators only.
+         */
+        patch: operations["patchUser"];
+        trace?: never;
+    };
+    "/users/{id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset another account's password
+         * @description Administrators only. Revokes that account's sessions. Audited as `user.password_reset`.
+         *
+         *     Distinct from `POST /api/auth/password`, which changes your **own** and requires the current one.
+         */
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the server is doing right now */
+        get: operations["getActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The tail of the server log
+         * @description Administrators only. **Admin only because the log names filesystem paths, library roots and provider errors**: that is server-operator information, not viewer information.
+         *
+         *     This exists because the log is written beside the database and could otherwise only be read by finding the data directory in a file manager — the wrong ask for the case it serves, since the log matters most when the server runs as a service and something is wrong.
+         */
+        get: operations["getServerLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crashes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recovered panics, newest first
+         * @description Administrators only. A stack trace names source paths and may name a route the caller cannot reach.
+         *
+         *     Without this a panic unwinds through the HTTP server, which closes the connection with no response — the client sees a network error and the operator sees nothing unless they happen to be reading the log at the time. The request now answers `500` with the ordinary error envelope, and the panic becomes a numbered report.
+         */
+        get: operations["listCrashes"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard every crash report
+         * @description Administrators only.
+         *
+         *     **Nothing is ever sent anywhere.** LANcast does not phone home, and "except for crash reports" is how every product that does began.
+         */
+        delete: operations["deleteCrashes"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who changed what, and when
+         * @description Administrators only. (ADR 0026)
+         *
+         *     **A failed audit write does not fail the request.** The mutation has already happened; refusing it after the fact would turn a full disk into a denial of the user's own deletions. Failures are logged at `ERROR` server-side. This is a stated trade, not an oversight.
+         */
+        get: operations["getAuditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether a newer release exists
+         * @description Administrators only.
+         */
+        get: operations["getUpdateState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check now
+         * @description Administrators only.
+         */
+        post: operations["checkForUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage the release the last check found, without applying it
+         * @description Administrators only.
+         *
+         *     **The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.
+         *
+         *     Calling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.
+         */
+        post: operations["downloadUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a staged update by restarting
+         * @description Administrators only.
+         *
+         *     Required because a staged update had nowhere to go. LANcast applies one on the way down, and when it runs as a Windows service nothing ever takes it down — so "it takes effect the next time the server starts" meant never, and the only route through was an elevated service stop, which applied the update and left the machine with LANcast not running at all.
+         *
+         *     A service cannot restart itself, so the server spawns a detached helper — the same binary — which stops the service, **waits for the stop to complete**, and starts it again. Renaming a running executable is permitted on Windows, which is what lets the helper keep executing while the swap replaces the file it was started from.
+         */
+        post: operations["restartForUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media-tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether ffmpeg is present, and any install in progress
+         * @description Administrators only. — and for a stronger reason than most admin gates here: this makes the server download a binary and then execute it.
+         *
+         *     **Never cached.** Every poll is a GET of the same URL with no cache-buster, and with no cache headers a browser may heuristically reuse the first response — which is how a progress bar sat frozen at 0% while the install ran to completion underneath it.
+         */
+        get: operations["getMediaTools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media-tools/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the download
+         * @description Administrators only.
+         *
+         *     **Nothing here runs automatically** — not on first start, not when a probe fails.
+         */
+        post: operations["installMediaTools"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media-tools/install/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a running install
+         * @description Administrators only.
+         */
+        post: operations["cancelMediaToolsInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cache/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Throw away something the server can make again
+         * @description Administrators only.
+         */
+        post: operations["clearCache"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2479,6 +2816,212 @@ export interface components {
             /** @description **The work, by title, or empty.** Never an episode ("Cowboy Bebop", not "Cowboy Bebop S01E02"), never music or photographs, and never a position — ADR 0045 §3 bounds the disclosure exhaustively and the payload carries nothing else. */
             watching?: string;
         };
+        ManagedUser: {
+            id: string;
+            name: string;
+            /** @description `admin` or `member` (ADR 0015). */
+            role: string;
+            /** Format: int64 */
+            created_at: number;
+            /** @description **Live sessions, not a login history.** It answers "is this person here right now", which is the question an administrator asks before changing something under them. */
+            sessions: number;
+        };
+        ManagedUserList: {
+            users: components["schemas"]["ManagedUser"][];
+        };
+        CreateUserRequest: {
+            username: string;
+            /** Format: password */
+            password: string;
+            /** @description Defaults to `member`. */
+            role?: string;
+        };
+        /**
+         * @description Rename an account, change its role, or both. **At least one field is required.**
+         *
+         *     The account **id is unchanged**, which is what makes this a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently.
+         */
+        PatchUserRequest: {
+            name?: string;
+            role?: string;
+        };
+        ResetPasswordRequest: {
+            /** Format: password */
+            password: string;
+        };
+        /** @description One thing the server is doing, normalised across workers. */
+        ActivityTask: {
+            /** @description `scan`, `enrich`, `probe`, `coverart` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising. */
+            kind: string;
+            /** @description Stable for the task's lifetime, so a list can be keyed by it. */
+            id: string;
+            /**
+             * @description Resolved server-side — a scan names its library, because a client showing the row should not have to join an id back to a name.
+             *
+             *     A `transcode` task titles itself **"Remuxing for playback"** when the streams are being copied into a different container and **"Transcoding for playback"** only when something is genuinely re-encoded. The two differ by an order of magnitude in cost — a remux is a few percent of one core — and reporting both as a transcode overstates what the server is doing.
+             */
+            title: string;
+            /** @description `running` or `failed`, and only those: **a finished task is not activity**. A failed scan stays listed, because a failure with nowhere to appear is the failure shape this project keeps being bitten by. */
+            state: string;
+            done: number;
+            /** @description **0 means indeterminate.** A scan knows how many files it has seen and never how many it will see, so `done` is a count and there is no percentage to render. */
+            total: number;
+            detail?: string;
+            /**
+             * Format: int64
+             * @description Scans only.
+             */
+            library_id?: number;
+            /** Format: int64 */
+            started_at?: number;
+            error?: string;
+        };
+        /**
+         * @description What the server is doing right now, in one request.
+         *
+         *     The per-worker endpoints each answer for one worker, which means a client wanting to show "what is happening" would have to know the whole list of workers and poll each — including the scan endpoint once per library. This answers without that knowledge, in one shape.
+         *
+         *     **Nothing here is persisted.** A restarted server reports an idle one, which is the truth: the workers are in-process and a restart ended their work.
+         *
+         *     Reading progress needs no special role. The endpoints that *start* work remain admin only.
+         */
+        ActivitySnapshot: {
+            active: boolean;
+            tasks: components["schemas"]["ActivityTask"][];
+            /** Format: int64 */
+            completed_at?: number | null;
+            /** @description A staged update's version, when one is waiting for a restart. */
+            staged?: string;
+        };
+        ServerLog: {
+            /** @description Oldest first. A server that has never opened a log — one that has only ever run in a terminal, where the log goes to the terminal — returns an empty array with `complete: true`. That is a supported configuration, not an error. */
+            lines: string[];
+            /** @description **False when older entries exist that this response does not carry** — the difference between "this is the log" and "this is the end of the log". A client that assumes the first sends its reader looking for a startup line that was never withheld from them. */
+            complete: boolean;
+            path: string;
+        };
+        /** @description A recovered panic. Reports are JSON files under the data directory, not database rows: **the crash most worth having is the one where the database was the thing going wrong.** The newest 50 are kept — a crash loop produces the same stack a thousand times, and the first one is the informative one. */
+        CrashReport: {
+            id: string;
+            /**
+             * Format: int64
+             * @description Unix milliseconds.
+             */
+            at: number;
+            kind: string;
+            /** @description **The route pattern, not the URL.** `GET /api/items/{id}` is what somebody fixes, while the URL it came from invites the belief that one particular item is special. */
+            where: string;
+            value: string;
+            stack: string;
+            version: string;
+        };
+        CrashList: {
+            crashes: components["schemas"]["CrashReport"][];
+        };
+        /** @description One recorded act (ADR 0026). **Deliberate acts only** — reads are never recorded, because browsing, playback and progress are the normal operation of a media server and auditing them would bury the events that matter. Scans are not recorded either: the activity view already reports them, and a scan is not a decision anyone needs attributed. */
+        AuditEvent: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            at: number;
+            actor_id: string;
+            /** @description **Frozen at write time**, so "who deleted this library" survives the deletion of the account that did it. */
+            actor_name: string;
+            /** @description `library.create`, `library.delete`, `item.delete`, `item.match`, `item.edit`, `item.unlock`, `user.create`, `user.delete`, `user.password_reset`, `auth.password_change`, the `plugin.*` trust decisions of ADR 0021, and `settings.update` — which records **field names only, never values**. */
+            action: string;
+            target_kind?: string;
+            target_id?: string;
+            /** @description **Resolved at write time**, so an event stays readable after the row it names is gone. The client renders it and never reconstructs it. */
+            summary: string;
+            /** @description A JSON blob, as a string. */
+            detail?: string;
+        };
+        AuditPage: {
+            /** @description Newest first. */
+            events: components["schemas"]["AuditEvent"][];
+            total: number;
+            /** @description The distinct actions actually present, so a client builds its filter from what happened rather than from a hardcoded list that drifts from the handlers. */
+            actions: string[];
+        };
+        UpdateProgress: {
+            active: boolean;
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            total: number;
+            stage?: string;
+        };
+        UpdateState: {
+            /** @description False on a build with no updater wired in; nothing else is then present. */
+            supported: boolean;
+            current?: string;
+            latest?: string;
+            available?: boolean;
+            url?: string;
+            /** Format: int64 */
+            checked_at?: number;
+            checking?: boolean;
+            /** @description The last failed *check*. */
+            error?: string;
+            /** @description The last failed *download*, distinct from a failed check. Reported because a download runs detached from the request that starts it — without this a client has no way to tell a slow download from one that died half an hour ago. */
+            download_error?: string;
+            can_verify?: boolean;
+            enabled?: boolean;
+            /** @description Present only while a download is running. */
+            downloading?: components["schemas"]["UpdateProgress"];
+            /** @description A staged version means **restart**, not download. Reporting only `available` after staging would ask somebody to do something already done. */
+            staged?: string;
+            /** Format: int64 */
+            staged_at?: number;
+        };
+        StagedUpdate: {
+            /** @description The version now staged, if any. */
+            staged?: string;
+        };
+        /** @description A pinned build, as offered **before** it is downloaded. A download the user cannot identify is not consent, so this is shown rather than implied. */
+        MediaToolsSource: {
+            version: string;
+            licence: string;
+            licence_url: string;
+            /** Format: int64 */
+            size_bytes: number;
+            url: string;
+        };
+        /**
+         * @description Fetching ffmpeg and ffprobe from inside the app (ADR 0043).
+         *
+         *     **There is no URL parameter anywhere in this flow.** The build is pinned in the server with a SHA-256 checked before anything is unpacked. A server that fetched an address the caller chose would be the server-side request forgery the channel-source and guide endpoints already refuse, and here the payload is an executable rather than a playlist. A version bump is therefore a code change, deliberately: a server following a "latest" pointer is one whose playback behaviour changes without a release.
+         */
+        MediaToolsState: {
+            running: boolean;
+            /** @description `downloading`, `verifying`, `installing`, or empty. */
+            stage: string;
+            /** Format: int64 */
+            bytes_done: number;
+            /** Format: int64 */
+            bytes_total: number;
+            error?: string;
+            /** Format: int64 */
+            finished_at?: number;
+            probe_available: boolean;
+            transcode_available: boolean;
+            directory?: string;
+            /** @description Absent where there is no pinned build for this platform. */
+            available_source?: components["schemas"]["MediaToolsSource"];
+        };
+        /** @description Everything reachable here is recoverable **by the server itself**, and that is the boundary — nothing here touches media, the database, accounts, or anything a person typed. */
+        ClearCacheRequest: {
+            /**
+             * @description `artwork` throws away every cached image, original and derived; the rows referencing those hashes are **left alone**, so an item keeps knowing which artwork it has. `transcode` throws away scratch space and every running session with it — a few seconds of buffered video per viewer, rebuilt on the next play.
+             *
+             *     Any other target is a `400`.
+             */
+            target: string;
+        };
+        ClearCacheResult: {
+            /** Format: int64 */
+            freed_bytes: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -2597,6 +3140,8 @@ export interface components {
         TogetherId: string;
         /** @description The peer's fingerprint, in either the canonical or the grouped form. */
         PeerFingerprint: string;
+        /** @description The account id. */
+        UserId: string;
     };
     requestBodies: never;
     headers: never;
@@ -5058,6 +5603,491 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every account, with its live session count. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUserList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The new account. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The name is taken. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `last_admin` — the only administrator cannot be removed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The account as it now stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedUser"];
+                };
+            };
+            /** @description Neither field was supplied. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `duplicate` if the name is taken, or `last_admin` when this would demote the only administrator — refused in the store inside a transaction with the count, so two concurrent demotions cannot both succeed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Reset. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getActivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every running or failed task. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivitySnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getServerLog: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 300, clamped to 2000. A value that is not a positive whole number is `400`. */
+                lines?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tail, oldest line first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerLog"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listCrashes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept reports. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrashList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteCrashes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAuditLog: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 100, capped at 500. A non-numeric or negative value is `400`. */
+                limit?: number;
+                /** @description A non-numeric or negative value is `400`. */
+                offset?: number;
+                /** @description Filter to one action. */
+                action?: string;
+                /** @description Filter to one actor id. */
+                actor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of events, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getUpdateState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The updater's state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    checkForUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The updater's state after the check. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    downloadUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The staged version, if one was staged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StagedUpdate"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    restartForUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The restart has been set in motion. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getMediaTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Install state and what is available. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaToolsState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    installMediaTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The install has started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaToolsState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description An install is already running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cancelMediaToolsInstall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Acknowledged"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    clearCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearCacheRequest"];
+            };
+        };
+        responses: {
+            /** @description How much was freed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearCacheResult"];
+                };
+            };
+            /** @description An unrecognised target. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

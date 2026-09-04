@@ -61,6 +61,14 @@
     {
       "name": "peers",
       "description": "Paired servers, the people on them, and live presence (ADRs 0044–0046)."
+    },
+    {
+      "name": "users",
+      "description": "Account management (ADR 0015). Administrators only."
+    },
+    {
+      "name": "operations",
+      "description": "Running the server: activity, logs, crashes, the audit trail, updates and caches."
     }
   ],
   "paths": {
@@ -3317,6 +3325,657 @@
           }
         }
       }
+    },
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "tags": [
+          "users"
+        ],
+        "summary": "Every account",
+        "description": "Administrators only.",
+        "responses": {
+          "200": {
+            "description": "Every account, with its live session count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Create an account",
+        "description": "Administrators only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "The name is taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserId"
+        }
+      ],
+      "patch": {
+        "operationId": "patchUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Rename an account or change its role",
+        "description": "Administrators only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The account as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Neither field was supplied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`duplicate` if the name is taken, or `last_admin` when this would demote the only administrator — refused in the store inside a transaction with the count, so two concurrent demotions cannot both succeed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Delete an account",
+        "description": "Administrators only.",
+        "responses": {
+          "204": {
+            "description": "Deleted. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`last_admin` — the only administrator cannot be removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}/password": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserId"
+        }
+      ],
+      "post": {
+        "operationId": "resetUserPassword",
+        "tags": [
+          "users"
+        ],
+        "summary": "Reset another account's password",
+        "description": "Administrators only. Revokes that account's sessions. Audited as `user.password_reset`.\n\nDistinct from `POST /api/auth/password`, which changes your **own** and requires the current one.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Reset. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/activity": {
+      "get": {
+        "operationId": "getActivity",
+        "tags": [
+          "operations"
+        ],
+        "summary": "What the server is doing right now",
+        "responses": {
+          "200": {
+            "description": "Every running or failed task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivitySnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "operationId": "getServerLog",
+        "tags": [
+          "operations"
+        ],
+        "summary": "The tail of the server log",
+        "description": "Administrators only. **Admin only because the log names filesystem paths, library roots and provider errors**: that is server-operator information, not viewer information.\n\nThis exists because the log is written beside the database and could otherwise only be read by finding the data directory in a file manager — the wrong ask for the case it serves, since the log matters most when the server runs as a service and something is wrong.",
+        "parameters": [
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 300, clamped to 2000. A value that is not a positive whole number is `400`.",
+            "schema": {
+              "type": "integer",
+              "default": 300,
+              "maximum": 2000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tail, oldest line first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/crashes": {
+      "get": {
+        "operationId": "listCrashes",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Recovered panics, newest first",
+        "description": "Administrators only. A stack trace names source paths and may name a route the caller cannot reach.\n\nWithout this a panic unwinds through the HTTP server, which closes the connection with no response — the client sees a network error and the operator sees nothing unless they happen to be reading the log at the time. The request now answers `500` with the ordinary error envelope, and the panic becomes a numbered report.",
+        "responses": {
+          "200": {
+            "description": "The kept reports.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrashList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCrashes",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Discard every crash report",
+        "description": "Administrators only.\n\n**Nothing is ever sent anywhere.** LANcast does not phone home, and \"except for crash reports\" is how every product that does began.",
+        "responses": {
+          "204": {
+            "description": "Discarded. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "operationId": "getAuditLog",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Who changed what, and when",
+        "description": "Administrators only. (ADR 0026)\n\n**A failed audit write does not fail the request.** The mutation has already happened; refusing it after the fact would turn a full disk into a denial of the user's own deletions. Failures are logged at `ERROR` server-side. This is a stated trade, not an oversight.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 100, capped at 500. A non-numeric or negative value is `400`.",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "A non-numeric or negative value is `400`.",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Filter to one action.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "description": "Filter to one actor id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/update": {
+      "get": {
+        "operationId": "getUpdateState",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Whether a newer release exists",
+        "description": "Administrators only.",
+        "responses": {
+          "200": {
+            "description": "The updater's state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateState"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/update/check": {
+      "post": {
+        "operationId": "checkForUpdate",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Check now",
+        "description": "Administrators only.",
+        "responses": {
+          "200": {
+            "description": "The updater's state after the check.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateState"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/update/download": {
+      "post": {
+        "operationId": "downloadUpdate",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Stage the release the last check found, without applying it",
+        "description": "Administrators only.\n\n**The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.\n\nCalling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.",
+        "responses": {
+          "200": {
+            "description": "The staged version, if one was staged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagedUpdate"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/update/restart": {
+      "post": {
+        "operationId": "restartForUpdate",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Finish a staged update by restarting",
+        "description": "Administrators only.\n\nRequired because a staged update had nowhere to go. LANcast applies one on the way down, and when it runs as a Windows service nothing ever takes it down — so \"it takes effect the next time the server starts\" meant never, and the only route through was an elevated service stop, which applied the update and left the machine with LANcast not running at all.\n\nA service cannot restart itself, so the server spawns a detached helper — the same binary — which stops the service, **waits for the stop to complete**, and starts it again. Renaming a running executable is permitted on Windows, which is what lets the helper keep executing while the swap replaces the file it was started from.",
+        "responses": {
+          "202": {
+            "description": "The restart has been set in motion."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/media-tools": {
+      "get": {
+        "operationId": "getMediaTools",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Whether ffmpeg is present, and any install in progress",
+        "description": "Administrators only. — and for a stronger reason than most admin gates here: this makes the server download a binary and then execute it.\n\n**Never cached.** Every poll is a GET of the same URL with no cache-buster, and with no cache headers a browser may heuristically reuse the first response — which is how a progress bar sat frozen at 0% while the install ran to completion underneath it.",
+        "responses": {
+          "200": {
+            "description": "Install state and what is available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaToolsState"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/media-tools/install": {
+      "post": {
+        "operationId": "installMediaTools",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Start the download",
+        "description": "Administrators only.\n\n**Nothing here runs automatically** — not on first start, not when a probe fails.",
+        "responses": {
+          "202": {
+            "description": "The install has started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaToolsState"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "An install is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media-tools/install/cancel": {
+      "post": {
+        "operationId": "cancelMediaToolsInstall",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Cancel a running install",
+        "description": "Administrators only.",
+        "responses": {
+          "200": {
+            "description": "Cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/cache/clear": {
+      "post": {
+        "operationId": "clearCache",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Throw away something the server can make again",
+        "description": "Administrators only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearCacheRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How much was freed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearCacheResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An unrecognised target.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3450,6 +4109,15 @@
         "in": "path",
         "required": true,
         "description": "The peer's fingerprint, in either the canonical or the grouped form.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "UserId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The account id.",
         "schema": {
           "type": "string"
         }
@@ -6326,6 +6994,520 @@
           "watching": {
             "type": "string",
             "description": "**The work, by title, or empty.** Never an episode (\"Cowboy Bebop\", not \"Cowboy Bebop S01E02\"), never music or photographs, and never a position — ADR 0045 §3 bounds the disclosure exhaustively and the payload carries nothing else."
+          }
+        }
+      },
+      "ManagedUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "created_at",
+          "sessions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`admin` or `member` (ADR 0015)."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sessions": {
+            "type": "integer",
+            "description": "**Live sessions, not a login history.** It answers \"is this person here right now\", which is the question an administrator asks before changing something under them."
+          }
+        }
+      },
+      "ManagedUserList": {
+        "type": "object",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManagedUser"
+            }
+          }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          },
+          "role": {
+            "type": "string",
+            "description": "Defaults to `member`."
+          }
+        }
+      },
+      "PatchUserRequest": {
+        "type": "object",
+        "description": "Rename an account, change its role, or both. **At least one field is required.**\n\nThe account **id is unchanged**, which is what makes this a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "ActivityTask": {
+        "type": "object",
+        "description": "One thing the server is doing, normalised across workers.",
+        "required": [
+          "kind",
+          "id",
+          "title",
+          "state",
+          "done",
+          "total"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`scan`, `enrich`, `probe`, `coverart` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable for the task's lifetime, so a list can be keyed by it."
+          },
+          "title": {
+            "type": "string",
+            "description": "Resolved server-side — a scan names its library, because a client showing the row should not have to join an id back to a name.\n\nA `transcode` task titles itself **\"Remuxing for playback\"** when the streams are being copied into a different container and **\"Transcoding for playback\"** only when something is genuinely re-encoded. The two differ by an order of magnitude in cost — a remux is a few percent of one core — and reporting both as a transcode overstates what the server is doing."
+          },
+          "state": {
+            "type": "string",
+            "description": "`running` or `failed`, and only those: **a finished task is not activity**. A failed scan stays listed, because a failure with nowhere to appear is the failure shape this project keeps being bitten by."
+          },
+          "done": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer",
+            "description": "**0 means indeterminate.** A scan knows how many files it has seen and never how many it will see, so `done` is a count and there is no percentage to render."
+          },
+          "detail": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Scans only."
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ActivitySnapshot": {
+        "type": "object",
+        "description": "What the server is doing right now, in one request.\n\nThe per-worker endpoints each answer for one worker, which means a client wanting to show \"what is happening\" would have to know the whole list of workers and poll each — including the scan endpoint once per library. This answers without that knowledge, in one shape.\n\n**Nothing here is persisted.** A restarted server reports an idle one, which is the truth: the workers are in-process and a restart ended their work.\n\nReading progress needs no special role. The endpoints that *start* work remain admin only.",
+        "required": [
+          "active",
+          "tasks"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityTask"
+            }
+          },
+          "completed_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "staged": {
+            "type": "string",
+            "description": "A staged update's version, when one is waiting for a restart."
+          }
+        }
+      },
+      "ServerLog": {
+        "type": "object",
+        "required": [
+          "lines",
+          "complete",
+          "path"
+        ],
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Oldest first. A server that has never opened a log — one that has only ever run in a terminal, where the log goes to the terminal — returns an empty array with `complete: true`. That is a supported configuration, not an error."
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "**False when older entries exist that this response does not carry** — the difference between \"this is the log\" and \"this is the end of the log\". A client that assumes the first sends its reader looking for a startup line that was never withheld from them."
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "CrashReport": {
+        "type": "object",
+        "description": "A recovered panic. Reports are JSON files under the data directory, not database rows: **the crash most worth having is the one where the database was the thing going wrong.** The newest 50 are kept — a crash loop produces the same stack a thousand times, and the first one is the informative one.",
+        "required": [
+          "id",
+          "at",
+          "kind",
+          "where",
+          "value",
+          "stack",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "where": {
+            "type": "string",
+            "description": "**The route pattern, not the URL.** `GET /api/items/{id}` is what somebody fixes, while the URL it came from invites the belief that one particular item is special."
+          },
+          "value": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "CrashList": {
+        "type": "object",
+        "required": [
+          "crashes"
+        ],
+        "properties": {
+          "crashes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CrashReport"
+            }
+          }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "description": "One recorded act (ADR 0026). **Deliberate acts only** — reads are never recorded, because browsing, playback and progress are the normal operation of a media server and auditing them would bury the events that matter. Scans are not recorded either: the activity view already reports them, and a scan is not a decision anyone needs attributed.",
+        "required": [
+          "id",
+          "at",
+          "actor_id",
+          "actor_name",
+          "action",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_name": {
+            "type": "string",
+            "description": "**Frozen at write time**, so \"who deleted this library\" survives the deletion of the account that did it."
+          },
+          "action": {
+            "type": "string",
+            "description": "`library.create`, `library.delete`, `item.delete`, `item.match`, `item.edit`, `item.unlock`, `user.create`, `user.delete`, `user.password_reset`, `auth.password_change`, the `plugin.*` trust decisions of ADR 0021, and `settings.update` — which records **field names only, never values**."
+          },
+          "target_kind": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "**Resolved at write time**, so an event stays readable after the row it names is gone. The client renders it and never reconstructs it."
+          },
+          "detail": {
+            "type": "string",
+            "description": "A JSON blob, as a string."
+          }
+        }
+      },
+      "AuditPage": {
+        "type": "object",
+        "required": [
+          "events",
+          "total",
+          "actions"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "description": "Newest first."
+          },
+          "total": {
+            "type": "integer"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The distinct actions actually present, so a client builds its filter from what happened rather than from a hardcoded list that drifts from the handlers."
+          }
+        }
+      },
+      "UpdateProgress": {
+        "type": "object",
+        "required": [
+          "active",
+          "done",
+          "total"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "stage": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateState": {
+        "type": "object",
+        "required": [
+          "supported"
+        ],
+        "properties": {
+          "supported": {
+            "type": "boolean",
+            "description": "False on a build with no updater wired in; nothing else is then present."
+          },
+          "current": {
+            "type": "string"
+          },
+          "latest": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "checked_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "checking": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "description": "The last failed *check*."
+          },
+          "download_error": {
+            "type": "string",
+            "description": "The last failed *download*, distinct from a failed check. Reported because a download runs detached from the request that starts it — without this a client has no way to tell a slow download from one that died half an hour ago."
+          },
+          "can_verify": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "downloading": {
+            "$ref": "#/components/schemas/UpdateProgress",
+            "description": "Present only while a download is running."
+          },
+          "staged": {
+            "type": "string",
+            "description": "A staged version means **restart**, not download. Reporting only `available` after staging would ask somebody to do something already done."
+          },
+          "staged_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "StagedUpdate": {
+        "type": "object",
+        "properties": {
+          "staged": {
+            "type": "string",
+            "description": "The version now staged, if any."
+          }
+        }
+      },
+      "MediaToolsSource": {
+        "type": "object",
+        "description": "A pinned build, as offered **before** it is downloaded. A download the user cannot identify is not consent, so this is shown rather than implied.",
+        "required": [
+          "version",
+          "licence",
+          "licence_url",
+          "size_bytes",
+          "url"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "licence": {
+            "type": "string"
+          },
+          "licence_url": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "MediaToolsState": {
+        "type": "object",
+        "description": "Fetching ffmpeg and ffprobe from inside the app (ADR 0043).\n\n**There is no URL parameter anywhere in this flow.** The build is pinned in the server with a SHA-256 checked before anything is unpacked. A server that fetched an address the caller chose would be the server-side request forgery the channel-source and guide endpoints already refuse, and here the payload is an executable rather than a playlist. A version bump is therefore a code change, deliberately: a server following a \"latest\" pointer is one whose playback behaviour changes without a release.",
+        "required": [
+          "running",
+          "stage",
+          "bytes_done",
+          "bytes_total",
+          "probe_available",
+          "transcode_available"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "stage": {
+            "type": "string",
+            "description": "`downloading`, `verifying`, `installing`, or empty."
+          },
+          "bytes_done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "probe_available": {
+            "type": "boolean"
+          },
+          "transcode_available": {
+            "type": "boolean"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "available_source": {
+            "$ref": "#/components/schemas/MediaToolsSource",
+            "description": "Absent where there is no pinned build for this platform."
+          }
+        }
+      },
+      "ClearCacheRequest": {
+        "type": "object",
+        "description": "Everything reachable here is recoverable **by the server itself**, and that is the boundary — nothing here touches media, the database, accounts, or anything a person typed.",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "`artwork` throws away every cached image, original and derived; the rows referencing those hashes are **left alone**, so an item keeps knowing which artwork it has. `transcode` throws away scratch space and every running session with it — a few seconds of buffered video per viewer, rebuilt on the next play.\n\nAny other target is a `400`."
+          }
+        }
+      },
+      "ClearCacheResult": {
+        "type": "object",
+        "required": [
+          "freed_bytes"
+        ],
+        "properties": {
+          "freed_bytes": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       }
