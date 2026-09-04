@@ -1,6 +1,6 @@
 # ADR 0060 — Semantic photo search is a second model in the sidecar
 
-Date: 2026-09-04 · Status: **proposed**
+Date: 2026-09-04 · Status: **accepted** 2026-09-04
 
 A picture library is the one library LANcast cannot search. `?q=` matches title
 and series, and a photograph's title is its filename — `DSC_0042`, `IMG_2291`,
@@ -109,11 +109,49 @@ is the wrong answer here" — because InsightFace's *code* is MIT while its
 AGPL-3.0 with a commercial licence available (ADR 0053), so weights that forbid
 commercial use are weights that cannot ship.
 
-The same table has to be built for CLIP before a model is chosen, and it has to
-be built for **weights** rather than repositories. This ADR deliberately does
-not name a winner: the candidates worth checking are OpenAI's original CLIP,
-LAION's OpenCLIP, and SigLIP, and *the licence on each set of weights is the
-question*, not the benchmark score.
+The same table, built for **weights** rather than repositories:
+
+| weights | licence | usable |
+|---|---|---|
+| [`openai/clip-vit-base-patch32`](https://huggingface.co/openai/clip-vit-base-patch32) | **none declared** | **no** |
+| [`laion/CLIP-ViT-B-32-laion2B-s34B-b79K`](https://huggingface.co/laion/CLIP-ViT-B-32-laion2B-s34B-b79K) | **MIT**, with a caveat — see below | yes |
+| [`google/siglip-base-patch16-224`](https://huggingface.co/google/siglip-base-patch16-224) | **Apache-2.0** | yes |
+
+**OpenAI's own weights declare no licence at all**, which is the worst of the
+three and the opposite of what a reader assumes from a famous open model: no
+declared licence is no grant. They are out.
+
+**The LAION caveat is a caveat, not a licence term, and the distinction is the
+whole reason this section exists.** The card's licence field says MIT; its
+*Out-of-Scope Use* section says "Any deployed use case of the model — whether
+commercial or not — is currently out of scope". That sentence is inherited from
+OpenAI's original card and is about untested deployment domains rather than
+permission, and [open_clip#503](https://github.com/mlfoundations/open_clip/issues/503)
+is somebody asking exactly this and being pointed at a prior thread concluding
+commercial use is fine.
+
+That is a reading, and it is recorded as one. **If it is read as binding
+instead, SigLIP is the answer and nothing else in this ADR changes** — the
+shape, the storage and the exclusions are all model-independent, which is most
+of why ONNX was chosen in the first place.
+
+### The tokenizer is the other half of the choice, and it points the other way
+
+Nothing here needs a text encoder until a person types a sentence, and then it
+needs the *same* model's tokenizer or the two vectors are not comparable.
+
+- CLIP and OpenCLIP use **byte-pair encoding** with a fixed 49,152-token vocab.
+  Well-specified, deterministic, a few hundred lines and a vocabulary file.
+- SigLIP uses **SentencePiece**, a protobuf-described unigram model. Correct
+  implementations in Go are a dependency rather than an afternoon.
+
+So the cleaner licence has the harder tokenizer and vice versa.
+
+**Chosen: OpenCLIP ViT-B/32, MIT.** 512 dimensions, which is the number the
+arithmetic above is built on, and a tokenizer this project can write and test
+the way it wrote its own EXIF reader rather than take a dependency for. SigLIP
+stays the documented fallback, and swapping is a file and a tokenizer — not a
+rebuild — which is exactly the property ADR 0052 bought with ONNX.
 
 The model directory, the install flow and the "a download somebody cannot
 identify is not consent" rule already exist and are reused unchanged.
