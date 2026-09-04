@@ -7,9 +7,10 @@
 // checked against the spec by schema.test.ts — so a shape that reaches this
 // file has been verified end to end.
 //
-// The rest are still hand-written, and are migrated a section at a time as the
-// spec grows. `pendingSpec` in internal/api/openapi_test.go is the list of what
-// has not been reached yet.
+// What is still hand-written is what the spec does not cover: the live-TV
+// shapes, which are parked (`pendingSpec` in internal/api/openapi_test.go lists
+// those routes), and ApiError, which is the client's own read of the error
+// envelope rather than a response shape of its own.
 
 import type { components } from "./schema";
 
@@ -129,40 +130,10 @@ export type Plugin = components["schemas"]["Plugin"];
 
 export type Role = "admin" | "member";
 
-export interface AuthUser {
-  id: string;
-  name: string;
-  role: Role;
-  /** This account's own ADR 0035 sharing choice. Absent only if the server
-   *  could not read it — `/api/people` cannot answer this, because it excludes
-   *  the caller. */
-  sharing?: boolean;
-  /** Whether this account appears in the roster handed to paired servers
-   *  (ADR 0044). Reported here for the same reason `sharing` is: nothing else
-   *  can tell a client its own setting. */
-  visible_to_peers?: boolean;
-}
+export type AuthUser = components["schemas"]["User"];
 
 // GET /api/auth/status. `user` is present only when a session is active.
-export interface AuthStatus {
-  configured: boolean;
-  authenticated: boolean;
-  lan_enabled: boolean;
-  // Whether restarting would let other devices reach the server. False when a
-  // loopback address was configured deliberately — there a restart changes
-  // nothing, so promising otherwise sends the operator on a dead end.
-  restart_required: boolean;
-  /*
-   * Whether the server can convert files at all — false when ffmpeg is absent.
-   *
-   * Optional because a client may be newer than its server. Absent means "this
-   * server does not say", which must read as *capable*: assuming a server
-   * cannot convert would put a warning in front of somebody whose playback
-   * works perfectly.
-   */
-  can_convert?: boolean;
-  user?: AuthUser;
-}
+export type AuthStatus = components["schemas"]["AuthStatus"];
 
 // Background probing progress. `available` is false when ffprobe is not
 // installed, which is a supported configuration rather than an error.
@@ -170,10 +141,7 @@ export type ProbeStatus = components["schemas"]["ProbeStatus"];
 
 // What a re-probe queued. `scope` echoes back which one ran, since the default
 // is the narrow one and the caller should be able to tell them apart.
-export interface ReprobeResult {
-  scope: "incomplete" | "all";
-  queued: number;
-}
+export type ReprobeResult = components["schemas"]["ReprobeResult"];
 
 /*
  * What a re-parse did. Both numbers are needed to say anything useful: a run
@@ -188,27 +156,7 @@ export type ReparseResult = components["schemas"]["ReparseResult"];
 // activity panel renders a list rather than five special cases.
 export type Activity = components["schemas"]["ActivityTask"];
 
-export interface ActivityStatus {
-  active: boolean;
-  tasks: Activity[];
-  /**
-   * When background work last finished, in unix seconds. 0 means nothing has
-   * ever finished, which is not the same as "just now".
-   *
-   * Watched instead of the active-to-idle edge, because work shorter than the
-   * idle poll interval is never seen as active and produces no edge at all.
-   */
-  completed_at?: number;
-  /**
-   * The version waiting to be applied on the next restart, when there is one.
-   *
-   * Here rather than only on /api/update because the shell's stale-client
-   * banner needs it and is shown to everyone, where /api/update is admin-only.
-   * Absent means nothing is staged — which is the case where telling somebody
-   * to restart is advice that cannot work.
-   */
-  staged?: string;
-}
+export type ActivityStatus = components["schemas"]["ActivitySnapshot"];
 
 // GET /api/logs. `complete` is false when older lines exist that this response
 // does not carry — the difference between "this is the log" and "this is the
@@ -221,118 +169,34 @@ export type ServerLog = components["schemas"]["ServerLog"];
 // reconstructs them.
 export type AuditEvent = components["schemas"]["AuditEvent"];
 
-export interface AuditPage {
-  events: AuditEvent[];
-  total: number;
-  // The distinct actions actually present, so the filter is built from what
-  // happened rather than from a list that drifts from the server.
-  actions: string[];
-}
+export type AuditPage = components["schemas"]["AuditPage"];
 
 // GET /api/update. `can_verify` is whether this build can check a release's
 // signature at all — false means automatic installation is unavailable no
 // matter what the setting says, and the UI must say so rather than offering a
 // button that cannot work.
-export interface UpdateStatus {
-  supported: boolean;
-  current?: string;
-  latest?: string;
-  available?: boolean;
-  url?: string;
-  checked_at?: number;
-  checking?: boolean;
-  error?: string;
-  // The last failed download, distinct from a failed check: "I could not ask"
-  // versus "I asked, and installing it failed". A download runs detached from
-  // the request that starts it, so this is the only way its outcome is visible.
-  download_error?: string;
-  can_verify?: boolean;
-  enabled?: boolean;
-  // Set once an update is downloaded and verified. Distinct from `available`:
-  // available means decide, staged means restart.
-  staged?: string;
-  staged_at?: number;
-  downloading?: {
-    active: boolean;
-    done: number;
-    total: number;
-    stage?: string;
-  };
-}
+export type UpdateStatus = components["schemas"]["UpdateState"];
 
 // GET /api/profile. Identity, totals and history in one response — a page that
 // needs all three should not discover that from three round trips.
-export interface ProfileUser {
-  id: string;
-  name: string;
-  admin: boolean;
-  // False on an unconfigured loopback server, where there is no account and the
-  // history belongs to the migrated 'local' id. The page says so rather than
-  // inventing a person.
-  secured: boolean;
-}
+export type ProfileUser = components["schemas"]["ProfileUser"];
 
-export interface ProfileStats {
-  started: number;
-  // Two different questions, and keeping them apart is the point: `finished` is
-  // how many distinct titles have been finished, `viewings` is how many times
-  // finishing happened. Somebody who has seen twelve films, one of them nine
-  // times, has finished twelve things and sat through twenty.
-  finished: number;
-  // Optional because a server older than this field simply does not send it,
-  // and a client newer than its server is ordinary here.
-  viewings?: number;
-  // Time spent, not runtime owned: an unfinished item counts how far in you
-  // got, so eleven abandoned films are not eleven hours — and a rewatched one
-  // counts its runtime per viewing, so nine sittings are not one.
-  watched_ms: number;
-  first_at: number | null;
-}
+export type ProfileStats = components["schemas"]["ProfileStats"];
 
-export interface HistoryEntry {
-  item: Item;
-  position_ms: number;
-  watched: boolean;
-  played_at: number;
-}
+export type HistoryEntry = components["schemas"]["HistoryEntry"];
 
-export interface Profile {
-  user: ProfileUser;
-  stats: ProfileStats;
-  history: HistoryEntry[];
-  has_more: boolean;
-}
+export type Profile = components["schemas"]["Profile"];
 
 // GET /api/crashes — a recovered panic. `where` is the route pattern rather
 // than the URL: the pattern is what somebody fixes.
-export interface CrashReport {
-  id: string;
-  at: number;
-  kind: string;
-  where: string;
-  value: string;
-  stack: string;
-  version: string;
-}
+export type CrashReport = components["schemas"]["CrashReport"];
 
 // GET /api/libraries/{id}/trending. `viewers` counts *accounts*, not plays:
 // playback_state holds one row per item per user, so this is how many people
 // played something recently rather than how often it was played.
-export interface TrendingItem {
-  item: Item;
-  viewers: number;
-  finishers: number;
-  last_at: number;
-}
+export type TrendingItem = components["schemas"]["TrendingItem"];
 
-export interface Trending {
-  items: TrendingItem[];
-  // How many accounts contributed anything in the window. With one, this is
-  // honestly "recently played" and not a trend — the client is given the number
-  // so it can say the true thing rather than calling it trending regardless.
-  contributors: number;
-  window_days: number;
-}
+export type Trending = components["schemas"]["Trending"];
 
 // GET /api/items/{id}/rating — *your* rating. There is no route to anybody
 // else's: a rating is private to the account that wrote it, and the paths carry

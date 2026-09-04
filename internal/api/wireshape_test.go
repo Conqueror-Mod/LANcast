@@ -96,6 +96,14 @@ import (
 // contract says last_seen must be 0 rather than absent for a peer that has
 // never answered — "never" and "three days ago" being different statements —
 // so the map is right and serializing the struct would be wrong.
+//
+// store.User and store.ExternalSubtitle were listed here and should not have
+// been, which is the same mistake in the other direction: listing a type that
+// is not on the wire checks a shape nobody receives, and quietly leaves the one
+// that *is* unchecked. listUsers builds its rows with userJSON and the other
+// account routes answer managedUserView; the subtitle list answers
+// subtitleTrack, which is now listed in ExternalSubtitle's place. Read the
+// handler, not the package.
 var wireTypes = []struct {
 	where string
 	value any
@@ -160,12 +168,11 @@ var wireTypes = []struct {
 	{"GET /api/guide", store.Program{}},
 
 	// Subtitles, plugins, people.
-	{"GET /api/items/{id}/subtitles", store.ExternalSubtitle{}},
+	{"GET /api/items/{id}/subtitles", subtitleTrack{}},
 	{"GET /api/plugins", pluginView{}},
 	{"GET /api/plugins · capabilities", capsView{}},
 	{"GET /api/people", store.Person{}},
 	{"GET /api/people/peers", store.RemotePerson{}},
-	{"GET /api/users", store.User{}},
 
 	// Workers and status.
 	{"GET /api/enrich", enrich.Stats{}},

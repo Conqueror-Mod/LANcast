@@ -3965,8 +3965,15 @@ export interface components {
         ActivitySnapshot: {
             active: boolean;
             tasks: components["schemas"]["ActivityTask"][];
-            /** Format: int64 */
-            completed_at?: number | null;
+            /**
+             * Format: int64
+             * @description The most recent moment any background work finished.
+             *
+             *     **Zero when nothing has ever finished, and a client must read that as "no information" rather than as "just now".** The difference matters on a fresh install, where treating it as a completion would invalidate every query on the first poll.
+             *
+             *     Scans are the only worker that records a finish time today, which is enough: they are what changes what a list *holds*. Enrichment and probing alter rows a list already contains, and those surfaces refetch on their own.
+             */
+            completed_at: number;
             /** @description A staged update's version, when one is waiting for a restart. */
             staged?: string;
         };

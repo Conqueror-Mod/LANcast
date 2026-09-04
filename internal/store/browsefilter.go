@@ -22,8 +22,8 @@ import (
  * height-based rule silently files every scope film one tier too low.
  */
 
-// ResolutionBucket is the browse label for a video width.
-// ResolutionBucket is one tier on the browse filter.
+// ResolutionBucket is the browse label for a video width — one tier on the
+// browse filter.
 //
 // The json tags are load-bearing and were missing until 2026-09-03. This struct
 // is serialized straight to the client inside Facets, so without them the wire

@@ -9381,7 +9381,8 @@
         "description": "What the server is doing right now, in one request.\n\nThe per-worker endpoints each answer for one worker, which means a client wanting to show \"what is happening\" would have to know the whole list of workers and poll each — including the scan endpoint once per library. This answers without that knowledge, in one shape.\n\n**Nothing here is persisted.** A restarted server reports an idle one, which is the truth: the workers are in-process and a restart ended their work.\n\nReading progress needs no special role. The endpoints that *start* work remain admin only.",
         "required": [
           "active",
-          "tasks"
+          "tasks",
+          "completed_at"
         ],
         "properties": {
           "active": {
@@ -9394,11 +9395,9 @@
             }
           },
           "completed_at": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
+            "type": "integer",
+            "format": "int64",
+            "description": "The most recent moment any background work finished.\n\n**Zero when nothing has ever finished, and a client must read that as \"no information\" rather than as \"just now\".** The difference matters on a fresh install, where treating it as a completion would invalidate every query on the first poll.\n\nScans are the only worker that records a finish time today, which is enough: they are what changes what a list *holds*. Enrichment and probing alter rows a list already contains, and those surfaces refetch on their own."
           },
           "staged": {
             "type": "string",

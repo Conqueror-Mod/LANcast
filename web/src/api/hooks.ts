@@ -430,10 +430,18 @@ function useBackgroundLibraryJob(path: (libraryID: number) => string) {
   return useMutation({
     mutationFn: (libraryID: number) => apiSend(path(libraryID), "POST"),
     onSuccess: (_res, libraryID) => {
-      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
-        active: true,
-        tasks: prev?.tasks ?? [],
-      }));
+      // Spread rather than rebuild. The old form listed the two fields it
+      // cared about and silently dropped the rest: `staged`, so an available
+      // update stopped being reported until the next poll, and `completed_at`,
+      // which the poller reads as "have I looked before" — an absent stamp is
+      // its first-poll guard, so a synthetic snapshot without one told it to
+      // skip the invalidation it exists to do. Surfaced by the generated types
+      // when the spec recorded that the server always sends completed_at.
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) =>
+        prev
+          ? { ...prev, active: true }
+          : { active: true, tasks: [], completed_at: 0 },
+      );
       // Refetch both now rather than waiting out the idle interval: the panel
       // starts showing progress, and the per-library status query starts its
       // own faster poll.
@@ -492,10 +500,11 @@ export function useScanAllLibraries() {
   return useMutation({
     mutationFn: () => apiPost<ScanAllResult>("/api/libraries/scan", {}),
     onSuccess: () => {
-      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
-        active: true,
-        tasks: prev?.tasks ?? [],
-      }));
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) =>
+        prev
+          ? { ...prev, active: true }
+          : { active: true, tasks: [], completed_at: 0 },
+      );
       qc.invalidateQueries({ queryKey: ["activity"] });
       qc.invalidateQueries({ queryKey: ["scan"] });
     },
@@ -552,10 +561,11 @@ export function useRefreshItem(id: number) {
     mutationFn: () =>
       apiPost<{ queued: number }>(`/api/items/${id}/refresh`, {}),
     onSuccess: () => {
-      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
-        active: true,
-        tasks: prev?.tasks ?? [],
-      }));
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) =>
+        prev
+          ? { ...prev, active: true }
+          : { active: true, tasks: [], completed_at: 0 },
+      );
       qc.invalidateQueries({ queryKey: ["activity"] });
       /*
        * The item itself, and the review queue it may leave or join. Not the
@@ -587,10 +597,11 @@ export function useRefreshLibrary() {
         {},
       ),
     onSuccess: (_res, { libraryID }) => {
-      qc.setQueryData<ActivityStatus>(["activity"], (prev) => ({
-        active: true,
-        tasks: prev?.tasks ?? [],
-      }));
+      qc.setQueryData<ActivityStatus>(["activity"], (prev) =>
+        prev
+          ? { ...prev, active: true }
+          : { active: true, tasks: [], completed_at: 0 },
+      );
       qc.invalidateQueries({ queryKey: ["activity"] });
       qc.invalidateQueries({ queryKey: ["scan", libraryID] });
       /*
