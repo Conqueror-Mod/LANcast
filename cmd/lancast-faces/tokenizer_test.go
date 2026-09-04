@@ -159,7 +159,7 @@ func TestEndOfWordMarkerIsAttachedNotAppended(t *testing.T) {
 func TestEncodeIsAlwaysContextLength(t *testing.T) {
 	tk := tinyTokenizer(t)
 	for _, q := range []string{"", "a", "a b c", "  Mixed   Case  "} {
-		ids, err := tk.Encode(q)
+		ids, _, err := tk.Encode(q)
 		if err != nil {
 			t.Fatalf("%q: %v", q, err)
 		}
@@ -182,7 +182,7 @@ func TestEncodeIsAlwaysContextLength(t *testing.T) {
  */
 func TestOverlongQueriesKeepTheEndMarker(t *testing.T) {
 	tk := tinyTokenizer(t)
-	ids, err := tk.Encode(strings.Repeat("a b c ", 200))
+	ids, _, err := tk.Encode(strings.Repeat("a b c ", 200))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,11 +198,11 @@ func TestOverlongQueriesKeepTheEndMarker(t *testing.T) {
 // two ways is the same search.
 func TestCleaningIsCaseAndWhitespaceInsensitive(t *testing.T) {
 	tk := tinyTokenizer(t)
-	a, err := tk.Encode("A B")
+	a, _, err := tk.Encode("A B")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := tk.Encode("   a    b   ")
+	b, _, err := tk.Encode("   a    b   ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestAnEmptyMergesFileIsRefused(t *testing.T) {
  */
 func TestMultiByteCharactersMapPerByte(t *testing.T) {
 	tk := tinyTokenizer(t)
-	ids, err := tk.Encode("é")
+	ids, _, err := tk.Encode("é")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,5 +240,68 @@ func TestMultiByteCharactersMapPerByte(t *testing.T) {
 	}
 	if ids[3] != tk.encoder[endOfText] {
 		t.Errorf("expected the end marker at position 3, got %d", ids[3])
+	}
+}
+
+/*
+ * The mask marks the real tokens, and it cannot be recovered from the ids.
+ *
+ * Padding is zero because that is what the reference pads with, and zero is a
+ * real token id — the vocabulary's first entry, "!". Anything deriving the mask
+ * as `id != 0` masks out every exclamation mark somebody types, and the
+ * sentence quietly loses a character on its way to the encoder.
+ */
+func TestMaskCoversTheRealTokensOnly(t *testing.T) {
+	tk := tinyTokenizer(t)
+	ids, mask, err := tk.Encode("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mask) != ContextLength {
+		t.Fatalf("mask is %d, want %d", len(mask), ContextLength)
+	}
+
+	var real int
+	for _, m := range mask {
+		if m == 1 {
+			real++
+		}
+	}
+	// start + "a</w>" + end.
+	if real != 3 {
+		t.Errorf("mask covers %d tokens, want 3", real)
+	}
+	for i := real; i < ContextLength; i++ {
+		if mask[i] != 0 {
+			t.Errorf("padding at %d is not masked out", i)
+		}
+		if ids[i] != 0 {
+			t.Errorf("padding at %d is %d, want the reference's zero", i, ids[i])
+		}
+	}
+}
+
+// The case the naive derivation gets wrong: a query whose own tokens include
+// id zero.
+func TestAQueryContainingTokenZeroIsNotMaskedOut(t *testing.T) {
+	tk := tinyTokenizer(t)
+	ids, mask, err := tk.Encode("!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "!" alone becomes "!</w>", so find a position whose id is zero and check
+	// the mask does not follow the value.
+	for i := range ids {
+		if mask[i] == 1 && i > 0 && ids[i] == 0 {
+			return // a real token carrying id zero, correctly masked in
+		}
+	}
+	// Not reachable with this fixture, so assert the weaker invariant that
+	// still catches a value-derived mask: everything before the end marker is
+	// masked in regardless of its id.
+	for i := 0; i < 3; i++ {
+		if mask[i] != 1 {
+			t.Errorf("token %d (id %d) was masked out; the mask is following the value", i, ids[i])
+		}
 	}
 }

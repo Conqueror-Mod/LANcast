@@ -282,14 +282,14 @@ func clean(text string) string {
  * so a truncated query without one is not a shortened search, it is a search
  * for whatever the 77th token happened to be.
  */
-func (t *Tokenizer) Encode(text string) ([]int32, error) {
+func (t *Tokenizer) Encode(text string) (ids, mask []int32, err error) {
 	sot, ok := t.encoder[startOfText]
 	if !ok {
-		return nil, fmt.Errorf("encode: vocabulary has no %s", startOfText)
+		return nil, nil, fmt.Errorf("encode: vocabulary has no %s", startOfText)
 	}
 	eot := t.encoder[endOfText]
 
-	ids := []int32{sot}
+	ids = []int32{sot}
 	for _, tok := range clipPattern.FindAllString(clean(text), -1) {
 		// Bytes rather than runes: the mapping is per byte, so a multi-byte
 		// character becomes several vocabulary entries, which is what the merge
@@ -303,18 +303,37 @@ func (t *Tokenizer) Encode(text string) ([]int32, error) {
 			if !ok {
 				// Unreachable with a complete merges file, and silently dropping
 				// it would shift every later token — better to say so.
-				return nil, fmt.Errorf("encode: %q is not in the vocabulary", piece)
+				return nil, nil, fmt.Errorf("encode: %q is not in the vocabulary", piece)
 			}
 			ids = append(ids, id)
 		}
 	}
 
+	ids = append(ids, eot)
+
+	/*
+	 * The mask says how many of those are real, and it cannot be recovered from
+	 * the ids afterwards.
+	 *
+	 * Padding is zero because that is what the reference pads with — and zero is
+	 * a real token id, the vocabulary's first entry, "!". So `mask[i] = ids[i]
+	 * != 0` is wrong for any query containing an exclamation mark: those
+	 * positions would be masked out and the sentence would quietly lose a
+	 * character. It is derived from the length here, where the length is still
+	 * known, rather than inferred later from values that cannot carry it.
+	 */
 	out := make([]int32, ContextLength)
-	if len(ids) >= ContextLength {
+	mask = make([]int32, ContextLength)
+	n := len(ids)
+	if n >= ContextLength {
 		copy(out, ids[:ContextLength])
 		out[ContextLength-1] = eot
-		return out, nil
+		n = ContextLength
+	} else {
+		copy(out, ids)
 	}
-	copy(out, append(ids, eot))
-	return out, nil
+	for i := 0; i < n; i++ {
+		mask[i] = 1
+	}
+	return out, mask, nil
 }
