@@ -56,19 +56,14 @@ const specBase = "/api"
 // Nothing new may be added to this list. A new endpoint gets specified in the
 // commit that adds it, the way docs/api.md already has to be.
 var pendingSpec = []string{
-	"DELETE /api/backups/{name}",
 	"DELETE /api/channel-sources/{id}",
 	"DELETE /api/faces/clusters/{id}/faces/{face}",
 	"DELETE /api/faces/clusters/{id}/suggestions/{other}",
 	"DELETE /api/items/{id}",
 	"DELETE /api/items/{id}/locks/{field}",
 	"DELETE /api/items/{id}/subtitles/{key}",
-	"DELETE /api/playlists/{id}",
-	"DELETE /api/playlists/{id}/entries/{pos}",
 	"DELETE /api/plugins/{name}",
 	"GET /api/artwork/{hash}",
-	"GET /api/backups",
-	"GET /api/backups/{name}",
 	"GET /api/channel-sources",
 	"GET /api/channels",
 	"GET /api/channels/{id}/guide",
@@ -97,7 +92,6 @@ var pendingSpec = []string{
 	"GET /api/plugins",
 	"PATCH /api/channel-sources/{id}",
 	"PATCH /api/items/{id}",
-	"POST /api/backups",
 	"POST /api/channel-sources",
 	"POST /api/channel-sources/{id}/refresh",
 	"POST /api/coverart/refresh",
@@ -108,8 +102,6 @@ var pendingSpec = []string{
 	"POST /api/items/{id}/subtitles/download",
 	"POST /api/libraries/{id}/faces",
 	"POST /api/markers/refresh",
-	"POST /api/playlists",
-	"POST /api/playlists/{id}/entries",
 	"POST /api/plugins",
 	"POST /api/plugins/{name}/disable",
 	"POST /api/plugins/{name}/enable",
@@ -117,7 +109,6 @@ var pendingSpec = []string{
 	"PUT /api/faces/clusters/{id}",
 	"PUT /api/items/{id}/poster",
 	"PUT /api/items/{id}/sensitive",
-	"PUT /api/playlists/{id}/entries",
 }
 
 // openapiDoc mirrors only the parts of the document these tests read.

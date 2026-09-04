@@ -69,6 +69,14 @@
     {
       "name": "operations",
       "description": "Running the server: activity, logs, crashes, the audit trail, updates and caches."
+    },
+    {
+      "name": "playlists",
+      "description": "Ordered sequences that may hold the same track twice (ADR 0030)."
+    },
+    {
+      "name": "backups",
+      "description": "Snapshots of the database (ADR 0058). Administrators only."
     }
   ],
   "paths": {
@@ -3976,6 +3984,394 @@
           }
         }
       }
+    },
+    "/playlists": {
+      "post": {
+        "operationId": "createPlaylist",
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Create an empty playlist",
+        "description": "A playlist is an ordinary item with `kind: \"playlist\"` (ADR 0030). Its entries are **not** `parent_id` children — a track belongs to its album, and being in a playlist does not move it — so they are fetched with `?playlist_id=` on `GET /api/items`.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlaylistRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new playlist, in the item shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/playlists/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PlaylistId"
+        }
+      ],
+      "delete": {
+        "operationId": "deletePlaylist",
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Delete a playlist and its entries",
+        "description": "**Its own route rather than `DELETE /api/items/{id}`**, which takes a `mode` because it is about files: for an imported playlist `mode=delete` would remove the `.m3u` and `mode=ignore` would add it to the ignore list. This route touches no file.\n\nThe tracks are untouched — being in a playlist was never where they lived.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "responses": {
+          "204": {
+            "description": "Deleted. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/playlists/{id}/entries": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PlaylistId"
+        }
+      ],
+      "put": {
+        "operationId": "replacePlaylistEntries",
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Replace the membership with exactly this list, in this order",
+        "description": "**Reorder, insert, and remove-several are all this call**: a playlist is an ordered sequence, and every one of those edits is the caller having decided the whole sequence.\n\n`400` naming the id if any item does not exist, and **nothing is written**.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaylistEntriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Replaced. No body."
+          },
+          "400": {
+            "description": "An item id does not exist; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "operationId": "appendPlaylistEntries",
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Append to the end, in the order given",
+        "description": "The one edit whose position the caller does not have to decide.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaylistEntriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Appended. No body."
+          },
+          "400": {
+            "description": "An item id does not exist; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/playlists/{id}/entries/{pos}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PlaylistId"
+        },
+        {
+          "name": "pos",
+          "in": "path",
+          "required": true,
+          "description": "**By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one.",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "deletePlaylistEntry",
+        "tags": [
+          "playlists"
+        ],
+        "summary": "Remove one entry",
+        "description": "**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "responses": {
+          "204": {
+            "description": "Removed. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "There is no entry at that position.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups": {
+      "get": {
+        "operationId": "listBackups",
+        "tags": [
+          "backups"
+        ],
+        "summary": "The backups on disk, newest first",
+        "description": "**Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.",
+        "responses": {
+          "200": {
+            "description": "Every backup, plus where they live and how to restore one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBackup",
+        "tags": [
+          "backups"
+        ],
+        "summary": "Take a backup",
+        "description": "**Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.\n\n**Synchronous, and deliberately not a background job with progress**: it is `VACUUM INTO`, measured at 441 ms on a 103 MB library, from a live server with no downtime and no interruption to playback. An activity entry and a poll would be more machinery than the operation.\n\nSerialised server-side — two requests at once produce two backups, not a name collision.\n\nRecorded in the audit log as `backup.create`.",
+        "responses": {
+          "201": {
+            "description": "The new backup, in the same shape as a list element.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupFile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "507": {
+            "description": "`no_space` — the disk is full. A distinct code rather than a generic internal error, because that is the likely failure on a home server and \"unexpected server error\" would send somebody looking for a bug in LANcast instead of at their disk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backups/{name}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BackupName"
+        }
+      ],
+      "get": {
+        "operationId": "downloadBackup",
+        "tags": [
+          "backups"
+        ],
+        "summary": "Download one",
+        "description": "**Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.\n\nSupports range requests, so a 100 MB file over a home network resumes rather than restarting.",
+        "responses": {
+          "200": {
+            "description": "The database file.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "`attachment`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "description": "`bytes`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/vnd.sqlite3": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file.",
+            "content": {
+              "application/vnd.sqlite3": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a bare backup filename.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Well-formed, but there is no such file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBackup",
+        "tags": [
+          "backups"
+        ],
+        "summary": "Remove one",
+        "description": "**Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.\n\nRecorded as `backup.delete`.",
+        "responses": {
+          "204": {
+            "description": "Removed. No body."
+          },
+          "400": {
+            "description": "Not a bare backup filename.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "There is no such file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4118,6 +4514,25 @@
         "in": "path",
         "required": true,
         "description": "The account id.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PlaylistId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The playlist's item id.",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "BackupName": {
+        "name": "name",
+        "in": "path",
+        "required": true,
+        "description": "A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database.",
         "schema": {
           "type": "string"
         }
@@ -7508,6 +7923,100 @@
           "freed_bytes": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "CreatePlaylistRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "library_id"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "**Required.** Every item belongs to a library, and a server with films and music has no defensible default."
+          }
+        }
+      },
+      "PlaylistEntriesRequest": {
+        "type": "object",
+        "description": "**Repeats are kept** — sending the same id twice is a playlist that holds a track twice, not an error.",
+        "required": [
+          "item_ids"
+        ],
+        "properties": {
+          "item_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "BackupFile": {
+        "type": "object",
+        "required": [
+          "name",
+          "bytes",
+          "taken_at",
+          "schema_version",
+          "restorable"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "taken_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "schema_version": {
+            "type": "integer",
+            "description": "The revision recorded inside the file; zero when it could not be read."
+          },
+          "restorable": {
+            "type": "boolean",
+            "description": "Whether **this build** could restore that file, and it is not decorative: each entry is opened and its recorded schema version read. Migrations are one-way, so a backup from a newer LANcast cannot be restored by an older one. Saying so in the list is the difference between finding out now and finding out during a restore."
+          },
+          "problem": {
+            "type": "string",
+            "description": "Why not, in a sentence — \"taken by a newer LANcast — update before restoring it\", or that the file is not a readable backup. Absent when there is none."
+          }
+        }
+      },
+      "BackupList": {
+        "type": "object",
+        "description": "A backup is a snapshot of the database and nothing else (ADR 0058).\n\n**Artwork is not included.** The cache is roughly forty-six times the database's size and is re-fetchable, so after a restore posters arrive again over the following hours. **A backup holds no sessions** — they are cleared when it is written, so a backup file cannot sign anyone in.\n\n**An unreadable backup is listed and marked, never omitted.** A backup that has gone bad is the single most important thing this endpoint can report, and a list that quietly dropped it would say the opposite of the truth.",
+        "required": [
+          "backups",
+          "folder",
+          "restore_command"
+        ],
+        "properties": {
+          "backups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackupFile"
+            },
+            "description": "Newest first. A server that has never taken one answers `[]`, not an error."
+          },
+          "folder": {
+            "type": "string",
+            "description": "Where the files are, so a person can copy one somewhere that is not this disk. **A backup that only exists on the drive it protects against is not really a backup**, and naming the folder is the cheapest way to say that without a lecture."
+          },
+          "restore_command": {
+            "type": "string",
+            "description": "What to type to put one back.\n\n**There is no restore endpoint, and that is the decision rather than a gap.** Restoring replaces the database the server is reading, so it is offline: the server stops, the file is replaced, the server starts. **Clients must not offer a restore button** — they show this instead."
           }
         }
       }

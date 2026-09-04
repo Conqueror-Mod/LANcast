@@ -1703,6 +1703,184 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an empty playlist
+         * @description A playlist is an ordinary item with `kind: "playlist"` (ADR 0030). Its entries are **not** `parent_id` children — a track belongs to its album, and being in a playlist does not move it — so they are fetched with `?playlist_id=` on `GET /api/items`.
+         *
+         *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
+         *
+         *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
+         */
+        post: operations["createPlaylist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a playlist and its entries
+         * @description **Its own route rather than `DELETE /api/items/{id}`**, which takes a `mode` because it is about files: for an imported playlist `mode=delete` would remove the `.m3u` and `mode=ignore` would add it to the ignore list. This route touches no file.
+         *
+         *     The tracks are untouched — being in a playlist was never where they lived.
+         *
+         *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
+         *
+         *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
+         */
+        delete: operations["deletePlaylist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the membership with exactly this list, in this order
+         * @description **Reorder, insert, and remove-several are all this call**: a playlist is an ordered sequence, and every one of those edits is the caller having decided the whole sequence.
+         *
+         *     `400` naming the id if any item does not exist, and **nothing is written**.
+         *
+         *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
+         *
+         *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
+         */
+        put: operations["replacePlaylistEntries"];
+        /**
+         * Append to the end, in the order given
+         * @description The one edit whose position the caller does not have to decide.
+         *
+         *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
+         *
+         *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
+         */
+        post: operations["appendPlaylistEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/playlists/{id}/entries/{pos}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                pos: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one entry
+         * @description **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
+         *
+         *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
+         */
+        delete: operations["deletePlaylistEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The backups on disk, newest first
+         * @description **Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.
+         */
+        get: operations["listBackups"];
+        put?: never;
+        /**
+         * Take a backup
+         * @description **Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.
+         *
+         *     **Synchronous, and deliberately not a background job with progress**: it is `VACUUM INTO`, measured at 441 ms on a 103 MB library, from a live server with no downtime and no interruption to playback. An activity entry and a poll would be more machinery than the operation.
+         *
+         *     Serialised server-side — two requests at once produce two backups, not a name collision.
+         *
+         *     Recorded in the audit log as `backup.create`.
+         */
+        post: operations["createBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+                name: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download one
+         * @description **Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.
+         *
+         *     Supports range requests, so a 100 MB file over a home network resumes rather than restarting.
+         */
+        get: operations["downloadBackup"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove one
+         * @description **Administrators only**, throughout: a backup is a complete copy of the library including every account row, so being able to fetch one is being able to read the database.
+         *
+         *     Recorded as `backup.delete`.
+         */
+        delete: operations["deleteBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3022,6 +3200,50 @@ export interface components {
             /** Format: int64 */
             freed_bytes: number;
         };
+        CreatePlaylistRequest: {
+            title: string;
+            /**
+             * Format: int64
+             * @description **Required.** Every item belongs to a library, and a server with films and music has no defensible default.
+             */
+            library_id: number;
+        };
+        /** @description **Repeats are kept** — sending the same id twice is a playlist that holds a track twice, not an error. */
+        PlaylistEntriesRequest: {
+            item_ids: number[];
+        };
+        BackupFile: {
+            name: string;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: int64 */
+            taken_at: number;
+            /** @description The revision recorded inside the file; zero when it could not be read. */
+            schema_version: number;
+            /** @description Whether **this build** could restore that file, and it is not decorative: each entry is opened and its recorded schema version read. Migrations are one-way, so a backup from a newer LANcast cannot be restored by an older one. Saying so in the list is the difference between finding out now and finding out during a restore. */
+            restorable: boolean;
+            /** @description Why not, in a sentence — "taken by a newer LANcast — update before restoring it", or that the file is not a readable backup. Absent when there is none. */
+            problem?: string;
+        };
+        /**
+         * @description A backup is a snapshot of the database and nothing else (ADR 0058).
+         *
+         *     **Artwork is not included.** The cache is roughly forty-six times the database's size and is re-fetchable, so after a restore posters arrive again over the following hours. **A backup holds no sessions** — they are cleared when it is written, so a backup file cannot sign anyone in.
+         *
+         *     **An unreadable backup is listed and marked, never omitted.** A backup that has gone bad is the single most important thing this endpoint can report, and a list that quietly dropped it would say the opposite of the truth.
+         */
+        BackupList: {
+            /** @description Newest first. A server that has never taken one answers `[]`, not an error. */
+            backups: components["schemas"]["BackupFile"][];
+            /** @description Where the files are, so a person can copy one somewhere that is not this disk. **A backup that only exists on the drive it protects against is not really a backup**, and naming the folder is the cheapest way to say that without a lecture. */
+            folder: string;
+            /**
+             * @description What to type to put one back.
+             *
+             *     **There is no restore endpoint, and that is the decision rather than a gap.** Restoring replaces the database the server is reading, so it is offline: the server stops, the file is replaced, the server starts. **Clients must not offer a restore button** — they show this instead.
+             */
+            restore_command: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -3142,6 +3364,10 @@ export interface components {
         PeerFingerprint: string;
         /** @description The account id. */
         UserId: string;
+        /** @description The playlist's item id. */
+        PlaylistId: number;
+        /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+        BackupName: string;
     };
     requestBodies: never;
     headers: never;
@@ -6088,6 +6314,315 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createPlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlaylistRequest"];
+            };
+        };
+        responses: {
+            /** @description The new playlist, in the item shape. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deletePlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replacePlaylistEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Replaced. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An item id does not exist; the message names it. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    appendPlaylistEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaylistEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Appended. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An item id does not exist; the message names it. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePlaylistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The playlist's item id. */
+                id: components["parameters"]["PlaylistId"];
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                pos: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description There is no entry at that position. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every backup, plus where they live and how to restore one. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new backup, in the same shape as a list element. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `no_space` — the disk is full. A distinct code rather than a generic internal error, because that is the likely failure on a home server and "unexpected server error" would send somebody looking for a bug in LANcast instead of at their disk. */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    downloadBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+                name: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The database file. */
+            200: {
+                headers: {
+                    /** @description `attachment`. */
+                    "Content-Disposition"?: string;
+                    /** @description `bytes`. */
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.sqlite3": string;
+                };
+            };
+            /** @description A range of the file. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.sqlite3": string;
+                };
+            };
+            /** @description Not a bare backup filename. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Well-formed, but there is no such file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+                name: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a bare backup filename. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description There is no such file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

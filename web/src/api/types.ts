@@ -536,23 +536,6 @@ export type Collision = {
  * Backups (ADR 0058). A backup is the database and nothing else: no artwork,
  * which is re-fetchable, and no sessions, which are cleared when it is written.
  */
-export interface BackupFile {
-  name: string;
-  bytes: number;
-  taken_at: number;
-  schema_version: number;
-  // Whether *this build* could restore it. Migrations are one-way, so a backup
-  // from a newer LANcast cannot be, and `problem` says so in a sentence.
-  restorable: boolean;
-  problem?: string;
-}
+export type BackupFile = components["schemas"]["BackupFile"];
 
-export interface BackupsResponse {
-  backups: BackupFile[];
-  // Where the files are, shown so somebody can copy one off this disk.
-  folder: string;
-  // What to type to restore. The client cannot perform one — restoring
-  // replaces the database the server is reading — so it shows the command
-  // rather than a button that would have to lie.
-  restore_command: string;
-}
+export type BackupsResponse = components["schemas"]["BackupList"];
