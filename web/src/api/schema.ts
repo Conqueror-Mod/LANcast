@@ -1881,6 +1881,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Installed plugins, each showing requested against granted
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         */
+        get: operations["listPlugins"];
+        put?: never;
+        /**
+         * Upload a bundle to inspect it
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         *
+         *     **Install is deliberately two steps** — upload to inspect, then grant to activate — so that the capability approval is an explicit act rather than a consequence of choosing a file.
+         *
+         *     The bundle is **verified before anything is compiled**: a tampered or unknown-key bundle is refused before its code is ever handed to the runtime. On success the plugin is **staged disabled with an empty grant**, and the response reports what it *requests* so the client can present the approval dialog.
+         *
+         *     The body is the raw `.lcplugin` bytes, up to 32 MiB.
+         */
+        post: operations["uploadPlugin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{name}/grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve capabilities and activate
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         *
+         *     **The grant must be a subset of what the manifest requests** — `400` otherwise. The API cannot hand a plugin more than it asked for, which is what stops an approval dialog from being a place where authority is invented.
+         *
+         *     Takes effect immediately: the registry reloads.
+         */
+        post: operations["grantPluginCapabilities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{name}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn a plugin on
+         * @description **Administrators only.** Every plugin endpoint requires an admin session. The registry reloads.
+         */
+        post: operations["enablePlugin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{name}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn a plugin off
+         * @description **Administrators only.** Every plugin endpoint requires an admin session. The registry reloads.
+         */
+        post: operations["disablePlugin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a plugin and delete its unpacked files
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         */
+        delete: operations["removePlugin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3244,6 +3370,37 @@ export interface components {
              */
             restore_command: string;
         };
+        /** @description What a plugin may reach. **Deny by default** (ADR 0020): an empty capability set is a plugin that can compute and nothing else. */
+        PluginCapabilities: {
+            /** @description Hosts it may contact. */
+            http: string[];
+            /** @description Named secrets it may read. */
+            secrets: string[];
+        };
+        /**
+         * @description An installed plugin.
+         *
+         *     **Two trust layers apply independently** (ADR 0021): *provenance* — the `signer` — and *authority*, which is the capability grant. The manifest can only ever **request**; the recorded grant is the effective authority.
+         */
+        Plugin: {
+            name: string;
+            version: string;
+            /** @description Which interface it registers into (ADR 0007). */
+            kind: string;
+            /** @description `first_party`, `pinned` or `unsigned` — **provenance, which is a separate question from authority**. A first-party signature says who wrote it, not what it may do; a plugin still reaches nothing without a grant. */
+            signer: string;
+            enabled: boolean;
+            digest: string;
+            /** @description What the manifest asks for. A request is not a permission. */
+            requested: components["schemas"]["PluginCapabilities"];
+            /** @description What it actually has. **This, not the manifest, is the effective authority.** */
+            granted: components["schemas"]["PluginCapabilities"];
+            /** Format: int64 */
+            installed_at?: number;
+        };
+        PluginList: {
+            plugins: components["schemas"]["Plugin"][];
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -3368,6 +3525,8 @@ export interface components {
         PlaylistId: number;
         /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
         BackupName: string;
+        /** @description The plugin's name. */
+        PluginName: string;
     };
     requestBodies: never;
     headers: never;
@@ -6623,6 +6782,174 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    listPlugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every installed plugin. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    uploadPlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Staged, disabled, with an empty grant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plugin"];
+                };
+            };
+            /** @description The bundle is too large, tampered with, or signed by a key this server does not trust. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    grantPluginCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginCapabilities"];
+            };
+        };
+        responses: {
+            /** @description The plugin, now carrying its grant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plugin"];
+                };
+            };
+            /** @description The grant exceeds what the manifest requests. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    enablePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    disablePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

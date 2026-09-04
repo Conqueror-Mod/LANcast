@@ -77,6 +77,10 @@
     {
       "name": "backups",
       "description": "Snapshots of the database (ADR 0058). Administrators only."
+    },
+    {
+      "name": "plugins",
+      "description": "Third-party code in a deny-by-default sandbox (ADRs 0020, 0021). Administrators only."
     }
   ],
   "paths": {
@@ -4372,6 +4376,224 @@
           }
         }
       }
+    },
+    "/plugins": {
+      "get": {
+        "operationId": "listPlugins",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Installed plugins, each showing requested against granted",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.",
+        "responses": {
+          "200": {
+            "description": "Every installed plugin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadPlugin",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Upload a bundle to inspect it",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.\n\n**Install is deliberately two steps** — upload to inspect, then grant to activate — so that the capability approval is an explicit act rather than a consequence of choosing a file.\n\nThe bundle is **verified before anything is compiled**: a tampered or unknown-key bundle is refused before its code is ever handed to the runtime. On success the plugin is **staged disabled with an empty grant**, and the response reports what it *requests* so the client can present the approval dialog.\n\nThe body is the raw `.lcplugin` bytes, up to 32 MiB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Staged, disabled, with an empty grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plugin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The bundle is too large, tampered with, or signed by a key this server does not trust.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/plugins/{name}/grant": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginName"
+        }
+      ],
+      "post": {
+        "operationId": "grantPluginCapabilities",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Approve capabilities and activate",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.\n\n**The grant must be a subset of what the manifest requests** — `400` otherwise. The API cannot hand a plugin more than it asked for, which is what stops an approval dialog from being a place where authority is invented.\n\nTakes effect immediately: the registry reloads.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginCapabilities"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The plugin, now carrying its grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plugin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The grant exceeds what the manifest requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/plugins/{name}/enable": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginName"
+        }
+      ],
+      "post": {
+        "operationId": "enablePlugin",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Turn a plugin on",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session. The registry reloads.",
+        "responses": {
+          "204": {
+            "description": "Done. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/plugins/{name}/disable": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginName"
+        }
+      ],
+      "post": {
+        "operationId": "disablePlugin",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Turn a plugin off",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session. The registry reloads.",
+        "responses": {
+          "204": {
+            "description": "Done. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/plugins/{name}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginName"
+        }
+      ],
+      "delete": {
+        "operationId": "removePlugin",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Forget a plugin and delete its unpacked files",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.",
+        "responses": {
+          "204": {
+            "description": "Removed. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4533,6 +4755,15 @@
         "in": "path",
         "required": true,
         "description": "A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PluginName": {
+        "name": "name",
+        "in": "path",
+        "required": true,
+        "description": "The plugin's name.",
         "schema": {
           "type": "string"
         }
@@ -8017,6 +8248,92 @@
           "restore_command": {
             "type": "string",
             "description": "What to type to put one back.\n\n**There is no restore endpoint, and that is the decision rather than a gap.** Restoring replaces the database the server is reading, so it is offline: the server stops, the file is replaced, the server starts. **Clients must not offer a restore button** — they show this instead."
+          }
+        }
+      },
+      "PluginCapabilities": {
+        "type": "object",
+        "description": "What a plugin may reach. **Deny by default** (ADR 0020): an empty capability set is a plugin that can compute and nothing else.",
+        "required": [
+          "http",
+          "secrets"
+        ],
+        "properties": {
+          "http": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hosts it may contact."
+          },
+          "secrets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Named secrets it may read."
+          }
+        }
+      },
+      "Plugin": {
+        "type": "object",
+        "description": "An installed plugin.\n\n**Two trust layers apply independently** (ADR 0021): *provenance* — the `signer` — and *authority*, which is the capability grant. The manifest can only ever **request**; the recorded grant is the effective authority.",
+        "required": [
+          "name",
+          "version",
+          "kind",
+          "signer",
+          "enabled",
+          "digest",
+          "requested",
+          "granted"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Which interface it registers into (ADR 0007)."
+          },
+          "signer": {
+            "type": "string",
+            "description": "`first_party`, `pinned` or `unsigned` — **provenance, which is a separate question from authority**. A first-party signature says who wrote it, not what it may do; a plugin still reaches nothing without a grant."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "requested": {
+            "$ref": "#/components/schemas/PluginCapabilities",
+            "description": "What the manifest asks for. A request is not a permission."
+          },
+          "granted": {
+            "$ref": "#/components/schemas/PluginCapabilities",
+            "description": "What it actually has. **This, not the manifest, is the effective authority.**"
+          },
+          "installed_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PluginList": {
+        "type": "object",
+        "required": [
+          "plugins"
+        ],
+        "properties": {
+          "plugins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Plugin"
+            }
           }
         }
       }

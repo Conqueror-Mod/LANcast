@@ -12,7 +12,6 @@ import (
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
 	"lancast/internal/meta"
-	"lancast/internal/plugin"
 	"lancast/internal/probe"
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -162,8 +161,8 @@ var wireTypes = []struct {
 
 	// Subtitles, plugins, people.
 	{"GET /api/items/{id}/subtitles", store.ExternalSubtitle{}},
-	{"GET /api/plugins", store.InstalledPlugin{}},
-	{"GET /api/plugins · capabilities", plugin.Capabilities{}},
+	{"GET /api/plugins", pluginView{}},
+	{"GET /api/plugins · capabilities", capsView{}},
 	{"GET /api/people", store.Person{}},
 	{"GET /api/people/peers", store.RemotePerson{}},
 	{"GET /api/users", store.User{}},
