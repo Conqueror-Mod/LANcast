@@ -45,6 +45,14 @@
     {
       "name": "playback",
       "description": "The direct-play / remux / transcode decision, and the endpoints that deliver bytes (ADR 0012)."
+    },
+    {
+      "name": "profile",
+      "description": "The caller's own account, history and ratings. Never anybody else's."
+    },
+    {
+      "name": "settings",
+      "description": "Server-wide configuration."
     }
   ],
   "paths": {
@@ -1514,6 +1522,490 @@
           }
         }
       }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "getProfile",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Who the caller is, what they have watched, and the totals behind it",
+        "description": "**The caller's own profile only.** There is no per-user variant of this route: \"what has everyone been watching\" needs an answer to who may see it before it needs a route.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "History page size. Defaults to 50, maximum 200.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "History page offset.",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "renameProfile",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Change your own display name",
+        "description": "The account **id does not change**, which is what makes this a rename rather than a replacement: sessions, watch history, ratings and playlist membership all hang off the id and follow silently.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The renamed account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "`duplicate` if the name is taken, or `no_account` on an unconfigured loopback server where there is no account to edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/history": {
+      "get": {
+        "operationId": "countHistoryReset",
+        "tags": [
+          "profile"
+        ],
+        "summary": "How many playback records a reset would remove",
+        "description": "**Removes nothing.** It exists so the confirmation can name a number: a person who expected to clear one show and is told four hundred has learned something while it is still free, and a number is what makes an irreversible action reviewable rather than a shrug.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HistoryScope"
+          },
+          {
+            "$ref": "#/components/parameters/HistoryUnder"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The count, and the scope it was counted under.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "resetHistory",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Delete your own playback history",
+        "description": "**The account is the session's and there is no user id to supply.** Playback state is keyed by user (ADR 0006) so that one person's viewing is their own, and an administrator clearing their own history must not be able to reach into anybody else's — so the endpoint offers no way to name a victim. Running the server is not consent on somebody else's behalf.\n\nAudited (ADR 0026): destructive and irreversible puts it in the same class as removing a library. The entry records the scope and the count, not the rows — \"forgot 412 finished items\" is what answers the question a month later, and a list of ids for things that may since have been deleted is not.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HistoryScope"
+          },
+          {
+            "$ref": "#/components/parameters/HistoryUnder"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How many were removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryReset"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/profile/ratings": {
+      "get": {
+        "operationId": "listOwnRatings",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Everything you have rated, most recent first",
+        "description": "Your list. There is no route to anybody else's.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Defaults to 50, maximum 200.",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your ratings, with the items they are about.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatedItemList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/profile/sharing": {
+      "put": {
+        "operationId": "putSharing",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Whether your activity is visible to other accounts",
+        "description": "The caller's own decision, and only ever the caller's. **There is deliberately no administrator variant**: an administrator may run the server, but a switch somebody else can flip on your behalf is not consent. Audited, because it changes who can see something about a person.\n\nTurning it off is **retroactive**: past activity stops being visible along with future. A switch that cannot take back what it gave is not a switch.\n\nRead the current value from `user.sharing` on `GET /api/auth/status`, **not** from `GET /api/people` — that list excludes the caller by design, so reading your own setting from it always answers undefined.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/profile/peer-visibility": {
+      "put": {
+        "operationId": "putPeerVisibility",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Whether your account appears in the roster handed to paired servers",
+        "description": "Choosing to appear in a roster is one account's own decision about itself, and there is deliberately no admin-facing version of it — the same reasoning as the sharing switch. Pairing a server is administrative because it opens a network relationship for the whole server; being listed in one is not.\n\nRead the current value from `user.visible_to_peers` on `GET /api/auth/status`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeerVisibilityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/items/{id}/rating": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getOwnRating",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your rating of an item",
+        "description": "**These routes carry no user id**: whose rating is always the caller's, which makes it impossible to leak one by forgetting a filter.",
+        "responses": {
+          "200": {
+            "description": "Your rating, or null.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putOwnRating",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Record or replace your rating",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRatingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The rating as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatingEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A score outside 1–10.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteOwnRating",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Withdraw your rating",
+        "description": "**Not the same as scoring something 1.** \"I have not rated this\" and \"I rated this badly\" are different statements, and an interface that cannot say the first is one people stop trusting with the second.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "getSettings",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Server settings",
+        "responses": {
+          "200": {
+            "description": "The current settings, with provider keys reported only as configured flags.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putSettings",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Change server settings",
+        "description": "Administrators only. Returns the settings as `GET` would.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The settings as they now stand.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/settings/reset": {
+      "post": {
+        "operationId": "resetSettings",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Restore the documented defaults",
+        "description": "Administrators only. Returns the settings, like `GET`.\n\n**Credentials and machine facts survive**: the password hash, the provider API keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first would lock the operator out of their own server and wiping the others would break metadata and HTTPS — none of which is what anybody means by \"reset settings\", and none of which a reset can restore. What resets is behaviour.",
+        "responses": {
+          "200": {
+            "description": "The settings, back at their defaults.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1611,6 +2103,26 @@
         "description": "Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served.",
         "schema": {
           "type": "number"
+        }
+      },
+      "HistoryScope": {
+        "name": "scope",
+        "in": "query",
+        "required": false,
+        "description": "`all`, `finished` or `unfinished`.\n\nThree scopes because \"reset my history\" means three different things. Playback state is one table carrying two meanings, and somebody forgetting a show they finished rarely means \"and lose my place in the one I am half way through\".",
+        "schema": {
+          "type": "string",
+          "default": "all"
+        }
+      },
+      "HistoryUnder": {
+        "name": "under",
+        "in": "query",
+        "required": false,
+        "description": "Narrow to an item and everything beneath it, recursively — so forgetting a show is one call rather than a client walking its episodes.",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
         }
       }
     },
@@ -2873,6 +3385,502 @@
             "type": "string"
           },
           "queued": {
+            "type": "integer"
+          }
+        }
+      },
+      "ProfileUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "admin",
+          "secured"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A string, not a number."
+          },
+          "name": {
+            "type": "string"
+          },
+          "admin": {
+            "type": "boolean"
+          },
+          "secured": {
+            "type": "boolean",
+            "description": "False on an unconfigured loopback server, where there is no account and the history belongs to the migrated `local` id. **The client says so rather than inventing a person.**"
+          }
+        }
+      },
+      "ProfileStats": {
+        "type": "object",
+        "description": "`finished` and `viewings` answer different questions and **clients must not treat either as the other**. `finished` is how many distinct titles have been finished; `viewings` is how many times finishing happened, so somebody who has seen twelve films, one of them nine times, reports `finished: 12` and `viewings: 20`. `viewings` is therefore always greater than or equal to `finished`.",
+        "required": [
+          "started",
+          "finished",
+          "watched_ms",
+          "first_at"
+        ],
+        "properties": {
+          "started": {
+            "type": "integer"
+          },
+          "finished": {
+            "type": "integer",
+            "description": "Distinct titles finished."
+          },
+          "viewings": {
+            "type": "integer",
+            "description": "How many times finishing happened.\n\n**Absent on a server older than schema revision 32, and absent is not zero.** A client that renders a missing field as `0 viewings` beside `168 finished` states something false rather than omitting something true. Treat it as unknown and say nothing."
+          },
+          "watched_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Time **spent**, not runtime owned: a finished item counts its duration once *per viewing*, an unfinished one counts how far in you got.\n\nSumming the duration of everything touched would report eleven hours for eleven films abandoned in their first minute; counting a rewatched film once under-reports the opposite way, which is what this did before the tally beside the flag was read.\n\nA title whose runtime is unknown is counted **once**, whatever its tally says. There is no measurement of how long one viewing of it was, so multiplying would invent time rather than report it — and inventing upward is the worse direction, because a total that grows on its own is harder to disbelieve than one that is missing."
+          },
+          "first_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The oldest playback this user has, so a client can say what period the numbers cover rather than implying they cover all time."
+          }
+        }
+      },
+      "HistoryEntry": {
+        "type": "object",
+        "required": [
+          "item",
+          "position_ms",
+          "watched",
+          "played_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "position_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "watched": {
+            "type": "boolean"
+          },
+          "played_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Profile": {
+        "type": "object",
+        "description": "Identity, statistics and history in one request, because a page needing all three should not discover that from three round trips and three loading states.",
+        "required": [
+          "user",
+          "stats",
+          "history",
+          "has_more"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/ProfileUser"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ProfileStats"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntry"
+            },
+            "description": "**Derived from playback state, not from a log of plays.** There is one row per item per user, so this is the *last* time each item was played and not every time it was. That is a stated limit rather than a hidden one: a per-play log is a second record of the same fact, free to disagree with the first, and nothing has yet asked for one.\n\nItems that are `missing` are included. \"What happened to the film I watched last week\" is a question about history, and a library that lost a drive should not lose the answer to it."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether the history was cut short, so a client can offer the next page rather than infer it from a full-looking one."
+          }
+        }
+      },
+      "Rating": {
+        "type": "object",
+        "description": "**Your** verdict on an item. A rating is private to the account that wrote it: there is no household average, no count of how many people rated something, and no route that returns somebody else's score.\n\nDistinct from `rating` on the item (the provider's opinion) and from the external ratings of ADR 0019. Three numbers about one film is one too many to leave unlabelled, so they are never merged into a single field.",
+        "required": [
+          "item_id",
+          "score",
+          "updated_at"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Out of **ten**, not five: a half-star interface then needs no migration, and the provider ratings this sits beside are already out of ten."
+          },
+          "review": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A note to yourself. **Nullable rather than empty-string**, because a score with no words is the common case and an empty string would be indistinguishable from a review somebody deliberately cleared."
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RatingEnvelope": {
+        "type": "object",
+        "required": [
+          "rating"
+        ],
+        "properties": {
+          "rating": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Rating"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "**Null when you have not rated it, rather than a `404`**: the item exists and your verdict does not."
+          }
+        }
+      },
+      "SetRatingRequest": {
+        "type": "object",
+        "required": [
+          "score"
+        ],
+        "properties": {
+          "score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "review": {
+            "type": "string",
+            "description": "A review of `\"\"` clears the note while keeping the score: they are two separate things somebody may want to change independently."
+          }
+        }
+      },
+      "RatedItem": {
+        "type": "object",
+        "required": [
+          "item",
+          "rating"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "rating": {
+            "$ref": "#/components/schemas/Rating"
+          }
+        }
+      },
+      "RatedItemList": {
+        "type": "object",
+        "required": [
+          "ratings"
+        ],
+        "properties": {
+          "ratings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RatedItem"
+            }
+          }
+        }
+      },
+      "HistoryCount": {
+        "type": "object",
+        "required": [
+          "count",
+          "scope"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "How many records a reset **would** remove. Removes nothing."
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      },
+      "HistoryReset": {
+        "type": "object",
+        "required": [
+          "removed",
+          "scope"
+        ],
+        "properties": {
+          "removed": {
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      },
+      "RenameProfileRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "60 characters or fewer, no control characters."
+          }
+        }
+      },
+      "SharingRequest": {
+        "type": "object",
+        "required": [
+          "share"
+        ],
+        "properties": {
+          "share": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PeerVisibilityRequest": {
+        "type": "object",
+        "required": [
+          "visible"
+        ],
+        "properties": {
+          "visible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "description": "**Every provider key is write-only.** `GET` returns each provider's configured flag only, never the value. Keys are stored in the config file at `0600`, never in the database.",
+        "required": [
+          "tmdb",
+          "opensubtitles",
+          "omdb",
+          "media_tools",
+          "encoder",
+          "rate_per_sec",
+          "write_nfo",
+          "sensitive_marking",
+          "detect_markers",
+          "auto_enrich",
+          "update_check",
+          "debug_logging",
+          "watched_threshold",
+          "continue_weeks",
+          "continue_limit",
+          "allow_media_deletion",
+          "empty_trash_on_scan",
+          "scan_interval_hours",
+          "audit_retention_days"
+        ],
+        "properties": {
+          "tmdb": {
+            "type": "object",
+            "required": [
+              "configured"
+            ],
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              }
+            },
+            "description": "Whether a key is set. **The value itself is never returned.**"
+          },
+          "opensubtitles": {
+            "type": "object",
+            "required": [
+              "configured"
+            ],
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              }
+            },
+            "description": "Whether a key is set. **The value itself is never returned.**"
+          },
+          "omdb": {
+            "type": "object",
+            "required": [
+              "configured"
+            ],
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              }
+            },
+            "description": "External ratings (ADR 0019). Setting `omdb_key` enables the rating pass; clearing it turns external ratings off again, and without it the pass never runs and nothing is fetched."
+          },
+          "media_tools": {
+            "type": "object",
+            "description": "Whether the server can inspect and convert media. Without these every file is direct-played, and anything the client cannot decode fails silently.",
+            "required": [
+              "probe_available",
+              "transcode_available",
+              "directory"
+            ],
+            "properties": {
+              "probe_available": {
+                "type": "boolean"
+              },
+              "transcode_available": {
+                "type": "boolean"
+              },
+              "directory": {
+                "type": "string"
+              }
+            }
+          },
+          "encoder": {
+            "type": "object",
+            "required": [
+              "preference",
+              "active",
+              "available"
+            ],
+            "properties": {
+              "preference": {
+                "type": "string",
+                "description": "`auto`, or a named encoder."
+              },
+              "active": {
+                "$ref": "#/components/schemas/Encoder"
+              },
+              "available": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Encoder"
+                }
+              }
+            }
+          },
+          "rate_per_sec": {
+            "type": "number",
+            "description": "Provider request rate limit."
+          },
+          "write_nfo": {
+            "type": "boolean",
+            "description": "Whether a scan writes NFO sidecars next to the media."
+          },
+          "sensitive_marking": {
+            "type": "boolean",
+            "description": "Whether picture folders and photos can be marked sensitive (ADR 0051)."
+          },
+          "detect_markers": {
+            "type": "boolean"
+          },
+          "auto_enrich": {
+            "type": "boolean"
+          },
+          "update_check": {
+            "type": "boolean"
+          },
+          "debug_logging": {
+            "type": "boolean",
+            "description": "Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times."
+          },
+          "watched_threshold": {
+            "type": "integer"
+          },
+          "continue_weeks": {
+            "type": "integer"
+          },
+          "continue_limit": {
+            "type": "integer"
+          },
+          "allow_media_deletion": {
+            "type": "boolean"
+          },
+          "empty_trash_on_scan": {
+            "type": "boolean",
+            "description": "When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default.\n\nA scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and \"scanning marks missing, never deletes\" is not relaxed by this setting."
+          },
+          "scan_interval_hours": {
+            "type": "integer"
+          },
+          "audit_retention_days": {
+            "type": "integer",
+            "description": "How long audit entries are kept (ADR 0026)."
+          }
+        }
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "description": "Every field optional; an omitted field is left alone.",
+        "properties": {
+          "tmdb_key": {
+            "type": "string"
+          },
+          "opensubtitles_key": {
+            "type": "string"
+          },
+          "omdb_key": {
+            "type": "string",
+            "description": "An empty string clears it and turns external ratings off."
+          },
+          "ffmpeg_dir": {
+            "type": "string"
+          },
+          "rate_per_sec": {
+            "type": "number"
+          },
+          "write_nfo": {
+            "type": "boolean"
+          },
+          "auto_enrich": {
+            "type": "boolean"
+          },
+          "update_check": {
+            "type": "boolean"
+          },
+          "sensitive_marking": {
+            "type": "boolean"
+          },
+          "detect_markers": {
+            "type": "boolean"
+          },
+          "hardware_encoder": {
+            "type": "string"
+          },
+          "debug_logging": {
+            "type": "boolean"
+          },
+          "watched_threshold": {
+            "type": "integer"
+          },
+          "continue_weeks": {
+            "type": "integer"
+          },
+          "continue_limit": {
+            "type": "integer"
+          },
+          "allow_media_deletion": {
+            "type": "boolean"
+          },
+          "empty_trash_on_scan": {
+            "type": "boolean"
+          },
+          "scan_interval_hours": {
+            "type": "integer"
+          },
+          "audit_retention_days": {
             "type": "integer"
           }
         }

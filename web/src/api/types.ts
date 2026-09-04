@@ -164,60 +164,9 @@ export interface CastMember {
 
 export type Encoder = components["schemas"]["Encoder"];
 
-export interface Settings {
-  tmdb: { configured: boolean };
-  opensubtitles: { configured: boolean };
-  omdb: { configured: boolean };
-  // Whether the server can inspect and convert media. Without these every file
-  // is direct-played, and anything the browser cannot decode fails silently.
-  media_tools: {
-    probe_available: boolean;
-    transcode_available: boolean;
-    directory: string;
-  };
-  rate_per_sec: number;
-  write_nfo: boolean;
-  /* Whether picture folders and photos can be marked sensitive (ADR 0051). */
-  sensitive_marking: boolean;
-  detect_markers: boolean;
-  auto_enrich: boolean;
-  update_check: boolean;
-  encoder: { preference: string; active: Encoder; available: Encoder[] };
-  // Server rules: what a client shows and what it may do. They live on the
-  // server because a household with a phone, a browser and a TV must not hold
-  // three answers to "have I watched this".
-  debug_logging: boolean;
-  watched_threshold: number;
-  continue_weeks: number;
-  continue_limit: number;
-  allow_media_deletion: boolean;
-  // Optional because a server older than this field does not send it, and a
-  // client newer than its server is ordinary here. Absent reads as off, which
-  // is the safe direction for a switch that removes records.
-  empty_trash_on_scan?: boolean;
-  scan_interval_hours: number;
-}
+export type Settings = components["schemas"]["Settings"];
 
-export interface SettingsUpdate {
-  tmdb_key?: string;
-  opensubtitles_key?: string;
-  omdb_key?: string;
-  ffmpeg_dir?: string;
-  rate_per_sec?: number;
-  write_nfo?: boolean;
-  sensitive_marking?: boolean;
-  detect_markers?: boolean;
-  auto_enrich?: boolean;
-  update_check?: boolean;
-  hardware_encoder?: string;
-  debug_logging?: boolean;
-  watched_threshold?: number;
-  continue_weeks?: number;
-  continue_limit?: number;
-  allow_media_deletion?: boolean;
-  empty_trash_on_scan?: boolean;
-  scan_interval_hours?: number;
-}
+export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 
 export interface ScanIssue {
   path: string; // library-relative
@@ -576,18 +525,9 @@ export interface Trending {
 // GET /api/items/{id}/rating — *your* rating. There is no route to anybody
 // else's: a rating is private to the account that wrote it, and the paths carry
 // no user id so a filter cannot be forgotten.
-export interface Rating {
-  item_id: number;
-  /** 1–10, not 1–5: a half-star interface then needs no migration. */
-  score: number;
-  review?: string | null;
-  updated_at: number;
-}
+export type Rating = components["schemas"]["Rating"];
 
-export interface RatedItem {
-  item: Item;
-  rating: Rating;
-}
+export type RatedItem = components["schemas"]["RatedItem"];
 
 // GET /api/together — a watch-together room. The server owns position and
 // paused; clients converge on them rather than each broadcasting their own.

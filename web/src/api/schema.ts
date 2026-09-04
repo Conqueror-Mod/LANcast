@@ -570,6 +570,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who the caller is, what they have watched, and the totals behind it
+         * @description **The caller's own profile only.** There is no per-user variant of this route: "what has everyone been watching" needs an answer to who may see it before it needs a route.
+         */
+        get: operations["getProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change your own display name
+         * @description The account **id does not change**, which is what makes this a rename rather than a replacement: sessions, watch history, ratings and playlist membership all hang off the id and follow silently.
+         */
+        patch: operations["renameProfile"];
+        trace?: never;
+    };
+    "/profile/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many playback records a reset would remove
+         * @description **Removes nothing.** It exists so the confirmation can name a number: a person who expected to clear one show and is told four hundred has learned something while it is still free, and a number is what makes an irreversible action reviewable rather than a shrug.
+         */
+        get: operations["countHistoryReset"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete your own playback history
+         * @description **The account is the session's and there is no user id to supply.** Playback state is keyed by user (ADR 0006) so that one person's viewing is their own, and an administrator clearing their own history must not be able to reach into anybody else's — so the endpoint offers no way to name a victim. Running the server is not consent on somebody else's behalf.
+         *
+         *     Audited (ADR 0026): destructive and irreversible puts it in the same class as removing a library. The entry records the scope and the count, not the rows — "forgot 412 finished items" is what answers the question a month later, and a list of ids for things that may since have been deleted is not.
+         */
+        delete: operations["resetHistory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/ratings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything you have rated, most recent first
+         * @description Your list. There is no route to anybody else's.
+         */
+        get: operations["listOwnRatings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Whether your activity is visible to other accounts
+         * @description The caller's own decision, and only ever the caller's. **There is deliberately no administrator variant**: an administrator may run the server, but a switch somebody else can flip on your behalf is not consent. Audited, because it changes who can see something about a person.
+         *
+         *     Turning it off is **retroactive**: past activity stops being visible along with future. A switch that cannot take back what it gave is not a switch.
+         *
+         *     Read the current value from `user.sharing` on `GET /api/auth/status`, **not** from `GET /api/people` — that list excludes the caller by design, so reading your own setting from it always answers undefined.
+         */
+        put: operations["putSharing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/peer-visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Whether your account appears in the roster handed to paired servers
+         * @description Choosing to appear in a roster is one account's own decision about itself, and there is deliberately no admin-facing version of it — the same reasoning as the sharing switch. Pairing a server is administrative because it opens a network relationship for the whole server; being listed in one is not.
+         *
+         *     Read the current value from `user.visible_to_peers` on `GET /api/auth/status`.
+         */
+        put: operations["putPeerVisibility"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Your rating of an item
+         * @description **These routes carry no user id**: whose rating is always the caller's, which makes it impossible to leak one by forgetting a filter.
+         */
+        get: operations["getOwnRating"];
+        /** Record or replace your rating */
+        put: operations["putOwnRating"];
+        post?: never;
+        /**
+         * Withdraw your rating
+         * @description **Not the same as scoring something 1.** "I have not rated this" and "I rated this badly" are different statements, and an interface that cannot say the first is one people stop trusting with the second.
+         */
+        delete: operations["deleteOwnRating"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Server settings */
+        get: operations["getSettings"];
+        /**
+         * Change server settings
+         * @description Administrators only. Returns the settings as `GET` would.
+         */
+        put: operations["putSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore the documented defaults
+         * @description Administrators only. Returns the settings, like `GET`.
+         *
+         *     **Credentials and machine facts survive**: the password hash, the provider API keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first would lock the operator out of their own server and wiping the others would break metadata and HTTPS — none of which is what anybody means by "reset settings", and none of which a reset can restore. What resets is behaviour.
+         */
+        post: operations["resetSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1095,6 +1282,185 @@ export interface components {
             scope: string;
             queued: number;
         };
+        ProfileUser: {
+            /** @description A string, not a number. */
+            id: string;
+            name: string;
+            admin: boolean;
+            /** @description False on an unconfigured loopback server, where there is no account and the history belongs to the migrated `local` id. **The client says so rather than inventing a person.** */
+            secured: boolean;
+        };
+        /** @description `finished` and `viewings` answer different questions and **clients must not treat either as the other**. `finished` is how many distinct titles have been finished; `viewings` is how many times finishing happened, so somebody who has seen twelve films, one of them nine times, reports `finished: 12` and `viewings: 20`. `viewings` is therefore always greater than or equal to `finished`. */
+        ProfileStats: {
+            started: number;
+            /** @description Distinct titles finished. */
+            finished: number;
+            /**
+             * @description How many times finishing happened.
+             *
+             *     **Absent on a server older than schema revision 32, and absent is not zero.** A client that renders a missing field as `0 viewings` beside `168 finished` states something false rather than omitting something true. Treat it as unknown and say nothing.
+             */
+            viewings?: number;
+            /**
+             * Format: int64
+             * @description Time **spent**, not runtime owned: a finished item counts its duration once *per viewing*, an unfinished one counts how far in you got.
+             *
+             *     Summing the duration of everything touched would report eleven hours for eleven films abandoned in their first minute; counting a rewatched film once under-reports the opposite way, which is what this did before the tally beside the flag was read.
+             *
+             *     A title whose runtime is unknown is counted **once**, whatever its tally says. There is no measurement of how long one viewing of it was, so multiplying would invent time rather than report it — and inventing upward is the worse direction, because a total that grows on its own is harder to disbelieve than one that is missing.
+             */
+            watched_ms: number;
+            /**
+             * Format: int64
+             * @description The oldest playback this user has, so a client can say what period the numbers cover rather than implying they cover all time.
+             */
+            first_at: number | null;
+        };
+        HistoryEntry: {
+            item: components["schemas"]["Item"];
+            /** Format: int64 */
+            position_ms: number;
+            watched: boolean;
+            /** Format: int64 */
+            played_at: number;
+        };
+        /** @description Identity, statistics and history in one request, because a page needing all three should not discover that from three round trips and three loading states. */
+        Profile: {
+            user: components["schemas"]["ProfileUser"];
+            stats: components["schemas"]["ProfileStats"];
+            /**
+             * @description **Derived from playback state, not from a log of plays.** There is one row per item per user, so this is the *last* time each item was played and not every time it was. That is a stated limit rather than a hidden one: a per-play log is a second record of the same fact, free to disagree with the first, and nothing has yet asked for one.
+             *
+             *     Items that are `missing` are included. "What happened to the film I watched last week" is a question about history, and a library that lost a drive should not lose the answer to it.
+             */
+            history: components["schemas"]["HistoryEntry"][];
+            /** @description Whether the history was cut short, so a client can offer the next page rather than infer it from a full-looking one. */
+            has_more: boolean;
+        };
+        /**
+         * @description **Your** verdict on an item. A rating is private to the account that wrote it: there is no household average, no count of how many people rated something, and no route that returns somebody else's score.
+         *
+         *     Distinct from `rating` on the item (the provider's opinion) and from the external ratings of ADR 0019. Three numbers about one film is one too many to leave unlabelled, so they are never merged into a single field.
+         */
+        Rating: {
+            /** Format: int64 */
+            item_id: number;
+            /** @description Out of **ten**, not five: a half-star interface then needs no migration, and the provider ratings this sits beside are already out of ten. */
+            score: number;
+            /** @description A note to yourself. **Nullable rather than empty-string**, because a score with no words is the common case and an empty string would be indistinguishable from a review somebody deliberately cleared. */
+            review?: string | null;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        RatingEnvelope: {
+            /** @description **Null when you have not rated it, rather than a `404`**: the item exists and your verdict does not. */
+            rating: components["schemas"]["Rating"] | null;
+        };
+        SetRatingRequest: {
+            score: number;
+            /** @description A review of `""` clears the note while keeping the score: they are two separate things somebody may want to change independently. */
+            review?: string;
+        };
+        RatedItem: {
+            item: components["schemas"]["Item"];
+            rating: components["schemas"]["Rating"];
+        };
+        RatedItemList: {
+            ratings: components["schemas"]["RatedItem"][];
+        };
+        HistoryCount: {
+            /** @description How many records a reset **would** remove. Removes nothing. */
+            count: number;
+            scope: string;
+        };
+        HistoryReset: {
+            removed: number;
+            scope: string;
+        };
+        RenameProfileRequest: {
+            /** @description 60 characters or fewer, no control characters. */
+            name: string;
+        };
+        SharingRequest: {
+            share: boolean;
+        };
+        PeerVisibilityRequest: {
+            visible: boolean;
+        };
+        /** @description **Every provider key is write-only.** `GET` returns each provider's configured flag only, never the value. Keys are stored in the config file at `0600`, never in the database. */
+        Settings: {
+            /** @description Whether a key is set. **The value itself is never returned.** */
+            tmdb: {
+                configured: boolean;
+            };
+            /** @description Whether a key is set. **The value itself is never returned.** */
+            opensubtitles: {
+                configured: boolean;
+            };
+            /** @description External ratings (ADR 0019). Setting `omdb_key` enables the rating pass; clearing it turns external ratings off again, and without it the pass never runs and nothing is fetched. */
+            omdb: {
+                configured: boolean;
+            };
+            /** @description Whether the server can inspect and convert media. Without these every file is direct-played, and anything the client cannot decode fails silently. */
+            media_tools: {
+                probe_available: boolean;
+                transcode_available: boolean;
+                directory: string;
+            };
+            encoder: {
+                /** @description `auto`, or a named encoder. */
+                preference: string;
+                active: components["schemas"]["Encoder"];
+                available: components["schemas"]["Encoder"][];
+            };
+            /** @description Provider request rate limit. */
+            rate_per_sec: number;
+            /** @description Whether a scan writes NFO sidecars next to the media. */
+            write_nfo: boolean;
+            /** @description Whether picture folders and photos can be marked sensitive (ADR 0051). */
+            sensitive_marking: boolean;
+            detect_markers: boolean;
+            auto_enrich: boolean;
+            update_check: boolean;
+            /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
+            debug_logging: boolean;
+            watched_threshold: number;
+            continue_weeks: number;
+            continue_limit: number;
+            allow_media_deletion: boolean;
+            /**
+             * @description When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default.
+             *
+             *     A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and "scanning marks missing, never deletes" is not relaxed by this setting.
+             */
+            empty_trash_on_scan: boolean;
+            scan_interval_hours: number;
+            /** @description How long audit entries are kept (ADR 0026). */
+            audit_retention_days: number;
+        };
+        /** @description Every field optional; an omitted field is left alone. */
+        SettingsUpdate: {
+            tmdb_key?: string;
+            opensubtitles_key?: string;
+            /** @description An empty string clears it and turns external ratings off. */
+            omdb_key?: string;
+            ffmpeg_dir?: string;
+            rate_per_sec?: number;
+            write_nfo?: boolean;
+            auto_enrich?: boolean;
+            update_check?: boolean;
+            sensitive_marking?: boolean;
+            detect_markers?: boolean;
+            hardware_encoder?: string;
+            debug_logging?: boolean;
+            watched_threshold?: number;
+            continue_weeks?: number;
+            continue_limit?: number;
+            allow_media_deletion?: boolean;
+            empty_trash_on_scan?: boolean;
+            scan_interval_hours?: number;
+            audit_retention_days?: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -1201,6 +1567,14 @@ export interface components {
         MaxBitrate: number;
         /** @description Start offset in seconds. Seeking forward restarts the stream from a new value, because a live transcode cannot be range-served. */
         StartOffset: number;
+        /**
+         * @description `all`, `finished` or `unfinished`.
+         *
+         *     Three scopes because "reset my history" means three different things. Playback state is one table carrying two meanings, and somebody forgetting a show they finished rarely means "and lose my place in the one I am half way through".
+         */
+        HistoryScope: string;
+        /** @description Narrow to an item and everything beneath it, recursively — so forgetting a show is one call rather than a client walking its episodes. */
+        HistoryUnder: number;
     };
     requestBodies: never;
     headers: never;
@@ -2332,6 +2706,367 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    getProfile: {
+        parameters: {
+            query?: {
+                /** @description History page size. Defaults to 50, maximum 200. */
+                limit?: number;
+                /** @description History page offset. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    renameProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The renamed account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileUser"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `duplicate` if the name is taken, or `no_account` on an unconfigured loopback server where there is no account to edit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    countHistoryReset: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `all`, `finished` or `unfinished`.
+                 *
+                 *     Three scopes because "reset my history" means three different things. Playback state is one table carrying two meanings, and somebody forgetting a show they finished rarely means "and lose my place in the one I am half way through".
+                 */
+                scope?: components["parameters"]["HistoryScope"];
+                /** @description Narrow to an item and everything beneath it, recursively — so forgetting a show is one call rather than a client walking its episodes. */
+                under?: components["parameters"]["HistoryUnder"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The count, and the scope it was counted under. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryCount"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    resetHistory: {
+        parameters: {
+            query?: {
+                /**
+                 * @description `all`, `finished` or `unfinished`.
+                 *
+                 *     Three scopes because "reset my history" means three different things. Playback state is one table carrying two meanings, and somebody forgetting a show they finished rarely means "and lose my place in the one I am half way through".
+                 */
+                scope?: components["parameters"]["HistoryScope"];
+                /** @description Narrow to an item and everything beneath it, recursively — so forgetting a show is one call rather than a client walking its episodes. */
+                under?: components["parameters"]["HistoryUnder"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were removed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryReset"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listOwnRatings: {
+        parameters: {
+            query?: {
+                /** @description Defaults to 50, maximum 200. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your ratings, with the items they are about. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatedItemList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SharingRequest"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Acknowledged"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putPeerVisibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PeerVisibilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Acknowledged"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getOwnRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your rating, or null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putOwnRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRatingRequest"];
+            };
+        };
+        responses: {
+            /** @description The rating as it now stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RatingEnvelope"];
+                };
+            };
+            /** @description A score outside 1–10. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteOwnRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current settings, with provider keys reported only as configured flags. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description The settings as they now stand. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    resetSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings, back at their defaults. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }
