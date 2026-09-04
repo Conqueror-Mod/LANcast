@@ -234,6 +234,20 @@ settled elsewhere:
 over no tiles is the shape of something broken — and a marked folder never
 contributes to one.
 
+**Built as its own route, `GET /api/memories`, rather than a filter on
+`/api/items`.** The plan said "a store method, a route, and a shelf" and did not
+say why the route; the reason turned out to be the whole design. A
+`taken_on=MM-DD` parameter would put a calendar date in the client's hands, and
+a client computing one is a fault already written down twice — `toISOString()`
+is UTC, so through a US evening it resolves to *tomorrow*, and the shelf would
+show the wrong day for hours every night while looking correct. The response
+returns the date the server used, so a page left open overnight can tell it has
+crossed midnight.
+
+A third exclusion joined the two the plan named: **the current year**. A
+photograph from this morning is not a memory, and a card imported today would
+otherwise be the entire shelf on the one day the real memories were there.
+
 ---
 
 ## Sequencing
