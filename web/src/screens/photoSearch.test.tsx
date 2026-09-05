@@ -31,6 +31,8 @@ type Scenario = {
   reason?: string;
   indexed?: number;
   hits?: { item: { id: number; title: string }; score: number }[];
+  pending?: number;
+  running?: boolean;
 };
 
 let host: HTMLDivElement;
@@ -67,6 +69,14 @@ function mount(s: Scenario) {
           semantic_ready: s.ready,
           semantic_reason: s.reason,
           semantic_model: s.ready ? "openclip-vit-b-32" : undefined,
+        });
+      }
+      if (url.includes("/photos/index")) {
+        return json({
+          indexed: s.indexed ?? 0,
+          pending: s.pending ?? 0,
+          running: s.running ?? false,
+          model: "openclip-vit-b-32",
         });
       }
       if (url.includes("/photos/search")) {
@@ -257,6 +267,36 @@ describe("searching photographs by description", () => {
     await settle();
 
     expect(gets.some((u) => u.includes("/photos/search"))).toBe(false);
+  });
+
+  /*
+   * The screen speaks before it is spoken to.
+   *
+   * This is the bug that watching it found. Every sentence on the page used to
+   * be derived from a search result, so arriving at an unindexed library
+   * rendered a search field and nothing else — no count, no explanation, no
+   * suggestion to index. The one screen written to keep three empty states
+   * apart opened in a fourth that it never described, and every test here
+   * missed it because every test searched first.
+   */
+  it("says the library is not indexed on arrival, before anything is typed", async () => {
+    mount({ ready: true, indexed: 0 });
+    await render();
+
+    expect(text()).toContain("has been indexed");
+    // And it did so without spending a model load on a query nobody typed.
+    expect(gets.some((u) => u.includes("/photos/search"))).toBe(false);
+  });
+
+  // A pass in progress is said on the page, not only in the activity bar: a
+  // count that climbs is the difference between working and stuck.
+  it("shows a running pass and how far it has got", async () => {
+    mount({ ready: true, indexed: 340, pending: 2262, running: true });
+    await render();
+
+    expect(text()).toContain("Indexing");
+    expect(text()).toContain("340");
+    expect(text()).toContain("2,262");
   });
 
   /*

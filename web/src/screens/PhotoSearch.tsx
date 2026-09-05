@@ -4,6 +4,7 @@ import {
   useLibraries,
   useSemanticCapabilities,
   usePhotoSearch,
+  useSemanticIndexStatus,
   useStartSemanticPass,
   useIsAdmin,
 } from "@/api/hooks";
@@ -46,6 +47,7 @@ export function PhotoSearch() {
   const library = libraries?.find((l) => l.id === libraryID);
   const { data: caps, isError: capsFailed } = useSemanticCapabilities();
   const startPass = useStartSemanticPass(libraryID);
+  const { data: status } = useSemanticIndexStatus(libraryID);
 
   // The typed text and the submitted query are separate: the first changes on
   // every keystroke and the second is what was actually asked, which is what
@@ -142,12 +144,31 @@ export function PhotoSearch() {
       )}
 
       {/*
-        State two: installed, but this library has no vectors.
-        Checked before the results are read, because it is true whether or not
-        anything matched — and it is the state where showing "nothing matched"
-        would be an outright lie.
+        A pass in progress, said on the page rather than only in the activity
+        bar. The count climbs while it runs, which is the difference between
+        "this is working" and "this is stuck".
       */}
-      {ready && data && data.indexed === 0 && (
+      {status?.running && (
+        <p className="photosearch__note">
+          Indexing — {status.indexed.toLocaleString()} done
+          {status.pending > 0
+            ? `, ${status.pending.toLocaleString()} to go`
+            : ""}
+          . You can search what is already indexed, and you can leave this page.
+        </p>
+      )}
+
+      {/*
+        State two: installed, but this library has no vectors.
+
+        Read from the status route, not from a search result — which is the
+        change. Derived from the search it only appeared *after* somebody typed
+        something, so the screen opened on an unindexed library showing a field
+        and no explanation at all: the one page written to keep empty states
+        apart, opening in a state it never described. Watching it do that is the
+        only way it was ever going to be found.
+      */}
+      {ready && status && !status.running && status.indexed === 0 && (
         <p className="photosearch__note">
           Nothing in this library has been indexed yet.{" "}
           {isAdmin ? (

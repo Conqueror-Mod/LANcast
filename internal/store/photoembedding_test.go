@@ -288,3 +288,50 @@ func TestRankingIsATotalOrder(t *testing.T) {
 		t.Errorf("a tie did not break on id: %v", first)
 	}
 }
+
+/*
+ * A result carries its artwork.
+ *
+ * itemCols holds no images — every grid in this project attaches them
+ * afterwards — so a search that forgot to would return rows correct in every
+ * field the ranking uses and render as a page of blank tiles with filenames on
+ * them. Nothing fails: the ids, the scores and the order are all right, and the
+ * answer is unusable.
+ *
+ * That is what shipped, and it was found by looking at the screen rather than
+ * by any test here, because the tests all asserted the part that was never
+ * wrong.
+ */
+func TestSearchResultsCarryTheirArtwork(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, err := st.CreateLibrary(ctx, "Photographs", "picture", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.UpsertItem(ctx, ScanFile{
+		LibraryID: lib.ID, Path: "a.jpg", Kind: "photo",
+		Title: "a", SortTitle: "a", Container: "jpg", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutArtwork(ctx, id, "deadbeef", "poster", "", 100, 150, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SavePhotoEmbedding(ctx, id, "m", []float32{1, 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := st.SearchPhotosByVector(ctx, lib.ID, "m", []float32{1, 0}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("got %d hits, want 1", len(hits))
+	}
+	if hits[0].Item.Artwork == nil || hits[0].Item.Artwork.Poster != "deadbeef" {
+		t.Error("the result carries no poster; the grid would draw a blank tile " +
+			"with a filename on it, and every other assertion here would pass")
+	}
+}

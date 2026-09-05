@@ -228,6 +228,22 @@ func (s *Store) SearchPhotosByVector(
 	if err != nil {
 		return nil, fmt.Errorf("search photos: %w", err)
 	}
+	/*
+	 * The artwork has to be attached, and forgetting it is invisible from here.
+	 *
+	 * `itemCols` carries no images — every grid in this project gets them from
+	 * AttachArtwork afterwards — so a search that skipped this returned rows
+	 * that were correct in every field the ranking uses and rendered as a page
+	 * of blank tiles with filenames on them. Nothing fails: the ids are right,
+	 * the scores are right, the order is right, and the answer is unusable.
+	 *
+	 * Found by looking at it. The tests assert which photographs come back and
+	 * in what order, which is exactly what was never wrong.
+	 */
+	if err := s.AttachArtwork(ctx, items); err != nil {
+		return nil, fmt.Errorf("search photos: %w", err)
+	}
+
 	byID := make(map[int64]Item, len(items))
 	for _, it := range items {
 		byID[it.ID] = it

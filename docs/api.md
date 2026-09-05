@@ -3646,6 +3646,32 @@ pressing a button that says the work will take a while.
 Photographs under a folder marked sensitive are never embedded, and marking a
 folder deletes any vectors already stored beneath it (ADR 0051).
 
+### `GET /api/libraries/{id}/photos/index`
+
+How much of a library is indexed, without running a search.
+
+```json
+{ "indexed": 12480, "pending": 0, "running": false,
+  "model": "openclip-vit-b-32" }
+```
+
+Readable by anyone, because it describes the state of the library rather than
+changing it. **This is what the search screen calls on arrival**, and it exists
+because the screen did not have it: a library nobody had indexed showed a search
+field and nothing else, since every sentence on the page was derived from a
+search result and no search had been run.
+
+A search cannot answer this. It costs a process start and a model load, it needs
+a query nobody has typed yet, and it is the wrong question to ask on arrival.
+
+It answers even when no model is installed, rather than refusing the way the
+search does — a library that was indexed and then had its models removed holds
+exactly as many vectors as it did. In that case `model` is empty and both counts
+are zero, meaning "cannot say" rather than "none".
+
+`pending` excludes marked folders, which are never indexed (ADR 0051); counting
+them would leave a total that never reaches zero.
+
 ### `GET /api/libraries/{id}/photos/search`
 
 Answer a typed query with photographs.

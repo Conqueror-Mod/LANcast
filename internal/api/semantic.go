@@ -103,6 +103,71 @@ func (s *Server) startSemanticPass(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
+ * semanticStatus says how much of one library is indexed, without searching.
+ *
+ * Added after watching the screen: arriving at it on a library that has never
+ * been indexed showed a search field and *nothing else*, because every sentence
+ * on the page was derived from a search result and no search had been run. The
+ * one screen written to keep three empty states apart opened in a fourth with
+ * no state at all.
+ *
+ * A search cannot answer this. It costs a process start and a model load, needs
+ * a query nobody has typed yet, and returning `indexed: 0` for a library that
+ * has 12,000 vectors under a *previous* model would be the wrong number
+ * besides. This is a count, so it is a route that counts.
+ */
+func (s *Server) semanticStatus(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid library id")
+		return
+	}
+	lib, err := s.st.GetLibrary(r.Context(), id)
+	if s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	if lib.Kind != "picture" {
+		writeError(w, http.StatusBadRequest, "wrong_kind",
+			"photographs are indexed in picture libraries")
+		return
+	}
+
+	/*
+	 * Answers even when nothing can embed, rather than 409ing like the search
+	 * does.
+	 *
+	 * The counts are still true — a library that was indexed and then had its
+	 * models removed holds exactly as many vectors as it did — and this is the
+	 * route a screen calls on arrival. Refusing it would put the page back in
+	 * the state that caused it to be written.
+	 */
+	model := ""
+	if s.faceTool != nil {
+		model = s.faceTool.Capabilities(r.Context()).SemanticModel
+	}
+	out := map[string]any{"indexed": 0, "pending": 0, "model": model}
+	if model != "" {
+		indexed, err := s.st.EmbeddedPhotoCount(r.Context(), id, model)
+		if err != nil {
+			s.writeInternal(w, err, "count embedded photographs")
+			return
+		}
+		pending, err := s.st.PhotosPendingEmbeddingCount(r.Context(), id, model)
+		if err != nil {
+			s.writeInternal(w, err, "count photographs to embed")
+			return
+		}
+		out["indexed"], out["pending"] = indexed, pending
+	}
+	if s.embedder != nil {
+		out["running"] = s.embedder.Stats().Running
+	} else {
+		out["running"] = false
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+/*
  * searchPhotos answers a typed query with photographs.
  *
  * Two things are reported alongside the results and neither is decoration.

@@ -2890,7 +2890,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * How much of a library is indexed
+         * @description Readable by anyone, because it describes the state of the library rather than changing it. This is what a search screen calls on arrival, so that a library nobody has indexed says so before a query is typed rather than after.
+         */
+        get: operations["getSemanticIndexStatus"];
         put?: never;
         /**
          * Give every photograph in a picture library a vector
@@ -4716,6 +4720,23 @@ export interface components {
             indexed: number;
             /** @description The coordinate system the answer was ranked in. */
             model: string;
+        };
+        /**
+         * @description How much of one library is indexed, without running a search.
+         *
+         *     A search cannot answer this: it costs a process start and a model load, it needs a query nobody has typed yet, and it is the wrong question on arrival at a screen. This is a count, so it is a route that counts.
+         *
+         *     It answers even when nothing can embed, rather than refusing the way the search does — a library that was indexed and then had its models removed holds exactly as many vectors as it did, and this is the route a screen calls before it knows anything.
+         */
+        SemanticIndexStatus: {
+            /** @description Photographs with a vector for the current model. */
+            indexed: number;
+            /** @description Photographs still to embed. Marked folders are not counted: they are excluded from indexing entirely (ADR 0051), so counting them would leave a total that never reaches zero. */
+            pending: number;
+            /** @description Whether a pass is running right now, on any library — the worker is one at a time. */
+            running: boolean;
+            /** @description The coordinate system the counts are for. Empty when no model is installed, in which case both counts are zero and mean "cannot say" rather than "none". */
+            model?: string;
         };
     };
     responses: {
@@ -9556,6 +9577,40 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getSemanticIndexStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts, for the current model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticIndexStatus"];
+                };
+            };
+            /** @description `wrong_kind` — not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     startSemanticPass: {

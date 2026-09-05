@@ -297,6 +297,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/photos/semantic/models/install", s.adminOnly(s.installSemanticModels))
 	mux.HandleFunc("POST /api/photos/semantic/models/install/cancel", s.adminOnly(s.cancelSemanticModelsInstall))
 	mux.HandleFunc("POST /api/libraries/{id}/photos/index", s.adminOnly(s.startSemanticPass))
+	mux.HandleFunc("GET /api/libraries/{id}/photos/index", s.semanticStatus)
 	mux.HandleFunc("GET /api/libraries/{id}/photos/search", s.searchPhotos)
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
 	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)

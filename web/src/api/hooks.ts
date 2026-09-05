@@ -1671,7 +1671,38 @@ export function useStartSemanticPass(libraryID: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["activity"] });
       qc.invalidateQueries({ queryKey: ["photo-search", libraryID] });
+      qc.invalidateQueries({ queryKey: ["semantic-status", libraryID] });
     },
+  });
+}
+
+export type SemanticIndexStatus = {
+  indexed: number;
+  pending: number;
+  running: boolean;
+  model?: string;
+};
+
+/*
+ * How much of a library is indexed, asked on arrival rather than after a search.
+ *
+ * The screen used to derive every sentence it showed from a search result,
+ * which meant a library nobody had indexed rendered a field and nothing else
+ * until somebody typed something. This is the query that lets it speak first.
+ *
+ * Polled while a pass runs, so the count climbs rather than sitting at whatever
+ * it was when the page opened.
+ */
+export function useSemanticIndexStatus(libraryID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["semantic-status", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<SemanticIndexStatus>(
+        `/api/libraries/${libraryID}/photos/index`,
+        signal,
+      ),
+    enabled: enabled && libraryID > 0,
+    refetchInterval: (q) => (q.state.data?.running ? 2000 : false),
   });
 }
 
