@@ -893,7 +893,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 *
 	 * Its stdin closing would end it anyway once this process exits, so this is
 	 * about the gap rather than the steady state: between the last request and
-	 * the exit there is a 250MB child holding a model for a server that is on
+	 * the exit there is a ~700MB child holding a model for a server that is on
 	 * its way out, and a restart that overlaps that window has two of them.
 	 */
 	faceTool.StopText()

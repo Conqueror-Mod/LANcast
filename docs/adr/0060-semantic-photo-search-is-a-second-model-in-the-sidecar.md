@@ -130,7 +130,7 @@ is that the choice is now informed: at 2,601 photographs — the test library,
 measured end to end — a search takes about 0.2s and needs nothing, and the
 in-memory copy only starts earning its place somewhere above ten thousand.
 
-Two things worth knowing before that decision is made. The 1.2s the sidecar
+Two things worth knowing before that decision is made. The ~2s the sidecar
 spends starting a process and loading the text model is charged to **every**
 search regardless, so caching the vectors takes a 40k search from 4.2s to about
 1.3s rather than to nothing — the process, not the read, is then the ceiling.
@@ -150,9 +150,14 @@ number for every library anyone actually has:
 | a process per query (as first built) | ~2.09 s |
 | a warm process, marginal query | **~0.06 s** |
 
-Startup is about 2.0s of loading a 250MB text model to do 60ms of arithmetic,
-and it was being paid on every search at every library size. Consistent across
-runs of 1, 20 and 100 queries.
+Startup is about 2.0s of loading the text model to do 60ms of arithmetic, and
+it was being paid on every search at every library size. Consistent across runs
+of 1, 20 and 100 queries.
+
+Measured running as the service, a warm worker is **about 700MB resident** —
+the model is 254MB on disk and the ONNX runtime is the rest. That is a good deal
+more than the 250MB this was designed against, and it makes the idle exit the
+load-bearing half of the design rather than a courtesy.
 
 So the long-lived worker this ADR named as the fallback is now what runs, and
 it is worth being clear that it was chosen over the in-memory cache on evidence
@@ -171,7 +176,7 @@ the read with float16 before eliminating it with a cache — but the trigger is
 now library size alone, and nothing here has measured float16.
 
 Two properties of the warm worker are load-bearing rather than incidental. It
-**exits after five minutes of quiet**, because a media server holding 250MB
+**exits after five minutes of quiet**, because a media server holding 700MB
 permanently for a feature used twice a month has taken something that is not
 its to take; a burst of searching pays the load once at the start of it. And
 the protocol is **order, not request ids** — one line in, one line out — so

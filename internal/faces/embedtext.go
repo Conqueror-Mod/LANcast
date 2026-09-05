@@ -18,8 +18,8 @@ import (
  *
  * WHY THIS EXISTS
  *
- * The first version started a process per query. Measured, that is about 1.2s
- * of loading a 250MB model to do a few milliseconds of arithmetic — paid on
+ * The first version started a process per query. Measured, that is about 2s of
+ * loading a model to do a few milliseconds of arithmetic — paid on
  * every search, at every library size, for ever. On the library this was built
  * against it was roughly six times the cost of searching the photographs.
  *
@@ -44,8 +44,11 @@ import (
  *
  * IT DOES NOT STAY RESIDENT FOR EVER
  *
- * A media server that holds 250MB permanently for a feature somebody uses twice
- * a month has taken something that is not its to take. So the process exits
+ * A media server that holds most of a gigabyte permanently for a feature
+ * somebody uses twice a month has taken something that is not its to take.
+ * Measured as the service, a warm worker is about 700MB resident — the model is
+ * 254MB on disk and the runtime is the rest, which is a good deal more than the
+ * "250MB" this comment claimed before anybody looked. So the process exits
  * after a spell of quiet, and a burst of searching — which is how searching
  * actually happens — pays the load once at the start of it rather than once per
  * query.
@@ -101,7 +104,7 @@ func (t *Tool) EmbedText(ctx context.Context, query string) ([]float32, error) {
 	 *
 	 * A worker that *answered* and said it could not embed this query has left
 	 * the stream in step and has nothing wrong with it. Restarting it would pay
-	 * the 1.2s model load again to be told the same thing — on every
+	 * the 2s model load again to be told the same thing — on every
 	 * unluckily-worded search, which is precisely the cost this whole file
 	 * exists to remove. The test that caught it counted the processes.
 	 */
@@ -116,7 +119,7 @@ func (t *Tool) EmbedText(ctx context.Context, query string) ([]float32, error) {
 /*
  * queryError is the worker declining one query, as opposed to the pipe failing.
  *
- * A distinct type rather than a string check: this decides whether a 250MB
+ * A distinct type rather than a string check: this decides whether a 700MB
  * process is torn down and rebuilt, and matching on message text would make
  * that decision depend on wording nobody thinks of as load-bearing.
  */
@@ -266,7 +269,7 @@ func (te *textEmbedder) stop() {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		// It did not leave when asked. A vision library can wedge inside a
-		// native call, and a stuck worker holding 250MB is worse than an
+		// native call, and a stuck worker holding 700MB is worse than an
 		// ungraceful one.
 		_ = cmd.Process.Kill()
 		<-done
