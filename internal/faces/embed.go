@@ -247,37 +247,3 @@ func (ix *Indexer) record(ctx context.Context, it store.Item, line embedLine, mo
 	}
 	ix.set(func(s *EmbedStats) { s.Embedded++ })
 }
-
-/*
- * EmbedText turns a typed query into a vector in the same space.
- *
- * One invocation per search, which is a process start and a model load per
- * query. That is the honest first version and it is measurable: if it proves
- * too slow the answer is a long-lived worker process, not a cached vector —
- * caching would key on a string somebody typed and the first typo would fill
- * it with nonsense nobody could clear.
- */
-func (t *Tool) EmbedText(ctx context.Context, query string) ([]float32, error) {
-	path, ok := t.Path()
-	if !ok {
-		return nil, fmt.Errorf("the worker is not installed")
-	}
-	cmd := exec.CommandContext(ctx, path, "embed-text", "-models", t.ModelsDir, "-q", query)
-	cmd.Env = t.env()
-
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("embed query: %w", err)
-	}
-	var line embedLine
-	if err := json.Unmarshal(out, &line); err != nil {
-		return nil, fmt.Errorf("embed query: unreadable answer: %w", err)
-	}
-	if line.Error != "" {
-		return nil, fmt.Errorf("embed query: %s", line.Error)
-	}
-	if len(line.Vector) == 0 {
-		return nil, fmt.Errorf("embed query: the worker returned no vector")
-	}
-	return line.Vector, nil
-}

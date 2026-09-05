@@ -139,6 +139,47 @@ holds: an indexing pass, and a folder being marked sensitive. The second is the
 one that would be forgotten, and forgetting it serves marked photographs from
 memory after the rule has deleted them from the database.
 
+### Measured, and taken: the process was the cost, not the read
+
+The measurement above put the read at 2.97s for 40,000 photographs and left the
+sidecar's own cost as a footnote. Measured properly, the footnote was the larger
+number for every library anyone actually has:
+
+| | per search |
+| --- | --- |
+| a process per query (as first built) | ~2.09 s |
+| a warm process, marginal query | **~0.06 s** |
+
+Startup is about 2.0s of loading a 250MB text model to do 60ms of arithmetic,
+and it was being paid on every search at every library size. Consistent across
+runs of 1, 20 and 100 queries.
+
+So the long-lived worker this ADR named as the fallback is now what runs, and
+it is worth being clear that it was chosen over the in-memory cache on evidence
+rather than taste. On the 3,015-photograph library this was built against, a
+search was 2.09s of process plus 0.22s of reading: the worker removes 2.03s of
+that and the cache would have removed 0.22s. It is also the option with no
+correctness surface — a warm process returns the same vector a cold one does,
+where a cache has to be invalidated by a pass, a marked folder, a missing file
+and a model change, and the second of those is a privacy rule.
+
+**This changes when the cache becomes worth it, and the honest reading is
+"sooner".** With the process cost gone the read is now essentially the whole of
+a search, so the 2.97s at 40,000 photographs is no longer hidden behind
+anything. The order of preference in the previous section still holds — halve
+the read with float16 before eliminating it with a cache — but the trigger is
+now library size alone, and nothing here has measured float16.
+
+Two properties of the warm worker are load-bearing rather than incidental. It
+**exits after five minutes of quiet**, because a media server holding 250MB
+permanently for a feature used twice a month has taken something that is not
+its to take; a burst of searching pays the load once at the start of it. And
+the protocol is **order, not request ids** — one line in, one line out — so
+every exchange holds a lock through reading its own answer. A desynchronised
+pipe would not crash: it would answer each search with the previous search's
+vector, and every result would be a confident, correctly-ranked list of
+photographs for something nobody asked, reported by nothing.
+
 The consequence worth stating plainly: **adding a vector extension would mean
 giving up the pure-Go driver**, which is the same trade ADR 0052 refused for
 cgo. A feature that costs the release matrix is a feature that costs every user

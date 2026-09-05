@@ -147,8 +147,13 @@ func usage() {
                           write one JSON Result per line to stdout
   embed [-models DIR]     the same, for semantic search (ADR 0060): one JSON
                           Embedding per line, each vector unit length
-  embed-text [-models DIR] -q QUERY
-                          embed one typed query into the same space, as JSON
+  embed-text [-models DIR] [-q QUERY]
+                          embed typed queries into the same space. With -q,
+                          one query and exit; without it, read queries on
+                          stdin and write one JSON Embedding per line — the
+                          model load is 1.2s and the embedding is
+                          milliseconds, so a search worth having reuses one
+                          process
   version                 print the version
 
 Paths arrive on stdin rather than as arguments because a library is tens of
@@ -336,14 +341,56 @@ func embedText(args []string) {
 		os.Exit(3)
 	}
 
-	v, err := embedQuery(*query, *models)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
-		os.Exit(1)
-	}
 	enc := json.NewEncoder(os.Stdout)
-	if err := enc.Encode(Embedding{Vector: v}); err != nil {
-		fmt.Fprintln(os.Stderr, "lancast-faces:", err)
-		os.Exit(1)
+
+	/*
+	 * With -q this embeds one query and exits. Without it, it reads queries
+	 * from stdin and answers one line each until stdin closes.
+	 *
+	 * The second mode is what makes search fast, and the arithmetic is the same
+	 * one `embed` already makes: a session is expensive to build and cheap to
+	 * reuse. Measured, the model load is about 1.2s and the embedding itself is
+	 * a few milliseconds — so a process per query spends 99% of a search
+	 * starting up, at every library size, for ever.
+	 *
+	 * One-shot is kept rather than replaced. It is how somebody checks an
+	 * install by hand, it is what the tests drive, and a mode that only exists
+	 * inside a long-lived pipe is a mode nobody can reproduce from a terminal.
+	 */
+	if *query != "" {
+		v, err := embedQuery(*query, *models)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+			os.Exit(1)
+		}
+		if err := enc.Encode(Embedding{Vector: v}); err != nil {
+			fmt.Fprintln(os.Stderr, "lancast-faces:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	sc := bufio.NewScanner(os.Stdin)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		q := strings.TrimSpace(sc.Text())
+		if q == "" {
+			continue
+		}
+		/*
+		 * Exactly one line out for every line in, errors included.
+		 *
+		 * The caller matches answers to questions by order — it sends one and
+		 * reads one — so a query that failed must still produce a line. Staying
+		 * silent on failure would slide every later answer onto the wrong
+		 * question, and each of those is a plausible-looking result list for
+		 * something somebody did not ask.
+		 */
+		v, err := embedQuery(q, *models)
+		if err != nil {
+			_ = enc.Encode(Embedding{Error: err.Error()})
+			continue
+		}
+		_ = enc.Encode(Embedding{Vector: v})
 	}
 }

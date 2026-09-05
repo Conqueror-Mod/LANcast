@@ -888,6 +888,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// and a service that does not complete its stop is killed and restarted —
 	// which is worse than cutting one playback short. Closing is what makes
 	// "closed" mean closed.
+	/*
+	 * The warm text worker goes down with the server.
+	 *
+	 * Its stdin closing would end it anyway once this process exits, so this is
+	 * about the gap rather than the steady state: between the last request and
+	 * the exit there is a 250MB child holding a model for a server that is on
+	 * its way out, and a restart that overlaps that window has two of them.
+	 */
+	faceTool.StopText()
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Warn("graceful shutdown did not finish; closing connections",
 			"grace", shutdownGrace, "error", err)

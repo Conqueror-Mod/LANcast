@@ -70,6 +70,11 @@ type Tool struct {
 	mu     sync.Mutex
 	cached *Capabilities
 	at     time.Time
+
+	// The warm text embedder (ADR 0060, amended). Lazily created, because most
+	// servers never search photographs at all.
+	textOnce sync.Once
+	textEmb  *textEmbedder
 }
 
 func exeName() string {
@@ -153,6 +158,18 @@ func (t *Tool) Forget() {
 	t.mu.Lock()
 	t.cached, t.at = nil, time.Time{}
 	t.mu.Unlock()
+
+	/*
+	 * The warm text worker goes too, and this is the one call that must not be
+	 * forgotten.
+	 *
+	 * Forget is called when the models on disk change — an install finishing is
+	 * the only caller today. A worker started before that change holds the
+	 * *previous* models in memory and would go on answering in their coordinate
+	 * system, against a database that had just moved to another. Every search
+	 * would rank, and sort, and be wrong, and report nothing.
+	 */
+	t.StopText()
 }
 
 func (t *Tool) probe(ctx context.Context) Capabilities {
