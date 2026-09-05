@@ -6,6 +6,7 @@ import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
 import { Timeline } from "@/screens/Timeline";
 import { FacePeople } from "@/screens/FacePeople";
+import { PhotoSearch } from "@/screens/PhotoSearch";
 import { Search } from "@/screens/Search";
 import { Detail } from "@/screens/Detail";
 import { Player } from "@/screens/Player";
@@ -46,7 +47,8 @@ export function App() {
 
   // No account yet — first run. The server is loopback-only until one exists,
   // so this is only reachable from the machine itself.
-  if (!auth.configured) return <Setup restartRequired={auth.restart_required} />;
+  if (!auth.configured)
+    return <Setup restartRequired={auth.restart_required} />;
 
   // Configured but not signed in.
   if (!auth.authenticated) return <Login />;
@@ -69,6 +71,7 @@ export function App() {
           <Route path="/library/:id/timeline" element={<Timeline />} />
           {/* The people in a picture library — face groups, not accounts. */}
           <Route path="/library/:id/people" element={<FacePeople />} />
+          <Route path="/library/:id/photos/search" element={<PhotoSearch />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />

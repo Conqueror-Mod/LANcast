@@ -39,6 +39,10 @@ import {
   type HistoryScope,
   useFaceCapabilities,
   useFaceModels,
+  useSemanticCapabilities,
+  useSemanticModels,
+  useInstallSemanticModels,
+  useCancelSemanticModels,
   useInstallFaceModels,
   useCancelFaceModels,
 } from "@/api/hooks";
@@ -2125,6 +2129,8 @@ function PicturesSection() {
         </p>
       )}
 
+      <SemanticSearchRow />
+
       {models?.supported &&
         !models.installed &&
         !running &&
@@ -2142,6 +2148,129 @@ function PicturesSection() {
           </p>
         )}
     </section>
+  );
+}
+
+/*
+ * Searching photographs by description (ADR 0060).
+ *
+ * Its own component inside the Pictures pane rather than more branches in
+ * PicturesSection, because it is a *second* optional download with its own
+ * three states and its own progress. Interleaving them would produce a pane
+ * where two independent installs share one progress sentence, and the first
+ * time both are running nobody could tell which number belonged to which.
+ *
+ * The sizes are stated plainly. Six hundred megabytes is a real ask on a
+ * metered connection, and a consent screen that rounds it away is not consent.
+ */
+function SemanticSearchRow() {
+  const { data: caps } = useSemanticCapabilities();
+  const { data: models } = useSemanticModels();
+  const install = useInstallSemanticModels();
+  const cancel = useCancelSemanticModels();
+
+  const job = models?.job;
+  const running = job?.running ?? false;
+  const pct =
+    job && job.bytes_total > 0
+      ? Math.min(100, Math.round((job.bytes_done / job.bytes_total) * 100))
+      : 0;
+
+  return (
+    <>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">
+            Search photographs by description
+          </div>
+          <div className="set-row__sub">
+            Find a photograph by describing what is in it — “a dog on a beach” —
+            rather than by its filename. Like face grouping, it runs entirely on
+            this machine: nothing is uploaded and no account is needed.
+          </div>
+        </div>
+      </div>
+
+      {models && !models.supported && (
+        <p className="set-row__sub">
+          {models.reason ?? "There is no download for this platform yet."}
+        </p>
+      )}
+
+      {models?.supported && !models.installed && !running && (
+        <>
+          <p className="set-row__sub">
+            This needs a one-off download of{" "}
+            <strong>{formatBytes(models.bytes_total ?? 0)}</strong> — the model
+            that reads photographs, the one that reads your words, and the
+            vocabulary they share. Nothing is fetched until you press the
+            button.
+          </p>
+          <ul className="set-assets">
+            {(models.assets ?? []).map((a) => (
+              <li key={a.name}>
+                <code>{a.name}</code> · {formatBytes(a.size_bytes)} ·{" "}
+                <a href={a.licence_url} target="_blank" rel="noreferrer">
+                  {a.licence}
+                </a>
+                {/*
+                  The shared runtime is listed even when it is already here, and
+                  said to be already here. Dropping it would leave a list whose
+                  sizes do not add up to the total above it, on the one screen
+                  whose purpose is being trustworthy about numbers.
+                */}
+                {a.present ? " · already downloaded" : ""}
+              </li>
+            ))}
+          </ul>
+          <button
+            className="set-btn"
+            onClick={() => install.mutate()}
+            disabled={install.isPending}
+          >
+            {install.isPending ? "Starting…" : "Download the search models"}
+          </button>
+        </>
+      )}
+
+      {running && job && (
+        <>
+          <p className="set-row__sub">
+            {job.stage === "verifying"
+              ? "Checking what arrived…"
+              : job.stage === "installing"
+                ? "Putting it in place…"
+                : `Downloading ${job.asset ?? ""}`}{" "}
+            — {pct}%
+          </p>
+          <button className="set-btn" onClick={() => cancel.mutate()}>
+            Cancel
+          </button>
+        </>
+      )}
+
+      {job?.error && !running && (
+        <p className="set-row__sub set-row__sub--warn">
+          The download did not finish: {job.error}
+        </p>
+      )}
+
+      {models?.installed && (
+        <p className="set-row__sub">
+          {caps?.semantic_ready ? (
+            <>
+              Ready — open a picture library and press <strong>Describe</strong>
+              . Each library has to be indexed once before it can be searched.
+            </>
+          ) : (
+            <>
+              The models are installed, but the worker could not use them:{" "}
+              <strong>{caps?.semantic_reason ?? "no reason given"}</strong>
+            </>
+          )}
+        </p>
+      )}
+    </>
   );
 }
 

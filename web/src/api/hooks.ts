@@ -1430,8 +1430,13 @@ export function useNamePerson(libraryID: number) {
 export function useRejectFace(libraryID: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ clusterID, faceID }: { clusterID: number; faceID: number }) =>
-      apiSend(`/api/faces/clusters/${clusterID}/faces/${faceID}`, "DELETE"),
+    mutationFn: ({
+      clusterID,
+      faceID,
+    }: {
+      clusterID: number;
+      faceID: number;
+    }) => apiSend(`/api/faces/clusters/${clusterID}/faces/${faceID}`, "DELETE"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cluster-faces"] });
       qc.invalidateQueries({ queryKey: ["people-faces", libraryID] });
@@ -1450,8 +1455,17 @@ export function useRejectFace(libraryID: number) {
 export function useDismissSuggestion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ clusterID, otherID }: { clusterID: number; otherID: number }) =>
-      apiSend(`/api/faces/clusters/${clusterID}/suggestions/${otherID}`, "DELETE"),
+    mutationFn: ({
+      clusterID,
+      otherID,
+    }: {
+      clusterID: number;
+      otherID: number;
+    }) =>
+      apiSend(
+        `/api/faces/clusters/${clusterID}/suggestions/${otherID}`,
+        "DELETE",
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cluster-suggestions"] });
     },
@@ -1509,7 +1523,16 @@ export function useFaceModels(enabled = true) {
     queryFn: ({ signal }) =>
       apiGet<FaceModelState>("/api/faces/models", signal),
     enabled,
-    refetchInterval: (q) => (q.state.data?.job.running ? 1000 : false),
+    /*
+     * `job?.running`, not `job.running`.
+     *
+     * The optional chain stops one field short and that was a crash, not a
+     * style point: a response without `job` — an older server, a proxy that
+     * trimmed it, a handler that answered an error envelope — threw inside the
+     * poller and took the whole settings page down with it. A missing job means
+     * nothing is running, which is the answer this needs.
+     */
+    refetchInterval: (q) => (q.state.data?.job?.running ? 1000 : false),
   });
 }
 
@@ -1533,6 +1556,153 @@ export function useCancelFaceModels() {
   return useMutation({
     mutationFn: () => apiSend("/api/faces/models/install/cancel", "POST"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["face-models"] }),
+  });
+}
+
+/*
+ * Semantic photograph search (ADR 0060).
+ *
+ * A SEPARATE FEATURE FROM FACE GROUPING, INCLUDING IN THE CACHE
+ *
+ * Its own query keys, not a field on the face ones. They share a worker binary
+ * and nothing else, and a client that read readiness from `face-capabilities`
+ * would report a working search as unavailable on every server that never
+ * wanted face grouping.
+ */
+export type SemanticCapabilities = {
+  semantic_ready: boolean;
+  semantic_reason?: string;
+  semantic_model?: string;
+};
+
+export function useSemanticCapabilities(enabled = true) {
+  return useQuery({
+    queryKey: ["semantic-capabilities"],
+    queryFn: ({ signal }) =>
+      apiGet<SemanticCapabilities>("/api/photos/semantic/capabilities", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export type SemanticAsset = {
+  name: string;
+  size_bytes: number;
+  licence: string;
+  licence_url: string;
+  url: string;
+  present: boolean;
+};
+
+export type SemanticModelState = {
+  supported: boolean;
+  reason?: string;
+  installed?: boolean;
+  assets?: SemanticAsset[];
+  bytes_total?: number;
+  directory?: string;
+  job: {
+    running: boolean;
+    stage: string;
+    asset?: string;
+    bytes_done: number;
+    bytes_total: number;
+    error?: string;
+    finished_at?: number;
+  };
+};
+
+export function useSemanticModels(enabled = true) {
+  return useQuery({
+    queryKey: ["semantic-models"],
+    queryFn: ({ signal }) =>
+      apiGet<SemanticModelState>("/api/photos/semantic/models", signal),
+    enabled,
+    /*
+     * `job?.running`, not `job.running`.
+     *
+     * The optional chain stops one field short and that was a crash, not a
+     * style point: a response without `job` — an older server, a proxy that
+     * trimmed it, a handler that answered an error envelope — threw inside the
+     * poller and took the whole settings page down with it. A missing job means
+     * nothing is running, which is the answer this needs.
+     */
+    refetchInterval: (q) => (q.state.data?.job?.running ? 1000 : false),
+  });
+}
+
+export function useInstallSemanticModels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/photos/semantic/models/install", "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["semantic-models"] });
+      // Readiness changes the moment the models land and is cached for a
+      // minute on the server, so the client stops trusting its own copy
+      // immediately rather than showing "not set up" over a finished install.
+      qc.invalidateQueries({ queryKey: ["semantic-capabilities"] });
+    },
+  });
+}
+
+export function useCancelSemanticModels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiSend("/api/photos/semantic/models/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["semantic-models"] }),
+  });
+}
+
+/*
+ * Starting a pass invalidates the searches as well as the activity list.
+ *
+ * A search answer carries `indexed`, and that number is exactly what the pass
+ * changes. Without this the screen keeps saying "nothing has been indexed yet"
+ * over a pass that has been running for ten minutes — the stale-list bug this
+ * project has shipped four times, in the one place where the stale value is a
+ * sentence telling somebody to press a button they already pressed.
+ */
+export function useStartSemanticPass(libraryID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiSend(`/api/libraries/${libraryID}/photos/index`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["photo-search", libraryID] });
+    },
+  });
+}
+
+export type PhotoSearchHit = { item: Item; score: number };
+
+export type PhotoSearchResults = {
+  hits: PhotoSearchHit[];
+  indexed: number;
+  model: string;
+};
+
+/*
+ * usePhotoSearch runs one query.
+ *
+ * Every search is a process start and a model load on the server, so it is
+ * deliberately not run as somebody types: the query is submitted, and an empty
+ * one is not a request at all.
+ */
+export function usePhotoSearch(libraryID: number, query: string) {
+  return useQuery({
+    queryKey: ["photo-search", libraryID, query],
+    queryFn: ({ signal }) =>
+      apiGet<PhotoSearchResults>(
+        `/api/libraries/${libraryID}/photos/search?q=${encodeURIComponent(query)}`,
+        signal,
+      ),
+    enabled: libraryID > 0 && query.length > 0,
+    // The answer for one query cannot change unless a pass runs, and a pass
+    // invalidates this key. Re-asking on every focus would spend a model load
+    // to get the same photographs back.
+    staleTime: 5 * 60_000,
   });
 }
 
