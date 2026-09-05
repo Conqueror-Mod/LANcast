@@ -335,3 +335,64 @@ func TestSearchResultsCarryTheirArtwork(t *testing.T) {
 			"with a filename on it, and every other assertion here would pass")
 	}
 }
+
+/*
+ * The indexed count agrees with what a search would return.
+ *
+ * Three queries decide eligibility for this feature — this count, the pending
+ * count, and the search — and this one used to disagree, counting vectors for
+ * photographs on an unmounted drive that the search excludes.
+ *
+ * The number is not decoration: the screen says "N of M photographs are
+ * indexed, so a search only looks at those". A count that includes rows the
+ * search will not return makes that sentence false in the direction that
+ * matters — somebody is told more of their library was searched than was.
+ */
+func TestIndexedCountExcludesWhatTheSearchExcludes(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, err := st.CreateLibrary(ctx, "Photographs", "picture", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []int64
+	for _, name := range []string{"here.jpg", "gone.jpg"} {
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: name, Kind: "photo",
+			Title: name, SortTitle: name, Container: "jpg", SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SavePhotoEmbedding(ctx, id, "m", []float32{1, 0}); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+
+	if n, err := st.EmbeddedPhotoCount(ctx, lib.ID, "m"); err != nil || n != 2 {
+		t.Fatalf("count = %d (err %v), want 2 before anything goes missing", n, err)
+	}
+
+	// The drive holding the second one is unplugged. Scanning marks missing, it
+	// never deletes — so the vector stays and the photograph does not.
+	if _, err := st.db.ExecContext(ctx,
+		`UPDATE media_item SET missing = 1 WHERE id = ?`, ids[1]); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := st.SearchPhotosByVector(ctx, lib.ID, "m", []float32{1, 0}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.EmbeddedPhotoCount(ctx, lib.ID, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(hits) {
+		t.Errorf("the library reports %d indexed but a search reaches %d; the "+
+			"screen would tell somebody more of their library was searched "+
+			"than was", n, len(hits))
+	}
+}

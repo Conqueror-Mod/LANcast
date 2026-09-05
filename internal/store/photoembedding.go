@@ -264,11 +264,30 @@ func (s *Store) SearchPhotosByVector(
 // for progress reporting.
 func (s *Store) EmbeddedPhotoCount(ctx context.Context, libraryID int64, model string) (int, error) {
 	var n int
+	/*
+	 * Eligibility here must match the search's, exactly.
+	 *
+	 * Three queries decide what a library holds for this feature — this one,
+	 * the pending count, and the search itself — and for a while this one
+	 * disagreed with the other two: it counted every stored vector, including
+	 * photographs on an unmounted drive that the search excludes.
+	 *
+	 * That is not a rounding error, because of what the number is used for. The
+	 * screen says "N of M photographs are indexed, so a search only looks at
+	 * those", and if N counts rows the search will not return then the sentence
+	 * is false in the direction that matters: somebody is told more of their
+	 * library was searched than actually was.
+	 *
+	 * A marked folder is already handled by deleting its embeddings (ADR 0051),
+	 * so this clause is belt and braces there — and it is the missing ones that
+	 * made it necessary.
+	 */
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		  FROM photo_embedding e
 		  JOIN media_item mi ON mi.id = e.item_id
-		 WHERE mi.library_id = ? AND e.model = ?`, libraryID, model).Scan(&n)
+		 WHERE mi.library_id = ? AND e.model = ?
+		   AND mi.missing = 0 AND mi.sensitive_effective = 0`, libraryID, model).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("embedded photo count: %w", err)
 	}
