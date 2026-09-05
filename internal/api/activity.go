@@ -55,6 +55,7 @@ type snapshot struct {
 	covers   coverart.Stats
 	photos   photo.Stats
 	faces    faces.Stats
+	semantic faces.EmbedStats
 	sessions []transcode.SessionInfo
 	update   update.State
 	staged   string
@@ -95,6 +96,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.facesW != nil {
 		snap.faces = s.facesW.Stats()
+	}
+	if s.embedder != nil {
+		snap.semantic = s.embedder.Stats()
 	}
 	if s.trans != nil {
 		snap.sessions = s.trans.Sessions()
@@ -211,6 +215,19 @@ func buildActivity(snap snapshot) []Activity {
 		tasks = append(tasks, Activity{
 			Kind: "faces", ID: "faces", Title: "Grouping faces",
 			State: "running", Done: st.Examined, Total: st.Examined + st.Remaining,
+			Detail: failedDetail(st.Failed),
+		})
+	}
+	if st := snap.semantic; st.Running {
+		/*
+		 * Total is embedded-plus-remaining, and remaining is re-read rather
+		 * than counted down, for the same reason the face pass's is: an
+		 * indexing pass discovers its own size as it goes, and a bar whose
+		 * total moves backwards is worse than one that grows.
+		 */
+		tasks = append(tasks, Activity{
+			Kind: "semantic", ID: "semantic", Title: "Indexing photographs for search",
+			State: "running", Done: st.Embedded, Total: st.Embedded + st.Remaining,
 			Detail: failedDetail(st.Failed),
 		})
 	}

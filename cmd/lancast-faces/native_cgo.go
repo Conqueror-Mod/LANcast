@@ -5,8 +5,27 @@ package main
 import (
 	"fmt"
 	"image"
+	/*
+	 * The same decoders `internal/photo` registers, and that is the point of
+	 * the list rather than a preference.
+	 *
+	 * Found by embedding a real library: one file in 2,602 failed with
+	 * "decode: image: unknown format", and it was a WebP carrying a .jpg
+	 * extension — which the thumbnailer reads perfectly well, because it
+	 * registers webp and this did not. A photograph LANcast is happy to show
+	 * you was one it could not search for or find a face in, and the only
+	 * symptom was a single line in a failure count.
+	 *
+	 * So the two lists match. If a format is added there it belongs here, and
+	 * the dependency is already in the build either way.
+	 */
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 	"os"
 	"path/filepath"
 	"sync"
@@ -125,6 +144,46 @@ func contains(s, sub string) bool {
 	return false
 }
 
+/*
+ * Starting the runtime is shared between the two engines, and must be.
+ *
+ * The face models and the CLIP models load separately and on purpose — two
+ * optional downloads, and a server may have either, both or neither. The
+ * *environment* underneath them is not separable: `InitializeEnvironment` is
+ * global to the process, and the second caller gets
+ *
+ *     start onnxruntime: The onnxruntime has already been initialized
+ *
+ * which is not an error about anything the second caller did.
+ *
+ * That is not theoretical. With both features installed, `capabilities`
+ * reported `semantic_ready: true` and `ready: false` — face grouping declared
+ * broken, with a reason naming a runtime that had in fact started perfectly, on
+ * a machine where it had been working for weeks. Whichever engine happened to
+ * load second was the one that appeared to be at fault, so the symptom would
+ * even have moved about between runs.
+ *
+ * So: one Once for the environment, and each engine keeps its own for its
+ * models. Split by what the thing actually is, rather than by which feature
+ * asked for it.
+ */
+var (
+	runtimeOnce sync.Once
+	runtimeErr  error
+)
+
+func startRuntime(modelsDir string) error {
+	runtimeOnce.Do(func() {
+		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
+			ort.SetSharedLibraryPath(lib)
+		}
+		if err := ort.InitializeEnvironment(); err != nil {
+			runtimeErr = fmt.Errorf("start onnxruntime: %w", err)
+		}
+	})
+	return runtimeErr
+}
+
 func load(modelsDir string) (*engine, error) {
 	engineOnce.Do(func() {
 		/*
@@ -153,11 +212,8 @@ func load(modelsDir string) (*engine, error) {
 		 * search order reaches first, which is a different machine's answer on
 		 * every machine.
 		 */
-		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
-			ort.SetSharedLibraryPath(lib)
-		}
-		if err := ort.InitializeEnvironment(); err != nil {
-			loadErr = fmt.Errorf("start onnxruntime: %w", err)
+		if err := startRuntime(modelsDir); err != nil {
+			loadErr = err
 			return
 		}
 		det, err := findModel(modelsDir, "yunet")

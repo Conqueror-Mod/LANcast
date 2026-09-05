@@ -157,6 +157,7 @@ var wireTypes = []struct {
 
 	// Subsystems.
 	{"GET /api/faces/capabilities", faces.Capabilities{}},
+	{"GET /api/libraries/{id}/photos/search · hits", store.SearchHit{}},
 	{"GET /api/together/{id}", together.Session{}},
 	{"GET /api/together/{id} · members", together.Member{}},
 	{"GET /api/backups", backup.File{}},

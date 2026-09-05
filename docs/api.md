@@ -3549,6 +3549,155 @@ a client claiming "not watched" at 98% has an out-of-date idea of finished.
 
 ---
 
+## Semantic photograph search
+
+Typed queries over a picture library — "a dog on a beach" — answered by
+comparing a sentence and a photograph in the same vector space (ADR 0060).
+
+**Its own routes rather than a mode on face grouping.** They share a worker
+binary and a runtime library and nothing else: two optional downloads, and a
+server may have either, both or neither. Hanging search off the face routes
+because that is where the binary lives would tell somebody who wanted search
+and not face grouping that the feature was unavailable because a *different*
+model was missing.
+
+### `GET /api/photos/semantic/capabilities`
+
+Whether this server can answer a typed query, and why not when it cannot.
+
+```json
+{ "semantic_ready": true, "semantic_model": "openclip-vit-b-32" }
+```
+
+`semantic_reason` is present only when `semantic_ready` is false, and says
+which of several situations the server is in — "not installed" and "no model"
+are different problems with different fixes.
+
+Only the semantic half of the worker's capabilities is answered here. The full
+struct also carries face readiness, and a client reading it from this route
+would eventually branch on `ready` — a different feature's answer, and false on
+a server whose search works perfectly well.
+
+`semantic_model` names the coordinate system this server produces vectors in.
+It is stored beside every embedding, so a swapped model is something a pass
+notices rather than a library ranked against a mixture of two spaces.
+
+### `GET /api/photos/semantic/models`
+
+What semantic search would download, before anything is fetched.
+
+```json
+{ "supported": true, "installed": false, "bytes_total": 606331739,
+  "directory": "C:\ProgramData\LANcast\faces",
+  "assets": [
+    { "name": "clip-visual.onnx", "size_bytes": 351613724, "present": false,
+      "licence": "MIT", "licence_url": "…", "url": "…" }
+  ],
+  "job": { "running": false, "stage": "", "bytes_done": 0, "bytes_total": 0 } }
+```
+
+Same rules as the face models: every asset names its size, its licence and the
+address the machine would connect to, and readable by anyone because it
+describes what the server *would* do rather than doing it.
+
+**`bytes_total` is what is missing, not what the set weighs.** The ONNX Runtime
+library is shared with face grouping, so a server that installed that last week
+is told this costs about 600 MB rather than 680 — and the number shown is the
+number the progress bar counts to. `present` says so per asset, rather than
+having a file silently dropped from a total that no longer adds up.
+
+`supported: false` on platforms with no pinned build.
+
+### `POST /api/photos/semantic/models/install`
+
+Start the download. Admin only. `202` with the job snapshot; progress is polled
+from `GET /api/photos/semantic/models`.
+
+**Only what is missing is fetched, and by digest rather than by name.** Pressing
+it again after a failed install repairs the one file that was truncated instead
+of spending 600 MB on the two that were fine — while still repairing them,
+which skipping on name would not. On an install that is already complete it is
+a no-op returning `202`: somebody pressing install on an installed feature has
+asked for a state it is already in.
+
+The URLs are pinned in the server and are never taken from the request, and
+each file is verified against a pinned SHA-256 before it is moved into place —
+for the reasons written under the face models.
+
+### `POST /api/photos/semantic/models/install/cancel`
+
+Stop a running download. Admin only. Six hundred megabytes on a metered
+connection is something somebody may reasonably change their mind about
+halfway through.
+
+### `POST /api/libraries/{id}/photos/index`
+
+Give every photograph in a picture library a vector. Admin only. `202` with the
+pass's stats; progress appears in `GET /api/activity` as a `semantic` task.
+
+`400 wrong_kind` for a library that is not a picture library. `409
+not_available` carries the reason when the models are not installed.
+
+Asynchronous and detached from the request, like every other pass: a picture
+library is a long job, and inheriting the request's context would cancel it the
+moment the browser navigated away — which is exactly what somebody does after
+pressing a button that says the work will take a while.
+
+Photographs under a folder marked sensitive are never embedded, and marking a
+folder deletes any vectors already stored beneath it (ADR 0051).
+
+### `GET /api/libraries/{id}/photos/index`
+
+How much of a library is indexed, without running a search.
+
+```json
+{ "indexed": 12480, "pending": 0, "running": false,
+  "model": "openclip-vit-b-32" }
+```
+
+Readable by anyone, because it describes the state of the library rather than
+changing it. **This is what the search screen calls on arrival**, and it exists
+because the screen did not have it: a library nobody had indexed showed a search
+field and nothing else, since every sentence on the page was derived from a
+search result and no search had been run.
+
+A search cannot answer this. It costs a process start and a model load, it needs
+a query nobody has typed yet, and it is the wrong question to ask on arrival.
+
+It answers even when no model is installed, rather than refusing the way the
+search does — a library that was indexed and then had its models removed holds
+exactly as many vectors as it did. In that case `model` is empty and both counts
+are zero, meaning "cannot say" rather than "none".
+
+`pending` excludes marked folders, which are never indexed (ADR 0051); counting
+them would leave a total that never reaches zero.
+
+### `GET /api/libraries/{id}/photos/search`
+
+Answer a typed query with photographs.
+
+```json
+{ "hits": [ { "item": { "id": 5512, "title": "IMG_4410" }, "score": 0.31 } ],
+  "indexed": 12480, "model": "openclip-vit-b-32" }
+```
+
+`q` is required; `limit` defaults to 60 and is capped at 500.
+
+**`indexed` is always present, including when it is zero.** "Nothing matched"
+and "nothing has been indexed yet" are different sentences, and a client that
+has to infer which one it is will pick wrong — it decides whether somebody
+rephrases the query or presses the button that starts the pass.
+
+`score` is a cosine between unit vectors: bounded, comparable within one answer,
+and close to meaningless across two. It travels because a list with no notion of
+confidence gives a distant fifth-best the same standing as an obvious first.
+
+`409 not_available` when the models are not installed, carrying the reason. A
+query the worker cannot turn into a vector is a `500`, not a `400`: there is no
+input this route accepts that should make the worker fail — the tokenizer
+truncates rather than refusing — so a failure means the install is wrong, and
+calling it a bad request would send somebody rewording a query that was fine.
+
 ## Backups
 
 A backup is a snapshot of the database and nothing else

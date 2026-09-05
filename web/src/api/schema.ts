@@ -2800,6 +2800,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/photos/semantic/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether this server can answer a typed query */
+        get: operations["getSemanticCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/semantic/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What semantic search would download, before anything is fetched */
+        get: operations["getSemanticModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/semantic/models/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the model download
+         * @description Administrators only. Asynchronous because it is about 600 MB — holding the request open would make a client timeout indistinguishable from a failed install. Progress is polled from `GET /api/photos/semantic/models`.
+         *
+         *     **Only what is missing is fetched, and by digest rather than by name.** Pressing it again after a failed install repairs the one file that was truncated instead of spending 600 MB on the two that were fine — while still repairing them, which skipping on name would not. On an already-complete install it is a no-op returning `202`.
+         *
+         *     **The URLs are pinned in the server and are never taken from the request**, and each file is verified against a pinned SHA-256 before it is moved into place — the payload is a model this server loads and a library it executes.
+         *
+         *     **Pressing it twice while it runs is a person, not a fault**: the second call returns the same snapshot rather than starting a second download.
+         */
+        post: operations["installSemanticModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/semantic/models/install/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a running model download
+         * @description Administrators only. Six hundred megabytes on a metered connection is something somebody may reasonably change their mind about halfway through.
+         */
+        post: operations["cancelSemanticModelsInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/photos/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * How much of a library is indexed
+         * @description Readable by anyone, because it describes the state of the library rather than changing it. This is what a search screen calls on arrival, so that a library nobody has indexed says so before a query is typed rather than after.
+         */
+        get: operations["getSemanticIndexStatus"];
+        put?: never;
+        /**
+         * Give every photograph in a picture library a vector
+         * @description Administrators only. Asynchronous: progress is read from `GET /api/activity` like every other worker (the task's `kind` is `semantic`), and the pass outlives the request that started it — inheriting the request's context would cancel it the moment the browser navigated away, which is exactly what somebody does after pressing a button that says the work will take a while.
+         *
+         *     The pass is **incremental**: a photograph that already has a vector for the current model is skipped, and a model change is therefore a full re-index rather than a silent mixture of two coordinate systems.
+         *
+         *     **Folders marked sensitive are never embedded**, and marking one deletes any vectors already stored beneath it (ADR 0051): an embedding is derived from a photograph and is not less private than it.
+         */
+        post: operations["startSemanticPass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/photos/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Answer a typed query with photographs
+         * @description Every photograph in the library is scored against the query, with no vector index: brute force over a few tens of thousands of rows is milliseconds, and an approximate index is a second structure to keep in step with the model name for a saving nobody would notice (ADR 0060).
+         *
+         *     A query the worker cannot turn into a vector is a `500`, not a `400`: there is no input this route accepts that should make the worker fail — the tokenizer truncates rather than refusing — so a failure means the install is wrong, and calling it a bad request would send somebody rewording a query that was fine.
+         */
+        get: operations["searchPhotos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4517,6 +4653,90 @@ export interface components {
              *     **Returned rather than assumed**, so a client left open overnight can notice it has crossed midnight and the shelf it is drawing is yesterday's. It is also the reason this is a route rather than a `taken_on` filter on `/api/items`: a parameter would put a calendar date in the client's hands, and a client computing one resolves to tomorrow through a US evening, because `toISOString()` is UTC. The day comes from the same clock the photographs were filed under.
              */
             on: string;
+        };
+        /**
+         * @description Whether this server can answer a typed query, and why not when it cannot (ADR 0060).
+         *
+         *     Only the semantic half of the worker's capabilities is reported here. The full struct also carries face readiness, and a client reading that from this route would eventually branch on `ready` — a different feature's answer, and false on a server whose search works perfectly well.
+         */
+        SemanticCapabilities: {
+            /** @description **A client must never present an empty result list as "nothing matched" without checking this and `indexed`.** "Nothing matched", "nothing was indexed" and "nothing can be indexed" are the same empty array and three different sentences. */
+            semantic_ready: boolean;
+            /** @description Present only when `semantic_ready` is false — "not installed" and "no model" are different problems with different fixes. */
+            semantic_reason?: string;
+            /** @description The coordinate system this server produces vectors in, stored beside every embedding. A swapped model is something a pass notices rather than a library ranked against a mixture of two spaces. */
+            semantic_model?: string;
+        };
+        /** @description Every asset names its size, its licence and the address the machine would connect to — **a download somebody cannot identify is not consent**. */
+        SemanticModelAsset: {
+            name: string;
+            /** Format: int64 */
+            size_bytes: number;
+            licence: string;
+            licence_url: string;
+            url: string;
+            /** @description Already on disk with the right bytes. The ONNX Runtime library is shared with face grouping, and reporting it per asset keeps a file from being silently dropped from a total that no longer adds up. */
+            present: boolean;
+        };
+        /**
+         * @description What semantic search **would** download, before anything is fetched. Readable by anyone, because it describes what the server would do rather than doing it.
+         *
+         *     A separate download from the face models: two features, and a server may have either, both or neither.
+         */
+        SemanticModels: {
+            /** @description False on platforms with no pinned build — rather than offering a download that could not be used once it arrived. */
+            supported: boolean;
+            installed?: boolean;
+            /**
+             * Format: int64
+             * @description What is **missing**, not what the set weighs. The runtime is shared with face grouping, so a server that already has it is told the smaller number — and it is the number the progress bar counts to.
+             */
+            bytes_total?: number;
+            directory?: string;
+            assets?: components["schemas"]["SemanticModelAsset"][];
+            job?: components["schemas"]["FaceModelJob"];
+        };
+        /** @description Progress of an indexing pass. */
+        SemanticPassStats: {
+            running: boolean;
+            embedded: number;
+            failed: number;
+            /** @description Re-read each batch rather than counted down. A scan can add photographs while a pass runs and marking a folder removes some entirely, so a counter that only fell would drift in both directions. */
+            remaining: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        SearchHit: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: double
+             * @description A cosine between unit vectors: bounded, comparable within one answer, and close to meaningless across two. It travels because a list with no notion of confidence gives a distant fifth-best the same standing as an obvious first.
+             */
+            score: number;
+        };
+        PhotoSearchResults: {
+            hits: components["schemas"]["SearchHit"][];
+            /** @description How many photographs in this library have a vector. **Always present, including when it is zero** — "nothing matched" and "nothing has been indexed yet" are different sentences, and it decides whether somebody rephrases the query or presses the button that starts the pass. */
+            indexed: number;
+            /** @description The coordinate system the answer was ranked in. */
+            model: string;
+        };
+        /**
+         * @description How much of one library is indexed, without running a search.
+         *
+         *     A search cannot answer this: it costs a process start and a model load, it needs a query nobody has typed yet, and it is the wrong question on arrival at a screen. This is a count, so it is a route that counts.
+         *
+         *     It answers even when nothing can embed, rather than refusing the way the search does — a library that was indexed and then had its models removed holds exactly as many vectors as it did, and this is the route a screen calls before it knows anything.
+         */
+        SemanticIndexStatus: {
+            /** @description Photographs with a vector for the current model. */
+            indexed: number;
+            /** @description Photographs still to embed. Marked folders are not counted: they are excluded from indexing entirely (ADR 0051), so counting them would leave a total that never reaches zero. */
+            pending: number;
+            /** @description Whether a pass is running right now, on any library — the worker is one at a time. */
+            running: boolean;
+            /** @description The coordinate system the counts are for. Empty when no model is installed, in which case both counts are zero and mean "cannot say" rather than "none". */
+            model?: string;
         };
     };
     responses: {
@@ -9262,6 +9482,227 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getSemanticCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Readiness, with the reason when it is not ready. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticCapabilities"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getSemanticModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each asset, its licence, whether it is already here, and any running job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticModels"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    installSemanticModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download has started, was already running, or there was nothing to fetch. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaceModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `unsupported` — no pinned build for this platform. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cancelSemanticModelsInstall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job as it stands after cancelling. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FaceModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSemanticIndexStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts, for the current model. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticIndexStatus"];
+                };
+            };
+            /** @description `wrong_kind` — not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startSemanticPass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pass has started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticPassStats"];
+                };
+            };
+            /** @description `wrong_kind` — not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `not_available` — the models are missing, with the reason in the message. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    searchPhotos: {
+        parameters: {
+            query: {
+                /** @description The query, in words — "a dog on a beach". */
+                q: string;
+                /** @description Defaults to 60, capped at 500. */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photographs, best first, with how many were searched. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoSearchResults"];
+                };
+            };
+            /** @description `bad_request` — no query; or `wrong_kind` — not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description `not_available` — the models are missing, with the reason in the message. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

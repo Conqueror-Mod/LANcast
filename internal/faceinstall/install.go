@@ -119,6 +119,139 @@ var runtimeWindowsAMD64 = Asset{
 }
 
 /*
+ * The semantic-search set (ADR 0060), which is a *separate* optional download.
+ *
+ * Two features, two downloads, and a server may have either, both or neither.
+ * Folding them together would tell a household that wanted search and not face
+ * grouping that the feature was unavailable because a different model was
+ * missing — the report ADR 0052 built the reason field to avoid.
+ *
+ * WHY THIS COPY OF THE WEIGHTS
+ *
+ * These are OpenCLIP's ViT-B/32 LAION-2B weights, which are MIT, exported to
+ * ONNX. The export is Immich's, pinned to a commit and to the sha256 of each
+ * file: the choice is between depending on somebody's re-export or shipping our
+ * own conversion pipeline, and a pinned digest makes the first of those a
+ * question about *these bytes* rather than about a repository. Every byte is
+ * verified before it is placed, exactly as the face models are.
+ *
+ * OpenAI's own CLIP export was the obvious alternative and was rejected: it
+ * declares no licence at all, and "no licence" is not permission.
+ *
+ * The runtime is the same onnxruntime.dll the face models need. Whichever
+ * feature is installed first pays for it, and `Missing` keeps the second from
+ * fetching 76MB it already has.
+ */
+const clipCommit = "19a057a0fb927cf239541300e74237cd56c7ffe2"
+
+const clipBase = "https://huggingface.co/immich-app/ViT-B-32__laion2b-s34b-b79k/resolve/" +
+	clipCommit + "/"
+
+/*
+ * The names on disk are the sidecar's contract, not the repository's.
+ *
+ * `clip-visual` and `clip-textual` are what the worker looks for. The upstream
+ * files are both called model.onnx, in different folders, and this directory is
+ * flat — so they are renamed on the way in, and the worker's fragment search
+ * finds them regardless of any suffix a later pin adds.
+ */
+var semanticModels = []Asset{
+	{
+		Name:       "clip-visual.onnx",
+		URL:        clipBase + "visual/model.onnx",
+		SHA256:     "b9ce24b91a8c62ef8d40ea786051709c93140104cbf2b6b4a2cc270df3838f9c",
+		SizeBytes:  351613724,
+		Licence:    "MIT",
+		LicenceURL: "https://github.com/mlfoundations/open_clip/blob/main/LICENSE",
+	},
+	{
+		Name:       "clip-textual.onnx",
+		URL:        clipBase + "textual/model.onnx",
+		SHA256:     "48c25be37b352398f2533c9426dab6f9340535e14e46f884cc894236a5060722",
+		SizeBytes:  254193396,
+		Licence:    "MIT",
+		LicenceURL: "https://github.com/mlfoundations/open_clip/blob/main/LICENSE",
+	},
+	{
+		// Half a megabyte, and the half of the model with no error path: a
+		// tokenizer that is nearly right returns confidently wrong photographs.
+		Name:       "merges.txt",
+		URL:        clipBase + "textual/merges.txt",
+		SHA256:     "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+		SizeBytes:  524619,
+		Licence:    "MIT",
+		LicenceURL: "https://github.com/mlfoundations/open_clip/blob/main/LICENSE",
+	},
+}
+
+// SemanticAssetsForHost is the semantic-search download for this machine,
+// including the shared runtime — which `Missing` will drop if face grouping
+// already fetched it.
+func SemanticAssetsForHost() ([]Asset, error) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		return nil, ErrUnsupportedPlatform
+	}
+	return append(append([]Asset{}, semanticModels...), runtimeWindowsAMD64), nil
+}
+
+// SemanticInstalled reports whether semantic search has everything it needs.
+func SemanticInstalled(dir string) bool {
+	for _, a := range semanticModels {
+		if !fileExists(filepath.Join(dir, a.Name)) {
+			return false
+		}
+	}
+	return fileExists(filepath.Join(dir, runtimeWindowsAMD64.Name))
+}
+
+/*
+ * Missing drops the assets already sitting in dir with the right bytes.
+ *
+ * By digest rather than by name, and that is the whole point of it. A file
+ * present under the right name may be a truncated download from a connection
+ * that dropped, and skipping it on name alone would make a re-install — the one
+ * thing somebody does when it is broken — the one thing that cannot fix it.
+ *
+ * Hashing what is already there costs a few seconds against a download measured
+ * in minutes, so it is not worth an option.
+ */
+func Missing(dir string, assets []Asset) []Asset {
+	out := make([]Asset, 0, len(assets))
+	for _, a := range assets {
+		p := filepath.Join(dir, a.Name)
+		/*
+		 * An extracted asset is checked for presence rather than by digest,
+		 * because its SHA256 is the *archive's* and the file on disk is one
+		 * member of it. Comparing them would never match, and the runtime — the
+		 * largest download of the set — would be fetched again every time.
+		 */
+		if a.ExtractFromZip != "" {
+			if !fileExists(p) {
+				out = append(out, a)
+			}
+			continue
+		}
+		if !matchesDigest(p, a.SHA256) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func matchesDigest(path, want string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return false
+	}
+	return hex.EncodeToString(sum.Sum(nil)) == want
+}
+
+/*
  * AssetsForHost returns everything to fetch for this machine.
  *
  * Windows/amd64 only for now, matching the platforms `lancast-faces` is built

@@ -430,6 +430,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Runtime:   faceRuntime,
 	}
 	faceWorker := faces.NewWorker(st, faceTool, log)
+	// Semantic search shares the worker binary and nothing else — its own
+	// indexer, its own models, its own progress (ADR 0060).
+	embedder := faces.NewIndexer(st, faceTool, log)
 
 	// Album art comes off the disk, not from a provider: the picture embedded
 	// in a track, or a cover.jpg beside it (ADR 0024). It gets its own worker
@@ -690,7 +693,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
-		Faces: faceWorker, FaceTool: faceTool,
+		Faces: faceWorker, FaceTool: faceTool, Embedder: embedder,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 		// Only for installs that are not a service; the service path
 		// restarts through the service manager instead.
@@ -885,6 +888,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// and a service that does not complete its stop is killed and restarted —
 	// which is worse than cutting one playback short. Closing is what makes
 	// "closed" mean closed.
+	/*
+	 * The warm text worker goes down with the server.
+	 *
+	 * Its stdin closing would end it anyway once this process exits, so this is
+	 * about the gap rather than the steady state: between the last request and
+	 * the exit there is a ~700MB child holding a model for a server that is on
+	 * its way out, and a restart that overlaps that window has two of them.
+	 */
+	faceTool.StopText()
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Warn("graceful shutdown did not finish; closing connections",
 			"grace", shutdownGrace, "error", err)

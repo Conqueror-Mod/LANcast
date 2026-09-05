@@ -250,3 +250,135 @@ func TestEveryPinnedAssetCanBeDescribed(t *testing.T) {
 func contains(s, sub string) bool {
 	return bytes.Contains([]byte(s), []byte(sub))
 }
+
+/*
+ * The semantic-search set (ADR 0060).
+ *
+ * These are pins, and a pin is only worth what checks it. What can be asserted
+ * without the network is that the set is complete, that it is named the way the
+ * worker looks for it, and that every file carries a licence — the three things
+ * a careless edit here would break silently, since a missing file surfaces as
+ * "semantic search is unavailable" months later and a wrong name surfaces the
+ * same way.
+ */
+func TestSemanticSetIsNamedTheWayTheWorkerLooksForIt(t *testing.T) {
+	assets, err := SemanticAssetsForHost()
+	if err != nil {
+		t.Skip("no pinned semantic build for this platform")
+	}
+	want := map[string]bool{
+		"clip-visual.onnx":  false,
+		"clip-textual.onnx": false,
+		"merges.txt":        false,
+		"onnxruntime.dll":   false,
+	}
+	for _, a := range assets {
+		if _, ok := want[a.Name]; !ok {
+			t.Errorf("unexpected asset %q in the semantic set", a.Name)
+			continue
+		}
+		want[a.Name] = true
+	}
+	for name, seen := range want {
+		if !seen {
+			t.Errorf("the semantic set is missing %q", name)
+		}
+	}
+}
+
+// Every asset is identifiable before it is fetched. A download somebody cannot
+// identify is not consent, and that applies to the second feature as much as
+// the first.
+func TestEverySemanticAssetDeclaresItsLicence(t *testing.T) {
+	assets, err := SemanticAssetsForHost()
+	if err != nil {
+		t.Skip("no pinned semantic build for this platform")
+	}
+	for _, a := range assets {
+		if a.Licence == "" || a.LicenceURL == "" {
+			t.Errorf("%s: no licence declared", a.Name)
+		}
+		if a.SHA256 == "" {
+			t.Errorf("%s: no pinned digest", a.Name)
+		}
+		if a.SizeBytes <= 0 {
+			t.Errorf("%s: no size, so nothing can be shown before the fetch", a.Name)
+		}
+	}
+}
+
+/*
+ * A file already present with the right bytes is not fetched again; one with
+ * the wrong bytes is.
+ *
+ * The second half is the one worth the test. Skipping on name alone would make
+ * a re-install — the thing somebody does when it is broken — the one action
+ * that cannot repair a truncated download.
+ */
+func TestMissingSkipsOnDigestRatherThanOnName(t *testing.T) {
+	dir := t.TempDir()
+	body := []byte("the real bytes")
+	sum := sha256.Sum256(body)
+	good := Asset{Name: "good.bin", SHA256: hex.EncodeToString(sum[:]), SizeBytes: int64(len(body))}
+	bad := Asset{Name: "bad.bin", SHA256: hex.EncodeToString(sum[:]), SizeBytes: int64(len(body))}
+
+	if err := os.WriteFile(filepath.Join(dir, good.Name), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Present, right name, truncated — what a dropped connection leaves.
+	if err := os.WriteFile(filepath.Join(dir, bad.Name), body[:4], 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := Missing(dir, []Asset{good, bad})
+	if len(got) != 1 || got[0].Name != bad.Name {
+		t.Fatalf("Missing returned %v, want only %s", names(got), bad.Name)
+	}
+}
+
+// An asset extracted from an archive is judged on presence, because its pinned
+// digest is the archive's and the file on disk is one member of it. Comparing
+// them would refetch the largest download in the set every single time.
+func TestMissingJudgesAnExtractedAssetOnPresence(t *testing.T) {
+	dir := t.TempDir()
+	a := Asset{Name: "onnxruntime.dll", SHA256: "the archive's digest, not this file's",
+		ExtractFromZip: "lib/onnxruntime.dll"}
+
+	if got := Missing(dir, []Asset{a}); len(got) != 1 {
+		t.Fatal("an absent extracted asset was treated as present")
+	}
+	if err := os.WriteFile(filepath.Join(dir, a.Name), []byte("a library"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Missing(dir, []Asset{a}); len(got) != 0 {
+		t.Errorf("the runtime would be downloaded again although it is here: %v", names(got))
+	}
+}
+
+// The two features share the runtime and nothing else. An overlap in model
+// names would have one install quietly overwrite the other's file.
+func TestTheTwoSetsOverlapOnlyOnTheRuntime(t *testing.T) {
+	face, err := AssetsForHost()
+	if err != nil {
+		t.Skip("no pinned build for this platform")
+	}
+	semantic, _ := SemanticAssetsForHost()
+
+	seen := map[string]bool{}
+	for _, a := range face {
+		seen[a.Name] = true
+	}
+	for _, a := range semantic {
+		if seen[a.Name] && a.ExtractFromZip == "" {
+			t.Errorf("%q is in both sets; one install would overwrite the other", a.Name)
+		}
+	}
+}
+
+func names(assets []Asset) []string {
+	out := make([]string, 0, len(assets))
+	for _, a := range assets {
+		out = append(out, a.Name)
+	}
+	return out
+}

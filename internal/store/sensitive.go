@@ -65,6 +65,18 @@ func (s *Store) SetSensitive(ctx context.Context, id int64, on bool) error {
 	if _, err := s.DeleteFacesUnderSensitive(ctx, libraryID); err != nil {
 		return err
 	}
+	/*
+	 * And so do the photo embeddings (ADR 0060), for the identical reason and a
+	 * sharper one.
+	 *
+	 * A face embedding says *who* is in a photograph. A CLIP embedding says
+	 * *what the photograph is of* — so a covered folder whose vectors survived
+	 * could be reached by searching for its contents, which is a cover that
+	 * lifts for anyone who guesses.
+	 */
+	if _, err := s.DeletePhotoEmbeddingsUnderSensitive(ctx, libraryID); err != nil {
+		return err
+	}
 	return nil
 }
 

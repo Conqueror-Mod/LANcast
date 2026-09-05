@@ -413,6 +413,18 @@ export function LibraryView({
             Timeline
           </button>
         )}
+        {/* Describing a photograph to find it. Offered whether or not the
+            models are installed, for the same reason People is: the page
+            explains an absence, and a control that silently is not there
+            teaches nobody it exists. */}
+        {isPictures && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/photos/search`)}
+          >
+            Describe
+          </button>
+        )}
         {/* Face groups. Offered whether or not the worker is installed: the
             page itself explains an absence, which is better than a control
             that silently is not there. */}

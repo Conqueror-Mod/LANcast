@@ -30,6 +30,23 @@ type Capabilities struct {
 	Native  string `json:"native"`
 	Ready   bool   `json:"ready"`
 	Reason  string `json:"reason,omitempty"`
+
+	/*
+	 * Semantic search reports separately (ADR 0060).
+	 *
+	 * Two independent downloads: a household may have face grouping and not
+	 * search, or the reverse. Folding them into one boolean would mean one
+	 * feature reporting itself broken because the *other* is not installed —
+	 * and the reason field exists in this file precisely so a UI can say which
+	 * of several situations it is in rather than "no".
+	 */
+	SemanticReady  bool   `json:"semantic_ready"`
+	SemanticReason string `json:"semantic_reason,omitempty"`
+	// SemanticModel names the coordinate system the worker produces vectors
+	// in. Stored beside every embedding and compared, so a swapped model is
+	// something a pass notices rather than a library ranked against a mixture
+	// of two spaces.
+	SemanticModel string `json:"semantic_model,omitempty"`
 }
 
 // Tool locates and interrogates the worker binary.
@@ -53,6 +70,11 @@ type Tool struct {
 	mu     sync.Mutex
 	cached *Capabilities
 	at     time.Time
+
+	// The warm text embedder (ADR 0060, amended). Lazily created, because most
+	// servers never search photographs at all.
+	textOnce sync.Once
+	textEmb  *textEmbedder
 }
 
 func exeName() string {
@@ -136,6 +158,18 @@ func (t *Tool) Forget() {
 	t.mu.Lock()
 	t.cached, t.at = nil, time.Time{}
 	t.mu.Unlock()
+
+	/*
+	 * The warm text worker goes too, and this is the one call that must not be
+	 * forgotten.
+	 *
+	 * Forget is called when the models on disk change — an install finishing is
+	 * the only caller today. A worker started before that change holds the
+	 * *previous* models in memory and would go on answering in their coordinate
+	 * system, against a database that had just moved to another. Every search
+	 * would rank, and sort, and be wrong, and report nothing.
+	 */
+	t.StopText()
 }
 
 func (t *Tool) probe(ctx context.Context) Capabilities {
