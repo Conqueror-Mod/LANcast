@@ -70,6 +70,12 @@ type Tool struct {
 	mu     sync.Mutex
 	cached *Capabilities
 	at     time.Time
+	// inflight is non-nil while a probe is running, and is closed when it
+	// finishes. It is what stops six callers becoming six subprocesses.
+	inflight chan struct{}
+	// gen rises whenever Forget is called, so a probe that was already running
+	// when the models changed does not get to write its answer down.
+	gen int
 
 	// The warm text embedder (ADR 0060, amended). Lazily created, because most
 	// servers never search photographs at all.
@@ -124,21 +130,132 @@ func fileExists(p string) bool {
  * minute is short enough to feel immediate and long enough to stop a polling
  * client launching a process a second.
  */
+/*
+ * How long a probe's answer is trusted, and how long it is *served* while a
+ * fresh one is fetched behind it.
+ *
+ * These were one minute and no second value, which was fine while a probe was
+ * two small face models. It is not fine now: since semantic search landed, the
+ * worker also loads 600MB of CLIP to answer the question, and a probe measured
+ * **2.6 seconds**. Every minute, whichever page asked first wore that.
+ */
+const (
+	capsFresh = 10 * time.Minute
+	capsStale = 24 * time.Hour
+)
+
+/*
+ * Capabilities answers what the worker can do, from cache wherever it can.
+ *
+ * THIS SHIPPED BROKEN IN v0.9.0 AND IS WHY THE APP WENT SLUGGISH
+ *
+ * The old version released the lock, probed, and took it again. That is fine
+ * for a cheap probe and ruinous for this one: `capabilities` now loads the CLIP
+ * models, so it costs 2.6s and about 700MB, and **nothing was shared between
+ * callers**. Opening a page that asks — Settings, People, the search screen —
+ * spawned one 700MB subprocess *per request*. Six at once measured 6.6s and
+ * several gigabytes of transient allocation, which is a machine that stops
+ * answering, and the client reported it the only way it can: `Failed to fetch`,
+ * on whichever requests happened to be in flight. Then it recurred every minute
+ * when the cache expired.
+ *
+ * Two changes, and both matter.
+ *
+ * **One probe at a time.** A caller that finds a probe already running waits
+ * for its answer instead of starting another. That is the difference between a
+ * cost and a multiplier.
+ *
+ * **A stale answer is served while a fresh one is fetched.** Readiness changes
+ * when somebody installs or removes models, and `Forget` is called on exactly
+ * that event — so between those events the previous answer is not merely
+ * probably right, it is right. Blocking a page load for 2.6s to re-confirm it
+ * is a cost with nothing bought.
+ *
+ * Only a genuinely cold cache blocks, and it blocks once per server lifetime.
+ */
 func (t *Tool) Capabilities(ctx context.Context) Capabilities {
 	t.mu.Lock()
-	if t.cached != nil && time.Since(t.at) < time.Minute {
+
+	if t.cached != nil && time.Since(t.at) < capsFresh {
 		c := *t.cached
 		t.mu.Unlock()
 		return c
 	}
+
+	if t.cached != nil && time.Since(t.at) < capsStale {
+		// Stale but usable: answer now, refresh behind. The caller gets the
+		// previous answer, which is the right one unless the models changed —
+		// and if they changed, Forget already cleared this.
+		c := *t.cached
+		t.startProbeLocked()
+		t.mu.Unlock()
+		return c
+	}
+
+	// Cold, or so old it is worth waiting for. Share whatever probe is running.
+	t.startProbeLocked()
+	wait := t.inflight
 	t.mu.Unlock()
 
-	c := t.probe(ctx)
+	select {
+	case <-wait:
+	case <-ctx.Done():
+		/*
+		 * The caller gave up; the probe has not. It is still running for
+		 * whoever else is waiting, and its answer will be cached — so a request
+		 * that times out here does not also waste the work it started.
+		 */
+		return Capabilities{Reason: "still checking the photograph worker"}
+	}
 
 	t.mu.Lock()
-	t.cached, t.at = &c, time.Now()
-	t.mu.Unlock()
-	return c
+	defer t.mu.Unlock()
+	if t.cached != nil {
+		return *t.cached
+	}
+	return Capabilities{Reason: "the photograph worker could not be checked"}
+}
+
+/*
+ * startProbeLocked begins a probe unless one is already running. The caller
+ * holds mu.
+ *
+ * The probe runs on context.Background with its own timeout, never on a
+ * request's context. It is shared, so letting one caller's cancellation kill it
+ * would abort work several other callers are waiting on — and on the request
+ * that cancels, which is usually a page being navigated away from, that would
+ * mean the next page starts the whole 2.6s again.
+ */
+func (t *Tool) startProbeLocked() {
+	if t.inflight != nil {
+		return
+	}
+	done := make(chan struct{})
+	t.inflight = done
+
+	gen := t.gen
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		c := t.probe(ctx)
+
+		t.mu.Lock()
+		/*
+		 * Discarded if the models changed while this ran.
+		 *
+		 * An install finishing calls Forget, and a probe that started before it
+		 * finished saw a half-downloaded directory. Storing that would cache
+		 * "not installed" over a completed install for ten minutes — which is
+		 * the report somebody watching a progress bar would be left reading,
+		 * and the exact failure Forget exists to prevent.
+		 */
+		if t.gen == gen {
+			t.cached, t.at = &c, time.Now()
+		}
+		t.inflight = nil
+		t.mu.Unlock()
+		close(done)
+	}()
 }
 
 /*
@@ -157,6 +274,7 @@ func (t *Tool) Capabilities(ctx context.Context) Capabilities {
 func (t *Tool) Forget() {
 	t.mu.Lock()
 	t.cached, t.at = nil, time.Time{}
+	t.gen++
 	t.mu.Unlock()
 
 	/*
