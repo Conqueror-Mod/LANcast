@@ -67,6 +67,20 @@ func runFakeWorker(mode string) int {
 		}
 	}
 
+	/*
+	 * `capabilities` is answered too, because the probe is what the thundering
+	 * herd was about — six pages mounting meant six of these, each loading
+	 * 600MB, and counting the starts is the only way to see that from a test.
+	 */
+	for _, a := range os.Args[1:] {
+		if a == "capabilities" {
+			fmt.Println(`{"version":"test","os":"windows","arch":"amd64",` +
+				`"ready":true,"semantic_ready":true,` +
+				`"semantic_model":"openclip-vit-b-32"}`)
+			return 0
+		}
+	}
+
 	sc := bufio.NewScanner(os.Stdin)
 	for sc.Scan() {
 		q := sc.Text()
@@ -122,7 +136,21 @@ func fakeWorker(t *testing.T, mode string) (*Tool, string) {
 	t.Setenv(fakeWorkerEnv+"_COUNT", counter)
 
 	tool := &Tool{Dir: dir, ModelsDir: dir}
-	t.Cleanup(tool.StopText)
+	t.Cleanup(func() {
+		tool.StopText()
+		/*
+		 * Wait for any probe still running before the temp directory is
+		 * removed. A background refresh holds the copied binary open, and on
+		 * Windows that makes the cleanup fail the test for a reason that has
+		 * nothing to do with what it asserted.
+		 */
+		tool.mu.Lock()
+		wait := tool.inflight
+		tool.mu.Unlock()
+		if wait != nil {
+			<-wait
+		}
+	})
 	return tool, counter
 }
 
