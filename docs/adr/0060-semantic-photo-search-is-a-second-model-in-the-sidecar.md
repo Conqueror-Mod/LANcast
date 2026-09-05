@@ -96,6 +96,49 @@ the way nothing else here does. *Measure it against a real library before
 choosing.* This project has a rule about that and a release that paid for
 ignoring it.
 
+### Measured, 2026-09-04: the read is the cost, and it is worse than this said
+
+`BenchmarkSearchPhotos` in `internal/store/photoembedding_bench_test.go`, on a
+Ryzen 9 3900X, one query returning the top 60:
+
+| photographs | per search |
+| --- | --- |
+| 1,000 | 45 ms |
+| 10,000 | 582 ms |
+| 40,000 | **2.97 s** |
+
+Linear, at about 74µs per photograph. "Milliseconds of arithmetic" was right
+about the arithmetic and wrong about the total by three orders of magnitude:
+a CPU profile puts 74% of the time inside SQLite's VDBE and essentially none in
+`cosine`.
+
+Two hypotheses were tested and both were wrong. The query plan is already the
+good one — `SEARCH mi USING INDEX idx_item_library` then `SEARCH e USING
+PRIMARY KEY` — so it is not a missing index. Replacing the join with a flat
+scan of `photo_embedding` plus an in-memory set of eligible ids was **11%
+faster**, which is noise against a factor of sixty: it is not the seeks either.
+
+It is simply the throughput of pulling 20MB of blobs through the pure-Go
+driver, about 37MB/s. Nothing about the query shape changes that, which means
+**no amount of SQL is going to fix it** — the fix is to stop reading the
+vectors per query, exactly as this ADR guessed.
+
+What that costs is now a known number rather than a guess: 82MB of resident
+memory for a 40,000-photograph library, held for the life of the process. That
+is a real ask of a home server and it is **not** decided here. What is decided
+is that the choice is now informed: at 2,601 photographs — the test library,
+measured end to end — a search takes about 0.2s and needs nothing, and the
+in-memory copy only starts earning its place somewhere above ten thousand.
+
+Two things worth knowing before that decision is made. The 1.2s the sidecar
+spends starting a process and loading the text model is charged to **every**
+search regardless, so caching the vectors takes a 40k search from 4.2s to about
+1.3s rather than to nothing — the process, not the read, is then the ceiling.
+And a cache has to be invalidated by the two things that change what a library
+holds: an indexing pass, and a folder being marked sensitive. The second is the
+one that would be forgotten, and forgetting it serves marked photographs from
+memory after the rule has deleted them from the database.
+
 The consequence worth stating plainly: **adding a vector extension would mean
 giving up the pure-Go driver**, which is the same trade ADR 0052 refused for
 cgo. A feature that costs the release matrix is a feature that costs every user
