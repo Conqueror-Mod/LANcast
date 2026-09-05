@@ -5,8 +5,27 @@ package main
 import (
 	"fmt"
 	"image"
+	/*
+	 * The same decoders `internal/photo` registers, and that is the point of
+	 * the list rather than a preference.
+	 *
+	 * Found by embedding a real library: one file in 2,602 failed with
+	 * "decode: image: unknown format", and it was a WebP carrying a .jpg
+	 * extension — which the thumbnailer reads perfectly well, because it
+	 * registers webp and this did not. A photograph LANcast is happy to show
+	 * you was one it could not search for or find a face in, and the only
+	 * symptom was a single line in a failure count.
+	 *
+	 * So the two lists match. If a format is added there it belongs here, and
+	 * the dependency is already in the build either way.
+	 */
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 	"os"
 	"path/filepath"
 	"sync"
