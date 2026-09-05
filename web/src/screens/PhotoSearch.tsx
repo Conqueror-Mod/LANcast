@@ -182,6 +182,49 @@ export function PhotoSearch() {
         </p>
       )}
 
+      {/*
+        A part-indexed library says so, and this is the second half of the same
+        lesson. The first fix covered a library with *nothing* indexed and left
+        this one blank: 317 photographs indexed out of 5,090, no pass running
+        because a restart had interrupted it, and a page with nothing on it.
+        Searching would then have quietly looked at six per cent of the library
+        and reported "best first" over it.
+      */}
+      {ready &&
+        status &&
+        !status.running &&
+        status.indexed > 0 &&
+        status.pending > 0 &&
+        query.length === 0 && (
+          <p className="photosearch__note">
+            {status.indexed.toLocaleString()} of{" "}
+            {(status.indexed + status.pending).toLocaleString()} photographs are
+            indexed, so a search only looks at those.{" "}
+            {isAdmin ? (
+              <>
+                Press <strong>Index photographs</strong> to finish — it picks up
+                where it left off.
+              </>
+            ) : (
+              "An administrator can finish indexing it."
+            )}
+          </p>
+        )}
+
+      {/* And a fully indexed library says how much it is about to search, so
+          the page is never silent about what a query would mean. */}
+      {ready &&
+        status &&
+        !status.running &&
+        status.indexed > 0 &&
+        status.pending === 0 &&
+        query.length === 0 && (
+          <p className="photosearch__note">
+            {status.indexed.toLocaleString()} photographs are indexed. Describe
+            what is in the one you are looking for.
+          </p>
+        )}
+
       {isLoading && query.length > 0 && (
         <p className="photosearch__note">Looking…</p>
       )}

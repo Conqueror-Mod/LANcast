@@ -288,6 +288,32 @@ describe("searching photographs by description", () => {
     expect(gets.some((u) => u.includes("/photos/search"))).toBe(false);
   });
 
+  /*
+   * A part-indexed library says so before a query is typed.
+   *
+   * The second half of the same lesson. The first fix covered a library with
+   * nothing indexed and left this one blank — 317 of 5,090, no pass running
+   * because a restart had interrupted it — and a search would then have quietly
+   * looked at six per cent of the library and called it "best first".
+   */
+  it("says how much of a part-indexed library a search would cover", async () => {
+    mount({ ready: true, indexed: 317, pending: 4773 });
+    await render();
+
+    expect(text()).toContain("317");
+    expect(text()).toContain("5,090");
+    expect(text()).toContain("only looks at those");
+  });
+
+  // And a fully indexed one says how much it is about to search, so the page
+  // is never silent about what a query would mean.
+  it("says how many are indexed when the library is finished", async () => {
+    mount({ ready: true, indexed: 5090, pending: 0 });
+    await render();
+
+    expect(text()).toContain("5,090 photographs are indexed");
+  });
+
   // A pass in progress is said on the page, not only in the activity bar: a
   // count that climbs is the difference between working and stuck.
   it("shows a running pass and how far it has got", async () => {
