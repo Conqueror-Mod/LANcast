@@ -96,15 +96,12 @@ func findFile(dir, fragment, ext string) (string, error) {
 
 func loadClip(modelsDir string) (*clipEngine, error) {
 	clipOnce.Do(func() {
-		// Named, never discovered — the same rule and the same reason as the
-		// face engine's. See native_cgo.go: an empty path binds to whichever
-		// runtime the loader reaches first, which on Windows is Microsoft's own
-		// and is a different answer on every machine.
-		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
-			ort.SetSharedLibraryPath(lib)
-		}
-		if err := ort.InitializeEnvironment(); err != nil {
-			clipErr = fmt.Errorf("start onnxruntime: %w", err)
+		// Shared with the face engine, because the environment is global to the
+		// process even though the models are not. See startRuntime: calling
+		// InitializeEnvironment twice makes whichever engine loads second
+		// report the other one's success as its own failure.
+		if err := startRuntime(modelsDir); err != nil {
+			clipErr = err
 			return
 		}
 

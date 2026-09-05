@@ -125,6 +125,46 @@ func contains(s, sub string) bool {
 	return false
 }
 
+/*
+ * Starting the runtime is shared between the two engines, and must be.
+ *
+ * The face models and the CLIP models load separately and on purpose — two
+ * optional downloads, and a server may have either, both or neither. The
+ * *environment* underneath them is not separable: `InitializeEnvironment` is
+ * global to the process, and the second caller gets
+ *
+ *     start onnxruntime: The onnxruntime has already been initialized
+ *
+ * which is not an error about anything the second caller did.
+ *
+ * That is not theoretical. With both features installed, `capabilities`
+ * reported `semantic_ready: true` and `ready: false` — face grouping declared
+ * broken, with a reason naming a runtime that had in fact started perfectly, on
+ * a machine where it had been working for weeks. Whichever engine happened to
+ * load second was the one that appeared to be at fault, so the symptom would
+ * even have moved about between runs.
+ *
+ * So: one Once for the environment, and each engine keeps its own for its
+ * models. Split by what the thing actually is, rather than by which feature
+ * asked for it.
+ */
+var (
+	runtimeOnce sync.Once
+	runtimeErr  error
+)
+
+func startRuntime(modelsDir string) error {
+	runtimeOnce.Do(func() {
+		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
+			ort.SetSharedLibraryPath(lib)
+		}
+		if err := ort.InitializeEnvironment(); err != nil {
+			runtimeErr = fmt.Errorf("start onnxruntime: %w", err)
+		}
+	})
+	return runtimeErr
+}
+
 func load(modelsDir string) (*engine, error) {
 	engineOnce.Do(func() {
 		/*
@@ -153,11 +193,8 @@ func load(modelsDir string) (*engine, error) {
 		 * search order reaches first, which is a different machine's answer on
 		 * every machine.
 		 */
-		if lib := runtimePath(os.Getenv("LANCAST_ONNXRUNTIME"), modelsDir); lib != "" {
-			ort.SetSharedLibraryPath(lib)
-		}
-		if err := ort.InitializeEnvironment(); err != nil {
-			loadErr = fmt.Errorf("start onnxruntime: %w", err)
+		if err := startRuntime(modelsDir); err != nil {
+			loadErr = err
 			return
 		}
 		det, err := findModel(modelsDir, "yunet")
