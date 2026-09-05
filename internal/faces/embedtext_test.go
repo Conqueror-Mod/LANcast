@@ -76,8 +76,12 @@ func runFakeWorker(mode string) int {
 			// operator with a task manager, leaves behind.
 			fmt.Printf("{\"vector\":[1,0],\"path\":%q}\n", q)
 			return 0
+		case mode == "stale":
+			// A worker older than stdin mode: it answers without naming the
+			// query, because it never saw one.
+			fmt.Println(`{"vector":[1,0]}`)
 		case strings.HasPrefix(q, "bad"):
-			fmt.Println(`{"error":"cannot embed that"}`)
+			fmt.Printf("{\"error\":\"cannot embed that\",\"path\":%q}\n", q)
 		default:
 			fmt.Printf("{\"vector\":[1,0],\"path\":%q}\n", q)
 		}
@@ -243,6 +247,33 @@ func TestAPastedNewlineCannotSplitTheQuery(t *testing.T) {
 	}
 	if _, err := tool.EmbedText(context.Background(), "a cat"); err != nil {
 		t.Errorf("the following search failed: %v", err)
+	}
+}
+
+/*
+ * A worker that does not name the query it answered is refused.
+ *
+ * This is the failure that shipped, and it shipped silently. A worker one
+ * version behind the server was left in place beside it: it did not understand
+ * stdin mode, read `-q ""`, embedded the *empty string*, printed one vector and
+ * exited — and every search was ranked against that. Ordered, plausible, and
+ * about nothing anybody had typed. Nothing raised a warning; the only clue was
+ * that the results looked odd, which is not a signal anyone can act on.
+ *
+ * An error here is the whole improvement. A search that says "the worker is
+ * older than this server" sends somebody to the right place in seconds.
+ */
+func TestAWorkerThatCannotNameTheQueryIsRefused(t *testing.T) {
+	tool, _ := fakeWorker(t, "stale")
+
+	_, err := tool.EmbedText(context.Background(), "a birthday cake")
+	if err == nil {
+		t.Fatal("an unattributed answer was accepted; every search would be " +
+			"ranked against a query nobody typed")
+	}
+	if !strings.Contains(err.Error(), "older") {
+		t.Errorf("error was %q; it should point at the worker's version, "+
+			"because that is the fix", err)
 	}
 }
 

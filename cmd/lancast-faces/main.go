@@ -386,11 +386,25 @@ func embedText(args []string) {
 		 * question, and each of those is a plausible-looking result list for
 		 * something somebody did not ask.
 		 */
+		/*
+		 * The query is echoed back in `path`, and the server checks it.
+		 *
+		 * Written after a worker one version behind this one was left in place
+		 * beside a newer server. It did not understand stdin mode, so it read
+		 * `-q ""`, embedded the *empty string*, printed one vector and exited —
+		 * and the server accepted that as the answer to every search. The
+		 * results were ranked, ordered, plausible, and about nothing anybody
+		 * had typed. No error was raised anywhere.
+		 *
+		 * Echoing turns that into a mismatch the caller can see, and it hardens
+		 * the ordering besides: an answer that names its own question cannot be
+		 * silently attributed to a different one.
+		 */
 		v, err := embedQuery(q, *models)
 		if err != nil {
-			_ = enc.Encode(Embedding{Error: err.Error()})
+			_ = enc.Encode(Embedding{Path: q, Error: err.Error()})
 			continue
 		}
-		_ = enc.Encode(Embedding{Vector: v})
+		_ = enc.Encode(Embedding{Path: q, Vector: v})
 	}
 }

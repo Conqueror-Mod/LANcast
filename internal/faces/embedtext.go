@@ -161,6 +161,25 @@ func (te *textEmbedder) ask(ctx context.Context, query string) ([]float32, error
 		 */
 		return nil, fmt.Errorf("embed query: unreadable answer: %w", err)
 	}
+	/*
+	 * The answer must name the question it answered.
+	 *
+	 * This is not belt and braces; it is the guard for a failure that shipped.
+	 * A worker one version behind the server was left in place beside it, did
+	 * not understand stdin mode, read `-q ""`, embedded the *empty string*,
+	 * printed one vector and exited — and every search was then ranked against
+	 * that. The results were ordered, plausible, and about nothing anybody had
+	 * typed, and nothing raised so much as a warning.
+	 *
+	 * Treated as a pipe failure rather than a query failure, so the caller
+	 * restarts once and then reports honestly. A worker that cannot name what
+	 * it answered is not one to keep asking.
+	 */
+	if line.Path != query {
+		return nil, fmt.Errorf(
+			"embed query: the worker answered for %q, not %q — it is probably "+
+				"older than this server", line.Path, query)
+	}
 	if line.Error != "" {
 		// The worker answered, and said it could not do this one. The pipe is
 		// still in step, so this is the query's failure and not the process's.
