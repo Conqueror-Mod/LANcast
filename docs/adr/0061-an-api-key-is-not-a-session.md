@@ -1,7 +1,10 @@
 # ADR 0061 — An API key is not a session
 
-**Status:** proposed
-**Date:** 2026-09-06
+Date: 2026-09-06 · Status: **accepted** 2026-09-06
+
+The admin restriction was the part put up to be argued with, and it was
+accepted as drawn.
+
 **Extends:** ADR 0014 (TLS and the loopback rule), ADR 0015 (accounts),
 ADR 0018 (API versioning). Does not supersede anything.
 
