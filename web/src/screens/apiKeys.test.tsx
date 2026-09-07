@@ -19,6 +19,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { Settings } from "./Settings";
+import { apiKeysPollMs } from "@/api/hooks";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -78,12 +79,14 @@ function mount(initial: Key[]) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -174,6 +177,43 @@ describe("the API keys panel", () => {
     expect(posted.some((p) => p.body.includes("deploy bot"))).toBe(true);
     expect(text()).toContain("SECRET-VALUE-ONLY-ONCE");
     expect(text()).toContain("not shown again");
+  });
+
+  /*
+   * A key used elsewhere stops saying "Never used" without anybody touching the
+   * screen.
+   *
+   * This is the bug the live verification found. `last_used` is changed by a
+   * script on another machine, so no mutation in this client can invalidate it,
+   * and the create/revoke invalidations do not cover it — the panel went on
+   * saying "Never used" with the database holding a timestamp a minute old.
+   * Wrong in the direction that matters: it is the column somebody reads when
+   * deciding which key is safe to revoke.
+   */
+  it("notices a key that was used while the panel was open", async () => {
+    mount([
+      { id: "k1", name: "backup script", created_at: 1788500000, last_used: 0 },
+    ]);
+    await render();
+    expect(text()).toContain("Never used");
+
+    // Something else presents the key. Nothing happens in this client at all.
+    keys = [
+      {
+        id: "k1",
+        name: "backup script",
+        created_at: 1788500000,
+        last_used: 1788795309,
+      },
+    ];
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(apiKeysPollMs + 1000);
+    });
+    await settle();
+
+    expect(text()).not.toContain("Never used");
+    expect(text()).toContain("Last used");
   });
 
   // Revoking asks the server to revoke, rather than only hiding the row.
