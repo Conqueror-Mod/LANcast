@@ -1,6 +1,9 @@
 # ADR 0062 — A tag is a note to yourself
 
-Date: 2026-09-07 · Status: **proposed**
+Date: 2026-09-07 · Status: **accepted** 2026-09-07
+
+The sharing decision was put up to be argued with and was argued down; what is
+accepted here is the corrected version, with tags private per account.
 
 Extends ADR 0002 (one wide `media_item`), ADR 0006 (per-user state), ADR 0008
 (field-level locking) and the design system's gold rule. Supersedes nothing.
