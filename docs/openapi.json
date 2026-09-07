@@ -19,6 +19,9 @@
   "security": [
     {
       "sessionCookie": []
+    },
+    {
+      "apiKey": []
     }
   ],
   "tags": [
@@ -97,6 +100,10 @@
     {
       "name": "semantic",
       "description": "Typed queries over a picture library (ADR 0060). A separate optional download from face grouping, sharing only a worker binary and a runtime library."
+    },
+    {
+      "name": "keys",
+      "description": "API keys (ADR 0061) — how something that is not a browser authenticates. A key is presented as `Authorization: Bearer <key>`, never in a query parameter, and may neither perform administration nor manage keys."
     }
   ],
   "paths": {
@@ -6512,6 +6519,170 @@
           }
         }
       }
+    },
+    "/keys": {
+      "get": {
+        "operationId": "listAPIKeys",
+        "tags": [
+          "keys"
+        ],
+        "summary": "The caller's own API keys",
+        "description": "Never anybody else's, and never the secrets. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.",
+        "responses": {
+          "200": {
+            "description": "The caller's keys, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`forbidden` — the caller authenticated with an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAPIKey",
+        "tags": [
+          "keys"
+        ],
+        "summary": "Mint an API key",
+        "description": "Returns the secret **once**. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Required rather than defaulted, so the key can be told apart later. Trimmed to 64 characters."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The key, and its secret for the only time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — no name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`forbidden` — the caller authenticated with an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/keys/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The key's id, from the list."
+        }
+      ],
+      "delete": {
+        "operationId": "revokeAPIKey",
+        "tags": [
+          "keys"
+        ],
+        "summary": "Revoke an API key",
+        "description": "The key stops authenticating immediately; there is no cache to wait out. `404` for a key that is not the caller's — ownership is part of the query rather than a check in the handler, so the database refuses it however the handler is later rewritten.\n\nRequires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.",
+        "responses": {
+          "200": {
+            "description": "Revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "revoked"
+                  ],
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — no id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`forbidden` — the caller authenticated with an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6521,6 +6692,11 @@
         "in": "cookie",
         "name": "lancast_session",
         "description": "A server-side session (ADR 0011). Set by `/auth/setup` and `/auth/login`.\n\nState-changing methods are additionally origin-checked: `POST`, `PUT`, `PATCH` and `DELETE` must carry an `Origin` or `Referer` matching the request host or the call is refused `403`. A request carrying **neither** header is allowed, so non-browser clients work normally. CSRF is defended twice — this and `SameSite=Strict` — and both are load-bearing."
+      },
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key (ADR 0061). Presented as `Authorization: Bearer <key>`, never in a query parameter — a credential in a URL is a credential in the server log, the browser history and the next request's Referer.\n\nA key authenticates as the account that made it, and may **never** perform administration or manage keys, whoever owns it. Cross-origin requests authenticated this way are allowed: the CSRF check exists because a browser attaches cookies by itself, and nothing attaches this header by itself."
       }
     },
     "parameters": {
@@ -11285,6 +11461,65 @@
           "model": {
             "type": "string",
             "description": "The coordinate system the counts are for. Empty when no model is installed, in which case both counts are zero and mean \"cannot say\" rather than \"none\"."
+          }
+        }
+      },
+      "APIKey": {
+        "type": "object",
+        "description": "One key, without its secret. This is everything needed to decide whether to revoke it.",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "last_used"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Required at creation and trimmed to 64 characters. A list of keys all called the same thing is one nobody can revoke confidently, which is the only thing the list is for."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_used": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds, or **0 for a key that has never been presented**. Zero means \"never used\" rather than 1970, and a client should say so in words — a key that has never been used is the safe one to revoke."
+          }
+        }
+      },
+      "APIKeyList": {
+        "type": "object",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/APIKey"
+            }
+          }
+        }
+      },
+      "APIKeyCreated": {
+        "type": "object",
+        "description": "The one and only time a key's secret exists outside the caller's own storage.",
+        "required": [
+          "key",
+          "secret"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/APIKey"
+          },
+          "secret": {
+            "type": "string",
+            "description": "**Returned exactly once and never retrievable afterwards.** The server stores only its hash, the same treatment sessions get, so a stolen database yields nothing that can be presented to a server. A client must say plainly that this will not be shown again."
           }
         }
       }
