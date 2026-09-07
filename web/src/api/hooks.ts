@@ -1753,11 +1753,33 @@ export type APIKey = {
   last_used: number;
 };
 
+/*
+ * Polled while the panel is open, which is not the usual reason to poll.
+ *
+ * `last_used` is changed by something that is not this client — the key being
+ * presented by a script on another machine — so no mutation here can invalidate
+ * it, and the create/revoke invalidations do not cover it. Fetched once and
+ * left, the list says what was true when the screen opened.
+ *
+ * Found by using it: a key was created, used from a terminal, and the panel
+ * went on saying **"Never used"** while the database held a timestamp a minute
+ * old. That is wrong in the direction that matters — `last_used` is the column
+ * somebody reads when deciding which key is safe to revoke after a suspected
+ * leak, and "never used" about a key used sixty seconds ago is the answer that
+ * gets the wrong one revoked.
+ *
+ * Thirty seconds, because the value only matters at human timescales; the
+ * interval pauses when the window is not focused, so a settings screen left
+ * open behind something else costs nothing.
+ */
+export const apiKeysPollMs = 30_000;
+
 export function useAPIKeys(enabled = true) {
   return useQuery({
     queryKey: ["api-keys"],
     queryFn: ({ signal }) => apiGet<{ keys: APIKey[] }>("/api/keys", signal),
     enabled,
+    refetchInterval: apiKeysPollMs,
   });
 }
 
