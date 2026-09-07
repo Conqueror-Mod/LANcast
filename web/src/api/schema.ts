@@ -5115,6 +5115,15 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description `too_many_requests` — attempts are throttled, sharing one counter with `/auth/login`. This route verifies `current_password` with bcrypt before doing anything else, so an unbounded version is a password oracle for anybody holding a stolen session — the password outlives every session being revoked — and about a hundred milliseconds of deliberate work per request. One counter, so a spent login budget is not refreshed by asking here instead; a correct current password clears it, exactly as a successful login does. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getIdentity: {

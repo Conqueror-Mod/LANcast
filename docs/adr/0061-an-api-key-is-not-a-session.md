@@ -140,9 +140,34 @@ any existing response. Both halves of the contract in the same commit.
 `127.0.0.1` and nothing else; a key is not a way to widen that, and creating one
 requires being signed in first.
 
-**Rate limiting is not in this.** It is a real gap for a credential meant to be
-used unattended, and bolting a limiter onto one route while the rest of the API
-has none would be security theatre. Noted as its own decision.
+**Rate limiting is not in this, and the first version of this paragraph was
+wrong about why.**
+
+It said a key was "a real gap" because an unattended credential could be
+guessed as fast as the server answers. That is false. `auth.NewToken` is 32
+random bytes — 256 bits — so brute force is not a threat model, it is
+arithmetic that does not finish. The guessable credential in this system is the
+**password**, and `auth.Throttle` has limited attempts against it since long
+before this decision: ten per five minutes per remote address, decaying, with
+no lockout, because a lockout is a denial of service an attacker can aim at the
+owner.
+
+Corrected on 2026-09-07 after reading `internal/auth` rather than recalling it.
+The sentence had already reached a shipped release note as a known gap, which
+is the cost of writing down a weakness without checking whether it is one:
+somebody would have gone looking for a problem that does not exist, and found
+working code that seemed to be missing.
+
+What the review did turn up is a real omission, and it is not about keys.
+`POST /api/auth/password` runs bcrypt at cost 12 on `current_password` and is
+not throttled at all — a password oracle for anybody holding a stolen session,
+and about a hundred milliseconds of deliberate work per request with nothing
+bounding it. Fixed by applying the throttle that already existed.
+
+A **general** limiter across the API is declined. Every caller past
+authentication can already start a scan or a transcode, and a limiter that
+breaks a legitimate sync job in order to constrain somebody who already holds
+credentials is a bad trade.
 
 **What would make this wrong:** if the admin restriction turns out to block the
 first real thing somebody wants a key for. That would mean the boundary is drawn
