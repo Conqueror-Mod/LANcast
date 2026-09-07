@@ -794,6 +794,18 @@ type ItemFilter struct {
 	 */
 	FaceClusterIDs []int64
 
+	/*
+	 * TagIDs and Favourite are read against UserID, and cannot be otherwise
+	 * (ADR 0062).
+	 *
+	 * Ids rather than names: a name is only unique within one account, so
+	 * filtering by the word would need the account anyway and would quietly
+	 * match a different person's tag if the scoping were ever dropped. An id
+	 * belongs to exactly one account by construction.
+	 */
+	TagIDs    []int64
+	Favourite bool
+
 	// CollectionIDs restricts to members of a collection. A collection is
 	// itself a media_item, so this is the membership table rather than
 	// parent_id: a film belongs to a franchise without being inside it, which
@@ -1069,6 +1081,30 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		for _, g := range f.Genres {
 			args = append(args, g)
 		}
+	}
+	if len(f.TagIDs) > 0 {
+		/*
+		 * The user_id is in the subquery, not assumed from the id.
+		 *
+		 * A tag id is already private to one account, so this is belt and
+		 * braces — and it is the belt that matters: it means a caller passing
+		 * somebody else's id, however it reached them, selects nothing rather
+		 * than something.
+		 */
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_tag it JOIN tag t ON t.id = it.tag_id
+			WHERE it.item_id = media_item.id AND t.user_id = ?
+			  AND t.id IN (` + placeholders(len(f.TagIDs)) + `))`
+		args = append(args, f.UserID)
+		for _, id := range f.TagIDs {
+			args = append(args, id)
+		}
+	}
+	if f.Favourite {
+		where += ` AND EXISTS (
+			SELECT 1 FROM user_favourite uf
+			WHERE uf.item_id = media_item.id AND uf.user_id = ?)`
+		args = append(args, f.UserID)
 	}
 	if len(f.Decades) > 0 {
 		parts := make([]string, len(f.Decades))

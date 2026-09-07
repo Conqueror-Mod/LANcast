@@ -3715,6 +3715,80 @@ input this route accepts that should make the worker fail — the tokenizer
 truncates rather than refusing — so a failure means the install is wrong, and
 calling it a bad request would send somebody rewording a query that was fine.
 
+## Tags and favourites
+
+Your own words on an item, and a way to mark one (ADR 0062). Genres come from a
+provider and a refresh overwrites them; there is no TMDB genre for *needs a
+better copy*.
+
+**Both are private to your account.** You see your tags; nobody else on the
+server sees them, nobody can remove them, and nobody can see that they exist.
+The vocabulary is per-account too, not a shared list of names with per-account
+membership — two people using the word *christmas* have two tags, which is
+duplication a normaliser would object to and a privacy boundary would not.
+
+That is why removing a tag that is not yours answers `404` rather than `403`.
+Distinguishing them would answer "does this id belong to another account" for
+anybody who asked, which is exactly the disclosure the design avoids.
+
+Tagging is **not administration** — it changes what is written about an item,
+not what the server can reach — so it is not admin-gated, and an API key may do
+it. A key acts as its owner, writing that owner's tags and seeing no others.
+
+Tags are **not written to NFO sidecars**. A rescan therefore cannot disturb them,
+by construction rather than by a lock, and a private note does not end up in a
+file next to your media where anybody with the drive can read it. They are in
+backups (ADR 0058).
+
+### `GET /api/tags`
+
+Your tags, with how many items carry each — what a filter row is built from.
+
+```json
+{ "tags": [ { "id": 4, "name": "Christmas", "count": 12 } ] }
+```
+
+### `GET /api/items/{id}/tags`
+
+Your tags on one item, and whether you have favourited it.
+
+```json
+{ "tags": [ { "id": 4, "name": "Christmas", "count": 0 } ], "favourite": true }
+```
+
+`count` is zero here; it is only filled by the list above.
+
+### `POST /api/items/{id}/tags`
+
+`{ "name": "christmas" }`. Creates the tag if this is the first time your
+account has used the word, and returns it.
+
+Names are trimmed and internal whitespace collapsed, and matched
+case-insensitively: `Christmas`, `christmas` and `Christmas ` are one tag. **The
+first spelling you used is the one kept** — typing it differently later is not a
+request to rename. A name that folds to nothing is `400`.
+
+### `DELETE /api/items/{id}/tags/{tag}`
+
+Takes the tag off the item. **When nothing carries it any more, the tag itself
+is removed**, so the filter row does not fill with every typo anybody ever made.
+
+`404` for a tag that is not on this item, or is not yours.
+
+### `PUT /api/items/{id}/favourite`
+
+`{ "favourite": true }`. Yours alone, keyed like a rating.
+
+### Filtering
+
+`GET /api/items` accepts repeated **`tag=<id>`** and **`favourite=1`**, alongside
+the existing facets. Ids rather than names, because a name is unique only within
+one account.
+
+An id belonging to another account matches nothing rather than erroring — the
+account is part of the query, so there is no id anybody can pass to reach
+somebody else's selection.
+
 ## API keys
 
 How something that is not a browser signs in: a script, a CLI, a third-party

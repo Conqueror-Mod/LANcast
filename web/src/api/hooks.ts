@@ -1808,6 +1808,88 @@ export function useRevokeAPIKey() {
   });
 }
 
+/*
+ * Tags and favourites (ADR 0062).
+ *
+ * Both are private to the signed-in account. There is no account parameter
+ * anywhere in here and there must not be one: the server reads the caller's own
+ * and nothing else, so a client that could ask about somebody else would be
+ * asking a question the API does not answer.
+ */
+export type Tag = { id: number; name: string; count: number };
+
+/** Every tag this account has, with counts — what a filter row is built from. */
+export function useTags(enabled = true) {
+  return useQuery({
+    queryKey: ["tags"],
+    queryFn: ({ signal }) => apiGet<{ tags: Tag[] }>("/api/tags", signal),
+    enabled,
+  });
+}
+
+/** This account's tags on one item, and whether they have favourited it. */
+export function useItemTags(itemID: number) {
+  return useQuery({
+    queryKey: ["item-tags", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<{ tags: Tag[]; favourite: boolean }>(
+        `/api/items/${itemID}/tags`,
+        signal,
+      ),
+    enabled: itemID > 0,
+  });
+}
+
+/*
+ * Adding or removing a tag changes three things a person could be looking at:
+ * this item's tags, the tag list a filter row is built from, and any grid
+ * currently filtered by a tag.
+ *
+ * The third is the one this project has shipped wrong four times — a write that
+ * changes what a list holds must invalidate that list. `items` is invalidated by
+ * prefix, which reaches the infinite browse query because its key starts with
+ * it.
+ */
+function invalidateTagViews(
+  qc: ReturnType<typeof useQueryClient>,
+  itemID: number,
+) {
+  qc.invalidateQueries({ queryKey: ["item-tags", itemID] });
+  qc.invalidateQueries({ queryKey: ["tags"] });
+  qc.invalidateQueries({ queryKey: ["items"] });
+}
+
+export function useAddTag(itemID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiPost<{ tag: Tag }>(`/api/items/${itemID}/tags`, { name }),
+    onSuccess: () => invalidateTagViews(qc, itemID),
+  });
+}
+
+export function useRemoveTag(itemID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tagID: number) =>
+      apiSend(`/api/items/${itemID}/tags/${tagID}`, "DELETE"),
+    onSuccess: () => invalidateTagViews(qc, itemID),
+  });
+}
+
+export function useSetFavourite(itemID: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (favourite: boolean) =>
+      apiPost<{ favourite: boolean }>(
+        `/api/items/${itemID}/favourite`,
+        { favourite },
+        "PUT",
+      ),
+    onSuccess: () => invalidateTagViews(qc, itemID),
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);

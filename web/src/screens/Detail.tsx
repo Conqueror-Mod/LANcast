@@ -47,6 +47,7 @@ import { EpisodeList } from "@/components/EpisodeList";
 import { TrailerModal } from "@/components/TrailerModal";
 import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
+import { TagItem } from "@/components/TagItem";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -851,6 +852,9 @@ export function Detail() {
                 summary you have already read. Containers and photos are not
                 things anybody rates. */}
             {!container && !isPicture(item) && <RateItem itemID={item.id} />}
+            {/* Tags and the heart sit with the rating: all three are this
+                account's own opinion of the item rather than facts about it. */}
+            {!container && <TagItem itemID={item.id} />}
 
             {item.overview && (
               <p className="detail__overview">{item.overview}</p>

@@ -296,6 +296,17 @@ func (s *Server) Handler() http.Handler {
 	 * API keys (ADR 0061). Session-only, deliberately: a key that can mint keys
 	 * cannot be revoked by revoking it.
 	 */
+	/*
+	 * Tags and favourites (ADR 0062). Not adminOnly: tagging changes what is
+	 * written about an item, not what the server can reach. Every one of these
+	 * is scoped to the caller's own account inside the store.
+	 */
+	mux.HandleFunc("GET /api/tags", s.listTags)
+	mux.HandleFunc("GET /api/items/{id}/tags", s.itemTags)
+	mux.HandleFunc("POST /api/items/{id}/tags", s.addItemTag)
+	mux.HandleFunc("DELETE /api/items/{id}/tags/{tag}", s.removeItemTag)
+	mux.HandleFunc("PUT /api/items/{id}/favourite", s.putFavourite)
+
 	mux.HandleFunc("GET /api/keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/keys", s.createAPIKey)
 	mux.HandleFunc("DELETE /api/keys/{id}", s.deleteAPIKey)
