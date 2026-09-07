@@ -15,7 +15,14 @@ import (
 // ctxKey namespaces values this package stores on a request context.
 type ctxKey int
 
-const sessionCtxKey ctxKey = iota
+const (
+	sessionCtxKey ctxKey = iota
+	// apiKeyCtxKey marks a caller that authenticated with an API key rather
+	// than a cookie. It is what adminOnly reads to refuse one (ADR 0061), so
+	// the distinction survives all the way to authorization instead of being
+	// flattened into "authenticated" at the door.
+	apiKeyCtxKey
+)
 
 // isPublicPath reports paths reachable without a session. Deliberately short:
 // the web assets are public because the login form lives in them, and health is
@@ -59,19 +66,57 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// CSRF: a state-changing request must come from this origin. Paired with
-		// SameSite=Strict on the cookie — either alone leaves a gap, and this one
-		// also covers non-cookie contexts.
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			if !auth.SameOriginRequest(r) {
-				writeError(w, http.StatusForbidden, "forbidden", "cross-origin request refused")
-				return
+		/*
+		 * A key-authenticated caller is resolved before the CSRF check, because
+		 * the check does not apply to it and cannot be made to (ADR 0061).
+		 *
+		 * CSRF exists because **a browser attaches cookies by itself**: the
+		 * attack is a third-party page causing the victim's browser to send a
+		 * request carrying the victim's ambient credential. Nothing attaches an
+		 * Authorization header by itself — a cross-origin page cannot make the
+		 * browser add one — so a request authenticated this way cannot be
+		 * forged in the way the check defends against, while a legitimate
+		 * browser-based client using a key would be refused on every write.
+		 *
+		 * The shape that would be wrong is skipping whenever an Authorization
+		 * header is *present*: any page could then switch the check off by
+		 * adding a meaningless header while the cookie still did the
+		 * authenticating. This skips only when the key actually resolved, so
+		 * the cookie path keeps both of its defences exactly as they were.
+		 */
+		keySess, keyID, keyed := s.apiKey(r)
+
+		if !keyed {
+			// CSRF: a state-changing request must come from this origin. Paired
+			// with SameSite=Strict on the cookie — either alone leaves a gap,
+			// and this one also covers non-cookie contexts.
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				if !auth.SameOriginRequest(r) {
+					writeError(w, http.StatusForbidden, "forbidden", "cross-origin request refused")
+					return
+				}
 			}
 		}
 
 		if isPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		if keyed {
+			/*
+			 * No presence.Seen for a key.
+			 *
+			 * "Online" is meant to be a fact about a person being here, and a
+			 * script polling every minute is not that. Letting a key say
+			 * otherwise would make the signal permanently wrong for anybody who
+			 * has an integration running.
+			 */
+			s.st.TouchAPIKey(r.Context(), keyID)
+			ctx := context.WithValue(r.Context(), sessionCtxKey, keySess)
+			ctx = context.WithValue(ctx, apiKeyCtxKey, true)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -86,6 +131,41 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		s.presence.Seen(sess.UserID)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
 	})
+}
+
+/*
+ * apiKey resolves an `Authorization: Bearer` credential (ADR 0061).
+ *
+ * A header rather than a query parameter, because a credential in a URL is a
+ * credential in the server log, the browser history, the Referer of the next
+ * request, and any proxy in between.
+ *
+ * A malformed or unknown key returns false rather than an error, and the caller
+ * then falls through to the cookie path — so presenting rubbish is exactly as
+ * unauthorized as presenting nothing, and never a different message that would
+ * tell somebody which of their guesses was closer.
+ */
+func (s *Server) apiKey(r *http.Request) (*store.Session, string, bool) {
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+		return nil, "", false
+	}
+	token := strings.TrimSpace(h[len(prefix):])
+	if token == "" {
+		return nil, "", false
+	}
+	sess, id, err := s.st.LookupAPIKey(r.Context(), auth.HashToken(token))
+	if err != nil {
+		return nil, "", false
+	}
+	return sess, id, true
+}
+
+// authedByKey reports whether the caller authenticated with an API key.
+func authedByKey(r *http.Request) bool {
+	keyed, _ := r.Context().Value(apiKeyCtxKey).(bool)
+	return keyed
 }
 
 // session resolves the caller's session, refreshing its expiry as it goes.
@@ -138,8 +218,26 @@ func (s *Server) adminOnly(h http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 			return
 		}
+		/*
+		 * An API key never reaches here, whoever owns it (ADR 0061).
+		 *
+		 * Adding a library is arbitrary filesystem read access at a path the
+		 * request chooses — the same sentence that justifies the loopback rule.
+		 * A session is bounded by somebody sitting in front of the app: it
+		 * expires, and it dies when the password changes. A key is long-lived,
+		 * kept in a config file on another machine, used unattended, and
+		 * committed by accident. Those are different risk classes.
+		 *
+		 * Checked after the role rather than before it, so the message a
+		 * non-admin gets does not depend on how they authenticated.
+		 */
 		if sess.Role != store.RoleAdmin {
 			writeError(w, http.StatusForbidden, "forbidden", "requires an administrator account")
+			return
+		}
+		if authedByKey(r) {
+			writeError(w, http.StatusForbidden, "forbidden",
+				"an API key cannot perform administration; sign in instead")
 			return
 		}
 		h(w, r)

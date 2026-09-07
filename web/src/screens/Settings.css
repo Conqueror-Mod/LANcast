@@ -140,7 +140,9 @@
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
-  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+  transition:
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
     box-shadow var(--dur-fast) ease;
 }
 
@@ -476,7 +478,9 @@
   border-radius: 0;
   padding: 7px 10px;
   cursor: pointer;
-  transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease,
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease;
 }
 
@@ -614,4 +618,42 @@
 
 .set-row__sub--warn {
   color: var(--danger, #ff6b6b);
+}
+
+/*
+ * The one time a key's secret is on screen.
+ *
+ * Deliberately the loudest thing in the pane: it is a credential that cannot be
+ * shown again, and somebody who scrolls past it has to make another key. Gold
+ * is not used — gold means *where you are* and nothing else — so the emphasis
+ * comes from the border and the panel behind it.
+ */
+.set-keyreveal {
+  border: 1px solid var(--danger, #ff6b6b);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 12px 0 18px;
+  background: rgba(255, 107, 107, 0.06);
+  max-width: 62ch;
+}
+
+.set-keyreveal__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+/* Selectable and wrapping: a key is long, and the whole point is copying it. */
+.set-keyreveal__value {
+  display: block;
+  user-select: all;
+  word-break: break-all;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
 }

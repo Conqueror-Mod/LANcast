@@ -2936,6 +2936,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own API keys
+         * @description Never anybody else's, and never the secrets. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
+         */
+        get: operations["listAPIKeys"];
+        put?: never;
+        /**
+         * Mint an API key
+         * @description Returns the secret **once**. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
+         */
+        post: operations["createAPIKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key's id, from the list. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an API key
+         * @description The key stops authenticating immediately; there is no cache to wait out. `404` for a key that is not the caller's — ownership is part of the query rather than a check in the handler, so the database refuses it however the handler is later rewritten.
+         *
+         *     Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
+         */
+        delete: operations["revokeAPIKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4737,6 +4786,28 @@ export interface components {
             running: boolean;
             /** @description The coordinate system the counts are for. Empty when no model is installed, in which case both counts are zero and mean "cannot say" rather than "none". */
             model?: string;
+        };
+        /** @description One key, without its secret. This is everything needed to decide whether to revoke it. */
+        APIKey: {
+            id: string;
+            /** @description Required at creation and trimmed to 64 characters. A list of keys all called the same thing is one nobody can revoke confidently, which is the only thing the list is for. */
+            name: string;
+            /** Format: int64 */
+            created_at: number;
+            /**
+             * Format: int64
+             * @description Unix seconds, or **0 for a key that has never been presented**. Zero means "never used" rather than 1970, and a client should say so in words — a key that has never been used is the safe one to revoke.
+             */
+            last_used: number;
+        };
+        APIKeyList: {
+            keys: components["schemas"]["APIKey"][];
+        };
+        /** @description The one and only time a key's secret exists outside the caller's own storage. */
+        APIKeyCreated: {
+            key: components["schemas"]["APIKey"];
+            /** @description **Returned exactly once and never retrievable afterwards.** The server stores only its hash, the same treatment sessions get, so a stolen database yields nothing that can be presented to a server. A client must say plainly that this will not be shown again. */
+            secret: string;
         };
     };
     responses: {
@@ -9703,6 +9774,127 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    listAPIKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's keys, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `forbidden` — the caller authenticated with an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    createAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Required rather than defaulted, so the key can be told apart later. Trimmed to 64 characters. */
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The key, and its secret for the only time. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyCreated"];
+                };
+            };
+            /** @description `bad_request` — no name. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `forbidden` — the caller authenticated with an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    revokeAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The key's id, from the list. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        revoked: boolean;
+                    };
+                };
+            };
+            /** @description `bad_request` — no id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `forbidden` — the caller authenticated with an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }

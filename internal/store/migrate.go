@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 41
+const CurrentSchemaVersion = 42
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -80,6 +80,7 @@ var migrations = []migration{
 	{version: 39, sql: schemaRevision39},
 	{version: 40, sql: schemaRevision40},
 	{version: 41, sql: schemaRevision41},
+	{version: 42, sql: schemaRevision42},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1451,4 +1452,26 @@ CREATE TABLE IF NOT EXISTS photo_embedding (
 -- The pass asks "which photographs has this model not seen", and the search
 -- asks for every row of one model. Both are answered by the model.
 CREATE INDEX IF NOT EXISTS idx_photo_embedding_model ON photo_embedding(model);
+`
+
+const schemaRevision42 = `
+-- API keys (ADR 0061). A key authenticates a third-party client as its owner,
+-- and is deliberately not a session: it does not expire, it is not swept away
+-- when the password changes, and it may never reach an admin-gated route.
+CREATE TABLE IF NOT EXISTS api_key (
+    id          TEXT    PRIMARY KEY,
+    -- The hash, never the key. Same treatment as session, and for the same
+    -- reason: a stolen database yields nothing usable.
+    token_hash  TEXT    NOT NULL UNIQUE,
+    user_id     TEXT    NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    name        TEXT    NOT NULL,
+    created_at  INTEGER NOT NULL,
+    -- Zero until first use. It is what makes a list of keys judgeable: somebody
+    -- revoking after a suspected theft needs to tell the one their backup
+    -- script uses from the one they made a year ago and forgot.
+    last_used   INTEGER NOT NULL DEFAULT 0
+);
+
+-- Every request that presents a key looks it up by hash.
+CREATE INDEX IF NOT EXISTS idx_api_key_user ON api_key(user_id);
 `

@@ -292,6 +292,14 @@ func (s *Server) Handler() http.Handler {
 	// Semantic photograph search (ADR 0060). Its own routes rather than a mode
 	// on the face ones, because they are two optional downloads and a server
 	// may have either, both or neither.
+	/*
+	 * API keys (ADR 0061). Session-only, deliberately: a key that can mint keys
+	 * cannot be revoked by revoking it.
+	 */
+	mux.HandleFunc("GET /api/keys", s.listAPIKeys)
+	mux.HandleFunc("POST /api/keys", s.createAPIKey)
+	mux.HandleFunc("DELETE /api/keys/{id}", s.deleteAPIKey)
+
 	mux.HandleFunc("GET /api/photos/semantic/capabilities", s.semanticCapabilities)
 	mux.HandleFunc("GET /api/photos/semantic/models", s.semanticModels)
 	mux.HandleFunc("POST /api/photos/semantic/models/install", s.adminOnly(s.installSemanticModels))

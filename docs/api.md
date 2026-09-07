@@ -3698,6 +3698,99 @@ input this route accepts that should make the worker fail — the tokenizer
 truncates rather than refusing — so a failure means the install is wrong, and
 calling it a bad request would send somebody rewording a query that was fine.
 
+## API keys
+
+How something that is not a browser signs in: a script, a CLI, a third-party
+client built against [`openapi.json`](openapi.json). The alternative was storing
+somebody's password and keeping a session cookie alive against a timeout chosen
+for a person watching a film (ADR 0061).
+
+A key is presented in a header:
+
+```
+Authorization: Bearer <key>
+```
+
+**Never in a query parameter.** A credential in a URL is a credential in the
+server log, the browser history, the `Referer` of the next request, and any
+proxy in between.
+
+### What a key may and may not do
+
+A key authenticates as the account that made it, for everything except two
+things.
+
+**It can never perform administration**, even when its owner is an
+administrator. Adding a library is arbitrary filesystem read access at a path
+the request chooses; a session is bounded by somebody sitting in front of the
+app, and a key lives unattended in a config file on another machine. Those are
+different risk classes. Admin routes answer `403` with a message saying so, so
+nobody spends an afternoon suspecting the key is invalid.
+
+**It can never manage keys** — not create, list or revoke them. A key that can
+mint keys cannot be revoked by revoking it: whoever holds a stolen one makes a
+second and keeps it. Revocation has to be the end of the story, so the routes
+below require a signed-in session.
+
+**Cross-origin requests authenticated by a key are allowed**, and this is
+deliberate. The CSRF check exists because a browser attaches cookies by itself;
+nothing attaches an `Authorization` header by itself, so there is no ambient
+credential to forge. A browser-based client using a key would otherwise be
+refused on every write it makes. A request that carries a cookie keeps both CSRF
+defences exactly as before — presenting an unusable `Authorization` header does
+**not** turn them off.
+
+**Changing a password does not revoke keys.** It deletes every session,
+including the caller's own, and that is deliberate — but rotating a password
+should not silently break a machine that has been running for a year. A
+suspected theft is handled by revoking deliberately, which is what the list and
+its `last_used` column are for.
+
+**A key does not make its owner appear online.** A script polling every minute is
+not a person being present.
+
+### `GET /api/keys`
+
+The caller's own keys. Never anybody else's, and never the secrets.
+
+```json
+{ "keys": [ { "id": "9f3c…", "name": "backup script",
+              "created_at": 1788500000, "last_used": 0 } ] }
+```
+
+`last_used` is `0` until the key is first presented — **"never used" rather
+than 1970**, and a client should say so in words. A key that has never been used
+is the safe one to revoke.
+
+Requires a session.
+
+### `POST /api/keys`
+
+Mint a key. `{ "name": "backup script" }`. Requires a session.
+
+```json
+{ "key": { "id": "9f3c…", "name": "backup script",
+           "created_at": 1788500000, "last_used": 0 },
+  "secret": "hn3K…" }
+```
+
+**`secret` is returned exactly once and is never retrievable afterwards.** The
+database holds only its hash, the same treatment sessions get, so a stolen
+database yields nothing that can be presented to a server. A client must say
+plainly that the value will not be shown again.
+
+A name is required rather than defaulted: a list of keys all called the same
+thing is a list nobody can revoke confidently, which is the only thing the list
+is for. Names are trimmed to 64 characters.
+
+### `DELETE /api/keys/{id}`
+
+Revoke one of the caller's keys. Requires a session. `404` for a key that is not
+yours — the ownership is part of the query rather than a check in the handler,
+so the database refuses it however the handler is later rewritten.
+
+The key stops authenticating immediately; there is no cache to wait out.
+
 ## Backups
 
 A backup is a snapshot of the database and nothing else

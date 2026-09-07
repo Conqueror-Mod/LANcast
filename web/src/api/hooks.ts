@@ -1737,6 +1737,55 @@ export function usePhotoSearch(libraryID: number, query: string) {
   });
 }
 
+/*
+ * API keys (ADR 0061).
+ *
+ * Managed only from a signed-in session — a key cannot mint, list or revoke
+ * keys, because a key that could would survive its own revocation. The client
+ * does not need to enforce that (the server does), but it is why there is no
+ * "sign in with a key" anywhere in here.
+ */
+export type APIKey = {
+  id: string;
+  name: string;
+  created_at: number;
+  /** 0 means never used, not 1970. The UI must say so in words. */
+  last_used: number;
+};
+
+export function useAPIKeys(enabled = true) {
+  return useQuery({
+    queryKey: ["api-keys"],
+    queryFn: ({ signal }) => apiGet<{ keys: APIKey[] }>("/api/keys", signal),
+    enabled,
+  });
+}
+
+/*
+ * The secret comes back once and is never retrievable.
+ *
+ * It is deliberately *not* put in the query cache: the list is refetched after
+ * a mutation and would drop it, and a cache entry holding a live credential is
+ * one more place it can be read from. The caller holds it in component state
+ * for exactly as long as the dialog showing it is open.
+ */
+export function useCreateAPIKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiPost<{ key: APIKey; secret: string }>("/api/keys", { name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
+  });
+}
+
+export function useRevokeAPIKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/keys/${id}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
+  });
+}
+
 export function useItems(query: ItemQuery) {
   const { libraryID } = query;
   const params = itemsParams(query);
