@@ -61,6 +61,26 @@ body {
   background: inherit;
   opacity: 0.5;
   animation: nebula-drift var(--dur-ambient) ease-in-out infinite alternate;
+  /*
+   * Rasterise once, then move the finished picture.
+   *
+   * Without this the drift cost **a whole core, continuously, on every screen**
+   * — measured on the desktop client at ~107% of one core with nothing playing,
+   * and 0% the moment the window was minimised, which is what says it is paint
+   * rather than script. It saturates the renderer's *main thread*, so the UI
+   * drops frames however many cores the machine has idle.
+   *
+   * The cause is the `scale` in the keyframes. Chromium happily composites a
+   * moving layer, but a *scaling* one is re-rasterised at each new size — and
+   * this layer is the whole viewport plus 10%, filled with six stacked radial
+   * gradients. So it repainted all of that, sixty times a second, for ever.
+   *
+   * `will-change: transform` promotes it once and pins the raster scale, which
+   * is exactly the trade this wants: the drift is 3% over 75 seconds, so a
+   * fixed raster is indistinguishable, and the alternative was repainting the
+   * most expensive thing on the page every frame to express it.
+   */
+  will-change: transform;
 }
 
 @keyframes nebula-drift {
