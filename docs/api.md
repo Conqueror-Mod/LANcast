@@ -131,7 +131,24 @@ the request: the account is created either way, and the server is fully usable
 without ffmpeg — it simply cannot convert. Nothing is fetched when ffmpeg is
 already present.
 | `POST /api/auth/logout` | Ends this session |
-| `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions |
+| `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions. **Throttled**, sharing one counter with `login` — see below |
+
+`login` and `password` share **one** throttle: ten attempts per five minutes per
+address, decaying on their own, with no lockout — a lockout is a denial of
+service an attacker can aim at the owner. A correct password clears the counter
+on either route, because it is the same proof.
+
+Both are throttled for the same reason, and it is not only guessing. Each
+verifies a password with bcrypt before doing anything else, so an unbounded
+stream of wrong answers is a way to spend the machine's cores as well as a way
+to learn the password. `password` matters even though the caller is already
+signed in: a stolen session ends when sessions are revoked, and the password
+does not.
+
+Forwarded headers are deliberately ignored when identifying a caller. They are
+attacker-controlled unless a trusted proxy sets them, and honouring them would
+let anybody reset their own counter. Behind a reverse proxy the limit therefore
+applies to the proxy rather than to each client.
 
 When a session is active, `status`, `setup`, and `login` include
 `user: {id, name, role}`. A wrong username and a wrong password are reported

@@ -491,6 +491,31 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/*
+	 * Throttled with the same counter the login path uses, because this is the
+	 * same question asked a different way.
+	 *
+	 * It verifies `current_password` with bcrypt at cost 12 before it does
+	 * anything else. Two things follow from that being unbounded. It is a
+	 * **password oracle** for anybody holding a stolen session — they already
+	 * have access, but the password is worth more, because it survives having
+	 * every session revoked and people reuse it elsewhere. And each attempt is
+	 * about a hundred milliseconds of deliberate work, so an unbounded stream
+	 * of wrong guesses is a way to spend the machine's cores rather than merely
+	 * a way to guess.
+	 *
+	 * Sharing the login counter rather than keeping a second one: an attacker
+	 * who has a session and wants to learn the password should not get a fresh
+	 * budget by asking on a different route. A correct answer clears it, below,
+	 * exactly as a successful login does.
+	 */
+	key := auth.ClientKey(r)
+	if !s.throttle.Allow(key) {
+		writeError(w, http.StatusTooManyRequests, "too_many_requests",
+			"too many attempts; wait a few minutes")
+		return
+	}
+
 	var req struct {
 		Current string `json:"current_password"`
 		New     string `json:"new_password"`
@@ -509,6 +534,9 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
 		return
 	}
+	// Knowing the current password is the same proof a login gives, so it earns
+	// the same clean slate.
+	s.throttle.Reset(key)
 
 	hash, err := auth.HashPassword(req.New)
 	if errors.Is(err, auth.ErrWeakPassword) {
