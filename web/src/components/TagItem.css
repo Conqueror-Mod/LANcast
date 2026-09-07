@@ -1,0 +1,118 @@
+/*
+ * Your tags, and the heart.
+ *
+ * No gold anywhere in this file, deliberately. design.md names "favorite" as a
+ * thing gold must never mean, and gold is the only accent — so the state is
+ * carried by whether a shape is filled, and by the text ramp. The one place
+ * gold appears is the focus ring every control gets, which is gold meaning
+ * where-you-are, exactly as it should.
+ */
+.tagitem {
+  margin-top: 18px;
+  max-width: 62ch;
+}
+
+.tagitem__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tagitem__label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The heart moves through the text ramp rather than through a hue: muted at
+   rest, primary when set. Filling the shape is what carries the state. */
+.tagitem__heart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tagitem__heart:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+.tagitem__heart.is-set {
+  color: var(--text-primary);
+}
+
+.tagitem__heart:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold-ring);
+}
+
+.tagitem__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tagitem__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.tagitem__remove {
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tagitem__remove:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.tagitem__input {
+  background: var(--surface-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  min-width: 12ch;
+}
+
+.tagitem__input::placeholder {
+  color: var(--text-muted);
+}
+
+.tagitem__input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-ring);
+}
+
+/* Said once, quietly, and not repeated. Somebody deciding whether to write
+   "needs a better copy" on something is entitled to know who reads it. */
+.tagitem__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}

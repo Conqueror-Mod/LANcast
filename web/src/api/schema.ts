@@ -2985,6 +2985,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The calling account's tags, with counts
+         * @description What a filter row is built from. **Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word "christmas" have two tags — because a shared name table would leak the names through anything that lists them.
+         */
+        get: operations["listTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * This account's tags on one item, and whether it is a favourite
+         * @description **Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word "christmas" have two tags — because a shared name table would leak the names through anything that lists them.
+         */
+        get: operations["getItemTags"];
+        put?: never;
+        /**
+         * Put one of this account's tags on an item
+         * @description Creates the tag if this is the first time the account has used the word.
+         *
+         *     Names are trimmed, internal whitespace collapsed, and matched case-insensitively. **The first spelling used is the one kept** — typing it differently later is not a request to rename.
+         *
+         *     Not administration, so an API key may do it (ADR 0061): a key acts as its owner, writing that owner's tags and seeing no others.
+         */
+        post: operations["addItemTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/tags/{tag}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                tag: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Take one of this account's tags off an item
+         * @description **When nothing carries the tag any more, the tag itself is removed**, so a filter row does not fill with every typo anybody ever made.
+         *
+         *     A tag that is not yours answers `404`, exactly as one that does not exist. A `403` would answer "does this id belong to another account" for anybody who asked, which is the disclosure the per-account vocabulary exists to prevent.
+         */
+        delete: operations["removeItemTag"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/favourite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark or unmark an item for this account
+         * @description A favourite is an opinion and is keyed per account, like a rating.
+         */
+        put: operations["putFavourite"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4809,6 +4909,22 @@ export interface components {
             /** @description **Returned exactly once and never retrievable afterwards.** The server stores only its hash, the same treatment sessions get, so a stolen database yields nothing that can be presented to a server. A client must say plainly that this will not be shown again. */
             secret: string;
         };
+        Tag: {
+            /** Format: int64 */
+            id: number;
+            /** @description The spelling this account first used. Names fold on case and whitespace, so `Christmas` and `christmas ` are one tag, and typing it differently later is not a request to rename. */
+            name: string;
+            /** @description How many of this account's items carry the tag. Filled by `GET /api/tags`; zero elsewhere. */
+            count: number;
+        };
+        TagList: {
+            tags: components["schemas"]["Tag"][];
+        };
+        ItemTags: {
+            tags: components["schemas"]["Tag"][];
+            /** @description Whether the calling account has marked this item. Keyed per account like a rating. */
+            favourite: boolean;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -5468,6 +5584,10 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset. */
                 offset?: number;
+                /** @description Repeatable. Restrict to items carrying these tags. **Ids rather than names**, because a name is unique only within one account. An id belonging to another account matches nothing rather than erroring — the account is part of the query, so there is no id anybody can pass to reach somebody else's selection. */
+                tag?: number[];
+                /** @description `1` restricts to the calling account's favourites. */
+                favourite?: "1";
             };
             header?: never;
             path?: never;
@@ -9903,6 +10023,189 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description This account's tags. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getItemTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tags and favourite state for the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemTags"];
+                };
+            };
+            /** @description `bad_request` — invalid item id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addItemTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The tag, created or reused. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tag: components["schemas"]["Tag"];
+                    };
+                };
+            };
+            /** @description `bad_request` — a name that folds to nothing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeItemTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                tag: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        removed: boolean;
+                    };
+                };
+            };
+            /** @description `bad_request` — invalid item or tag id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `not_found` — no such tag on this item, or it is not yours. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    putFavourite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    favourite: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The state now set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        favourite: boolean;
+                    };
+                };
+            };
+            /** @description `bad_request` — invalid item id or body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

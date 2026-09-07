@@ -366,6 +366,22 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 
 // nonEmpty drops blank entries from a repeated query parameter, so a stray
 // "&genre=" never becomes a filter for the empty string.
+// int64s parses repeated numeric query values, dropping anything that is not a
+// number rather than failing the request. An unparseable id contributes no
+// filter, exactly as an unknown resolution key does.
+func int64s(vs []string) []int64 {
+	out := make([]int64, 0, len(vs))
+	for _, v := range vs {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func nonEmpty(vs []string) []string {
 	out := make([]string, 0, len(vs))
 	for _, v := range vs {
@@ -571,10 +587,15 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		TakenMonth:   q.Get("taken_month"),
 		TakenUndated: q.Get("taken_undated") == "1",
 
-		Initial:        q.Get("initial"),
-		Query:          q.Get("q"),
-		Sort:           q.Get("sort"),
-		Genres:         nonEmpty(q["genre"]),
+		Initial: q.Get("initial"),
+		Query:   q.Get("q"),
+		Sort:    q.Get("sort"),
+		Genres:  nonEmpty(q["genre"]),
+		// Tag ids rather than names (ADR 0062): a name is unique only within one
+		// account, so filtering by the word would need the account anyway and
+		// would match somebody else's tag the moment the scoping slipped.
+		TagIDs:         int64s(q["tag"]),
+		Favourite:      q.Get("favourite") == "1",
 		Decades:        decades,
 		ContentRatings: nonEmpty(q["content_rating"]),
 		// Only the unwatched-only case is expressed; watched=true (watched-only)

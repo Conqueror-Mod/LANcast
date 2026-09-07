@@ -104,6 +104,10 @@
     {
       "name": "keys",
       "description": "API keys (ADR 0061) — how something that is not a browser authenticates. A key is presented as `Authorization: Bearer <key>`, never in a query parameter, and may neither perform administration nor manage keys."
+    },
+    {
+      "name": "tags",
+      "description": "**Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word \"christmas\" have two tags — because a shared name table would leak the names through anything that lists them."
     }
   ],
   "paths": {
@@ -938,6 +942,30 @@
               "type": "integer",
               "default": 0
             }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              }
+            },
+            "description": "Repeatable. Restrict to items carrying these tags. **Ids rather than names**, because a name is unique only within one account. An id belonging to another account matches nothing rather than erroring — the account is part of the query, so there is no id anybody can pass to reach somebody else's selection."
+          },
+          {
+            "name": "favourite",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "`1` restricts to the calling account's favourites."
           }
         ],
         "responses": {
@@ -6693,6 +6721,269 @@
           }
         }
       }
+    },
+    "/tags": {
+      "get": {
+        "operationId": "listTags",
+        "tags": [
+          "tags"
+        ],
+        "summary": "The calling account's tags, with counts",
+        "description": "What a filter row is built from. **Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word \"christmas\" have two tags — because a shared name table would leak the names through anything that lists them.",
+        "responses": {
+          "200": {
+            "description": "This account's tags.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/items/{id}/tags": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getItemTags",
+        "tags": [
+          "tags"
+        ],
+        "summary": "This account's tags on one item, and whether it is a favourite",
+        "description": "**Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word \"christmas\" have two tags — because a shared name table would leak the names through anything that lists them.",
+        "responses": {
+          "200": {
+            "description": "Tags and favourite state for the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemTags"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — invalid item id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addItemTag",
+        "tags": [
+          "tags"
+        ],
+        "summary": "Put one of this account's tags on an item",
+        "description": "Creates the tag if this is the first time the account has used the word.\n\nNames are trimmed, internal whitespace collapsed, and matched case-insensitively. **The first spelling used is the one kept** — typing it differently later is not a request to rename.\n\nNot administration, so an API key may do it (ADR 0061): a key acts as its owner, writing that owner's tags and seeing no others.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The tag, created or reused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tag"
+                  ],
+                  "properties": {
+                    "tag": {
+                      "$ref": "#/components/schemas/Tag"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — a name that folds to nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/items/{id}/tags/{tag}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        },
+        {
+          "name": "tag",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "removeItemTag",
+        "tags": [
+          "tags"
+        ],
+        "summary": "Take one of this account's tags off an item",
+        "description": "**When nothing carries the tag any more, the tag itself is removed**, so a filter row does not fill with every typo anybody ever made.\n\nA tag that is not yours answers `404`, exactly as one that does not exist. A `403` would answer \"does this id belong to another account\" for anybody who asked, which is the disclosure the per-account vocabulary exists to prevent.",
+        "responses": {
+          "200": {
+            "description": "Removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "removed"
+                  ],
+                  "properties": {
+                    "removed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — invalid item or tag id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "`not_found` — no such tag on this item, or it is not yours.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/favourite": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "putFavourite",
+        "tags": [
+          "tags"
+        ],
+        "summary": "Mark or unmark an item for this account",
+        "description": "A favourite is an opinion and is keyed per account, like a rating.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "favourite"
+                ],
+                "properties": {
+                  "favourite": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The state now set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "favourite"
+                  ],
+                  "properties": {
+                    "favourite": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_request` — invalid item id or body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11530,6 +11821,61 @@
           "secret": {
             "type": "string",
             "description": "**Returned exactly once and never retrievable afterwards.** The server stores only its hash, the same treatment sessions get, so a stolen database yields nothing that can be presented to a server. A client must say plainly that this will not be shown again."
+          }
+        }
+      },
+      "Tag": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "count"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "description": "The spelling this account first used. Names fold on case and whitespace, so `Christmas` and `christmas ` are one tag, and typing it differently later is not a request to rename."
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many of this account's items carry the tag. Filled by `GET /api/tags`; zero elsewhere."
+          }
+        }
+      },
+      "TagList": {
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            }
+          }
+        }
+      },
+      "ItemTags": {
+        "type": "object",
+        "required": [
+          "tags",
+          "favourite"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            }
+          },
+          "favourite": {
+            "type": "boolean",
+            "description": "Whether the calling account has marked this item. Keyed per account like a rating."
           }
         }
       }

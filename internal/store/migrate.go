@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 42
+const CurrentSchemaVersion = 43
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -81,6 +81,7 @@ var migrations = []migration{
 	{version: 40, sql: schemaRevision40},
 	{version: 41, sql: schemaRevision41},
 	{version: 42, sql: schemaRevision42},
+	{version: 43, sql: schemaRevision43},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1474,4 +1475,44 @@ CREATE TABLE IF NOT EXISTS api_key (
 
 -- Every request that presents a key looks it up by hash.
 CREATE INDEX IF NOT EXISTS idx_api_key_user ON api_key(user_id);
+`
+
+const schemaRevision43 = `
+-- Tags and favourites (ADR 0062). Both are per-account: they record what one
+-- person thinks about something and neither describes the item.
+--
+-- The name lives on a row owned by a user rather than in a shared vocabulary
+-- with a per-user join. That is deliberate and it is the privacy boundary: a
+-- shared name table leaks the names, because everything that lists them either
+-- returns everybody's or has to remember to filter by owner at every call site
+-- for ever. Two accounts using "christmas" get two rows, which a normaliser
+-- would object to and a boundary would not.
+--
+-- folded is the comparison key -- trimmed, whitespace-collapsed, lowercased --
+-- while name keeps the spelling the account first used, for display.
+CREATE TABLE IF NOT EXISTS tag (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    name    TEXT NOT NULL,
+    folded  TEXT NOT NULL,
+    UNIQUE (user_id, folded)
+);
+
+CREATE TABLE IF NOT EXISTS item_tag (
+    item_id INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    tag_id  INTEGER NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+    PRIMARY KEY (item_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_tag_tag ON item_tag(tag_id);
+
+-- A favourite is an opinion, keyed like user_rating already is.
+CREATE TABLE IF NOT EXISTS user_favourite (
+    user_id  TEXT    NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    item_id  INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_favourite_item ON user_favourite(item_id);
 `
