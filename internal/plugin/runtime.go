@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"lancast/internal/netguard"
 	"log/slog"
 	"net/http"
 	"os"
@@ -163,7 +164,21 @@ func defaultHTTPGet(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	/*
+	 * Guarded, because the manifest allowlist checks a *name* and a name is not
+	 * a destination.
+	 *
+	 * A plugin lists `api.example.com`, the person installing it sees that in
+	 * the grant dialog and reasonably agrees — and whoever owns the name also
+	 * owns what it resolves to, and can point it at 127.0.0.1 whenever they
+	 * like, including after the grant. The allowlist would still match the
+	 * string.
+	 *
+	 * So the address is checked after resolution and before connect. The
+	 * allowlist decides which service a plugin may talk to; this decides which
+	 * addresses anything may be reached at. A plugin needs both.
+	 */
+	client := netguard.Client(15 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
