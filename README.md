@@ -96,7 +96,9 @@ can see each other's presence and admit remote guests under a host-set cap
 **Plugins.** Signed `.lcplugin` bundles running as WebAssembly under wazero,
 deny-by-default capabilities, and a two-step install that grants them
 explicitly ([ADR 0020](docs/adr/0020-plugin-isolation-boundary.md),
-[ADR 0021](docs/adr/0021-plugin-distribution-and-trust.md)).
+[ADR 0021](docs/adr/0021-plugin-distribution-and-trust.md)). Writing one is
+[docs/writing-a-plugin.md](docs/writing-a-plugin.md), which is honest about the
+two things a third party still cannot do.
 
 **Its own window.** `LANcast-Client` opens a WebView2 window rather than handing
 a URL to a browser — which is what lets it pin the server's certificate instead
