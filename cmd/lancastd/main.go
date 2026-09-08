@@ -301,7 +301,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Plugins (ADR 0020) are loaded once from the data dir and registered into
 	// each rebuilt registry. The runtime hands them a secret resolver scoped to
 	// what each plugin's manifest grants — a plugin never reads config directly.
+	//
+	// The cache and the rate limit are the host's, not each plugin's. They are
+	// the same store and the same allowance the native providers use, applied
+	// where a plugin cannot decline them: a limit a guest could skip would be
+	// spent on somebody else's API over this server's IP address, and the user
+	// would be the one banned for it.
 	pluginRT, err := plugin.NewRuntime(context.Background(), log,
+		plugin.WithResponseCache(st),
+		plugin.WithRateLimit(settings.Get().RatePerSec),
 		plugin.WithSecretResolver(func(name string) string {
 			s := settings.Get()
 			switch name {
@@ -334,6 +342,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 		next := meta.NewRegistry()
 		next.AddLocal(nfo.New())
+		// Plugins fetch through the host, so the rate setting has to reach the
+		// runtime too — otherwise lowering it would bind the native provider
+		// and not the plugins, which reads as the setting being broken.
+		pluginRT.SetRateLimit(s.RatePerSec)
 		if s.TMDBKey != "" {
 			next.AddProvider(tmdb.New(s.TMDBKey,
 				tmdb.WithCache(st),

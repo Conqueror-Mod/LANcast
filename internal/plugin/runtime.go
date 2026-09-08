@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"lancast/internal/meta"
 	"lancast/internal/netguard"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -33,6 +35,14 @@ type Runtime struct {
 	log    *slog.Logger
 	httpc  HTTPGetter
 	secret SecretResolver
+
+	// The fetch policy every plugin gets and none can decline — see
+	// fetchpolicy.go.
+	cache      ResponseCache
+	cacheTTL   time.Duration
+	ratePerSec float64
+	limMu      sync.Mutex
+	limiters   map[string]*meta.Limiter
 }
 
 // Option customizes a Runtime.
