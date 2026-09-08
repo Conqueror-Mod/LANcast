@@ -8,8 +8,8 @@ shape and ABI 2); the server-side API for installing one is in
 [api.md](api.md#plugins). This document is how you write the thing itself.
 
 **Read [What does not work yet](#what-does-not-work-yet) first if you are not
-one of us.** Two things are missing that a third party needs, and both are named
-there rather than discovered halfway through.
+one of us.** One thing is still missing that a third party needs, and it is
+named there rather than discovered halfway through.
 
 ---
 
@@ -267,6 +267,36 @@ for exactly this reason.
 
 ---
 
+## Secrets
+
+A plugin never holds a credential in its binary. It declares a name in the
+manifest, the operator approves that name at install, and the operator types the
+value in **Settings → Add-ons**. `sdk.Secret` reads it back:
+
+```go
+key := sdk.Secret("example_key")
+if key == "" {
+    return nil, nil // not configured is not a failure
+}
+```
+
+Three names are the **server's own** provider keys — `omdb_key`, `tmdb_key`
+and `opensubtitles_key`. They come from Settings, and a plugin granted one reads
+the same value the built-in provider uses; nothing is stored per-plugin for
+them. Any other name is your own credential, kept against your plugin
+specifically: two plugins both asking for `api_key` get two different values,
+because a credential is obtained *for* a plugin.
+
+Until the operator gives you one, `sdk.Secret` returns `""`. **Treat that as
+"not configured", not as a failure** — a server with no key for your service
+is a working server, it is just one you have nothing to answer for. The
+Add-ons page tells the operator which granted secrets are still waiting for a
+value, so the state is visible to them rather than only to you.
+
+Nothing can read a value back out: no endpoint returns one, and the audit log
+records that a secret was set, never what it was set to. The only route out of
+the database is the host handing it to the guest that was granted it.
+
 ## What the host does for you
 
 Do not implement any of these. They are not yours to skip.
@@ -342,9 +372,10 @@ and to arrive with a rebuild, not a migration.
 
 ## What does not work yet
 
-Writing this document from the outside found two things that stop a third party
-today. Both are real, neither is subtle once you hit it, and it seems better to
-say so here than to let somebody discover them at the compile step.
+Writing this document from the outside found two things that stopped a third
+party. One is fixed — a plugin can now have its own credential, see
+[Secrets](#secrets) — and the other is below. It is better to say so here than
+to let somebody discover it at the compile step.
 
 **1. The SDK is not fetchable.** It lives at `plugins/sdk` in the LANcast repo,
 in a module declared as `lancastplugins` — which is not an import path anybody
@@ -371,16 +402,6 @@ works.
 
 Publishing the SDK under a real module path is a prerequisite for third-party
 authorship, not a nicety.
-
-**2. A third-party plugin cannot have a secret.** The manifest can request one,
-an operator can grant it, the grant is recorded and shown in the UI — and
-`sdk.Secret` will return `""` for ever, because the host resolves secrets from a
-fixed list of first-party names (`omdb_key`, `tmdb_key`, `opensubtitles_key`).
-
-That is worse than refusing: the approval dialog tells an operator the plugin
-will read a key that it can never read. Anything needing its own credential is
-blocked until a plugin can declare a secret and have the server offer somewhere
-to put it.
 
 **Also missing:** a way to run a `.wasm` against the ABI without a server, so
 you can test a plugin without installing it into a running LANcast. Until that

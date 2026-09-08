@@ -23,10 +23,19 @@ import (
 // owns egress.
 type HTTPGetter func(ctx context.Context, url string) ([]byte, error)
 
-// SecretResolver returns a configured secret by name, or "" if unset. The
-// manifest gate runs before this is ever called, so it only sees names a plugin
-// was granted.
-type SecretResolver func(name string) string
+/*
+ * SecretResolver returns a configured secret, or "" if unset. The manifest gate
+ * runs before this is ever called, so it only sees names a plugin was granted.
+ *
+ * It takes the plugin's name as well as the secret's, and that is the whole
+ * point: a credential is obtained *for* a plugin. Two plugins asking for
+ * "api_key" are asking for two different things, and a resolver that could not
+ * tell them apart would have to answer both from one value or answer neither.
+ * Before this the host resolved from a fixed list of first-party names and
+ * answered "" for everything else — so a third-party plugin could be granted a
+ * secret it could never read.
+ */
+type SecretResolver func(plugin, name string) string
 
 // Runtime hosts compiled plugins. One per process is enough; it holds the
 // wazero runtime and the host-function module every plugin shares.
@@ -66,7 +75,7 @@ func NewRuntime(ctx context.Context, log *slog.Logger, opts ...Option) (*Runtime
 	rt := &Runtime{
 		log:    log,
 		httpc:  defaultHTTPGet,
-		secret: func(string) string { return "" },
+		secret: func(string, string) string { return "" },
 	}
 	for _, o := range opts {
 		o(rt)

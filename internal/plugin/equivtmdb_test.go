@@ -112,7 +112,7 @@ func TestTMDBPluginMatchesNativeProvider(t *testing.T) {
 			}
 			return []byte(payloadFor(t, path)), nil
 		}),
-		plugin.WithSecretResolver(func(name string) string {
+		plugin.WithSecretResolver(func(_, name string) string {
 			if name == "tmdb_key" {
 				return "test-key"
 			}
@@ -243,7 +243,7 @@ func TestTMDBPluginReportsAFailedFetchAsAFailure(t *testing.T) {
 		plugin.WithHTTPGetter(func(ctx context.Context, raw string) ([]byte, error) {
 			return nil, nil // the host refused it, or it failed
 		}),
-		plugin.WithSecretResolver(func(string) string { return "test-key" }),
+		plugin.WithSecretResolver(func(_, _ string) string { return "test-key" }),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -301,7 +301,7 @@ func loadTMDBPlugin(t *testing.T) (*plugin.Runtime, *plugin.Plugin) {
 			}
 			return []byte(payloadFor(t, path)), nil
 		}),
-		plugin.WithSecretResolver(func(name string) string { return "test-key" }),
+		plugin.WithSecretResolver(func(_, name string) string { return "test-key" }),
 	)
 	if err != nil {
 		t.Fatal(err)

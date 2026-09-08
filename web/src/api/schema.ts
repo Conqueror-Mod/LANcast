@@ -3085,6 +3085,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugins/{name}/secrets/{secret}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+                /** @description A secret name from the plugin's **granted** capabilities. */
+                secret: components["parameters"]["PluginSecretName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Store a plugin's own credential
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         *
+         *     The secret **must be one the plugin was granted** — the grant is the authority here as everywhere else, and a value stored against a name nobody approved would be a credential no plugin can read.
+         *
+         *     **Write-only.** No endpoint returns a value; the only route out of the database is the host handing it to the guest that was granted it. An empty `value` clears it.
+         */
+        put: operations["setPluginSecret"];
+        post?: never;
+        /**
+         * Forget a plugin's credential
+         * @description **Administrators only.** Every plugin endpoint requires an admin session.
+         *
+         *     Succeeds whether or not a value was set — the caller asked for it to be gone and it is. `404` only when the plugin itself is unknown.
+         */
+        delete: operations["deletePluginSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4484,6 +4519,8 @@ export interface components {
             requested: components["schemas"]["PluginCapabilities"];
             /** @description What it actually has. **This, not the manifest, is the effective authority.** */
             granted: components["schemas"]["PluginCapabilities"];
+            /** @description The granted secret names that actually resolve to a value — either one stored for this plugin, or one of the server's own provider keys (`omdb_key`, `tmdb_key`, `opensubtitles_key`). **Granted is not the same as configured**: a granted name missing from this list is one the plugin reads as empty. Reading the two as the same is what let a plugin be approved to use a key it could never read. */
+            secrets_configured: string[];
             /** Format: int64 */
             installed_at?: number;
         };
@@ -5057,6 +5094,8 @@ export interface components {
         PluginName: string;
         /** @description The face group's id. */
         ClusterId: number;
+        /** @description A secret name from the plugin's **granted** capabilities. */
+        PluginSecretName: string;
     };
     requestBodies: never;
     headers: never;
@@ -10212,6 +10251,66 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setPluginSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+                /** @description A secret name from the plugin's **granted** capabilities. */
+                secret: components["parameters"]["PluginSecretName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The credential. Empty clears it. */
+                    value: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Stored. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deletePluginSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plugin's name. */
+                name: components["parameters"]["PluginName"];
+                /** @description A secret name from the plugin's **granted** capabilities. */
+                secret: components["parameters"]["PluginSecretName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gone. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

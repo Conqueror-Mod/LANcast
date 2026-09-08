@@ -317,3 +317,29 @@ func (s Settings) Watched(positionMS, durationMS int64) bool {
 
 // Path is the settings file location, for diagnostics.
 func (s *SettingsStore) Path() string { return s.path }
+
+/*
+ * BuiltinSecret resolves one of the server's own provider keys by the name a
+ * plugin manifest uses for it.
+ *
+ * These three are the only secrets that exist without anybody storing one
+ * against a plugin: they are the server's, configured in Settings, and a plugin
+ * granted the name reads the same value the built-in provider uses. Anything
+ * else is a plugin's own credential and lives in plugin_secret.
+ *
+ * It is a method here rather than a switch at each call site because there are
+ * two call sites — the host's secret resolver and the Add-ons page's "is this
+ * configured" check — and a second copy that disagreed with the first would
+ * show an operator a plugin as configured while the plugin read nothing.
+ */
+func (s Settings) BuiltinSecret(name string) string {
+	switch name {
+	case "omdb_key":
+		return s.OMDbKey
+	case "tmdb_key":
+		return s.TMDBKey
+	case "opensubtitles_key":
+		return s.OpenSubtitlesKey
+	}
+	return ""
+}

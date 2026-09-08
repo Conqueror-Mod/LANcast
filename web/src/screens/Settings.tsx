@@ -28,6 +28,7 @@ import {
   useUploadPlugin,
   useGrantPlugin,
   useSetPluginEnabled,
+  useSetPluginSecret,
   useRemovePlugin,
   useServerLog,
   useMediaTools,
@@ -1911,11 +1912,89 @@ function GrantDialog({
   );
 }
 
+/*
+ * One granted secret, and whether the plugin can actually read it.
+ *
+ * This exists because "granted" was being read as "working". A plugin could be
+ * granted a secret, be listed as granted, and read nothing — the host resolved
+ * secrets from a fixed list of the server's own provider keys and answered
+ * empty for every other name. So the approval dialog told an operator the
+ * plugin would read a key that it never could.
+ *
+ * The state is therefore the point of this row, not the input: **needs a
+ * value** is the thing worth saying out loud. Named in words rather than
+ * coloured, because `design.md` reserves the one accent for where you are, and
+ * a second meaning for gold would kill the first.
+ *
+ * No value is ever shown. The server does not return one — `secrets_configured`
+ * carries names only — so there is nothing here to reveal, and the field is
+ * always empty on arrival even for a secret that is set.
+ */
+function AddonSecret({ plugin, secret }: { plugin: Plugin; secret: string }) {
+  const set = useSetPluginSecret();
+  const [value, setValue] = useState("");
+  const configured = plugin.secrets_configured.includes(secret);
+
+  const save = (next: string) =>
+    set.mutate(
+      { name: plugin.name, secret, value: next },
+      { onSuccess: () => setValue("") },
+    );
+
+  return (
+    <div className="set-row set-row--stacked">
+      <div className="set-row__main">
+        <div className="set-row__title">{secret}</div>
+        <div className="set-row__sub">
+          {configured
+            ? "Set. The add-on reads this; nobody can read it back out."
+            : "Needs a value — until you give it one the add-on reads nothing."}
+        </div>
+      </div>
+      <div className="set-row__actions">
+        <input
+          className="set-input"
+          type="password"
+          autoComplete="off"
+          placeholder={configured ? "Replace…" : "Paste the key…"}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <button
+          className="set-btn"
+          onClick={() => save(value)}
+          disabled={value === "" || set.isPending}
+        >
+          Save
+        </button>
+        {configured && (
+          <button
+            className="set-btn set-btn--danger"
+            onClick={() => save("")}
+            disabled={set.isPending}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {set.isError && (
+        <span className="set-error">{(set.error as Error).message}</span>
+      )}
+    </div>
+  );
+}
+
 function AddonRow({ plugin }: { plugin: Plugin }) {
   const setEnabled = useSetPluginEnabled();
   const remove = useRemovePlugin();
   const [confirming, setConfirming] = useState(false);
   const granted = capSummary(plugin.granted);
+  // Granted but with nothing to read. Surfaced on the row itself so it is
+  // visible without opening anything — it is the difference between an add-on
+  // that works and one that quietly does nothing.
+  const missingSecrets = plugin.granted.secrets.filter(
+    (s) => !plugin.secrets_configured.includes(s),
+  );
   return (
     <div className="set-row">
       <div className="set-row__main">
@@ -1930,6 +2009,8 @@ function AddonRow({ plugin }: { plugin: Plugin }) {
           {granted.length > 0
             ? " · " + granted.join(" · ")
             : " · no capabilities"}
+          {missingSecrets.length > 0 &&
+            ` · ${missingSecrets.length === 1 ? "1 key needs" : `${missingSecrets.length} keys need`} a value`}
         </div>
       </div>
       <div className="set-row__actions">
@@ -1965,6 +2046,13 @@ function AddonRow({ plugin }: { plugin: Plugin }) {
           </button>
         )}
       </div>
+      {plugin.granted.secrets.length > 0 && (
+        <div className="addon-secrets">
+          {plugin.granted.secrets.map((secret) => (
+            <AddonSecret key={secret} plugin={plugin} secret={secret} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

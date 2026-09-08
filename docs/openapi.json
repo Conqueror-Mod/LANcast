@@ -6984,6 +6984,82 @@
           }
         }
       }
+    },
+    "/plugins/{name}/secrets/{secret}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PluginName"
+        },
+        {
+          "$ref": "#/components/parameters/PluginSecretName"
+        }
+      ],
+      "put": {
+        "operationId": "setPluginSecret",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Store a plugin's own credential",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.\n\nThe secret **must be one the plugin was granted** — the grant is the authority here as everywhere else, and a value stored against a name nobody approved would be a credential no plugin can read.\n\n**Write-only.** No endpoint returns a value; the only route out of the database is the host handing it to the guest that was granted it. An empty `value` clears it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "value"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "description": "The credential. Empty clears it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Stored. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePluginSecret",
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Forget a plugin's credential",
+        "description": "**Administrators only.** Every plugin endpoint requires an admin session.\n\nSucceeds whether or not a value was set — the caller asked for it to be gone and it is. `404` only when the plugin itself is unknown.",
+        "responses": {
+          "204": {
+            "description": "Gone. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7171,6 +7247,15 @@
         "schema": {
           "type": "integer",
           "format": "int64"
+        }
+      },
+      "PluginSecretName": {
+        "name": "secret",
+        "in": "path",
+        "required": true,
+        "description": "A secret name from the plugin's **granted** capabilities.",
+        "schema": {
+          "type": "string"
         }
       }
     },
@@ -10701,7 +10786,8 @@
           "enabled",
           "digest",
           "requested",
-          "granted"
+          "granted",
+          "secrets_configured"
         ],
         "properties": {
           "name": {
@@ -10731,6 +10817,13 @@
           "granted": {
             "$ref": "#/components/schemas/PluginCapabilities",
             "description": "What it actually has. **This, not the manifest, is the effective authority.**"
+          },
+          "secrets_configured": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The granted secret names that actually resolve to a value — either one stored for this plugin, or one of the server's own provider keys (`omdb_key`, `tmdb_key`, `opensubtitles_key`). **Granted is not the same as configured**: a granted name missing from this list is one the plugin reads as empty. Reading the two as the same is what let a plugin be approved to use a key it could never read."
           },
           "installed_at": {
             "type": "integer",

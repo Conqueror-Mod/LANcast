@@ -105,7 +105,7 @@ func TestHTTPGetRestrictedToDeclaredHosts(t *testing.T) {
 
 func TestSecretScopedToManifest(t *testing.T) {
 	secrets := map[string]string{"omdb_key": "s3cr3t", "tmdb_key": "nope"}
-	p := loadFixture(t, WithSecretResolver(func(name string) string { return secrets[name] }))
+	p := loadFixture(t, WithSecretResolver(func(_, name string) string { return secrets[name] }))
 
 	// Granted secret comes through.
 	out, err := p.Call(context.Background(), "getsecret", []byte("omdb_key"))

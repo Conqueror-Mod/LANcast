@@ -3999,8 +3999,16 @@ Installed plugins, each showing requested vs granted capabilities.
   "signer": "first_party", "enabled": true, "digest": "101e40cd…",
   "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
   "granted":   { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
+  "secrets_configured": ["omdb_key"],
   "installed_at": 1754064000 } ] }
 ```
+
+`secrets_configured` is the granted secret names that actually resolve to a
+value — either one stored for this plugin, or one of the server's own
+provider keys. A granted name missing from it is one the plugin will read as
+empty, which is a state a client should show: **granted is not the same as
+configured**, and reading it as such is what let a plugin be approved to use a
+key it could never read.
 
 ### `POST /api/plugins`
 
@@ -4013,7 +4021,8 @@ it *requests* so the client can present the approval dialog.
 { "name": "omdb", "version": "0.1.0", "kind": "rating_source",
   "signer": "unsigned", "enabled": false, "digest": "101e40cd…",
   "requested": { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] },
-  "granted":   { "http": [], "secrets": [] } }
+  "granted":   { "http": [], "secrets": [] },
+  "secrets_configured": [] }
 ```
 
 ### `POST /api/plugins/{name}/grant`
@@ -4026,6 +4035,34 @@ it takes effect immediately (the registry reloads).
 ```json
 { "http": ["www.omdbapi.com"], "secrets": ["omdb_key"] }
 ```
+
+### `PUT /api/plugins/{name}/secrets/{secret}`
+
+Store the plugin's own credential. `204`.
+
+```json
+{ "value": "the-api-key" }
+```
+
+`{secret}` **must be a granted secret name** (`400` otherwise) — the grant is
+the authority here as everywhere else, and a value stored against a name nobody
+approved would be a credential no plugin can read, sitting in the database
+looking like configuration. An empty `value` clears it.
+
+**There is no way to read a value back.** No endpoint returns one, and the only
+route out of the database is the host handing it to the guest that was granted
+it. `secrets_configured` on `GET /api/plugins` reports which names *have* a
+value, which is the question a client actually needs answered.
+
+The three names the **server itself** configures — `omdb_key`, `tmdb_key`,
+`opensubtitles_key` — come from Settings and need nothing stored here; a
+plugin granted one reads the same value the built-in provider uses. Anything
+else is a plugin's own credential and, until it is set, the plugin reads `""`.
+
+### `DELETE /api/plugins/{name}/secrets/{secret}`
+
+Forget one credential. `204`, and `204` again if it was never set — the
+caller asked for it to be gone and it is. `404` only if the plugin is unknown.
 
 ### `POST /api/plugins/{name}/enable` · `POST /api/plugins/{name}/disable`
 
