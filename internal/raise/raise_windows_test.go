@@ -32,7 +32,7 @@ func isolate(t *testing.T) {
 func TestSignalReachesAListener(t *testing.T) {
 	isolate(t)
 	got := make(chan struct{}, 1)
-	stop, err := Listen(func() { got <- struct{}{} }, func() {})
+	stop, err := Listen(func(string) { got <- struct{}{} }, func() {})
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestSignalReachesAListener(t *testing.T) {
 func TestEachSignalWakesTheListenerOnce(t *testing.T) {
 	isolate(t)
 	got := make(chan struct{}, 8)
-	stop, err := Listen(func() { got <- struct{}{} }, func() {})
+	stop, err := Listen(func(string) { got <- struct{}{} }, func() {})
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestSignallingNobodyIsNotAnError(t *testing.T) {
 func TestStopEndsTheListener(t *testing.T) {
 	isolate(t)
 	fired := make(chan struct{}, 1)
-	stop, err := Listen(func() { fired <- struct{}{} }, func() {})
+	stop, err := Listen(func(string) { fired <- struct{}{} }, func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestQuitAndShowDoNotCrossWires(t *testing.T) {
 	isolate(t)
 	shown := make(chan struct{}, 4)
 	quit := make(chan struct{}, 4)
-	stop, err := Listen(func() { shown <- struct{}{} }, func() { quit <- struct{}{} })
+	stop, err := Listen(func(string) { shown <- struct{}{} }, func() { quit <- struct{}{} })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestASignalSurvivesAnEarlierListenerBeingStopped(t *testing.T) {
 			isolate(t)
 
 			// A listener that is stopped, leaving goroutines to unwind.
-			stopFirst, err := Listen(func() {}, func() {})
+			stopFirst, err := Listen(func(string) {}, func() {})
 			if err != nil {
 				t.Fatalf("first listen: %v", err)
 			}
@@ -248,7 +248,7 @@ func TestASignalSurvivesAnEarlierListenerBeingStopped(t *testing.T) {
 
 			// And a fresh one on the same names, immediately.
 			got := make(chan struct{}, 1)
-			stop, err := Listen(func() { got <- struct{}{} }, func() {})
+			stop, err := Listen(func(string) { got <- struct{}{} }, func() {})
 			if err != nil {
 				t.Fatalf("second listen: %v", err)
 			}
@@ -271,7 +271,7 @@ func TestASignalSurvivesAnEarlierListenerBeingStopped(t *testing.T) {
 // a tray Quit and a deferred shutdown is an ordinary shape.
 func TestStopIsSafeToCallTwice(t *testing.T) {
 	isolate(t)
-	stop, err := Listen(func() {}, func() {})
+	stop, err := Listen(func(string) {}, func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestQuitIsDeliveredWhenTheTrayExits(t *testing.T) {
 	isolate(t)
 	shown := make(chan struct{}, 1)
 	quit := make(chan struct{}, 1)
-	stop, err := Listen(func() { shown <- struct{}{} }, func() { quit <- struct{}{} })
+	stop, err := Listen(func(string) { shown <- struct{}{} }, func() { quit <- struct{}{} })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -108,6 +108,9 @@ type Options struct {
 type Controller interface {
 	// Show makes the window visible and brings it forward.
 	Show()
+	// Navigate points the window at a URL. It is how the server's tray sends
+	// somebody to a settings pane without opening a second interface to do it.
+	Navigate(url string)
 	// Hide removes it from the screen without destroying it.
 	Hide()
 	// Close ends the window and its message loop.
