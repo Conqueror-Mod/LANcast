@@ -16,6 +16,7 @@ import (
 	_ "image/png"
 	"io"
 	"io/fs"
+	"lancast/internal/netguard"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,8 +71,24 @@ type Cache struct {
 // New builds a cache rooted at dir.
 func New(dir string) *Cache {
 	return &Cache{
-		root:     dir,
-		http:     &http.Client{Timeout: 30 * time.Second},
+		root: dir,
+		/*
+		 * Guarded (internal/netguard).
+		 *
+		 * Every URL reaching this today comes from first-party provider code
+		 * built on a fixed image base, so nothing untrusted picks one. That
+		 * changes the moment a provider can be a plugin: Record.Artwork and
+		 * Credit.Image are URLs the host fetches on a record's say-so, and a
+		 * fetch of http://127.0.0.1:8080/… would be stored by content hash and
+		 * served back as the item's poster — where whoever asked for it can
+		 * simply look at it.
+		 *
+		 * Put in before that rather than with it, so the ordering is: close the
+		 * mechanism, then open the door. The cost while no plugin fills these
+		 * fields is that artwork cannot be fetched from a LAN address, which
+		 * nothing does.
+		 */
+		http:     netguard.Client(30 * time.Second),
 		deriving: map[string]*sync.Mutex{},
 	}
 }
