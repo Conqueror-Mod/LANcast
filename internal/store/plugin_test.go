@@ -82,3 +82,123 @@ func TestPluginLifecycleNotFound(t *testing.T) {
 		t.Errorf("RemovePlugin on missing = %v, want ErrNotFound", err)
 	}
 }
+
+// installFor is a plugin row to hang secrets off.
+func installFor(t *testing.T, st *Store, name string, secrets ...string) {
+	t.Helper()
+	err := st.InstallPlugin(context.Background(), InstalledPlugin{
+		Name: name, Version: "1", Kind: "rating_source", Digest: name + "-digest",
+		Signer: "unsigned", Enabled: true, GrantedSecrets: secrets,
+	})
+	if err != nil {
+		t.Fatalf("InstallPlugin %s: %v", name, err)
+	}
+}
+
+func TestPluginSecretRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	installFor(t, st, "example", "example_key")
+
+	if _, ok, err := st.PluginSecret(ctx, "example", "example_key"); err != nil || ok {
+		t.Fatalf("unset secret = (ok %v, err %v), want not set", ok, err)
+	}
+	if err := st.SetPluginSecret(ctx, "example", "example_key", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+	v, ok, err := st.PluginSecret(ctx, "example", "example_key")
+	if err != nil || !ok || v != "hunter2" {
+		t.Fatalf("secret = (%q, %v, %v), want hunter2", v, ok, err)
+	}
+
+	// Writing again replaces rather than duplicating.
+	if err := st.SetPluginSecret(ctx, "example", "example_key", "hunter3"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := st.PluginSecret(ctx, "example", "example_key"); v != "hunter3" {
+		t.Errorf("after rewrite = %q, want hunter3", v)
+	}
+
+	names, err := st.ConfiguredPluginSecrets(ctx, "example")
+	if err != nil || len(names) != 1 || names[0] != "example_key" {
+		t.Errorf("configured = %v (%v), want [example_key]", names, err)
+	}
+}
+
+/*
+ * Two plugins asking for the same name are asking for two different things.
+ *
+ * A credential is obtained *for* a plugin. Keyed on the name alone, the second
+ * plugin to be installed would silently read the first one's key — which is
+ * both wrong and a quiet way to hand somebody's credential to code they did
+ * not give it to.
+ */
+func TestPluginSecretsAreScopedToOnePlugin(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	installFor(t, st, "one", "api_key")
+	installFor(t, st, "two", "api_key")
+
+	if err := st.SetPluginSecret(ctx, "one", "api_key", "one-value"); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok, _ := st.PluginSecret(ctx, "two", "api_key"); ok || v != "" {
+		t.Errorf("plugin two read %q, want nothing — it read another plugin's credential", v)
+	}
+	if err := st.SetPluginSecret(ctx, "two", "api_key", "two-value"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := st.PluginSecret(ctx, "one", "api_key"); v != "one-value" {
+		t.Errorf("plugin one now reads %q, want one-value", v)
+	}
+}
+
+// An empty value deletes rather than storing emptiness: "" is what an unset
+// secret already reads as, and two spellings of unset is one too many.
+func TestPluginSecretEmptyValueClearsIt(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	installFor(t, st, "example", "example_key")
+
+	st.SetPluginSecret(ctx, "example", "example_key", "hunter2")
+	if err := st.SetPluginSecret(ctx, "example", "example_key", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := st.PluginSecret(ctx, "example", "example_key"); ok {
+		t.Error("an empty value stored a row instead of clearing it")
+	}
+	names, _ := st.ConfiguredPluginSecrets(ctx, "example")
+	if len(names) != 0 {
+		t.Errorf("configured = %v, want none", names)
+	}
+}
+
+/*
+ * Removing a plugin takes its credentials with it.
+ *
+ * A stored key outliving the plugin it was obtained for is a credential nobody
+ * can see, in a table nobody would think to look in, waiting to be handed to
+ * whatever installs under that name next.
+ */
+func TestRemovePluginForgetsItsSecrets(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	installFor(t, st, "example", "example_key")
+	st.SetPluginSecret(ctx, "example", "example_key", "hunter2")
+
+	if err := st.RemovePlugin(ctx, "example"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := st.PluginSecret(ctx, "example", "example_key"); ok {
+		t.Error("the credential outlived the plugin it belonged to")
+	}
+}
+
+// Deleting one that was never set is not a failure: the caller asked for it to
+// be gone and it is.
+func TestDeletePluginSecretIsIdempotent(t *testing.T) {
+	st := newStore(t)
+	if err := st.DeletePluginSecret(context.Background(), "nobody", "nothing"); err != nil {
+		t.Errorf("deleting an unset secret failed: %v", err)
+	}
+}

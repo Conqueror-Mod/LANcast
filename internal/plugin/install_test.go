@@ -42,7 +42,7 @@ func TestGrantOverridesManifestRequest(t *testing.T) {
 	ctx := context.Background()
 
 	rt, err := NewRuntime(ctx, quietLog(),
-		WithSecretResolver(func(name string) string {
+		WithSecretResolver(func(_, name string) string {
 			if name == "omdb_key" {
 				return "s3cr3t"
 			}

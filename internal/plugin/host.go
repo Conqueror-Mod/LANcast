@@ -77,7 +77,7 @@ func (rt *Runtime) hostSecret(ctx context.Context, mod api.Module, namePtr, name
 		rt.log.Warn("plugin secret denied", "plugin", pn, "secret", name)
 		return 0
 	}
-	val := rt.secret(name)
+	val := rt.secret(p.Manifest.Name, name)
 	if val == "" {
 		return 0
 	}

@@ -330,6 +330,21 @@
   border-color: #7a5a2a;
 }
 
+/* A granted secret and whether it has a value. Indented under its add-on so it
+   reads as belonging to that row rather than as a sibling setting, and ruled on
+   the left because the nesting is the only thing saying which add-on it is for.
+
+   No colour carries the "needs a value" state: design.md reserves the accent
+   for where you are, and the words say it anyway. */
+.addon-secrets {
+  margin-left: 16px;
+  padding-left: 12px;
+  border-left: 1px solid var(--gold-dormant);
+}
+.addon-secrets .set-input {
+  max-width: 220px;
+}
+
 /* The capability-approval dialog. */
 .addon-dialog__scrim {
   position: fixed;

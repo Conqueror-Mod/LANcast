@@ -310,18 +310,25 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	pluginRT, err := plugin.NewRuntime(context.Background(), log,
 		plugin.WithResponseCache(st),
 		plugin.WithRateLimit(settings.Get().RatePerSec),
-		plugin.WithSecretResolver(func(name string) string {
-			s := settings.Get()
-			switch name {
-			case "omdb_key":
-				return s.OMDbKey
-			case "tmdb_key":
-				return s.TMDBKey
-			case "opensubtitles_key":
-				return s.OpenSubtitlesKey
-			default:
-				return ""
+		/*
+		 * A plugin's own credential first, then the server's own provider keys.
+		 *
+		 * Most specific wins: a value an operator stored *for this plugin* is a
+		 * more direct answer than a server key that happens to share the name.
+		 * The order also means the built-in plugins keep working untouched —
+		 * they have no stored rows, so they fall through to Settings exactly as
+		 * before.
+		 */
+		plugin.WithSecretResolver(func(pluginName, name string) string {
+			v, _, err := st.PluginSecret(context.Background(), pluginName, name)
+			if err != nil {
+				// A database failure must not reach the guest as "you were not
+				// granted this". It says nothing, and says why here.
+				log.Warn("could not read a plugin secret",
+					"plugin", pluginName, "secret", name, "error", err)
+				v = ""
 			}
+			return resolveSecret(v, settings.Get(), name)
 		}),
 	)
 	if err != nil {
@@ -1340,4 +1347,22 @@ func onnxLibName() string {
 	default:
 		return "libonnxruntime.so"
 	}
+}
+
+/*
+ * resolveSecret picks between a plugin's own credential and the server's.
+ *
+ * Most specific wins: a value an operator stored *for this plugin* is a more
+ * direct answer than one of the server's provider keys that happens to share
+ * the name. The order also means the built-in plugins are untouched — they
+ * have no stored value, so they fall through to Settings exactly as before.
+ *
+ * Pure, and separated from the database read above, because the ordering is
+ * the part worth a test and a store round-trip is not.
+ */
+func resolveSecret(stored string, s config.Settings, name string) string {
+	if stored != "" {
+		return stored
+	}
+	return s.BuiltinSecret(name)
 }

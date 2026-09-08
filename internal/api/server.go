@@ -489,6 +489,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/plugins/{name}/enable", s.adminOnly(s.enablePlugin))
 	mux.HandleFunc("POST /api/plugins/{name}/disable", s.adminOnly(s.disablePlugin))
 	mux.HandleFunc("DELETE /api/plugins/{name}", s.adminOnly(s.removePlugin))
+	// Write-only by design: there is no GET for a secret's value, and the only
+	// route out of the database is the host handing it to the granted guest.
+	mux.HandleFunc("PUT /api/plugins/{name}/secrets/{secret}", s.adminOnly(s.setPluginSecret))
+	mux.HandleFunc("DELETE /api/plugins/{name}/secrets/{secret}", s.adminOnly(s.deletePluginSecret))
 
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))

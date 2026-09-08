@@ -57,7 +57,7 @@ func TestOMDbPluginMatchesNativeSource(t *testing.T) {
 		plugin.WithHTTPGetter(func(ctx context.Context, url string) ([]byte, error) {
 			return []byte(omdbPayload), nil
 		}),
-		plugin.WithSecretResolver(func(name string) string {
+		plugin.WithSecretResolver(func(_, name string) string {
 			if name == "omdb_key" {
 				return "test-key"
 			}

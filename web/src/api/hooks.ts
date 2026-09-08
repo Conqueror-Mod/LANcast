@@ -2056,6 +2056,28 @@ export function useSetPluginEnabled() {
   });
 }
 
+/*
+ * Store or clear one plugin's own credential.
+ *
+ * Write-only, like the endpoint: nothing reads a value back, and what the page
+ * needs to know — whether a value exists — arrives on the plugin listing as
+ * `secrets_configured`. Which is why this invalidates that listing: setting a
+ * secret changes what the row says about itself, and a row that still reads
+ * "needs a value" after you gave it one is the project's most-repeated bug.
+ */
+export function useSetPluginSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; secret: string; value: string }) =>
+      apiSend(
+        `/api/plugins/${encodeURIComponent(args.name)}/secrets/${encodeURIComponent(args.secret)}`,
+        "PUT",
+        { value: args.value },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+  });
+}
+
 export function useRemovePlugin() {
   const qc = useQueryClient();
   return useMutation({

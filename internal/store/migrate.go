@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 43
+const CurrentSchemaVersion = 44
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -82,6 +82,7 @@ var migrations = []migration{
 	{version: 41, sql: schemaRevision41},
 	{version: 42, sql: schemaRevision42},
 	{version: 43, sql: schemaRevision43},
+	{version: 44, sql: schemaRevision44},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1515,4 +1516,36 @@ CREATE TABLE IF NOT EXISTS user_favourite (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_favourite_item ON user_favourite(item_id);
+`
+
+/*
+ * Revision 44 -- a place to put a plugin's own credential.
+ *
+ * Until now the host resolved a secret from a fixed list of first-party names
+ * (omdb_key, tmdb_key, opensubtitles_key) and answered "" for anything else.
+ * A third-party plugin could therefore request a secret, an operator could
+ * grant it, the grant was recorded and shown -- and the value was always
+ * empty. That is worse than refusing: the approval dialog told an operator the
+ * plugin would read a key it could never read.
+ *
+ * Keyed on (plugin, name) rather than on name alone. A credential is obtained
+ * for a particular plugin, and two plugins asking for "api_key" are asking for
+ * two different things; a single name-keyed table would silently hand the
+ * second one the first one's credential.
+ *
+ * The value is stored as the operator typed it. That is the same standing as
+ * every other credential in this database -- the provider keys in settings are
+ * plaintext too -- and encrypting it here would be theatre while the key to
+ * decrypt it sat in the same directory. What protects it is that the file is
+ * the operator's and the API never reads a value back out: it reports only
+ * whether one is set.
+ */
+const schemaRevision44 = `
+CREATE TABLE IF NOT EXISTS plugin_secret (
+    plugin  TEXT    NOT NULL,
+    name    TEXT    NOT NULL,
+    value   TEXT    NOT NULL,
+    set_at  INTEGER NOT NULL,
+    PRIMARY KEY (plugin, name)
+);
 `

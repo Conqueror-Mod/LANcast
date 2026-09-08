@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,6 +37,16 @@ type pluginView struct {
 	Requested   capsView `json:"requested"`
 	Granted     capsView `json:"granted"`
 	InstalledAt int64    `json:"installed_at,omitempty"`
+
+	// SecretsConfigured is the granted secret names that actually resolve to a
+	// value — either one stored for this plugin, or one of the server's own
+	// provider keys.
+	//
+	// It exists because "granted" was being read as "working". A plugin could
+	// be granted a secret, be shown as granted, and read nothing, and the
+	// approval dialog told the operator it would read a key it never could.
+	// Names only: no value is ever reported back out.
+	SecretsConfigured []string `json:"secrets_configured"`
 }
 
 func caps(c plugin.Capabilities) capsView {
@@ -64,15 +75,115 @@ func (s *Server) requestedCaps(digest string, granted plugin.Capabilities) plugi
 	return m.Capabilities
 }
 
-func (s *Server) viewOf(p store.InstalledPlugin) pluginView {
+func (s *Server) viewOf(ctx context.Context, p store.InstalledPlugin) pluginView {
 	granted := plugin.Capabilities{HTTP: p.GrantedHTTP, Secrets: p.GrantedSecrets}
 	return pluginView{
 		Name: p.Name, Version: p.Version, Kind: p.Kind, Signer: p.Signer,
 		Enabled: p.Enabled, Digest: p.Digest,
-		Requested:   caps(s.requestedCaps(p.Digest, granted)),
-		Granted:     caps(granted),
-		InstalledAt: p.InstalledAt,
+		Requested:         caps(s.requestedCaps(p.Digest, granted)),
+		Granted:           caps(granted),
+		InstalledAt:       p.InstalledAt,
+		SecretsConfigured: nonNil(s.configuredSecrets(ctx, p)),
 	}
+}
+
+/*
+ * configuredSecrets reports which of a plugin's granted secrets would actually
+ * hand it something.
+ *
+ * It answers the same question the host's resolver answers, in the same order,
+ * and both read the built-in names through config.Settings.BuiltinSecret —
+ * because a second copy of that mapping that disagreed with the first would
+ * show an operator a plugin as configured while the plugin read nothing, which
+ * is the exact failure this whole change exists to remove.
+ *
+ * Best-effort: a database failure reports nothing configured rather than
+ * failing the listing. Being told a key is missing when it is present is a
+ * recoverable annoyance; not being able to see the page is not.
+ */
+func (s *Server) configuredSecrets(ctx context.Context, p store.InstalledPlugin) []string {
+	stored, err := s.st.ConfiguredPluginSecrets(ctx, p.Name)
+	if err != nil {
+		s.log.Warn("could not read configured plugin secrets", "plugin", p.Name, "error", err)
+	}
+	has := make(map[string]bool, len(stored))
+	for _, n := range stored {
+		has[n] = true
+	}
+	settings := s.settings.Get()
+
+	var out []string
+	for _, n := range p.GrantedSecrets {
+		if has[n] || settings.BuiltinSecret(n) != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+/*
+ * setPluginSecret stores a credential for one installed plugin.
+ *
+ * Only a *granted* name is accepted. The grant is the authority everywhere else
+ * in this model, and a value stored against a name nobody approved would be a
+ * credential sitting in the database that no plugin can read — dead data that
+ * looks like configuration.
+ *
+ * There is deliberately no way to read a value back. The only route out of the
+ * database is the host function handing it to the guest that was granted it.
+ */
+func (s *Server) setPluginSecret(w http.ResponseWriter, r *http.Request) {
+	name, secret := r.PathValue("name"), r.PathValue("secret")
+	p, err := s.st.GetInstalledPlugin(r.Context(), name)
+	if s.notFoundOr(w, err, "get plugin", "no such plugin") {
+		return
+	}
+	if !contains(p.GrantedSecrets, secret) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"that secret is not granted to this plugin")
+		return
+	}
+
+	var req struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
+		return
+	}
+	if err := s.st.SetPluginSecret(r.Context(), name, secret, req.Value); err != nil {
+		s.writeInternal(w, err, "set plugin secret")
+		return
+	}
+	s.reloadPluginsSoon()
+	// The name and whether it was set or cleared; never the value. An audit log
+	// an administrator can read is not a place to put a credential.
+	action := "set"
+	if req.Value == "" {
+		action = "cleared"
+	}
+	s.audit(r, "plugin.secret", "plugin", name,
+		fmt.Sprintf("%s the %q secret for %q", action, secret, name),
+		map[string]any{"secret": secret, "cleared": req.Value == ""})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// deletePluginSecret forgets one credential. Deleting one that was never set
+// succeeds: the caller asked for it to be gone, and it is.
+func (s *Server) deletePluginSecret(w http.ResponseWriter, r *http.Request) {
+	name, secret := r.PathValue("name"), r.PathValue("secret")
+	if _, err := s.st.GetInstalledPlugin(r.Context(), name); s.notFoundOr(w, err, "get plugin", "no such plugin") {
+		return
+	}
+	if err := s.st.DeletePluginSecret(r.Context(), name, secret); err != nil {
+		s.writeInternal(w, err, "delete plugin secret")
+		return
+	}
+	s.reloadPluginsSoon()
+	s.audit(r, "plugin.secret", "plugin", name,
+		fmt.Sprintf("cleared the %q secret for %q", secret, name),
+		map[string]any{"secret": secret, "cleared": true})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) trustedKeys() plugin.TrustedKeys {
@@ -88,7 +199,7 @@ func (s *Server) listPlugins(w http.ResponseWriter, r *http.Request) {
 	}
 	views := make([]pluginView, 0, len(installed))
 	for _, p := range installed {
-		views = append(views, s.viewOf(p))
+		views = append(views, s.viewOf(r.Context(), p))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"plugins": views})
 }
@@ -121,7 +232,7 @@ func (s *Server) uploadPlugin(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "stage plugin")
 		return
 	}
-	view := s.viewOf(rec)
+	view := s.viewOf(r.Context(), rec)
 	view.Requested = caps(vb.Manifest.Capabilities)
 	// Staged, not yet trusted: the capability grant is a separate act and gets
 	// its own event. Recording the signer is the point — provenance is half of
@@ -172,7 +283,7 @@ func (s *Server) grantPlugin(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("Granted %q http=%v secrets=%v and enabled it",
 			p.Name, p.GrantedHTTP, p.GrantedSecrets),
 		map[string]any{"http": p.GrantedHTTP, "secrets": p.GrantedSecrets, "digest": p.Digest})
-	writeJSON(w, http.StatusOK, s.viewOf(p))
+	writeJSON(w, http.StatusOK, s.viewOf(r.Context(), p))
 }
 
 func (s *Server) enablePlugin(w http.ResponseWriter, r *http.Request) {
