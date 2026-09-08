@@ -20,7 +20,19 @@ import (
 // declaring a different major is refused rather than run against a boundary it
 // was not built for. It is deliberately separate from the HTTP API version
 // (ADR 0018) — a different contract with a different audience.
-const ABIVersion = 1
+//
+// The version gates the **whole** contract, not each function: a module
+// declaring 2 gets all of ABI 2 and none of ABI 1. That is the cheap answer
+// while the only implementations are ours, and it is the honest one — a
+// per-function negotiation would mean the host supporting every combination
+// anybody ever shipped.
+//
+// 2 added the response envelope (ADR 0063). Before it a guest had no way to say
+// a call failed: an empty span meant "nothing", so an upstream that was down
+// reported itself exactly as one that found nothing. Breaking a contract with
+// one implementation, all of it ours, cost a rebuild; the same change after
+// publication would have cost everybody else's.
+const ABIVersion = 2
 
 // Kind is what a plugin extends. The set is intentionally narrow to start: the
 // first contract is "a new source for an existing capability", not "a new

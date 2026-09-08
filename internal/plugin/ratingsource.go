@@ -61,11 +61,18 @@ func (rs *ratingSource) Ratings(ctx context.Context, imdbID string) ([]meta.Rati
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q ratings: %w", rs.p.Manifest.Name, err)
 	}
-	if len(out) == 0 {
+	payload, err := decodeEnvelope(rs.p.Manifest.Name, out)
+	if err != nil {
+		// A guest-reported failure travels rather than becoming an empty
+		// result. The caller decides what to do about it; what it must not do
+		// is look like "this item has no ratings".
+		return nil, err
+	}
+	if len(payload) == 0 {
 		return nil, nil
 	}
 	var items []ratingItem
-	if err := json.Unmarshal(out, &items); err != nil {
+	if err := json.Unmarshal(payload, &items); err != nil {
 		return nil, fmt.Errorf("plugin %q returned malformed ratings: %w", rs.p.Manifest.Name, err)
 	}
 	ratings := make([]meta.Rating, 0, len(items))

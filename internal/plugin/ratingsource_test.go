@@ -3,8 +3,10 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"lancast/internal/meta"
@@ -103,5 +105,42 @@ func TestLoadAllMissingDirIsEmpty(t *testing.T) {
 	t.Cleanup(func() { rt.Close(ctx) })
 	if got := rt.LoadAll(ctx, filepath.Join(t.TempDir(), "nonexistent")); got != nil {
 		t.Errorf("LoadAll of a missing dir = %v, want nil", got)
+	}
+}
+
+/*
+ * A guest that reports a failure reaches the host as an error, through a real
+ * module rather than a hand-written envelope.
+ *
+ * The envelope tests decode bytes. This one compiles, instantiates and calls a
+ * wasm module that chose to fail, which is the only version that proves the
+ * guest SDK, the ABI and the host adapter agree — the three places the meaning
+ * of "it went wrong" has to survive.
+ *
+ * Under ABI 1 this call was indistinguishable from a film with no ratings.
+ */
+func TestAFailingGuestIsAnErrorNotAnEmptyResult(t *testing.T) {
+	p := loadFixture(t)
+	rs, err := NewRatingSource(p)
+	if err != nil {
+		t.Fatalf("NewRatingSource: %v", err)
+	}
+
+	// The fixture fails on this id and succeeds on any other.
+	got, err := rs.Ratings(context.Background(), "fail")
+	if err == nil {
+		t.Fatal("a guest that reported a failure came back as no ratings; the " +
+			"caller cannot tell an outage from a film nobody scored")
+	}
+	if len(got) != 0 {
+		t.Errorf("ratings = %+v, want none alongside the error", got)
+	}
+	if !errors.Is(err, ErrPluginRefused) {
+		t.Errorf("err = %v, want it to unwrap to ErrPluginRefused", err)
+	}
+	if !strings.Contains(err.Error(), "asked to fail") {
+		t.Errorf("err = %q; the guest's own words should survive the boundary, "+
+			"because they are what tells somebody which setting is wrong",
+			err.Error())
 	}
 }

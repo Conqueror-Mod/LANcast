@@ -102,10 +102,24 @@ func ratings(ptr, length uint32) uint64 {
 		IMDbID string `json:"imdb_id"`
 	}
 	_ = json.Unmarshal(bytesAt(ptr, length), &req)
+
+	/*
+	 * "fail" asks the fixture to report a failure, so the host side can be
+	 * tested against the answer ABI 1 could not give. Everything else is a
+	 * success, wrapped in the ABI 2 envelope.
+	 */
+	if req.IMDbID == "fail" {
+		out, err := json.Marshal(map[string]any{"error": "the fixture was asked to fail"})
+		if err != nil {
+			return 0
+		}
+		return ret(out)
+	}
+
 	resp := []map[string]any{
 		{"source": "imdb", "score": 7.9, "display": req.IMDbID, "votes": 42},
 	}
-	out, err := json.Marshal(resp)
+	out, err := json.Marshal(map[string]any{"result": resp})
 	if err != nil {
 		return 0
 	}
