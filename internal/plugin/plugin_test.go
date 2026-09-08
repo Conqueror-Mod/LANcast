@@ -78,7 +78,7 @@ func TestHTTPGetRestrictedToDeclaredHosts(t *testing.T) {
 	p := loadFixture(t, WithHTTPGetter(getter))
 
 	// Declared host: the host makes the call and the bytes come back.
-	out, err := p.Call(context.Background(), "fetch", []byte("https://example.test/data"))
+	out, err := p.Call(context.Background(), "httpget", []byte("https://example.test/data"))
 	if err != nil {
 		t.Fatalf("fetch allowed: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestHTTPGetRestrictedToDeclaredHosts(t *testing.T) {
 
 	// Undeclared host: denied, the getter is never reached, empty comes back.
 	fetched = ""
-	out, err = p.Call(context.Background(), "fetch", []byte("https://evil.test/steal"))
+	out, err = p.Call(context.Background(), "httpget", []byte("https://evil.test/steal"))
 	if err != nil {
 		t.Fatalf("fetch denied returned error: %v", err)
 	}
