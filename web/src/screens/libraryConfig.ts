@@ -24,7 +24,22 @@ export interface LibraryKindConfig {
   playlists?: boolean;
 }
 
-// Sort values the API supports (title | year | added | rating).
+/*
+ * Sort values the API supports (title | year | added | rating | longest |
+ * shortest).
+ *
+ * The duration sorts are here and on no other kind, for the reason the music
+ * comment below spells out at length: every other library's top level is a
+ * container. A show, a season, an artist and a gallery all carry no running
+ * time, so the option would tie every row and hand back the alphabet — which
+ * is indistinguishable from sorting being broken, and was reported as exactly
+ * that when the music library offered Year.
+ *
+ * Photographs are the trap worth naming, because they *look* like they have
+ * one: the probe writes 40ms for every still image in the library, so a
+ * duration sort there would not tie visibly — it would produce a confident,
+ * arbitrary order.
+ */
 const MOVIE: LibraryKindConfig = {
   searchPlaceholder: "Search this library",
   sorts: [
@@ -32,6 +47,8 @@ const MOVIE: LibraryKindConfig = {
     { value: "year", label: "Year" },
     { value: "added", label: "Recently added" },
     { value: "rating", label: "Rating" },
+    { value: "longest", label: "Duration (longest)" },
+    { value: "shortest", label: "Duration (shortest)" },
   ],
 };
 

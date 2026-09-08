@@ -1248,6 +1248,28 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// every EXIF-less wallpaper in one undifferentiated block; COALESCE
 		// keeps them in a sensible place among the dated ones instead (ADR 0028).
 		order = ` ORDER BY COALESCE(taken_at, mtime, added_at) DESC, sort_title`
+	case "longest", "shortest":
+		/*
+		 * By running time, with anything that has no running time at the bottom
+		 * of both.
+		 *
+		 * `duration_ms <= 0` counts as unknown alongside NULL, because zero is
+		 * what a probe writes when it could not read a length — and a film of
+		 * "no minutes" is not the shortest film, it is a film nobody measured.
+		 * Sinking both is the same rule `rating` follows for unrated rows.
+		 *
+		 * Containers have no duration at all: a show, a season, a collection
+		 * and an artist are all NULL here, which is why this sort is offered on
+		 * film libraries and nowhere else. Offering it where every row ties
+		 * would produce the alphabet and look like broken sorting — the
+		 * mistake the music library's Year option already made and had removed.
+		 */
+		unknown := `(duration_ms IS NULL OR duration_ms <= 0)`
+		if f.Sort == "longest" {
+			order = ` ORDER BY ` + unknown + `, duration_ms DESC, sort_title`
+		} else {
+			order = ` ORDER BY ` + unknown + `, duration_ms ASC, sort_title`
+		}
 	case "track":
 		// Disc, then track number — an album in the order the record plays.
 		//
