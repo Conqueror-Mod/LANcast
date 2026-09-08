@@ -177,6 +177,19 @@ func (pr *provider) Search(ctx context.Context, q meta.Query) ([]meta.Candidate,
 			PosterURL:  pr.keepURL(c.PosterURL),
 		})
 	}
+	/*
+	 * Nil rather than an empty slice, and the difference is not cosmetic.
+	 *
+	 * A guest returning no candidates sends JSON null, which unmarshals into a
+	 * nil slice, which this loop then turns into an allocated empty one. Every
+	 * native provider answers nil, so a plugin that found nothing would have
+	 * been distinguishable from a native source that found nothing by a
+	 * reflect.DeepEqual anywhere downstream — which is exactly what the TMDB
+	 * equivalence test does, and how this was found.
+	 */
+	if len(out) == 0 {
+		return nil, nil
+	}
 	return out, nil
 }
 
