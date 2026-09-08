@@ -13,6 +13,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -47,25 +48,43 @@ type response struct {
 	} `json:"Ratings"`
 }
 
-func omdbRatings(imdbID string) []sdk.Rating {
+/*
+ * The error returns mirror internal/meta/omdb exactly, because the equivalence
+ * test is what keeps the two honest and the boundary must not quietly change
+ * the meaning of an answer.
+ *
+ * The native client already told a fetch failure apart from a miss: a transport
+ * error is returned, while `"Response":"False"` — "Movie not found", "Incorrect
+ * IMDb ID" — is a normal empty result, because OMDb's coverage thins out for
+ * older, non-US and television titles. **ABI 1 could not carry that
+ * distinction.** Both arrived at the host as an empty span, so a plugin whose
+ * key had been rejected reported itself exactly as a film with no scores.
+ */
+func omdbRatings(imdbID string) ([]sdk.Rating, error) {
 	imdbID = normalizeIMDbID(imdbID)
 	if imdbID == "" {
-		return nil
+		return nil, nil
 	}
+	// Not configured is not a failure, matching the native client's
+	// Configured() check: a server with no OMDb key is a working server.
 	key := sdk.Secret("omdb_key")
 	if key == "" {
-		return nil
+		return nil, nil
 	}
 	body := sdk.HTTPGet("https://www.omdbapi.com/?i=" + imdbID + "&apikey=" + key)
 	if len(body) == 0 {
-		return nil
+		// The host refused the fetch, or it failed. Either way this is the
+		// case ABI 1 could not report.
+		return nil, errors.New("omdb request failed or was denied")
 	}
 	var doc response
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil
+		return nil, errors.New("omdb returned a response this plugin could not read")
 	}
 	if !strings.EqualFold(doc.Response, "True") {
-		return nil
+		// "Incorrect IMDb ID" / "Movie not found" — a miss, not a failure,
+		// exactly as the native client treats it.
+		return nil, nil
 	}
 	var out []sdk.Rating
 	for _, r := range doc.Ratings {
@@ -79,7 +98,7 @@ func omdbRatings(imdbID string) []sdk.Rating {
 		}
 		out = append(out, rating)
 	}
-	return out
+	return out, nil
 }
 
 func parseRating(source, value string) (string, float64, bool) {

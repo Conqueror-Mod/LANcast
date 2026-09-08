@@ -28,7 +28,7 @@ func (h *harness) postRaw(t *testing.T, path string, body []byte) *http.Response
 // harness does not wire), so a real module is unnecessary here.
 func fixtureBundle(t *testing.T) []byte {
 	t.Helper()
-	manifest := []byte(`{"name":"omdb","version":"0.1.0","abi":1,"kind":"rating_source",` +
+	manifest := []byte(`{"name":"omdb","version":"0.1.0","abi":2,"kind":"rating_source",` +
 		`"capabilities":{"http":["www.omdbapi.com"],"secrets":["omdb_key"]}}`)
 	b, err := plugin.CreateBundle(manifest, []byte("opaque-wasm"), nil)
 	if err != nil {

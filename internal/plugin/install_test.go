@@ -16,7 +16,7 @@ func installFixture(t *testing.T) (root, digest string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest := []byte(`{"name":"fixture","version":"1","abi":1,"kind":"rating_source",` +
+	manifest := []byte(`{"name":"fixture","version":"1","abi":2,"kind":"rating_source",` +
 		`"capabilities":{"http":["example.test"],"secrets":["omdb_key"]}}`)
 	bundle, err := CreateBundle(manifest, wasm, nil) // unsigned is fine for the loader test
 	if err != nil {

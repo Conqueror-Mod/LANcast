@@ -111,15 +111,61 @@ type ratingsRequest struct {
 	IMDbID string `json:"imdb_id"`
 }
 
-// HandleRatings is the boilerplate for a rating_source entrypoint: it decodes
-// the {"imdb_id":...} request, calls fn, and encodes the result. A plugin's
-// exported `ratings` function is one line over this.
-func HandleRatings(input []byte, fn func(imdbID string) []Rating) uint64 {
-	var req ratingsRequest
-	_ = json.Unmarshal(input, &req)
-	out, err := json.Marshal(fn(req.IMDbID))
+/*
+ * envelope is the ABI 2 response shape (ADR 0063).
+ *
+ * Before it, a guest had no way to say a call went wrong: returning nothing was
+ * how you said "no results", so an upstream that was down looked exactly like
+ * one that had nothing. For a rating source that meant no scores until
+ * tomorrow. For a provider it would mean the host writing down "unmatched",
+ * which it does not re-ask, from a failure that was temporary.
+ */
+type envelope struct {
+	Result any    `json:"result,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// Ok packs a successful result.
+func Ok(v any) uint64 {
+	b, err := json.Marshal(envelope{Result: v})
+	if err != nil {
+		return Fail("could not encode the result")
+	}
+	return Return(b)
+}
+
+/*
+ * Fail packs a failure, in words.
+ *
+ * The message reaches the host's log with this plugin's name against it, so it
+ * is worth writing for somebody reading that log at the time — "omdb rejected
+ * the key" rather than "error 3".
+ */
+func Fail(msg string) uint64 {
+	b, err := json.Marshal(envelope{Error: msg})
 	if err != nil {
 		return 0
 	}
-	return Return(out)
+	return Return(b)
+}
+
+/*
+ * HandleRatings is the boilerplate for a rating_source entrypoint: it decodes
+ * the {"imdb_id":...} request, calls fn, and packs whichever of the two answers
+ * fn gave.
+ *
+ * fn returns an error as well as ratings, which is the ABI 2 change an author
+ * sees. Returning no ratings and no error means "looked, found nothing"; an
+ * error means "could not look" — and the host treats those differently.
+ */
+func HandleRatings(input []byte, fn func(imdbID string) ([]Rating, error)) uint64 {
+	var req ratingsRequest
+	if err := json.Unmarshal(input, &req); err != nil {
+		return Fail("could not read the request")
+	}
+	out, err := fn(req.IMDbID)
+	if err != nil {
+		return Fail(err.Error())
+	}
+	return Ok(out)
 }

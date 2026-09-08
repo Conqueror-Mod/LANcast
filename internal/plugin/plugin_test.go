@@ -40,13 +40,13 @@ func loadFixture(t *testing.T, opts ...Option) *Plugin {
 }
 
 func TestParseManifestValidation(t *testing.T) {
-	good := `{"name":"x","version":"1","abi":1,"kind":"rating_source"}`
+	good := `{"name":"x","version":"1","abi":2,"kind":"rating_source"}`
 	if _, err := ParseManifest([]byte(good)); err != nil {
 		t.Fatalf("valid manifest rejected: %v", err)
 	}
 	bad := map[string]string{
-		"no name":      `{"abi":1,"kind":"rating_source"}`,
-		"unknown kind": `{"name":"x","abi":1,"kind":"weather"}`,
+		"no name":      `{"abi":2,"kind":"rating_source"}`,
+		"unknown kind": `{"name":"x","abi":2,"kind":"weather"}`,
 		"bad abi":      `{"name":"x","abi":99,"kind":"rating_source"}`,
 		"malformed":    `{not json`,
 	}

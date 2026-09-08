@@ -10,7 +10,7 @@ import (
 )
 
 func testManifestJSON() []byte {
-	return []byte(`{"name":"omdb","version":"0.1.0","abi":1,"kind":"rating_source",` +
+	return []byte(`{"name":"omdb","version":"0.1.0","abi":2,"kind":"rating_source",` +
 		`"capabilities":{"http":["www.omdbapi.com"],"secrets":["omdb_key"]}}`)
 }
 
@@ -104,7 +104,7 @@ func TestTamperedManifestFailsVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	tampered := rewriteBundleMember(t, bundle, bundleManifest,
-		[]byte(`{"name":"omdb","version":"9.9.9","abi":1,"kind":"rating_source"}`))
+		[]byte(`{"name":"omdb","version":"9.9.9","abi":2,"kind":"rating_source"}`))
 	if _, err := VerifyBundle(tampered, TrustedKeys{Project: pub}); err == nil {
 		t.Error("a modified manifest must fail the signature check")
 	}
