@@ -1,0 +1,16 @@
+{
+  "name": "tmdb",
+  "version": "0.1.0",
+  "abi": 2,
+  "kind": "provider",
+  "caps": {
+    "movie": true,
+    "show": true,
+    "episode": true,
+    "artwork": true
+  },
+  "capabilities": {
+    "http": ["api.themoviedb.org", "image.tmdb.org"],
+    "secrets": ["tmdb_key"]
+  }
+}
