@@ -32,6 +32,7 @@ import "./FilterBar.css";
  */
 export function FilterBar({
   libraryID,
+  cast = false,
   facets,
   params,
   castNames,
@@ -41,6 +42,9 @@ export function FilterBar({
   onClear,
 }: {
   libraryID: number;
+  /** Whether this library kind has a cast at all — see LibraryKindConfig. A
+   *  photograph never will, so the two chips could only say "nobody". */
+  cast?: boolean;
   facets?: Facets;
   params: URLSearchParams;
   /** Names for the person ids in the URL, so a bookmarked filter renders as a
@@ -84,12 +88,22 @@ export function FilterBar({
    * A category with nothing to offer is not drawn.
    *
    * The rule the chips already followed: a control that cannot change the grid
-   * lies about what it does. Cast is the exception and is always offered,
-   * because it is a search rather than a facet — the bar cannot know whether
-   * anybody is credited without asking, and an empty panel says so in words.
+   * lies about what it does. Cast is the exception and is offered without
+   * asking, because it is a search rather than a facet — the bar cannot know
+   * whether anybody is credited without a request, and an empty panel says so
+   * in words.
+   *
+   * That exception holds only where an empty answer is a fact about the
+   * *search*. In a picture library it is a fact about the kind — a photograph
+   * has no cast and never will — so the chips were two buttons that could only
+   * ever say "nobody", which is the very thing this rule exists to prevent.
+   * Whether they are offered is now the library's decision (libraryConfig).
    */
   const has = (c: FilterCategory): boolean => {
     switch (c.key) {
+      case "actor":
+      case "director":
+        return cast;
       case "genre":
         return (facets?.genres?.length ?? 0) > 0;
       case "decade":

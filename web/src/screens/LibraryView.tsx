@@ -460,6 +460,7 @@ export function LibraryView({
 
         <FilterBar
           libraryID={libraryID}
+          cast={!!config.cast}
           facets={facets}
           params={params}
           castNames={castNames}

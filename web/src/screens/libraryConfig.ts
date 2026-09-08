@@ -22,6 +22,21 @@ export interface LibraryKindConfig {
    * asks.
    */
   playlists?: boolean;
+  /**
+   * Whether Actor and Director are offered in the filter bar.
+   *
+   * They are a *search* rather than a facet — the bar cannot know whether
+   * anybody is credited without asking — so unlike every other category they
+   * cannot hide themselves when there is nothing to find. That exception is
+   * right for a film library, where an empty result is a fact about this
+   * search, and wrong for a library where it is a fact about the whole kind:
+   * a photograph has no cast and never will, so the panel could only ever say
+   * "nobody".
+   *
+   * Reported from a picture library showing both chips. Left off rather than
+   * defaulted on, so a new kind has to decide.
+   */
+  cast?: boolean;
 }
 
 /*
@@ -42,6 +57,7 @@ export interface LibraryKindConfig {
  */
 const MOVIE: LibraryKindConfig = {
   searchPlaceholder: "Search this library",
+  cast: true,
   sorts: [
     { value: "title", label: "Title" },
     { value: "year", label: "Year" },
@@ -54,6 +70,7 @@ const MOVIE: LibraryKindConfig = {
 
 const SHOW: LibraryKindConfig = {
   searchPlaceholder: "Search shows",
+  cast: true,
   sorts: [
     { value: "title", label: "Title" },
     { value: "year", label: "First aired" },

@@ -38,3 +38,27 @@ describe("the duration sort", () => {
     expect(labels).toContain("Duration (shortest)");
   });
 });
+
+/*
+ * Which libraries offer Actor and Director.
+ *
+ * They are a search rather than a facet, so unlike every other category they
+ * cannot hide themselves when there is nothing to find — the bar would have to
+ * make a request to know. That exception is right where an empty answer is a
+ * fact about the *search*, and wrong where it is a fact about the kind: a
+ * photograph has no cast and never will, so in a picture library the two chips
+ * could only ever say "nobody".
+ *
+ * Reported from a picture library showing both.
+ */
+describe("the cast filters", () => {
+  it("are offered where things have a cast", () => {
+    expect(configForKind("movie").cast).toBe(true);
+    expect(configForKind("show").cast).toBe(true);
+  });
+
+  it("are not offered on photographs or music", () => {
+    expect(configForKind("picture").cast).toBeFalsy();
+    expect(configForKind("music").cast).toBeFalsy();
+  });
+});
