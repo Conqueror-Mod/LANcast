@@ -348,25 +348,54 @@ ask.
 
 ## Versioning
 
-`abi` in the manifest must equal the host's `ABIVersion` exactly. It is **2**
-today.
+`abi` in the manifest is **2** today. The policy behind that number is
+[ADR 0064](adr/0064-what-the-plugin-abi-promises.md); what it means for you is
+below.
 
-The version gates the **whole contract, not each function**: a module declaring
-2 gets all of ABI 2 and none of ABI 1. A per-function negotiation would mean the
-host supporting every combination anybody ever shipped, which is the cost that
-buys a contract nobody can reason about.
+**The contract grows without breaking you.** These can appear in any release and
+a plugin built before them keeps working:
 
-A host refuses a module it cannot run rather than starting one and failing
-mid-call. That means **a new ABI breaks every existing plugin**, which is a
-deliberate constraint on us more than on you: ABI 2 was worth the break because
-it had one implementation and all of it was ours, and the same change after the
-contract went public would have cost everybody else's. Expect changes to be rare
-and to arrive with a rebuild, not a migration.
+- a new field in a payload, in either direction
+- a new optional field in `plugin.json`
+- a new plugin kind, or a new host function
+- an export the host calls only when a module has it
 
-> **Not yet decided:** what we promise about how long an ABI stays supported,
-> and whether a host will ever run two. Today it runs one. That policy needs
-> writing down before the contract can be called stable, and it is not written
-> down here because it has not been decided — see the roadmap.
+**Two obligations on your side make that safe**, and they are part of the
+contract rather than good manners:
+
+- **Ignore fields you do not recognise.** Go's `encoding/json` does by default
+  and the SDK relies on it; reaching for `DisallowUnknownFields` opts you out of
+  every future addition.
+- **Tolerate a field you expected being absent.** A host with nothing to say
+  about something omits it.
+
+**When the number does change**, it is for a real break — a payload field
+removed or re-typed, a host function's signature changed, the calling convention
+altered. Then you rebuild.
+
+**You get a release to do it in.** When ABI *N* ships, the host keeps accepting
+*N−1* for at least one subsequent release, and the removal is called out in the
+release notes. That window exists because the ordering is otherwise impossible:
+nobody can publish a build for an ABI that has not shipped yet, so a hard
+cutover would strand every plugin on day one. It is one version deep, not
+"everything ever shipped" — the host is not going to carry five readers.
+
+ABI 1 is the exception and is refused outright. It was never public and its only
+implementations were ours.
+
+**The version gates the whole contract, not each function.** A module declaring
+2 gets all of ABI 2. Per-function negotiation would mean the host supporting
+every combination anybody ever shipped, which is the cost that buys a contract
+nobody can reason about.
+
+**You never ask the host what version it is.** You declare one and it either
+runs you or refuses you, so a running plugin is always running the version it
+was built for.
+
+**Your module is checked against its kind at load.** A `provider` that exports
+no `search`, or anything at all missing `alloc`, is refused when it is
+installed — with a message naming the export — rather than installing cleanly
+and failing the first time it is asked something.
 
 ---
 

@@ -104,7 +104,18 @@ type Plugin struct {
 	Manifest Manifest
 	rt       *Runtime
 	compiled wazero.CompiledModule
+
+	// exports is what the module actually exports, read once at compile time.
+	// It is what makes an *optional* export possible (ADR 0064): the host can
+	// ask before calling, so adding one does not break a module built before
+	// it existed.
+	exports map[string]bool
 }
+
+// HasExport reports whether the module exports a function. Used for exports the
+// host calls only when they are present — adding one of those is a non-breaking
+// change, and this is what makes that true rather than aspirational.
+func (p *Plugin) HasExport(name string) bool { return p.exports[name] }
 
 // Load compiles a module from bytes under a validated manifest.
 func (rt *Runtime) Load(ctx context.Context, m Manifest, wasm []byte) (*Plugin, error) {
@@ -112,7 +123,28 @@ func (rt *Runtime) Load(ctx context.Context, m Manifest, wasm []byte) (*Plugin, 
 	if err != nil {
 		return nil, fmt.Errorf("compile plugin %q: %w", m.Name, err)
 	}
-	return &Plugin{Manifest: m, rt: rt, compiled: compiled}, nil
+	exports := make(map[string]bool)
+	for name := range compiled.ExportedFunctions() {
+		exports[name] = true
+	}
+	/*
+	 * Refuse a module that cannot answer for the kind it claims, here rather
+	 * than at the first call.
+	 *
+	 * Without this a provider missing `search` installed cleanly, listed as
+	 * enabled, and failed the first time the enricher asked it anything — with
+	 * a message that reaches a log rather than the person who just installed
+	 * it. The exports are known at compile time, so the honest moment to say so
+	 * is now.
+	 */
+	for _, fn := range append([]string{allocEntrypoint}, requiredExports[m.Kind]...) {
+		if !exports[fn] {
+			compiled.Close(ctx)
+			return nil, fmt.Errorf("plugin %q is kind %q but exports no %q",
+				m.Name, m.Kind, fn)
+		}
+	}
+	return &Plugin{Manifest: m, rt: rt, compiled: compiled, exports: exports}, nil
 }
 
 // LoadDir loads a plugin from a directory holding plugin.json and plugin.wasm.

@@ -34,6 +34,27 @@ import (
 // publication would have cost everybody else's.
 const ABIVersion = 2
 
+/*
+ * MinABIVersion is the oldest contract this host still runs (ADR 0064).
+ *
+ * When ABI N ships, N-1 keeps working for at least one subsequent release. A
+ * self-hosted operator cannot be upgraded in lockstep with anything: they
+ * update the server when they update it, and the plugin's author may be asleep,
+ * busy, or gone. Without a window the ordering is impossible — no author can
+ * publish a build for an ABI that has not shipped yet, so a hard cutover
+ * strands every plugin on day one by construction.
+ *
+ * It is a constant rather than a rule somebody remembers because the check is
+ * the only place the policy is enforced, and a policy that lives solely in a
+ * document is one the next bump forgets.
+ *
+ * **2, not 1, and that is deliberate.** ABI 1 was never public, its only
+ * implementations were ours, and ADR 0063 broke it precisely because that was
+ * true. Supporting it now would be carrying a reader for a version nothing in
+ * the world runs.
+ */
+const MinABIVersion = 2
+
 // Kind is what a plugin extends. The set is intentionally narrow to start: the
 // first contract is "a new source for an existing capability", not "a new
 // capability". Widening it waits for a real plugin that needs it.
@@ -51,6 +72,29 @@ var supportedKinds = map[Kind]bool{
 	KindRatingSource: true,
 	KindProvider:     true,
 }
+
+/*
+ * requiredExports is what a module of each kind must actually export.
+ *
+ * Checked at load, because the alternative is what happened before: a provider
+ * manifest with no `search` installed cleanly, was listed as installed and
+ * enabled, and failed at the first call with "plugin has no export" — a message
+ * that reaches a log rather than the person who just installed it.
+ *
+ * `alloc` is required of everything: it is how the host writes a call's input
+ * into guest memory, so a module without it cannot be passed anything.
+ *
+ * This is the *required* set. An export the host calls only when it is present
+ * is deliberately not listed — adding one of those is a non-breaking change
+ * (ADR 0064), and listing it here would make it breaking.
+ */
+var requiredExports = map[Kind][]string{
+	KindRatingSource: {ratingsEntrypoint},
+	KindProvider:     {searchEntrypoint, fetchEntrypoint},
+}
+
+// allocEntrypoint is the one export every module must have, whatever its kind.
+const allocEntrypoint = "alloc"
 
 /*
  * Caps is what a provider plugin says it can answer for, declared in the
@@ -108,8 +152,9 @@ func ParseManifest(data []byte) (Manifest, error) {
 	if m.Name == "" {
 		return m, errors.New("manifest: name is required")
 	}
-	if m.ABI != ABIVersion {
-		return m, fmt.Errorf("manifest: abi %d unsupported (host implements %d)", m.ABI, ABIVersion)
+	if m.ABI < MinABIVersion || m.ABI > ABIVersion {
+		return m, fmt.Errorf("manifest: abi %d unsupported (host runs %d-%d)",
+			m.ABI, MinABIVersion, ABIVersion)
 	}
 	if !supportedKinds[m.Kind] {
 		return m, fmt.Errorf("manifest: unknown kind %q", m.Kind)
