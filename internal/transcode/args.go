@@ -608,28 +608,46 @@ func Args(o Options) []string {
 	switch o.Output {
 	case HLS:
 		/*
-		 * The playlist type is a claim about the source, not a preference.
+		 * The playlist type is a claim about the playlist, not about the source.
 		 *
-		 * `vod` says the stream is complete and whole. For a film that is true.
-		 * For a channel it is a lie with a measurable cost: ffmpeg defers the
-		 * playlist entirely, so a harness watching a real channel for 60s saw
-		 * nine good segments written — h264 + aac, independently decodable, no
-		 * complaints — and `index.m3u8` never appear. The media was fine and
+		 * `vod` says the list is complete and whole, and ffmpeg takes it at its
+		 * word: it defers the playlist entirely and writes it when the encode
+		 * ends. A harness watching a real channel for 60s saw nine good
+		 * segments written — h264 + aac, independently decodable, no complaints
+		 * — and `index.m3u8` never appear. The media was fine and
 		 * undiscoverable, because a player has no way in but the playlist.
 		 *
-		 * `event` is the choice here rather than a sliding window, and the
-		 * trade is deliberate: every segment stays listed, so a viewer who
-		 * paused can still reach what they missed, at the cost of a playlist
-		 * and a directory that grow for as long as the session lives. That is
-		 * bounded by the session rather than unbounded — `IdleTimeout` reaps a
-		 * channel nobody is reading and takes its directory with it — but a
-		 * channel genuinely watched for a day is a real disk cost and is not
-		 * yet solved here.
+		 * **That was fixed for channels and left in place for films, and it was
+		 * wrong for films too.** The reasoning recorded here was "`vod` says the
+		 * stream is complete and whole; for a film that is true" — true of the
+		 * *file*, which is finite and sitting on a disk, and not of the
+		 * *playlist*, which is being produced right now by an ffmpeg that
+		 * started a moment ago. A film converted on demand is as unfinished as
+		 * a channel while it is being converted, and the flag is about the
+		 * playlist.
+		 *
+		 * The cost was total and silent. Measured on `Thats My Boy (2012).mkv`
+		 * with the exact arguments this builds: under `vod`, 566 segments in 60
+		 * seconds and no `index.m3u8` at all; under `event`, the playlist
+		 * appears in **one second** and grows. So every HLS file request timed
+		 * out on its 30-second wait, returned 503, and fell back — and because
+		 * the element reports a 503 as *unsupported source*, the client wrote
+		 * the device off as unable to play HLS and never asked again. One
+		 * server log holds exactly one HLS file session, on the day the feature
+		 * shipped, and none since.
+		 *
+		 * ADR 0050 measured a **finished** playlist, which is the one case this
+		 * flag does not break, and that is why it was not caught.
+		 *
+		 * `event` rather than a sliding window, for both: every segment stays
+		 * listed, so a viewer who paused can still reach what they missed, at
+		 * the cost of a playlist and a directory that grow for as long as the
+		 * session lives. Bounded by the session — `IdleTimeout` reaps one
+		 * nobody is reading and takes its directory with it — but something
+		 * genuinely watched for a day is a real disk cost and is not yet solved
+		 * here.
 		 */
-		playlistType := "vod"
-		if o.Live {
-			playlistType = "event"
-		}
+		const playlistType = "event"
 		a = append(a,
 			"-f", "hls",
 			"-hls_time", strconv.Itoa(SegmentSeconds),

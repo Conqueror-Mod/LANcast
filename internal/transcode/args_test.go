@@ -931,13 +931,32 @@ func TestLiveHLSIsAnEventPlaylist(t *testing.T) {
 	}
 }
 
-func TestFileHLSStaysVOD(t *testing.T) {
+/*
+ * A film is an event playlist too, and this test used to assert the opposite.
+ *
+ * It was called TestFileHLSStaysVOD and it guarded a premise rather than a
+ * measurement: "vod says the stream is complete and whole; for a film that is
+ * true". True of the *file* — finite, sitting on a disk — and not of the
+ * *playlist*, which is being produced right now by an ffmpeg that started a
+ * moment ago. The flag is about the playlist.
+ *
+ * Measured on a real film with the exact arguments this builds: under vod, 566
+ * segments in 60 seconds and no index.m3u8 at all; under event, the playlist
+ * appears in one second. So every HLS file request timed out on its 30-second
+ * wait and fell back to the progressive path — the very path segments were
+ * introduced to replace.
+ *
+ * The same failure had already been found and fixed for channels. This is the
+ * other half of it.
+ */
+func TestFileHLSIsAnEventPlaylist(t *testing.T) {
 	args := Args(Options{
 		Input: "in.mkv", Output: HLS, OutputDir: "/tmp/x",
 		Decision: remuxDecision(),
 	})
-	if got := argValue(args, "-hls_playlist_type"); got != "vod" {
-		t.Fatalf("file HLS playlist type = %q, want vod", got)
+	if got := argValue(args, "-hls_playlist_type"); got != "event" {
+		t.Fatalf("file HLS playlist type = %q, want event — under vod ffmpeg "+
+			"writes no playlist until the encode ends, so nothing can play it", got)
 	}
 }
 

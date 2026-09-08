@@ -62,7 +62,23 @@ export type FilePath = "direct" | "hls" | "progressive";
  */
 export type HLSVerdict = "unknown" | "playable" | "refused";
 
-export const HLS_VERDICT_KEY = "lancast:hls-playable";
+/*
+ * Versioned, and the version is a repair.
+ *
+ * The first key recorded a verdict that could be wrong for a reason nothing
+ * here could see — a server that failed to produce a playlist looked exactly
+ * like an engine that could not read one, so one bad thirty-second wait retired
+ * the better path on that device for ever. Observed doing precisely that: one
+ * `hls playlist unavailable` on 31 August, and every file played since went
+ * down the progressive path with the eviction fault this whole module exists to
+ * avoid.
+ *
+ * Bumping the key is how those devices get a second opinion. A verdict written
+ * under the old rules is not worth migrating — it was reached by a test that
+ * could not tell the two failures apart — so it is left behind rather than
+ * read, and each device pays one attempt to find out the truth.
+ */
+export const HLS_VERDICT_KEY = "lancast:hls-playable-2";
 
 export function hlsVerdict(): HLSVerdict {
   return readDevice<HLSVerdict>(HLS_VERDICT_KEY, "unknown");
@@ -124,4 +140,44 @@ export function filePath(
  */
 export function isUnsupportedSource(err: MediaError | null): boolean {
   return !!err && err.code === 4; // MEDIA_ERR_SRC_NOT_SUPPORTED
+}
+
+/*
+ * Did the server actually hand over a playlist?
+ *
+ * `MEDIA_ERR_SRC_NOT_SUPPORTED` was treated as reliable evidence about the
+ * engine. It is not, and the gap is what broke this: the element raises exactly
+ * that code when it is handed something that is not media at all — including
+ * the `503 {"error":…}` this server returns when ffmpeg has not produced
+ * index.m3u8 within thirty seconds. So a slow start on one film was recorded as
+ * "this device cannot play HLS", permanently, and every later film took the
+ * progressive path.
+ *
+ * That is the same species of mistake the module was written about: a claim
+ * about an engine, inferred rather than watched.
+ *
+ * So before writing a verdict, ask the endpoint directly. A response that is
+ * not a playlist means the server failed, which says nothing about the engine
+ * and must not be remembered. A real playlist that the element still refused is
+ * the evidence the verdict was always supposed to rest on.
+ *
+ * Returning null means "no verdict" — deliberately distinct from "refused", so
+ * a caller cannot fall into writing one by accident.
+ */
+export async function playlistWasServed(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean | null> {
+  try {
+    const res = await fetchImpl(url, { headers: { Accept: HLS_MIME } });
+    if (!res.ok) return false;
+    const type = res.headers.get("content-type") ?? "";
+    // A body that is not a playlist is a server saying something else — an
+    // error page, a login redirect — and is not evidence about the engine.
+    return type.includes("mpegurl");
+  } catch {
+    // The request could not be made at all. That is this moment, not this
+    // device.
+    return null;
+  }
 }

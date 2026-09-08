@@ -44,6 +44,7 @@ import {
   filePath,
   hlsWorthTrying,
   isUnsupportedSource,
+  playlistWasServed,
   rememberHLS,
   type FilePath,
 } from "./fileTransport";
@@ -1928,12 +1929,39 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                * or network error says something about this file or this moment,
                * and retiring the better path over one of those would be a
                * permanent decision made from a transient fault.
+               *
+               * And narrow was still not narrow enough. The element raises
+               * *unsupported source* for anything that is not media, including
+               * the `503 {"error":…}` this server returns when ffmpeg has not
+               * written index.m3u8 within thirty seconds — so one slow start
+               * was recorded as "this device cannot play HLS" and every later
+               * film took the progressive path, with the eviction fault the
+               * playlist exists to avoid. Observed on this server: one failed
+               * playlist on 31 August, and not one HLS file session since.
+               *
+               * So the fallback happens now — it is right either way and the
+               * viewer should not wait on a question — and the *verdict* waits
+               * to hear whether a playlist was ever served.
                */
               if (
                 chosenPath.current === "hls" &&
                 isUnsupportedSource(e.currentTarget.error)
               ) {
-                rememberHLS("refused");
+                void playlistWasServed(
+                  sourceURL(
+                    itemID,
+                    decision.current.method,
+                    offset.current,
+                    audioIndex,
+                    qualityRef.current,
+                    "hls",
+                  ),
+                ).then((served) => {
+                  // Only a playlist that arrived and was still refused says
+                  // anything about this engine. Anything else is the server or
+                  // the moment, and is not remembered.
+                  if (served) rememberHLS("refused");
+                });
                 const v = e.currentTarget;
                 chosenPath.current = "progressive";
                 setLoading(true);
