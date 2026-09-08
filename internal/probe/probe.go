@@ -45,6 +45,14 @@ type Stream struct {
 	Default  bool       `json:"default"`
 	Forced   bool       `json:"forced"`
 
+	// DurationMS is this stream's own duration, when the container states one
+	// per stream (mp4 does; matroska usually does not). Zero means unknown.
+	//
+	// It is kept because the container's duration and the picture's can
+	// disagree, and when they do the picture is the one being watched — see
+	// resolveDuration.
+	DurationMS int64 `json:"duration_ms,omitempty"`
+
 	// Video only.
 	Width     int    `json:"width,omitempty"`
 	Height    int    `json:"height,omitempty"`
@@ -335,6 +343,7 @@ func ParseJSON(raw []byte) (*Result, error) {
 			Channels:       s.Channels,
 			SampleRate:     atoi(s.SampleRate),
 			BitRate:        atoi64(s.BitRate),
+			DurationMS:     secondsToMS(s.Duration),
 		}
 		// "und" is ffprobe's placeholder for unknown and carries no more
 		// information than an empty string, but reads as a real language.
@@ -344,18 +353,67 @@ func ParseJSON(raw []byte) (*Result, error) {
 		res.Streams = append(res.Streams, out)
 	}
 
-	// Duration occasionally lives on the video stream rather than the format,
-	// notably for MPEG-TS.
-	if res.DurationMS == 0 {
-		for _, s := range doc.Streams {
-			if ms := secondsToMS(s.Duration); ms > 0 {
-				res.DurationMS = ms
-				break
-			}
-		}
-	}
+	res.DurationMS = resolveDuration(res, res.DurationMS)
 
 	return res, nil
+}
+
+/*
+ * resolveDuration decides how long a file is when its own metadata disagrees
+ * with itself.
+ *
+ * The container's duration is the right answer nearly always, and it is what
+ * this used to take unconditionally. Two cases where it is not:
+ *
+ * **The container states nothing.** MPEG-TS in particular, where the duration
+ * lives on a stream. Any stream carrying one will do; that has always been
+ * here.
+ *
+ * **The container is longer than the picture, by a lot.** A container's
+ * duration is the end of its *longest* track, so one mistimed audio stream
+ * makes the whole file claim a length nothing in it has. Found on a real
+ * library: `Public Enemies (2009).mp4` reports a video stream of 8,383s — the
+ * film, 2h20 — an audio stream of 20,073s, and a container duration of 20,073s.
+ * LANcast believed the container, so the title showed as 5h35, headed a
+ * sort-by-longest, and measured progress against a length nobody would ever
+ * reach: watching the whole film gets to 42%, and it would never mark itself
+ * watched.
+ *
+ * So when a real video stream states its own duration and the container claims
+ * to be half again as long, the picture wins. A ratio rather than a fixed
+ * number of seconds, because the ordinary disagreement — a track running a
+ * moment past the last frame — is seconds either way and scales with nothing,
+ * while a broken track is a *multiple*. A ratio also holds for a 22-minute
+ * cartoon as well as a three-hour film.
+ *
+ * Cover art is excluded by Video(), and that exclusion is load-bearing rather
+ * than tidy: an album's embedded JPEG is a video stream, and if one ever
+ * carried a nominal duration this rule would happily resize every song on the
+ * server to the length of its artwork.
+ */
+func resolveDuration(r *Result, containerMS int64) int64 {
+	if containerMS <= 0 {
+		// Nothing stated at the container level: take the first stream that
+		// knows, whatever kind it is.
+		for i := range r.Streams {
+			if r.Streams[i].DurationMS > 0 {
+				return r.Streams[i].DurationMS
+			}
+		}
+		return containerMS
+	}
+
+	v := r.Video()
+	if v == nil || v.DurationMS <= 0 {
+		return containerMS
+	}
+	// 3/2 rather than 1.5 to keep this in integers: a duration is a count of
+	// milliseconds and comparing it through a float would make the boundary
+	// depend on rounding.
+	if containerMS*2 > v.DurationMS*3 {
+		return v.DurationMS
+	}
+	return containerMS
 }
 
 // ---------------------------------------------------------------- decoding
