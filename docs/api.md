@@ -941,7 +941,7 @@ rather than matching everybody.
 | `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | `min_rating` | Rated at least this highly, out of ten. **Unrated items are excluded, not sunk**: a film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
-| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `track` (disc then track number — see Music items) |
+| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `longest` / `shortest` (by running time; anything unmeasured sinks to the bottom of **both**, since zero is what a probe writes when it could not read a length and a film of no minutes is not the shortest film — offered on film libraries, because a show, an artist and a gallery carry no duration and would all tie), `track` (disc then track number — see Music items) |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
 
 Repeatable filters are **OR within a facet and AND across facets**: two genres
