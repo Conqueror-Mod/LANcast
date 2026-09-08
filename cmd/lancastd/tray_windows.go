@@ -403,7 +403,32 @@ func runServiceTray(addr, dataDir string, svc serviceState) error {
 }
 
 // openPane opens the web UI at one settings pane.
+/*
+ * openPane sends somebody to a settings pane, in the window if there is one.
+ *
+ * It used to open a browser unconditionally, and that is the bug: with the
+ * desktop app already on screen, "Update libraries…" opened a *second*
+ * interface beside it — a browser tab with no pinned certificate, which is the
+ * thing the window exists to avoid (ADR 0023) and the fallback rather than the
+ * front door. Reported as exactly that.
+ *
+ * The window is asked first and the browser is what happens when nobody
+ * answers. raise.Show reports whether a client was listening, which is the
+ * whole reason it returns a bool: without it this could only guess, and a
+ * guess here is either a browser nobody wanted or a menu item that silently
+ * does nothing.
+ *
+ * A client too old to carry a destination still comes forward, showing
+ * whatever it was showing. That is worse than landing on the pane and much
+ * better than a browser, and it is why a failed payload does not count as a
+ * failed raise.
+ */
 func openPane(addr, pane string, log *slog.Logger) {
+	if delivered, err := raise.Show(pane); err != nil {
+		log.Debug("could not signal the client window", "error", err)
+	} else if delivered {
+		return
+	}
 	if err := desktop.OpenBrowser(desktop.ResolvedURL(addr) + "/settings?pane=" + pane); err != nil {
 		log.Warn("could not open browser", "error", err)
 	}

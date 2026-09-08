@@ -295,7 +295,24 @@ func runWindow(l *launcher) {
 			 * have made the fix work only for people who had turned on an
 			 * unrelated setting.
 			 */
-			if s, err := raise.Listen(c.Show, func() {
+			if s, err := raise.Listen(func(pane string) {
+				/*
+				 * Go there first, then come forward.
+				 *
+				 * The other order shows the window on whatever it had, which
+				 * then changes under the person looking at it — a flash of the
+				 * old screen that reads as the app having done something it
+				 * did not mean to. Navigating while hidden costs nothing.
+				 *
+				 * An empty pane is a plain raise: a second launch of the client
+				 * asking for the window it already has, which must not move
+				 * anybody off the page they were on.
+				 */
+				if pane != "" {
+					c.Navigate(desktop.ResolvedURL(l.addr) + "/settings?pane=" + pane)
+				}
+				c.Show()
+			}, func() {
 				/*
 				 * Told to quit by the server's tray.
 				 *

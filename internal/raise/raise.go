@@ -26,9 +26,27 @@
 // it by name and sets it, and nothing else can be mistaken for either.
 package raise
 
-// Signal asks a running client to show its window. It is a no-op where the
-// mechanism does not exist, which reads as "there was nobody to tell".
-func Signal() error { return signalShow() }
+/*
+ * Show asks a running client to bring its window forward, optionally at a
+ * particular settings pane, and reports whether anyone was there to hear it.
+ *
+ * The bool is what makes a caller able to fall back honestly. The server's tray
+ * used to open a browser unconditionally — a second, different interface with
+ * no pinned certificate, beside a perfectly good window that was already open —
+ * because it had no way to ask whether the window existed. Now it can.
+ *
+ * An empty pane means "just show yourself", which is what a second launch of
+ * the client means and what this did before it could carry anything.
+ */
+func Show(pane string) (delivered bool, err error) { return signalShow(pane) }
+
+// Signal asks a running client to show its window, with no destination. It is
+// a no-op where the mechanism does not exist, which reads as "there was nobody
+// to tell".
+func Signal() error {
+	_, err := signalShow("")
+	return err
+}
 
 /*
  * Quit asks a running client to close.
@@ -51,7 +69,11 @@ func Quit() error { return signalQuit() }
 // Errors are returned rather than logged: a client that cannot listen still
 // works perfectly as a window, and the caller is the half that knows whether
 // that is worth saying out loud.
-func Listen(show, quit func()) (stop func(), err error) { return listen(show, quit) }
+// show is called with the destination the signaller named, or "" for a plain
+// raise.
+func Listen(show func(pane string), quit func()) (stop func(), err error) {
+	return listen(show, quit)
+}
 
 /*
  * TrayPresent reports whether something is there to bring the window back.

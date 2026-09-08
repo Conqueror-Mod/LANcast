@@ -272,6 +272,18 @@ func (c *controller) Show() {
 	})
 }
 
+/*
+ * Navigate points the web view somewhere else.
+ *
+ * Dispatched onto the UI thread like everything else here. WebView2 is
+ * apartment-threaded and a Navigate from a background goroutine is the kind of
+ * call that works until it does not — and the caller is always a background
+ * goroutine, since it is woken by a named event.
+ */
+func (c *controller) Navigate(url string) {
+	c.w.Dispatch(func() { c.w.Navigate(url) })
+}
+
 func (c *controller) Hide() {
 	c.w.Dispatch(func() {
 		_, _, _ = procShowWindow.Call(uintptr(c.w.Window()), swHide)
