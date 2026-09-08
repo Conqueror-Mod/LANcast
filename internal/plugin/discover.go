@@ -40,8 +40,8 @@ func (rt *Runtime) LoadAll(ctx context.Context, root string) []*Plugin {
 	return out
 }
 
-// RegisterInto adds each plugin to a registry by its kind — today only
-// rating_source sources. A plugin whose kind has no registration path yet is
+// RegisterInto adds each plugin to a registry by its kind. A plugin whose kind
+// has no registration path yet is
 // skipped with a log, not an error: the manifest already validated the kind, so
 // this is "the host does not wire this kind in yet", a forward-compatible state.
 func RegisterInto(reg *meta.Registry, plugins []*Plugin, log logger) {
@@ -54,6 +54,16 @@ func RegisterInto(reg *meta.Registry, plugins []*Plugin, log logger) {
 				continue
 			}
 			reg.AddRatingSource(rs)
+		case KindProvider:
+			pv, err := NewProvider(p)
+			if err != nil {
+				log.Warn("plugin not registered", "name", p.Manifest.Name, "error", err)
+				continue
+			}
+			// Registration order is priority order (meta.Registry), and plugins
+			// are loaded after the native providers — so a plugin adds a source
+			// rather than displacing TMDB.
+			reg.AddProvider(pv)
 		default:
 			log.Warn("plugin kind has no registration path", "name", p.Manifest.Name, "kind", p.Manifest.Kind)
 		}

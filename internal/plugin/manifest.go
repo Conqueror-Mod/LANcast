@@ -39,11 +39,42 @@ const ABIVersion = 2
 // capability". Widening it waits for a real plugin that needs it.
 type Kind string
 
-const KindRatingSource Kind = "rating_source"
+const (
+	KindRatingSource Kind = "rating_source"
+	// KindProvider is a searchable metadata source: `search` and `fetch`,
+	// adapted to meta.Provider. It is the second shape, and building it is what
+	// found the two holes ADR 0063 records.
+	KindProvider Kind = "provider"
+)
 
 var supportedKinds = map[Kind]bool{
 	KindRatingSource: true,
+	KindProvider:     true,
 }
+
+/*
+ * Caps is what a provider plugin says it can answer for, declared in the
+ * manifest rather than exported by the module (ADR 0063).
+ *
+ * The host needs this before deciding whether to load the plugin at all, and an
+ * export would mean instantiating a WASM module to ask a question about whether
+ * to instantiate it. The manifest is signed and readable without starting
+ * anything.
+ *
+ * A plugin can misdeclare in either direction — claiming a kind it cannot answer
+ * for, or hiding one it can. Neither is a safety question: the first costs a
+ * wasted call that returns nothing, the second costs a source nobody asked. So
+ * this trades no trust, only work.
+ */
+type Caps struct {
+	Movie   bool `json:"movie"`
+	Show    bool `json:"show"`
+	Episode bool `json:"episode"`
+	Artwork bool `json:"artwork"`
+}
+
+// any reports whether the caps name at least one kind this plugin could answer.
+func (c Caps) any() bool { return c.Movie || c.Show || c.Episode }
 
 // Capabilities is the authority a plugin asks for. Anything not listed here is
 // denied; the host grants exactly these and nothing more.
@@ -62,6 +93,9 @@ type Manifest struct {
 	ABI          int          `json:"abi"`
 	Kind         Kind         `json:"kind"`
 	Capabilities Capabilities `json:"capabilities"`
+	// Caps is meaningful only for KindProvider, and is what the host consults
+	// before asking this plugin about a movie or an episode.
+	Caps Caps `json:"caps"`
 }
 
 // ParseManifest decodes and validates a manifest. An unknown kind or an
@@ -79,6 +113,12 @@ func ParseManifest(data []byte) (Manifest, error) {
 	}
 	if !supportedKinds[m.Kind] {
 		return m, fmt.Errorf("manifest: unknown kind %q", m.Kind)
+	}
+	// A provider that answers for no kind is never consulted about anything.
+	// Refusing at load says so once, where somebody is reading an error; loading
+	// it would mean a plugin that appears installed and is silent for ever.
+	if m.Kind == KindProvider && !m.Caps.any() {
+		return m, errors.New("manifest: a provider must declare at least one of caps.movie, caps.show, caps.episode")
 	}
 	return m, nil
 }

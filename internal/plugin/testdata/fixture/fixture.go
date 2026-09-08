@@ -69,10 +69,13 @@ func echo(ptr, length uint32) uint64 {
 	return ret(bytesAt(ptr, length))
 }
 
-// fetch treats its input as a URL and returns the host's response bytes.
+// httpget treats its input as a URL and returns the host's response bytes.
 //
-//go:wasmexport fetch
-func fetch(ptr, length uint32) uint64 {
+// Named httpget rather than fetch because `fetch` is the provider entrypoint in
+// the ABI, and the fixture plays both kinds.
+//
+//go:wasmexport httpget
+func httpget(ptr, length uint32) uint64 {
 	return ret(fromHost(hostHTTPGet(ptr, length)))
 }
 
@@ -120,6 +123,105 @@ func ratings(ptr, length uint32) uint64 {
 		{"source": "imdb", "score": 7.9, "display": req.IMDbID, "votes": 42},
 	}
 	out, err := json.Marshal(map[string]any{"result": resp})
+	if err != nil {
+		return 0
+	}
+	return ret(out)
+}
+
+/*
+ * The provider entrypoints (ADR 0063).
+ *
+ * Between them they prove what the host adapter needs proving: that a second
+ * export needs nothing new from the ABI, that a candidate crosses the boundary
+ * with its fields intact, that a nil Fields pointer stays nil, and that an
+ * image URL outside the manifest grant is dropped by the host rather than by
+ * the guest choosing to behave.
+ */
+
+// search returns two candidates, one of which carries a poster on a host the
+// fixture manifest does not grant. "fail" asks for a reported failure.
+//
+//go:wasmexport search
+func search(ptr, length uint32) uint64 {
+	var q struct {
+		Kind  string `json:"kind"`
+		Title string `json:"title"`
+		Year  int    `json:"year"`
+	}
+	_ = json.Unmarshal(bytesAt(ptr, length), &q)
+	if q.Title == "fail" {
+		return envelope(map[string]any{"error": "the fixture was asked to fail"})
+	}
+	if q.Title == "nothing" {
+		return envelope(map[string]any{"result": []any{}})
+	}
+	return envelope(map[string]any{"result": []map[string]any{
+		{
+			"external_id": "ext-1",
+			"kind":        q.Kind,
+			"title":       q.Title,
+			"year":        q.Year,
+			"popularity":  3.5,
+			"poster_url":  "https://example.test/poster.jpg",
+		},
+		{
+			"external_id": "ext-2",
+			"kind":        q.Kind,
+			"title":       q.Title + " (again)",
+			"poster_url":  "https://evil.test/beacon.jpg",
+		},
+		// No external_id: the host has no way to fetch this one, so it drops it.
+		{"kind": q.Kind, "title": "unfetchable"},
+	}})
+}
+
+// fetch returns one record. Overview is deliberately absent rather than empty,
+// so the host side can prove a nil pointer survives the crossing.
+//
+//go:wasmexport fetch
+func fetch(ptr, length uint32) uint64 {
+	var ref struct {
+		Kind       string `json:"kind"`
+		ExternalID string `json:"external_id"`
+	}
+	_ = json.Unmarshal(bytesAt(ptr, length), &ref)
+	if ref.ExternalID == "fail" {
+		return envelope(map[string]any{"error": "the fixture was asked to fail"})
+	}
+	if ref.ExternalID == "missing" {
+		return envelope(map[string]any{})
+	}
+	return envelope(map[string]any{"result": map[string]any{
+		"external_id": ref.ExternalID,
+		"kind":        ref.Kind,
+		"imdb_id":     "tt0000001",
+		"fields": map[string]any{
+			"title": "A Fixture Film",
+			"year":  1999,
+		},
+		"genres": []string{"Drama"},
+		"credits": []map[string]any{
+			{"name": "A Person", "role": "actor", "image": "https://example.test/face.jpg"},
+			{"name": "B Person", "role": "director", "image": "https://evil.test/face.jpg"},
+			{"name": "", "role": "actor"},
+		},
+		"artwork": []map[string]any{
+			{"kind": "poster", "url": "https://example.test/poster.jpg"},
+			{"kind": "fanart", "url": "https://evil.test/fanart.jpg"},
+		},
+		"collection": map[string]any{
+			"external_id": "col-1",
+			"name":        "A Fixture Collection",
+			"artwork":     []map[string]any{{"kind": "poster", "url": "https://evil.test/col.jpg"}},
+		},
+		"keywords": []map[string]any{{"id": 7, "name": "fixture"}},
+	}})
+}
+
+// envelope marshals an ABI 2 response and packs it.
+func envelope(v map[string]any) uint64 {
+	out, err := json.Marshal(v)
 	if err != nil {
 		return 0
 	}
