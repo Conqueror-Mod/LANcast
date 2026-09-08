@@ -59,6 +59,12 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
   { key: "content_rating", label: "Content rating", mode: "chips" },
   { key: "min_rating", label: "Rating", mode: "chips", single: true },
   { key: "resolution", label: "Format", mode: "chips" },
+  /*
+   * Tag is chips rather than a search, because a person's own tags are a small
+   * list by construction — they typed every one of them. That is the same
+   * argument genre wins on and cast loses.
+   */
+  { key: "tag", label: "Tag", mode: "chips" },
   { key: "status", label: "Status", mode: "chips", single: true },
 ];
 
@@ -67,6 +73,11 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
 export const FILTER_PARAM_KEYS = [
   ...FILTER_CATEGORIES.map((c) => c.key),
   "watched",
+  // Favourite lives with the status group rather than as its own category, the
+  // way "unwatched" does: it is a marker on the caller rather than a property
+  // of the item, and a bar with one more button for one more boolean is a bar
+  // that grows without end.
+  "favourite",
   /*
    * face_cluster is a filter without a category, which is why it is listed by
    * hand rather than derived from FILTER_CATEGORIES above.
@@ -92,6 +103,9 @@ export interface PillContext {
   /** Names for the person ids currently filtered on. A pill whose name has not
    *  arrived yet is held back rather than shown as a raw id. */
   castNames?: Map<string, string>;
+  /* Names for tag ids currently filtered on, resolved from the facets. A tag id
+   * is meaningless on a pill, and unlike a genre the value is not the label. */
+  tagNames?: Map<string, string>;
   /*
    * Names for face groups, which are a different population from castNames
    * above and deliberately a separate map.
@@ -132,6 +146,13 @@ export function activePills(
     out.push({ key, value, label });
 
   for (const g of params.getAll("genre")) push("genre", g, g);
+  for (const id of params.getAll("tag")) {
+    // Held back until the name is known, exactly as a cast pill is: "tag 4" is
+    // not a thing anybody recognises as their own note.
+    const name = ctx.tagNames?.get(id);
+    if (name) push("tag", id, name);
+  }
+  if (params.get("favourite") === "1") push("favourite", "1", "Favourites");
   for (const d of params.getAll("decade")) push("decade", d, `${d}s`);
   for (const y of params.getAll("year")) push("year", y, y);
 

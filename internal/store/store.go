@@ -1311,6 +1311,21 @@ type Facets struct {
 	// somebody actually has are more useful at the top than the alphabet is.
 	Collections []CollectionFacet `json:"collections"`
 
+	/*
+	 * The caller's own tags that are actually on something in this library
+	 * (ADR 0062).
+	 *
+	 * Scoped by the account like every other tag read, and *also* by the
+	 * library, because a filter row offering a tag that can return nothing here
+	 * is the same control-that-lies problem `has_watched` and the resolution
+	 * buckets already avoid.
+	 */
+	Tags []Tag `json:"tags"`
+
+	// Whether the caller has favourited anything in this library, so the
+	// favourites toggle is only offered when it can change the grid.
+	HasFavourites bool `json:"has_favourites"`
+
 	// The highest rating present, so the client offers only thresholds that can
 	// return something. A library topping out at 8.4 has no business showing a
 	// 9+ filter that is guaranteed to be empty.
@@ -1337,7 +1352,60 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 	f := Facets{
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
-		Collections: []CollectionFacet{},
+		Collections: []CollectionFacet{}, Tags: []Tag{},
+	}
+
+	/*
+	 * The caller's tags that are on something in this library.
+	 *
+	 * Scoped by user *and* library. The user is the privacy boundary; the
+	 * library is the same rule the rest of this function follows — a filter
+	 * offering a value that returns nothing is a control that lies about what
+	 * it does.
+	 */
+	/*
+	 * media_item is joined *unaliased*, and that is not a style choice.
+	 *
+	 * topLevelPredicate embeds collectionIsReal, which refers to
+	 * `media_item.id` by name in a correlated subquery. Under an alias that
+	 * name is unbound and SQLite refuses the whole statement — which is exactly
+	 * what happened here: aliasing it to `mi` made this query fail, the
+	 * function return early, and *every other facet* come back empty. Initials
+	 * and content ratings went missing from a change about tags.
+	 */
+	trows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, t.name, COUNT(DISTINCT media_item.id)
+		  FROM tag t
+		  JOIN item_tag it ON it.tag_id = t.id
+		  JOIN media_item ON media_item.id = it.item_id
+		 WHERE t.user_id = ? AND media_item.library_id = ?
+		   AND `+topLevelPredicate+`
+		 GROUP BY t.id, t.name, t.folded
+		 ORDER BY t.folded`, userID, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (tags): %w", err)
+	}
+	for trows.Next() {
+		var t Tag
+		if err := trows.Scan(&t.ID, &t.Name, &t.Count); err != nil {
+			trows.Close()
+			return f, fmt.Errorf("library facets (tags): %w", err)
+		}
+		f.Tags = append(f.Tags, t)
+	}
+	trows.Close()
+	if err := trows.Err(); err != nil {
+		return f, fmt.Errorf("library facets (tags): %w", err)
+	}
+
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM user_favourite uf
+			JOIN media_item ON media_item.id = uf.item_id
+			WHERE uf.user_id = ? AND media_item.library_id = ?
+			  AND `+topLevelPredicate+`)`,
+		userID, libraryID).Scan(&f.HasFavourites); err != nil {
+		return f, fmt.Errorf("library facets (favourites): %w", err)
 	}
 
 	// The initials present, computed the same way InitialFilter selects on so

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Facets } from "@/api/types";
 import { useCast } from "@/api/hooks";
 import {
@@ -66,7 +66,8 @@ export function FilterBar({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(null);
+      if (wrap.current && !wrap.current.contains(e.target as Node))
+        setOpen(null);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(null);
@@ -99,8 +100,12 @@ export function FilterBar({
         return (facets?.content_ratings?.length ?? 0) > 0;
       case "collection":
         return (facets?.collections?.length ?? 0) > 0;
+      case "tag":
+        return (facets?.tags?.length ?? 0) > 0;
       case "min_rating":
-        return ratingSteps(RATING_THRESHOLDS, facets?.max_rating ?? 0).length > 0;
+        return (
+          ratingSteps(RATING_THRESHOLDS, facets?.max_rating ?? 0).length > 0
+        );
       case "resolution":
         return (facets?.resolutions?.length ?? 0) > 0;
       case "status":
@@ -117,7 +122,23 @@ export function FilterBar({
     }
   };
 
-  const pills = activePills(params, { facets, castNames, faceNames });
+  /*
+   * Tag names come from the facets rather than being plumbed in, because they
+   * are already here — unlike cast, where the pill's name needs a request the
+   * bar cannot make.
+   *
+   * The consequence is honest and worth knowing: a tag filtered on but no
+   * longer present in this library has no name here, so its pill is held back
+   * exactly as an unresolved cast pill is. The filter still applies; it is the
+   * label that waits, and "tag 4" would be worse than a moment's absence.
+   */
+  const tagNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of facets?.tags ?? []) m.set(String(t.id), t.name);
+    return m;
+  }, [facets]);
+
+  const pills = activePills(params, { facets, castNames, faceNames, tagNames });
 
   return (
     <div className="fbar" ref={wrap}>
@@ -236,6 +257,13 @@ function FilterPanel({
       )}
 
       <div className="fbar__opts">
+        {category.key === "tag" &&
+          (facets?.tags ?? []).map((t) =>
+            chip(String(t.id), t.name, selected.has(String(t.id)), () =>
+              onToggle("tag", String(t.id)),
+            ),
+          )}
+
         {category.key === "genre" &&
           (facets?.genres ?? []).map((g) =>
             chip(g, g, selected.has(g), () => onToggle("genre", g)),
@@ -340,6 +368,13 @@ function StatusOptions({
       on: status === "in_progress",
       set: () => onSet("status", status === "in_progress" ? "" : "in_progress"),
       show: !!facets?.has_in_progress,
+    },
+    {
+      key: "favourite",
+      label: "Favourites",
+      on: params.get("favourite") === "1",
+      set: () => onSet("favourite", params.get("favourite") === "1" ? "" : "1"),
+      show: !!facets?.has_favourites,
     },
     {
       key: "unmatched",
