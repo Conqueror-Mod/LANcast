@@ -3896,6 +3896,10 @@ export interface components {
             has_in_progress: boolean;
             /** @description Follows the `has_watched` rule. */
             has_unmatched: boolean;
+            /** @description The **calling account's** tags that are on something in this library (ADR 0062). Scoped by account — the privacy boundary — and by library, so a filter row never offers a value that can return nothing. */
+            tags?: components["schemas"]["Tag"][];
+            /** @description Whether the calling account has favourited anything here, so the toggle is only offered when it can change the grid. */
+            has_favourites?: boolean;
         };
         CastMember: {
             /** Format: int64 */

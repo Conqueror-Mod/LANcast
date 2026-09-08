@@ -9210,6 +9210,17 @@
           "has_unmatched": {
             "type": "boolean",
             "description": "Follows the `has_watched` rule."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "description": "The **calling account's** tags that are on something in this library (ADR 0062). Scoped by account — the privacy boundary — and by library, so a filter row never offers a value that can return nothing."
+          },
+          "has_favourites": {
+            "type": "boolean",
+            "description": "Whether the calling account has favourited anything here, so the toggle is only offered when it can change the grid."
           }
         }
       },

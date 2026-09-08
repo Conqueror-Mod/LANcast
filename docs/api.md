@@ -3781,6 +3781,11 @@ is removed**, so the filter row does not fill with every typo anybody ever made.
 
 ### Filtering
 
+`GET /api/libraries/{id}/facets` carries **`tags`** — the caller's own tags that
+are on something in that library — and **`has_favourites`**. Both are scoped to
+the calling account, and the tag list is scoped to the library as well, so the
+filter row never offers a value that would return nothing.
+
 `GET /api/items` accepts repeated **`tag=<id>`** and **`favourite=1`**, alongside
 the existing facets. Ids rather than names, because a name is unique only within
 one account.
