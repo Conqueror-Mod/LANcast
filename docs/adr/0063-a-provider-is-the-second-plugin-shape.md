@@ -1,6 +1,10 @@
 # ADR 0063 — A provider is the second plugin shape, and it found two holes
 
-Date: 2026-09-08 · Status: **proposed**
+Date: 2026-09-08 · Status: **accepted** 2026-09-08
+
+Hole two was taken out of this decision and fixed on its own first, which
+was the right order: the dangerous half of it was live in shipped code and
+needed no provider to be reachable. See below.
 
 Extends ADR 0007 (provider/local-source split), ADR 0019 (rating sources) and
 ADR 0020 (the WASM isolation boundary). Supersedes nothing.
@@ -100,6 +104,23 @@ implement, as it already does. **The version gates the whole contract, not each
 function** — a plugin declaring ABI 2 gets all of it.
 
 ### Artwork a plugin returns is constrained to the hosts it declared
+
+**Half of this shipped separately, ahead of this decision** — see
+`internal/netguard`. Splitting it out turned up something this ADR had
+understated: the manifest allowlist matches a *hostname*, and a hostname is
+not a destination, so a plugin whose granted domain resolves to 127.0.0.1
+could already reach the server itself. That needed no provider and no
+artwork field — it was live for the rating plugins that exist today.
+Outbound fetches now refuse private and local addresses, checked after
+resolution and immediately before connect.
+
+What remains is narrower and still worth doing. The guard stops a plugin
+pointing the host at *internal* addresses; it does not stop one pointing the
+host at an arbitrary **public** address. An artwork URL is a fetch the host
+makes, unattributed, on a schedule the plugin influences — a serviceable
+beacon, and a way to make the server talk to a host nobody granted.
+
+So:
 
 The URLs in a plugin's `Record.Artwork` are checked against that plugin's own
 manifest allowlist before the host fetches any of them, using the same matching
