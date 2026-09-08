@@ -153,6 +153,14 @@ and `user_favourite` keyed by account and item. A downgrade survives it.
 filter paths. That is a property worth a test rather than a convention, because
 it is the kind that stays correct until somebody adds the second call site.
 
+**Confirmed with a second real account on 2026-09-08**, on the published v0.9.2
+build, by the only check that could settle it: signing in as the other person
+and looking at a tagged item. Until then the claim rested entirely on tests —
+thorough ones, and still tests written by the same person who wrote the thing
+they test. The store refused to let that verification be faked from outside
+(the live database is held open by the server and rejected a direct write),
+which was the right answer to the wrong idea.
+
 **Additive API** (ADR 0018), both halves of the contract in the same commit.
 
 **What would make this wrong.** If the house ends up wanting a shared shelf —
