@@ -31,6 +31,12 @@ func (rt *Runtime) hostLog(ctx context.Context, mod api.Module, level, ptr, leng
 // host its manifest declared. The host owns the connection; the module gets
 // bytes back, never a socket. An undeclared host or a failed fetch returns an
 // empty span, which the guest reads as "no data".
+//
+// The fetch itself goes through rt.fetch, which caches and rate-limits it. That
+// is deliberately not optional and not visible to the guest: a limit a plugin
+// could decline would be spent against the user's IP address by a plugin they
+// cannot audit. The URL is redacted before it is logged, because a plugin's
+// query string is where its API key lives.
 func (rt *Runtime) hostHTTPGet(ctx context.Context, mod api.Module, urlPtr, urlLen uint32) uint64 {
 	raw, ok := mod.Memory().Read(urlPtr, urlLen)
 	if !ok {
@@ -43,12 +49,12 @@ func (rt *Runtime) hostHTTPGet(ctx context.Context, mod api.Module, urlPtr, urlL
 		if p != nil {
 			name = p.Manifest.Name
 		}
-		rt.log.Warn("plugin http denied", "plugin", name, "url", url)
+		rt.log.Warn("plugin http denied", "plugin", name, "url", redactURL(url))
 		return 0
 	}
-	body, err := rt.httpc(ctx, url)
+	body, err := rt.fetch(ctx, p, url)
 	if err != nil {
-		rt.log.Debug("plugin http failed", "plugin", p.Manifest.Name, "url", url, "error", err)
+		rt.log.Debug("plugin http failed", "plugin", p.Manifest.Name, "url", redactURL(url), "error", err)
 		return 0
 	}
 	return writeToGuest(ctx, mod, body)
