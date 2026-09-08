@@ -58,9 +58,21 @@ function itemBody(id: number) {
 /** What the element claims about playlists. Chromium says "maybe". */
 let canPlay = "maybe";
 
+/*
+ * What the *server* does when asked for the playlist.
+ *
+ * This is the distinction the fallback got wrong for a release. The element
+ * raises MEDIA_ERR_SRC_NOT_SUPPORTED both when the engine cannot read a
+ * playlist and when the server handed it something that is not one — a 503,
+ * say, which is what this server returns when ffmpeg has not written
+ * index.m3u8 in time. Only the first says anything about the device.
+ */
+let playlistServed = true;
+
 beforeEach(() => {
   sources = [];
   canPlay = "maybe";
+  playlistServed = true;
   localStorage.clear();
   /*
    * readDevice keeps a module-level cache that outlives clearing localStorage,
@@ -99,6 +111,17 @@ beforeEach(() => {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      if (url.includes("/hls/index.m3u8")) {
+        return playlistServed
+          ? new Response("#EXTM3U", {
+              status: 200,
+              headers: { "Content-Type": "application/vnd.apple.mpegurl" },
+            })
+          : new Response(JSON.stringify({ error: { code: "unavailable" } }), {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            });
+      }
       if (url.includes("/playback")) {
         return json({
           decision: {
@@ -202,7 +225,40 @@ describe("delivering a conversion", () => {
   it("remembers the refusal so the next film does not pay for it again", async () => {
     await start();
     await failWith(4);
+    await settle();
     expect(localStorage.getItem(HLS_VERDICT_KEY)).toContain("refused");
+  });
+
+  /*
+   * The failure that cost a release, and the reason the verdict is no longer
+   * written from the error code alone.
+   *
+   * The server returns 503 when ffmpeg has not produced index.m3u8 within
+   * thirty seconds. The element reports that as *unsupported source* — the
+   * same code as an engine that cannot read a playlist — so one slow start was
+   * recorded as "this device cannot play HLS" and every later film fell back to
+   * the progressive path, which is the path segments exist to replace.
+   *
+   * On the server this happened for every film, because the playlist type made
+   * ffmpeg defer the playlist to the end of the encode. Even with that fixed, a
+   * single slow start must not retire the path for ever.
+   */
+  it("does not blame the engine when the server did not serve a playlist", async () => {
+    playlistServed = false;
+    await start();
+    await failWith(4);
+    await settle();
+    expect(localStorage.getItem(HLS_VERDICT_KEY)).not.toContain("refused");
+  });
+
+  // The fallback still happens either way: it is right for this playback
+  // whichever half failed, and the viewer must not wait on the question.
+  it("falls back for this film even when no verdict is recorded", async () => {
+    playlistServed = false;
+    await start();
+    await failWith(4);
+    const after = streams();
+    expect(after[after.length - 1]).toContain("/transcode");
   });
 
   /*
