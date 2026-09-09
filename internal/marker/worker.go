@@ -171,6 +171,27 @@ func (w *Worker) Run(ctx context.Context) error {
 		return nil
 	}
 
+	/*
+	 * Say that this is running, because otherwise nothing does.
+	 *
+	 * Every line this package could emit was a failure. A pass occupies a core
+	 * with ffmpeg for as long as it takes to decode the tail of every
+	 * unexamined film — hours, on a real library — and said nothing at all
+	 * while doing it. From outside, that is indistinguishable from a leaked
+	 * process, which is exactly the conclusion two people reached about it in
+	 * one evening: an ffmpeg parented by the server, no session in the log, and
+	 * a new one every few minutes.
+	 *
+	 * Answering "why is ffmpeg running" should not need a code read and a
+	 * database query.
+	 *
+	 * Only when there is work. This is called on a timer, and a line per empty
+	 * pass would bury the ones that mean something — the same reason the
+	 * reaper logs what it took rather than every sweep.
+	 */
+	started := time.Now()
+	w.log.Info("credits detection started", "batch", len(items))
+
 	conc := w.Concurrency
 	if conc < 1 {
 		conc = 1
@@ -194,11 +215,30 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 	wg.Wait()
 
+	remaining := -1
 	if n, err := w.st.PendingMarkersCount(ctx); err == nil {
+		remaining = n
 		w.mu.Lock()
 		w.stats.Remaining = n
 		w.mu.Unlock()
 	}
+
+	/*
+	 * And what it did with the time.
+	 *
+	 * `remaining` is the number worth having: it turns "ffmpeg is busy again"
+	 * into "there are 336 films left", which is the difference between a
+	 * mystery and an estimate. It is -1 when the count could not be read, so a
+	 * missing number is visibly missing rather than reported as zero — nothing
+	 * left to do and could not find out are opposite states.
+	 */
+	w.mu.Lock()
+	examined, found, failed := w.stats.Examined, w.stats.Found, w.stats.Failed
+	w.mu.Unlock()
+	w.log.Info("credits detection finished",
+		"batch", len(items), "remaining", remaining,
+		"examined_total", examined, "found_total", found, "failed_total", failed,
+		"seconds", int(time.Since(started).Seconds()))
 	return nil
 }
 
