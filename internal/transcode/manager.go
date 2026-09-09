@@ -74,6 +74,38 @@ type Manager struct {
 	 */
 	LiveIdleTimeout time.Duration
 
+	/*
+	 * UnreadIdleTimeout is for an HLS session that has never handed over a
+	 * single byte of picture.
+	 *
+	 * IdleTimeout's ten minutes buy one thing: a paused film keeps its ffmpeg,
+	 * because waiting is nearly free and resuming is expensive. That bargain
+	 * assumes somebody is *there* — it is a viewer's pause being protected.
+	 * A session nobody ever attached to has no viewer to protect and no
+	 * position to resume to, and it holds a session slot for ten minutes all
+	 * the same.
+	 *
+	 * Which was observed costing exactly what that predicts. Skipping around an
+	 * episode three times, over seven seconds, started five sessions: the client
+	 * asks for a playlist, falls back to the progressive stream about six
+	 * hundred milliseconds later, and abandons the HLS session where it stands.
+	 * At the third seek the server refused to play anything at all —
+	 * `running=3 max=3` — and the slots were not freed until ten minutes after
+	 * the person had given up and gone away.
+	 *
+	 * Scoped to HLS on purpose. A progressive stream is one held request, so
+	 * the transport itself reports the client leaving; an HLS session is a
+	 * series of separate polls and has nothing that says "still here" except
+	 * the polls, which is the same asymmetry ADR 0065 records for a channel.
+	 *
+	 * Thirty seconds is measured against what the path costs when it works: a
+	 * playlist appears in about a second and the first segment immediately
+	 * after. This is not a race with a slow encode, because any request for a
+	 * segment touches the session and starts the clock again — it expires only
+	 * where nothing has been asked for at all.
+	 */
+	UnreadIdleTimeout time.Duration
+
 	// binMu guards bin, which is no longer written only at construction: the
 	// media-tools installer can put ffmpeg on this machine while the server is
 	// running, and requiring a restart to notice would make a working install
@@ -97,15 +129,16 @@ type Manager struct {
 // NewManager builds a manager rooted at dir for scratch space.
 func NewManager(dir string, log *slog.Logger) *Manager {
 	m := &Manager{
-		root:            dir,
-		log:             log,
-		MaxSessions:     3,
-		IdleTimeout:     10 * time.Minute,
-		LiveIdleTimeout: 30 * time.Second,
-		sessions:        map[string]*Session{},
-		stopped:         make(chan struct{}),
-		available:       []Encoder{Software},
-		selected:        Software,
+		root:              dir,
+		log:               log,
+		MaxSessions:       3,
+		IdleTimeout:       10 * time.Minute,
+		LiveIdleTimeout:   30 * time.Second,
+		UnreadIdleTimeout: 30 * time.Second,
+		sessions:          map[string]*Session{},
+		stopped:           make(chan struct{}),
+		available:         []Encoder{Software},
+		selected:          Software,
 	}
 	m.Rescan()
 	return m
@@ -308,6 +341,38 @@ func (m *Manager) idleLimit(s *Session) time.Duration {
 	if s.IsLive() && m.LiveIdleTimeout > 0 {
 		return m.LiveIdleTimeout
 	}
+	/*
+	 * An HLS session that has never served a byte of picture is not somebody's
+	 * paused film, so it does not get the allowance that exists for one.
+	 *
+	 * The served count is what makes this safe, and it only became true bytes
+	 * when the segment route started reporting them: before that every HLS
+	 * session read as zero, working or not, and this test would have reaped a
+	 * film somebody was watching. A paused film has served megabytes and keeps
+	 * the full ten minutes.
+	 */
+	/*
+	 * Live is excluded explicitly rather than by luck. A channel is served
+	 * through the HLS path and its bytes are not counted either, so without
+	 * this a channel would match — and a Manager with LiveIdleTimeout unset,
+	 * which is documented to behave as it did before that field existed, would
+	 * silently get this thirty seconds instead of the film's ten minutes.
+	 */
+	if s.Output == HLS && !s.IsLive() && m.UnreadIdleTimeout > 0 && s.Served() == 0 {
+		/*
+		 * The shorter of the two, never simply the unread one.
+		 *
+		 * This rule exists to make an abandoned session die sooner; a session
+		 * nobody ever watched outliving one somebody paused is the rule
+		 * working backwards. Returning UnreadIdleTimeout flatly does exactly
+		 * that whenever IdleTimeout is the smaller number, which is not only a
+		 * test's configuration — a server tuned down to reap aggressively would
+		 * have found its abandoned sessions the most durable thing on it.
+		 */
+		if m.UnreadIdleTimeout < m.IdleTimeout {
+			return m.UnreadIdleTimeout
+		}
+	}
 	return m.IdleTimeout
 }
 
@@ -462,7 +527,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 
 // EnsureHLS returns a session producing HLS for this item at this offset,
 // starting one if needed.
-func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Session, error) {
+func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o Options) (*Session, error) {
 	if !m.Available() {
 		return nil, ErrNotInstalled
 	}
@@ -479,6 +544,22 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Sess
 	}
 	m.mu.Unlock()
 
+	/*
+	 * Anything of this viewer's still running for this item is a position they
+	 * have left, and it is stopped here rather than waited out.
+	 *
+	 * The reuse loop above has already returned for the offset being asked for,
+	 * so every session reaching this line is at a *different* one — which is
+	 * what a seek is. Nothing will ever request its segments again.
+	 *
+	 * Before reserve, so a seek cannot be refused on a ceiling that the
+	 * position being left is what filled. That is not a theoretical ordering:
+	 * skipping around an episode three times over seven seconds started five
+	 * sessions and the third seek was refused outright, `running=3 max=3`, with
+	 * the server then unable to play anything at all.
+	 */
+	m.supersedeHLS(owner, itemID)
+
 	if err := m.reserve(); err != nil {
 		return nil, err
 	}
@@ -494,7 +575,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, o Options) (*Sess
 		m.release()
 		return nil, err
 	}
-	s.ID, s.ItemID = id, itemID
+	s.ID, s.ItemID, s.Owner = id, itemID, owner
 
 	m.mu.Lock()
 	m.sessions[id] = s
@@ -545,9 +626,12 @@ func (m *Manager) WaitForFile(ctx context.Context, s *Session, name string, time
 /*
  * supersede stops this owner's existing progressive session for this item.
  *
- * Only progressive: HLS is segment-addressed and already reuses its session by
- * offset, so a second HLS request for the same item is the same player asking
- * for the next segment, not a replacement.
+ * Only progressive; supersedeHLS is the other half. This used to say that HLS
+ * needed no equivalent, "because a second HLS request for the same item is the
+ * same player asking for the next segment, not a replacement". That is true of
+ * the next segment and false of a seek, and the difference is the offset — a
+ * request at the same offset never reaches either function, because EnsureHLS
+ * has already reused the session for it.
  *
  * An owner of "" is not collapsed. That is the unconfigured loopback state
  * where every request is anonymous, and treating those as one player would let
@@ -586,6 +670,54 @@ func (m *Manager) supersede(owner string, itemID int64) {
 		 */
 		m.log.Info("superseding transcode", "session", s.ID, "item", itemID,
 			"age_ms", time.Since(s.Started()).Milliseconds(),
+			"served_bytes", s.Served())
+		s.Stop()
+	}
+}
+
+/*
+ * supersedeHLS stops this owner's HLS sessions for this item at other offsets.
+ *
+ * Every one of them is a position this viewer has moved away from. EnsureHLS
+ * reuses the session for the offset being requested before this is called, so
+ * what is left is only ever somewhere they used to be, and no client will ask
+ * for those segments again.
+ *
+ * This is the half of the leak the reaper cannot reach in time. An abandoned
+ * HLS session is now reaped in thirty seconds rather than ten minutes, but
+ * three seeks take about seven seconds — so waiting was still enough to fill a
+ * ceiling of three and refuse the film outright.
+ *
+ * Keyed on (owner, item) for the same reason superseding a progressive stream
+ * is: two people watching one thing at once is a thing a media server must do,
+ * and collapsing by item alone would have them ending each other's playback.
+ * An owner of "" is the unconfigured loopback state where every request is
+ * anonymous, and is not collapsed for exactly that reason.
+ *
+ * A live channel cannot match: its ItemID is a negated channel id, so it never
+ * equals a library item's.
+ */
+func (m *Manager) supersedeHLS(owner string, itemID int64) {
+	if owner == "" {
+		return
+	}
+	m.mu.Lock()
+	var dead []*Session
+	for id, s := range m.sessions {
+		if s.Output == HLS && s.ItemID == itemID && s.Owner == owner {
+			dead = append(dead, s)
+			delete(m.sessions, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, s := range dead {
+		// Info and carrying the same two figures as its progressive sibling:
+		// a run of sessions on one item is unreadable without an ending for
+		// each start, and `served_bytes` says whether the position being left
+		// was ever actually watched.
+		m.log.Info("superseding hls transcode", "session", s.ID, "item", itemID,
+			"start_at", s.StartAt, "age_ms", time.Since(s.Started()).Milliseconds(),
 			"served_bytes", s.Served())
 		s.Stop()
 	}

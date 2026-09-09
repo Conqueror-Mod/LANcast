@@ -32,9 +32,21 @@ func liveSession(id string, channelID int64, idleFor time.Duration) *Session {
 	return s
 }
 
+/*
+ * A film somebody is watching, paused.
+ *
+ * The served bytes are not decoration. A paused film is the case IdleTimeout's
+ * ten minutes exist for, and what makes it that case rather than an abandoned
+ * session is that picture was collected before the pause — an HLS session that
+ * has never handed over a byte is nobody's pause, and is reaped in thirty
+ * seconds (see unreadidle_test.go). This fixture predates that distinction and
+ * modelled a paused film as one that had served nothing, which was only ever
+ * true because the segment route never reported its bytes.
+ */
 func fileSession(id string, itemID int64, idleFor time.Duration) *Session {
 	s := &Session{ID: id, ItemID: itemID, Output: HLS}
 	s.lastTouch = time.Now().Add(-idleFor)
+	s.NoteServed(4 << 20)
 	return s
 }
 

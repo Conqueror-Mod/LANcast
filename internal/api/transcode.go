@@ -75,7 +75,7 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 	it := t.item
 
-	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, transcode.Options{
+	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.userID(r), transcode.Options{
 		Input:      it.Path,
 		Decision:   t.decision,
 		StartAt:    queryFloat(r, "t"),
@@ -171,7 +171,25 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "stat segment")
 		return
 	}
-	http.ServeContent(w, r, name, info.ModTime(), f)
+
+	/*
+	 * Count what actually goes out, and tell the session.
+	 *
+	 * Media bytes only. The playlist is deliberately not counted: it is a
+	 * manifest, and every abandoned session in the log had been handed one.
+	 * What separates a stream somebody is watching from one nobody ever
+	 * attached to is whether any *picture* was collected, so that is the thing
+	 * being measured.
+	 *
+	 * Without this the count was zero for every HLS session that ever ran,
+	 * which made `served_bytes` on the reaper's line a number that could only
+	 * say one thing.
+	 */
+	cw := &countingWriter{ResponseWriter: w}
+	http.ServeContent(cw, r, name, info.ModTime(), f)
+	if cw.n > 0 {
+		sess.NoteServed(cw.n)
+	}
 }
 
 // transcodeSessions lists running transcodes.
