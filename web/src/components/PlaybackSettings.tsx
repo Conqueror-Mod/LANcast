@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { QUALITIES, DEFAULTS } from "@/playback/prefs";
+import { QUALITIES, DEFAULTS, type SubFont } from "@/playback/prefs";
+import { FONTS } from "@/playback/cueVars";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
 import "./PlaybackSettings.css";
@@ -294,6 +295,23 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
                 {COLORS.map((c) => (
                   <option key={c.value} value={c.value}>
                     {c.label}
+                  </option>
+                ))}
+              </select>
+            </Row>
+
+            <Row label="Subtitle typeface" disabled={!subsOn}>
+              <select
+                className="pbset__select"
+                value={prefs.subFont}
+                disabled={!subsOn}
+                onChange={(e) =>
+                  setPrefs({ subFont: e.target.value as SubFont })
+                }
+              >
+                {FONTS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
                   </option>
                 ))}
               </select>

@@ -159,6 +159,9 @@
  */
 .playback__video::cue {
   color: var(--cue-color, #ffffff);
+  /* A stack, always, so a machine without the chosen face lands on the right
+     kind of one rather than on the engine's own default. */
+  font-family: var(--cue-font, Inter, "Segoe UI", system-ui, sans-serif);
   background: rgba(0, 0, 0, 0.62);
   /* Scaled from the engine's own default rather than a fixed pixel size: the
      default is already relative to the video box, so this keeps subtitles

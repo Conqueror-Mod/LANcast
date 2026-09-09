@@ -55,6 +55,15 @@ export function qualityByID(id: string): Quality {
 /** Where the subtitles sit, as a percentage of the picture height from the bottom. */
 export type SubPosition = number;
 
+/*
+ * Which typeface the cues use.
+ *
+ * A generic family rather than a font name, resolved to a stack in cueVars.ts.
+ * Storing a name would be storing a bet that the machine has that face, and the
+ * fallback when it does not is the engine's own default — a serif nobody chose.
+ */
+export type SubFont = "sans" | "serif" | "mono";
+
 export interface Prefs {
   /** Quality id; see QUALITIES. */
   quality: string;
@@ -64,6 +73,8 @@ export interface Prefs {
   autoPlay: boolean;
 
   subColor: string;
+  /** Which typeface the cues use; see SubFont. */
+  subFont: SubFont;
   /** Multiplier on the base cue size; 1 is the default. */
   subSize: number;
   /** Percent of the picture height, from the bottom. */
@@ -77,6 +88,7 @@ export const DEFAULTS: Prefs = {
   audioDevice: "",
   autoPlay: true,
   subColor: "#ffffff",
+  subFont: "sans",
   subSize: 1,
   subPosition: 8,
   subOffset: 0,
