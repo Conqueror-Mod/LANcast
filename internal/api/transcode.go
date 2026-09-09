@@ -121,8 +121,25 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 
 	sess := s.trans.Session(sessionID)
 	if sess == nil {
-		// The session was reaped or never existed. A 404 lets the player
-		// re-request the playlist and get a fresh one.
+		/*
+		 * The session was reaped or never existed. A 404 lets the player
+		 * re-request the playlist and get a fresh one.
+		 *
+		 * **Said out loud, because a silent 404 here is invisible from both
+		 * ends.** A `<video>` element cannot tell "this is not media" from "I
+		 * could not fetch the media": either way it reports
+		 * MEDIA_ERR_SRC_NOT_SUPPORTED, which the client reads as this device
+		 * being unable to play a playlist at all — and writes that down.
+		 *
+		 * So a segment refused here does not look like a refused segment. It
+		 * looks like a broken engine, on a machine whose engine is fine, and it
+		 * retires the segmented path for that device. The playlist route
+		 * already logs its own failure; this one recorded nothing, which made
+		 * it the last place a failure could hide on this path.
+		 */
+		s.log.Warn("hls segment refused: no such session",
+			"session", sessionID, "name", name, "item", r.PathValue("id"),
+			"running", len(s.trans.Sessions()))
 		writeError(w, http.StatusNotFound, "not_found", "transcode session has ended")
 		return
 	}
