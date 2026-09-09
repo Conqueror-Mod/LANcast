@@ -50,6 +50,30 @@ type Manager struct {
 	 */
 	IdleTimeout time.Duration
 
+	/*
+	 * LiveIdleTimeout is the same idea for a channel, and it is much shorter
+	 * (ADR 0065).
+	 *
+	 * IdleTimeout is a film's number: its comment below records being raised to
+	 * ten minutes so a paused film keeps its ffmpeg, which is right, because
+	 * waiting costs nothing and resuming is expensive.
+	 *
+	 * Every term of that differs for a channel. An abandoned one is pulled at
+	 * full rate for the whole ten minutes from somebody else's server; nobody
+	 * pauses five films in two minutes, where surfing five channels is one
+	 * ordinary minute of use; and there is nothing to resume into, because
+	 * coming back to live means joining at *now*.
+	 *
+	 * Observed costing exactly what that predicts: two minutes of channel
+	 * surfing, and the server refusing to play anything because three session
+	 * slots were held by channels already left.
+	 *
+	 * Thirty seconds is derived rather than picked. A viewer polls for a
+	 * segment about every SegmentSeconds, so thirty is roughly five missed
+	 * polls — not a slow network, but nobody there.
+	 */
+	LiveIdleTimeout time.Duration
+
 	// binMu guards bin, which is no longer written only at construction: the
 	// media-tools installer can put ffmpeg on this machine while the server is
 	// running, and requiring a restart to notice would make a working install
@@ -73,14 +97,15 @@ type Manager struct {
 // NewManager builds a manager rooted at dir for scratch space.
 func NewManager(dir string, log *slog.Logger) *Manager {
 	m := &Manager{
-		root:        dir,
-		log:         log,
-		MaxSessions: 3,
-		IdleTimeout: 10 * time.Minute,
-		sessions:    map[string]*Session{},
-		stopped:     make(chan struct{}),
-		available:   []Encoder{Software},
-		selected:    Software,
+		root:            dir,
+		log:             log,
+		MaxSessions:     3,
+		IdleTimeout:     10 * time.Minute,
+		LiveIdleTimeout: 30 * time.Second,
+		sessions:        map[string]*Session{},
+		stopped:         make(chan struct{}),
+		available:       []Encoder{Software},
+		selected:        Software,
 	}
 	m.Rescan()
 	return m
@@ -217,7 +242,7 @@ func (m *Manager) reap() {
 		// A finished session still serves its segments — the file is fully
 		// transcoded and seeking through it is exactly what a user does next.
 		// Only idleness reaps.
-		if s.Idle() > m.IdleTimeout {
+		if s.Idle() > m.idleLimit(s) {
 			dead = append(dead, s)
 			delete(m.sessions, id)
 			continue
@@ -247,15 +272,78 @@ func (m *Manager) reap() {
 		 * configurable and a session reaped at 601 seconds and one reaped at
 		 * 4,000 are different stories about what the client was doing.
 		 */
-		m.log.Info("reaping idle transcode", "session", s.ID, "item", s.ItemID,
-			"idle_seconds", int(s.Idle().Seconds()),
-			"served_bytes", s.Served())
+		/*
+		 * A channel is logged as a channel.
+		 *
+		 * ItemID holds a negated channel id for a live session, so this line
+		 * used to report `item=-30598` — a number that matches nothing in the
+		 * library and reads as corruption to anybody grepping for an item.
+		 */
+		if s.IsLive() {
+			m.log.Info("reaping idle live channel", "session", s.ID,
+				"channel", -s.ItemID, "idle_seconds", int(s.Idle().Seconds()),
+				"served_bytes", s.Served())
+		} else {
+			m.log.Info("reaping idle transcode", "session", s.ID, "item", s.ItemID,
+				"idle_seconds", int(s.Idle().Seconds()),
+				"served_bytes", s.Served())
+		}
 		s.Stop()
 		// A session can go idle *because* ffmpeg stopped producing. Whatever it
 		// said on the way out is the explanation, and this is the other path a
 		// session ends by.
 		m.reportStderr(s)
 	}
+}
+
+/*
+ * idleLimit is how long this session may go unread before it is reaped.
+ *
+ * Two numbers rather than one, because they answer different questions — see
+ * LiveIdleTimeout. A zero LiveIdleTimeout falls back to the film's, so a
+ * Manager built without setting it behaves exactly as it did before this
+ * existed rather than reaping everything in no time.
+ */
+func (m *Manager) idleLimit(s *Session) time.Duration {
+	if s.IsLive() && m.LiveIdleTimeout > 0 {
+		return m.LiveIdleTimeout
+	}
+	return m.IdleTimeout
+}
+
+/*
+ * StopLive ends the session for a channel, if one is running.
+ *
+ * The exact signal the HLS path otherwise lacks (ADR 0065). A poll of a
+ * playlist is not a lifetime, so the request context cannot end the encode —
+ * which leaves the client's own knowledge that it has stopped watching as the
+ * only precise information available, and until now it was thrown away.
+ *
+ * Reports whether it stopped anything so the caller can log it, but stopping a
+ * channel that is not running is success: the caller asked for it to not be
+ * running, and it is not.
+ */
+func (m *Manager) StopLive(channelID int64) bool {
+	key := -channelID
+
+	m.mu.Lock()
+	var found *Session
+	for id, s := range m.sessions {
+		if s.ItemID == key && s.Output == HLS {
+			found = s
+			delete(m.sessions, id)
+			break
+		}
+	}
+	m.mu.Unlock()
+
+	if found == nil {
+		return false
+	}
+	m.log.Info("stopping live channel: the viewer left", "session", found.ID,
+		"channel", channelID, "served_bytes", found.Served())
+	found.Stop()
+	return true
 }
 
 // Sessions returns a snapshot for diagnostics.

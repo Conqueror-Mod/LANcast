@@ -307,3 +307,33 @@ func (s *Server) channelLiveHLS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(rewritten))
 }
+
+/*
+ * channelStopLive ends a channel's session because the viewer said so.
+ *
+ * The HLS path has no other way to know (ADR 0065). A poll of a playlist is not
+ * a lifetime, so the request context cannot end the encode — which is correct,
+ * and leaves the server with no signal at all that somebody has gone. The idle
+ * timeout is the backstop; this is the exact answer, and it is the one moment
+ * the software knows it for certain.
+ *
+ * What that cost: two minutes of channel surfing left three sessions held by
+ * channels already abandoned, and the server refused to play anything else.
+ *
+ * Idempotent, and it says so with a 204 either way. Stopping a channel that is
+ * not running is what the caller asked for — a 404 would make an unremarkable
+ * race (two beacons, a reload, a reaper that got there first) look like a
+ * failure to a client that cannot do anything about it.
+ */
+func (s *Server) channelStopLive(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid channel id")
+		return
+	}
+	// No existence check on the channel itself: this is about a running
+	// session, and a channel that was deleted while somebody watched it should
+	// still have its ffmpeg stopped.
+	s.trans.StopLive(id)
+	w.WriteHeader(http.StatusNoContent)
+}

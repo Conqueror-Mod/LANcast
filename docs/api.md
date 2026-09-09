@@ -3051,6 +3051,36 @@ see `GET /api/guide` below.
 rather than half-rewritten. A client that can reach the provider still plays;
 one that cannot will fail on an encrypted stream. Stated rather than guessed at.
 
+### `POST /api/channels/{id}/stop`
+
+Stop the channel's session because the viewer has left. `204`.
+
+**The HLS path has no other way to know** ([ADR 0065](adr/0065-a-channel-nobody-is-watching-stops.md)).
+A poll of a playlist is not a lifetime, so the request context cannot end the
+encode — correctly, or the channel would die between the playlist and its first
+segment — which leaves the server with no signal at all that somebody has gone.
+An idle timeout is the backstop; this is the exact answer, and it is the one
+moment a client knows it for certain.
+
+Without it, two minutes of channel surfing left three sessions held by channels
+already abandoned, and the server refused to play anything else.
+
+**Idempotent**: `204` whether or not anything was running. Stopping a channel
+that is not running is what the caller asked for, and a `404` would make an
+unremarkable race — two beacons, a reload, a reaper that got there first — look
+like a failure to a client that can do nothing about it.
+
+**A client should send this on every way of leaving**: a stop button, switching
+channels, navigating away, closing the window. Send it with `keepalive` (or a
+beacon), because an ordinary request issued while a page is unloading is
+routinely cancelled — and a stop that only arrives when the tab survives misses
+the case it exists for.
+
+**One session is shared between viewers**, so a stop from one viewer ends the
+session another may still be polling. That viewer's next poll starts it again;
+the cost is a gap, not a failure, and the alternative is a per-viewer identity
+this contract does not have.
+
 ### `GET /api/channels/{id}/hls/index.m3u8`
 
 The same channel as an **HLS playlist** with fMP4 segments, rather than one
