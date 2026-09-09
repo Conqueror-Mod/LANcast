@@ -555,6 +555,21 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	it.ChildCount = counted[0].ChildCount
+
+	/*
+	 * Markers ride along, so the player can draw a skip button without asking a
+	 * second question (ADR 0054).
+	 *
+	 * Best-effort: a marker is an optional convenience and a detail page that
+	 * failed because the credits detector had a bad day would be a worse
+	 * outcome than a missing button. The inspection endpoint still exists for
+	 * anything that wants to see confidence and provenance.
+	 */
+	if markers, err := s.st.MarkersFor(r.Context(), id); err == nil {
+		it.Markers = markers
+	} else {
+		s.log.Warn("could not load markers for an item", "item", id, "error", err)
+	}
 	writeJSON(w, http.StatusOK, it)
 }
 

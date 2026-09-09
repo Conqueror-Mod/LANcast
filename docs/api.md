@@ -1886,12 +1886,25 @@ The boundaries detected on one item — where its credits begin (ADR 0054).
   "confidence": 0.9, "created_at": 1788300000 } ] }
 ```
 
-`kind` is `credits` or `intro`; **nothing writes `intro` yet**, and it is in the
-contract so that when it does, a client written today does not have to change
-shape to accept it.
+`kind` is `credits` or `intro`. Both are written now: `credits` from a black
+stretch in the file's tail, `intro` from audio fingerprints compared across a
+season, which is what makes an intro findable at all — it is the passage every
+episode has in common.
 
-`end_ms` is absent for credits, which run to the end of the file. An intro has a
-real end — the point you would skip *to* — and will carry one.
+**Markers also ride on `GET /api/items/{id}`**, in a `markers` array of exactly
+this shape. That is the one a player should read: asking a second question
+before it can draw a button means drawing the button late. This endpoint stays
+as the inspection surface, and it is the only one that will grow fields like
+provenance.
+
+`end_ms` is absent for credits, which run to the end of the file. An intro
+carries a real end: the point a **Skip intro** button seeks to.
+
+**That end is not padded, and a client must not pad it either.** Measured
+against real episodes, it is occasionally a few seconds early on a long title
+sequence — landing you in the last bar of the theme. Padding to compensate would
+trade that for clipping the first line of the episode, which is the worse of the
+two: nobody minds the tail of a theme and everybody minds a missing first line.
 
 `confidence` is `0.9` for a boundary found by a black stretch over five seconds
 and `0.5` where only a shorter one existed. It is reported rather than

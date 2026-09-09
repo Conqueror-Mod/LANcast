@@ -8281,6 +8281,13 @@
           "next_episode": {
             "$ref": "#/components/schemas/Item",
             "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
+          },
+          "markers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            },
+            "description": "Detected intro and credits ranges (ADR 0054). Present on detail responses only.\n\nCarried here rather than fetched separately because a client that must ask a second question before it can draw a skip button will draw it late. `GET /api/items/{id}/markers` remains the inspection surface.\n\nAn `intro` marker's `end_ms` is the point a **Skip intro** button seeks to, and it is **not padded** — it is occasionally a few seconds early on a long title sequence, and padding to compensate would risk clipping the first line of the episode, which is the worse trade."
           }
         }
       },

@@ -435,6 +435,21 @@ type Item struct {
 	// Detail-only.
 	Streams []MediaStream `json:"streams,omitempty"`
 
+	/*
+	 * Markers are the detected intro and credits ranges, carried on the item
+	 * rather than fetched separately (ADR 0054).
+	 *
+	 * The ADR is explicit about why: "a client that must ask a second question
+	 * before it can draw a button will draw it late, and a button that appears
+	 * three seconds into the credits is worse than none." An intro is more
+	 * forgiving than credits — it starts a minute or two in — but the reason
+	 * holds either way, and one payload is one race fewer.
+	 *
+	 * Detail responses only. A grid of two hundred tiles has no use for them
+	 * and would pay a query each.
+	 */
+	Markers []Marker `json:"markers,omitempty"`
+
 	// FileName is the base name of the file, detail-only. The full path stays
 	// private — it would disclose the server's filesystem layout — but the name
 	// alone is what identifies a title whose metadata is wrong, and without it a
