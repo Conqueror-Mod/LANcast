@@ -359,7 +359,19 @@ func (m *Manager) idleLimit(s *Session) time.Duration {
 	 * silently get this thirty seconds instead of the film's ten minutes.
 	 */
 	if s.Output == HLS && !s.IsLive() && m.UnreadIdleTimeout > 0 && s.Served() == 0 {
-		return m.UnreadIdleTimeout
+		/*
+		 * The shorter of the two, never simply the unread one.
+		 *
+		 * This rule exists to make an abandoned session die sooner; a session
+		 * nobody ever watched outliving one somebody paused is the rule
+		 * working backwards. Returning UnreadIdleTimeout flatly does exactly
+		 * that whenever IdleTimeout is the smaller number, which is not only a
+		 * test's configuration — a server tuned down to reap aggressively would
+		 * have found its abandoned sessions the most durable thing on it.
+		 */
+		if m.UnreadIdleTimeout < m.IdleTimeout {
+			return m.UnreadIdleTimeout
+		}
 	}
 	return m.IdleTimeout
 }

@@ -223,3 +223,24 @@ func TestSupersedingAnItemCannotTakeAChannel(t *testing.T) {
 		t.Error("superseding item 37106 stopped channel 37106")
 	}
 }
+
+/*
+ * An unwatched session never outlives a watched one.
+ *
+ * The rule is "abandoned sessions go sooner", and returning the unread timeout
+ * flatly inverts it whenever IdleTimeout is the smaller number — the session
+ * nobody ever attached to becomes the most durable thing on the server. Found
+ * by a test that lowers IdleTimeout to reap quickly and then could not reap.
+ */
+func TestAnUnwatchedSessionNeverOutlivesAWatchedOne(t *testing.T) {
+	m := idleManager(t)
+	m.IdleTimeout = 50 * time.Millisecond
+
+	unread := &Session{ID: "unread", ItemID: 37106, Output: HLS}
+	watched := &Session{ID: "watched", ItemID: 37106, Output: HLS}
+	watched.NoteServed(1 << 20)
+
+	if m.idleLimit(unread) > m.idleLimit(watched) {
+		t.Errorf("unread %v outlives watched %v", m.idleLimit(unread), m.idleLimit(watched))
+	}
+}
