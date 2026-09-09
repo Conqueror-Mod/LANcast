@@ -113,7 +113,7 @@ func TestARealFFmpegWritesAUsableEventPlaylist(t *testing.T) {
 	film := syntheticFilm(t)
 	ctx := context.Background()
 
-	sess, err := m.EnsureHLS(ctx, 1, Options{
+	sess, err := m.EnsureHLS(ctx, 1, "u_test", Options{
 		Input:    film,
 		Decision: audioEncodeDecision(),
 	})
@@ -184,7 +184,7 @@ func TestASegmentThePlaylistNamesIsRealMedia(t *testing.T) {
 	film := syntheticFilm(t)
 	ctx := context.Background()
 
-	sess, err := m.EnsureHLS(ctx, 3, Options{
+	sess, err := m.EnsureHLS(ctx, 3, "u_test", Options{
 		Input:    film,
 		Decision: audioEncodeDecision(),
 	})

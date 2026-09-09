@@ -365,11 +365,11 @@ printf 'seg' > "$d/seg00000.m4s"
 sleep 5`)
 	m := newManager(t, bin)
 
-	a, err := m.EnsureHLS(context.Background(), 7, Options{Input: "x.mkv", Decision: remux()})
+	a, err := m.EnsureHLS(context.Background(), 7, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatalf("EnsureHLS: %v", err)
 	}
-	b, err := m.EnsureHLS(context.Background(), 7, Options{Input: "x.mkv", Decision: remux()})
+	b, err := m.EnsureHLS(context.Background(), 7, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestWaitForFileTimesOut(t *testing.T) {
 	bin := fakeFFmpeg(t, `sleep 5`) // never writes the file
 	m := newManager(t, bin)
 
-	sess, err := m.EnsureHLS(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	sess, err := m.EnsureHLS(context.Background(), 1, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func TestWaitForFileFailsWhenFFmpegDies(t *testing.T) {
 	bin := fakeFFmpeg(t, `echo "boom" >&2; exit 1`)
 	m := newManager(t, bin)
 
-	sess, err := m.EnsureHLS(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	sess, err := m.EnsureHLS(context.Background(), 1, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ sleep 10`)
 	m := newManager(t, bin)
 	m.IdleTimeout = 50 * time.Millisecond
 
-	sess, err := m.EnsureHLS(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	sess, err := m.EnsureHLS(context.Background(), 1, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ printf '#EXTM3U\n' > "$d/index.m3u8"
 sleep 10`)
 	m := newManager(t, bin)
 
-	m.EnsureHLS(context.Background(), 1, Options{Input: "x.mkv", Decision: remux()})
+	m.EnsureHLS(context.Background(), 1, "u_test", Options{Input: "x.mkv", Decision: remux()})
 	root := m.root
 	m.StopAll()
 
