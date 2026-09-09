@@ -3567,6 +3567,14 @@ export interface components {
              *     **For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished.
              */
             next_episode?: components["schemas"]["Item"];
+            /**
+             * @description Detected intro and credits ranges (ADR 0054). Present on detail responses only.
+             *
+             *     Carried here rather than fetched separately because a client that must ask a second question before it can draw a skip button will draw it late. `GET /api/items/{id}/markers` remains the inspection surface.
+             *
+             *     An `intro` marker's `end_ms` is the point a **Skip intro** button seeks to, and it is **not padded** — it is occasionally a few seconds early on a long title sequence, and padding to compensate would risk clipping the first line of the episode, which is the worse trade.
+             */
+            markers?: components["schemas"]["Marker"][];
         };
         ItemsPage: {
             items: components["schemas"]["Item"][];

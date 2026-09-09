@@ -31,6 +31,7 @@ import {
   StopGlyph,
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
+import { skipTarget } from "@/lib/skip";
 import { DEFAULTS } from "@/playback/prefs";
 import "./Player.css";
 
@@ -391,6 +392,16 @@ export function Player() {
 
   const item = pb.item;
 
+  /*
+   * The skip on offer right now, or nothing.
+   *
+   * Recomputed from the playhead rather than held in state: it is a pure
+   * function of where we are, and storing it would mean a second thing that can
+   * disagree with the first — a button still showing after a seek past the
+   * intro, which is the exact bug this shape cannot have.
+   */
+  const skip = skipTarget(item?.markers, pb.displayTime);
+
   return (
     <div
       className={
@@ -489,6 +500,30 @@ export function Player() {
             </div>
           )}
         </div>
+
+        {/*
+          Skip intro: a button that appears, never a jump that happens.
+          ADR 0054 and the feature backlog both insist on that, and the reason
+          is that an automatic skip a few seconds wrong is indistinguishable
+          from a broken file — the first thing it would eat is a cold open.
+
+          It sits above the transport rather than among it because it is
+          transient: it exists for thirty seconds of a forty-minute episode, and
+          a control that comes and goes inside a fixed row makes the row move.
+
+          Outside player__chrome's fade, deliberately. The chrome hides when the
+          mouse is still, and a skip that vanished with it would be a button you
+          had to wake the interface up to press, during the one stretch nobody
+          is touching the mouse.
+        */}
+        {skip && (
+          <button
+            className="player__skip"
+            onClick={() => pb.seekTo(skip.atSeconds)}
+          >
+            Skip intro
+          </button>
+        )}
 
         <div className="player__bottom">
           <Scrubber

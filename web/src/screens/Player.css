@@ -263,6 +263,43 @@
   color: var(--text-dim, #b9c0cc);
 }
 
+/* Skip intro.
+ *
+ * Bottom-right and above the transport, where a skip button has lived in every
+ * player anybody has used — familiarity is worth more here than novelty, for a
+ * control that appears for thirty seconds and must be found without looking.
+ *
+ * **Not gold.** design.md reserves the accent for *where you are* and nothing
+ * else, and the moment it also means "press this" the focus signal is dead.
+ * This reads as a control through shape and contrast: a solid ground, a light
+ * border, and enough padding to be a target on a television.
+ *
+ * pointer-events auto because the chrome above it may be mid-fade; the button
+ * outlives the chrome deliberately, so it must stay pressable while the rest is
+ * on its way out.
+ */
+.player__skip {
+  position: absolute;
+  right: 2.5rem;
+  bottom: 7rem;
+  z-index: 3;
+  pointer-events: auto;
+  padding: 0.6rem 1.4rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--text-primary, #f2f5fa);
+  background: rgba(12, 16, 24, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.35);
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.player__skip:hover,
+.player__skip:focus-visible {
+  background: rgba(24, 32, 46, 0.92);
+  border-color: rgba(226, 232, 240, 0.6);
+}
+
 /* The playback statistics overlay.
  *
  * Positioned top-left, away from the transport chrome along the bottom and from
