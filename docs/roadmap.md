@@ -752,7 +752,12 @@ group is not priority.
 
 ### Metadata, ratings and discovery
 
-- **Cast search, beyond the crash.** Searching people by name *and* role
+- ~~**Cast search, beyond the crash**~~ — **built** in v0.8.18
+  ([items.go](../internal/api/items.go),
+  [browsefilter.go](../internal/store/browsefilter.go)). Matching is a
+  substring rather than prefix-or-word, LIKE's own wildcards are escaped, and
+  library 0 searches every library. The description below is what was wrong.
+  Searching people by name *and* role
   answered `datatype mismatch` and an empty list for every query, because
   `SearchCast` assigned its where clause instead of appending and dropped the
   role condition while keeping its argument. The picker always scopes to a
@@ -769,7 +774,12 @@ group is not priority.
   reuse a second normalizer — `clean` and `SortTitle` in `internal/media` are
   the ones that exist.
 
-- **Actor images beside the names.** A detail page lists its cast as text, and
+- ~~**Actor images beside the names**~~ — **built** in v0.8.18. `thumb_hash` is
+  written by [enrich.go](../internal/enrich/enrich.go) from TMDB's
+  `profile_path`, fetched once per person and enforced by the database rather
+  than the caller, and drawn by [CastRow.tsx](../web/src/screens/CastRow.tsx)
+  with initials as the designed fallback. The description below is the gap it
+  closed. A detail page listed its cast as text, and
   the storage for the pictures is already there and empty: `person.thumb_hash`
   has been in the schema since the credits work and **nothing in the codebase
   writes it or reads it**. TMDB returns `profile_path` on the same credits
@@ -791,7 +801,13 @@ group is not priority.
 
 ### Social and profiles
 
-- **Resetting watched and listened history.** There is no way to undo a viewing
+- ~~**Resetting watched and listened history**~~ — **built** in v0.8.18, and
+  given a user interface in v0.8.19, which is when it became reachable
+  ([history.go](../internal/api/history.go),
+  [historyreset.go](../internal/store/historyreset.go)). Three scopes, audited
+  like removing a library, and priced before it is performed so the
+  confirmation names a number. The description below is why it needed three.
+  There was no way to undo a viewing
   record beyond one title at a time, and the request is usually one of three
   quite different things: *forget this show* (a shared account watched
   something for somebody else), *forget everything* (handing the server on, or
@@ -975,7 +991,9 @@ group is not priority.
   this library" was unanswerable during v0.4.x testing. Still open beside it:
   whether identity should live in its own store rather than beside the library,
   so losing a password never opens the file holding the media.
-- **A wrong library kind is only half-visible.** Kind is chosen once and is
+- ~~**A wrong library kind is only half-visible**~~ — **built** in v0.6.27
+  ([libraryshape.go](../internal/store/libraryshape.go)). The description below
+  is the half that was missing. Kind is chosen once and is
   immutable by design — it decides which files are scanned at all and biases
   movie-vs-TV matching, so changing it later would mean a rescan re-litigating
   identity for a whole library, which is the thing the locked-fields rule exists
@@ -1119,7 +1137,13 @@ group is not priority.
 
 ### Input and control
 
-- **"Are you still watching."** Nothing stops playback when nobody is there.
+- ~~**"Are you still watching"**~~ — **built** in v0.8.18, made visible in
+  v0.8.19 and made reachable in v0.8.25
+  ([stillWatching.ts](../web/src/playback/stillWatching.ts)). It counts
+  *automatic advances* rather than interactions — the obvious rule punishes
+  the person watching a two-hour film properly — needs a count and a clock
+  together, and asks *before* advancing rather than after. The description
+  below is the case for it. Nothing stopped playback when nobody was there.
   Autoplay walks a season, each episode marks itself watched at the end, and a
   server left running overnight has both spent hours of transcode and rewritten
   the one piece of state people actually care about — where they had got to. The
@@ -1155,9 +1179,13 @@ group is not priority.
   ordinary: `[` and `]` for subtitle tracks are one key on a US layout and a dead
   key on several European ones, and a shortcut you cannot physically press is
   not a shortcut.
-- **Pop-out player** in our own window rather than the browser's
-  ([ADR 0029](adr/0029-picture-in-picture-is-our-window.md), **accepted**, not
-  yet built). Picture-in-picture hands the element to Chrome, so the window
+- ~~**Pop-out player** in our own window rather than the browser's~~ —
+  **built** in v0.6.27 ([ADR 0029](adr/0029-picture-in-picture-is-our-window.md),
+  [popout.ts](../web/src/playback/popout.ts)). The acceptance test the ADR
+  asked for is [crossDocumentMove.test.tsx](../web/src/playback/crossDocumentMove.test.tsx),
+  which holds both the safe shape and the shape that breaks. The description
+  below is why the browser's own window was not enough. Picture-in-picture
+  hands the element to Chrome, so the window
   arrives with Chrome's chrome: our subtitles keep rendering in the parent tab
   while the picture is in the corner, a Live Caption button offers guessed
   transcription in place of the real tracks, and speed, audio track and queue
