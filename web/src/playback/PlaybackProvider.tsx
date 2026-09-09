@@ -36,6 +36,7 @@ import {
   prevPos,
 } from "./queueOrder";
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
+import { applyCueVars } from "./cueVars";
 import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
@@ -1615,24 +1616,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
   }, [prefs.audioDevice, itemID, subOffset]);
 
-  /*
-   * ---- subtitle appearance --------------------------------------------------
-   *
-   * Written as CSS custom properties on the document, because ::cue cannot be
-   * styled inline — the cue box lives in a shadow tree the page cannot reach
-   * with a style attribute, and the only hook is a stylesheet rule that reads
-   * these. The rule itself is in playback.css.
-   *
-   * Position is a percentage from the bottom of the picture. It moves the cue
-   * box rather than the text inside it, which is why it is a `bottom` on the
-   * container and not something ::cue could express at all.
-   */
-  useEffect(() => {
-    const s = document.documentElement.style;
-    s.setProperty("--cue-color", prefs.subColor);
-    s.setProperty("--cue-scale", String(prefs.subSize));
-    s.setProperty("--cue-bottom", `${prefs.subPosition}%`);
-  }, [prefs.subColor, prefs.subSize, prefs.subPosition]);
 
   /*
    * The pop-out window.
@@ -1644,6 +1627,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * hand because a portal would unmount it and unmounting stops the sound.
    */
   const [popoutWin, setPopoutWin] = useState<Window | null>(null);
+
+  /*
+   * ---- subtitle appearance --------------------------------------------------
+   *
+   * Written as CSS custom properties on the document, because ::cue cannot be
+   * styled inline — the cue box lives in a shadow tree the page cannot reach
+   * with a style attribute, and the only hook is a stylesheet rule that reads
+   * these. The rule itself is in playback.css.
+   *
+   * Which properties exist, and how each is written, is cueVars.ts — one place,
+   * so that a control added to the settings panel and never applied is a
+   * failing test rather than a preference that quietly does nothing.
+   */
+  useEffect(() => {
+    applyCueVars(document.documentElement, prefs);
+    /*
+     * And the pop-out window, which is a second document with a root of its
+     * own.
+     *
+     * This is the half that was missing. `copyStyles` carries the stylesheets
+     * across, so the `::cue` rules arrive intact — but the values they read
+     * were written as inline style on the *page's* root, and an inline style on
+     * an element is not a stylesheet. Every `var(--cue-…, fallback)` in the
+     * copied rules therefore resolved to its fallback, and the pop-out showed
+     * subtitles at the shipped defaults whatever anyone had chosen. Nothing
+     * failed: the rule was right, the properties were right, and no one asked
+     * which root they were on.
+     *
+     * `popoutWin` is in the dependencies for the same reason — opening the
+     * window has to apply them, not only changing a preference while it is
+     * already open.
+     */
+    const other = popoutWin?.document?.documentElement;
+    if (other) applyCueVars(other, prefs);
+  }, [prefs, popoutWin]);
   const [popoutRoot, setPopoutRoot] = useState<HTMLElement | null>(null);
   /*
    * Feature detection answers "does this host implement Document PiP". It does
