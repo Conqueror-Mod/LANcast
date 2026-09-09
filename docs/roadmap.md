@@ -1282,10 +1282,28 @@ group is not priority.
   acceptance test named there should now cover an `AudioContext` as well as the
   element. Watch Together raises no question here: the curve is per device, so
   there is nothing to synchronise.
-- **Subtitle appearance — font, size, colour, background, position.** Every
-  commercial service ships three presets; this is a genuine accessibility win and
-  it is pure client work, with subtitle-offset plumbing already in
-  `web/src/playback/`. **Back burner** — wanted, not next.
+- ~~**Subtitle appearance — font, size, colour, background, position**~~ —
+  **built.** Colour, size and position shipped in v0.8.18 on the playback
+  settings panel; the **typeface** and the fix below are v0.9.6.
+
+  Two of the five named here were never going to be controls. **Background is
+  deliberately not offered**: it stays a dark box because that is what makes a
+  subtitle readable over a bright scene, and a switch that could turn it off
+  would let somebody make their subtitles invisible over exactly the shots that
+  need them most. **Font is a generic family, not a name** — a name is a bet
+  that the machine has that face, and no font is bundled, because a
+  high-legibility face designed for dyslexia is a licence and bundle-size
+  decision that a dropdown does not get to make on its own.
+
+  And what shipped did not reach the **pop-out player** for three releases. The
+  preferences were written as custom properties on the page's `documentElement`,
+  and the pop-out ([ADR 0029](adr/0029-picture-in-picture-is-our-window.md)) is a
+  second document with a root of its own: `copyStyles` carries the stylesheets
+  across, an inline style on an element is not a stylesheet, and every
+  `var(--cue-…, fallback)` resolved to its fallback. Subtitles at the shipped
+  defaults whatever anyone had chosen, with nothing failing anywhere — the third
+  time this project has shipped a feature whose halves were each correct and
+  never joined.
 
 ### Resolved modeling question — multi-part and serial works
 
