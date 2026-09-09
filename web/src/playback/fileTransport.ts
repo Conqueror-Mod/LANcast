@@ -68,31 +68,119 @@ export type HLSVerdict = "unknown" | "playable" | "refused";
  * The first key recorded a verdict that could be wrong for a reason nothing
  * here could see — a server that failed to produce a playlist looked exactly
  * like an engine that could not read one, so one bad thirty-second wait retired
- * the better path on that device for ever. Observed doing precisely that: one
- * `hls playlist unavailable` on 31 August, and every file played since went
- * down the progressive path with the eviction fault this whole module exists to
- * avoid.
+ * the better path on that device for ever.
  *
  * Bumping the key is how those devices get a second opinion. A verdict written
  * under the old rules is not worth migrating — it was reached by a test that
- * could not tell the two failures apart — so it is left behind rather than
- * read, and each device pays one attempt to find out the truth.
+ * could not tell those failures apart — so it is left behind rather than read.
  */
-export const HLS_VERDICT_KEY = "lancast:hls-playable-2";
+export const HLS_VERDICT_KEY = "lancast:hls-playable-3";
 
-export function hlsVerdict(): HLSVerdict {
-  return readDevice<HLSVerdict>(HLS_VERDICT_KEY, "unknown");
+/**
+ * What this device has been observed to do, and how sure we are.
+ *
+ * `refusals` is why this is a record rather than a string: one refusal is an
+ * incident and three is a property of the machine.
+ */
+export interface HLSRecord {
+  verdict: HLSVerdict;
+  /** Consecutive refusals. Reset by any success. */
+  refusals: number;
+  /** When it was last written, epoch ms. */
+  at: number;
+}
+
+/*
+ * A refusal is provisional until it repeats, and even then it does not last for
+ * ever.
+ *
+ * Written once and read for ever was too strong, and it cost exactly what that
+ * implies. On a real machine the element raised MEDIA_ERR_SRC_NOT_SUPPORTED
+ * once, at 451ms, on a playlist that was **fine** — proven afterwards by
+ * serving that same playlist, byte for byte, to the same engine, which played
+ * it to readyState 4. The server had logged no error and the playlist fetch
+ * that followed succeeded, so every check available said "the engine refused a
+ * good playlist" and the device was pinned to the progressive path permanently
+ * — the very path segments exist to replace.
+ *
+ * The lesson is not that the check was wrong. It is that **a single event is
+ * not a property**. An engine that genuinely cannot read a playlist refuses
+ * every one it is handed; a blip refuses once. Counting distinguishes them at a
+ * cost of two extra failed loads, once, in the life of a device.
+ *
+ * SETTLED_AFTER is 3 rather than 2 because two consecutive failures are still
+ * plausibly one bad minute — a server restarting mid-load will do it.
+ */
+const SETTLED_AFTER = 3;
+
+/*
+ * And it expires, because the answer can change under us.
+ *
+ * A WebView2 runtime updates, a codec extension is installed, a television
+ * browser is replaced. Thirty days is long enough that a device which truly
+ * cannot play a playlist pays the retry about once a month, and short enough
+ * that somebody who fixed their machine is not still being told no next year.
+ */
+const SETTLED_FOR_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function hlsRecord(now = Date.now()): HLSRecord {
+  const r = readDevice<HLSRecord | null>(HLS_VERDICT_KEY, null);
+  if (!r || typeof r.verdict !== "string") {
+    return { verdict: "unknown", refusals: 0, at: 0 };
+  }
+  // A settled refusal that has aged out becomes a question again.
+  if (r.verdict === "refused" && r.refusals >= SETTLED_AFTER) {
+    if (now - r.at > SETTLED_FOR_MS) {
+      return { verdict: "unknown", refusals: 0, at: 0 };
+    }
+  }
+  return r;
+}
+
+export function hlsVerdict(now = Date.now()): HLSVerdict {
+  return hlsRecord(now).verdict;
 }
 
 /**
  * rememberHLS records what happened when this device was handed a playlist.
  *
- * Written once and read for ever after: a device that refused a playlist is not
- * asked again on the next film, because the cost of asking is a visible failed
- * load and the answer does not change.
+ * A success settles it outright and clears any refusals behind it: frames from
+ * a playlist are proof, where a failure to load is only evidence.
  */
-export function rememberHLS(v: Exclude<HLSVerdict, "unknown">): void {
-  writeDevice(HLS_VERDICT_KEY, v);
+export function rememberHLS(
+  v: Exclude<HLSVerdict, "unknown">,
+  now = Date.now(),
+): void {
+  if (v === "playable") {
+    writeDevice<HLSRecord>(HLS_VERDICT_KEY, {
+      verdict: "playable",
+      refusals: 0,
+      at: now,
+    });
+    return;
+  }
+  const prev = hlsRecord(now);
+  writeDevice<HLSRecord>(HLS_VERDICT_KEY, {
+    verdict: "refused",
+    refusals: prev.verdict === "refused" ? prev.refusals + 1 : 1,
+    at: now,
+  });
+}
+
+/**
+ * forgetHLS throws the verdict away, so the next film asks again.
+ *
+ * There was no way to do this, and that was the sharper half of the fault: the
+ * only lever was bumping the storage key and shipping a release, which is a
+ * migration wearing a constant's clothes. A remembered capability failure needs
+ * a way back, the same way the codec denials do.
+ */
+export function forgetHLS(): void {
+  writeDevice<HLSRecord>(HLS_VERDICT_KEY, {
+    verdict: "unknown",
+    refusals: 0,
+    at: 0,
+  });
 }
 
 /**
@@ -105,10 +193,17 @@ export function rememberHLS(v: Exclude<HLSVerdict, "unknown">): void {
  */
 export function hlsWorthTrying(
   canPlayType: (t: string) => string,
-  verdict: HLSVerdict = hlsVerdict(),
+  record: HLSRecord = hlsRecord(),
 ): boolean {
-  if (verdict === "refused") return false;
-  if (verdict === "playable") return true;
+  if (record.verdict === "playable") return true;
+  /*
+   * A refusal only stops us once it has repeated. Below that it is an incident,
+   * and the cost of asking again is one reload against the cost of never using
+   * the better path again.
+   */
+  if (record.verdict === "refused" && record.refusals >= SETTLED_AFTER) {
+    return false;
+  }
   return canPlayType(HLS_MIME) !== "";
 }
 

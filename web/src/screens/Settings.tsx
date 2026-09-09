@@ -60,6 +60,7 @@ import {
   withhold,
   withheldCapabilities,
 } from "@/playback/capabilities";
+import { forgetHLS, hlsRecord } from "@/playback/fileTransport";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { useBigscreen } from "@/lib/bigscreen";
@@ -1598,16 +1599,29 @@ function CodecDenialsRow() {
   const [denials, setDenials] = useState(() => deniedCapabilities());
   const [claims, setClaims] = useState(() => capabilities());
   const [off, setOff] = useState(() => withheldCapabilities());
+  /*
+   * Segmented delivery is remembered the same way a codec is, so it is cleared
+   * by the same button.
+   *
+   * It is a capability this device was observed failing at, and until now there
+   * was no way back from that observation at all — the only lever was bumping a
+   * storage key and shipping a release, which is a migration wearing a
+   * constant's clothes. It cost a real machine the better delivery path
+   * permanently, on one refusal of a playlist later proven fine.
+   */
+  const [segments, setSegments] = useState(() => hlsRecord().verdict);
   const offered = claimable();
 
   function refresh() {
     setDenials(deniedCapabilities());
     setClaims(capabilities());
     setOff(withheldCapabilities());
+    setSegments(hlsRecord().verdict);
   }
 
   function reset() {
     clearDenials();
+    forgetHLS();
     refresh();
   }
 
@@ -1639,6 +1653,12 @@ function CodecDenialsRow() {
   }
   if (off.length > 0) {
     parts.push(`turned off by you: ${off.join(", ")}`);
+  }
+  // Named alongside the codecs because it is the same kind of fact and has the
+  // same consequence: a file this device could have been sent in pieces is sent
+  // as one long response instead, which is what makes a long film stutter.
+  if (segments === "refused") {
+    parts.push("segmented delivery: off after a failure");
   }
 
   let sub: string;
@@ -1676,9 +1696,9 @@ function CodecDenialsRow() {
             failures. The title says so, since the label cannot. */}
         <button
           className="set-btn"
-          disabled={denials.length === 0}
+          disabled={denials.length === 0 && segments !== "refused"}
           onClick={reset}
-          title="Clears only the codecs turned off automatically after a failure. Ones you turned off stay off."
+          title="Clears what was turned off automatically after a failure — codecs, and segmented delivery. Ones you turned off stay off."
         >
           Try them again
         </button>

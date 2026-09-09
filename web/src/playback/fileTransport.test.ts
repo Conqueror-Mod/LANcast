@@ -3,6 +3,8 @@ import {
   filePath,
   hlsWorthTrying,
   hlsVerdict,
+  hlsRecord,
+  forgetHLS,
   rememberHLS,
   isUnsupportedSource,
   HLS_VERDICT_KEY,
@@ -20,6 +22,11 @@ import {
 
 beforeEach(() => {
   localStorage.clear();
+  // readDevice keeps a module-level cache that outlives clearing localStorage,
+  // so the verdict has to be written back rather than merely erased — without
+  // this, a test that ends refused silently decides the next one, and the
+  // refusal count accumulates across the file.
+  forgetHLS();
 });
 
 const says = (answer: string) => () => answer;
@@ -68,10 +75,71 @@ describe("hlsWorthTrying", () => {
     expect(hlsWorthTrying(says(""))).toBe(false);
   });
 
-  it("stops asking once a device has refused a playlist", () => {
+  /*
+   * One refusal is an incident, not a property.
+   *
+   * This test used to assert the opposite — that a single refusal stopped us
+   * asking — and that cost a real machine the better path permanently. The
+   * element raised MEDIA_ERR_SRC_NOT_SUPPORTED once, at 451ms, on a playlist
+   * later proven fine by serving it byte for byte to the same engine, which
+   * played it to readyState 4. Every check available agreed the engine had
+   * refused a good playlist; it had not.
+   */
+  it("keeps asking after one refusal", () => {
     rememberHLS("refused");
-    // Even though the engine still claims "maybe".
+    expect(hlsWorthTrying(says("maybe"))).toBe(true);
+  });
+
+  // An engine that genuinely cannot read a playlist refuses every one it is
+  // handed, so repetition is what tells the two apart.
+  it("stops asking once refusals have repeated", () => {
+    rememberHLS("refused");
+    rememberHLS("refused");
+    expect(hlsWorthTrying(says("maybe"))).toBe(true);
+    rememberHLS("refused");
     expect(hlsWorthTrying(says("maybe"))).toBe(false);
+  });
+
+  // A success is proof where a failure is only evidence, so it clears the
+  // count behind it rather than sitting alongside it.
+  it("forgets earlier refusals once a playlist actually plays", () => {
+    rememberHLS("refused");
+    rememberHLS("refused");
+    rememberHLS("playable");
+    rememberHLS("refused");
+    expect(hlsWorthTrying(says("maybe"))).toBe(true);
+  });
+
+  /*
+   * A settled refusal ages out, because the answer can change under us — a
+   * runtime updates, a codec extension is installed, a television browser is
+   * replaced.
+   */
+  it("asks again long after it settled", () => {
+    const t0 = Date.UTC(2026, 0, 1);
+    rememberHLS("refused", t0);
+    rememberHLS("refused", t0);
+    rememberHLS("refused", t0);
+    expect(hlsWorthTrying(says("maybe"), hlsRecord(t0))).toBe(false);
+
+    const later = t0 + 31 * 24 * 60 * 60 * 1000;
+    expect(hlsWorthTrying(says("maybe"), hlsRecord(later))).toBe(true);
+  });
+
+  /*
+   * And there is a way back by hand.
+   *
+   * There was not, and that was the sharper half: the only lever was bumping
+   * the storage key and shipping a release, which is a migration wearing a
+   * constant's clothes.
+   */
+  it("can be told to forget", () => {
+    rememberHLS("refused");
+    rememberHLS("refused");
+    rememberHLS("refused");
+    expect(hlsWorthTrying(says("maybe"))).toBe(false);
+    forgetHLS();
+    expect(hlsWorthTrying(says("maybe"))).toBe(true);
   });
 
   /*
@@ -96,6 +164,15 @@ describe("hlsWorthTrying", () => {
     rememberHLS("refused");
     expect(hlsVerdict()).toBe("refused");
     expect(localStorage.getItem(HLS_VERDICT_KEY)).toContain("refused");
+  });
+
+  // A value written by an older build is a shape this one cannot read. It must
+  // come back as "ask again" rather than as a crash or a silent refusal.
+  it("treats an unreadable stored value as never having asked", () => {
+    localStorage.setItem(HLS_VERDICT_KEY, JSON.stringify("refused"));
+    forgetHLS();
+    localStorage.setItem(HLS_VERDICT_KEY, JSON.stringify("refused"));
+    expect(hlsRecord().verdict).toBe("unknown");
   });
 });
 
