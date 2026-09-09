@@ -18,6 +18,21 @@
  *
  *   go build -tags hlsharness -o hlsharness.exe ./cmd/hlsharness
  *   ./hlsharness.exe -url "<channel url>" -seconds 90
+ *   ./hlsharness.exe -file "D:/media/a film.mkv" -seconds 20
+ *
+ * # Why it takes a file as well as a channel
+ *
+ * It was built for channels, it found the playlist bug for channels, and it was
+ * never pointed at a film. The identical bug was sitting in the same switch
+ * statement for the file path, shipped, and survived a fortnight in the field:
+ * `-hls_playlist_type vod` makes ffmpeg defer the playlist until the encode
+ * ends, so every conversion timed out waiting for index.m3u8 and fell back to
+ * the progressive stream the segments existed to replace.
+ *
+ * An instrument that can only be pointed at half the problem answers for half
+ * the problem, and the half it cannot reach is where the bug lived. So it takes
+ * either now, and -control flips the playlist type whichever way is the
+ * interesting direction for that source.
  */
 package main
 
@@ -41,23 +56,28 @@ import (
 )
 
 func main() {
-	url := flag.String("url", "", "channel URL to read (required)")
+	url := flag.String("url", "", "channel URL to read")
+	file := flag.String("file", "", "path to a film or episode to convert")
 	seconds := flag.Int("seconds", 90, "how long to let it run")
 	keep := flag.Bool("keep", false, "keep the output directory for inspection")
-	control := flag.Bool("control", false, "swap the VOD playlist flags for live ones, to isolate the cause")
+	control := flag.Bool("control", false, "swap the playlist type for the other one, to isolate the cause")
 	flag.Parse()
 
-	if *url == "" {
-		fmt.Fprintln(os.Stderr, "need -url")
+	if (*url == "") == (*file == "") {
+		fmt.Fprintln(os.Stderr, "need exactly one of -url or -file")
 		os.Exit(2)
 	}
-	if err := run(*url, *seconds, *keep, *control); err != nil {
+	source, live := *url, true
+	if *file != "" {
+		source, live = *file, false
+	}
+	if err := run(source, live, *seconds, *keep, *control); err != nil {
 		fmt.Fprintln(os.Stderr, "FAILED:", err)
 		os.Exit(1)
 	}
 }
 
-func run(url string, seconds int, keep, control bool) error {
+func run(source string, live bool, seconds int, keep, control bool) error {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return fmt.Errorf("ffmpeg not on PATH: %w", err)
@@ -73,20 +93,33 @@ func run(url string, seconds int, keep, control bool) error {
 	fmt.Println("output dir:", dir)
 
 	/*
-	 * Live and HLSInput describe the source honestly — a channel that never
-	 * ends, delivered as a playlist. Copy for both streams is what
+	 * The options describe the source honestly, because a harness that lies
+	 * about its input measures a command line nobody runs.
+	 *
+	 * For a channel: Live and HLSInput, and copy for both streams — what
 	 * LiveDecision produces for the overwhelmingly common H.264/AAC channel,
-	 * and it is the cheapest case: if HLS output is wrong even when ffmpeg is
-	 * only rewriting the container, no encoder setting can be the cause.
+	 * and the cheapest case. If HLS output is wrong even when ffmpeg is only
+	 * rewriting the container, no encoder setting can be the cause.
+	 *
+	 * For a film: neither flag, and video copied with audio re-encoded. That is
+	 * not an arbitrary choice — it is the decision the reported failures
+	 * actually took, because an unsupported audio track is the usual reason a
+	 * film is converted at all.
 	 */
 	opts := transcode.Options{
-		Input:      url,
+		Input:      source,
 		Output:     transcode.HLS,
 		OutputDir:  dir,
-		Live:       true,
-		HLSInput:   true,
+		Live:       live,
+		HLSInput:   live,
 		AudioIndex: -1,
 		Decision:   probe.Decision{VideoAction: "copy", AudioAction: "copy"},
+	}
+	if !live {
+		opts.Decision = probe.Decision{
+			Method: probe.Transcode, VideoAction: "copy", AudioAction: "encode",
+		}
+		opts.AudioBitrate, opts.AudioChannels = 192, 2
 	}
 	/*
 	 * The args are printed because they are half the point of the harness —
@@ -98,10 +131,10 @@ func run(url string, seconds int, keep, control bool) error {
 	 */
 	args := transcode.Args(opts)
 	if control {
-		args = asLive(args)
-		fmt.Println("CONTROL RUN: playlist type swapped to event, window bounded")
+		args = swapPlaylistType(args)
+		fmt.Println("CONTROL RUN: playlist type swapped to the other one")
 	}
-	fmt.Println("ffmpeg args:", strings.Join(redact(args, url), " "))
+	fmt.Println("ffmpeg args:", strings.Join(redact(args, source), " "))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(seconds)*time.Second)
 	defer cancel()
@@ -222,30 +255,41 @@ func watch(ctx context.Context, dir string) observation {
  * might want. That is a design question, and this harness deliberately does
  * not answer it.
  */
-func asLive(args []string) []string {
+/*
+ * swapPlaylistType flips the playlist type to whichever one is not in use.
+ *
+ * It used to only go one way — vod to event — because there was only one
+ * direction worth testing when everything shipped as vod. Both paths are event
+ * now, so the interesting control run is the other way: put vod back and watch
+ * the playlist fail to appear at all. That is the shape of the bug that shipped,
+ * and being able to reproduce it on demand is the point of a control.
+ */
+func swapPlaylistType(args []string) []string {
 	out := make([]string, 0, len(args)+2)
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-hls_playlist_type":
-			out = append(out, "-hls_playlist_type", "event")
+		if args[i] == "-hls_playlist_type" && i+1 < len(args) {
+			other := "vod"
+			if args[i+1] == "vod" {
+				other = "event"
+			}
+			out = append(out, "-hls_playlist_type", other)
 			i++
-		case "-hls_list_size":
-			out = append(out, "-hls_list_size", "6")
-			i++
-		default:
-			out = append(out, args[i])
+			continue
 		}
+		out = append(out, args[i])
 	}
 	return out
 }
 
-// redact replaces the channel URL wherever it appears in the argument list.
-// Matching on the value rather than on a pattern is deliberate: a guess at what
-// a credential looks like is a guess that eventually misses one.
-func redact(args []string, url string) []string {
+// redact replaces the source wherever it appears in the argument list. Matching
+// on the value rather than on a pattern is deliberate: a guess at what a
+// credential looks like is a guess that eventually misses one. A file path is
+// withheld for a quieter reason — it names somebody's media and their
+// directory layout, and this output is meant to be pasteable.
+func redact(args []string, source string) []string {
 	out := make([]string, len(args))
 	for i, a := range args {
-		out[i] = strings.ReplaceAll(a, url, "<channel url withheld>")
+		out[i] = strings.ReplaceAll(a, source, "<source withheld>")
 	}
 	return out
 }
