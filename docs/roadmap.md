@@ -940,22 +940,24 @@ group is not priority.
 
 ### System, operations and diagnostics
 
-- **Developer tools in the desktop window.** The client is WebView2 and its
-  devtools are switched off, which is defensible for a shipped app and costs
-  more than it looks. The console, the network log and the element inspector are
-  where a client-side fault is actually diagnosed, and without them the
-  alternatives are what this project has repeatedly had to fall back on: reading
-  `lancastd.log` and inferring the client's behaviour from the server's, or
-  polling a log and screenshotting the player to prove a timecode did *not*
-  reset. v0.8.6's own notes name the gap — the "Catching up" label exists partly
-  because a speed change had to be "answerable without devtools, which the
-  native window does not have". WebView2 exposes this as one setting
-  (`AreDevToolsEnabled`), so the work is not the switch but deciding what it is
-  attached to: **off by default and enabled from Settings** is the obvious shape,
-  since a always-on inspector in a media player is a support liability, and an
-  unreachable one is why bugs get diagnosed by inference. Worth pairing with the
-  existing debug-logging toggle on the Logs pane, which is the same decision one
-  layer down.
+- ~~**Developer tools in the desktop window**~~ — **built** in v0.8.18, and
+  **it did not work until v0.9.6.** The switch is on Settings, off by default,
+  honest that it takes effect at the next launch — the browser arguments are
+  read when the web view environment is created and there is no supported way to
+  add one to a running environment. What shipped was half of it. Opening the
+  inspector needs `--auto-open-devtools-for-tabs` *and*
+  `AreDevToolsEnabled`, and the vendored web view was told `false` for the
+  second one unconditionally: the pane opened, and a moment later the API
+  switched devtools off underneath it. That is a window with nothing in it, and
+  it was written down in v0.8.49's notes as "a devtools pane that renders blank
+  in this WebView2 build" — a defect attributed to the runtime by a window that
+  was disabling the thing it had just asked to open. Nothing failed and nothing
+  logged, because both halves did exactly what they were told. The default
+  context menu now travels with the switch, since right-click → Inspect is the
+  only way back once the pane is closed: the UI owns the keyboard model
+  ([ADR 0004](adr/0004-keyboard-focus-model.md)) so F12 never arrives. The wiring has
+  tests now, which is the half that had none — the same shape as the close
+  handler this package installed one line too late and never called.
 
 
 - ~~**Activity status in the UI**~~ — **built.** `GET /api/activity` answers

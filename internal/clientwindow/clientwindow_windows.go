@@ -66,19 +66,9 @@ func open(o Options) error {
 		userClose,
 	)
 
-	w = webview2.NewWithOptions(webview2.WebViewOptions{
-		OnClose: onClose,
-		WindowOptions: webview2.WindowOptions{
-			Title:  o.Title,
-			Width:  uint(o.Width),
-			Height: uint(o.Height),
-			Center: true,
-		},
-		DataPath: o.DataDir,
-		// The UI owns its own keyboard model (ADR 0004), and a browser's
-		// accelerators would fight it.
-		AutoFocus: true,
-	})
+	opts := viewOptions(o)
+	opts.OnClose = onClose
+	w = webview2.NewWithOptions(opts)
 	if w == nil {
 		return errors.New("client window: the web view could not be created")
 	}
@@ -323,6 +313,48 @@ func (c *controller) Close() {
  * malformed pin must fail loudly whether or not anything else wanted a switch,
  * and because its tests are about that rule specifically.
  */
+/*
+ * viewOptions builds what the web view is created with.
+ *
+ * Its own function so the wiring can be asserted. Everything here is read once,
+ * at creation, and this package has already shipped a bug of exactly that shape
+ * — the close handler installed a moment too late, kept by value, never called,
+ * and silent about it. The rules were tested; what reached them was not.
+ */
+func viewOptions(o Options) webview2.WebViewOptions {
+	return webview2.WebViewOptions{
+		WindowOptions: webview2.WindowOptions{
+			Title:  o.Title,
+			Width:  uint(o.Width),
+			Height: uint(o.Height),
+			Center: true,
+		},
+		DataPath: o.DataDir,
+		// The UI owns its own keyboard model (ADR 0004), and a browser's
+		// accelerators would fight it.
+		AutoFocus: true,
+		/*
+		 * Debug is what the vendored package calls the pair of settings that
+		 * govern the inspector and the default context menu, and both belong to
+		 * the same switch.
+		 *
+		 * This was the missing half. `--auto-open-devtools-for-tabs` opens the
+		 * pane, and `PutAreDevToolsEnabled(false)` — which is what an unset
+		 * Debug asked for — turns devtools off through the API a moment later.
+		 * The pane opened and rendered nothing, which was reported in v0.8.49 as
+		 * "a devtools pane that renders blank in this WebView2 build" and read
+		 * as a runtime fault rather than as this window disabling the thing it
+		 * had just asked to open.
+		 *
+		 * The context menu travelling with it is deliberate rather than
+		 * collateral: right-click → Inspect is the only way back into the
+		 * inspector once it is closed, since F12 never arrives past ADR 0004's
+		 * keyboard model. Off by default keeps the shipped app as it was.
+		 */
+		Debug: o.DevTools,
+	}
+}
+
 func applyBrowserArgs(pin string, devTools bool) error {
 	if !devTools {
 		return applyCertPin(pin)
