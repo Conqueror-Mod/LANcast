@@ -1070,7 +1070,23 @@ group is not priority.
 - ~~**Desktop lifecycle — "Open on Windows start" and "Close to tray"**~~ —
   **built** in v0.6.1 ([plan](desktop-lifecycle-plan.md)).
 
-- **Multiple displays — which screen the window opens on, and remembering it.**
+- ~~**Multiple displays — which screen the window opens on, and remembering it.**~~
+  — **built** in v0.8.56 and made to actually work in v0.8.57, where it had
+  shipped as dead code: the handler that records the position was installed
+  *after* the webview had been constructed with the original callback, which
+  takes it by value, so the restore half worked perfectly on nothing. The
+  placement rules were pure and fifteen tests passed throughout, because the
+  fault was in the wiring that reaches them.
+
+  Of the three things below, the first and third are answered as written. **DPI
+  is handled by its consequence rather than by reading a DPI**: a size that will
+  not fit its new screen is shrunk, and an absurd remembered size is refused, so
+  the 4K-to-1080p case lands somewhere sensible without the code knowing why. If
+  that ever proves insufficient it will look like a window that is the wrong
+  *size* rather than in the wrong *place*, which is the cheaper failure.
+
+  The original entry, kept because it is what the build was measured against:
+
   [desktopprefs](../internal/desktopprefs/prefs.go) is already the right home and
   says why in its own doc comment: per user, per machine, a small JSON file the
   server never learns about. "Which of my three monitors" is that kind of fact
@@ -1148,9 +1164,33 @@ group is not priority.
   acceptance test the ADR asks for, before any feature code: proving the media
   element survives an imperative cross-document move under React re-render.
 
-- **Skip intro and skip credits** — captured, needs an ADR, and the ADR is
-  about *detection* rather than about the button. Nothing in the codebase knows
-  where an intro is: [probe](../internal/probe/) reads streams, not chapters, and
+- **Skip intro and skip credits** — **skip intro is built**; skip credits is
+  deliberately not, and there is now a measurement saying why.
+
+  [ADR 0054](adr/0054-a-marker-says-where-the-film-stops.md) gated the button on
+  a check nobody had done: *"the rule is consistent, not right. Nobody has yet
+  watched a film and written down where its credits begin."* So it was done —
+  forty films, one frame each thirty seconds past the detected marker, where
+  credits should plainly be rolling. **About one in five was still in the film**,
+  mid-scene, with ten minutes left to run. A button that drops somebody out of
+  the third act one time in five is worse than no button, which is exactly what
+  the ADR gated against. The number is the useful part: the rule now has
+  something to be improved against rather than a shrug, and the ADR can move off
+  *proposed* once it is.
+
+  Intros come from the other detector — audio fingerprints compared across a
+  season — and every one checked landed inside a title sequence. Its known
+  weakness is the *end*, occasionally a few seconds early on a long title
+  sequence, which is a benign failure where the credits one is not: you see the
+  last bar of a theme rather than losing the third act. **The end is not padded**,
+  because padding trades that for clipping the first line of the episode.
+
+  The original entry follows. Its opening claim — that nothing in the codebase
+  knows where an intro is — stopped being true when the fingerprint worker
+  shipped, and the rest of its reasoning is what the build followed.
+
+  Nothing in the codebase knows where an intro is: [probe](../internal/probe/)
+  reads streams, not chapters, and
   the `chapter` hits elsewhere in the tree are the multi-part serial work of
   [ADR 0017](adr/0017-collections-and-multi-part-works.md), which is unrelated.
   Two sources, and they are not alternatives so much as a cheap one and a real

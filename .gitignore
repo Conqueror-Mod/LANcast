@@ -48,6 +48,14 @@ installer/*.exe
 /web/node_modules/
 node_modules/
 
+# Vite's cache, which lands at the repo root rather than beside the client.
+#
+# vitest writes /.vite/vitest when it is run from the root — `npm --prefix web
+# test` does exactly that — so it appears for anybody running the client suite
+# the way CLAUDE.md documents it, and it is a cache: reproducible, machine
+# local, and worthless to anybody else.
+/.vite/
+
 # Editor and OS
 .vscode/
 .idea/
