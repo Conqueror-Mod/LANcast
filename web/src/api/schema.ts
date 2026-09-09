@@ -3120,6 +3120,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/channels/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Channel id. */
+                id: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a channel because the viewer has left
+         * @description The HLS live path has no other way to know (ADR 0065). A poll of a playlist is not a lifetime, so the request context cannot end the encode — correctly, or the channel would die between the playlist and its first segment — which leaves the server with no signal that somebody has gone. An idle timeout is the backstop; this is the exact answer.
+         *
+         *     **Idempotent**: `204` whether or not anything was running. A `404` would make an unremarkable race look like a failure to a client that can do nothing about it.
+         *
+         *     Send it with `keepalive` or a beacon: an ordinary request issued while a page unloads is routinely cancelled, and a stop that only arrives when the tab survives misses the case it exists for.
+         *
+         *     One session is shared between viewers, so this ends a session another viewer may still be polling; their next poll starts it again.
+         */
+        post: operations["stopChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5096,6 +5125,8 @@ export interface components {
         ClusterId: number;
         /** @description A secret name from the plugin's **granted** capabilities. */
         PluginSecretName: string;
+        /** @description Channel id. */
+        ChannelId: number;
     };
     requestBodies: never;
     headers: never;
@@ -10312,6 +10343,29 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    stopChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Channel id. */
+                id: components["parameters"]["ChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped, or was not running. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
 }

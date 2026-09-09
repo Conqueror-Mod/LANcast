@@ -126,6 +126,17 @@ func (s *Session) Idle() time.Duration {
 	return time.Since(s.lastTouch)
 }
 
+/*
+ * IsLive reports whether this session is a channel rather than a library item.
+ *
+ * Channel ids are recorded negated in ItemID — the convention LiveHLS
+ * establishes, so a session list cannot show a channel as though it were an
+ * item, since the two numbering schemes overlap. Reading that convention
+ * through a named method rather than at each call site keeps the sign from
+ * becoming folklore.
+ */
+func (s *Session) IsLive() bool { return s.ItemID < 0 }
+
 // Done reports whether ffmpeg has exited, and why.
 func (s *Session) Done() (bool, error) {
 	s.mu.Lock()

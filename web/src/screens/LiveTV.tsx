@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useAuthStatus,
   useChannels,
@@ -82,10 +82,65 @@ export function LiveTV() {
    */
   const guide = useGuide();
   const [playing, setPlaying] = useState<Channel | null>(null);
+  /*
+   * The channel the server currently believes is being watched.
+   *
+   * A ref rather than state because the only readers are cleanup paths — an
+   * unmount, a pagehide — which run after the last render and must see what was
+   * playing rather than what a re-render has already replaced.
+   */
+  const watching = useRef<number | null>(null);
   const [playError, setPlayError] = useState<string | null>(null);
   const [buffering, setBuffering] = useState(false);
   /** Whether the picture has ever actually moved. */
   const [started, setStarted] = useState(false);
+
+  /*
+   * Tell the server the viewer has gone (ADR 0065).
+   *
+   * The HLS path gives the server nothing to infer from: a poll of a playlist
+   * is not a lifetime, so a channel nobody is watching keeps being pulled at
+   * full rate until an idle timeout notices. That is not only bandwidth — two
+   * minutes of channel surfing filled every session slot with channels already
+   * left, and the server began refusing to play anything.
+   *
+   * `keepalive` rather than a plain fetch, because this fires exactly when a
+   * page is going away and an ordinary request issued during unload is
+   * routinely cancelled. A stop that only arrives when the tab survives misses
+   * the case it exists for.
+   *
+   * Failures are ignored on purpose. The server reaps an abandoned channel
+   * anyway; this is the fast path, not the correctness one, and there is
+   * nothing a viewer who has already left could do about an error.
+   */
+  const stopWatching = useCallback((id: number | null) => {
+    if (id == null) return;
+    if (watching.current === id) watching.current = null;
+    void fetch(`/api/channels/${id}/stop`, {
+      method: "POST",
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+
+  /*
+   * Every way of leaving, and there are three.
+   *
+   * Unmount covers navigating to another screen. `pagehide` covers the window
+   * being closed or the app quitting, which unmount does not reliably reach —
+   * and it is `pagehide` rather than `beforeunload` because the latter does not
+   * fire on mobile or when a page is discarded from the back-forward cache.
+   *
+   * Switching channels is handled where it happens, so the previous channel is
+   * stopped before the next one starts rather than both running.
+   */
+  useEffect(() => {
+    const leave = () => stopWatching(watching.current);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, [stopWatching]);
   /*
    * What the MSE path actually did, said out loud.
    *
@@ -676,6 +731,7 @@ export function LiveTV() {
                 // it is still pulling a live stream leaves the connection open
                 // long enough to be noticed by a provider counting streams.
                 videoRef.current?.pause();
+                stopWatching(watching.current);
                 setPlaying(null);
               }}
             >
@@ -724,6 +780,10 @@ export function LiveTV() {
             }
             onClick={() => {
               setPlayError(null);
+              // The previous channel first, so two are not pulled at once while
+              // the new one starts.
+              if (watching.current !== c.id) stopWatching(watching.current);
+              watching.current = c.id;
               setPlaying(c);
             }}
           >

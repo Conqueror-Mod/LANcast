@@ -286,3 +286,32 @@ func ffmpegTestSource(t *testing.T) string {
 	t.Cleanup(func() { close(held) })
 	return srv.URL + "/source.ts"
 }
+
+/*
+ * The viewer leaving, said out loud (ADR 0065).
+ *
+ * The HLS live path has no other way to know: a poll of a playlist is not a
+ * lifetime, so the request context cannot end the encode. Without this the only
+ * thing that stops an abandoned channel is an idle timeout — and on a real
+ * server that left three session slots held by channels already left, and the
+ * server refused to play anything else.
+ */
+func TestChannelStopIsIdempotent(t *testing.T) {
+	h := newHarness(t)
+
+	// Nothing running: still 204. Stopping a channel that is not running is
+	// what the caller asked for, and a 404 would make an unremarkable race —
+	// two beacons, a reload, a reaper that got there first — look like a
+	// failure to a client that can do nothing about it.
+	if resp := h.do(t, "POST", "/api/channels/4242/stop", nil); resp.StatusCode != 204 {
+		t.Errorf("stop with nothing running = %d, want 204", resp.StatusCode)
+	}
+	if resp := h.do(t, "POST", "/api/channels/4242/stop", nil); resp.StatusCode != 204 {
+		t.Errorf("second stop = %d, want 204", resp.StatusCode)
+	}
+	// A channel id that is not a number is the caller's mistake, and is worth
+	// saying so rather than silently succeeding.
+	if resp := h.do(t, "POST", "/api/channels/not-a-number/stop", nil); resp.StatusCode != 400 {
+		t.Errorf("stop with a junk id = %d, want 400", resp.StatusCode)
+	}
+}
