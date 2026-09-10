@@ -37,6 +37,7 @@ import {
 } from "./queueOrder";
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
 import { applyCueVars } from "./cueVars";
+import { refusedNote } from "./transcodeRefused";
 import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
@@ -1224,14 +1225,28 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * transcode that was refused, taking a slot to explain why there were no
    * slots. The reason is in the server log; what belongs here is that it
    * failed, and that waiting will not fix it.
+   *
+   * # It used to name a cause it could not know
+   *
+   * The message said the server was "already converting as much as it can",
+   * which is one cause among several and was stated as though it were the
+   * finding. Refusals that read identically from here include a file that is
+   * no longer on disk, a path that fails the containment check, and ffmpeg not
+   * being installed at all — none of which are load, and none of which get
+   * better by waiting or are visible in Activity.
+   *
+   * It cost a real investigation. A show whose path is a directory was handed
+   * to the player, the server refused it at the containment check, and this
+   * text sent everybody to look at how busy the server was. It was not busy.
+   *
+   * So it no longer asserts which. The element reports MEDIA_ERR codes and
+   * nothing else, so the honest position is that the request was refused, that
+   * waiting will not help, and where the answer actually is.
    */
   const transcodeFailed = useCallback(() => {
     setLoading(false);
-    setNote(
-      "The conversion did not start. The server may already be converting as " +
-        "much as it can — check Activity in Settings, or try again shortly.",
-    );
-  }, []);
+    setNote(refusedNote({ missing: !!item?.missing }));
+  }, [item]);
 
   // ---- seeking --------------------------------------------------------------
   const seekTo = useCallback(
