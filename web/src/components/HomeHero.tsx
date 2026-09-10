@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchShowEpisodes } from "@/api/hooks";
+import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { isSquareArt } from "@/lib/kind";
@@ -114,6 +115,41 @@ export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) 
    * A film takes the same path and simply has no episodes to fetch.
    */
   const resume = async () => {
+    /*
+     * A show resolves to an episode before anything is played.
+     *
+     * This is the third button that answers "what comes next", and it was the
+     * one that answered it differently: a show fell through to
+     * `/watch/${item.id}` and handed the *container* to the player. A show's
+     * path is a directory, so the server refused it at the containment check —
+     * correctly, since there is no file there — and the client reported that as
+     * the server being too busy to convert anything. A healthy server, a
+     * misleading message, and the hero on the home page unable to play the
+     * thing it was advertising.
+     *
+     * showContinueTarget is the one path that asks, and its own comment says
+     * why there may not be a second: "a show cannot be allowed two answers to
+     * what comes next". It counted two buttons and there were three.
+     *
+     * A failure opens the show page rather than dying quietly — it can explain
+     * itself and offer Play, which is the same fallback the shelf tile takes.
+     */
+    if (item.kind === "show") {
+      try {
+        const target = await showContinueTarget(item.id);
+        if (target.kind === "play") {
+          navigate(`/watch/${target.episodeID}`, {
+            state: { queue: target.queue },
+          });
+          return;
+        }
+      } catch {
+        // Falls through to the show page below.
+      }
+      navigate(`/item/${item.id}`);
+      return;
+    }
+
     if (item.kind !== "episode") {
       navigate(`/watch/${item.id}`);
       return;
