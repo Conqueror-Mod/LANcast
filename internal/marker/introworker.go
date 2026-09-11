@@ -132,7 +132,7 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			if !prints[p].ok {
 				continue
 			}
-			m := BestCommonRun(prints[i].phases, prints[p].single, IntroTolerance)
+			m := BestCommonRunBridging(prints[i].phases, prints[p].single, IntroTolerance, IntroGapFrames)
 			if m.Frames == 0 {
 				// A comparison that found nothing is still a comparison, and
 				// the majority rule counts it. Dropping it would let one

@@ -14,6 +14,11 @@ const (
 	// IntroMinSeconds is the shortest run worth calling an intro. Below this a
 	// shared stretch is a stinger, a network ident, or a coincidence.
 	IntroMinSeconds = 8.0
+	// IntroCardMinSeconds is the shortest title card, believed only when every
+	// comparison agrees on where it starts (see IntroFrom). IntroCardMinCompared
+	// is how many comparisons that takes: two files agreeing is not a season.
+	IntroCardMinSeconds  = 3.0
+	IntroCardMinCompared = 3
 	// IntroMaxSeconds caps it. A run longer than this is two episodes sharing
 	// something larger than a title sequence — a recap, a clip show, or the
 	// same episode twice on disk.
@@ -23,6 +28,20 @@ const (
 	IntroHeadSeconds = 420
 	// IntroTolerance is how many of the 16 bits may differ frame to frame.
 	IntroTolerance = 3
+	/*
+	 * IntroGapFrames is how many consecutive disagreeing frames a run may cross,
+	 * at ten frames a second: half a second.
+	 *
+	 * Measured with introlab on seasons the detector had marked nothing in.
+	 * It's Always Sunny S8 went from 0 of 10 episodes to 9 of 10, every one a
+	 * ~22s intro whose four comparisons started within a second of each other,
+	 * where the strict walk had broken each into pieces of 1.5 to 10 seconds.
+	 * On seasons that already worked it tightened rather than moved the answer:
+	 * Sunny S3 stayed 8 of 8 with every candidate starting on the same second,
+	 * and Black Books S1 went from 5 of 6 to 6 of 6. Two seconds found nothing
+	 * half a second did not, and let runs drift a few seconds past the titles.
+	 */
+	IntroGapFrames = 5
 	/*
 	 * IntroStartSlack is how far apart two candidates may begin and still be
 	 * called the same intro, in seconds.
@@ -76,14 +95,35 @@ type Intro struct {
  * a title sequence is the thing that recurs across the whole season.
  */
 func IntroFrom(cands []Candidate) Intro {
+	if in := introFrom(cands, IntroMinSeconds, false); in.Found {
+		return in
+	}
+	/*
+	 * A title card, which is short, and is believed only unanimously.
+	 *
+	 * The League has one: about four seconds. introlab over season 2 found every
+	 * one of 13 episodes matching all four of its siblings at the same second —
+	 * 96, 96, 96, 96; 82, 82, 82, 82 — with runs of 3.6 to 5.9 seconds, and the
+	 * detector marked none of them, because eight seconds was the floor. The
+	 * floor is right for a majority: three of four agreeing on a short run is
+	 * what a shared network sting looks like. Every comparison agreeing on the
+	 * same start, at least three of them, is what a title card looks like.
+	 */
+	return introFrom(cands, IntroCardMinSeconds, true)
+}
+
+func introFrom(cands []Candidate, minSeconds float64, unanimous bool) Intro {
 	usable := make([]Candidate, 0, len(cands))
 	for _, c := range cands {
-		if c.Len() >= IntroMinSeconds && c.Len() <= IntroMaxSeconds && c.StartSec >= 0 {
+		if c.Len() >= minSeconds && c.Len() <= IntroMaxSeconds && c.StartSec >= 0 {
 			usable = append(usable, c)
 		}
 	}
 	if len(usable) == 0 {
 		return Intro{Compared: len(cands)}
+	}
+	if unanimous && (len(usable) < len(cands) || len(cands) < IntroCardMinCompared) {
+		return Intro{Compared: len(cands), Agreed: len(usable)}
 	}
 
 	// The largest group of candidates that begin near the same place. Sorting
@@ -103,7 +143,9 @@ func IntroFrom(cands []Candidate) Intro {
 	// A majority of what was actually compared, not of what survived the
 	// filter: three usable candidates out of eight comparisons is three
 	// agreeing and five saying nothing, which is not agreement.
-	if len(cands) == 0 || bestLen*2 <= len(cands) {
+	// Unanimous means every comparison in the one group: runs that passed the
+	// length filter but began somewhere else are dissent, not agreement.
+	if len(cands) == 0 || bestLen*2 <= len(cands) || (unanimous && bestLen < len(cands)) {
 		return Intro{Compared: len(cands), Agreed: bestLen}
 	}
 

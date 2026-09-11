@@ -13,6 +13,10 @@
 // 193s — the length agrees to within a second while the position varies by two
 // and a half minutes, which is what a real intro behind a variable cold open
 // looks like, and why no rule may assume a fixed timestamp.
+//
+// It runs the shipping decision — IntroPeers, BestCommonRun, IntroFrom — beside
+// variants of the run measurement, so a proposed change is judged by what it
+// does to the answer rather than to one candidate.
 package main
 
 import (
@@ -21,20 +25,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
 	"strconv"
+	"strings"
 
 	"lancast/internal/marker"
 
 	_ "modernc.org/sqlite"
 )
 
-const headSeconds = 420 // 7 minutes: an intro is never later than this
-
 func decodeHead(ffmpeg, path string) ([]float64, error) {
 	cmd := exec.Command(ffmpeg,
 		"-hide_banner", "-nostats", "-v", "error",
-		"-t", strconv.Itoa(headSeconds),
+		"-t", strconv.Itoa(marker.IntroHeadSeconds),
 		"-i", path,
 		"-vn",
 		"-ac", "1",
@@ -54,24 +56,30 @@ func decodeHead(ffmpeg, path string) ([]float64, error) {
 }
 
 type ep struct {
-	id      int64
-	season  int
-	number  int
-	title   string
-	path    string
-	fp      []uint32
-	phases  [][]uint32
-	introAt float64
-	introTo float64
-	votes   int
+	number int
+	title  string
+	path   string
+	fp     []uint32
+	phases [][]uint32
 }
+
+/*
+ * A variant of the run measurement. gap is how many consecutive disagreeing
+ * frames a run may cross and continue; 0 is the shipping CommonRun.
+ */
+type variant struct {
+	name string
+	gap  int
+}
+
+var variants = []variant{{"strict", 0}, {"gap0.5s", 5}, {"gap2s", 20}}
 
 func main() {
 	ffmpeg := os.Args[1]
 	dbPath := os.Args[2]
 	show := os.Args[3]
 	season, _ := strconv.Atoi(os.Args[4])
-	limit := 6
+	limit := 30
 	if len(os.Args) > 5 {
 		limit, _ = strconv.Atoi(os.Args[5])
 	}
@@ -81,22 +89,25 @@ func main() {
 		panic(err)
 	}
 	rows, err := db.Query(`
-		SELECT e.id, e.season, e.episode, e.title, e.path
+		SELECT e.episode, e.title, e.path
 		FROM media_item e
 		LEFT JOIN media_item se ON se.id = e.parent_id
 		JOIN media_item sh ON sh.id = COALESCE(se.parent_id, e.parent_id)
 		WHERE e.kind='episode' AND e.missing=0 AND sh.kind='show'
-		  AND sh.title = ? AND e.season = ?
-		ORDER BY e.episode LIMIT ?`, show, season, limit)
+		  AND sh.title = ? AND COALESCE(e.season, 0) = ?
+		  AND e.path IS NOT NULL AND e.probed_at IS NOT NULL
+		ORDER BY e.episode, e.id LIMIT ?`, show, season, limit)
 	if err != nil {
 		panic(err)
 	}
 	var eps []*ep
 	for rows.Next() {
 		e := &ep{}
-		if err := rows.Scan(&e.id, &e.season, &e.number, &e.title, &e.path); err != nil {
+		var num sql.NullInt64
+		if err := rows.Scan(&num, &e.title, &e.path); err != nil {
 			panic(err)
 		}
+		e.number = int(num.Int64)
 		eps = append(eps, e)
 	}
 	rows.Close()
@@ -108,7 +119,7 @@ func main() {
 	fmt.Printf("%s S%d — %d episodes\n", show, season, len(eps))
 	for _, e := range eps {
 		s, err := decodeHead(ffmpeg, e.path)
-		if err != nil {
+		if err != nil || len(s) < marker.FrameSize {
 			fmt.Printf("  E%02d decode failed: %v\n", e.number, err)
 			continue
 		}
@@ -116,48 +127,53 @@ func main() {
 		e.phases = marker.FingerprintPhases(s)
 	}
 
-	// Every episode against every other. Expensive and fine here: the point is
-	// to see what the signal looks like, not to be the shipping algorithm.
+	found := make([]int, len(variants))
 	for i, a := range eps {
 		if a.fp == nil {
 			continue
 		}
-		type cand struct{ at, to, run float64 }
-		var cands []cand
-		for j, b := range eps {
-			if i == j || b.fp == nil {
-				continue
+		line := fmt.Sprintf("  E%02d %-24s", a.number, trunc(a.title, 24))
+		for vi, v := range variants {
+			var cands []marker.Candidate
+			var raw []string
+			for _, p := range marker.IntroPeers(len(eps), i, marker.PeersPerEpisode) {
+				b := eps[p]
+				if b.fp == nil {
+					continue
+				}
+				m := bestBridged(a.phases, b.fp, marker.IntroTolerance, v.gap)
+				if m.Frames == 0 {
+					cands = append(cands, marker.Candidate{})
+					raw = append(raw, "-")
+					continue
+				}
+				c := marker.Candidate{
+					StartSec: marker.Seconds(m.OffsetA),
+					EndSec:   marker.Seconds(m.OffsetA + m.Frames),
+				}
+				cands = append(cands, c)
+				raw = append(raw, fmt.Sprintf("%.0f+%.1f", c.StartSec, c.Len()))
 			}
-			m := marker.BestCommonRun(a.phases, b.fp, 3)
-			if marker.Seconds(m.Frames) < 5 {
-				continue
+			in := marker.IntroFrom(cands)
+			verdict := "none"
+			if in.Found {
+				found[vi]++
+				verdict = fmt.Sprintf("%.1f-%.1f", in.StartSec, in.EndSec)
 			}
-			cands = append(cands, cand{
-				at:  marker.Seconds(m.OffsetA),
-				to:  marker.Seconds(m.OffsetA + m.Frames),
-				run: marker.Seconds(m.Frames),
-			})
+			line += fmt.Sprintf(" | %s %-11s [%s]", v.name, verdict, strings.Join(raw, " "))
 		}
-		// Every candidate, not the median: the spread within one episode is
-		// what the aggregation rule has to survive, and it is not the same
-		// quantity as the spread of medians across episodes.
-		fmt.Printf("  E%02d %-28s ", a.number, trunc(a.title, 28))
-		for _, c := range cands {
-			fmt.Printf("[%.0f-%.0fs %.1fs] ", c.at, c.to, c.run)
-		}
-		fmt.Println()
-
-		if len(cands) == 0 {
-			fmt.Printf("  E%02d %-34s no shared stretch\n", a.number, trunc(a.title, 34))
-			continue
-		}
-		// The median candidate, so one odd pairing cannot decide it.
-		sort.Slice(cands, func(x, y int) bool { return cands[x].run < cands[y].run })
-		med := cands[len(cands)/2]
-		a.introAt, a.introTo, a.votes = med.at, med.to, len(cands)
-		fmt.Printf("  E%02d %-34s intro %6.1fs → %6.1fs  (%.1fs, agreed by %d/%d)\n",
-			a.number, trunc(a.title, 34), med.at, med.to, med.run, len(cands), len(eps)-1)
+		fmt.Println(line)
 	}
+	fmt.Printf("  FOUND")
+	for vi, v := range variants {
+		fmt.Printf("  %s=%d/%d", v.name, found[vi], len(eps))
+	}
+	fmt.Println()
+}
+
+// bestBridged is the package's own comparison, so the lab measures what ships.
+func bestBridged(aPhases [][]uint32, b []uint32, maxTol, maxGap int) marker.Match {
+	return marker.BestCommonRunBridging(aPhases, b, maxTol, maxGap)
 }
 
 func trunc(s string, n int) string {
