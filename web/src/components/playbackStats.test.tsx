@@ -16,6 +16,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { PlaybackStats } from "./PlaybackStats";
+import {
+  forgetHLSIncidents,
+  noteHLSIncident,
+} from "@/playback/hlsIncident";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -38,6 +42,9 @@ afterEach(() => {
   host.remove();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // The record outlives the component, which is the point of it — so it has to
+  // be cleared between tests or one fallback leaks into the next assertion.
+  forgetHLSIncidents();
 });
 
 /** A video element that reports whatever a test wants it to. */
@@ -115,5 +122,74 @@ describe("the playback statistics panel", () => {
   it("does not fall over before the element exists", () => {
     render(null);
     expect(host.textContent).toContain("Reading");
+  });
+});
+
+/*
+ * The fallback reaches the panel.
+ *
+ * This is the half that has been wrong every time in this project: the rules
+ * were tested and what reached them was not. The record is only worth keeping
+ * if somebody can read it, and the panel is the only place anybody can — the
+ * desktop client has no console within reach.
+ */
+describe("why the segmented path was abandoned", () => {
+  it("shows nothing when nothing has fallen back", () => {
+    render(stubVideo(() => ({ dropped: 0, total: 100 })));
+    act(() => vi.advanceTimersByTime(1100));
+
+    expect(host.querySelector(".pstats__incident")).toBeNull();
+  });
+
+  it("shows the message the element gave, which is the finding", () => {
+    noteHLSIncident({
+      code: 4,
+      message: "PipelineStatus::DEMUXER_ERROR_COULD_NOT_PARSE",
+      readyState: 0,
+      networkState: 3,
+      buffered: 0,
+      at: 1024,
+      clock: 1,
+    });
+    render(stubVideo(() => ({ dropped: 0, total: 100 })));
+    act(() => vi.advanceTimersByTime(1100));
+
+    const text = host.querySelector(".pstats__incident")?.textContent ?? "";
+    expect(
+      text,
+      "the panel does not show why segments were given up on, so the message " +
+        "is kept where nobody can read it",
+    ).toContain("DEMUXER_ERROR_COULD_NOT_PARSE");
+    expect(text).toContain("code 4");
+    expect(text).toContain("ready 0");
+  });
+
+  /*
+   * Picked up even when the panel was opened afterwards.
+   *
+   * A fallback happens in the first second of playback and the panel is opened
+   * when somebody notices the picture is wrong, which is minutes later. A
+   * record only readable if the panel was already open would miss every real
+   * case.
+   */
+  it("is found by a panel opened after the fact", () => {
+    render(stubVideo(() => ({ dropped: 0, total: 100 })));
+    act(() => vi.advanceTimersByTime(1100));
+    expect(host.querySelector(".pstats__incident")).toBeNull();
+
+    noteHLSIncident({
+      code: 4,
+      message: "DEMUXER_ERROR_NO_SUPPORTED_STREAMS",
+      readyState: 1,
+      networkState: 3,
+      buffered: 6,
+      at: 0,
+      clock: 2,
+    });
+    act(() => vi.advanceTimersByTime(1100));
+
+    expect(host.querySelector(".pstats__incident")?.textContent ?? "").toContain(
+      "DEMUXER_ERROR_NO_SUPPORTED_STREAMS",
+    );
   });
 });

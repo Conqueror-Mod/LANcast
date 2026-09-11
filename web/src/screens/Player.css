@@ -379,6 +379,23 @@
   flex-shrink: 0;
 }
 
+/*
+ * A record of something that already happened, held apart from the readings.
+ *
+ * Separated by a rule because everything above it is what the picture is doing
+ * *now*, and this is not — reading a past fallback as a live measurement would
+ * be worse than not showing it. Dimmer than the numbers for the same reason,
+ * and not gold, which means where you are.
+ */
+.pstats__incident {
+  flex-shrink: 0;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--muted, #9aa4b8);
+  word-break: break-word;
+}
+
 /* The one line that is a verdict rather than a number. Not gold — gold means
    where you are, and this means something is wrong. */
 .pstats__line--bad {

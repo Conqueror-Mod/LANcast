@@ -7,6 +7,11 @@ import {
   type Sample,
   type Stats,
 } from "@/playback/stats";
+import {
+  describeIncident,
+  lastHLSIncident,
+  type HLSIncident,
+} from "@/playback/hlsIncident";
 
 /*
  * A small readout of what the picture is doing, over the video.
@@ -31,6 +36,14 @@ export function PlaybackStats({
 }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+  /*
+   * Why the segmented path was abandoned, if it was.
+   *
+   * Polled with everything else rather than pushed, because the fallback
+   * happens in the provider and the panel may be opened minutes afterwards —
+   * which is exactly when somebody goes looking for it.
+   */
+  const [incident, setIncident] = useState<HLSIncident | null>(null);
   const prev = useRef<Sample | null>(null);
 
   useEffect(() => {
@@ -38,6 +51,7 @@ export function PlaybackStats({
     prev.current = null;
 
     const tick = () => {
+      setIncident(lastHLSIncident());
       const now = read(video);
       if (!now) {
         // The browser will not report quality. Said plainly rather than shown
@@ -87,6 +101,21 @@ export function PlaybackStats({
             {line}
           </div>
         ))
+      )}
+      {incident && (
+        /*
+         * Kept visually distinct and last. It is not a reading of what is
+         * happening now — it is a record of something that already happened,
+         * and reading it as a live measurement would be worse than not showing
+         * it at all.
+         */
+        <div className="pstats__incident">
+          {describeIncident(incident).map((line, i) => (
+            <div className="pstats__line" key={i}>
+              {line}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
