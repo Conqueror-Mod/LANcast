@@ -43,6 +43,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,6 +54,18 @@ import (
 
 	"lancast/internal/probe"
 	"lancast/internal/transcode"
+)
+
+// The server's real decision for a converted HDR film, so the harness can
+// produce exactly what the server does rather than an easier approximation.
+var (
+	startAt  = flag.Float64("start", 0, "file only: start offset in seconds, as -ss")
+	useNVENC = flag.Bool("nvenc", false, "file only: encode with the NVENC encoder the server selects")
+	hdr      = flag.Bool("hdr", false, "file only: the source is HDR and must be tone mapped")
+	openCL   = flag.Bool("opencl", false, "file only: tone map with tonemap_opencl, as a server whose probe passed")
+	srcW     = flag.Int("w", 0, "file only: source width, for the H.264 level")
+	srcH     = flag.Int("h", 0, "file only: source height, for the H.264 level")
+	srcFPS   = flag.Float64("fps", 0, "file only: source frame rate, for the level and GOP")
 )
 
 func main() {
@@ -141,7 +154,17 @@ func run(source string, live bool, seconds int, keep, control bool, videoAction,
 			// The encoder the running server chose for itself. Naming it rather
 			// than letting ffmpeg pick is the rule the DXVA2 release taught.
 			opts.Encoder = transcode.Software
+			if *useNVENC {
+				quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+				opts.Encoder = transcode.SelectEncoder(
+					transcode.DetectEncoders(context.Background(), ffmpeg, quiet), "h264_nvenc", quiet)
+			}
 		}
+		opts.StartAt = *startAt
+		opts.Decision.TonemapHDR = *hdr
+		opts.Decision.SourceWidth, opts.Decision.SourceHeight = *srcW, *srcH
+		opts.Decision.SourceFrameRate = *srcFPS
+		opts.CanTonemap, opts.CanTagSDR, opts.CanTonemapOpenCL = true, true, *openCL
 	}
 	/*
 	 * The args are printed because they are half the point of the harness —
