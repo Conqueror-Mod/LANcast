@@ -59,24 +59,60 @@ func (w *Worker) RunIntros(ctx context.Context) error {
 		return nil
 	}
 
-	seasons, err := st.PendingIntroSeasons(ctx, 2, 5)
-	if err != nil {
-		return err
+	examine := w.examineSeason
+	if w.examineSeasonFn != nil {
+		examine = w.examineSeasonFn
 	}
-	for _, se := range seasons {
-		if ctx.Err() != nil {
-			return ctx.Err()
+
+	/*
+	 * Until nothing is pending, not one batch.
+	 *
+	 * A pass took five seasons and returned, and a pass only starts at startup
+	 * or after a library scan. v0.9.16's revision 45 queued every season of a
+	 * real library for re-examination: the startup pass did exactly five —
+	 * Black Books S1–S3, Blue Mountain State S1–S2 — and the other sixty sat
+	 * there, because nothing scanned. The batch stays small so each query is
+	 * cheap and the setting is re-checked often; the loop is what finishes.
+	 *
+	 * A season that fails is not stamped, so it comes back on the next query.
+	 * Seasons are remembered for this pass, and a batch holding nothing new
+	 * ends it — otherwise one unreadable season would be retried for ever.
+	 * It is retried on the next pass, as before.
+	 */
+	tried := map[[2]int64]bool{}
+	for {
+		seasons, err := st.PendingIntroSeasons(ctx, 2, introSeasonBatch)
+		if err != nil {
+			return err
 		}
-		if !w.stillWanted() {
+		fresh := 0
+		for _, se := range seasons {
+			key := [2]int64{se.ShowID, int64(se.Season)}
+			if tried[key] {
+				continue
+			}
+			tried[key] = true
+			fresh++
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if !w.stillWanted() {
+				return nil
+			}
+			if err := examine(ctx, st, se); err != nil {
+				w.log.Warn("intro detection failed",
+					"show", se.ShowName, "season", se.Season, "error", err)
+			}
+		}
+		if fresh == 0 {
 			return nil
 		}
-		if err := w.examineSeason(ctx, st, se); err != nil {
-			w.log.Warn("intro detection failed",
-				"show", se.ShowName, "season", se.Season, "error", err)
-		}
 	}
-	return nil
 }
+
+// introSeasonBatch is how many seasons one query fetches. RunIntros keeps
+// fetching until none are pending; this only bounds the query.
+const introSeasonBatch = 5
 
 /*
  * examineSeason fingerprints a season and writes what its episodes share.

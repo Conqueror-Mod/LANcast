@@ -89,6 +89,10 @@ type Worker struct {
 	 */
 	Enabled func() bool
 
+	// examineSeasonFn stands in for examineSeason in tests, so the intro pass's
+	// queue handling is tested without decoding any audio. Nil is the real one.
+	examineSeasonFn func(ctx context.Context, st IntroStore, se store.Season) error
+
 	mu      sync.Mutex
 	running bool
 	stats   Stats
