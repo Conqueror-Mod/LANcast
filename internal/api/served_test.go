@@ -195,3 +195,55 @@ func TestARangeIsNotMistakenForATruncation(t *testing.T) {
 		t.Errorf("countingWriter recorded %d rather than the 206 it sent", cw.status)
 	}
 }
+
+/*
+ * The check sees the responses the desktop client actually gets.
+ *
+ * WebView2 asks for every segment with `Range: bytes=0-`, so every segment is a
+ * 206 — and a check that judged only 200s could never fire in the one client it
+ * was written for.
+ */
+func TestAWholeFileRangeThatStopsEarlyIsShort(t *testing.T) {
+	// ServeContent's Content-Range for bytes=0- of a 10,233,627-byte segment.
+	promised, short := shortDelivery(http.StatusPartialContent, 4096, 10_233_627, "bytes 0-10233626/10233627")
+	if !short {
+		t.Error("a bytes=0- response cut off after 4KB was not reported — the check is blind to what WebView2 requests")
+	}
+	if promised != 10_233_627 {
+		t.Errorf("promised = %d, want the whole segment", promised)
+	}
+}
+
+func TestACompleteRangeIsNotShort(t *testing.T) {
+	if _, short := shortDelivery(http.StatusPartialContent, 100, 4096, "bytes 0-99/4096"); short {
+		t.Error("a range that delivered everything it promised was reported short")
+	}
+}
+
+// A partial range is judged against its own promise, not the file's size — the
+// original reason 206s were excluded, kept.
+func TestAPartialRangeIsJudgedAgainstItsOwnLength(t *testing.T) {
+	if _, short := shortDelivery(http.StatusPartialContent, 100, 1_000_000, "bytes 500-599/1000000"); short {
+		t.Error("a 100-byte range was judged against the whole file")
+	}
+	if _, short := shortDelivery(http.StatusPartialContent, 60, 1_000_000, "bytes 500-599/1000000"); !short {
+		t.Error("a 100-byte range that sent 60 was not reported")
+	}
+}
+
+func TestAShortTwoHundredIsStillShort(t *testing.T) {
+	if _, short := shortDelivery(http.StatusOK, 10, 4096, ""); !short {
+		t.Error("a 200 that stopped early is no longer reported")
+	}
+}
+
+func TestOtherStatusesAreNotJudged(t *testing.T) {
+	for _, st := range []int{http.StatusNotModified, http.StatusNotFound, http.StatusRequestedRangeNotSatisfiable} {
+		if _, short := shortDelivery(st, 0, 4096, ""); short {
+			t.Errorf("status %d was judged as a delivery", st)
+		}
+	}
+	if _, short := shortDelivery(http.StatusPartialContent, 0, 4096, "garbage"); short {
+		t.Error("an unreadable Content-Range was reported short")
+	}
+}
