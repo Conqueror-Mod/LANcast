@@ -75,10 +75,15 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 	it := t.item
 
+	var duration float64
+	if it.DurationMS != nil {
+		duration = float64(*it.DurationMS) / 1000
+	}
 	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.userID(r), transcode.Options{
 		Input:      it.Path,
 		Decision:   t.decision,
 		StartAt:    s.startAt(r, it),
+		Duration:   duration,
 		AudioIndex: t.audioIndex,
 	})
 	if err != nil {
@@ -86,6 +91,9 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Waited for even when the playlist is written here: ffmpeg producing its
+	// own is the proof that the encode started, and a 503 now is far easier to
+	// read than a playlist whose every segment times out.
 	path, err := s.trans.WaitForFile(r.Context(), sess, "index.m3u8", 30*time.Second)
 	if err != nil {
 		s.log.Warn("hls playlist unavailable", "item", it.ID, "error", err)
@@ -93,18 +101,42 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := os.ReadFile(path)
-	if err != nil {
-		s.writeInternal(w, err, "read playlist")
-		return
+	prefix := "/api/stream/" + itoa64(it.ID) + "/hls/" + sess.ID + "/"
+	var body string
+	if sess.Complete() {
+		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix)
+	} else {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			s.writeInternal(w, err, "read playlist")
+			return
+		}
+		// ffmpeg writes bare filenames; rewrite them to this session's endpoints.
+		body = rewritePlaylist(string(raw), prefix)
 	}
+	writePlaylist(w, sess.Complete(), body)
+}
 
-	// ffmpeg writes bare filenames; rewrite them to this session's endpoints.
-	rewritten := rewritePlaylist(string(body), "/api/stream/"+itoa64(it.ID)+"/hls/"+sess.ID+"/")
+/*
+ * PlaylistKindHeader says whether a playlist was listed whole or is growing.
+ *
+ * A client needs it to read a refusal correctly. WebView2 cannot play a growing
+ * playlist and can play a complete one, and a copied video track still gets a
+ * growing one — so a refusal of a growing playlist is a fact about that
+ * playlist, not about the device, and must not settle the device against the
+ * complete playlists that do play on it.
+ */
+const PlaylistKindHeader = "X-LANcast-Playlist"
 
+func writePlaylist(w http.ResponseWriter, complete bool, body string) {
+	kind := "growing"
+	if complete {
+		kind = "complete"
+	}
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(rewritten))
+	w.Header().Set(PlaylistKindHeader, kind)
+	_, _ = io.WriteString(w, body)
 }
 
 // hlsSegment serves one segment or the init file from a session directory.
@@ -145,7 +177,13 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.Touch()
 
-	path, err := s.trans.WaitForFile(r.Context(), sess, name, 30*time.Second)
+	/*
+	 * Sixty seconds, not thirty. From a complete playlist the player asks for a
+	 * segment about one segment ahead of the picture, so on an encode running
+	 * near real time the wait is the encode catching up, not a stalled session
+	 * — and a 503 here ends the playback.
+	 */
+	path, err := s.trans.WaitForSegment(r.Context(), sess, name, 60*time.Second)
 	if err != nil {
 		s.log.Warn("hls segment unavailable", "session", sessionID, "name", name, "error", err)
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "segment not ready")

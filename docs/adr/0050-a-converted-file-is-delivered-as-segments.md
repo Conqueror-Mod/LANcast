@@ -140,3 +140,80 @@ WebView2 that cannot read a playlist refuses the source, gets progressive on the
 next assignment, and records the refusal so no later film pays for it again —
 which is worth one reload, once, on such a device. That is the whole reason the
 capability is learned by trial instead of asked for.
+
+## Amendment — 2026-09-11: an encoded film's playlist is written whole
+
+**The risk above landed.** The desktop client fell back from segments to the
+progressive stream on 21 of 21 file playbacks in the log. Every candidate that
+could be tested from outside the app came back clean: playlist content, encoder,
+declared level, MIME types, URL rewrite, throughput, TLS and the certificate
+pin, and whole delivery (a superseded session served exactly twice the bytes on
+disk).
+
+### Reproduced
+
+A real WebView2 window (`cmd/wv2harness`), fed by a server that delivers exactly
+as `internal/api` does and logs every request (`cmd/segserve`), running the
+server's own ffmpeg command:
+
+| playlist | result |
+| --- | --- |
+| finished (`ENDLIST`), plain static server | plays |
+| finished, LANcast delivery, HTTP | plays |
+| finished, LANcast delivery, HTTPS + pinned certificate | plays |
+| **growing, as ffmpeg writes it** | **code 4 `DEMUXER_ERROR_COULD_NOT_PARSE` at 0.45s** |
+
+The request log is the mechanism:
+1. The playlist is fetched, listing one segment.
+2. `init` and `seg00000` go out whole.
+3. **The playlist is fetched again 88ms later, unchanged.**
+4. The error follows 20ms after that.
+
+WebView2 treats a growing playlist as live, reloads it at once, and fails when
+it has not grown. Chrome and Edge poll patiently, which is why the measurements
+this ADR was built on never saw it.
+
+Holding back the first playlist until four segments existed played, but from
+the live edge. `seg00000` was never requested, so a film started from the
+beginning would silently lose its opening. That was not a fix.
+
+### The decision
+
+**When video is encoded, the server writes the playlist itself: the whole of
+what remains after `t`, `VOD`, closed with `ENDLIST`, from the first response.**
+Segments the encode has not reached are waited for when they are asked for.
+
+Measured with a 4K HDR film, started 22 minutes in, before any segment existed:
+- Playback ran from `seg00000`, 36 seconds continuous.
+- The playlist was fetched once.
+- Segments were requested one at a time, about six seconds ahead of the
+  picture, as the encode produced them.
+
+Three conditions came with it.
+
+**Durations are estimates, and may be.** A segment is the smallest whole number
+of GOPs that reaches six seconds — 6.006s at 23.976fps, which is what ffmpeg
+wrote for all 49 segments measured. With every segment listed deliberately wrong
+(5.5s against a real 6.006s), the same engine played identically, because it
+places a fragment by its own timestamps. The client never seeks inside one of
+these playlists: a seek while converting still re-requests with a new `t`.
+
+**A segment is served when ffmpeg has finished it, not when it exists.** A
+complete playlist has the player asking ahead of the encode, and ffmpeg writes
+segments in place. The first run of the experiment served `init.mp4` at 0 bytes
+and failed with `APPEND_FAILED`. Readiness is now "listed in ffmpeg's own
+playlist", which ffmpeg writes only after closing a segment.
+
+**Only encoded video.** A segment starts on a keyframe. The encode places them;
+a copied video track brings the source's own, which nothing has read. A copy
+keeps the growing playlist, and on WebView2 still falls back — **that remains
+open**. The playlist route says which kind it served (`X-LANcast-Playlist`), and
+the client no longer counts a refused growing playlist against the device: three
+copied films would otherwise settle the device as unable to play playlists, and
+retire the path for every encoded film that now plays on it. The verdict key
+moved to `-4`, because every refusal recorded before was of the growing kind.
+
+**Not yet verified as the service.** The experiment ran the server's command
+from a shell with the same encoder and tone-map filters. Delivery is not GPU
+work, but the encode feeding it is, so the check that counts is still a playback
+in the installed client against the installed service.
