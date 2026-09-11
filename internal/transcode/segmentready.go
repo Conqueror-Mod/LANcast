@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -64,4 +65,59 @@ func (m *Manager) WaitForSegment(ctx context.Context, s *Session, name string, t
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+}
+
+/*
+ * WaitForEndlist reports whether ffmpeg's own playlist is finished — closed with
+ * #EXT-X-ENDLIST — waiting up to timeout for it to become so.
+ *
+ * It exists for sessions that copy the video and are listed as they grow. The
+ * desktop client's engine reads a growing playlist once, plays what it listed,
+ * and fires `ended`; the client then reads that as a cut stream and restarts
+ * from where it stopped. Seen on v0.9.14 with It's Always Sunny S16E01
+ * (video=copy audio=copy): a new session every 36–45 seconds, each delivering
+ * the same ~52 MB — what the first playlist fetch had listed. The remux itself
+ * wrote the remaining twenty minutes, 205 segments and ENDLIST, in three
+ * seconds. A finished playlist is one that engine plays.
+ *
+ * False means the playlist was not finished in time, and the caller serves it
+ * growing, exactly as before. A failed ffmpeg answers false at once rather than
+ * waiting out the timeout.
+ */
+func (m *Manager) WaitForEndlist(ctx context.Context, s *Session, timeout time.Duration) bool {
+	playlist := filepath.Join(s.Dir, "index.m3u8")
+	deadline := time.Now().Add(timeout)
+
+	for {
+		if body, err := os.ReadFile(playlist); err == nil && Finished(string(body)) {
+			return true
+		}
+		if done, ffErr := s.Done(); done {
+			if ffErr != nil {
+				return false
+			}
+			// ffmpeg writes its final playlist before exiting; read it once more
+			// in case it landed between the read above and the exit.
+			body, err := os.ReadFile(playlist)
+			return err == nil && Finished(string(body))
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// Finished reports whether a playlist is closed with #EXT-X-ENDLIST.
+func Finished(playlist string) bool {
+	for _, line := range strings.Split(playlist, "\n") {
+		if strings.TrimSpace(line) == "#EXT-X-ENDLIST" {
+			return true
+		}
+	}
+	return false
 }
