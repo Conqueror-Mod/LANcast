@@ -2479,7 +2479,10 @@ after consulting `/playback`.
 ### `GET /api/stream/{id}/transcode`
 
 Streams a progressive fragmented MP4 produced by ffmpeg on demand. Plays in any
-browser with no client library. `?t=` seconds sets a start offset; `?audio=`
+browser with no client library. `?t=` seconds sets a start offset, and an offset
+at or past the file's probed duration starts from the beginning instead — ffmpeg
+given a start beyond the last frame fails, on the GPU path with an error that
+names the encoder rather than the offset; `?audio=`
 selects a specific track by absolute index; `?profile=` names the client
 profile (see above).
 

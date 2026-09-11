@@ -419,6 +419,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // re-run when it changes — it updates several times a second, and an effect
   // that reloads the source on it would reload the source forever.
   const livePos = useRef<{ id: number; at: number }>({ id: 0, at: 0 });
+  /*
+   * Which item the element's source actually belongs to.
+   *
+   * Not `itemID`. When the queue advances, `itemID` moves on at once, but the
+   * element keeps playing the *previous* stream until the next source is
+   * assigned — which waits for the next item's details to load. A `timeupdate`
+   * from the old stream in that gap was tagged with the new id and the old
+   * stream's position, so the source effect read it as "already playing this
+   * item" and resumed the next episode there.
+   *
+   * Seen on a real season: an episode resumed in its credits at 1301s, and every
+   * episode after it started at 1301s too, played fifty seconds of credits,
+   * was marked watched and advanced — until one shorter than 1301s could not be
+   * started at all. Set only where the source is assigned for a new item.
+   */
+  const sourceItem = useRef(0);
 
   const decision = useRef<Decision>({ method: "direct", reason: "" });
   const transcoding = useRef(false);
@@ -987,6 +1003,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         decision.current.method,
         hlsWorthTrying(mediaCapability().canPlayType),
       );
+      sourceItem.current = item.id;
       v.src = sourceURL(
         item.id,
         decision.current.method,
@@ -2055,7 +2072,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               // direct play and the transcode's own zero point otherwise, which
               // is the same sum displayTime makes.
               livePos.current = {
-                id: itemID,
+                // The stream's own item, not the one the queue has moved to.
+                id: sourceItem.current,
                 at: (transcoding.current ? offset.current : 0) + t,
               };
               saveProgress();
