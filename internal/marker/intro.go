@@ -112,9 +112,24 @@ func IntroFrom(cands []Candidate) Intro {
 	return introFrom(cands, IntroCardMinSeconds, true)
 }
 
+/*
+ * IntroCardEarliestSec is how far into an episode a title card must begin.
+ *
+ * A short stretch every episode shares at 0:00 is the network's ident, which the
+ * rip carries, not the show's title. Measured: Silicon Valley S1 and Lanterns
+ * S1, both HBO, returned unanimous 5–6 second runs starting at exactly 0.0s,
+ * while The League's cards sat between 38 and 139 seconds in every episode of
+ * two seasons. A long intro at the very start is untouched — Black Books opens
+ * on its titles — because that goes through the majority rule, not this one.
+ */
+const IntroCardEarliestSec = 2.0
+
 func introFrom(cands []Candidate, minSeconds float64, unanimous bool) Intro {
 	usable := make([]Candidate, 0, len(cands))
 	for _, c := range cands {
+		if unanimous && c.StartSec < IntroCardEarliestSec {
+			continue
+		}
 		if c.Len() >= minSeconds && c.Len() <= IntroMaxSeconds && c.StartSec >= 0 {
 			usable = append(usable, c)
 		}

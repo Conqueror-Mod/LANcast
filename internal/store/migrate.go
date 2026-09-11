@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 44
+const CurrentSchemaVersion = 45
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -83,6 +83,7 @@ var migrations = []migration{
 	{version: 42, sql: schemaRevision42},
 	{version: 43, sql: schemaRevision43},
 	{version: 44, sql: schemaRevision44},
+	{version: 45, sql: schemaRevision45},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1548,4 +1549,26 @@ CREATE TABLE IF NOT EXISTS plugin_secret (
     set_at  INTEGER NOT NULL,
     PRIMARY KEY (plugin, name)
 );
+`
+
+/*
+ * Revision 45 -- every season is compared again for its intro (ADR 0055,
+ * 2026-09-11 amendment).
+ *
+ * No shape changes. The detector changed underneath a stamp: a run now crosses
+ * half a second of disagreement, and a short title card counts when every
+ * comparison agrees. Seasons the old rule examined and marked nothing in --
+ * nineteen of them in a real library, Blue Mountain State and Futurama S1 among
+ * them -- carry intros_at and would never be looked at again, so the fix would
+ * reach only episodes added after it.
+ *
+ * Clearing the stamp is the whole migration. The intro pass replaces only its
+ * own kind of marker, and intro markers are evidence nobody edits (ADR 0055,
+ * decision 4), so re-examining a season cannot overwrite a person's work. The
+ * cost is one background decode of seven minutes of audio per episode, under
+ * the same setting and throttle as before.
+ */
+const schemaRevision45 = `
+UPDATE media_item SET intros_at = NULL
+WHERE kind = 'episode' AND intros_at IS NOT NULL;
 `

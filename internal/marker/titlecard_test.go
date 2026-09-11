@@ -58,6 +58,21 @@ func TestBelowTheCardFloorIsNothing(t *testing.T) {
 	}
 }
 
+// A short stretch every episode shares at 0:00 is a network ident: Silicon
+// Valley S1 and Lanterns S1, both HBO, each returned one at exactly 0.0s.
+func TestAUnanimousCardAtTheVeryStartIsAnIdentNotAnIntro(t *testing.T) {
+	if in := IntroFrom(card(0, 6.4, 6.3, 6.4, 6.4)); in.Found {
+		t.Errorf("a 6s stretch at 0:00 in every episode was called an intro: %+v", in)
+	}
+}
+
+// Opening on the titles is still fine for a real intro: Black Books does.
+func TestALongIntroAtTheVeryStartIsStillFound(t *testing.T) {
+	if in := IntroFrom(card(0, 30.7, 29.0, 30.3, 30.7)); !in.Found {
+		t.Errorf("Black Books' 30s intro at 0:00 was refused: %+v", in)
+	}
+}
+
 // A real intro still goes through the majority rule, unchanged.
 func TestALongIntroStillNeedsOnlyAMajority(t *testing.T) {
 	cands := append(card(55, 30.2, 30.1, 30.3), Candidate{})

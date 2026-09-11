@@ -185,3 +185,81 @@ against a global database, rather than finding what two known files share. The
 whole fingerprinter here is under 200 lines with no dependency, and CLAUDE.md's
 rule about not adding a third-party player library on the strength of an
 existing one applies in spirit: this build vendors what it can justify.
+
+## Amendment — 2026-09-11: a run crosses a noisy frame, and a title card counts
+
+The pass has run on a real library long enough to judge. It marked **261 of
+994** episodes in seasons of three or more. **19 seasons had
+nothing at all**, most of them shows with an obvious title sequence.
+
+### What was wrong
+
+`introlab` now runs the shipping peers and rule beside variants of the run
+measurement, and reports every candidate. Across the seasons that had nothing,
+it found two separate causes.
+
+**A run ended at the first frame over tolerance.** A line of dialogue, a door,
+or a sting over the titles broke a thirty-second intro into pieces. Most pieces
+fell under the eight-second floor, and the ones that survived started wherever
+the first uninterrupted piece happened to begin. The Black Books starts that
+decision 2 above attributes to noise (4, 3, 2 and 0) were this. With half a
+second bridged, all four start at 0 and run 29–31 seconds.
+
+**A title card is short.** The League's is about four seconds. Every episode of
+season 2 matched all four siblings starting on the same second, and nothing
+was marked, because eight seconds was the floor.
+
+### Measured, with the shipping comparison
+
+| season | before | 0.5s bridge | 2s bridge |
+| --- | --- | --- | --- |
+| Blue Mountain State S1 | 0/13 | **13/13** (30s) | 13/13 |
+| Cowboy Bebop S1 (12 eps) | 1/12 | **12/12** (90s) | 12/12 |
+| Futurama S1 | 0/9 | **9/9** (28s) | 9/9 |
+| It's Always Sunny S8 | 0/10 | **9/10** (22s) | 9/10 |
+| It's Always Sunny S12 | 0/10 | **9/10** (22s) | 9/10 |
+| Star Trek: TNG S6 (12 eps) | 1/12 | **12/12** | 12/12 |
+| School Days S1 | 0/12 | **10/12** | 10/12 |
+| Black Books S1 | 5/6 | 6/6 | 6/6 |
+| It's Always Sunny S3 | 8/8 | 8/8, every start on one second | 8/8 |
+| It's Always Sunny S14 | 3/10 | 5/10 | 5/10 |
+| The League S2 (card rule) | 0/13 | **13/13** (~4s) | 3/13 |
+| The League S5 (card rule) | 0/13 | **12/13** | 1/13 |
+| Storm of the Century (3 parts) | 0/3 | 0/3 | 0/3 |
+
+This answers the question above about Blue Mountain State, which was recorded
+as unknown. It was the walk, not the material.
+
+### Decision
+
+**A run may cross up to half a second of consecutive disagreement**
+(`IntroGapFrames`). The gap is never counted as agreement, and a trailing gap
+is not part of the run, so bridging cannot grow a run into what follows it. Two
+seconds found nothing half a second missed. It let runs drift past the titles,
+and it destroyed the title cards: The League S2 fell from 13/13 to 3/13 as short
+cards were bridged into unrelated matches.
+
+**A run of three seconds or more counts as a title card when every comparison
+agrees on where it starts, and there are at least three of them.** A majority on
+a short run is still what a shared network sting looks like, and is still
+refused. A card may not begin in an episode's first two seconds. Silicon Valley
+S1 and Lanterns S1, both HBO, each returned a unanimous 5–6 second stretch at
+exactly 0.0s, which is the network ident the rips carry. A long intro at 0:00
+still goes through the majority rule.
+
+**Revision 45 clears `intros_at` on every episode**, so seasons the old rule
+examined are compared again. Without it the fix would reach only episodes added
+afterwards. It is a stamp reset and nothing else. Markers already found stay
+until the pass replaces them, and intro markers are evidence nobody edits
+(decision 4).
+
+### Still not right, and recorded as such
+
+- **An ident longer than eight seconds at 0:00 still passes the majority rule.**
+  Lanterns' bridged run is 8.5s, so it stays marked at 0.0–8.7s. Telling an
+  ident from an intro that opens an episode needs more than timing.
+- **Intros past the head window are cut off.** Two TNG S6 episodes put their
+  titles beyond 6:40, and the marker ends at 7:00.
+- **Nobody has watched an episode to confirm a single one of these timestamps.**
+  Agreement between detectors is still not correctness, and no client draws a
+  skip control from them.
