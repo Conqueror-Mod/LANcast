@@ -484,6 +484,8 @@ export interface paths {
          * The same transcode as an HLS playlist with fMP4 segments
          * @description For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
          *
+         *     **When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's growing `EVENT` playlist. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.
+         *
          *     **This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.
          */
         get: operations["streamHLSPlaylist"];
@@ -6282,6 +6284,8 @@ export interface operations {
             /** @description The playlist. */
             200: {
                 headers: {
+                    /** @description `complete` when every segment is listed up front and the playlist is closed; `growing` when it is ffmpeg's own EVENT playlist, as for a copied video track. */
+                    "X-LANcast-Playlist"?: "complete" | "growing";
                     [name: string]: unknown;
                 };
                 content: {
