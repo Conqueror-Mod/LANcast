@@ -177,7 +177,7 @@ func (m *Manager) LiveHLS(ctx context.Context, channelID int64, o LiveOptions) (
 		Encoder:    m.Encoder(),
 		OutputDir:  filepath.Join(m.root, id),
 	}
-	opts.CanTonemap, opts.CanTagSDR = m.colourFor()
+	opts.CanTonemap, opts.CanTagSDR, opts.CanTonemapOpenCL = m.colourFor()
 
 	s, err := startHLS(ctx, m.binary(), opts)
 	if err != nil {

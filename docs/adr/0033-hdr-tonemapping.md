@@ -213,6 +213,91 @@ confirmed; the magnitudes differ from the 28.3 → 105.1 measured in the Context
 above, which was a different sample and scene, and the two should not be read as
 the same measurement repeated.
 
+## Amendment, 2026-09-10 — the CPU cost proved unacceptable, so tone map on the GPU when the service can
+
+The Decision said "`libplacebo` is the path to revisit if the CPU cost proves
+unacceptable". It has, and the tension with GPU decode that the first amendment
+said "returns whenever GPU-resident decode does" has returned: decode is on the
+card now (`-hwaccel cuda`), so an HDR file decodes on the GPU, downloads every
+10-bit frame to system memory, converts it to 32-bit float RGB on the CPU, tone
+maps, converts back, and uploads to NVENC.
+
+**Measured on a 3840×1606 HDR10 film** (`The Fifth Element`, BT.2020 PQ), 15–30
+seconds from the same offset, with the server's own filter chain:
+
+| Tone map | Throughput |
+| --- | --- |
+| CPU `zscale` + `tonemap` (this ADR's chain) | **0.41–0.44× realtime** |
+| CPU chain, scaled to 1080p first | 0.51× |
+| GPU `libplacebo` (Vulkan) | 2.74× |
+| GPU `tonemap_opencl` | **3.71×** |
+
+Below 1× a film cannot be converted as fast as it plays, so no buffer or quality
+ceiling rescues it: 1080p barely moves the number, because the cost is the
+download and the float conversion, not the pixel count. Reported as stutter on
+exactly this title, and as an audio-track change that takes uncomfortably long,
+since every new stream pays the slow start again. It had previously been
+diagnosed as a supply problem that did not exist, from a benchmark that left the
+tone map out — the measurement that matters is the one using the real chain.
+
+### Decision
+
+**Tone map with `tonemap_opencl` when the running server can prove OpenCL works;
+otherwise keep the CPU chain exactly as it is.**
+
+- **OpenCL over `libplacebo`**: fastest of the two here, and closer to the look
+  this ADR already shipped. Against the CPU output over three scenes (bright,
+  mid, dark), SSIM and mean-luma difference:
+
+  | Variant | SSIM | Luma delta |
+  | --- | --- | --- |
+  | `tonemap_opencl` default | 0.935 / 0.870 / 0.962 | −5.6 / −3.3 / −6.2 |
+  | `tonemap_opencl`, `peak=10` | **0.955 / 0.889 / 0.975** | **−1.0 / −0.9 / −1.3** |
+  | `libplacebo` default | 0.955 / 0.857 / 0.957 | +4.2 / −2.3 / +8.7 |
+
+  `peak=10` is the chosen parameter: the CPU chain linearises with `npl=100`, so
+  signal 1.0 is 100 nits and 10 is the 1,000-nit mastering peak of ordinary
+  HDR10 — the brightness then agrees with the shipped look to about one level.
+  `libplacebo` is the higher-quality operator in principle, but its default peak
+  detection moved brightness in both directions between scenes, which is a look
+  that changes with the shot. The frames were also compared by eye: all three are
+  correct pictures, differing mainly in overall brightness.
+
+- **`hable`, unchanged**, for the reason this ADR chose it.
+
+- **Proven by a real encode at startup, never by a filter listing.** The first
+  implementation of this ADR decided capabilities from `ffmpeg -filters` with the
+  reasoning "a filter has no hardware behind it to be absent". That is true of
+  `zscale` and false of `tonemap_opencl`, which needs an OpenCL device — and the
+  server runs as a Windows service in session 0, the environment where v0.8.0's
+  `-hwaccel auto` chose DXVA2 and ffmpeg exited before writing a byte. Being
+  listed is not being usable there. So the capability is set only by running the
+  exact device initialisation and filter on a generated HDR frame, the same way
+  `DetectEncoders` refuses to trust `-encoders`.
+
+- **A failed probe costs speed, never the stream.** If OpenCL is absent in the
+  service's session, the capability is false and HDR takes the CPU chain — today's
+  behaviour, slower and correct. Nothing about a GPU tone map may make a file that
+  plays today stop playing.
+
+### Consequences
+
+**Verification must be as the service.** Every number above was measured from an
+interactive shell, where OpenCL is certain to initialise. That proves the path is
+worth having and says nothing about session 0 — which is precisely the gap that
+cost v0.8.0. The startup probe's log line is how the running service reports
+which chain it chose, and that line from the installed service is the
+verification, not these benchmarks.
+
+**The look of HDR output changes slightly** on machines where the probe passes:
+brightness within about one level of today's, structure agreeing at SSIM
+0.89–0.98. Accepted knowingly, against a film that cannot currently be watched.
+
+**A quality ceiling is applied after the GPU tone map rather than before it.**
+There is no OpenCL scaler in the builds this runs on, so the scale runs on the
+downloaded 8-bit frame. The CPU chain keeps scaling first, as the first amendment
+recorded.
+
 ## Work breakdown
 
 1. Probe `color_transfer`, `color_primaries`, `color_space`; migration adding

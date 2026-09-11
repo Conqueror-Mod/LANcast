@@ -48,6 +48,7 @@ import { PopoutPlayer } from "./PopoutPlayer";
 
 import { conversionHelp } from "./conversionAvailable";
 import {
+  HLS_PROVEN_SECONDS,
   filePath,
   hlsWorthTrying,
   isUnsupportedSource,
@@ -435,6 +436,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * started at all. Set only where the source is assigned for a new item.
    */
   const sourceItem = useRef(0);
+  /*
+   * Where playback of a playlist began, so it can be proven only once enough of
+   * it has actually played. Null when there is nothing to prove — not on the
+   * playlist path, already proven, or it failed. See HLS_PROVEN_SECONDS.
+   */
+  const hlsPlayingFrom = useRef<number | null>(null);
 
   const decision = useRef<Decision>({ method: "direct", reason: "" });
   const transcoding = useRef(false);
@@ -1004,6 +1011,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         hlsWorthTrying(mediaCapability().canPlayType),
       );
       sourceItem.current = item.id;
+      hlsPlayingFrom.current = null;
       v.src = sourceURL(
         item.id,
         decision.current.method,
@@ -1958,14 +1966,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             // explain, and a permanent banner over the picture reads as a warning
             // about the thing you are currently watching happily. A later stall
             // shows the spinner on its own, which is the honest signal for it.
-            onPlaying={() => {
+            onPlaying={(e) => {
               setLoading(false);
               setNote("");
               // Frames from a playlist are the only proof that this engine can
               // read one. Recorded so the question is not re-opened on every
               // film, and so a later decode error cannot be mistaken for the
               // engine lacking HLS altogether.
-              if (chosenPath.current === "hls") rememberHLS("playable");
+              // Not proof yet: the desktop client fires `playing` on a playlist
+              // and fails a few seconds later on every film. Start counting,
+              // and record it once enough has really played (onTimeUpdate).
+              if (chosenPath.current === "hls" && hlsPlayingFrom.current === null) {
+                hlsPlayingFrom.current = e.currentTarget.currentTime;
+              }
             }}
             onWaiting={() => setLoading(true)}
             onError={(e) => {
@@ -1998,6 +2011,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                * viewer should not wait on a question — and the *verdict* waits
                * to hear whether a playlist was ever served.
                */
+              hlsPlayingFrom.current = null;
               if (
                 chosenPath.current === "hls" &&
                 isUnsupportedSource(e.currentTarget.error)
@@ -2071,6 +2085,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               // What a reload should come back in at. offset.current is zero on
               // direct play and the transcode's own zero point otherwise, which
               // is the same sum displayTime makes.
+              if (
+                chosenPath.current === "hls" &&
+                hlsPlayingFrom.current !== null &&
+                t - hlsPlayingFrom.current >= HLS_PROVEN_SECONDS
+              ) {
+                rememberHLS("playable");
+                hlsPlayingFrom.current = null;
+              }
               livePos.current = {
                 // The stream's own item, not the one the queue has moved to.
                 id: sourceItem.current,

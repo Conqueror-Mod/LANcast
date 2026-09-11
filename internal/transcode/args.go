@@ -115,6 +115,18 @@ type Options struct {
 	 */
 	CanTonemap bool
 	CanTagSDR  bool
+
+	/*
+	 * CanTonemapOpenCL means this server *ran* `tonemap_opencl` successfully at
+	 * startup, in its own session (ADR 0033, 2026-09-10 amendment).
+	 *
+	 * Not a filter listing. `tonemap_opencl` needs an OpenCL device, and the
+	 * service runs in session 0, where v0.8.0 learned a GPU API can be listed
+	 * and absent. When it is true an HDR source is tone mapped on the card at
+	 * 3.7x realtime instead of on the CPU at 0.4x; when it is false nothing
+	 * changes from the CPU chain.
+	 */
+	CanTonemapOpenCL bool
 }
 
 /*
@@ -156,6 +168,33 @@ type Options struct {
  * the decode, is the expensive half. The gain is on the ordinary HEVC re-encode
  * that does not tone map.
  */
+/*
+ * openclDeviceArgs create the OpenCL device the GPU tone map runs on.
+ *
+ * Global options, so they precede the input. Only emitted when the chain below
+ * is: initialising a device the job never uses would put a GPU API in the path
+ * of every HDR file for nothing.
+ */
+var openclDeviceArgs = []string{"-init_hw_device", "opencl=ocl", "-filter_hw_device", "ocl"}
+
+/*
+ * openclTonemapFilters convert HDR to SDR on the GPU (ADR 0033 amendment).
+ *
+ * The decode arrives in system memory as 10-bit, is uploaded, tone mapped and
+ * converted to BT.709 in one OpenCL filter, and comes back as 8-bit NV12 for the
+ * encoder. `hable` as on the CPU. `peak=10` because the CPU chain linearises at
+ * `npl=100`, making 10 the 1,000-nit mastering peak of ordinary HDR10 — measured
+ * to agree with the CPU chain's brightness to about one luma level over three
+ * scenes, where the default ran 3–6 levels darker.
+ */
+var openclTonemapFilters = []string{
+	"format=p010",
+	"hwupload",
+	"tonemap_opencl=tonemap=hable:desat=0:t=bt709:m=bt709:p=bt709:peak=10:format=nv12",
+	"hwdownload",
+	"format=nv12",
+}
+
 var tonemapFilters = []string{
 	"zscale=t=linear:npl=100",
 	"format=gbrpf32le",
@@ -395,6 +434,14 @@ func Args(o Options) []string {
 		}
 	}
 
+	// An HDR source is tone mapped on the card when the running server proved it
+	// can be. Decided here because its device is a global option and has to be in
+	// place before the input is opened.
+	gpuTonemap := decoding && o.Decision.TonemapHDR && o.CanTonemapOpenCL
+	if gpuTonemap {
+		a = append(a, openclDeviceArgs...)
+	}
+
 	if o.Live {
 		a = append(a, liveInputArgs()...)
 		if o.HLSInput {
@@ -499,7 +546,11 @@ func Args(o Options) []string {
 		// computes the exact width and hands ffmpeg an odd number on plenty of
 		// ordinary aspect ratios, where the encoder does not round — it exits.
 		// -2 asks for the same computation constrained to a multiple of two.
-		if o.Decision.TargetHeight > 0 {
+		// Not before a GPU tone map: there is no OpenCL scaler in the builds this
+		// runs on, and scaling a 10-bit 4K frame on the CPU first would spend the
+		// very cost moving the tone map to the card exists to avoid. That chain
+		// scales the downloaded 8-bit frame instead, below.
+		if o.Decision.TargetHeight > 0 && !gpuTonemap {
 			filters = append(filters,
 				fmt.Sprintf("scale=-2:%d", o.Decision.TargetHeight))
 		}
@@ -517,6 +568,13 @@ func Args(o Options) []string {
 		case !o.Decision.TonemapHDR:
 			// Not HDR. Its colour metadata is already right; rewriting it would
 			// be inventing a conversion that did not happen.
+		case gpuTonemap:
+			filters = append(filters, openclTonemapFilters...)
+			if o.Decision.TargetHeight > 0 {
+				filters = append(filters,
+					fmt.Sprintf("scale=-2:%d", o.Decision.TargetHeight))
+			}
+			colourFixed = true
 		case o.CanTonemap:
 			filters = append(filters, tonemapFilters...)
 			colourFixed = true

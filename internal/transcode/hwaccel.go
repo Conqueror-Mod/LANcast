@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"fmt"
 	"lancast/internal/childproc"
 	"log/slog"
 	"os/exec"
@@ -252,16 +253,23 @@ type ColourCaps struct {
 	// TagSDR: frame colour properties can be relabelled without converting.
 	// Required for the output tags to be coherent — see sdrRelabel.
 	TagSDR bool
+	// TonemapOpenCL: the GPU tone map *ran* here at startup. Proven, not
+	// listed — see testTonemapOpenCL.
+	TonemapOpenCL bool
 }
 
 /*
  * DetectColourCaps probes what this ffmpeg can do about HDR.
  *
- * A filter listing is enough here, unlike the encoder probe above. That one
- * runs a real test encode because ffmpeg advertises encoders the machine cannot
- * run — h264_nvenc is listed with no NVIDIA card present and fails at playback
- * time. A filter has no hardware behind it to be absent, so being listed and
- * being usable are the same thing.
+ * A filter listing is enough for the CPU filters, unlike the encoder probe
+ * above: `zscale`, `tonemap` and `setparams` have no hardware behind them to be
+ * absent, so being listed and being usable are the same thing.
+ *
+ * **That reasoning stops at `tonemap_opencl`**, which it once covered by
+ * implication. An OpenCL filter needs an OpenCL device, and this server runs as
+ * a service in session 0 — the environment where v0.8.0's `-hwaccel auto` chose
+ * DXVA2, found no Direct3D, and exited before a byte. So the GPU tone map is
+ * listed-and-*run*, the same bar DetectEncoders sets.
  */
 func DetectColourCaps(ctx context.Context, bin string, log *slog.Logger) ColourCaps {
 	if bin == "" {
@@ -272,6 +280,19 @@ func DetectColourCaps(ctx context.Context, bin string, log *slog.Logger) ColourC
 		Tonemap: filters["tonemap"] && filters["zscale"],
 		TagSDR:  filters["setparams"],
 	}
+	if filters["tonemap_opencl"] && filters["hwupload"] && filters["hwdownload"] {
+		if err := testTonemapOpenCL(ctx, bin); err != nil {
+			// Info, not Warn: the CPU chain is correct, only slower, and a server
+			// with no usable OpenCL is an ordinary machine, not a fault.
+			log.Info("gpu hdr tonemapping unavailable; HDR uses the CPU tone map", "error", err)
+		} else {
+			caps.TonemapOpenCL = true
+		}
+	}
+	// Which chain the running service chose, said once. This line from the
+	// installed service is the verification the ADR requires — a benchmark from a
+	// shell cannot say what session 0 can do.
+	log.Info("hdr tonemapping", "gpu_opencl", caps.TonemapOpenCL, "cpu", caps.Tonemap)
 
 	// Worth saying once at startup rather than leaving someone to wonder why HDR
 	// still looks flat, and worth distinguishing the two degraded states: one
@@ -288,6 +309,43 @@ func DetectColourCaps(ctx context.Context, bin string, log *slog.Logger) ColourC
 			"setparams", filters["setparams"])
 	}
 	return caps
+}
+
+/*
+ * openclProbeArgs run the exact GPU tone map on one generated HDR frame.
+ *
+ * The frame is tagged PQ/BT.2020 so tonemap_opencl has a transfer to convert
+ * from; a plain generated frame carries no transfer and the filter would be
+ * exercised on a case it never meets. Split out so the command is testable
+ * without a GPU.
+ */
+func openclProbeArgs() []string {
+	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
+	a = append(a, openclDeviceArgs...)
+	a = append(a,
+		"-f", "lavfi", "-i", "testsrc2=duration=0.1:size=320x240:rate=10",
+		"-vf", "format=yuv420p10le,"+
+			"setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc,"+
+			strings.Join(openclTonemapFilters, ","),
+		"-frames:v", "1", "-f", "null", "-",
+	)
+	return a
+}
+
+// testTonemapOpenCL proves the GPU tone map runs in this process's session.
+func testTonemapOpenCL(ctx context.Context, bin string) error {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, openclProbeArgs()...)
+	childproc.Hide(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if len(msg) > 200 {
+			msg = msg[:200]
+		}
+		return fmt.Errorf("%w: %s", err, msg)
+	}
+	return nil
 }
 
 // listFilters returns the filter names this ffmpeg advertises.
