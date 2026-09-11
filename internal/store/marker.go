@@ -156,6 +156,31 @@ func (s *Store) MarkersFor(ctx context.Context, itemID int64) ([]Marker, error) 
  * thresholds are tuned numbers, and a build that moves them has to be able to
  * ask every film the new question.
  */
+/*
+ * ClearMarkersFor queues one item to be examined again.
+ *
+ * ClearMarkers asks every film, which is right when the rule changes and ruinous
+ * when one answer is wrong — a full decode of every film's tail, at about
+ * forty-five seconds each, to repair a single row. It was the only way back for
+ * a film a shutdown had retired as "unreadable", and two were still stuck when
+ * that was found.
+ *
+ * Same conditions as the library-wide version, so a missing file or one with no
+ * path answers zero rather than being queued for a pass that cannot read it.
+ */
+func (s *Store) ClearMarkersFor(ctx context.Context, itemID int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE media_item SET markers_at = NULL
+		WHERE id = ? AND markers_at IS NOT NULL AND missing = 0 AND path IS NOT NULL`, itemID)
+	if err != nil {
+		return 0, fmt.Errorf("clear markers for item: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("clear markers for item: %w", err)
+	}
+	return n, nil
+}
+
 func (s *Store) ClearMarkers(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE media_item SET markers_at = NULL
 		WHERE markers_at IS NOT NULL AND missing = 0 AND path IS NOT NULL`)

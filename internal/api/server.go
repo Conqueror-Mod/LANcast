@@ -474,6 +474,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/markers", s.itemMarkers)
 	mux.HandleFunc("GET /api/markers", s.markerStatus)
 	mux.HandleFunc("POST /api/markers/refresh", s.adminOnly(s.refreshMarkers))
+	mux.HandleFunc("POST /api/items/{id}/markers/refresh", s.adminOnly(s.refreshItemMarkers))
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)

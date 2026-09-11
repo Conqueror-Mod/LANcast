@@ -152,6 +152,37 @@ func TestSaveMarkersLeavesOtherKindsAlone(t *testing.T) {
 	}
 }
 
+// One wrong answer is repaired by asking that film, not every film. Two others
+// must stay exactly as they were, or this is ClearMarkers with extra steps.
+func TestClearMarkersForRequeuesOnlyThatItem(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	a := seedMarkerFilm(t, st, "Retired", 6_000_000, true)
+	b := seedMarkerFilm(t, st, "Fine", 6_000_000, true)
+	for _, id := range []int64{a, b} {
+		if err := st.SaveMarkers(ctx, id, []string{MarkerCredits}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := st.ClearMarkersFor(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("cleared %d, want 1", n)
+	}
+	pending, _ := st.PendingMarkers(ctx, 10)
+	if len(pending) != 1 || pending[0].ID != a {
+		t.Errorf("pending = %+v, want only the one film asked about", pending)
+	}
+
+	// Asking again about a film already queued answers zero, not an error.
+	if n, err := st.ClearMarkersFor(ctx, a); err != nil || n != 0 {
+		t.Errorf("second clear = %d, %v; want 0, nil", n, err)
+	}
+}
+
 // The window and the length thresholds are tuned numbers, so a build that
 // moves them has to be able to ask every film the new question.
 func TestClearMarkersRequeuesEverythingExamined(t *testing.T) {

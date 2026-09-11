@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   useItem,
   useRefreshItem,
+  useRedetectCredits,
   useTrailer,
   useChildren,
   useCollectionMembers,
@@ -124,6 +125,50 @@ function RefreshMetaButton({ id }: { id: number }) {
       onClick={() => refresh.mutate()}
     >
       {refresh.isPending ? "Refreshing…" : "Refresh metadata"}
+    </button>
+  );
+}
+
+/*
+ * Look for this film's credits again.
+ *
+ * Beside Refresh metadata because it is the same kind of act — re-ask about one
+ * title — for a different detector. The library-wide version decodes every
+ * film's tail to repair one row, and was the only way back for a film a shutdown
+ * had retired as "unreadable".
+ */
+function RedetectCreditsButton({ id }: { id: number }) {
+  const redetect = useRedetectCredits(id);
+  const focusable = useFocusable(() => redetect.mutate());
+
+  if (redetect.isSuccess) {
+    return (
+      <span className="detail__matchbadge">
+        {redetect.data.queued === 0
+          ? "Credits not re-queued"
+          : "Looking for credits again"}
+      </span>
+    );
+  }
+  if (redetect.isError) {
+    // A 409 (detection off) or 503 (no ffmpeg) is the server explaining
+    // itself, and the button is the only place that explanation can land.
+    return (
+      <span className="detail__matchbadge">
+        {redetect.error instanceof Error
+          ? redetect.error.message
+          : "Could not re-queue credits"}
+      </span>
+    );
+  }
+  return (
+    <button
+      {...focusable}
+      className="detail__fix"
+      disabled={redetect.isPending}
+      onClick={() => redetect.mutate()}
+    >
+      {redetect.isPending ? "Queueing…" : "Re-detect credits"}
     </button>
   );
 }
@@ -670,6 +715,11 @@ export function Detail() {
                     provider work, and offering a button that answers 403 is
                     worse than not offering it. */}
                 {isAdmin && <RefreshMetaButton id={item.id} />}
+                {/* Films only: a show's episodes have no page of their own to
+                    carry this, and a show has no tail to decode. */}
+                {isAdmin && item.kind === "movie" && (
+                  <RedetectCreditsButton id={item.id} />
+                )}
               </div>
             )}
 

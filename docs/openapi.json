@@ -5611,6 +5611,62 @@
         }
       }
     },
+    "/items/{id}/markers/refresh": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "post": {
+        "operationId": "refreshItemMarkers",
+        "tags": [
+          "markers"
+        ],
+        "summary": "Queue one item to be looked at again",
+        "description": "Administrators only.\n\n`queued` is `0` when there was nothing to re-ask: not yet examined, already queued, missing from disk, or no file. The library-wide refresh decodes every film's tail, which is the wrong price for repairing one wrong answer.",
+        "responses": {
+          "200": {
+            "description": "How many were queued: 0 or 1.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkerRefreshResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`detect_markers` is off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ffmpeg is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/markers/refresh": {
       "post": {
         "operationId": "refreshMarkers",
