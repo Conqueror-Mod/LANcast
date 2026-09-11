@@ -246,7 +246,22 @@ func startHLS(ctx context.Context, bin string, o Options) (*Session, error) {
 		return nil, fmt.Errorf("transcode: create output dir: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	/*
+	 * Detached from the caller's cancellation, deliberately.
+	 *
+	 * The caller is an HTTP handler, and Go cancels a request's context when
+	 * the handler returns — which for the playlist route is the moment the
+	 * playlist has been sent. Tied to that, ffmpeg was killed as every
+	 * segmented session's playlist went out, having written one segment, and
+	 * the wait below recorded it as an ordinary stop. Seen as the service on
+	 * v0.9.13: `playlist=complete`, then 2.5s later "transcode finished without
+	 * producing seg00001.m4s" with no reason.
+	 *
+	 * A segmented session is many requests long, so its lifetime belongs to the
+	 * session: Stop (supersede, the reaper, StopAll) cancels it. A progressive
+	 * session is different — it *is* its response — and keeps the request's.
+	 */
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	cmd := exec.CommandContext(ctx, bin, Args(o)...)
 	childproc.Hide(cmd)
 	stderr := newRingBuffer(8 << 10)
