@@ -32,7 +32,7 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 	opts := transcode.Options{
 		Input:      it.Path,
 		Decision:   t.decision,
-		StartAt:    queryFloat(r, "t"),
+		StartAt:    s.startAt(r, it),
 		AudioIndex: t.audioIndex,
 	}
 
@@ -78,7 +78,7 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.userID(r), transcode.Options{
 		Input:      it.Path,
 		Decision:   t.decision,
-		StartAt:    queryFloat(r, "t"),
+		StartAt:    s.startAt(r, it),
 		AudioIndex: t.audioIndex,
 	})
 	if err != nil {
@@ -393,6 +393,33 @@ func validSegmentName(name string) bool {
 	}
 	// Belt and braces: reject anything that is not a plain filename.
 	return filepath.Base(name) == name
+}
+
+/*
+ * startAt is where a conversion begins, from the request's `t`.
+ *
+ * A start at or past the file's end is treated as the start of the file — the
+ * same rule the client's resumeSeconds applies to a saved position. ffmpeg
+ * handed an offset beyond the last frame gets no frames at all, and on the GPU
+ * decode path it does not say so: it fails opening the encoder with
+ * `hw_frames_ctx must be set when using GPU frames as input`, which reads as a
+ * driver fault and sent a reader looking at the graphics card.
+ *
+ * Seen when autoplay carried a 1301s position into a 1291s episode. That client
+ * fault is fixed separately; this is so a stale offset from any caller plays the
+ * file rather than failing with the wrong explanation.
+ */
+func (s *Server) startAt(r *http.Request, it *store.Item) float64 {
+	t := queryFloat(r, "t")
+	if t <= 0 || it == nil || it.DurationMS == nil || *it.DurationMS <= 0 {
+		return t
+	}
+	if t*1000 >= float64(*it.DurationMS) {
+		s.log.Info("start offset past the end of the file; starting from the beginning",
+			"item", it.ID, "t", t, "duration_ms", *it.DurationMS)
+		return 0
+	}
+	return t
 }
 
 func queryFloat(r *http.Request, key string) float64 {
