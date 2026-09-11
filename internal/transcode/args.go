@@ -37,6 +37,7 @@ type Options struct {
 	Output     Output
 	Decision   probe.Decision
 	StartAt    float64 // seconds into the file
+	Duration   float64 // the whole file's length in seconds; 0 when unknown
 	OutputDir  string  // HLS only
 	AudioIndex int     // absolute stream index; -1 means let ffmpeg choose
 

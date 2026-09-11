@@ -41,6 +41,15 @@ type Session struct {
 	 */
 	Encoding bool
 
+	/*
+	 * MediaSeconds and SegmentLength are set when the server lists this
+	 * session's playlist whole, up front, instead of passing on ffmpeg's growing
+	 * one — see CompletePlaylist for why, and completeFor for when. Zero means
+	 * ffmpeg's playlist is served as it grows.
+	 */
+	MediaSeconds  float64
+	SegmentLength float64
+
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
 	stderr *ringBuffer
