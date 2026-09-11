@@ -123,6 +123,24 @@ const SETTLED_AFTER = 3;
  */
 const SETTLED_FOR_MS = 30 * 24 * 60 * 60 * 1000;
 
+/*
+ * How much of a playlist must actually play before it counts as proof.
+ *
+ * `playing` is not proof. On the desktop client the element reaches readyState
+ * 4 on a playlist, fires `playing`, and then fails with
+ * DEMUXER_ERROR_COULD_NOT_PARSE a few seconds in — on every film. Recording
+ * "playable" at `playing` wiped the refusal count each time, so the next refusal
+ * counted from zero: the stored record read `refusals: 1` after twenty
+ * consecutive failures, never reached SETTLED_AFTER, and every start, seek and
+ * audio change paid eight to eleven seconds attempting a path that had never
+ * once worked.
+ *
+ * Thirty seconds is several segments past where those failures land (3–10s),
+ * and short enough that a device where playlists genuinely work is recognised
+ * within the first minute of a film.
+ */
+export const HLS_PROVEN_SECONDS = 30;
+
 export function hlsRecord(now = Date.now()): HLSRecord {
   const r = readDevice<HLSRecord | null>(HLS_VERDICT_KEY, null);
   if (!r || typeof r.verdict !== "string") {

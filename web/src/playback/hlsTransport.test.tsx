@@ -272,6 +272,66 @@ describe("delivering a conversion", () => {
     expect(localStorage.getItem(HLS_VERDICT_KEY)).not.toContain("refused");
   });
 
+  /*
+   * `playing` is not proof that playlists work.
+   *
+   * On the desktop client the element fires `playing` on a playlist and then
+   * fails a few seconds later, on every film. Recording "playable" at `playing`
+   * wiped the refusal count each time: the stored record read `refusals: 1`
+   * after twenty failures, never settled, and every start, seek and audio change
+   * paid eight to eleven seconds retrying a path that had never once worked.
+   */
+  it("settles on the fallback when playlists play briefly and then fail", async () => {
+    await render();
+    for (const id of [1, 2, 3]) {
+      await act(async () => {
+        pb.play(id, [id]);
+      });
+      await settle();
+      expect(streams()[streams().length - 1], `film ${id} should try the playlist`).toContain(
+        "/hls/index.m3u8",
+      );
+      const v = media()!;
+      await act(async () => {
+        v.dispatchEvent(new Event("playing"));
+      });
+      await failWith(4);
+      await settle();
+    }
+
+    const record = JSON.parse(localStorage.getItem(HLS_VERDICT_KEY) ?? "{}");
+    expect(
+      record,
+      "each brief `playing` reset the count, so three failures never settled",
+    ).toMatchObject({ verdict: "refused", refusals: 3 });
+
+    await act(async () => {
+      pb.play(4, [4]);
+    });
+    await settle();
+    expect(streams()[streams().length - 1]).toContain("/transcode");
+    expect(streams()[streams().length - 1]).not.toContain("/hls/");
+  });
+
+  // The other half: a device where playlists really work is still recognised,
+  // once enough has actually played.
+  it("remembers playlists as playable once enough has really played", async () => {
+    await start();
+    const v = media()!;
+    Object.defineProperty(v, "currentTime", { configurable: true, writable: true, value: 0 });
+    await act(async () => {
+      v.dispatchEvent(new Event("playing"));
+    });
+    expect(localStorage.getItem(HLS_VERDICT_KEY) ?? "").not.toContain("playable");
+
+    (v as unknown as { currentTime: number }).currentTime = 31;
+    await act(async () => {
+      v.dispatchEvent(new Event("timeupdate"));
+    });
+    await settle();
+    expect(localStorage.getItem(HLS_VERDICT_KEY)).toContain("playable");
+  });
+
   // An engine that says it has no idea what a playlist is, is believed — there
   // is no reason to spend a visibly failed load discovering that.
   it("does not try a playlist on an engine that rules it out", async () => {

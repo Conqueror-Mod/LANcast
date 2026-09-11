@@ -197,11 +197,11 @@ func (m *Manager) Encoder() Encoder {
 	return m.selected
 }
 
-// colourFor unpacks the colour capabilities into the two Options fields, so the
+// colourFor unpacks the colour capabilities into the Options fields, so the
 // call site reads as what it sets rather than as a struct copy.
-func (m *Manager) colourFor() (tonemap, tagSDR bool) {
+func (m *Manager) colourFor() (tonemap, tagSDR, tonemapOpenCL bool) {
 	c := m.ColourCaps()
-	return c.Tonemap, c.TagSDR
+	return c.Tonemap, c.TagSDR, c.TonemapOpenCL
 }
 
 // ColourCaps reports what this ffmpeg build can do about HDR (ADR 0033).
@@ -493,7 +493,7 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 
 	o.Output = Progressive
 	o.Encoder = m.Encoder()
-	o.CanTonemap, o.CanTagSDR = m.colourFor()
+	o.CanTonemap, o.CanTagSDR, o.CanTonemapOpenCL = m.colourFor()
 	s, stdout, err := startProgressive(ctx, m.binary(), o)
 	if err != nil {
 		m.release()
@@ -567,7 +567,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	id := newID()
 	o.Output = HLS
 	o.Encoder = m.Encoder()
-	o.CanTonemap, o.CanTagSDR = m.colourFor()
+	o.CanTonemap, o.CanTagSDR, o.CanTonemapOpenCL = m.colourFor()
 	o.OutputDir = filepath.Join(m.root, id)
 
 	s, err := startHLS(ctx, m.binary(), o)
