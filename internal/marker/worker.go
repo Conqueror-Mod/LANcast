@@ -275,6 +275,22 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 		 * A stamped failure is not permanent: POST /api/markers/refresh clears
 		 * every stamp, so a replaced file is re-examined when somebody says so.
 		 */
+		/*
+		 * And before either: did *we* stop it?
+		 *
+		 * A shutdown cancels the pass, and ffmpeg dies with "context canceled"
+		 * or, killed a moment earlier, a bare "exit status 1". Both reached the
+		 * stamp below, because the file was present — so a restart during a
+		 * pass retired whichever films were mid-scan, permanently, logged as
+		 * unreadable. Twenty of twenty-two such stamps in one log sat on a
+		 * "shutting down" line; two films were still retired when it was found.
+		 *
+		 * The context is asked rather than the error, because the error does
+		 * not always say so: the killed process reports its exit code, not why.
+		 */
+		if ctx.Err() != nil {
+			return
+		}
 		if _, statErr := os.Stat(it.Path); statErr != nil {
 			w.log.Warn("marker detection failed", "item", it.ID,
 				"error", err, "note", "file unreachable; will try again")

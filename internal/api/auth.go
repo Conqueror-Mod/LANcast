@@ -48,7 +48,15 @@ func isPublicPath(p string) bool {
 func (s *Server) secured(ctx context.Context) bool {
 	n, err := s.st.CountUsers(ctx)
 	if err != nil {
-		s.log.Error("count users", "error", err)
+		// A caller that went away is not a fault, for the reason writeInternal
+		// gives. This logged straight to ERROR instead, which made it the last
+		// source of that noise — 162 lines, still arriving after the rest had
+		// been demoted. Still fails closed either way.
+		if errors.Is(err, context.Canceled) {
+			s.log.Debug("count users: caller went away", "error", err)
+		} else {
+			s.log.Error("count users", "error", err)
+		}
 		return true
 	}
 	return n > 0
