@@ -19,10 +19,35 @@ import "net/http"
 type countingWriter struct {
 	http.ResponseWriter
 	n int
+	/*
+	 * The status, kept so a short body can be told from a legitimate one.
+	 *
+	 * A 206 is *supposed* to be shorter than the file; a 200 that stops early
+	 * is a delivery that was cut off. Without the code the two are one number
+	 * and the interesting case cannot be seen.
+	 */
+	status int
+	/** Whatever stopped the write, if anything did. */
+	err error
+}
+
+func (c *countingWriter) WriteHeader(code int) {
+	if c.status == 0 {
+		c.status = code
+	}
+	c.ResponseWriter.WriteHeader(code)
 }
 
 func (c *countingWriter) Write(p []byte) (int, error) {
+	// An implicit 200: ServeContent writes a body without calling WriteHeader
+	// when there is nothing to negotiate.
+	if c.status == 0 {
+		c.status = http.StatusOK
+	}
 	n, err := c.ResponseWriter.Write(p)
 	c.n += n
+	if err != nil && c.err == nil {
+		c.err = err
+	}
 	return n, err
 }

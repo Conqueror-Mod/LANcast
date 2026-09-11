@@ -1999,7 +1999,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                  */
                 const incidentClock = Date.now();
                 noteHLSIncident(
-                  readIncident(e.currentTarget, offset.current, incidentClock),
+                  readIncident(
+                    e.currentTarget,
+                    offset.current,
+                    incidentClock,
+                    itemID,
+                    item?.title ?? "",
+                  ),
                 );
                 void playlistWasServed(
                   sourceURL(
