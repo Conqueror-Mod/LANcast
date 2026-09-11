@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -106,5 +107,91 @@ func TestTheWrapperDoesNotSwallowTheResponse(t *testing.T) {
 	}
 	if cw.n != 3 {
 		t.Errorf("counted %d, want 3", cw.n)
+	}
+}
+
+/*
+ * A segment that did not go out whole says so.
+ *
+ * The player reports DEMUXER_ERROR_COULD_NOT_PARSE *after* reaching
+ * `readyState 4` — it starts, plays, and then a piece will not parse. A segment
+ * truncated in flight produces exactly that shape, and it was invisible from
+ * both ends: the server wrote what it could and moved on, the element only said
+ * the result would not parse, and neither could see the other half.
+ */
+
+// A writer that gives up partway, the way a connection does.
+type breakingWriter struct {
+	http.ResponseWriter
+	after int
+	wrote int
+}
+
+func (b *breakingWriter) Write(p []byte) (int, error) {
+	if b.wrote >= b.after {
+		return 0, errors.New("connection reset by peer")
+	}
+	n := len(p)
+	short := false
+	if b.wrote+n > b.after {
+		n, short = b.after-b.wrote, true
+	}
+	b.wrote += n
+	written, err := b.ResponseWriter.Write(p[:n])
+	if err == nil && short {
+		// An io.Writer that returns fewer bytes than it was given must say why,
+		// and a connection that dies mid-body is exactly that.
+		err = errors.New("connection reset by peer")
+	}
+	return written, err
+}
+
+func TestAShortWriteIsCountedAndItsErrorKept(t *testing.T) {
+	rec := httptest.NewRecorder()
+	cw := &countingWriter{ResponseWriter: &breakingWriter{ResponseWriter: rec, after: 50}}
+	cw.WriteHeader(http.StatusOK)
+	_, err := cw.Write(bytes.Repeat([]byte("x"), 4096))
+
+	if err == nil {
+		t.Fatal("the write error did not reach the caller")
+	}
+	if cw.n != 50 {
+		t.Errorf("counted %d bytes, want the 50 that actually went out", cw.n)
+	}
+	if cw.err == nil {
+		t.Error("the reason delivery stopped was not kept, so the log line " +
+			"cannot say why a segment was cut off")
+	}
+	if cw.status != http.StatusOK {
+		t.Errorf("status = %d; without it a truncated 200 cannot be told from "+
+			"a 206, which is short on purpose", cw.status)
+	}
+}
+
+// ServeContent writes a body without calling WriteHeader when there is nothing
+// to negotiate, and a status of zero would read as "not a 200" and hide every
+// truncation on the ordinary path.
+func TestAnImplicitTwoHundredIsStillATwoHundred(t *testing.T) {
+	rec := httptest.NewRecorder()
+	cw := &countingWriter{ResponseWriter: rec}
+	_, _ = cw.Write([]byte("abc"))
+
+	if cw.status != http.StatusOK {
+		t.Errorf("status = %d, want 200", cw.status)
+	}
+}
+
+// A range is meant to be shorter than the file. Judging one as truncated would
+// bury the real case under every ordinary seek.
+func TestARangeIsNotMistakenForATruncation(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/stream/7/hls/s/1.m4s", nil)
+	r.Header.Set("Range", "bytes=0-99")
+	cw, rec := serveSegment(t, r)
+
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206", rec.Code)
+	}
+	if cw.status != http.StatusPartialContent {
+		t.Errorf("countingWriter recorded %d rather than the 206 it sent", cw.status)
 	}
 }

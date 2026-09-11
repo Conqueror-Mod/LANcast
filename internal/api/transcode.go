@@ -190,6 +190,29 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 	if cw.n > 0 {
 		sess.NoteServed(cw.n)
 	}
+
+	/*
+	 * A whole segment that did not go out whole.
+	 *
+	 * The player reports `DEMUXER_ERROR_COULD_NOT_PARSE` after reaching
+	 * `readyState 4` — it starts, plays, and then a piece will not parse. A
+	 * segment truncated in flight is the shape that produces exactly that, and
+	 * it is invisible from both ends otherwise: the server wrote what it could
+	 * and moved on, and the element only says the result would not parse.
+	 *
+	 * Only a 200 can be judged. A 206 is meant to be shorter than the file, and
+	 * treating one as truncated would fill the log with normal range requests.
+	 *
+	 * A client that seeks or closes mid-segment also lands here, which is why
+	 * this is a warning about delivery rather than a claim of fault — but it is
+	 * a warning nobody could previously read at all, on the one path where the
+	 * failure is a parse error with no other explanation.
+	 */
+	if cw.status == http.StatusOK && int64(cw.n) < info.Size() {
+		s.log.Warn("hls segment delivered short",
+			"session", sessionID, "name", name,
+			"sent", cw.n, "size", info.Size(), "error", cw.err)
+	}
 }
 
 // transcodeSessions lists running transcodes.
