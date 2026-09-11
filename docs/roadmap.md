@@ -686,7 +686,11 @@ group is not priority.
   *is* once it lands in a library, which is a bigger question than the feature
   looks.
 
-- **Installed games as a library — Steam and Epic** — captured, and the first
+- **Installed games as a library — Steam and Epic** — **decided in
+  [ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)
+  (proposed): Steam only, a local read in the desktop client, no sign-in, no
+  server table, off by default; Epic deferred.** What follows is the original
+  capture, kept for the reasoning. It was the first
   backlog item that **breaks the model rather than extending it**, so it needs an
   ADR before it needs a design.
   [ADR 0002](adr/0002-one-wide-media-item-table.md) claims a new media type is a
