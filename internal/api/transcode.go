@@ -208,10 +208,11 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 	 * a warning nobody could previously read at all, on the one path where the
 	 * failure is a parse error with no other explanation.
 	 */
-	if cw.status == http.StatusOK && int64(cw.n) < info.Size() {
+	if want, short := shortDelivery(cw.status, cw.n, info.Size(), w.Header().Get("Content-Range")); short {
 		s.log.Warn("hls segment delivered short",
 			"session", sessionID, "name", name,
-			"sent", cw.n, "size", info.Size(), "error", cw.err)
+			"sent", cw.n, "promised", want, "size", info.Size(),
+			"range", r.Header.Get("Range"), "error", cw.err)
 	}
 }
 

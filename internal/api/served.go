@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 /*
  * How many bytes of media a response actually handed over.
@@ -50,4 +53,33 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 		c.err = err
 	}
 	return n, err
+}
+
+/*
+ * shortDelivery reports whether a response sent fewer bytes than it promised,
+ * and what it promised.
+ *
+ * The first version judged only a 200, on the reasoning that a 206 is short on
+ * purpose. That made it blind in exactly the place it was built for: WebView2
+ * requests every playlist and segment with `Range: bytes=0-`, so every segment
+ * the desktop client ever received was a 206 and the check could not fire.
+ * Found by logging a real WebView2's requests, not by reading the code.
+ *
+ * A 206 is not short on purpose — it is short *by its own Content-Range*. So the
+ * promise is read from that header, and a response is judged against it.
+ */
+func shortDelivery(status, sent int, size int64, contentRange string) (promised int64, short bool) {
+	switch status {
+	case http.StatusOK:
+		promised = size
+	case http.StatusPartialContent:
+		var first, last, total int64
+		if _, err := fmt.Sscanf(contentRange, "bytes %d-%d/%d", &first, &last, &total); err != nil || last < first {
+			return 0, false
+		}
+		promised = last - first + 1
+	default:
+		return 0, false
+	}
+	return promised, int64(sent) < promised
 }
