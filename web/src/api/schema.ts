@@ -484,7 +484,7 @@ export interface paths {
          * The same transcode as an HLS playlist with fMP4 segments
          * @description For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
          *
-         *     **When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's growing `EVENT` playlist. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.
+         *     **When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's own `EVENT` playlist; the response waits up to twenty seconds for it to finish and serves it closed with `#EXT-X-ENDLIST` when it does, growing otherwise. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.
          *
          *     **This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.
          */
@@ -6284,7 +6284,7 @@ export interface operations {
             /** @description The playlist. */
             200: {
                 headers: {
-                    /** @description `complete` when every segment is listed up front and the playlist is closed; `growing` when it is ffmpeg's own EVENT playlist, as for a copied video track. */
+                    /** @description `complete` when every segment is listed and the playlist is closed — written up front for encoded video, or ffmpeg's own once a copy finished within the wait; `growing` when a copied video track's playlist was still being written. */
                     "X-LANcast-Playlist"?: "complete" | "growing";
                     [name: string]: unknown;
                 };

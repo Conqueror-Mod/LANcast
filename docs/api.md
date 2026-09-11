@@ -2524,9 +2524,11 @@ served only once ffmpeg has finished writing it. The listed durations are close
 estimates (6.006s at 23.976fps, from the GOP the encode uses), not frame counts;
 fragments carry their own timestamps.
 
-A copied video track keeps ffmpeg's own **growing** `EVENT` playlist, because
-its cuts fall on the source's keyframes and cannot be listed in advance. Poll it
-as HLS describes.
+A copied video track keeps ffmpeg's own `EVENT` playlist, because its cuts fall
+on the source's keyframes and cannot be listed in advance. **The response waits
+up to twenty seconds for that playlist to finish** — a remux usually writes the
+whole file in seconds — and serves it closed with `#EXT-X-ENDLIST` when it does.
+Past the wait it is served **growing**; poll it as HLS describes.
 
 The response says which it is in `X-LANcast-Playlist: complete | growing`. It
 exists because an engine can play one and refuse the other — WebView2 treats a

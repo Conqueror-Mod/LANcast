@@ -217,3 +217,29 @@ moved to `-4`, because every refusal recorded before was of the growing kind.
 from a shell with the same encoder and tone-map filters. Delivery is not GPU
 work, but the encode feeding it is, so the check that counts is still a playback
 in the installed client against the installed service.
+
+## Amendment — 2026-09-11 (later): the playback that counted, and what it found
+
+**Playing it as the service found a second fault that no experiment could.** On
+v0.9.13 the encoded film got `playlist=complete`, and ffmpeg ended 2.5 seconds
+later with an empty reason. `startHLS` built ffmpeg on the playlist request's
+context, and Go cancels that context when the handler returns, which is the
+moment the playlist has been sent. Every segmented session had died after one
+segment. The harness ran ffmpeg itself, so it never went through the handler.
+v0.9.14 detaches the session. The Fifth Element then played continuously on the
+new path, 47 segments in two minutes, with no fallback.
+
+**A copied video track then played, but restarted every forty seconds.** It's
+Always Sunny S16E01 (`video=copy audio=copy`, growing playlist) produced a new
+session every 36–45 seconds, each delivering the same ~52 MB. The client's
+engine plays a growing playlist as far as its first fetch listed and fires
+`ended`, and the client's cut-stream recovery restarts from there. The remux
+had meanwhile written the remaining twenty minutes, 205 segments, and
+`ENDLIST` in **three seconds**.
+
+**So a copied session's playlist waits for ffmpeg to finish it**, up to twenty
+seconds, and is served finished (`X-LANcast-Playlist: complete`). A finished
+playlist is one that engine plays. Past the wait it goes out growing, as
+before, and a log line says so. That answers "that remains open" above for any
+remux that completes in time. A remux slow enough to miss the wait, such as a
+long film over a slow network share, still restarts.

@@ -103,9 +103,21 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 
 	prefix := "/api/stream/" + itoa64(it.ID) + "/hls/" + sess.ID + "/"
 	var body string
-	if sess.Complete() {
+	complete := sess.Complete()
+	if complete {
 		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix)
 	} else {
+		/*
+		 * A copied video track cannot be listed in advance, but a remux is fast
+		 * enough that it usually does not need to be: wait a little for ffmpeg to
+		 * finish its own playlist, and serve that finished (see WaitForEndlist).
+		 * Past the wait it goes out growing, as before.
+		 */
+		complete = s.trans.WaitForEndlist(r.Context(), sess, remuxPlaylistWait)
+		if !complete {
+			s.log.Info("hls playlist served growing: the remux did not finish in time",
+				"item", it.ID, "session", sess.ID, "waited", remuxPlaylistWait)
+		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			s.writeInternal(w, err, "read playlist")
@@ -114,8 +126,20 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		// ffmpeg writes bare filenames; rewrite them to this session's endpoints.
 		body = rewritePlaylist(string(raw), prefix)
 	}
-	writePlaylist(w, sess.Complete(), body)
+	writePlaylist(w, complete, body)
 }
+
+/*
+ * remuxPlaylistWait is how long the playlist route waits for a copied session's
+ * playlist to finish before serving it growing.
+ *
+ * The measured remux wrote twenty minutes of a 1080p episode in three seconds,
+ * so twenty seconds covers a two-hour film at the same rate with room for a
+ * slower disk. It is a wait on the first response only — a seek re-requests and
+ * waits again for the shorter remainder — and a start that takes that long is
+ * still cheaper than a reload every forty seconds.
+ */
+const remuxPlaylistWait = 20 * time.Second
 
 /*
  * PlaylistKindHeader says whether a playlist was listed whole or is growing.
