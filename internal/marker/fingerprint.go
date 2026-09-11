@@ -158,9 +158,14 @@ func FingerprintPhases(samples []float64) [][]uint32 {
  * grids lines up, not that both are enumerated.
  */
 func BestCommonRun(aPhases [][]uint32, b []uint32, maxTol int) Match {
+	return BestCommonRunBridging(aPhases, b, maxTol, 0)
+}
+
+// BestCommonRunBridging is BestCommonRun with CommonRunBridging's gap allowance.
+func BestCommonRunBridging(aPhases [][]uint32, b []uint32, maxTol, maxGap int) Match {
 	best := Match{}
 	for _, a := range aPhases {
-		if m := CommonRun(a, b, maxTol); m.Frames > best.Frames {
+		if m := CommonRunBridging(a, b, maxTol, maxGap); m.Frames > best.Frames {
 			best = m
 		}
 	}
@@ -250,8 +255,86 @@ func Seconds(frames int) float64 {
  * matches silence everywhere.
  */
 func CommonRun(a, b []uint32, maxTol int) Match {
-	if len(a) == 0 || len(b) == 0 {
+	return CommonRunBridging(a, b, maxTol, 0)
+}
+
+/*
+ * CommonRunBridging is CommonRun with a run allowed to cross up to maxGap
+ * consecutive frames that disagree.
+ *
+ * A title sequence is not heard alone. A door slam, a line of dialogue over
+ * the titles, a network sting — any one frame over the tolerance ended the run
+ * there, and a thirty-second intro came back as pieces. Measured on real
+ * episodes with the shipping comparison: Black Books S1E01 matched its four
+ * siblings at 23.4, 15.1, 24.9 and 28.2 seconds starting at 4, 3, 2 and 0 — and
+ * at 30.7, 29.0, 30.3 and 30.7 seconds all starting at 0 when half a second of
+ * disagreement was bridged. The starts were not noise in the intro; they were
+ * wherever the first uninterrupted piece happened to begin.
+ *
+ * The gap is not counted as agreement: the run is measured from its first
+ * agreeing frame to its last, and a trailing gap is not included, so a run
+ * cannot grow by bridging into what follows it.
+ */
+func CommonRunBridging(a, b []uint32, maxTol, maxGap int) Match {
+	offset, ok := bestAlignment(a, b)
+	if !ok {
 		return Match{}
+	}
+
+	best := Match{}
+	start, last, gap, bits, agreed := -1, -1, 0, 0, 0
+	flush := func() {
+		if start >= 0 {
+			if n := last - start + 1; n > best.Frames {
+				best = Match{
+					OffsetA: start + offset,
+					OffsetB: start,
+					Frames:  n,
+					Score:   float64(bits) / float64(agreed),
+				}
+			}
+		}
+		start, last, gap, bits, agreed = -1, -1, 0, 0, 0
+	}
+	for j := 0; j < len(b); j++ {
+		i := j + offset
+		d := -1
+		if i >= 0 && i < len(a) {
+			d = hamming(a[i], b[j])
+		}
+		if d >= 0 && d <= maxTol {
+			if start < 0 {
+				start = j
+			}
+			last, gap = j, 0
+			bits += d
+			agreed++
+			continue
+		}
+		if start < 0 {
+			continue
+		}
+		// Off the end of A is not a gap to bridge: nothing is there.
+		if gap++; d < 0 || gap > maxGap {
+			flush()
+		}
+	}
+	flush()
+	return best
+}
+
+/*
+ * bestAlignment finds the offset between two fingerprints that the most exact
+ * frame matches support.
+ *
+ * Every frame of B that matches a frame of A casts a vote for the offset
+ * between them; a genuinely shared passage puts hundreds of votes on one offset
+ * while coincidental matches scatter. Ties go to the smaller offset, so the
+ * answer does not depend on map iteration order.
+ */
+func bestAlignment(a, b []uint32) (int, bool) {
+	if len(a) == 0 || len(b) == 0 {
+		return 0, false
 	}
 	// Index A by exact hash. Exact here is deliberate — the tolerance is spent
 	// on measuring the run, not on finding the alignment, or every offset
@@ -268,47 +351,14 @@ func CommonRun(a, b []uint32, maxTol int) Match {
 		}
 	}
 	if len(votes) == 0 {
-		return Match{}
+		return 0, false
 	}
 
 	bestOffset, bestVotes := 0, 0
 	for off, n := range votes {
-		if n > bestVotes {
+		if n > bestVotes || (n == bestVotes && off < bestOffset) {
 			bestOffset, bestVotes = off, n
 		}
 	}
-
-	// Walk the aligned pair and take the longest agreeing stretch.
-	best := Match{}
-	runStart, runBits, runLen := -1, 0, 0
-	flush := func(end int) {
-		if runStart >= 0 && runLen > best.Frames {
-			best = Match{
-				OffsetA: runStart + bestOffset,
-				OffsetB: runStart,
-				Frames:  runLen,
-				Score:   float64(runBits) / float64(runLen),
-			}
-		}
-		_ = end
-		runStart, runBits, runLen = -1, 0, 0
-	}
-	for j := 0; j < len(b); j++ {
-		i := j + bestOffset
-		if i < 0 || i >= len(a) {
-			flush(j)
-			continue
-		}
-		if d := hamming(a[i], b[j]); d <= maxTol {
-			if runStart < 0 {
-				runStart = j
-			}
-			runBits += d
-			runLen++
-		} else {
-			flush(j)
-		}
-	}
-	flush(len(b))
-	return best
+	return bestOffset, true
 }
