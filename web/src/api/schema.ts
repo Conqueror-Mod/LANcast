@@ -2437,6 +2437,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/markers/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue one item to be looked at again
+         * @description Administrators only.
+         *
+         *     `queued` is `0` when there was nothing to re-ask: not yet examined, already queued, missing from disk, or no file. The library-wide refresh decodes every film's tail, which is the wrong price for repairing one wrong answer.
+         */
+        post: operations["refreshItemMarkers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/markers/refresh": {
         parameters: {
             query?: never;
@@ -9307,6 +9332,50 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    refreshItemMarkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were queued: 0 or 1. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkerRefreshResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description `detect_markers` is off. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description ffmpeg is not installed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     refreshMarkers: {

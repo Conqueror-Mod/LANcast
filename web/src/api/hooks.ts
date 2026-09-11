@@ -544,6 +544,25 @@ export function useRefreshPreview(
 }
 
 /**
+ * Look for one film's credits again.
+ *
+ * The only way back for a single wrong answer used to be re-asking the whole
+ * library — a decode of every film's tail — and a shutdown had retired two films
+ * as "unreadable" before that was fixed.
+ */
+export function useRedetectCredits(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ queued: number }>(`/api/items/${id}/markers/refresh`, {}),
+    onSuccess: () => {
+      // The pass runs in the background; activity is what shows it working.
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+}
+
+/**
  * Ask the provider again about one title, and everything under it.
  *
  * The endpoint has existed since metadata did and **nothing in this client ever

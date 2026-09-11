@@ -65,6 +65,49 @@ func (s *Server) markerStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
+ * refreshItemMarkers queues one item to be looked at again.
+ *
+ * The library-wide refresh was the only way back for a single wrong answer, and
+ * it decodes every film's tail to fix one row. A shutdown had retired two films
+ * as "unreadable" before that bug was fixed, and nothing short of re-asking the
+ * whole library could return them.
+ *
+ * Same refusals as the library-wide version, for the same reasons.
+ */
+func (s *Server) refreshItemMarkers(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	if s.markers == nil || !s.markers.Available() {
+		writeError(w, http.StatusServiceUnavailable, "unavailable",
+			"ffmpeg is not installed, so credits cannot be detected")
+		return
+	}
+	if !s.settings.Get().DetectMarkers {
+		writeError(w, http.StatusConflict, "conflict",
+			"credits detection is off; turn it on in settings first")
+		return
+	}
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err,
+		"get item", "no such item") {
+		return
+	}
+
+	queued, err := s.st.ClearMarkersFor(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "queue item marker refresh")
+		return
+	}
+	if queued > 0 && s.detectMarkers != nil {
+		s.detectMarkers()
+	}
+	s.log.Info("marker refresh queued", "item", id, "items", queued)
+	writeJSON(w, http.StatusOK, map[string]any{"queued": queued})
+}
+
+/*
  * refreshMarkers queues every examined item to be looked at again.
  *
  * Admin-only and explicit, like re-probing and for a stronger reason: this is

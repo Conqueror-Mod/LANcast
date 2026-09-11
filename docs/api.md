@@ -1935,6 +1935,22 @@ found. They are separate because "switched off" and "ffmpeg missing" are
 different answers and a client that conflates them cannot tell somebody how to
 fix it.
 
+### `POST /api/items/{id}/markers/refresh`
+
+Queues **one** item to be looked at again, and starts a pass. Admin only.
+
+```json
+{ "queued": 1 }
+```
+
+`queued` is `0` when there was nothing to re-ask: the item has not been examined
+yet, is already queued, is missing from disk, or has no file. The library-wide
+refresh below decodes every film's tail — about forty-five seconds each — which
+is the wrong price for repairing one wrong answer.
+
+Returns `404` for an item that does not exist, and the same `503` and `409` as
+the library-wide refresh.
+
 ### `POST /api/markers/refresh`
 
 Queues every examined item to be looked at again, and starts a pass. Admin only.
