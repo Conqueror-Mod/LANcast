@@ -38,6 +38,11 @@ import {
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
+import {
+  noteHLSIncident,
+  noteHLSPlaylistServed,
+  readIncident,
+} from "./hlsIncident";
 import { popoutSupported, openPopout, moveElement } from "./popout";
 import { PopoutPlayer } from "./PopoutPlayer";
 
@@ -1980,6 +1985,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 chosenPath.current === "hls" &&
                 isUnsupportedSource(e.currentTarget.error)
               ) {
+                /*
+                 * Write down *why*, before doing anything about it.
+                 *
+                 * The element is holding `MediaError.message` at this instant
+                 * and nothing else in the system will ever see it. Keeping only
+                 * `code === 4` is keeping the one fact that distinguishes
+                 * nothing, since the element reports 4 for "this is not media"
+                 * and for "I could not fetch the media" alike — and chasing
+                 * that ambiguity meant eliminating the playlist, the encoder,
+                 * the declared level, the MIME types and the URL rewrite from
+                 * outside the application, all of which came back clean.
+                 */
+                const incidentClock = Date.now();
+                noteHLSIncident(
+                  readIncident(e.currentTarget, offset.current, incidentClock),
+                );
                 void playlistWasServed(
                   sourceURL(
                     itemID,
@@ -1990,6 +2011,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                     "hls",
                   ),
                 ).then((served) => {
+                  // The probe's answer belongs to the incident above, and is
+                  // kept whichever way it goes — "the server refused" is as
+                  // much of a diagnosis as "the engine refused", and the panel
+                  // should not have to guess which.
+                  noteHLSPlaylistServed(incidentClock, served);
                   // Only a playlist that arrived and was still refused says
                   // anything about this engine. Anything else is the server or
                   // the moment, and is not remembered.
