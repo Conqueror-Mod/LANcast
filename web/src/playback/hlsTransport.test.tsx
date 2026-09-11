@@ -69,10 +69,17 @@ let canPlay = "maybe";
  */
 let playlistServed = true;
 
+/*
+ * Which kind of playlist the server says it served — "complete", "growing", or
+ * undefined for a server too old to say.
+ */
+let playlistKind: string | undefined;
+
 beforeEach(() => {
   sources = [];
   canPlay = "maybe";
   playlistServed = true;
+  playlistKind = undefined;
   localStorage.clear();
   /*
    * readDevice keeps a module-level cache that outlives clearing localStorage,
@@ -115,7 +122,10 @@ beforeEach(() => {
         return playlistServed
           ? new Response("#EXTM3U", {
               status: 200,
-              headers: { "Content-Type": "application/vnd.apple.mpegurl" },
+              headers: {
+                "Content-Type": "application/vnd.apple.mpegurl",
+                ...(playlistKind ? { "X-LANcast-Playlist": playlistKind } : {}),
+              },
             })
           : new Response(JSON.stringify({ error: { code: "unavailable" } }), {
               status: 503,
@@ -249,6 +259,43 @@ describe("delivering a conversion", () => {
     await failWith(4);
     await settle();
     expect(localStorage.getItem(HLS_VERDICT_KEY)).not.toContain("refused");
+  });
+
+  /*
+   * A refused growing playlist is not held against the device.
+   *
+   * WebView2 refuses the growing playlist a copied video track still gets, and
+   * plays the complete one an encoded film now gets. Counting the first kind
+   * let three copied films settle the device as unable to play playlists —
+   * after which no encoded film would be offered the playlist that works.
+   */
+  it("does not count a refused growing playlist against the device", async () => {
+    playlistKind = "growing";
+    await render();
+    for (const id of [1, 2, 3]) {
+      await act(async () => {
+        pb.play(id, [id]);
+      });
+      await settle();
+      await failWith(4);
+      await settle();
+    }
+    expect(localStorage.getItem(HLS_VERDICT_KEY) ?? "").not.toContain("refused");
+
+    await act(async () => {
+      pb.play(4, [4]);
+    });
+    await settle();
+    expect(streams()[streams().length - 1]).toContain("/hls/index.m3u8");
+  });
+
+  // The complete kind is the one whose refusal is evidence about the engine.
+  it("still counts a refused complete playlist", async () => {
+    playlistKind = "complete";
+    await start();
+    await failWith(4);
+    await settle();
+    expect(localStorage.getItem(HLS_VERDICT_KEY)).toContain("refused");
   });
 
   // The fallback still happens either way: it is right for this playback

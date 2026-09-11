@@ -52,7 +52,7 @@ import {
   filePath,
   hlsWorthTrying,
   isUnsupportedSource,
-  playlistWasServed,
+  probePlaylist,
   rememberHLS,
   type FilePath,
 } from "./fileTransport";
@@ -2038,7 +2038,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                     item?.title ?? "",
                   ),
                 );
-                void playlistWasServed(
+                void probePlaylist(
                   sourceURL(
                     itemID,
                     decision.current.method,
@@ -2047,7 +2047,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                     qualityRef.current,
                     "hls",
                   ),
-                ).then((served) => {
+                ).then(({ served, growing }) => {
                   // The probe's answer belongs to the incident above, and is
                   // kept whichever way it goes — "the server refused" is as
                   // much of a diagnosis as "the engine refused", and the panel
@@ -2055,8 +2055,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                   noteHLSPlaylistServed(incidentClock, served);
                   // Only a playlist that arrived and was still refused says
                   // anything about this engine. Anything else is the server or
-                  // the moment, and is not remembered.
-                  if (served) rememberHLS("refused");
+                  // the moment, and is not remembered — and neither is a
+                  // growing playlist, which WebView2 refuses where it plays a
+                  // complete one (see probePlaylist).
+                  if (served && !growing) rememberHLS("refused");
                 });
                 const v = e.currentTarget;
                 chosenPath.current = "progressive";

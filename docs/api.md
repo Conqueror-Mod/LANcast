@@ -2516,6 +2516,24 @@ The same transcode as an HLS playlist with fMP4 segments, for clients that
 speak HLS. Takes the same `?t=`, `?audio=` and `?profile=` parameters. Segment
 URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
 
+**When video is encoded, the playlist is complete from the first response.**
+Every segment of what remains after `?t=` is listed, marked `VOD` and closed
+with `#EXT-X-ENDLIST`, before most of them exist. Segments the encode has not
+reached are waited for when requested — up to sixty seconds — and a segment is
+served only once ffmpeg has finished writing it. The listed durations are close
+estimates (6.006s at 23.976fps, from the GOP the encode uses), not frame counts;
+fragments carry their own timestamps.
+
+A copied video track keeps ffmpeg's own **growing** `EVENT` playlist, because
+its cuts fall on the source's keyframes and cannot be listed in advance. Poll it
+as HLS describes.
+
+The response says which it is in `X-LANcast-Playlist: complete | growing`. It
+exists because an engine can play one and refuse the other — WebView2 treats a
+growing playlist as live, reloads it straight after the first segment, and fails
+when it has not grown — so a client that remembers refusals should not count a
+refused growing playlist against the device.
+
 ### `GET /api/transcode`
 
 Lists running transcode sessions, and whether ffmpeg is available.

@@ -576,14 +576,20 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 		return nil, err
 	}
 	s.ID, s.ItemID, s.Owner = id, itemID, owner
+	s.MediaSeconds, s.SegmentLength, _ = completeFor(o)
 
 	m.mu.Lock()
 	m.sessions[id] = s
 	m.mu.Unlock()
 
+	playlist := "growing"
+	if s.Complete() {
+		playlist = "complete"
+	}
 	m.log.Info("transcode started", "session", id, "item", itemID,
 		"output", "hls", "start_at", o.StartAt,
 		"video", o.Decision.VideoAction, "audio", o.Decision.AudioAction,
+		"playlist", playlist, "segment_seconds", s.SegmentLength,
 		"reason", o.Decision.Reason)
 
 	return s, nil

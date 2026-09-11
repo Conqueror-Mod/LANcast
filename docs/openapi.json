@@ -1509,7 +1509,7 @@
           "playback"
         ],
         "summary": "The same transcode as an HLS playlist with fMP4 segments",
-        "description": "For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.\n\n**This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.",
+        "description": "For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.\n\n**When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's growing `EVENT` playlist. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.\n\n**This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Profile"
@@ -1533,6 +1533,18 @@
         "responses": {
           "200": {
             "description": "The playlist.",
+            "headers": {
+              "X-LANcast-Playlist": {
+                "description": "`complete` when every segment is listed up front and the playlist is closed; `growing` when it is ffmpeg's own EVENT playlist, as for a copied video track.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "complete",
+                    "growing"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/vnd.apple.mpegurl": {
                 "schema": {

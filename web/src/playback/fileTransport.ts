@@ -73,8 +73,12 @@ export type HLSVerdict = "unknown" | "playable" | "refused";
  * Bumping the key is how those devices get a second opinion. A verdict written
  * under the old rules is not worth migrating — it was reached by a test that
  * could not tell those failures apart — so it is left behind rather than read.
+ *
+ * -4: every refusal recorded under -3 was of a growing playlist, which WebView2
+ * cannot play, from a server that had never offered the complete kind it can.
+ * Devices settled on "refused" that way were answering a different question.
  */
-export const HLS_VERDICT_KEY = "lancast:hls-playable-3";
+export const HLS_VERDICT_KEY = "lancast:hls-playable-4";
 
 /**
  * What this device has been observed to do, and how sure we are.
@@ -281,16 +285,48 @@ export async function playlistWasServed(
   url: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<boolean | null> {
+  return (await probePlaylist(url, fetchImpl)).served;
+}
+
+/** What asking the playlist endpoint directly found. */
+export interface PlaylistProbe {
+  /** As playlistWasServed: true, false for a server failure, null for no answer. */
+  served: boolean | null;
+  /**
+   * The server said the playlist was still growing.
+   *
+   * WebView2 cannot play a growing playlist and plays a complete one — it
+   * reloads a growing one straight after the first segment and fails when it
+   * has not grown. The server lists an encoded film whole, and still hands a
+   * copied video track the growing kind. So refusing a growing playlist is a
+   * fact about that playlist, not about the device, and counting it would
+   * let three copied films retire the path for every encoded film that plays.
+   *
+   * A server that does not say is treated as it always was.
+   */
+  growing: boolean;
+}
+
+export async function probePlaylist(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<PlaylistProbe> {
   try {
     const res = await fetchImpl(url, { headers: { Accept: HLS_MIME } });
-    if (!res.ok) return false;
+    if (!res.ok) return { served: false, growing: false };
     const type = res.headers.get("content-type") ?? "";
     // A body that is not a playlist is a server saying something else — an
     // error page, a login redirect — and is not evidence about the engine.
-    return type.includes("mpegurl");
+    return {
+      served: type.includes("mpegurl"),
+      growing: res.headers.get(PLAYLIST_KIND_HEADER) === "growing",
+    };
   } catch {
     // The request could not be made at all. That is this moment, not this
     // device.
-    return null;
+    return { served: null, growing: false };
   }
 }
+
+/** The response header that says whether a playlist is complete or growing. */
+export const PLAYLIST_KIND_HEADER = "X-LANcast-Playlist";
