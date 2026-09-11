@@ -61,6 +61,8 @@ func main() {
 	seconds := flag.Int("seconds", 90, "how long to let it run")
 	keep := flag.Bool("keep", false, "keep the output directory for inspection")
 	control := flag.Bool("control", false, "swap the playlist type for the other one, to isolate the cause")
+	videoAction := flag.String("video", "copy", "file only: copy or encode the video")
+	audioAction := flag.String("audio", "encode", "file only: copy or encode the audio")
 	flag.Parse()
 
 	if (*url == "") == (*file == "") {
@@ -71,13 +73,13 @@ func main() {
 	if *file != "" {
 		source, live = *file, false
 	}
-	if err := run(source, live, *seconds, *keep, *control); err != nil {
+	if err := run(source, live, *seconds, *keep, *control, *videoAction, *audioAction); err != nil {
 		fmt.Fprintln(os.Stderr, "FAILED:", err)
 		os.Exit(1)
 	}
 }
 
-func run(source string, live bool, seconds int, keep, control bool) error {
+func run(source string, live bool, seconds int, keep, control bool, videoAction, audioAction string) error {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return fmt.Errorf("ffmpeg not on PATH: %w", err)
@@ -116,10 +118,30 @@ func run(source string, live bool, seconds int, keep, control bool) error {
 		Decision:   probe.Decision{VideoAction: "copy", AudioAction: "copy"},
 	}
 	if !live {
+		/*
+		 * The decision is a flag, because the hardcoded one was the exact
+		 * inverse of what the server does to the file that fails.
+		 *
+		 * This copied the video and encoded the audio, on the reasoning that an
+		 * unsupported audio track is the usual reason a film is converted. For
+		 * an HEVC episode the server does the opposite — `video=encode
+		 * audio=copy`, because the *video* is what the element cannot read —
+		 * and the harness's own header warns about an instrument that can only
+		 * be pointed at half the problem. It was still true of this one: it
+		 * produced an HEVC playlist, which no browser element can play,
+		 * and called the result PASS.
+		 */
 		opts.Decision = probe.Decision{
-			Method: probe.Transcode, VideoAction: "copy", AudioAction: "encode",
+			Method:      probe.Transcode,
+			VideoAction: videoAction,
+			AudioAction: audioAction,
 		}
 		opts.AudioBitrate, opts.AudioChannels = 192, 2
+		if videoAction == "encode" {
+			// The encoder the running server chose for itself. Naming it rather
+			// than letting ffmpeg pick is the rule the DXVA2 release taught.
+			opts.Encoder = transcode.Software
+		}
 	}
 	/*
 	 * The args are printed because they are half the point of the harness —
