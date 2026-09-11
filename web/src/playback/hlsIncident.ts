@@ -57,6 +57,18 @@ export interface HLSIncident {
   buffered: number;
   /** Where playback was being started from, seconds. */
   at: number;
+  /**
+   * Which item it happened to.
+   *
+   * The record outlives the playback it describes — deliberately, so a panel
+   * opened minutes later still finds it — which means it can be read against a
+   * *different* title and taken for that one's. Seen immediately: a film and an
+   * episode both fell back near 1300 seconds, and the panel could not say which
+   * of them the line was about.
+   */
+  itemID: number;
+  /** The title, for a line a person can read without knowing item ids. */
+  title: string;
   /** Wall clock, ms. */
   clock: number;
   /**
@@ -123,8 +135,13 @@ export function describeIncident(i: HLSIncident): string[] {
           ? "playlist served"
           : "playlist refused";
 
+  // The title leads, because the record outlives its playback and a line that
+  // does not name what it is about is a line that will eventually be read
+  // against the wrong thing.
+  const what = i.title ? `${i.title} — ` : `item ${i.itemID} — `;
+
   return [
-    `Segments abandoned at ${i.at.toFixed(0)}s · code ${i.code} · ${
+    `${what}segments abandoned at ${i.at.toFixed(0)}s · code ${i.code} · ${
       i.message || "no message"
     }`,
     `ready ${i.readyState} · network ${i.networkState} · buffered ${i.buffered.toFixed(
@@ -144,6 +161,8 @@ export function readIncident(
   v: HTMLVideoElement,
   at: number,
   clock: number,
+  itemID: number,
+  title: string,
 ): HLSIncident {
   const e = v.error;
   let buffered = 0;
@@ -163,5 +182,7 @@ export function readIncident(
     buffered,
     at,
     clock,
+    itemID,
+    title,
   };
 }

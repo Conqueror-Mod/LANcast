@@ -33,6 +33,8 @@ function incident(over: Partial<HLSIncident> = {}): HLSIncident {
     buffered: 0,
     at: 1024,
     clock: 1000,
+    itemID: 7058,
+    title: "The Fifth Element",
     ...over,
   };
 }
@@ -92,7 +94,7 @@ describe("reading the element", () => {
   }
 
   it("takes the code, the message and the state together", () => {
-    const i = readIncident(element({}), 481, 99);
+    const i = readIncident(element({}), 481, 99, 37106, "An Episode");
     expect(i.code).toBe(4);
     expect(i.message).toBe("DEMUXER_ERROR_NO_SUPPORTED_STREAMS");
     expect(i.readyState).toBe(1);
@@ -105,13 +107,13 @@ describe("reading the element", () => {
   // guess here would be the same mistake as the text that used to say the
   // server was probably busy.
   it("records an absent message as absent rather than inventing one", () => {
-    const i = readIncident(element({ error: { code: 4, message: "" } }), 0, 1);
+    const i = readIncident(element({ error: { code: 4, message: "" } }), 0, 1, 37106, "An Episode");
     expect(i.message).toBe("");
     expect(describeIncident(i)[0]).toContain("no message");
   });
 
   it("survives an element with no error object at all", () => {
-    const i = readIncident(element({ error: null }), 0, 1);
+    const i = readIncident(element({ error: null }), 0, 1, 37106, "An Episode");
     expect(i.code).toBe(0);
     expect(i.message).toBe("");
   });
@@ -127,12 +129,18 @@ describe("reading the element", () => {
         },
       },
     });
-    expect(() => readIncident(v, 0, 1)).not.toThrow();
-    expect(readIncident(v, 0, 1).buffered).toBe(0);
+    expect(() => readIncident(v, 0, 1, 37106, "An Episode")).not.toThrow();
+    expect(readIncident(v, 0, 1, 37106, "An Episode").buffered).toBe(0);
   });
 
   it("reports nothing buffered as zero rather than as missing", () => {
-    const i = readIncident(element({ buffered: { length: 0, end: () => 0 } }), 0, 1);
+    const i = readIncident(
+      element({ buffered: { length: 0, end: () => 0 } }),
+      0,
+      1,
+      37106,
+      "An Episode",
+    );
     expect(i.buffered).toBe(0);
   });
 });
@@ -177,5 +185,40 @@ describe("what it reads like on screen", () => {
     expect(
       describeIncident(incident({ playlistServed: false }))[1],
     ).toContain("playlist refused");
+  });
+});
+
+/*
+ * The record says what it is about.
+ *
+ * It outlives the playback it describes on purpose, so a panel opened minutes
+ * later still finds it — and that is exactly why it has to name its subject. A
+ * film and an episode both fell back near 1300 seconds within a minute of each
+ * other, and the line could not say which of them it meant.
+ */
+describe("which title it happened to", () => {
+  it("names the title first, before the numbers", () => {
+    const [first] = describeIncident(incident());
+    expect(first.startsWith("The Fifth Element — ")).toBe(true);
+  });
+
+  // A title is not always in hand — a fallback can happen before the item
+  // payload has arrived — and an id is still better than an anonymous line.
+  it("falls back to the item id rather than saying nothing", () => {
+    const [first] = describeIncident(incident({ title: "" }));
+    expect(first).toContain("item 7058");
+  });
+
+  it("carries the item through the reading", () => {
+    const v = {
+      error: { code: 4, message: "x" },
+      readyState: 4,
+      networkState: 3,
+      buffered: { length: 0, end: () => 0 },
+    } as unknown as HTMLVideoElement;
+
+    const i = readIncident(v, 1302, 5, 7058, "The Fifth Element");
+    expect(i.itemID).toBe(7058);
+    expect(i.title).toBe("The Fifth Element");
   });
 });

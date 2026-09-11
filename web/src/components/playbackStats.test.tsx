@@ -150,6 +150,8 @@ describe("why the segmented path was abandoned", () => {
       buffered: 0,
       at: 1024,
       clock: 1,
+      itemID: 7058,
+      title: "The Fifth Element",
     });
     render(stubVideo(() => ({ dropped: 0, total: 100 })));
     act(() => vi.advanceTimersByTime(1100));
@@ -185,6 +187,8 @@ describe("why the segmented path was abandoned", () => {
       buffered: 6,
       at: 0,
       clock: 2,
+      itemID: 37106,
+      title: "An Episode",
     });
     act(() => vi.advanceTimersByTime(1100));
 
