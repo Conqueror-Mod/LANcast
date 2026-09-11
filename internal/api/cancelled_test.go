@@ -38,6 +38,25 @@ func TestACancelledRequestIsNotAServerError(t *testing.T) {
 	}
 }
 
+/*
+ * The one call site that logged cancellation at ERROR by itself.
+ *
+ * `secured` asks whether an account exists and wrote any failure straight to
+ * ERROR, bypassing writeInternal — the last source of the noise, still arriving
+ * after the rest had been demoted. Demoting it must not change the answer: on
+ * any failure it has to say "secured", or a caller that hangs up mid-request
+ * would briefly read an unsecured server into existence.
+ */
+func TestSecuredFailsClosedWhenTheCallerLeaves(t *testing.T) {
+	h := newHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if !h.srvAPI.secured(ctx) {
+		t.Error("a cancelled request made the server report itself unsecured")
+	}
+}
+
 // A real failure still is one. This is the half that stops the fix from
 // silencing the thing the log exists for.
 func TestARealFailureStillReportsFiveHundred(t *testing.T) {

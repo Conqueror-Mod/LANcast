@@ -129,6 +129,31 @@ func TestAPresentButUnreadableFileIsStampedOnce(t *testing.T) {
 	}
 }
 
+/*
+ * A scan the server cancelled says nothing about the file.
+ *
+ * A shutdown mid-pass killed ffmpeg on a present file, and it was stamped as
+ * unreadable and never asked again. The stub store ignores the context, so the
+ * stamp would land here exactly as it did when the real transaction won the
+ * race with cancellation.
+ */
+func TestAScanCancelledByShutdownIsNotStamped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fine.mkv")
+	if err := os.WriteFile(path, []byte("a perfectly good film"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w, st := failingWorker(t, path)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	dur := int64(6_000_000)
+	w.examine(ctx, store.Item{ID: 44, Path: path, DurationMS: &dur})
+
+	if _, ok := st.saved[44]; ok {
+		t.Error("a scan stopped by shutdown retired the film for good")
+	}
+}
+
 func TestAnUnreachableFileIsNotStamped(t *testing.T) {
 	// No file at that path at all: an unmounted drive, not a damaged file.
 	w, st := failingWorker(t, "")
