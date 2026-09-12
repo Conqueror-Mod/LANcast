@@ -1,6 +1,6 @@
 # ADR 0066 — A game belongs to the machine it is installed on
 
-Date: 2026-09-11 · Status: **proposed**
+Date: 2026-09-11 · Status: **accepted** 2026-09-12
 
 Extends [ADR 0022](0022-client-and-server-executables.md) (the client and server
 are separate executables). Keeps [ADR 0002](0002-one-wide-media-item-table.md)
@@ -173,8 +173,8 @@ readers with none on disk. Owned-but-not-installed games. Playtime.
 
 ## Amendment, 2026-09-12 — which display a game opens on
 
-Status: **proposed**. Extends this ADR rather than superseding it; everything
-above still stands.
+Status: **accepted** 2026-09-12. Extends this ADR rather than superseding it;
+everything above still stands.
 
 ### Why this needs an amendment at all
 
