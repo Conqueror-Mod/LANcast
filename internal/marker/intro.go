@@ -60,6 +60,35 @@ const (
 	 * rule.
 	 */
 	IntroStartSlack = 5.0
+	/*
+	 * IntroStrongMinSeconds, IntroStrongSlack and IntroStrongAgreed describe a
+	 * run so few comparisons need agree, because they agree so closely.
+	 *
+	 * The majority rule is right when the minority found *nothing*: three of
+	 * eight agreeing is three agreeing and five saying nothing. It is wrong when
+	 * the minority found something else and far too short to be an intro —
+	 * a network ident — because the ident never reaches the clustering step at
+	 * all, being under IntroMinSeconds, and so counts only against the episode.
+	 *
+	 * Sunny S15E02 is the case: 115s+20.6s, 115s+19.9s, 18s+3.9s, 18s+3.9s. Two
+	 * comparisons find the intro to within a second and the other two find a
+	 * four-second sting, which is 2 of 4 and no majority. Measured with introlab
+	 * across the library: TNG S4 11→24 of 25, DS9 S7 15→21 of 25, Sunny S14
+	 * 5→8 of 10, Futurama S5 12→15 of 16, Sunny S15 1→3 of 8, and *no* change
+	 * to Sunny S3, Black Books S1, The League S2, Voyager S4 or Cowboy Bebop,
+	 * nor to the seasons whose right answer is nothing: Storm of the Century,
+	 * The League S1, Silicon Valley S1.
+	 *
+	 * The guard is what keeps it honest. A one-second spread is five times
+	 * tighter than IntroStartSlack and twelve seconds is half again
+	 * IntroMinSeconds, so this cannot promote the scattered near-misses the
+	 * majority rule refuses for good reason. Raising the peer count instead was
+	 * measured and rejected: it dilutes the majority, and took Sunny S15 from
+	 * 1 to 0.
+	 */
+	IntroStrongMinSeconds = 12.0
+	IntroStrongSlack      = 1.0
+	IntroStrongAgreed     = 2
 )
 
 // Candidate is one episode's match against one other episode.
@@ -109,7 +138,98 @@ func IntroFrom(cands []Candidate) Intro {
 	 * what a shared network sting looks like. Every comparison agreeing on the
 	 * same start, at least three of them, is what a title card looks like.
 	 */
-	return introFrom(cands, IntroCardMinSeconds, true)
+	majority := introFrom(cands, IntroMinSeconds, false)
+	if in := introFrom(cands, IntroCardMinSeconds, true); in.Found {
+		return in
+	}
+	/*
+	 * Last: two comparisons that agree closely on a long run, where the rest
+	 * found something far too short to be an intro. See IntroStrongMinSeconds.
+	 */
+	if in := strongPair(cands); in.Found {
+		return in
+	}
+	/*
+	 * Refused — and the refusal keeps the best evidence there was.
+	 *
+	 * Agreed is reported even when nothing is written, so a season that nearly
+	 * answered can be told from one that shared nothing at all. Returning this
+	 * rule's own empty refusal threw that away: three of eight agreeing came
+	 * back as zero, which reads as "no two episodes share anything".
+	 */
+	return majority
+}
+
+/*
+ * strongPair accepts IntroStrongAgreed comparisons that begin within
+ * IntroStrongSlack of each other on a run of at least IntroStrongMinSeconds.
+ *
+ * The end is the median of the group's ends, as everywhere else here — which
+ * for exactly two is the later of them. An intro's end is the noisier
+ * quantity (a match runs on into whatever two episodes happen to share after
+ * the titles), so this can overstate where the titles stop. That is tolerable
+ * only because nothing skips on these markers: ADR 0055 stores evidence and
+ * offers no control. It would need revisiting before anything did.
+ */
+func strongPair(cands []Candidate) Intro {
+	strong := make([]Candidate, 0, len(cands))
+	for _, c := range cands {
+		if c.StartSec >= 0 && c.Len() >= IntroStrongMinSeconds && c.Len() <= IntroMaxSeconds {
+			strong = append(strong, c)
+		}
+	}
+	if len(strong) < IntroStrongAgreed {
+		return Intro{Compared: len(cands)}
+	}
+	/*
+	 * And they must still be half of what was compared.
+	 *
+	 * Without this the rule accepts two agreeing out of five, which
+	 * TestIntroRequiresAMajorityOfWhatWasCompared has refused since this ADR
+	 * was written, for the reason the majority rule exists: two files sharing
+	 * something is not a title sequence that recurs across a season. Closeness
+	 * does not make two out of five into evidence about a season — it is the
+	 * denominator that separates Sunny S15E02's two of four from it.
+	 *
+	 * It also means this rule cannot rescue an episode compared against six or
+	 * eight peers, which agrees with the measurement that raising the peer
+	 * count makes such seasons worse rather than better.
+	 */
+	if len(cands) > 2*IntroStrongAgreed {
+		return Intro{Compared: len(cands)}
+	}
+
+	sort.Slice(strong, func(i, j int) bool { return strong[i].StartSec < strong[j].StartSec })
+	bestAt, bestLen := 0, 0
+	for i := range strong {
+		j := i
+		for j < len(strong) && strong[j].StartSec-strong[i].StartSec <= IntroStrongSlack {
+			j++
+		}
+		if j-i > bestLen {
+			bestAt, bestLen = i, j-i
+		}
+	}
+	if bestLen < IntroStrongAgreed {
+		return Intro{Compared: len(cands), Agreed: bestLen}
+	}
+
+	group := strong[bestAt : bestAt+bestLen]
+	starts := make([]float64, len(group))
+	ends := make([]float64, len(group))
+	for i, c := range group {
+		starts[i], ends[i] = c.StartSec, c.EndSec
+	}
+	sort.Float64s(starts)
+	sort.Float64s(ends)
+	return Intro{
+		Found:      true,
+		StartSec:   starts[len(starts)/2],
+		EndSec:     ends[len(ends)/2],
+		Agreed:     bestLen,
+		Compared:   len(cands),
+		Confidence: float64(bestLen) / float64(len(cands)),
+	}
 }
 
 /*
@@ -123,6 +243,18 @@ func IntroFrom(cands []Candidate) Intro {
  * on its titles — because that goes through the majority rule, not this one.
  */
 const IntroCardEarliestSec = 2.0
+
+/*
+ * IntroFromRule is one rule on its own, for the instrument.
+ *
+ * introlab compares a proposed rule against the previous one, and calling
+ * IntroFrom for both makes every column measure the same thing the moment a
+ * change lands — which is how a before-and-after table came to be produced
+ * from five identical columns. Spelling the old rule out needs its parts.
+ */
+func IntroFromRule(cands []Candidate, minSeconds float64, unanimous bool) Intro {
+	return introFrom(cands, minSeconds, unanimous)
+}
 
 func introFrom(cands []Candidate, minSeconds float64, unanimous bool) Intro {
 	usable := make([]Candidate, 0, len(cands))
