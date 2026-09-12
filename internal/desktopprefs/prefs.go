@@ -61,6 +61,26 @@ type Prefs struct {
 	DevTools bool `json:"devtools"`
 
 	/*
+	 * Games lists this machine's installed Steam games in the window (ADR 0066).
+	 *
+	 * Off by default, and for a different reason from the two above. They are
+	 * off because surprising background behaviour is a bug; this is off because
+	 * a media server that starts reading which games somebody has installed
+	 * because it happened to find Steam has decided something about them that
+	 * they did not ask for. Finding it is not permission to show it.
+	 *
+	 * Here rather than in server settings for the reason the package comment
+	 * gives, and more sharply than anything else in this file: the games are on
+	 * *this* machine, the server has no games table, and the phone in the
+	 * kitchen could not launch one if it had it.
+	 *
+	 * The bindings check this too. A page that called them with the setting off
+	 * would be refused by the process, because "the page will not ask" is not a
+	 * boundary.
+	 */
+	Games bool `json:"games"`
+
+	/*
 	 * Window is where the window was when it last closed: which screen, and
 	 * where on it.
 	 *

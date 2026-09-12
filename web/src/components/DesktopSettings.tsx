@@ -22,6 +22,7 @@ declare global {
       closeToTray: boolean,
       openAtLogin: boolean,
       devTools: boolean,
+      games: boolean,
     ) => Promise<{ ok: boolean; error?: string }>;
   }
 }
@@ -30,6 +31,10 @@ interface DesktopState {
   close_to_tray: boolean;
   open_at_login: boolean;
   devtools: boolean;
+  // Whether this window lists the machine's installed games (ADR 0066). The
+  // Games tab is hidden on this, and the bindings refuse while it is off, so
+  // the page and the process cannot disagree about whether it is on.
+  games: boolean;
   // Whether this window started the server it is showing. Only the client
   // process knows: from the server's side, a window that launched it and a
   // window that attached to a running service look identical.
@@ -56,12 +61,18 @@ export function DesktopSettings() {
     closeToTray: boolean,
     openAtLogin: boolean,
     devTools: boolean,
+    games: boolean,
   ) => {
     if (!window.lancastDesktopSet) return;
     setSaving(true);
     setSaveError("");
     try {
-      const res = await window.lancastDesktopSet(closeToTray, openAtLogin, devTools);
+      const res = await window.lancastDesktopSet(
+        closeToTray,
+        openAtLogin,
+        devTools,
+        games,
+      );
       if (!res.ok) setSaveError(res.error ?? "could not be saved");
     } catch (e) {
       setSaveError(String(e));
@@ -121,7 +132,9 @@ export function DesktopSettings() {
         title="Close to tray"
         sub="Keep LANcast running in the notification area when you close the window. Quit from the tray to stop it."
         checked={state.close_to_tray}
-        onChange={(next) => save(next, state.open_at_login, state.devtools)}
+        onChange={(next) =>
+          save(next, state.open_at_login, state.devtools, state.games)
+        }
         busy={saving}
         error={saveError}
         reason="Takes effect the next time you open LANcast."
@@ -130,7 +143,9 @@ export function DesktopSettings() {
         title="Open when Windows starts"
         sub="Start LANcast automatically when you sign in."
         checked={state.open_at_login}
-        onChange={(next) => save(state.close_to_tray, next, state.devtools)}
+        onChange={(next) =>
+          save(state.close_to_tray, next, state.devtools, state.games)
+        }
         busy={saving}
         error={saveError}
       />
@@ -148,10 +163,34 @@ export function DesktopSettings() {
         title="Developer tools"
         sub="Open the web inspector alongside the window. For diagnosing the client itself."
         checked={state.devtools}
-        onChange={(next) => save(state.close_to_tray, state.open_at_login, next)}
+        onChange={(next) =>
+          save(state.close_to_tray, state.open_at_login, next, state.games)
+        }
         busy={saving}
         error={saveError}
         reason="Opens the next time you start LANcast."
+      />
+      {/*
+        Off by default, and off for a different reason from the options above.
+        They are off because surprising background behaviour is a bug; this is
+        off because a media server that started listing which games somebody has
+        installed, on the strength of having found Steam, would have decided
+        something about them they never asked for. Finding it is not permission
+        to show it.
+
+        Only offered in this window, because only this window can act on it: the
+        games are on this machine, and the server — a service with no desktop —
+        could not launch one if it had them.
+      */}
+      <LifecycleOption
+        title="Show my installed games"
+        sub="List the games Steam has installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
+        checked={state.games}
+        onChange={(next) =>
+          save(state.close_to_tray, state.open_at_login, state.devtools, next)
+        }
+        busy={saving}
+        error={saveError}
       />
     </section>
   );
