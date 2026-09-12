@@ -531,7 +531,10 @@ func TestAFileGetsNoLiveFlags(t *testing.T) {
 			t.Errorf("file command carried %q: %s", unwanted, got)
 		}
 	}
-	if !strings.Contains(got, "-ss 30.000") {
+	// The seek is split across -i (see TestSeekIsSplitAcrossInputAndOutput);
+	// what matters here is that a file still carries one, and that the two
+	// halves add up to what was asked for.
+	if !strings.Contains(got, "-ss 20.000") || !strings.Contains(got, "-ss 10.000") {
 		t.Errorf("file command lost its seek: %s", got)
 	}
 }
@@ -1013,5 +1016,55 @@ func TestArgsLevelFollowsTheCapNotTheSource(t *testing.T) {
 	})
 	if got := argValue(a, "-level"); got != "4.1" {
 		t.Errorf("4K capped to 720p encoded at level %q, want 4.1", got)
+	}
+}
+
+// An input seek alone lands the video on a keyframe past the point asked for
+// while a copied audio track is rebased to zero, so the sound arrives early by
+// the keyframe distance. Measured at +3.494s on The Rite resumed at 570. The
+// output half of the seek is what makes the first frame the frame asked for.
+func TestSeekIsSplitAcrossInputAndOutput(t *testing.T) {
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 600})
+	in := argIndex(args, "-i")
+
+	var before, after []string
+	for i, v := range args {
+		if v != "-ss" || i+1 >= len(args) {
+			continue
+		}
+		if i < in {
+			before = append(before, args[i+1])
+		} else {
+			after = append(after, args[i+1])
+		}
+	}
+	if len(before) != 1 {
+		t.Fatalf("want one -ss before -i, got %v", before)
+	}
+	if len(after) != 1 {
+		t.Fatalf("want one -ss after -i, got %v; without it a copied audio track starts early", after)
+	}
+	if before[0] != "590.000" {
+		t.Errorf("input seek = %s, want 590.000 (600 less the preroll)", before[0])
+	}
+	if after[0] != "10.000" {
+		t.Errorf("output seek = %s, want the 10.000 preroll", after[0])
+	}
+}
+
+// Shorter than one preroll there is no bulk to seek on the input, and decoding
+// the whole way is already cheap.
+func TestShortSeekIsEntirelyOnTheOutput(t *testing.T) {
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 4})
+	in := argIndex(args, "-i")
+	ss := argIndex(args, "-ss")
+	if ss < 0 {
+		t.Fatal("no -ss for a seeked transcode")
+	}
+	if ss < in {
+		t.Errorf("-ss at %d precedes -i at %d; a sub-preroll seek has no input half", ss, in)
+	}
+	if args[ss+1] != "4.000" {
+		t.Errorf("output seek = %s, want the full 4.000", args[ss+1])
 	}
 }

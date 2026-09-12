@@ -356,6 +356,19 @@ const (
 	 * that fragmentation costs 0.9% of the bytes rather than one box per frame.
 	 */
 	liveFragDuration = "200000"
+
+	/*
+	 * seekPreroll is how many seconds of a seek are left to the output side,
+	 * in seconds.
+	 *
+	 * It must exceed the longest gap between keyframes in a source, or the
+	 * input seek lands past the point asked for and the output seek has
+	 * nothing left to trim. Ten seconds covers everything in the library with
+	 * room to spare — a 48-frame GOP is two — and decoding ten seconds to
+	 * throw them away measured at the same 2 seconds of wall time as not
+	 * seeking accurately at all.
+	 */
+	seekPreroll = 10.0
 )
 
 // Args builds the ffmpeg command line.
@@ -363,11 +376,43 @@ func Args(o Options) []string {
 	o = o.withDefaults()
 	a := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
 
-	// -ss before -i seeks by keyframe without decoding everything up to the
-	// offset. Placing it after -i would decode and discard, which on a
-	// two-hour film means minutes of wasted work before the first frame.
+	/*
+	 * A seek is split across the input and the output, and both halves earn
+	 * their place.
+	 *
+	 * -ss before -i seeks by keyframe without decoding everything up to the
+	 * offset. Placing the whole seek after -i would decode and discard, which
+	 * on a two-hour film means minutes of wasted work before the first frame.
+	 *
+	 * But an input seek alone desynchronises a *copied* audio track. It lands
+	 * the video on the nearest keyframe, which can be seconds past the point
+	 * asked for, while the copied audio is rebased to zero — so the video
+	 * keeps the keyframe offset and the audio does not, and the sound arrives
+	 * early by however far the keyframe was.
+	 *
+	 * Measured on `The Rite (2011).mp4` resumed at 570 seconds, through the
+	 * HLS muxer, reading the first packet of each stream out of the first
+	 * segment:
+	 *
+	 *	-ss 570 -i in            video 3.494  audio 0.000   +3.494s
+	 *	-i in -ss 570            video 0.125  audio 0.129   -0.004s
+	 *	-ss 560 -i in -ss 10     video 0.125  audio 0.129   -0.004s
+	 *
+	 * The middle row is correct and cost 10 seconds of wall time to produce
+	 * twenty seconds of output; the third is equally correct and cost 2, the
+	 * same as the broken first row. So: seek the bulk on the input, and let
+	 * the last seekPreroll seconds be decoded and discarded to land exactly.
+	 *
+	 * This is the same failure ADR-worthy enough to have been fixed once
+	 * already for AVI further down (SeekLosesAudioSync), by a different
+	 * mechanism — there the audio genuinely begins earlier because the
+	 * container has no per-frame timestamps. That guard stays: it was measured
+	 * and it addresses a cause this does not.
+	 */
 	if o.StartAt > 0 && !o.Live {
-		a = append(a, "-ss", strconv.FormatFloat(o.StartAt, 'f', 3, 64))
+		if o.StartAt > seekPreroll {
+			a = append(a, "-ss", strconv.FormatFloat(o.StartAt-seekPreroll, 'f', 3, 64))
+		}
 	}
 
 	/*
@@ -453,6 +498,18 @@ func Args(o Options) []string {
 	}
 
 	a = append(a, "-i", o.Input)
+
+	// The output half of the split seek described above. Whatever the input
+	// seek could not cover — the preroll, or the whole offset when it is
+	// shorter than one — is decoded and discarded so the first frame is the
+	// frame asked for and the copied audio starts alongside it.
+	if o.StartAt > 0 && !o.Live {
+		out := seekPreroll
+		if o.StartAt <= seekPreroll {
+			out = o.StartAt
+		}
+		a = append(a, "-ss", strconv.FormatFloat(out, 'f', 3, 64))
+	}
 
 	// Map explicitly. Without this ffmpeg picks one stream per type by its own
 	// rules, which quietly selects the wrong audio track on files with several.
