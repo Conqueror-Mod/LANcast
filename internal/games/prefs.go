@@ -29,6 +29,14 @@ const PrefsFileName = "games.json"
 type Prefs struct {
 	Hidden     []string `json:"hidden"`
 	Favourites []string `json:"favourites"`
+	/*
+	 * Displays is which screen each game was asked to open on, keyed on app id
+	 * and holding a display *device name* (ADR 0066's amendment).
+	 *
+	 * Omitted when empty so that a file written before this existed, and a
+	 * desk with one monitor, both stay the two lines they were.
+	 */
+	Displays map[string]string `json:"displays,omitempty"`
 }
 
 // IsHidden reports whether an appid is hidden.

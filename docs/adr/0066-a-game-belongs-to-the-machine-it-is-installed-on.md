@@ -168,3 +168,101 @@ and the moment it also means *favourite* the focus signal is dead.
 
 Epic, then GOG, Xbox and EA — each another local manifest reader. Artwork for
 readers with none on disk. Owned-but-not-installed games. Playtime.
+
+---
+
+## Amendment, 2026-09-12 — which display a game opens on
+
+Status: **proposed**. Extends this ADR rather than superseding it; everything
+above still stands.
+
+### Why this needs an amendment at all
+
+The decision above drew a line at *launcher only*: LANcast hands Steam an app
+id and gets out of the way. Putting a game on a chosen monitor crosses that
+line, because there is no way to ask for it — it can only be done by reaching
+out and moving another program's window after it appears. That is a different
+kind of act from starting one, and it deserves to be written down rather than
+absorbed quietly.
+
+### The constraint that shapes the whole feature
+
+**No launcher can tell a game which display to use.** `steam://rungameid/<id>`
+takes no such argument, and there is no Steam setting for it either. A game
+chooses its screen from its own configuration, from whichever display Windows
+calls primary, or from where its window was the last time it ran.
+
+So a picker cannot pass a preference along. Whatever LANcast offers here, it
+has to *cause*.
+
+### Decision: move the game's window once it appears
+
+After launching, the client watches for a new top-level window that looks like
+a game — visible, titled, and big enough not to be a splash or a tooltip — and
+moves it onto the chosen display's work area. It never resizes it: a game sized
+its own window for the render target it chose, and changing that is not ours to
+do.
+
+The watch is bounded. It polls for a minute and a half and then gives up
+silently, because a game that has not opened a window by then is either still
+decompressing shaders or never starting, and neither is improved by a client
+that keeps looking for ever.
+
+### What this honestly cannot do, and says so
+
+- **Exclusive fullscreen ignores it.** A game that takes a display exclusively
+  puts itself where its own settings say, and a `SetWindowPos` against that is
+  either undone or meaningless. Borderless and windowed — which is what most
+  modern games default to — are what this actually serves.
+- **A game running as administrator ignores it too.** Windows blocks a
+  lower-integrity process from moving a higher-integrity window, and several
+  anti-cheat systems run elevated.
+
+Both are stated in the picker, in the interface, before somebody chooses. A
+feature that quietly does nothing for half its cases is worse than one that
+names them: the failure here is invisible from the inside — the game opens,
+just not where it was asked to — so nothing would ever look broken.
+
+### Rejected: temporarily making the target display primary
+
+This is the only mechanism that moves an exclusive-fullscreen game, and it was
+still refused.
+
+Making a display primary rearranges the whole desktop — icons reflow, other
+programs' windows move, the taskbar jumps — and putting it back requires
+knowing when the game exited. LANcast never learns that: Steam launches the
+game detached, so the client sees no process to wait on. The realistic outcome
+is somebody's desktop left rearranged after playing, with LANcast having no
+idea it owes them a restore.
+
+Trading a permanent, visible change to somebody's whole desktop for a better
+success rate on one class of game is not a trade this project should make
+silently, and making it loudly would mean a second scary option nobody wants to
+read. The narrower mechanism that never touches anything but the game's own
+window is the one that fits *server owns truth, clients are thin* — the client
+acts on its own machine, on the thing it just started, and nothing else.
+
+### Asked once, remembered per game
+
+An unanswered game shows the picker on Play; an answered one launches straight
+away. The answer lives in the per-client `games.json` beside hidden and
+favourite, because it is a fact about this desk and this person, exactly like
+the rest of that file.
+
+**Stored as the device name** — `\.\DISPLAY2` — and never as coordinates. Two
+monitors swapped in Windows' display settings swap their rectangles with them,
+so a stored position follows the geometry rather than the screen, and somebody
+who rearranged their desk would find their games opening on the wrong monitor
+with nothing having changed in LANcast. This is the same rule the window's own
+placement already follows.
+
+"Wherever it would have opened" is a stored answer too, not an absent one. The
+difference between *chosen to leave it alone* and *never asked* is what decides
+whether the picker appears again.
+
+### The picker is an in-DOM modal, never a native dialog
+
+A native dialog in a frameless WebView2 window is a focus trap: dismissing it
+does not reliably hand keyboard focus back to the web contents, so the app
+keeps painting and clicking while nothing can be typed into. It reads as a
+random freeze that fixes itself when the user alt-tabs away and back.

@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { DisplayPicker } from "@/components/DisplayPicker";
 import {
+  displayAnswerLabel,
   gamesSupported,
+  useDisplays,
   useGameArt,
   useGames,
   useLaunchGame,
   useOpenGameFolder,
+  useSetGameDisplay,
   useSetGameFlags,
 } from "@/lib/games";
 import { formatBytes } from "@/lib/format";
@@ -25,6 +30,25 @@ export function GameDetail() {
   const launch = useLaunchGame();
   const openFolder = useOpenGameFolder();
   const flags = useSetGameFlags();
+  const setDisplay = useSetGameDisplay();
+  // Only fetched once this page needs to name a screen, which is why the hook
+  // takes a flag rather than always enumerating monitors on mount.
+  const { data: displays = [] } = useDisplays();
+  const [picking, setPicking] = useState(false);
+  /*
+   * Two ways into the picker, two different endings.
+   *
+   * Opened by Play, choosing a screen starts the game. Opened by Change, it
+   * only records the answer — somebody editing a preference has not asked for
+   * a game to start, and starting one anyway would be the page deciding
+   * something it was never told.
+   *
+   * Declared here with the other hooks rather than beside the handler that
+   * uses it: everything below runs after an early return for a game that is no
+   * longer installed, and a hook called after a return is a hook that is
+   * sometimes not called at all.
+   */
+  const [pickerStartsGame, setPickerStartsGame] = useState(false);
 
   const game = data?.games?.find((g) => g.id === id);
   const { data: art } = useGameArt(id, "header", !!game?.has_header);
@@ -56,6 +80,22 @@ export function GameDetail() {
     );
   }
 
+  const play = () => {
+    if (!game.display) setPicking(true);
+    else launch.mutate(game.id);
+  };
+
+  const chose = async (device: string) => {
+    setPicking(false);
+    try {
+      await setDisplay.mutateAsync({ id: game.id, device });
+    } catch {
+      // Recording the answer is a convenience; failing to is not a reason to
+      // refuse to start the game.
+    }
+    if (pickerStartsGame) launch.mutate(game.id);
+  };
+
   return (
     <div className="browse games game-detail">
       <div className="browse__head">
@@ -81,10 +121,28 @@ export function GameDetail() {
         </span>
       </div>
 
+      <div className="game-detail__display">
+        <span>
+          Opens on <strong>{displayAnswerLabel(game.display, displays)}</strong>
+        </span>
+        <button
+          className="games__flag"
+          onClick={() => {
+            setPickerStartsGame(false);
+            setPicking(true);
+          }}
+        >
+          Change
+        </button>
+      </div>
+
       <div className="game-detail__actions">
         <button
           className="games__play games__play--big"
-          onClick={() => launch.mutate(game.id)}
+          onClick={() => {
+            setPickerStartsGame(true);
+            play();
+          }}
           disabled={launch.isPending}
         >
           {launch.isPending ? "Starting…" : "Play"}
@@ -134,6 +192,14 @@ export function GameDetail() {
           It is text, not a link: the page never handles a path, and Open
           folder goes through the client, which checks it first. */}
       <p className="game-detail__path">{game.install_path}</p>
+
+      {picking && (
+        <DisplayPicker
+          game={game}
+          onChoose={chose}
+          onCancel={() => setPicking(false)}
+        />
+      )}
     </div>
   );
 }

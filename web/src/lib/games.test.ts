@@ -17,6 +17,10 @@ function game(p: Partial<GameRow> & { id: string; name: string }): GameRow {
     has_header: false,
     hidden: false,
     favourite: false,
+    // Unanswered, which is the state these sorting and filtering rules should
+    // be indifferent to — a game nobody has chosen a screen for still sorts and
+    // filters like any other.
+    display: "",
     ...p,
   };
 }

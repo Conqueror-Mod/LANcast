@@ -14,7 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { Games } from "./Games";
-import type { GameRow, GamesResult } from "@/lib/games";
+import { DISPLAY_DEFAULT, type GameRow, type GamesResult } from "@/lib/games";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -35,6 +35,10 @@ function game(p: Partial<GameRow> & { id: string; name: string }): GameRow {
     has_header: false,
     hidden: false,
     favourite: false,
+    // Answered by default, so that the tests about the grid are about the grid.
+    // The picker has its own block below, where the answer is deliberately
+    // absent.
+    display: DISPLAY_DEFAULT,
     ...p,
   };
 }
@@ -51,19 +55,55 @@ const bindings = [
   "lancastLaunchGame",
   "lancastOpenGameFolder",
   "lancastSetGameFlags",
+  "lancastDisplays",
+  "lancastSetGameDisplay",
 ] as const;
+
+// Two screens, one of them the one this window is on — the shape of the choice
+// somebody is actually making.
+const SCREENS = [
+  {
+    device: "\\\\.\\DISPLAY1",
+    label: "Display 1 — 1920 x 1080 (main)",
+    primary: true,
+    current: true,
+    width: 1920,
+    height: 1080,
+  },
+  {
+    device: "\\\\.\\DISPLAY2",
+    label: "Display 2 — 1440 x 960",
+    primary: false,
+    current: false,
+    width: 1440,
+    height: 960,
+  },
+];
 
 function stub(result: GamesResult) {
   const games = vi.fn(async () => result);
   const launch = vi.fn(async () => ({ ok: true }));
   const setFlags = vi.fn(async () => ({ ok: true }));
+  const displays = vi.fn(async () => ({ ok: true, displays: SCREENS }));
+  const setDisplay = vi.fn(async () => ({ ok: true }));
   const w = window as unknown as Record<string, unknown>;
   w.lancastGames = games;
   w.lancastGameArt = vi.fn(async () => ({ ok: true, uri: "" }));
   w.lancastLaunchGame = launch;
   w.lancastOpenGameFolder = vi.fn(async () => ({ ok: true }));
   w.lancastSetGameFlags = setFlags;
-  return { games, launch, setFlags };
+  w.lancastDisplays = displays;
+  w.lancastSetGameDisplay = setDisplay;
+  return { games, launch, setFlags, displays, setDisplay };
+}
+
+// A button anywhere on the page, by its visible text.
+function byText(text: string): HTMLButtonElement {
+  const el = [...host.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes(text),
+  );
+  if (!el) throw new Error(`no button saying ${text}`);
+  return el as HTMLButtonElement;
 }
 
 beforeEach(() => {
@@ -276,5 +316,87 @@ describe("the games tab", () => {
     );
     await click(rescan as HTMLButtonElement);
     expect(games).toHaveBeenCalledTimes(2);
+  });
+});
+
+/*
+ * The display picker (ADR 0066 amendment).
+ *
+ * What matters here is the order and the asking: a game nobody has answered
+ * for must not start until somebody has, the answer must be saved before the
+ * launch because the client reads it from disk at launch time, and a game that
+ * has an answer must never be asked again.
+ */
+describe("the display picker", () => {
+  const unanswered = [game({ id: "700010", name: "Zephyr Drift", display: "" })];
+
+  it("asks before the first launch instead of starting", async () => {
+    const { launch } = stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    expect(text()).toContain("Where should Zephyr Drift open?");
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it("records the screen and then starts the game", async () => {
+    const { launch, setDisplay } = stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    await click(byText("Display 2"));
+    // Saved first. The client reads the answer out of games.json when it
+    // launches, so a launch that raced the save would open on the old answer.
+    // Taken from the fixture rather than written out again: a device name is
+    // mostly backslashes, and two copies of it are two chances to escape it
+    // differently.
+    expect(setDisplay).toHaveBeenCalledWith("700010", SCREENS[1].device);
+    expect(launch).toHaveBeenCalledWith("700010");
+  });
+
+  it("treats leaving it alone as a real answer", async () => {
+    const { launch, setDisplay } = stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    await click(byText("Wherever it opens"));
+    expect(setDisplay).toHaveBeenCalledWith("700010", "default");
+    expect(launch).toHaveBeenCalledWith("700010");
+  });
+
+  it("marks the screen this window is on", async () => {
+    stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    expect(text()).toContain("LANcast is here");
+  });
+
+  it("says what it cannot do before anybody chooses", async () => {
+    // The failure is invisible from the inside: the game opens, just not where
+    // it was asked to. Naming the two cases is what makes this a limit rather
+    // than a bug.
+    stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    expect(text()).toContain("exclusive fullscreen");
+    expect(text()).toContain("administrator");
+  });
+
+  it("starts nothing when the picker is cancelled", async () => {
+    const { launch, setDisplay } = stub({ status: "ok", games: unanswered });
+    await render();
+    await click(buttonFor("Zephyr Drift", "Play"));
+    await click(byText("Cancel"));
+    expect(setDisplay).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+    expect(text()).not.toContain("Where should");
+  });
+
+  it("does not ask again once a game has an answer", async () => {
+    const answered = [
+      game({ id: "700011", name: "Answered", display: SCREENS[1].device }),
+    ];
+    const { launch } = stub({ status: "ok", games: answered });
+    await render();
+    await click(buttonFor("Answered", "Play"));
+    expect(text()).not.toContain("Where should");
+    expect(launch).toHaveBeenCalledWith("700011");
   });
 });
