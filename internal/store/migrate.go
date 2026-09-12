@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 45
+const CurrentSchemaVersion = 46
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -84,6 +84,7 @@ var migrations = []migration{
 	{version: 43, sql: schemaRevision43},
 	{version: 44, sql: schemaRevision44},
 	{version: 45, sql: schemaRevision45},
+	{version: 46, sql: schemaRevision46},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1571,4 +1572,31 @@ CREATE TABLE IF NOT EXISTS plugin_secret (
 const schemaRevision45 = `
 UPDATE media_item SET intros_at = NULL
 WHERE kind = 'episode' AND intros_at IS NOT NULL;
+`
+
+/*
+ * Revision 46 -- episodes the intro pass recorded as examined for credits are
+ * examined for credits (ADR 0054, 2026-09-11 amendment).
+ *
+ * No shape changes. SaveMarkers stamped markers_at -- the credits pass's flag --
+ * for whatever kind the caller was authoritative about, and the intro pass calls
+ * it once per episode. So every episode an intro pass reached was written off as
+ * examined for credits without a frame being decoded. Measured on a real
+ * library the moment it was suspected: 994 of 994 episodes stamped, **none with
+ * a credits marker**, against 1,112 of 1,208 films, which no intro pass touches.
+ *
+ * An episode with a credits marker was genuinely examined and keeps its stamp.
+ * One without it cannot be told apart from an honest abstention -- a file whose
+ * credits begin on a cut produces nothing either -- so the stamp is cleared and
+ * it is looked at once more. That is one wasted decode per real abstention,
+ * against a library that would otherwise never have a credits marker on an
+ * episode at all. Films are not touched.
+ */
+const schemaRevision46 = `
+UPDATE media_item SET markers_at = NULL
+WHERE kind = 'episode'
+  AND markers_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM item_marker m WHERE m.item_id = media_item.id AND m.kind = 'credits'
+  );
 `

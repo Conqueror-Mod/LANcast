@@ -208,3 +208,41 @@ viewer, the one who most wants the marker, is the one guaranteed not to have it.
 **Asking a metadata provider.** No provider serves this, and if one did it
 would be a fact about a theatrical cut rather than about the file on disk —
 which is the mistake this ADR opened by fixing.
+
+## Amendment — 2026-09-11: the stamp belongs to the pass that owns the kind
+
+Stage 2 arrived and quietly switched this one off for every episode.
+
+`SaveMarkers` takes the kinds a pass is authoritative about, so that the credits
+detector cannot delete an intro marker by writing an empty list. It then stamped
+`markers_at` — **this** pass's "looked at this file" flag, the one
+`PendingMarkers` selects on — regardless of those kinds. The intro pass writes
+one marker per episode through the same method, so every episode it examined was
+recorded as examined for credits without a frame being decoded.
+
+Measured on a real library the moment it was suspected:
+
+| | stamped | with a credits marker |
+| --- | --- | --- |
+| episodes | 994 of 994 | **0** |
+| films | 1,208 | 1,112 |
+
+Films are the control: no intro pass touches one. The failure was invisible
+because "stamped with no marker" is also what an honest abstention looks like —
+a file whose credits begin on a cut produces nothing either — so the log, the
+counts and the API all read exactly as they would on a library of unusual films.
+
+**`markers_at` is stamped only when `credits` is among the kinds.** An intro
+write leaves the flag alone, in both directions: it does not set it, and it does
+not clear one the credits pass has earned, because the two passes run in either
+order.
+
+**Revision 46 clears the stamp on any episode that carries one without a credits
+marker.** An episode that really was examined kept its marker and keeps its
+stamp; one that cannot be told apart from an abstention is looked at once more.
+That costs one wasted decode per genuine abstention, against a library that
+would otherwise never carry a credits marker on an episode at all.
+
+The lesson is the one ADR 0055 records about `intros_at` from the other side: a
+shared write path needs to know whose flag it is setting, and a flag that two
+passes can set is a flag neither of them owns.
