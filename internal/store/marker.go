@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -92,6 +93,16 @@ func (s *Store) PendingMarkersCount(ctx context.Context) (int, error) {
  * kinds says which kinds this pass is authoritative about, so the credits
  * detector cannot delete an intro marker it knows nothing about by writing an
  * empty list.
+ *
+ * **And the stamp belongs to the pass that owns it.** `markers_at` is the
+ * credits pass's "looked at this file" flag — PendingMarkers selects on it —
+ * and this stamped it whatever the caller was authoritative about. The intro
+ * pass writes one marker per episode through here, so every episode it examined
+ * was recorded as examined for *credits* as well. On a real library that was
+ * total: 994 of 994 episodes stamped, **0 with a credits marker**, while films,
+ * which no intro pass touches, had 1,112 of 1,208. Credits detection had never
+ * finished for a single episode, and nothing said so, because "stamped with no
+ * marker" is also what "looked and found nothing" looks like.
  */
 func (s *Store) SaveMarkers(ctx context.Context, itemID int64, kinds []string, markers []Marker) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -115,9 +126,11 @@ func (s *Store) SaveMarkers(ctx context.Context, itemID int64, kinds []string, m
 			return fmt.Errorf("save markers: %w", err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE media_item SET markers_at = ? WHERE id = ?`, now, itemID); err != nil {
-		return fmt.Errorf("save markers: %w", err)
+	if slices.Contains(kinds, MarkerCredits) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE media_item SET markers_at = ? WHERE id = ?`, now, itemID); err != nil {
+			return fmt.Errorf("save markers: %w", err)
+		}
 	}
 	return tx.Commit()
 }

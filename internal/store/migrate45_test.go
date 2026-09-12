@@ -89,7 +89,9 @@ func TestRevision45IsIdempotent(t *testing.T) {
 	if err := st.db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != 45 {
-		t.Errorf("schema_version = %d, want 45", v)
+	// The constant, not a literal: this test failed the moment revision 46 was
+	// added, on a migration that was working perfectly.
+	if v != CurrentSchemaVersion {
+		t.Errorf("schema_version = %d, want %d", v, CurrentSchemaVersion)
 	}
 }
