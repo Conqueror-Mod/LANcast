@@ -71,6 +71,11 @@ func gamesBindings(dir string) map[string]any {
 					"has_header":   g.HeaderPath != "",
 					"hidden":       prefs.IsHidden(g.ID),
 					"favourite":    prefs.IsFavourite(g.ID),
+					// Empty means nobody has been asked which display this one
+					// should open on, which is what raises the picker. A game
+					// answered with "wherever it opens" carries the default
+					// sentinel instead, and is never asked again.
+					"display": prefs.DisplayFor(g.ID),
 				})
 			}
 			out := map[string]any{"status": string(res.Status), "games": list}
@@ -131,7 +136,8 @@ func gamesBindings(dir string) map[string]any {
 			// The rescan is the check. Whatever the page believes it is looking
 			// at, only an app id that is installed on this disk right now gets
 			// as far as a URI.
-			if _, ok := installedGame(id); !ok {
+			g, ok := installedGame(id)
+			if !ok {
 				return map[string]any{"ok": false, "error": "that game is not installed"}
 			}
 			uri, err := games.LaunchURI(id)
@@ -140,6 +146,22 @@ func gamesBindings(dir string) map[string]any {
 			}
 			if err := desktop.OpenBrowser(uri); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
+			}
+			/*
+			 * Started only once the URI is away, and read here rather than
+			 * taken from the page.
+			 *
+			 * Here, because the watcher's first act is to write down every
+			 * window that already exists — anything it finds after that is a
+			 * candidate. Starting it before the launch would widen that gap for
+			 * no gain; starting it on a launch that failed would leave it
+			 * hunting for ninety seconds and possibly moving somebody's
+			 * unrelated window.
+			 */
+			if prefs, err := games.LoadPrefs(dir); err == nil {
+				if device := prefs.DisplayFor(id); device != "" && device != games.DisplayDefault {
+					moveGameToDisplay(device, g.Name)
+				}
 			}
 			return map[string]any{"ok": true}
 		},
@@ -188,6 +210,60 @@ func gamesBindings(dir string) map[string]any {
 				prefs = games.Prefs{}
 			}
 			prefs.Set(id, hidden, favourite)
+			if err := games.SavePrefs(dir, prefs); err != nil {
+				return map[string]any{"ok": false, "error": err.Error()}
+			}
+			return map[string]any{"ok": true}
+		},
+
+		// lancastDisplays lists the screens a game can be sent to, with the one
+		// this window is on marked — "not the one I am reading this on" is the
+		// usual answer, and a list of device names would not let anybody say it.
+		"lancastDisplays": func() map[string]any {
+			if !gamesEnabled(dir) {
+				return map[string]any{"ok": false, "error": "games are switched off"}
+			}
+			return map[string]any{"ok": true, "displays": availableDisplays()}
+		},
+
+		/*
+		 * lancastSetGameDisplay records which screen a game should open on.
+		 *
+		 * The device name is checked against the screens actually attached
+		 * rather than stored as given. It is the same rule as everywhere else
+		 * here — the page names a thing, the client decides whether that thing
+		 * exists — and it also keeps the file honest: an unplugged monitor's
+		 * name would sit in games.json for ever, quietly meaning nothing.
+		 *
+		 * Two values that are not devices are allowed. The default sentinel is
+		 * a real answer, "leave this one wherever it opens", and it stops the
+		 * picker coming back. An empty string forgets the answer entirely,
+		 * which is how the detail page asks to be asked again.
+		 */
+		"lancastSetGameDisplay": func(id, device string) map[string]any {
+			if !gamesEnabled(dir) {
+				return map[string]any{"ok": false, "error": "games are switched off"}
+			}
+			if id == "" {
+				return map[string]any{"ok": false, "error": "no game named"}
+			}
+			if device != "" && device != games.DisplayDefault {
+				known := false
+				for _, d := range availableDisplays() {
+					if d.Device == device {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return map[string]any{"ok": false, "error": "no such display is attached"}
+				}
+			}
+			prefs, err := games.LoadPrefs(dir)
+			if err != nil {
+				prefs = games.Prefs{}
+			}
+			prefs.SetDisplay(id, device)
 			if err := games.SavePrefs(dir, prefs); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}

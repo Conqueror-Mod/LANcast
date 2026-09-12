@@ -25,7 +25,30 @@ export interface GameRow {
   has_header: boolean;
   hidden: boolean;
   favourite: boolean;
+  /**
+   * Which display this game should open on: a device name, the DISPLAY_DEFAULT
+   * sentinel for "wherever it opens", or empty when nobody has been asked yet.
+   *
+   * Empty is what raises the picker, so the three states are not
+   * interchangeable: a game somebody deliberately left alone must not be asked
+   * about again.
+   */
+  display: string;
 }
+
+/** One screen a game can be sent to. */
+export interface DisplayInfo {
+  device: string;
+  label: string;
+  primary: boolean;
+  /** The screen this window is on — usually the one somebody does *not* want. */
+  current: boolean;
+  width: number;
+  height: number;
+}
+
+/** A stored answer meaning "leave it wherever it opens". */
+export const DISPLAY_DEFAULT = "default";
 
 export type GamesStatus = "ok" | "not-installed" | "error" | "disabled";
 
@@ -54,6 +77,12 @@ declare global {
       hidden: boolean,
       favourite: boolean,
     ) => Promise<Ack>;
+    lancastDisplays?: () => Promise<{
+      ok: boolean;
+      displays?: DisplayInfo[];
+      error?: string;
+    }>;
+    lancastSetGameDisplay?: (id: string, device: string) => Promise<Ack>;
   }
 }
 
@@ -195,6 +224,57 @@ export function useSetGameFlags() {
 export function useRescanGames() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: GAMES_KEY });
+}
+
+/*
+ * The attached screens.
+ *
+ * Its own key, and not a corner of ["games"]: the list is invalidated by every
+ * launch and every hide, and re-enumerating monitors each time would be work
+ * for nothing. It is also deliberately not a sibling — ["displays"] is not
+ * reached by ["games"] — which is the distinction that has cost this project
+ * four bugs.
+ *
+ * Always refetched when something asks for it. A monitor can be plugged in,
+ * unplugged, or rearranged between one launch and the next, and a cached list
+ * would offer a screen that is no longer there.
+ */
+export function useDisplays(enabled = true) {
+  return useQuery({
+    queryKey: ["displays"],
+    queryFn: async () => (await window.lancastDisplays!()).displays ?? [],
+    enabled: enabled && typeof window.lancastDisplays === "function",
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+}
+
+export function useSetGameDisplay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: { id: string; device: string }) => {
+      const res = await window.lancastSetGameDisplay!(v.id, v.device);
+      if (!res.ok) throw new Error(res.error ?? "it could not be saved");
+      return res;
+    },
+    // The grid and the detail page both show the answer, and the answer is what
+    // decides whether the picker appears next time.
+    onSuccess: () => qc.invalidateQueries({ queryKey: GAMES_KEY }),
+  });
+}
+
+/** What the picker should say about a stored answer. */
+export function displayAnswerLabel(
+  answer: string,
+  displays: DisplayInfo[],
+): string {
+  if (!answer) return "Ask me";
+  if (answer === DISPLAY_DEFAULT) return "Wherever it opens";
+  const known = displays.find((d) => d.device === answer);
+  // A screen that is no longer attached still has an answer stored against it,
+  // and saying so is better than showing a raw device name or pretending the
+  // game has no preference.
+  return known ? known.label : "A display that is not attached";
 }
 
 export type GameSort = "name" | "played" | "size";

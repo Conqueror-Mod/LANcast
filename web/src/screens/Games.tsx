@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { DisplayPicker } from "@/components/DisplayPicker";
 import {
   gamesSupported,
   hiddenCount,
@@ -8,6 +9,7 @@ import {
   useGames,
   useLaunchGame,
   useRescanGames,
+  useSetGameDisplay,
   useSetGameFlags,
   visibleGames,
   type GameRow,
@@ -31,9 +33,19 @@ import "./Games.css";
 export function Games() {
   const { data, isLoading } = useGames();
   const rescan = useRescanGames();
+  const launch = useLaunchGame();
+  const setDisplay = useSetGameDisplay();
   const [sort, setSort] = useState<GameSort>(rememberedSort);
   const [filter, setFilter] = useState("");
   const [showHidden, setShowHidden] = useState(false);
+  /*
+   * One picker for the page, holding the game it was opened for.
+   *
+   * Not one per tile: two open at once is a state this screen should not be
+   * able to reach, and a modal owned by the thing that triggered it is how that
+   * happens.
+   */
+  const [picking, setPicking] = useState<GameRow | null>(null);
 
   if (!gamesSupported()) {
     return (
@@ -51,6 +63,35 @@ export function Games() {
   const shown = sortGames(visibleGames(all, { filter, showHidden }), sort);
   const hidden = hiddenCount(all);
   const favourites = shown.filter((g) => g.favourite);
+
+  /*
+   * Play asks first, once.
+   *
+   * A game nobody has answered for raises the picker instead of starting; every
+   * launch after that goes straight through. The alternative — a dialog between
+   * you and every game, every time — is a tax on the thing this tab exists to
+   * make quick.
+   */
+  const play = (g: GameRow) => {
+    if (!g.display) setPicking(g);
+    else launch.mutate(g.id);
+  };
+
+  // Saved before launching, not after: the client reads the answer out of
+  // games.json at launch, so a launch that raced the save would open on
+  // whatever the previous answer was — which for a first launch is nowhere.
+  const chooseThenPlay = async (device: string) => {
+    const g = picking;
+    if (!g) return;
+    setPicking(null);
+    try {
+      await setDisplay.mutateAsync({ id: g.id, device });
+    } catch {
+      // Saying where it should open is a convenience; failing to record it is
+      // not a reason to refuse to start the game.
+    }
+    launch.mutate(g.id);
+  };
 
   return (
     <GamesShell
@@ -83,6 +124,12 @@ export function Games() {
         <p className="browse__message">
           Steam is here, with no games installed yet.
         </p>
+      )}
+
+      {/* One place for a failed launch, now that the button that starts one is
+          shared by every tile. */}
+      {launch.isError && (
+        <p className="games__error">{String(launch.error.message)}</p>
       )}
 
       {status === "ok" && all.length > 0 && (
@@ -129,7 +176,12 @@ export function Games() {
               <span className="section-label">Favourites</span>
               <div className="games__grid">
                 {favourites.map((g) => (
-                  <GameTile key={`fav-${g.id}`} game={g} />
+                  <GameTile
+                    key={`fav-${g.id}`}
+                    game={g}
+                    onPlay={play}
+                    starting={launch.isPending && launch.variables === g.id}
+                  />
                 ))}
               </div>
             </section>
@@ -141,7 +193,12 @@ export function Games() {
             )}
             <div className="games__grid">
               {shown.map((g) => (
-                <GameTile key={g.id} game={g} />
+                <GameTile
+                  key={g.id}
+                  game={g}
+                  onPlay={play}
+                  starting={launch.isPending && launch.variables === g.id}
+                />
               ))}
             </div>
             {shown.length === 0 && (
@@ -149,6 +206,14 @@ export function Games() {
             )}
           </section>
         </>
+      )}
+
+      {picking && (
+        <DisplayPicker
+          game={picking}
+          onChoose={chooseThenPlay}
+          onCancel={() => setPicking(null)}
+        />
       )}
     </GamesShell>
   );
@@ -183,9 +248,16 @@ function GamesShell({
   );
 }
 
-function GameTile({ game }: { game: GameRow }) {
+function GameTile({
+  game,
+  onPlay,
+  starting,
+}: {
+  game: GameRow;
+  onPlay: (g: GameRow) => void;
+  starting: boolean;
+}) {
   const { data: art } = useGameArt(game.id, "poster", game.has_poster);
-  const launch = useLaunchGame();
   const flags = useSetGameFlags();
 
   return (
@@ -208,10 +280,10 @@ function GameTile({ game }: { game: GameRow }) {
         <div className="games__actions">
           <button
             className="games__play"
-            onClick={() => launch.mutate(game.id)}
-            disabled={launch.isPending}
+            onClick={() => onPlay(game)}
+            disabled={starting}
           >
-            {launch.isPending ? "Starting…" : "Play"}
+            {starting ? "Starting…" : "Play"}
           </button>
           {/*
             A star, never gold. Gold means where you are and nothing else
@@ -247,9 +319,6 @@ function GameTile({ game }: { game: GameRow }) {
             {game.hidden ? "Unhide" : "Hide"}
           </button>
         </div>
-        {launch.isError && (
-          <span className="games__error">{String(launch.error.message)}</span>
-        )}
       </div>
     </div>
   );

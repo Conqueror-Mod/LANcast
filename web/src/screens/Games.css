@@ -303,3 +303,116 @@
 .games__name {
   min-height: 2.6em;
 }
+
+/*
+ * The display picker.
+ *
+ * In the DOM, never a native dialog. A native confirm in a frameless WebView2
+ * window is a focus trap: dismissing it does not reliably hand keyboard focus
+ * back to the web contents, and the app reads as randomly frozen until the user
+ * alt-tabs away and back (ADR 0066's amendment).
+ */
+.games-modal__scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 15, 0.72);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+}
+
+.games-modal {
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  padding: 22px 24px;
+  width: min(520px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+.games-modal__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.games-modal__sub {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.games-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.games-modal__option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  /* Items in a scrollable flex column shrink to fit rather than overflowing,
+     which collapses them to nothing with every style still applying. */
+  flex-shrink: 0;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.games-modal__option:hover,
+.games-modal__option:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/* "You are reading this here" — a neutral note, never gold. Gold in this panel
+   belongs to whichever option has focus. */
+.games-modal__here {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.games-modal__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.games-modal__note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.game-detail__display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.game-detail__display strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
