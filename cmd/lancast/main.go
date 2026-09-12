@@ -363,7 +363,7 @@ func runWindow(l *launcher) {
 // identical — and the page cannot infer it.
 func (l *launcher) desktopBindings() map[string]any {
 	dir := clientDataDir()
-	return map[string]any{
+	b := map[string]any{
 		// lancastDesktopState reports the current preferences and how this
 		// window relates to its server.
 		"lancastDesktopState": func() map[string]any {
@@ -383,7 +383,12 @@ func (l *launcher) desktopBindings() map[string]any {
 				// because the window cannot change it after launch: this is
 				// what the *next* start will do, which is what the toggle is
 				// promising.
-				"devtools":      prefs.DevTools,
+				"devtools": prefs.DevTools,
+				// Whether this window lists the machine's installed games
+				// (ADR 0066). The page hides the whole tab on it, and the
+				// bindings refuse while it is off, so the two cannot disagree
+				// about whether the feature is on.
+				"games":         prefs.Games,
 				"open_at_login": atLogin,
 				// True when this launcher started the server, so closing the
 				// window ends it. False when a service or an earlier launch
@@ -417,7 +422,7 @@ func (l *launcher) desktopBindings() map[string]any {
 		 * know whether it changed. A separate lancastDevTools() would be a
 		 * second way to write the same file, free to race the first.
 		 */
-		"lancastDesktopSet": func(closeToTray, openAtLogin, devTools bool) map[string]any {
+		"lancastDesktopSet": func(closeToTray, openAtLogin, devTools, gamesOn bool) map[string]any {
 			// The registry is the thing that actually starts LANcast at login,
 			// so it goes first: a preference file saying "on" over a run key
 			// that was never written is a setting that lies. If this fails the
@@ -425,13 +430,33 @@ func (l *launcher) desktopBindings() map[string]any {
 			if err := applyAutostart(openAtLogin); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
-			p := desktopprefs.Prefs{CloseToTray: closeToTray, DevTools: devTools}
+			/*
+			 * Loaded first so that Window survives.
+			 *
+			 * This function writes whole values, and the whole value includes a
+			 * field the page has never heard of: where the window was when it
+			 * last closed. Building the struct from the arguments alone would
+			 * silently forget the placement every time somebody ticked a box,
+			 * and the window would come back on the wrong monitor with nothing
+			 * having failed.
+			 */
+			p, _ := desktopprefs.Load(dir)
+			p.CloseToTray = closeToTray
+			p.DevTools = devTools
+			p.Games = gamesOn
 			if err := desktopprefs.Save(dir, p); err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
 			return map[string]any{"ok": true}
 		},
 	}
+	// The games tab's functions (ADR 0066), merged rather than listed above:
+	// they are one feature, they are all refused together when the setting is
+	// off, and they have nothing to do with the window's lifecycle.
+	for name, fn := range gamesBindings(dir) {
+		b[name] = fn
+	}
+	return b
 }
 
 // serverCertPin is the public key of the server's own certificate, or empty
