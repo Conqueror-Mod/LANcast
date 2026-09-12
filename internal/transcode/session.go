@@ -54,6 +54,21 @@ type Session struct {
 	cancel context.CancelFunc
 	stderr *ringBuffer
 
+	/*
+	 * waited is closed by whichever goroutine owns cmd.Wait, once it returns.
+	 *
+	 * os/exec documents Wait as a single call, and Stop used to make a second
+	 * one alongside the goroutine startHLS runs to record why ffmpeg exited.
+	 * The two raced for the process state: measured on Windows, a stopped
+	 * session never reported Done — so the reaper and the session ceiling went
+	 * on believing it was running, and MaxSessions is 3.
+	 *
+	 * Nil on the progressive path, which has no wait goroutine at all: its
+	 * stdout is a pipe the handler is still reading, and Wait closes that pipe
+	 * under the reader (see NoteEnded). There, Stop's own Wait is the only one.
+	 */
+	waited chan struct{}
+
 	mu        sync.Mutex
 	started   time.Time
 	lastTouch time.Time
@@ -159,11 +174,22 @@ func (s *Session) Stop() {
 		s.cancel()
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
-		// Wait briefly for the context cancellation to land before forcing it;
-		// ffmpeg flushes its output on SIGTERM and a half-written segment is
-		// worse than a slightly slower shutdown.
-		done := make(chan struct{})
-		go func() { s.cmd.Wait(); close(done) }()
+		/*
+		 * Wait briefly for the context cancellation to land before forcing it;
+		 * ffmpeg flushes its output on SIGTERM and a half-written segment is
+		 * worse than a slightly slower shutdown.
+		 *
+		 * On the segmented path that means waiting on the goroutine that owns
+		 * Wait rather than calling it again — two Waits on one Cmd race, and
+		 * the loser left the session reporting itself as still running for
+		 * ever. See the waited field.
+		 */
+		done := s.waited
+		if done == nil {
+			ch := make(chan struct{})
+			go func() { s.cmd.Wait(); close(ch) }()
+			done = ch
+		}
 		select {
 		case <-done:
 		case <-time.After(3 * time.Second):
@@ -274,14 +300,17 @@ func startHLS(ctx context.Context, bin string, o Options) (*Session, error) {
 		return nil, fmt.Errorf("transcode: start ffmpeg: %w", err)
 	}
 
+	waited := make(chan struct{})
 	s := &Session{
 		Output: HLS, StartAt: o.StartAt, Dir: o.OutputDir,
 		Encoding: o.Decision.Encoding(),
-		cmd:      cmd, cancel: cancel, stderr: stderr,
+		cmd:      cmd, cancel: cancel, stderr: stderr, waited: waited,
 		started: time.Now(), lastTouch: time.Now(),
 	}
 
 	go func() {
+		// The only Wait for this process: Stop waits on the channel instead.
+		defer close(waited)
 		err := cmd.Wait()
 		s.mu.Lock()
 		s.done = true
