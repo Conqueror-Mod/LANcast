@@ -12,7 +12,7 @@
  * the range that already worked.
  */
 import { describe, it, expect } from "vitest";
-import { formatBytes } from "./Settings";
+import { formatBytes } from "@/lib/format";
 
 const YUNET = 232589; // face_detection_yunet_2023mar.onnx
 const SFACE = 38696353; // face_recognition_sface_2021dec.onnx

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { formatBytes } from "@/lib/format";
 import {
   useLibraries,
   useSettings,
@@ -2512,27 +2513,6 @@ function SemanticSearchRow() {
 
 // Megabytes, rounded, because nobody reading a download size wants three
 // decimal places of a hundred-megabyte number.
-/*
- * A size for the consent list, which is the only place these appear.
- *
- * Rounding everything to whole megabytes rendered the 227KB face detector as
- * "0 MB" — an asset that reads as nothing at all, on the one screen whose
- * purpose is saying what is about to be downloaded. A list somebody cannot
- * trust the numbers on is not consent.
- *
- * So the unit follows the size rather than the other way round, and nothing is
- * ever reported as zero. The kilobyte branch stops below 1000 rather than 1024
- * so a file just under a megabyte cannot print as "1024 KB", which is a size
- * nobody writes.
- */
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 bytes";
-  if (bytes < 1024) return `${Math.round(bytes)} bytes`;
-  const kb = bytes / 1024;
-  if (kb < 1000) return `${Math.round(kb)} KB`;
-  return `${Math.round(bytes / 1048576)} MB`;
-}
-
 function GeneralSection() {
   const { data: health } = useHealth();
   return (
