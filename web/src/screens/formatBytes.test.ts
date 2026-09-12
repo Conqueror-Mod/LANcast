@@ -54,6 +54,32 @@ describe("sizes on the consent list", () => {
     expect(formatBytes(999)).toBe("999 bytes");
   });
 
+  /*
+   * The ceiling, found by looking at the thing.
+   *
+   * Everything above passed while this was broken, because a consent list of
+   * face models never measures anything bigger than 80MB. The games tab put a
+   * real 41GB install on screen as "42248 MB" — a number nobody reads as a
+   * size. A formatter that stops at one unit is only correct for as long as
+   * nothing larger is ever measured.
+   */
+  it("crosses to gigabytes rather than printing five-digit megabytes", () => {
+    expect(formatBytes(44295786496)).toBe("41.3 GB"); // a real Palworld install
+    expect(formatBytes(162765541376)).toBe("151.6 GB"); // a real Destiny 2 install
+  });
+
+  it("keeps one decimal, so similar installs stay distinguishable", () => {
+    // Whole gigabytes throw away most of what somebody comparing two games
+    // wants to know.
+    expect(formatBytes(44023414784)).toBe("41.0 GB");
+    expect(formatBytes(45097156608)).toBe("42.0 GB");
+  });
+
+  it("stays in megabytes just below the crossover", () => {
+    expect(formatBytes(999 * 1048576)).toBe("999 MB");
+    expect(formatBytes(1000 * 1048576)).toBe("1.0 GB");
+  });
+
   // A missing size arrives as 0 from `?? 0`, and must not crash or read oddly.
   it("handles an absent size", () => {
     expect(formatBytes(0)).toBe("0 bytes");

@@ -278,3 +278,28 @@
   font-size: 12px;
   word-break: break-all;
 }
+
+/*
+ * Both of these were found by looking at the page, which is the only way they
+ * could have been: jsdom performs no layout, so every assertion about this
+ * screen passed while it looked wrong.
+ *
+ * The head is not a flex row on its own — .browse__head carries no display of
+ * its own, only the sticky variant's positioning — so the count and Rescan
+ * stacked under the title instead of sitting beside it, and margin-left:auto
+ * had nothing to push against.
+ */
+.games .browse__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/*
+ * A two-line title pushed its own buttons down a row, so the Play buttons in a
+ * grid did not line up with each other. Reserving both lines costs nothing on
+ * the short names and keeps the row straight.
+ */
+.games__name {
+  min-height: 2.6em;
+}
