@@ -25,6 +25,18 @@ import (
 const DisplayDefault = "default"
 
 /*
+ * devicePrefix is what Windows calls a display: \\.\DISPLAY1, \\.\DISPLAY2.
+ *
+ * Named rather than written inline because it is almost entirely backslashes,
+ * and the first version of this shipped with one of them missing. The label
+ * then never matched a real device, so every screen in the picker was offered
+ * as "\\.\DISPLAY1" instead of "Display 1" — and the test agreed with it,
+ * because the same wrong spelling had been written into both files at once.
+ * Only looking at the picker found it. See the count in display_test.go.
+ */
+const devicePrefix = `\\.\DISPLAY`
+
+/*
  * Rect is a rectangle in desktop coordinates.
  *
  * A copy of the one in clientwindow rather than the type itself, for the reason
@@ -68,7 +80,7 @@ type Display struct {
 // settings show, which is where somebody will go to check.
 func DisplayLabel(device string, width, height int, primary bool) string {
 	name := device
-	if n := strings.TrimPrefix(device, `\.\DISPLAY`); n != device && n != "" {
+	if n := strings.TrimPrefix(device, devicePrefix); n != device && n != "" {
 		name = "Display " + n
 	}
 	label := fmt.Sprintf("%s — %d x %d", name, width, height)

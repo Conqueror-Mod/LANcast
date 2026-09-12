@@ -1,6 +1,7 @@
 package games
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -65,6 +66,27 @@ func TestMoveTargetNeverChangesTheSize(t *testing.T) {
 	}
 }
 
+/*
+ * A backslash canary.
+ *
+ * This exists because of a real bug rather than a hypothetical one: the prefix
+ * was written into the function and into this file's fixtures at the same time
+ * with one backslash missing, so every test agreed with the mistake and passed
+ * while the picker offered "\\.\DISPLAY1" as the name of a screen. A fixture
+ * cannot catch an error it shares.
+ *
+ * A count can. Three backslashes is a number, and a number cannot be quietly
+ * mangled by whatever mangled the string.
+ */
+func TestTheDevicePrefixHasAllItsBackslashes(t *testing.T) {
+	if got := strings.Count(devicePrefix, `\`); got != 3 {
+		t.Fatalf("devicePrefix is %q with %d backslashes, want 3 — a real device is \\\\.\\DISPLAY1", devicePrefix, got)
+	}
+	if !strings.HasSuffix(devicePrefix, "DISPLAY") {
+		t.Fatalf("devicePrefix = %q", devicePrefix)
+	}
+}
+
 func TestDisplayLabel(t *testing.T) {
 	for _, tc := range []struct {
 		device  string
@@ -72,9 +94,9 @@ func TestDisplayLabel(t *testing.T) {
 		primary bool
 		want    string
 	}{
-		{`\.\DISPLAY1`, 1920, 1080, true, "Display 1 — 1920 x 1080 (main)"},
-		{`\.\DISPLAY2`, 1440, 960, false, "Display 2 — 1440 x 960"},
-		{`\.\DISPLAY3`, 2560, 1440, false, "Display 3 — 2560 x 1440"},
+		{`\\.\DISPLAY1`, 1920, 1080, true, "Display 1 — 1920 x 1080 (main)"},
+		{`\\.\DISPLAY2`, 1440, 960, false, "Display 2 — 1440 x 960"},
+		{`\\.\DISPLAY3`, 2560, 1440, false, "Display 3 — 2560 x 1440"},
 		// Anything that is not shaped like a device name is shown as it is,
 		// rather than being mangled into "Display ".
 		{"HDMI-1", 1280, 720, false, "HDMI-1 — 1280 x 720"},
@@ -113,10 +135,10 @@ func TestDisplayAnswerIsRememberedPerGame(t *testing.T) {
 		t.Error("a game nobody has been asked about should have no answer")
 	}
 
-	p.SetDisplay("700010", `\.\DISPLAY2`)
+	p.SetDisplay("700010", `\\.\DISPLAY2`)
 	p.SetDisplay("700011", DisplayDefault)
 
-	if got := p.DisplayFor("700010"); got != `\.\DISPLAY2` {
+	if got := p.DisplayFor("700010"); got != `\\.\DISPLAY2` {
 		t.Errorf("answer = %q", got)
 	}
 	// The distinction the whole constant exists for: "leave this one alone" is
@@ -128,7 +150,7 @@ func TestDisplayAnswerIsRememberedPerGame(t *testing.T) {
 
 func TestForgettingADisplayAsksAgain(t *testing.T) {
 	var p Prefs
-	p.SetDisplay("700010", `\.\DISPLAY2`)
+	p.SetDisplay("700010", `\\.\DISPLAY2`)
 	p.SetDisplay("700010", "")
 	if p.DisplayFor("700010") != "" {
 		t.Error("forgetting should leave nothing behind")
@@ -142,7 +164,7 @@ func TestDisplayAnswersSurviveTheFile(t *testing.T) {
 	dir := t.TempDir()
 	var p Prefs
 	p.Set("700010", false, true)
-	p.SetDisplay("700010", `\.\DISPLAY3`)
+	p.SetDisplay("700010", `\\.\DISPLAY3`)
 	if err := SavePrefs(dir, p); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +174,7 @@ func TestDisplayAnswersSurviveTheFile(t *testing.T) {
 	}
 	// The backslashes are the part worth checking: a device name is the one
 	// value in this file that JSON has to escape.
-	if got := back.DisplayFor("700010"); got != `\.\DISPLAY3` {
+	if got := back.DisplayFor("700010"); got != `\\.\DISPLAY3` {
 		t.Errorf("after a round trip = %q", got)
 	}
 	if !back.IsFavourite("700010") {
