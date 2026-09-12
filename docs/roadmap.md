@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-11 · **v0.9.18 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-09-12 · **v0.9.19 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
