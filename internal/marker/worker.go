@@ -93,6 +93,10 @@ type Worker struct {
 	// queue handling is tested without decoding any audio. Nil is the real one.
 	examineSeasonFn func(ctx context.Context, st IntroStore, se store.Season) error
 
+	// examineFn does the same for the credits pass, so its queue handling is
+	// tested without decoding any video. Nil is the real one.
+	examineFn func(ctx context.Context, it store.Item)
+
 	mu      sync.Mutex
 	running bool
 	stats   Stats
@@ -167,57 +171,114 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.mu.Unlock()
 	}()
 
-	items, err := w.st.PendingMarkers(ctx, w.BatchSize)
-	if err != nil {
-		return err
+	examine := w.examine
+	if w.examineFn != nil {
+		examine = w.examineFn
 	}
-	if len(items) == 0 {
-		return nil
-	}
+	started := time.Now()
+	tried := map[int64]bool{}
+	files, batches := 0, 0
+	stopped := false
 
 	/*
-	 * Say that this is running, because otherwise nothing does.
+	 * Until nothing is pending, not one batch.
 	 *
-	 * Every line this package could emit was a failure. A pass occupies a core
-	 * with ffmpeg for as long as it takes to decode the tail of every
-	 * unexamined film — hours, on a real library — and said nothing at all
-	 * while doing it. From outside, that is indistinguishable from a leaked
-	 * process, which is exactly the conclusion two people reached about it in
-	 * one evening: an ffmpeg parented by the server, no session in the log, and
-	 * a new one every few minutes.
+	 * A pass took BatchSize files and returned, and a pass starts only at
+	 * startup or after a library scan. That was tolerable while the queue only
+	 * ever grew by what a scan added; revision 46 puts every episode the intro
+	 * pass wrongly retired back on it — 994 of them on a real library — and
+	 * twenty-five per restart is forty restarts. The intro pass had the same
+	 * shape and stalled at five seasons.
 	 *
-	 * Answering "why is ffmpeg running" should not need a code read and a
-	 * database query.
-	 *
-	 * Only when there is work. This is called on a timer, and a line per empty
-	 * pass would bury the ones that mean something — the same reason the
-	 * reaper logs what it took rather than every sweep.
+	 * The batch stays small so each query is cheap and the setting is re-checked
+	 * often; the loop is what finishes. A file that does not leave the queue —
+	 * a save that keeps failing — would be fetched for ever, so files are
+	 * remembered for this pass and a batch with nothing new ends it. It is
+	 * tried again on the next pass, as before.
 	 */
-	started := time.Now()
-	w.log.Info("credits detection started", "batch", len(items))
+	for {
+		items, err := w.st.PendingMarkers(ctx, w.BatchSize)
+		if err != nil {
+			return err
+		}
+		var fresh []store.Item
+		for _, it := range items {
+			if !tried[it.ID] {
+				tried[it.ID] = true
+				fresh = append(fresh, it)
+			}
+		}
+		if len(fresh) == 0 {
+			break
+		}
+		items = fresh
 
-	conc := w.Concurrency
-	if conc < 1 {
-		conc = 1
-	}
-	sem := make(chan struct{}, conc)
-	var wg sync.WaitGroup
-	for _, it := range items {
-		if ctx.Err() != nil {
+		/*
+		 * Say that this is running, because otherwise nothing does.
+		 *
+		 * Every line this package could emit was a failure. A pass occupies a core
+		 * with ffmpeg for as long as it takes to decode the tail of every
+		 * unexamined film — hours, on a real library — and said nothing at all
+		 * while doing it. From outside, that is indistinguishable from a leaked
+		 * process, which is exactly the conclusion two people reached about it in
+		 * one evening: an ffmpeg parented by the server, no session in the log, and
+		 * a new one every few minutes.
+		 *
+		 * Answering "why is ffmpeg running" should not need a code read and a
+		 * database query.
+		 *
+		 * Only when there is work. This is called on a timer, and a line per empty
+		 * pass would bury the ones that mean something — the same reason the
+		 * reaper logs what it took rather than every sweep.
+		 */
+		batches++
+		w.log.Info("credits detection started", "batch", len(items))
+
+		conc := w.Concurrency
+		if conc < 1 {
+			conc = 1
+		}
+		sem := make(chan struct{}, conc)
+		var wg sync.WaitGroup
+		for _, it := range items {
+			/*
+			 * The slot first, then the question.
+			 *
+			 * Asking before waiting for a slot asks about a moment that has
+			 * passed by the time the file starts: with one decode at a time, the
+			 * next file is already through the check and queued behind a decode
+			 * that may take minutes, so switching detection off still cost one
+			 * more file — measured, deterministically, at eleven when it was
+			 * switched off at ten. With the slot in hand the check is about the
+			 * file that is genuinely next, which is what Enabled promises above.
+			 * It matters more now a pass can be the whole library rather than
+			 * twenty-five files.
+			 */
+			sem <- struct{}{}
+			if ctx.Err() != nil || !w.stillWanted() {
+				<-sem
+				stopped = true
+				break
+			}
+			files++
+			wg.Add(1)
+			go func(it store.Item) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				examine(ctx, it)
+			}(it)
+		}
+		wg.Wait()
+		if stopped {
 			break
 		}
-		if !w.stillWanted() {
-			break
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(it store.Item) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			w.examine(ctx, it)
-		}(it)
 	}
-	wg.Wait()
+
+	// Nothing was pending, so nothing is said: Run is called on a timer, and a
+	// line per empty sweep would bury the ones that mean something.
+	if batches == 0 {
+		return nil
+	}
 
 	remaining := -1
 	if n, err := w.st.PendingMarkersCount(ctx); err == nil {
@@ -240,7 +301,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	examined, found, failed := w.stats.Examined, w.stats.Found, w.stats.Failed
 	w.mu.Unlock()
 	w.log.Info("credits detection finished",
-		"batch", len(items), "remaining", remaining,
+		"files", files, "batches", batches, "remaining", remaining,
 		"examined_total", examined, "found_total", found, "failed_total", failed,
 		"seconds", int(time.Since(started).Seconds()))
 	return nil
