@@ -263,3 +263,71 @@ until the pass replaces them, and intro markers are evidence nobody edits
 - **Nobody has watched an episode to confirm a single one of these timestamps.**
   Agreement between detectors is still not correctness, and no client draws a
   skip control from them.
+
+## Amendment — 2026-09-11 (later): two comparisons, when they agree closely
+
+The library-wide re-check left seasons answering on half their episodes, and
+`introlab` was extended to measure *why* rather than to tune the gap, which is
+settled.
+
+**The majority rule counts a comparison that found a network ident as a vote
+against.** Sunny S15E02 returns `115s+20.6s, 115s+19.9s, 18s+3.9s, 18s+3.9s`:
+two comparisons find the intro to within a second, two find a four-second
+sting. That is 2 of 4 and no majority — and the two short ones never reach the
+clustering step at all, being under `IntroMinSeconds`. The rule is right when
+the minority found *nothing*; it is wrong when the minority found something
+that could not be an intro.
+
+**So a run of at least twelve seconds that two comparisons begin within one
+second of each other is an intro — provided those two are half of what was
+compared.** The length and slack guards are far stricter than the majority
+path's, five times tighter than `IntroStartSlack` and half again
+`IntroMinSeconds`. Order is majority, then the unanimous card, then this.
+
+**The proportion is not decoration, and the first version of this rule left it
+out.** Without it the rule accepted two agreeing out of five, which
+`TestIntroRequiresAMajorityOfWhatWasCompared` has refused since this ADR was
+written — and it failed exactly that test. Closeness is not what separates
+Sunny S15E02 from that case; the denominator is. Two of four is half, two of
+five is a minority however tightly they agree. It follows that this rule cannot
+rescue an episode compared against six or eight peers, which agrees with the
+peer-count measurement below rather than arguing against it.
+
+Measured across the library. The instrument runs the **old rule spelled out**
+rather than calling `IntroFrom`, because the first attempt at this table called
+`IntroFrom` for every column and so compared the new rule with itself — five
+identical columns presented as a before and after:
+
+| season | old | new | old, 6 peers |
+| --- | --- | --- | --- |
+| Star Trek: TNG S4 | 11/25 | **24/25** | 16/25 |
+| Star Trek: DS9 S7 | 15/25 | **21/25** | 20/25 |
+| It's Always Sunny S14 | 5/10 | **8/10** | 7/10 |
+| Futurama S5 | 12/16 | **15/16** | 15/16 |
+| It's Always Sunny S15 | 1/8 | **3/8** | 0/8 |
+| Sunny S3 · Black Books S1 · The League S2 · Voyager S4 | full marks | unchanged | unchanged |
+| Storm of the Century · The League S1 · Silicon Valley S1 | none | **still none** | none |
+
+Every new timestamp matches its season's other episodes in position and length.
+
+**Raising the peer count was measured and rejected.** Six or eight peers takes
+TNG S4 from 11 to 16 of 25 but Sunny S15 from 1 to **0**: more comparisons
+dilute a majority when only a minority can find the intro. Six peers *with*
+this rule also invented an intro — S15E04 marked 117–137s where every visible
+candidate was a four-second ident — which is the failure this ADR exists to
+avoid.
+
+### Recorded against this rule
+
+- **With exactly two candidates the median end is the later one**, so an
+  intro's end can be overstated. The end is the noisier quantity, and a match
+  runs on into whatever two episodes happen to share after the titles. It is
+  tolerable only while nothing skips on these markers (decision 4), and would
+  need revisiting before anything did.
+- **Idents are marked more widely than the 0:00 case above admits.** The card
+  rule marks Sunny S14E10 at 12–18s and Futurama S5E15 at 25–29s, both from
+  four unanimous runs of four to six seconds — network stings, not titles.
+  `IntroCardEarliestSec` refuses them only at the very start, and these sit
+  twelve and twenty-five seconds in. Telling an ident from a title card wants
+  evidence the timing cannot give: an ident recurs across *unrelated shows* in
+  the same library, which is measurable and not yet measured.
