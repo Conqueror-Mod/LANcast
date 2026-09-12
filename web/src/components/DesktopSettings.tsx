@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { GAMES_ENABLED_KEY } from "@/lib/games";
 import "./DesktopSettings.css";
 
 // The desktop lifecycle section (docs/desktop-lifecycle-plan.md).
@@ -52,6 +54,7 @@ export function DesktopSettings() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const supported = typeof window.lancastDesktopState === "function";
+  const qc = useQueryClient();
 
   // Writes both preferences, then re-reads the state rather than assuming the
   // write landed. "Open at login" is backed by a registry key, and reporting a
@@ -80,6 +83,11 @@ export function DesktopSettings() {
       setSaving(false);
       const fresh = await window.lancastDesktopState!().catch(() => null);
       if (fresh) setState(fresh);
+      // The rail is looking at this too. Turning games on here has to make the
+      // tab appear, and turning it off has to take it away — otherwise the
+      // setting is right, the server is right, and only the picture is stale,
+      // which is the quietest bug this project has.
+      qc.invalidateQueries({ queryKey: GAMES_ENABLED_KEY });
     }
   };
 

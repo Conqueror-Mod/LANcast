@@ -14,6 +14,8 @@ import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Profile } from "@/screens/Profile";
 import { Downloads } from "@/screens/Downloads";
+import { Games } from "@/screens/Games";
+import { GameDetail } from "@/screens/GameDetail";
 import { Addons } from "@/screens/Addons";
 import { LiveTV } from "@/screens/LiveTV";
 import { People } from "@/screens/People";
@@ -77,6 +79,12 @@ export function App() {
           <Route path="/review" element={<Review />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/downloads" element={<Downloads />} />
+          {/* The games on *this* machine (ADR 0066). Routed for everyone and
+              useful to almost nobody: without the desktop bindings the page
+              says so, which is a better answer than a 404 to somebody who
+              followed a link from the machine where it works. */}
+          <Route path="/games" element={<Games />} />
+          <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/addons" element={<Addons />} />
           <Route path="/live" element={<LiveTV />} />
           <Route path="/people" element={<People />} />

@@ -202,6 +202,21 @@ export function LiveIcon() {
   );
 }
 
+// Games: a gamepad, reduced to a body, a d-pad and two buttons. Drawn as one
+// rounded bar rather than the usual winged silhouette, because at 20px the
+// wings turn into noise and the shape stops reading as anything at all.
+export function GamesIcon() {
+  return (
+    <RailGlyph>
+      <rect x="2.5" y="6.5" width="15" height="8.5" rx="3.2" />
+      <path d="M6.4 9.4v3.2" />
+      <path d="M4.8 11h3.2" />
+      <circle cx="13.2" cy="10.3" r="0.9" />
+      <circle cx="15" cy="12.4" r="0.9" />
+    </RailGlyph>
+  );
+}
+
 // People: two heads, the second offset behind the first. Same idea as the
 // player's watch-together glyph, drawn on the rail's own box.
 export function PeopleIcon() {

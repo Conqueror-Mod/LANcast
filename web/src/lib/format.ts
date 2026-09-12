@@ -1,5 +1,43 @@
 // Runtime as "2h 8m", from milliseconds. Empty string when unknown, so the
 // caller can omit it cleanly.
+/*
+ * A size in bytes, for anything that reports one.
+ *
+ * Rounding everything to whole megabytes rendered the 227KB face detector as
+ * "0 MB" — an asset that reads as nothing at all, on the one screen whose
+ * purpose is saying what is about to be downloaded. A list somebody cannot
+ * trust the numbers on is not consent.
+ *
+ * So the unit follows the size rather than the other way round, and nothing is
+ * ever reported as zero. The kilobyte branch stops below 1000 rather than 1024
+ * so a file just under a megabyte cannot print as "1024 KB", which is a size
+ * nobody writes.
+ *
+ * Here rather than in the settings screen, where it was written: the games tab
+ * reports install sizes too, and a second byte formatter that disagreed with
+ * this one about 227KB would be exactly the bug this function exists to fix.
+ *
+ * The gigabyte branch was added when the games tab put this in front of real
+ * data and a 41GB install read as "42248 MB". Nothing was wrong for the consent
+ * list it was written for — face models are tens of megabytes — which is why
+ * every test passed: the ceiling only shows up once something big enough is
+ * measured. An installed game is routinely a hundred times the largest file
+ * this had ever been asked about.
+ *
+ * One decimal at that size, because whole gigabytes throw away the difference
+ * between a 41GB game and a 41.9GB one, and that difference is most of what
+ * somebody is looking for when a disk is filling up.
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 bytes";
+  if (bytes < 1024) return `${Math.round(bytes)} bytes`;
+  const kb = bytes / 1024;
+  if (kb < 1000) return `${Math.round(kb)} KB`;
+  const mb = bytes / 1048576;
+  if (mb < 1000) return `${Math.round(mb)} MB`;
+  return `${(bytes / 1073741824).toFixed(1)} GB`;
+}
+
 export function runtime(ms: number | null | undefined): string {
   if (!ms || ms <= 0) return "";
   const mins = Math.round(ms / 60000);

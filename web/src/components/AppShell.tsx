@@ -19,6 +19,7 @@ import { KeyHelp } from "./KeyHelp";
 import { plainVersion } from "./UpdateSettings";
 import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
+import { useGamesTab } from "@/lib/games";
 import {
   LibraryIcon,
   HomeIcon,
@@ -26,6 +27,7 @@ import {
   SearchGlyph,
   AddonIcon,
   DownloadIcon,
+  GamesIcon,
   LiveIcon,
   PeopleIcon,
   AccountIcon,
@@ -168,6 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Back returns you to where you were, and a new page starts at the top.
   // Neither is the browser's default in a single-page app; see the hook.
   useScrollRestoration();
+  const gamesTab = useGamesTab();
 
   return (
     <div className="app-shell">
@@ -274,6 +277,27 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Downloads
               </span>
             </NavLink>
+
+            {/* Games is the only entry in this rail that is not about the
+                server. It appears in the desktop window, when the person using
+                it has asked for it, and nowhere else: the games are installed
+                on this machine, and a rail entry on a phone would lead to a
+                grid of things that phone can never start (ADR 0066). */}
+            {gamesTab && (
+              <NavLink
+                to="/games"
+                title="Games"
+                onClick={releaseRail}
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
+                }
+              >
+                <GamesIcon />
+                <span className="app-shell__lib-name app-shell__label">
+                  Games
+                </span>
+              </NavLink>
+            )}
           </nav>
 
           {/* People sits at the foot rather than among the libraries: it is
