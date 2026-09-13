@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Every appid and title in this file is invented. Real ones would be a
@@ -329,5 +330,92 @@ func TestScanRootReportsAnUnreadableLibraryList(t *testing.T) {
 	}
 	if res := ScanRoot(root); res.Status != StatusError {
 		t.Errorf("status = %q, want %q", res.Status, StatusError)
+	}
+}
+
+// writeAt creates a file and the folders above it.
+func writeAt(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+/*
+ * The layout that made three games out of four draw a lettered placeholder
+ * while their posters sat on disk the whole time.
+ *
+ * Current Steam gives every asset a folder named for its own content, and calls
+ * the portrait poster library_capsule.jpg where it used to be a flat
+ * library_600x900.jpg. Reading only the flat names found artwork for exactly
+ * one game in a real four-game library: the one whose cache predated the
+ * change. Fixtures written from the old shape agreed with the reader, so only
+ * looking at a real library could have caught it.
+ */
+func TestArtworkReadsTheHashedLayout(t *testing.T) {
+	root := t.TempDir()
+	app := filepath.Join(root, "appcache", "librarycache", "700020")
+	writeAt(t, filepath.Join(app, "0ccf0dc0", "library_capsule.jpg"), "poster")
+	writeAt(t, filepath.Join(app, "e0c14337", "library_header.jpg"), "header")
+
+	poster, header := artworkPaths(root, "700020")
+	if poster == "" {
+		t.Error("the portrait capsule was on disk and was not found")
+	}
+	if header == "" {
+		t.Error("the header was on disk and was not found")
+	}
+}
+
+func TestArtworkPrefersTheNewestHashFolder(t *testing.T) {
+	// Replaced artwork leaves the superseded folder behind, so a game can have
+	// two. Picking by name would show whichever hash sorted first, which is art
+	// the store stopped using, chosen at random and stable enough to look
+	// deliberate.
+	root := t.TempDir()
+	app := filepath.Join(root, "appcache", "librarycache", "700021")
+	stale := filepath.Join(app, "aaaa", "library_capsule.jpg")
+	recent := filepath.Join(app, "bbbb", "library_capsule.jpg")
+	writeAt(t, stale, "stale")
+	writeAt(t, recent, "current")
+	long_ago := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(stale, long_ago, long_ago); err != nil {
+		t.Fatal(err)
+	}
+
+	poster, _ := artworkPaths(root, "700021")
+	if poster != recent {
+		t.Errorf("poster = %q, want the newer folder %q", poster, recent)
+	}
+}
+
+func TestArtworkIgnoresAZeroBytePlaceholder(t *testing.T) {
+	// Steam leaves empty files behind in this cache; an empty file is not a
+	// poster, and offering one is a broken image rather than a placeholder.
+	root := t.TempDir()
+	app := filepath.Join(root, "appcache", "librarycache", "700022")
+	writeAt(t, filepath.Join(app, "aaaa", "library_capsule.jpg"), "")
+
+	if poster, _ := artworkPaths(root, "700022"); poster != "" {
+		t.Errorf("poster = %q, want nothing at all", poster)
+	}
+}
+
+func TestArtworkStillReadsTheFlatLayouts(t *testing.T) {
+	// The case that was already working, kept so that fixing the new layout
+	// cannot quietly drop the old one.
+	root := t.TempDir()
+	cache := filepath.Join(root, "appcache", "librarycache")
+	writeAt(t, filepath.Join(cache, "700023", "library_600x900.jpg"), "poster")
+	writeAt(t, filepath.Join(cache, "700024_library_600x900.jpg"), "poster")
+
+	if poster, _ := artworkPaths(root, "700023"); poster == "" {
+		t.Error("the previous flat layout stopped working")
+	}
+	if poster, _ := artworkPaths(root, "700024"); poster == "" {
+		t.Error("the oldest flat layout stopped working")
 	}
 }
