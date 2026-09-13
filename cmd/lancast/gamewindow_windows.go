@@ -51,9 +51,19 @@ const (
 	// point past which a watcher is a background process nobody remembers
 	// starting, and the cost of giving up is only that the game stays where it
 	// opened.
-	watchFor    = 90 * time.Second
-	watchEvery  = 500 * time.Millisecond
-	maxTitleLen = 256
+	watchFor   = 90 * time.Second
+	watchEvery = 500 * time.Millisecond
+	/*
+	 * watchAfterMove keeps the watch alive after a window is actually moved,
+	 * because a launcher appearing is evidence the game has not yet.
+	 *
+	 * watchCap ends it regardless. A watcher that a busy desktop can keep
+	 * alive for ever is a process moving windows long after anybody would
+	 * connect it to having pressed Play.
+	 */
+	watchAfterMove = 3 * time.Minute
+	watchCap       = 10 * time.Minute
+	maxTitleLen    = 256
 )
 
 type win32Rect struct{ Left, Top, Right, Bottom int32 }
@@ -140,10 +150,27 @@ func moveGameToDisplay(device, name string) {
 	mine := watchGeneration.Add(1)
 	before := topLevelWindows()
 	self := windows.GetCurrentProcessId()
-	deadline := time.Now().Add(watchFor)
+	start := time.Now()
 
 	go func() {
-		for time.Now().Before(deadline) {
+		/*
+		 * Every new window, not just the first.
+		 *
+		 * Stopping at the first one is why this did nothing for Zenless Zone
+		 * Zero: its Steam entry starts HoYoPlay — the install directory holds
+		 * HYP.exe and its helpers, not the game — so the first window to appear
+		 * is the launcher. That got moved, the watcher returned satisfied, and
+		 * the game opened minutes later on whatever screen it liked.
+		 *
+		 * It is not one game's quirk. EA, Ubisoft and Battle.net titles all
+		 * arrive through a launcher of their own, and for those the first window
+		 * is never the one somebody meant.
+		 */
+		placed := map[uintptr]bool{}
+		moved := 0
+		lastMove := time.Time{}
+
+		for time.Now().Before(watchDeadline(start, lastMove)) {
 			time.Sleep(watchEvery)
 			if watchGeneration.Load() != mine {
 				// Another launch took over.
@@ -157,32 +184,55 @@ func moveGameToDisplay(device, name string) {
 				if !ok {
 					continue
 				}
-				// Already there: a game that remembered this screen itself
-				// needs nothing, and re-centring it would be a visible twitch
-				// for no reason.
+				/*
+				 * Already on the chosen screen.
+				 *
+				 * Recorded rather than ignored, so a window that later moves
+				 * itself off is noticed and put back — some games finish
+				 * initialising after their window exists and reposition it
+				 * onto whichever display their own settings name.
+				 */
 				cx, cy := r.Left+r.Width()/2, r.Top+r.Height()/2
 				if cx >= work.Left && cx < work.Right && cy >= work.Top && cy < work.Bottom {
-					slog.Info("game opened on the chosen display already",
-						"game", name, "display", device)
-					return
+					if !placed[hwnd] {
+						placed[hwnd] = true
+						slog.Info("a game window opened on the chosen display already",
+							"game", name, "display", device)
+					}
+					continue
 				}
+
 				x, y := games.MoveTarget(r, work)
 				if moveWindow(hwnd, x, y) {
-					slog.Info("moved a game to the chosen display",
-						"game", name, "display", device, "x", x, "y", y)
-				} else {
+					moved++
+					placed[hwnd] = true
+					lastMove = time.Now()
+					slog.Info("moved a game window to the chosen display",
+						"game", name, "display", device, "x", x, "y", y, "moved_so_far", moved)
+				} else if !placed[hwnd] {
 					// Almost always an elevated game: Windows refuses window
 					// changes from a lower-integrity process, and several
 					// anti-cheats run as administrator.
-					slog.Info("could not move the game's window; it is probably running as administrator",
+					placed[hwnd] = true
+					slog.Info("could not move a game window; it is probably running as administrator",
 						"game", name, "display", device)
 				}
-				return
 			}
 		}
-		slog.Info("no game window appeared in time; leaving it wherever it opened",
-			"game", name, "display", device)
+		if moved == 0 {
+			slog.Info("no game window appeared in time; leaving it wherever it opened",
+				"game", name, "display", device)
+		} else {
+			slog.Info("finished watching for game windows",
+				"game", name, "display", device, "moved", moved)
+		}
 	}()
+}
+
+// watchDeadline is when to stop looking. The rule is in internal/games, where
+// it can be tested without a window in sight.
+func watchDeadline(start, lastMove time.Time) time.Time {
+	return games.WatchDeadline(start, lastMove, watchFor, watchAfterMove, watchCap)
 }
 
 func workAreaOf(device string) (games.Rect, bool) {
