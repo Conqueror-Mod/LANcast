@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { GAMES_ENABLED_KEY } from "@/lib/games";
 import "./DesktopSettings.css";
 
 // The desktop lifecycle section (docs/desktop-lifecycle-plan.md).
@@ -29,7 +27,7 @@ declare global {
   }
 }
 
-interface DesktopState {
+export interface DesktopState {
   close_to_tray: boolean;
   open_at_login: boolean;
   devtools: boolean;
@@ -49,33 +47,55 @@ interface DesktopState {
   error?: string;
 }
 
+/** The preferences `lancastDesktopSet` writes, all of them. */
+export type DesktopPrefs = Pick<
+  DesktopState,
+  "close_to_tray" | "open_at_login" | "devtools" | "games"
+>;
+
+/*
+ * One writer for this file, shared with the Games pane next door.
+ *
+ * `lancastDesktopSet` takes every preference at once — whole-value, so the page
+ * cannot half-apply a change — which means a caller who knows about one setting
+ * must still supply the other three. A second pane holding its own copy would
+ * therefore be able to quietly revert whatever changed since it read, and that
+ * bug would look like a setting that "sometimes does not stick".
+ *
+ * Re-reading immediately before writing makes it impossible, and lets a pane
+ * change one preference without knowing anything about the rest.
+ */
+export async function saveDesktopPrefs(
+  patch: Partial<DesktopPrefs>,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!window.lancastDesktopState || !window.lancastDesktopSet) {
+    return { ok: false, error: "this is not the desktop app" };
+  }
+  const now = await window.lancastDesktopState();
+  return window.lancastDesktopSet(
+    patch.close_to_tray ?? now.close_to_tray,
+    patch.open_at_login ?? now.open_at_login,
+    patch.devtools ?? now.devtools,
+    patch.games ?? now.games,
+  );
+}
+
 export function DesktopSettings() {
   const [state, setState] = useState<DesktopState | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const supported = typeof window.lancastDesktopState === "function";
-  const qc = useQueryClient();
 
   // Writes both preferences, then re-reads the state rather than assuming the
   // write landed. "Open at login" is backed by a registry key, and reporting a
   // tick the machine did not accept is the failure this whole section exists to
   // avoid.
-  const save = async (
-    closeToTray: boolean,
-    openAtLogin: boolean,
-    devTools: boolean,
-    games: boolean,
-  ) => {
+  const save = async (patch: Partial<DesktopPrefs>) => {
     if (!window.lancastDesktopSet) return;
     setSaving(true);
     setSaveError("");
     try {
-      const res = await window.lancastDesktopSet(
-        closeToTray,
-        openAtLogin,
-        devTools,
-        games,
-      );
+      const res = await saveDesktopPrefs(patch);
       if (!res.ok) setSaveError(res.error ?? "could not be saved");
     } catch (e) {
       setSaveError(String(e));
@@ -83,11 +103,6 @@ export function DesktopSettings() {
       setSaving(false);
       const fresh = await window.lancastDesktopState!().catch(() => null);
       if (fresh) setState(fresh);
-      // The rail is looking at this too. Turning games on here has to make the
-      // tab appear, and turning it off has to take it away — otherwise the
-      // setting is right, the server is right, and only the picture is stale,
-      // which is the quietest bug this project has.
-      qc.invalidateQueries({ queryKey: GAMES_ENABLED_KEY });
     }
   };
 
@@ -140,9 +155,7 @@ export function DesktopSettings() {
         title="Close to tray"
         sub="Keep LANcast running in the notification area when you close the window. Quit from the tray to stop it."
         checked={state.close_to_tray}
-        onChange={(next) =>
-          save(next, state.open_at_login, state.devtools, state.games)
-        }
+        onChange={(next) => save({ close_to_tray: next })}
         busy={saving}
         error={saveError}
         reason="Takes effect the next time you open LANcast."
@@ -151,9 +164,7 @@ export function DesktopSettings() {
         title="Open when Windows starts"
         sub="Start LANcast automatically when you sign in."
         checked={state.open_at_login}
-        onChange={(next) =>
-          save(state.close_to_tray, next, state.devtools, state.games)
-        }
+        onChange={(next) => save({ open_at_login: next })}
         busy={saving}
         error={saveError}
       />
@@ -171,40 +182,16 @@ export function DesktopSettings() {
         title="Developer tools"
         sub="Open the web inspector alongside the window. For diagnosing the client itself."
         checked={state.devtools}
-        onChange={(next) =>
-          save(state.close_to_tray, state.open_at_login, next, state.games)
-        }
+        onChange={(next) => save({ devtools: next })}
         busy={saving}
         error={saveError}
         reason="Opens the next time you start LANcast."
-      />
-      {/*
-        Off by default, and off for a different reason from the options above.
-        They are off because surprising background behaviour is a bug; this is
-        off because a media server that started listing which games somebody has
-        installed, on the strength of having found Steam, would have decided
-        something about them they never asked for. Finding it is not permission
-        to show it.
-
-        Only offered in this window, because only this window can act on it: the
-        games are on this machine, and the server — a service with no desktop —
-        could not launch one if it had them.
-      */}
-      <LifecycleOption
-        title="Show my installed games"
-        sub="List the games Steam has installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
-        checked={state.games}
-        onChange={(next) =>
-          save(state.close_to_tray, state.open_at_login, state.devtools, next)
-        }
-        busy={saving}
-        error={saveError}
       />
     </section>
   );
 }
 
-function LifecycleOption({
+export function LifecycleOption({
   title,
   sub,
   checked,

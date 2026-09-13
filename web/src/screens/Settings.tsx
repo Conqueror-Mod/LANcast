@@ -71,6 +71,7 @@ import { AuditLog } from "@/components/AuditLog";
 import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
+import { GamesSettings } from "@/components/GamesSettings";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -2705,9 +2706,22 @@ const SERVER_PANES: Pane[] = [
 const DEVICE_PANES: Pane[] = [
   { id: "account", label: "Account" },
   { id: "app", label: "This app" },
+  /*
+   * Games has a pane of its own rather than a row inside "This app".
+   *
+   * It was a row there, and the first person to look for it did not find it:
+   * nothing on that path says the word "games", so a feature that had shipped
+   * and worked was reported as having no interface at all. Off by default is
+   * the right decision (ADR 0066) and undiscoverable is not the same thing.
+   */
+  { id: "games", label: "Games" },
   { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
 ];
+
+// Panes that only mean anything inside the desktop window. Offering either in a
+// browser tab would give a heading that leads to an empty column.
+const DESKTOP_ONLY = new Set(["app", "games"]);
 
 // DesktopSettings renders nothing in a browser tab — there is no tray to reduce
 // to and no close button LANcast owns. Offering the category anyway would give a
@@ -2728,7 +2742,7 @@ export function Settings() {
 
   const server = isAdmin ? SERVER_PANES : [];
   const device = DEVICE_PANES.filter(
-    (x) => x.id !== "app" || desktopAvailable(),
+    (x) => !DESKTOP_ONLY.has(x.id) || desktopAvailable(),
   );
   const all = [...server, ...device];
   // An unknown or absent pane falls back to the first one the user may see,
@@ -2828,6 +2842,7 @@ export function Settings() {
           )}
           {pane === "account" && <AccountSection />}
           {pane === "app" && <DesktopSettings />}
+          {pane === "games" && <GamesSettings />}
           {pane === "keyboard" && <KeyBindings />}
           {pane === "display" && (
             <>
