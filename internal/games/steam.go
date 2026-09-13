@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 /*
@@ -275,15 +276,26 @@ func libraryFolders(root string) ([]string, error) {
 /*
  * artworkPaths finds Steam's own cached artwork for an appid.
  *
- * Two layouts, because Steam reorganised this cache and an install that
- * predates the change keeps the old one:
+ * Three layouts, because Steam has reorganised this cache twice and an install
+ * keeps whatever it was given:
  *
- *   appcache/librarycache/<appid>/library_600x900.jpg   (current)
- *   appcache/librarycache/<appid>_library_600x900.jpg   (older)
+ *   appcache/librarycache/<appid>/<sha>/library_capsule.jpg   (current)
+ *   appcache/librarycache/<appid>/library_600x900.jpg         (previous)
+ *   appcache/librarycache/<appid>_library_600x900.jpg         (oldest)
  *
- * Empty when neither exists, which is ordinary: Steam caches artwork lazily, so
- * a game installed and never viewed in the library may have none. The page
- * draws a lettered placeholder rather than a broken image.
+ * The first of those is why this had to be corrected after shipping. Reading
+ * only the flat names found artwork for exactly one game in a four-game library
+ * — the one whose cache predated Steam's change — and the other three drew
+ * lettered placeholders while their posters sat on disk the whole time, under
+ * a different name in a folder named for its own content.
+ *
+ * The current layout renames the portrait poster as well as moving it:
+ * `library_capsule.jpg` is what `library_600x900.jpg` used to be, and both are
+ * the 2:3 image the grid wants.
+ *
+ * Empty when none of them exists, which is still ordinary: Steam caches artwork
+ * lazily, so a game installed and never looked at in the library has none. The
+ * page draws a lettered placeholder rather than a broken image.
  *
  * No download happens here or anywhere else in this package. A missing poster
  * is a missing poster; fetching one would be the phone-home the whole design
@@ -292,16 +304,51 @@ func libraryFolders(root string) ([]string, error) {
 func artworkPaths(root, appid string) (poster, header string) {
 	cache := filepath.Join(root, "appcache", "librarycache")
 	poster = firstExisting(
+		newestAsset(cache, appid, "library_capsule.jpg"),
+		newestAsset(cache, appid, "library_600x900.jpg"),
 		filepath.Join(cache, appid, "library_600x900.jpg"),
 		filepath.Join(cache, appid+"_library_600x900.jpg"),
 	)
 	header = firstExisting(
+		newestAsset(cache, appid, "library_header.jpg"),
+		newestAsset(cache, appid, "library_hero.jpg"),
 		filepath.Join(cache, appid, "header.jpg"),
+		filepath.Join(cache, appid, "library_header.jpg"),
 		filepath.Join(cache, appid, "library_hero.jpg"),
 		filepath.Join(cache, appid+"_header.jpg"),
 		filepath.Join(cache, appid+"_library_hero.jpg"),
 	)
 	return poster, header
+}
+
+/*
+ * newestAsset is the most recent <appid>/<sha>/<name> in the cache, or "".
+ *
+ * Current Steam names each asset's folder for its content, so a game whose
+ * artwork has been replaced has more than one and the superseded folder stays
+ * on disk. Newest wins, because the alternative is showing whichever hash
+ * happened to sort first — art the store stopped using, picked at random and
+ * stable enough to look deliberate.
+ */
+func newestAsset(cache, appid, name string) string {
+	matches, err := filepath.Glob(filepath.Join(cache, appid, "*", name))
+	if err != nil {
+		return ""
+	}
+	var best string
+	var bestMod time.Time
+	for _, m := range matches {
+		st, err := os.Stat(m)
+		// Size is checked here as well as in firstExisting: Steam leaves
+		// zero-byte placeholders behind, and an empty file is not a poster.
+		if err != nil || st.IsDir() || st.Size() == 0 {
+			continue
+		}
+		if best == "" || st.ModTime().After(bestMod) {
+			best, bestMod = m, st.ModTime()
+		}
+	}
+	return best
 }
 
 func firstExisting(paths ...string) string {
