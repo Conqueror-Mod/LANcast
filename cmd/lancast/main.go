@@ -287,6 +287,17 @@ func runWindow(l *launcher) {
 		},
 		OnReady: func(c clientwindow.Controller) {
 			/*
+			 * Reload when the server comes back.
+			 *
+			 * The web view retries nothing, so a window opened against a server
+			 * that was not ready — or one whose server restarted under it
+			 * during an update — stays blank until somebody closes the app and
+			 * opens it again. recover.go explains why this is a poll rather
+			 * than an event.
+			 */
+			go l.watchForRecovery(c, url, pin)
+
+			/*
 			 * Listen for a second launch, whatever the tray preference says.
 			 *
 			 * Deliberately above the close-to-tray return: raising the window
@@ -545,6 +556,17 @@ func (l *launcher) serverDataDir() (string, bool) {
 func (l *launcher) ensureServer() error {
 	if desktop.ServerRunning(l.addr) {
 		return nil
+	}
+	/*
+	 * An installed service is waited for, never raced.
+	 *
+	 * Starting a second server here cannot work on such a machine — the data
+	 * directory belongs to the system account and a server started as this user
+	 * gets a read-only database — and the attempt is what made a cold boot open
+	 * a message box instead of the app. serverwait.go has the measurement.
+	 */
+	if state, installed := installedServiceState(); installed && l.usesSharedDataDir() {
+		return waitForInstalledService(l.addr, state)
 	}
 	exe, err := serverExePath()
 	if err != nil {
