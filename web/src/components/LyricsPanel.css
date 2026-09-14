@@ -1,0 +1,85 @@
+/* The lyrics panel, beside the player's chrome.
+
+   Nothing here is gold. A current line is *where the song is*, not where you
+   are — the focus signal means one thing in this app, and a lit lyric would be
+   the second. Brightness carries it instead: past lines recede, the current one
+   is full strength, and what is coming is dimmer than both. */
+
+.lyrics {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 38vw);
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 12, 14, 0.82);
+  backdrop-filter: blur(18px);
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  z-index: 3;
+}
+
+.lyrics__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 10px;
+  /* The header must not shrink when the list overflows — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.lyrics__note {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.lyrics__close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.lyrics__close:hover,
+.lyrics__close:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.lyrics__lines {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 20px 40vh;
+  /* Half a viewport of padding at the bottom so the last line can still be
+     centred by scrollIntoView rather than sticking at the end of the list. */
+}
+
+.lyrics__line {
+  margin: 0 0 14px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  transition: color 160ms ease, opacity 160ms ease;
+  /* Lines in a scrolling column must not collapse — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.lyrics__line.is-past {
+  opacity: 0.45;
+}
+
+.lyrics__line.is-current {
+  color: var(--text-primary);
+  font-size: 19px;
+}
+
+.lyrics__empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+  max-width: 40ch;
+}

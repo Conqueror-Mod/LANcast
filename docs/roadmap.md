@@ -736,7 +736,37 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
-- **Lyrics, and the rest of music.** [probe](../internal/probe/probe.go) throws
+- **Lyrics** — **built**; the rest of music below is not.
+  [internal/lyrics](../internal/lyrics/lyrics.go) parses LRC,
+  `GET /api/items/{id}/lyrics` resolves **sidecar first then the embedded tag**,
+  and the audio player grows a panel that follows the song. No provider and no
+  network, exactly as the entry below asked.
+
+  Three things the build settled that the entry did not:
+
+  **The album is the case the discovery rule exists for.** Subtitle discovery
+  can use a file named only for its language, because it first works out
+  whether a video is the only one in its folder. Twelve tracks share a folder
+  and every one is a different song, so a lyric file that does not name its
+  track belongs to nothing that can be worked out — the stem must match, and
+  that is the whole rule. `lyrics.lrc` sitting in an album folder is matched to
+  nothing rather than to everything.
+
+  **`synced` is reported rather than inferred.** "Every line at zero" is also
+  what a one-line synced file looks like, and a player deciding which to draw
+  must not have to guess. An unsynced file is still shown, with the panel saying
+  the words are not timed — plenty of `.lrc` files are somebody's
+  copy-and-paste, and words that do not scroll beat no words.
+
+  **The embedded tag cost a new probe call, deliberately.** `probe` discards
+  `LYRICS` on purpose and that stays right; `ReadRawTags` is the other half of
+  that decision rather than a reversal — a caller that wants exactly the blob
+  asks for it, once, when somebody has opened the panel, and nothing is stored.
+
+  Still open from the entry below: **gapless and crossfade**, which is
+  decoder scheduling in the client and nothing the server can fix.
+
+  Original entry: [probe](../internal/probe/probe.go) throws
   the `LYRICS` tag away on purpose — a multi-kilobyte blob has no business in a
   struct that answers "can this client play this file", and that stays true. So
   lyrics are a **separate read**, not a probe field: embedded `USLT`/`LYRICS`

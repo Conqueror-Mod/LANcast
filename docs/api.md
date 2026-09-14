@@ -1447,6 +1447,40 @@ off seasons rather than off the show — the obvious call returns the seasons, a
 every client would otherwise reimplement the walk and get the loose-episode case
 wrong.
 
+### `GET /api/items/{id}/lyrics`
+
+The words to a track, read off the disk it is already on.
+
+```json
+{ "source": "sidecar", "synced": true, "title": "A Song", "artist": "Somebody",
+  "lines": [ { "at_ms": 12340, "text": "The first line" },
+             { "at_ms": 18000, "text": "The second" } ] }
+```
+
+**No provider and no network.** An `.lrc` beside the file, or the tag embedded
+in it. `source` is `sidecar`, `embedded` or `none`, and it is reported because
+it changes what a person can do about the answer: a file beside the track can be
+edited, a tag needs a tag editor, and `none` is the only one of the three that
+is a reason to go looking.
+
+**Sidecar first**, exactly as subtitles resolve, and for the same two reasons —
+it is the one a person can fix, and it is the one that carries timestamps.
+`synced` is the difference between a feature and a text file: unsynced lyrics
+are words on a page, and synced lyrics follow the song. It is reported rather
+than inferred, because "every line at zero" is also what a one-line synced file
+looks like.
+
+A track with no lyrics answers `200` with `source: "none"` and no lines, not
+`404`: the question is reasonable and the answer is none. `at_ms` is meaningless
+when `synced` is false and stays zero for every line — **a line number is not a
+timestamp**. A repeated chorus appears once per occurrence, which is how the
+format writes a repeat and what lets a player highlight it each time.
+
+The embedded read costs an `ffprobe` and happens only when there is no sidecar,
+because nothing in the database holds it: the probe deliberately discards the
+`LYRICS` tag rather than carry a multi-kilobyte blob in a struct that answers
+whether a file can play.
+
 ### `GET /api/items/{id}/subtitles`
 
 Every track for an item — embedded and external, in one list.

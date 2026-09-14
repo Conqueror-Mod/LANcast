@@ -3176,6 +3176,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The words to a track
+         * @description A track with no lyrics answers `200` with `source: "none"` and no lines rather than `404`: the question is reasonable and the answer is none.
+         *
+         *     **Sidecar first**, exactly as subtitles resolve — it is the one a person can fix, and the one that carries timestamps. The embedded read costs an `ffprobe` and happens only when there is no sidecar, because nothing in the database holds the tag: the probe discards it on purpose rather than carry a multi-kilobyte blob in a struct that answers whether a file can play.
+         */
+        get: operations["itemLyrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5029,6 +5051,28 @@ export interface components {
             tags: components["schemas"]["Tag"][];
             /** @description Whether the calling account has marked this item. Keyed per account like a rating. */
             favourite: boolean;
+        };
+        LyricLine: {
+            /**
+             * Format: int64
+             * @description Milliseconds from the start of the track. **Meaningless when `synced` is false**, where it stays zero for every line rather than being invented from the line number.
+             */
+            at_ms: number;
+            /** @description May be empty: an instrumental break is written as a stamp with nothing after it, and it is meaningful — it is how a lyric sheet says nothing is sung here rather than leaving the previous line highlighted. */
+            text: string;
+        };
+        /** @description Words read off the disk the track is already on — an `.lrc` sidecar, or the tag inside the file. No provider and no network. */
+        Lyrics: {
+            /** @description `sidecar`, `embedded` or `none`. Reported because it changes what a person can do about the answer: a file beside the track can be edited, a tag needs a tag editor, and `none` is the only one that is a reason to go looking. */
+            source: string;
+            /** @description The difference between a feature and a text file. Reported rather than inferred from the lines, because "every line at zero" is also what a one-line synced file looks like. */
+            synced: boolean;
+            /** @description In time order. A repeated chorus appears **once per occurrence** — that is how the format writes a repeat, and it is what lets a player highlight it each time. */
+            lines: components["schemas"]["LyricLine"][];
+            /** @description What the lyric file said about itself. Never written back over the track's own metadata, which came from a provider or an NFO and is not this file's to correct. */
+            title?: string;
+            artist?: string;
+            album?: string;
         };
     };
     responses: {
@@ -10447,6 +10491,37 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    itemLyrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The lyrics, or none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lyrics"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

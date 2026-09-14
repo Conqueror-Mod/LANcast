@@ -11,6 +11,7 @@ import { clock } from "@/lib/format";
 import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
+import { LyricsPanel } from "@/components/LyricsPanel";
 import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
@@ -19,6 +20,7 @@ import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
   ShuffleGlyph,
+  LyricsGlyph,
   RepeatGlyph,
   VolumeGlyph,
   SettingsGlyph,
@@ -161,6 +163,14 @@ export function Player() {
    * serve the rare one that misbehaves.
    */
   const [showStats, setShowStats] = useState(false);
+  /*
+   * Lyrics, on audio only.
+   *
+   * Offered rather than opened: a panel that appears on its own would cover
+   * the artwork of every track somebody plays, and most tracks in most
+   * libraries have no words beside them to show.
+   */
+  const [lyricsOpen, setLyricsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /*
    * Whether anything behind the settings button is away from its default.
@@ -448,6 +458,18 @@ export function Player() {
         </div>
       )}
 
+      {lyricsOpen && pb.isAudio && (
+        <LyricsPanel
+          itemID={pb.itemID}
+          /* The clock the chrome already trusts. On a transcode the element's
+             own currentTime restarts at zero after every seek, which is the
+             bug displayTime exists to avoid — and a panel with its own timer
+             would be a second thing to be wrong. */
+          atMS={Math.max(0, Math.floor(pb.displayTime * 1000))}
+          onClose={() => setLyricsOpen(false)}
+        />
+      )}
+
       {showStats && (
         <PlaybackStats
           video={pb.videoRef.current}
@@ -717,6 +739,20 @@ export function Player() {
                   to. `cycleSub` walks `[null, ...available]`, so with nothing
                   available the click lands and nothing happens — the same empty
                   promise, made by a button instead of a menu. */}
+              {/* Audio only. A film's words are its subtitles, and offering
+                  both would be two buttons for one idea — while on a track,
+                  subtitles are the thing that does not exist. */}
+              {pb.isAudio && (
+                <button
+                  className={"player__icon" + (lyricsOpen ? " is-on" : "")}
+                  onClick={() => setLyricsOpen((o) => !o)}
+                  aria-label="Lyrics"
+                  aria-pressed={lyricsOpen}
+                  title="Lyrics"
+                >
+                  <LyricsGlyph />
+                </button>
+              )}
               {showsSubtitleButton(pb.isAudio, pb.subtitles) && (
                 <div className="player__subs">
                   <button
