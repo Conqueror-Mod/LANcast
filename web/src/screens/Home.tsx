@@ -15,9 +15,10 @@ import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeMasthead } from "@/components/HomeMasthead";
 import { TrendingShelf } from "@/components/TrendingShelf";
-import { isMusic, isPicture, watchedVerb } from "@/lib/kind";
+import { isMusic, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import { showContinueTarget } from "@/lib/continueShow";
+import { useHeroSpotlight } from "@/lib/useHero";
 import "./Home.css";
 
 // One library's own shelf. A component per library so each owns its query
@@ -31,33 +32,6 @@ function LibraryShelf({ library }: { library: Library }) {
       seeAllTo={`/library/${library.id}`}
     />
   );
-}
-
-// The hero needs a backdrop to be a hero at all, so the pick is the first
-// candidate that actually has fanart rather than simply the first candidate.
-// Resume wins over new: it is the likeliest reason someone opened LANcast.
-//
-// Music and pictures are excluded rather than left to fail the fanart test.
-// Neither has a backdrop today and both would be skipped anyway, but "the hero
-// is for something you watch" is the actual rule, and leaving it implicit means
-// the first album that arrives with provider artwork — or the first photo wide
-// enough to look like one — silently becomes a hero.
-function pickHero(
-  resumable: Item[] | undefined,
-  recent: Item[] | undefined,
-): { item: Item; resuming: boolean } | null {
-  const withArt = (items: Item[] | undefined) =>
-    items?.find(
-      (i) => i.artwork?.fanart && !i.missing && !isMusic(i) && !isPicture(i),
-    );
-
-  const inProgress = withArt(resumable);
-  if (inProgress) return { item: inProgress, resuming: true };
-
-  const fresh = withArt(recent);
-  if (fresh) return { item: fresh, resuming: false };
-
-  return null;
 }
 
 // Home is the hub: a spotlight, then continue watching → recently added →
@@ -142,7 +116,17 @@ export function Home() {
     ];
   };
 
-  const hero = pickHero(continueWatching, recentlyAddedVideo);
+  /*
+   * Which item is in the spotlight, and why.
+   *
+   * The rule used to be fixed — first resumable item with fanart, else first
+   * recently added — and resume-wins is right for the common case and wrong for
+   * the one people complain about: a library nobody is mid-way through, where
+   * the hero becomes a permanent monument to the last thing anybody watched.
+   * The choice is a device setting now, and the modes that cost extra requests
+   * make them only when they are the chosen one.
+   */
+  const hero = useHeroSpotlight(recentlyAddedVideo);
 
   // The hero already shows this item at full size. Repeating it as the first
   // tile of the shelf directly beneath is the kind of duplication that makes a
@@ -227,7 +211,7 @@ export function Home() {
         nobody designs for.
       */}
       <HomeMasthead libraries={libraries} hasHero={!!hero} />
-      {hero && <HomeHero item={hero.item} resuming={hero.resuming} />}
+      {hero && <HomeHero item={hero.item} reason={hero.reason} seed={hero.seed} />}
       <div className="home__shelves">
         <Shelf
           title="Continue Watching"

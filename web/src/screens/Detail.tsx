@@ -1,5 +1,10 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  heroEligible,
+  useHeroMode,
+  usePinnedHero,
+} from "@/lib/heroMode";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useItem,
@@ -284,6 +289,9 @@ export function Detail() {
 
 
   const { data: item, isLoading, isError } = useItem(itemID);
+  const [pinnedID, setPinnedHero] = usePinnedHero();
+  const [, setHeroMode] = useHeroMode();
+  const pinned = pinnedID === itemID;
   const { data: trailer } = useTrailer(itemID);
 
   // A container (show, season, collection, or a multi-part work) has no file to
@@ -863,6 +871,36 @@ export function Detail() {
                 <SecondaryButton
                   label="Add to playlist"
                   onPress={() => setAddOpen(true)}
+                />
+              )}
+              {/*
+               * Pinning is a thing you think while looking at a film, not
+               * while reading a settings page, so the gesture lives here and
+               * the setting only shows what it did.
+               *
+               * It sets the spotlight mode as well as the item, because a pin
+               * that changed a stored id and nothing you can see would be the
+               * quiet-failure shape this project keeps rediscovering: the
+               * write succeeded, the page is right, and nothing happened.
+               *
+               * Offered only for something that can actually be a hero. A film
+               * with no backdrop would be pinned to a spotlight that then
+               * declines to show it.
+               */}
+              {heroEligible(item) && (
+                <SecondaryButton
+                  label={pinned ? "Unpin from homepage" : "Pin to homepage"}
+                  onPress={() => {
+                    if (pinned) {
+                      setPinnedHero(0);
+                      // Back to the default rather than an empty spotlight
+                      // pointing at nothing.
+                      setHeroMode("continue");
+                      return;
+                    }
+                    setPinnedHero(item.id);
+                    setHeroMode("pinned");
+                  }}
                 />
               )}
               {isPlaylist && (
