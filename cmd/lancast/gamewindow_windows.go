@@ -31,9 +31,15 @@ import (
  */
 
 var (
-	user32                       = windows.NewLazySystemDLL("user32.dll")
-	procEnumWindows              = user32.NewProc("EnumWindows")
-	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
+	user32          = windows.NewLazySystemDLL("user32.dll")
+	procEnumWindows = user32.NewProc("EnumWindows")
+	/*
+	 * Not GetWindowTextW. It looks like a getter and is not: for a window owned
+	 * by another process it sends WM_GETTEXT to that window's thread and waits,
+	 * with no timeout at all. See windowTitle.
+	 */
+	procSendMessageTimeoutW      = user32.NewProc("SendMessageTimeoutW")
+	procIsHungAppWindow          = user32.NewProc("IsHungAppWindow")
 	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
 	procGetWindowRect            = user32.NewProc("GetWindowRect")
 	procGetWindowThreadProcessID = user32.NewProc("GetWindowThreadProcessId")
@@ -64,6 +70,13 @@ const (
 	watchAfterMove = 3 * time.Minute
 	watchCap       = 10 * time.Minute
 	maxTitleLen    = 256
+
+	wmGetText       = 0x000D
+	smtoAbortIfHung = 0x0002
+	// titleTimeout is how long a window gets to say what it is called. A window
+	// that cannot answer in a fifth of a second is busy starting a game, and
+	// waiting on it is what wedged this watcher.
+	titleTimeout = 200
 )
 
 type win32Rect struct{ Left, Top, Right, Bottom int32 }
@@ -281,13 +294,38 @@ func isGameWindow(hwnd uintptr, self uint32) bool {
 	return games.LooksLikeGameWindow(windowTitle(hwnd), r.Width(), r.Height())
 }
 
+/*
+ * windowTitle, without the call that hangs.
+ *
+ * GetWindowTextW sends WM_GETTEXT to a window owned by another process and
+ * waits for that thread to answer, with no timeout. A game still loading — or
+ * an anti-cheat that does not pump messages — blocks it for ever, and it takes
+ * the whole watcher with it.
+ *
+ * That is not hypothetical. A launch of Zenless Zone Zero left a client that
+ * was perfectly responsive, with its UI thread answering in nine milliseconds,
+ * and not one line in its own log: the watching goroutine was parked in here
+ * before it could move a window or report that it had not. The game opened on
+ * the main display, the launcher happened to be on the chosen one because
+ * HoYoPlay remembers its own position, and the feature looked half-working
+ * while doing nothing at all.
+ *
+ * SendMessageTimeout asks the same question and gives up. SMTO_ABORTIFHUNG
+ * refuses outright for a window whose thread is already known to be hung.
+ */
 func windowTitle(hwnd uintptr) string {
-	buf := make([]uint16, maxTitleLen)
-	n, _, _ := procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-	if n == 0 {
+	if hung, _, _ := procIsHungAppWindow.Call(hwnd); hung != 0 {
 		return ""
 	}
-	return syscall.UTF16ToString(buf[:n])
+	buf := make([]uint16, maxTitleLen)
+	var answer uintptr
+	ok, _, _ := procSendMessageTimeoutW.Call(hwnd, wmGetText,
+		uintptr(len(buf)), uintptr(unsafe.Pointer(&buf[0])),
+		smtoAbortIfHung, titleTimeout, uintptr(unsafe.Pointer(&answer)))
+	if ok == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf)
 }
 
 func windowRect(hwnd uintptr) (games.Rect, bool) {
