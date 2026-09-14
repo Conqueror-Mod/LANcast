@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { formatBytes } from "@/lib/format";
 import {
+  useItem,
   useLibraries,
   useSettings,
   useUpdateSettings,
@@ -72,6 +73,11 @@ import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
+import {
+  useHeroMode,
+  usePinnedHero,
+  type HeroMode,
+} from "@/lib/heroMode";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -1271,6 +1277,88 @@ function RuleNumber({
  * the room this device is in. Syncing it would shrink the phone in somebody's
  * hand because the television downstairs is a television.
  */
+/*
+ * What the homepage spotlight shows.
+ *
+ * A device setting, beside bigscreen and spoilers and for the same reason: the
+ * hero is what one person sees on one screen, and there is no per-user
+ * preference store on the server to put it in.
+ *
+ * The pinned item is chosen from the item itself rather than here — "Pin to
+ * homepage" is a thing you think while looking at a film, not while reading a
+ * settings page — so this offers the mode and a way out of it, and says which
+ * item is pinned rather than making you go and look.
+ */
+function HeroSection() {
+  const [mode, setMode] = useHeroMode();
+  const [pinnedID, setPinned] = usePinnedHero();
+  const { data: pinnedItem } = useItem(pinnedID);
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Homepage</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Spotlight</div>
+          <div className="set-row__sub">
+            What the big panel at the top of the home page shows. Whatever it
+            is set to, an item with no backdrop is never chosen and a mode with
+            nothing to show falls back to the next rather than leaving the
+            panel empty. Applies on this device only.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <select
+            className="set-input"
+            aria-label="Homepage spotlight"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as HeroMode)}
+          >
+            <option value="continue">Continue watching</option>
+            <option value="recent">Recently added</option>
+            <option value="recommended">Suggested</option>
+            <option value="pinned">A film I pick</option>
+          </select>
+        </div>
+      </div>
+
+      {mode === "recommended" && (
+        // Said plainly, because the alternative is letting somebody believe
+        // there is a recommender here. There is not, and there is not going to
+        // be one that phones home.
+        <p className="set-row__sub">
+          Suggestions come from what you are part-way through: something
+          unwatched from the same library sharing a genre with it. Nothing is
+          sent anywhere, and the spotlight always says which film a suggestion
+          came from.
+        </p>
+      )}
+
+      {mode === "pinned" && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">
+              {pinnedItem ? pinnedItem.title : "Nothing pinned yet"}
+            </div>
+            <div className="set-row__sub">
+              {pinnedItem
+                ? "Pinned to the spotlight on this device."
+                : "Open a film or a show and choose Pin to homepage. Until then the spotlight carries on as Continue watching."}
+            </div>
+          </div>
+          {pinnedID > 0 && (
+            <div className="set-row__actions">
+              <button className="set-btn" onClick={() => setPinned(0)}>
+                Unpin
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DisplaySection() {
   const [bigscreen, setBigscreen] = useBigscreen();
   const [spoilers, setSpoilers] = useSpoilerMode();
@@ -2847,6 +2935,7 @@ export function Settings() {
           {pane === "display" && (
             <>
               <DisplaySection />
+              <HeroSection />
               {/* On the device pane rather than the admin Playback one: a
                   denial is stored per browser, so the person it slows down is
                   the one sitting here, who may not be an administrator. */}

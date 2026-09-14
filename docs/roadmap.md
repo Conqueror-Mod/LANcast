@@ -557,8 +557,35 @@ group is not priority.
   because the keyboard model came first (ADR 0004): a pointer-only client would
   have needed a rewrite, and this one needed a stylesheet.
 
-- **Homepage hero as a recommendation** — a setting for what the spotlight
-  shows. Today `pickHero` in [Home.tsx](../web/src/screens/Home.tsx) is a fixed
+- ~~**Homepage hero as a recommendation**~~ — **built.** Four modes in
+  [heroMode.ts](../web/src/lib/heroMode.ts), per device beside `bigscreen` and
+  `spoilers`. The description below is what was asked for; three notes on what
+  it turned into.
+
+  **The fallback chain is the feature**, more than the modes are. Every mode
+  ends with resume-then-recent, because each way of having nothing to show is
+  ordinary — a new library has nothing to resume, a fully-watched one nothing to
+  suggest, and a pinned item can be deleted by somebody else while you are
+  looking at the page. None of those is a reason to render a hero-shaped hole.
+
+  **Recommended is not an engine, and the honest description is the design.**
+  It takes the thing you are part-way through, reads the genres off it, and
+  finds something unwatched in the same library sharing one — so it can always
+  say where it came from, and the spotlight renders that sentence: *Because you
+  watched X*. A candidate it cannot attribute is not shown as a suggestion at
+  all, which is the guard against this quietly becoming the recommender the
+  no-phone-home rule exists to refuse. The seed is fetched in full because
+  genres are a detail response only; that request, and the candidate search,
+  fire **only** in this mode. The two default modes still cost nothing, which
+  matters on the first screen of the app.
+
+  **Pinning is a gesture on the item, not a field in Settings.** "Pin to
+  homepage" is a thing you think while looking at a film, and it sets the mode
+  as well as the id — a pin that stored a number and changed nothing you can see
+  would be this project's favourite bug wearing a new hat. Settings shows what
+  is pinned and offers the way out.
+
+  Original entry: `pickHero` in [Home.tsx](../web/src/screens/Home.tsx) is a fixed
   rule: the first resumable item carrying fanart, else the first recently added,
   music and pictures excluded. Resume-wins is right for the common case and
   wrong for the one actually complained about — a library nobody is mid-way

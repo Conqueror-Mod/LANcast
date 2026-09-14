@@ -154,7 +154,7 @@ async function render(item: Item) {
         <FocusProvider>
           <MemoryRouter initialEntries={["/"]}>
             <Routes>
-              <Route path="/" element={<HomeHero item={item} resuming />} />
+              <Route path="/" element={<HomeHero item={item} reason="resuming" />} />
               <Route path="/watch/:id" element={<Landing />} />
               <Route path="/item/:id" element={<Landing />} />
             </Routes>
