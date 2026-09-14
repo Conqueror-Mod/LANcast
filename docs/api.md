@@ -322,7 +322,9 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 |---|---|
 | `GET /api/users` | `{users: [{id, name, role}]}` |
 | `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
-| `PATCH /api/users/{id}` | `{name?, role?}` — rename an account, change its role, or both. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count |
+| `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
+
+**What a ceiling does.** It is enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: "you may not see this" and "this does not exist" must be indistinguishable, or walking the ids becomes a way to enumerate what a household is keeping from somebody. An item with no rating of its own **inherits its parent's, then its grandparent's** — an episode is judged by its show — and anything still unrated after that is **blocked**, on the reasoning that a limit stopping at the catalogued and waving the rest past is a filter that looks like a limit. Music and photographs are exempt: a track and a photograph carry no certificate and never will, so judging them by one would mean a limited account could not see a single song or a single photograph — a lockout rather than a limit.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
 | `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 
@@ -1218,6 +1220,36 @@ because it changes who can see something about a person.
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
 
+### `GET /api/profile/year`
+
+`?year=2025`, defaulting to the **server's** current year — the calendar the
+household keeps, which is what its history is bucketed on. Answers one account's
+year: how many titles, how many were finished against put down, time spent, a
+count for each of the twelve months, a breakdown by kind, how many libraries
+were touched, and the first and last things played. `years` lists every year
+this account has history in, so a picker exists on first paint, and `partial`
+says the year is still running — the difference between "your 2025" and "your
+2025 so far" is the difference between a summary and a claim.
+
+**It answers about the caller and nobody else**, and there is deliberately no
+variant naming another account: the sharing opt-in publishes *what was watched*,
+never somebody's year assembled for them by somebody else.
+
+Two things it deliberately does not claim, both consequences of `playback_state`
+holding **one row per item per user**:
+
+- A year is *the titles whose last play fell in it*. A film watched in January
+  and again in December belongs to December, and nothing can recover the January
+  sitting — the row was overwritten.
+- `watched_ms` counts **one viewing of each title**, not `watch_count` viewings.
+  The tally is real and the dates of those viewings are not, so multiplying
+  would attribute every rewatch to the year of the most recent one. The figure
+  is therefore low rather than inflated, which is the safer direction: a number
+  that is missing is easier to disbelieve than one that grew on its own.
+
+Nothing here is sent anywhere. It is computed from data that has never left the
+machine, which is the entire point of it existing.
+
 ### `GET /api/profile/history`
 
 `?scope=all|finished|unfinished` and an optional `?under={item_id}` — how many
@@ -1446,6 +1478,40 @@ A route of its own rather than `/api/items?parent_id=`, because episodes hang
 off seasons rather than off the show — the obvious call returns the seasons, and
 every client would otherwise reimplement the walk and get the loose-episode case
 wrong.
+
+### `GET /api/items/{id}/lyrics`
+
+The words to a track, read off the disk it is already on.
+
+```json
+{ "source": "sidecar", "synced": true, "title": "A Song", "artist": "Somebody",
+  "lines": [ { "at_ms": 12340, "text": "The first line" },
+             { "at_ms": 18000, "text": "The second" } ] }
+```
+
+**No provider and no network.** An `.lrc` beside the file, or the tag embedded
+in it. `source` is `sidecar`, `embedded` or `none`, and it is reported because
+it changes what a person can do about the answer: a file beside the track can be
+edited, a tag needs a tag editor, and `none` is the only one of the three that
+is a reason to go looking.
+
+**Sidecar first**, exactly as subtitles resolve, and for the same two reasons —
+it is the one a person can fix, and it is the one that carries timestamps.
+`synced` is the difference between a feature and a text file: unsynced lyrics
+are words on a page, and synced lyrics follow the song. It is reported rather
+than inferred, because "every line at zero" is also what a one-line synced file
+looks like.
+
+A track with no lyrics answers `200` with `source: "none"` and no lines, not
+`404`: the question is reasonable and the answer is none. `at_ms` is meaningless
+when `synced` is false and stays zero for every line — **a line number is not a
+timestamp**. A repeated chorus appears once per occurrence, which is how the
+format writes a repeat and what lets a player highlight it each time.
+
+The embedded read costs an `ffprobe` and happens only when there is no sidecar,
+because nothing in the database holds it: the probe deliberately discards the
+`LYRICS` tag rather than carry a multi-kilobyte blob in a struct that answers
+whether a file can play.
 
 ### `GET /api/items/{id}/subtitles`
 
@@ -2017,6 +2083,59 @@ truth: the workers are in-process and a restart ended their work.
 
 Reading progress needs no special role. The endpoints that *start* work
 (`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
+
+### `GET /api/transcodes`
+
+What the server is converting right now. **Admin only.**
+
+```json
+{ "max": 3,
+  "sessions": [
+    { "id": "a9b698226f57ef29", "item_id": 6688, "title": "Scream", "owner": "u_3f9",
+      "live": false, "output": "hls", "encoding": true, "start_at": 0,
+      "idle_seconds": 41, "running_seconds": 52, "served_bytes": 0, "finished": false }
+  ] }
+```
+
+`served_bytes` is the field this exists for. Zero means the slot is being held
+for nobody: the session was started, never read from, and is keeping anything
+else from playing. Everything beside it is context for that number.
+
+Sessions come back **most idle first**, because the list is read when something
+has just been refused and the useful row is the one nobody is using. Sorting by
+age would put the film somebody is actually watching at the top of a list whose
+purpose is deciding what to stop.
+
+`max` is the ceiling, so a client can say "two of three" rather than "two".
+
+A channel carries `live: true` and a negated `item_id` — the convention that
+keeps channel and item numbering from being mistaken for one another — and no
+`title`, since it is not a library item.
+
+Admin only, and that is a privacy decision rather than a permissions
+afterthought: a conversion names an account and a film, so a list of them is a
+list of who is watching what. Tags and watch history are careful to keep that to
+themselves, and a diagnostics panel must not be the way around them.
+
+This exists because of a morning spent without it. A film refused to play, the
+app said only that it could not, and the answer — three sessions holding every
+slot, none of which had ever delivered a byte — was available exclusively by
+reading `lancastd.log` by hand. The server knew everything needed to explain
+itself and had no way to say it.
+
+### `DELETE /api/transcodes/{id}`
+
+Stop one conversion and free its slot. **Admin only.** `204` on success.
+
+A session that has already gone answers `404` rather than an error: two
+administrators pressing Stop on the same row is not a failure, and the second one
+has got what they asked for.
+
+The point of showing the list is being able to act on it. Eviction and reaping
+each decide for themselves when a slot is wasted, and when they are wrong there
+was previously nothing anybody could do from the app — the remedy was waiting ten
+minutes or restarting the server, which is not an answer to "I can see the thing
+that is blocking me".
 
 ### `GET /api/logs`
 

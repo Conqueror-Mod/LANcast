@@ -16,6 +16,7 @@ import (
 
 func rewindTo44(t *testing.T, st *Store) {
 	t.Helper()
+	dropPost45Additions(t, st)
 	if _, err := st.db.Exec(`UPDATE meta SET value = '44' WHERE key = 'schema_version'`); err != nil {
 		t.Fatal(err)
 	}

@@ -190,6 +190,10 @@ export type Profile = components["schemas"]["Profile"];
 // GET /api/crashes — a recovered panic. `where` is the route pattern rather
 // than the URL: the pattern is what somebody fixes.
 export type CrashReport = components["schemas"]["CrashReport"];
+export type Transcode = components["schemas"]["Transcode"];
+export type TranscodeList = components["schemas"]["TranscodeList"];
+export type YearInReview = components["schemas"]["YearInReview"];
+export type Lyrics = components["schemas"]["Lyrics"];
 
 // GET /api/libraries/{id}/trending. `viewers` counts *accounts*, not plays:
 // playback_state holds one row per item per user, so this is how many people

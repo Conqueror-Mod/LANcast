@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useProfile } from "@/api/hooks";
+import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
 import type { HistoryEntry } from "@/api/types";
@@ -91,6 +92,16 @@ export function Profile() {
           }
         />
       </div>
+
+      {/*
+        Above Recently played, below the lifetime totals.
+
+        It is the same history read a different way, so it belongs with the
+        numbers it is derived from rather than on a route of its own — and a
+        nav entry for something seasonal would be a permanent fixture for an
+        occasional read.
+      */}
+      <YearInReview />
 
       <span className="section-label profile__label">Recently played</span>
 

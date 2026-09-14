@@ -1523,6 +1523,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transcodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the server is converting right now
+         * @description Administrators only, and that is a privacy decision rather than a permissions afterthought: a conversion names an account and a film, so a list of them is a list of who is watching what.
+         *
+         *     `served_bytes` is the field worth reading. Zero means the slot is being held for nobody — the session was started, never read from, and is keeping other playback from starting. Sessions are returned most-idle first, because the list is read when something has been refused and the useful row is the one nobody is using.
+         *
+         *     A channel carries `live: true` and a negated `item_id`, the convention that keeps channel and item numbering from being confused.
+         */
+        get: operations["listTranscodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transcodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The session id, as returned by `GET /api/transcodes`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop one conversion
+         * @description Administrators only. Ends the session and frees its slot.
+         *
+         *     A session that has already gone answers `404` rather than an error: two administrators pressing Stop on the same row is not a failure, and the second one has got what they asked for.
+         */
+        delete: operations["stopTranscode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -3176,6 +3225,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/year": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One account's year
+         * @description Answers about **the caller and nobody else** — viewing is private by default (ADR 0035), and there is deliberately no variant naming another account.
+         *
+         *     The year defaults to the **server's** current year, which is the calendar the history is bucketed on: a client in another timezone asking for "now" gets the household's year rather than its own, which is the right answer on a server whose library sits in one house.
+         *
+         *     Nothing here is sent anywhere. It is computed from data that has never left the machine, which is the entire point of it existing.
+         */
+        get: operations["yearInReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The words to a track
+         * @description A track with no lyrics answers `200` with `source: "none"` and no lines rather than `404`: the question is reasonable and the answer is none.
+         *
+         *     **Sidecar first**, exactly as subtitles resolve — it is the one a person can fix, and the one that carries timestamps. The embedded read costs an `ffprobe` and happens only when there is no sidecar, because nothing in the database holds the tag: the probe discards it on purpose rather than carry a multi-kilobyte blob in a struct that answers whether a file can play.
+         */
+        get: operations["itemLyrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3238,6 +3333,8 @@ export interface components {
             sharing?: boolean;
             /** @description Whether this account appears in the roster handed to paired servers. `/auth/status` only, and absent rather than false when unreadable. */
             visible_to_peers?: boolean;
+            /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
+            max_content_rating?: string;
         };
         AuthStatus: {
             /** @description Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on. */
@@ -4310,6 +4407,8 @@ export interface components {
             created_at: number;
             /** @description **Live sessions, not a login history.** It answers "is this person here right now", which is the question an administrator asks before changing something under them. */
             sessions: number;
+            /** @description The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it. */
+            max_content_rating?: string;
         };
         ManagedUserList: {
             users: components["schemas"]["ManagedUser"][];
@@ -4322,13 +4421,21 @@ export interface components {
             role?: string;
         };
         /**
-         * @description Rename an account, change its role, or both. **At least one field is required.**
+         * @description Rename an account, change its role, set the content rating it may not exceed, or any combination. **At least one field is required.**
          *
          *     The account **id is unchanged**, which is what makes this a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently.
          */
         PatchUserRequest: {
             name?: string;
             role?: string;
+            /**
+             * @description A ceiling set **for** this account by an administrator (ADR 0015). Empty clears it, and `400` is answered for a label this server cannot place on its scale — a ceiling that means nothing would leave a household believing a limit was in force.
+             *
+             *     Deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit. The two rules must not be generalised into each other.
+             *
+             *     Enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: a refusal that is distinguishable from an absence lets somebody walk the ids to learn what is being kept from them. An item with no rating of its own inherits its parent's, then its grandparent's — an episode is judged by its show — and anything still unrated is blocked — except music and photographs, which carry no certificate and are exempt, since judging them by one would empty those libraries for a limited account rather than limiting them.
+             */
+            max_content_rating?: string;
         };
         ResetPasswordRequest: {
             /** Format: password */
@@ -4427,6 +4534,43 @@ export interface components {
             summary: string;
             /** @description A JSON blob, as a string. */
             detail?: string;
+        };
+        /** @description One conversion the server is running. */
+        Transcode: {
+            id: string;
+            /**
+             * Format: int64
+             * @description Negated for a channel; see `live`.
+             */
+            item_id: number;
+            /** @description Resolved server-side, since the page has no way to look up an item it is not already showing. Absent when the item has gone, and for a channel. */
+            title?: string;
+            /** @description The account this conversion was started for. Absent on an unconfigured loopback server, where every request is anonymous. */
+            owner?: string;
+            /** @description A channel rather than a library item. */
+            live: boolean;
+            /** @description `hls` or `progressive`. */
+            output: string;
+            /** @description A real re-encode, as opposed to a remux into a different container. The two cost wildly different amounts. */
+            encoding: boolean;
+            /** @description Offset into the film this conversion began at, which is what tells a seek apart from a fresh start. */
+            start_at: number;
+            idle_seconds: number;
+            running_seconds: number;
+            /**
+             * Format: int64
+             * @description How much picture has actually been handed over. Zero means the slot is held for nobody.
+             */
+            served_bytes: number;
+            /** @description ffmpeg has exited. For segmented output that is normal and the segments remain playable. */
+            finished: boolean;
+            /** @description Why ffmpeg exited, when it exited badly. */
+            error?: string;
+        };
+        TranscodeList: {
+            /** @description The ceiling, so a reader can say "two of three" rather than "two". */
+            max: number;
+            sessions: components["schemas"]["Transcode"][];
         };
         AuditPage: {
             /** @description Newest first. */
@@ -5029,6 +5173,74 @@ export interface components {
             tags: components["schemas"]["Tag"][];
             /** @description Whether the calling account has marked this item. Keyed per account like a rating. */
             favourite: boolean;
+        };
+        YearMonth: {
+            /** @description 1–12. **Every month is present, including the empty ones** — a chart with the quiet months missing is a chart that lies about the shape of the year. */
+            month: number;
+            /** @description Distinct titles whose last play fell in this month. */
+            titles: number;
+        };
+        YearKind: {
+            /** @description An item kind — **an open set** (ADR 0018). */
+            kind: string;
+            titles: number;
+        };
+        /**
+         * @description One account's year, computed from `playback_state` and sent nowhere.
+         *
+         *     Two things it deliberately does not claim, both consequences of that table holding **one row per item per user**:
+         *
+         *     - A year is *the titles whose last play fell in it*. A film watched in January and again in December belongs to December; the January sitting cannot be recovered, because the row was overwritten.
+         *     - `watched_ms` counts **one viewing of each title**, not `watch_count` viewings. The tally is real and the dates of those viewings are not, so multiplying would attribute every rewatch to the year of the most recent one. The figure is low rather than inflated, which is the safer direction.
+         */
+        YearInReview: {
+            year: number;
+            /** @description Distinct titles whose last play landed in this year. */
+            titles: number;
+            finished: number;
+            /** @description Titles played and not finished. Derived from `titles - finished` rather than counted separately, so the two cannot disagree about a total. */
+            abandoned: number;
+            /**
+             * Format: int64
+             * @description Time **spent**, not runtime owned: a finished title counts its runtime, an unfinished one counts how far you got, and one viewing each. See the schema description.
+             */
+            watched_ms: number;
+            /** @description Always twelve entries, in order. */
+            months: components["schemas"]["YearMonth"][];
+            /** @description Most-played kind first. */
+            kinds: components["schemas"]["YearKind"][];
+            /** @description Distinct libraries touched — breadth, in the one unit this server can state without an opinion about genre. */
+            libraries: number;
+            /** @description The first thing played in the year. **Absent when the year holds nothing.** */
+            first?: components["schemas"]["Item"];
+            /** @description The last thing played in the year. The same item as `first` when the year holds exactly one. */
+            last?: components["schemas"]["Item"];
+            /** @description Every year this account has history in, newest first, so a picker exists on first paint. */
+            years: number[];
+            /** @description The year is still running. The difference between "your 2025" and "your 2025 so far" is the difference between a summary and a claim. */
+            partial: boolean;
+        };
+        LyricLine: {
+            /**
+             * Format: int64
+             * @description Milliseconds from the start of the track. **Meaningless when `synced` is false**, where it stays zero for every line rather than being invented from the line number.
+             */
+            at_ms: number;
+            /** @description May be empty: an instrumental break is written as a stamp with nothing after it, and it is meaningful — it is how a lyric sheet says nothing is sung here rather than leaving the previous line highlighted. */
+            text: string;
+        };
+        /** @description Words read off the disk the track is already on — an `.lrc` sidecar, or the tag inside the file. No provider and no network. */
+        Lyrics: {
+            /** @description `sidecar`, `embedded` or `none`. Reported because it changes what a person can do about the answer: a file beside the track can be edited, a tag needs a tag editor, and `none` is the only one that is a reason to go looking. */
+            source: string;
+            /** @description The difference between a feature and a text file. Reported rather than inferred from the lines, because "every line at zero" is also what a one-line synced file looks like. */
+            synced: boolean;
+            /** @description In time order. A repeated chorus appears **once per occurrence** — that is how the format writes a repeat, and it is what lets a player highlight it each time. */
+            lines: components["schemas"]["LyricLine"][];
+            /** @description What the lyric file said about itself. Never written back over the track's own metadata, which came from a provider or an NFO and is not this file's to correct. */
+            title?: string;
+            artist?: string;
+            album?: string;
         };
     };
     responses: {
@@ -8012,6 +8224,52 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listTranscodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The live conversions, most idle first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    stopTranscode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The session id, as returned by `GET /api/transcodes`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getAuditLog: {
         parameters: {
             query?: {
@@ -10447,6 +10705,69 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    yearInReview: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the server's current year. A year outside anything a media library could hold answers `400` rather than an empty summary — the two look identical on screen and only one is worth showing. */
+                year?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The year */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YearInReview"];
+                };
+            };
+            /** @description Invalid year */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    itemLyrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The lyrics, or none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lyrics"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

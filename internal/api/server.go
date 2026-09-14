@@ -356,6 +356,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	// Forgetting what you watched. GET prices it, DELETE does it.
+	/*
+	 * Your year (ADR 0035). On the profile prefix because it is a fact about
+	 * one account and answers only about the caller — there is deliberately no
+	 * variant naming somebody else.
+	 */
+	mux.HandleFunc("GET /api/profile/year", s.yearInReview)
 	mux.HandleFunc("GET /api/profile/history", s.historyPreview)
 	mux.HandleFunc("DELETE /api/profile/history", s.resetHistory)
 
@@ -431,6 +437,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
 	// A show's play actions. Not admin-gated: they read what the caller may
 	// already browse, and Continue is per-user by construction.
+	/*
+	 * The words to a track, read off the disk it is already on: an .lrc beside
+	 * the file, or the tag inside it. No provider and no network.
+	 */
+	mux.HandleFunc("GET /api/items/{id}/lyrics", s.itemLyrics)
 	mux.HandleFunc("GET /api/items/{id}/continue", s.continueShow)
 	mux.HandleFunc("GET /api/items/{id}/episodes", s.showEpisodes)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
@@ -462,6 +473,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)
+	/*
+	 * What the server is converting, and the ability to stop one.
+	 *
+	 * Administrator only: a conversion names an account and a film, so the list
+	 * is a list of who is watching what — the thing tags and watch history are
+	 * careful to keep private.
+	 */
+	mux.HandleFunc("GET /api/transcodes", s.adminOnly(s.transcodes))
+	mux.HandleFunc("DELETE /api/transcodes/{id}", s.adminOnly(s.stopTranscode))
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
 	mux.HandleFunc("GET /api/crashes", s.adminOnly(s.listCrashes))
 	mux.HandleFunc("DELETE /api/crashes", s.adminOnly(s.clearCrashes))

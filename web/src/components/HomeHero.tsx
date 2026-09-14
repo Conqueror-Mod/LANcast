@@ -7,6 +7,7 @@ import { useFocusable } from "@/focus/FocusController";
 import { isSquareArt } from "@/lib/kind";
 import { rating, runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
+import type { HeroReason } from "@/lib/heroMode";
 import "./HomeHero.css";
 
 // Motion is opt-out, and the check is read once per mount rather than per frame.
@@ -95,7 +96,40 @@ function progressPct(item: Item): number {
 // It renders nothing when there is no artwork to render. A hero built around a
 // missing backdrop is a grey box with a title in it, which is precisely the look
 // this screen exists to get away from.
-export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) {
+/*
+ * What the spotlight says about itself.
+ *
+ * The eyebrow is not decoration: it is the difference between a home page that
+ * looks arranged and one that looks automatic. A recommendation in particular
+ * has to name the thing it came from — "Because you watched X" is a claim, and
+ * a suggestion that cannot say where it came from is the kind of thing this
+ * project has no interest in growing.
+ */
+function eyebrow(reason: HeroReason, seed: Item | undefined): string {
+  switch (reason) {
+    case "resuming":
+      return "Continue watching";
+    case "recent":
+      return "Just added";
+    case "pinned":
+      return "Pinned to your homepage";
+    case "recommended":
+      return seed ? `Because you watched ${seed.title}` : "Suggested";
+  }
+}
+
+export function HomeHero({
+  item,
+  reason,
+  seed,
+}: {
+  item: Item;
+  reason: HeroReason;
+  /** For "recommended": the item the suggestion was drawn from. */
+  seed?: Item;
+}) {
+  const resuming = reason === "resuming";
+  const label = eyebrow(reason, seed);
   const navigate = useNavigate();
 
   /*
@@ -188,7 +222,7 @@ export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) 
   ].filter(Boolean) as string[];
 
   return (
-    <section className="hero" aria-label={resuming ? "Continue watching" : "Just added"}>
+    <section className="hero" aria-label={label}>
       <div className="hero__backdrop" ref={parallaxRef}>
         {fanart && (
           <div
@@ -223,9 +257,7 @@ export function HomeHero({ item, resuming }: { item: Item; resuming: boolean }) 
         )}
 
         <div className="hero__text">
-          <span className="section-label hero__eyebrow">
-            {resuming ? "Continue watching" : "Just added"}
-          </span>
+          <span className="section-label hero__eyebrow">{label}</span>
           <h1 className="hero__title">{item.title}</h1>
           {meta.length > 0 && (
             <div className="hero__meta">

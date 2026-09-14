@@ -21,7 +21,23 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(users))
 	for _, u := range users {
-		out = append(out, userJSON(u.ID, u.Name, u.Role))
+		row := userJSON(u.ID, u.Name, u.Role)
+		/*
+		 * The content rating ceiling, on this listing only (ADR 0015).
+		 *
+		 * Added here rather than inside userJSON, which also builds the object
+		 * a session gets back about *itself* at login. A limit is a fact an
+		 * administrator manages, and this route is already admin-only; putting
+		 * it in the shared helper would quietly publish every household's
+		 * limits to every signed-in account.
+		 *
+		 * Omitted when there is none, so "no limit" is an absence rather than
+		 * an empty string a client has to know to read as one.
+		 */
+		if u.MaxContentRating != "" {
+			row["max_content_rating"] = u.MaxContentRating
+		}
+		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
 }

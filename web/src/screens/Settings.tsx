@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { formatBytes } from "@/lib/format";
 import {
+  useItem,
   useLibraries,
   useSettings,
   useUpdateSettings,
@@ -72,6 +73,13 @@ import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
+import { ClientLog } from "@/components/ClientLog";
+import { Transcodes } from "@/components/Transcodes";
+import {
+  useHeroMode,
+  usePinnedHero,
+  type HeroMode,
+} from "@/lib/heroMode";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -135,6 +143,18 @@ function errorMessage(err: unknown): string {
   return "Something went wrong.";
 }
 
+/*
+ * The ceilings offered, in order.
+ *
+ * A short list rather than every label internal/rating can place. The full
+ * table carries six national systems so that *items* from any of them can be
+ * judged; offering all of them here would ask a household to choose between
+ * "15" and "TV-14" as though the difference meant something to them. These are
+ * the rungs somebody actually thinks in, and an item rated in another system is
+ * still placed against whichever one is chosen.
+ */
+const RATING_CEILINGS = ["G", "PG", "PG-13", "TV-14", "R"];
+
 function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
   const del = useDeleteUser();
   const reset = useResetUserPassword();
@@ -153,7 +173,18 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
             {user.name}
             {isSelf && <span className="set-tag">you</span>}
           </div>
-          <div className="set-row__sub">{user.role}</div>
+          <div className="set-row__sub">
+            {user.role}
+            {/*
+              Said on the row rather than hidden behind the control, because
+              the question an administrator has when they open this pane is
+              "which of these accounts is limited", and a limit you have to
+              click each row to discover is one nobody audits.
+            */}
+            {user.max_content_rating
+              ? ` · ${user.max_content_rating} and under`
+              : ""}
+          </div>
           {/* The server refuses to demote the last administrator — inside a
               transaction with the count, because two admins demoting each other
               at once is a race a client-side check cannot win. This surfaces
@@ -257,6 +288,39 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
               >
                 {user.role === "admin" ? "Make member" : "Make admin"}
               </button>
+              {/*
+                A ceiling set *for* this account, which is the opposite of the
+                sharing switch in the Account pane: that one has no
+                administrator route because a switch somebody else can flip is
+                not consent, and this one has no self-service route because a
+                limit you can lift is not a limit. The two look alike and must
+                not be generalised into each other.
+
+                Not offered for yourself. An administrator can lift any ceiling,
+                so one set on your own account is a note rather than a limit,
+                and offering it would suggest otherwise.
+              */}
+              {!isSelf && (
+                <select
+                  className="set-input"
+                  aria-label={`Content rating limit for ${user.name}`}
+                  value={user.max_content_rating ?? ""}
+                  disabled={update.isPending}
+                  onChange={(e) =>
+                    update.mutate({
+                      id: user.id,
+                      max_content_rating: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">No limit</option>
+                  {RATING_CEILINGS.map((label) => (
+                    <option key={label} value={label}>
+                      {label} and under
+                    </option>
+                  ))}
+                </select>
+              )}
               <button className="set-btn" onClick={() => setResetting(true)}>
                 Reset password
               </button>
@@ -1271,6 +1335,88 @@ function RuleNumber({
  * the room this device is in. Syncing it would shrink the phone in somebody's
  * hand because the television downstairs is a television.
  */
+/*
+ * What the homepage spotlight shows.
+ *
+ * A device setting, beside bigscreen and spoilers and for the same reason: the
+ * hero is what one person sees on one screen, and there is no per-user
+ * preference store on the server to put it in.
+ *
+ * The pinned item is chosen from the item itself rather than here — "Pin to
+ * homepage" is a thing you think while looking at a film, not while reading a
+ * settings page — so this offers the mode and a way out of it, and says which
+ * item is pinned rather than making you go and look.
+ */
+function HeroSection() {
+  const [mode, setMode] = useHeroMode();
+  const [pinnedID, setPinned] = usePinnedHero();
+  const { data: pinnedItem } = useItem(pinnedID);
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Homepage</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Spotlight</div>
+          <div className="set-row__sub">
+            What the big panel at the top of the home page shows. Whatever it
+            is set to, an item with no backdrop is never chosen and a mode with
+            nothing to show falls back to the next rather than leaving the
+            panel empty. Applies on this device only.
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <select
+            className="set-input"
+            aria-label="Homepage spotlight"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as HeroMode)}
+          >
+            <option value="continue">Continue watching</option>
+            <option value="recent">Recently added</option>
+            <option value="recommended">Suggested</option>
+            <option value="pinned">A film I pick</option>
+          </select>
+        </div>
+      </div>
+
+      {mode === "recommended" && (
+        // Said plainly, because the alternative is letting somebody believe
+        // there is a recommender here. There is not, and there is not going to
+        // be one that phones home.
+        <p className="set-row__sub">
+          Suggestions come from what you are part-way through: something
+          unwatched from the same library sharing a genre with it. Nothing is
+          sent anywhere, and the spotlight always says which film a suggestion
+          came from.
+        </p>
+      )}
+
+      {mode === "pinned" && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">
+              {pinnedItem ? pinnedItem.title : "Nothing pinned yet"}
+            </div>
+            <div className="set-row__sub">
+              {pinnedItem
+                ? "Pinned to the spotlight on this device."
+                : "Open a film or a show and choose Pin to homepage. Until then the spotlight carries on as Continue watching."}
+            </div>
+          </div>
+          {pinnedID > 0 && (
+            <div className="set-row__actions">
+              <button className="set-btn" onClick={() => setPinned(0)}>
+                Unpin
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DisplaySection() {
   const [bigscreen, setBigscreen] = useBigscreen();
   const [spoilers, setSpoilers] = useSpoilerMode();
@@ -2827,6 +2973,12 @@ export function Settings() {
                     is not.
                   */}
                   <Review />
+                  {/*
+                    Conversions sits above the audit log because it is the only
+                    live reading on the page: everything else here is a record
+                    of what has happened, and this is what is happening.
+                  */}
+                  <Transcodes />
                   <AuditLog />
                 </>
               )}
@@ -2841,12 +2993,25 @@ export function Settings() {
             </>
           )}
           {pane === "account" && <AccountSection />}
-          {pane === "app" && <DesktopSettings />}
+          {pane === "app" && (
+            <>
+              <DesktopSettings />
+              {/*
+                On the device pane rather than the admin Logs one. This file is
+                written by this window, on this machine, and it is not the
+                server's to show: a phone opening Settings has no such file, and
+                an administrator reading it from another device would be reading
+                nothing.
+              */}
+              <ClientLog />
+            </>
+          )}
           {pane === "games" && <GamesSettings />}
           {pane === "keyboard" && <KeyBindings />}
           {pane === "display" && (
             <>
               <DisplaySection />
+              <HeroSection />
               {/* On the device pane rather than the admin Playback one: a
                   denial is stored per browser, so the person it slows down is
                   the one sitting here, who may not be an administrator. */}

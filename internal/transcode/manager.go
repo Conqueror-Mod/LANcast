@@ -424,6 +424,7 @@ func (m *Manager) Sessions() []SessionInfo {
 			Encoding: s.Encoding,
 			StartAt:  s.StartAt, IdleSeconds: int(s.Idle().Seconds()),
 			RunningSeconds: int(time.Since(s.Started()).Seconds()), Finished: done,
+			Owner: s.Owner, ServedBytes: s.Served(),
 		}
 		if err != nil {
 			info.Error = err.Error()
@@ -431,6 +432,35 @@ func (m *Manager) Sessions() []SessionInfo {
 		out = append(out, info)
 	}
 	return out
+}
+
+/*
+ * StopSession ends one session by id, and reports whether there was one.
+ *
+ * The manual half of the ceiling. Eviction and reaping both decide for
+ * themselves when a slot is wasted, and when they are wrong about it there has
+ * been nothing anybody could do from the app — the only remedy was to wait ten
+ * minutes or restart the server, neither of which is an answer to "I can see
+ * the thing that is blocking me".
+ *
+ * Removed under the lock and stopped outside it, the order reap and supersede
+ * both use: Stop blocks for up to three seconds.
+ */
+func (m *Manager) StopSession(id string) bool {
+	m.mu.Lock()
+	s, ok := m.sessions[id]
+	if ok {
+		delete(m.sessions, id)
+	}
+	m.mu.Unlock()
+	if !ok {
+		return false
+	}
+
+	m.log.Info("stopping a transcode on request", "session", s.ID, "item", s.ItemID,
+		"served_bytes", s.Served(), "idle_seconds", int(s.Idle().Seconds()))
+	s.Stop()
+	return true
 }
 
 // SessionInfo is a serializable view of a session.
@@ -445,6 +475,22 @@ type SessionInfo struct {
 	RunningSeconds int     `json:"running_seconds"`
 	Finished       bool    `json:"finished"`
 	Error          string  `json:"error,omitempty"`
+	/*
+	 * Owner is the account this session was started for.
+	 *
+	 * Reported so that an administrator looking at a full ceiling can see whose
+	 * playback is holding it, rather than three opaque identifiers.
+	 */
+	Owner string `json:"owner,omitempty"`
+	/*
+	 * ServedBytes is how much picture this session has actually handed over.
+	 *
+	 * Zero is the interesting value, and the one that was impossible to see
+	 * from outside. A session that has never served a byte is holding a slot
+	 * for nobody — three of those refusing every film on the machine is exactly
+	 * what v0.9.21 fixed, and it took reading the server log by hand to find.
+	 */
+	ServedBytes int64 `json:"served_bytes"`
 }
 
 /*

@@ -24,6 +24,9 @@ import type {
   CastMember,
   Collision,
   CrashReport,
+  TranscodeList,
+  YearInReview,
+  Lyrics,
   MediaToolsState,
   Facets,
   HistoryEntry,
@@ -2834,6 +2837,50 @@ export function useProfile(limit = 50, offset = 0) {
   });
 }
 
+// ------------------------------------------------------------ your year
+
+/*
+ * One account's year, computed on the server from data that never left it.
+ *
+ * The year is part of the key rather than a sibling of ["profile"], so a
+ * history reset invalidating the profile does not silently also mean this —
+ * and so switching years is a cache hit rather than a refetch of the one you
+ * just looked at.
+ */
+export function useYearInReview(year?: number) {
+  return useQuery({
+    queryKey: ["year-in-review", year ?? "current"],
+    queryFn: ({ signal }) =>
+      apiGet<YearInReview>(
+        year ? `/api/profile/year?year=${year}` : "/api/profile/year",
+        signal,
+      ),
+    staleTime: 60_000,
+  });
+}
+
+// -------------------------------------------------------------- lyrics
+
+/*
+ * The words to a track, read off the server's disk.
+ *
+ * Its own key rather than a sibling of ["item", id]: nothing invalidates
+ * lyrics, and a key reached by prefix from the item would be refetched every
+ * time anything about the item changed — a file on disk that has not moved.
+ *
+ * Long staleTime for the same reason. This answer changes when somebody drops
+ * an .lrc next to a track, which is not something a player needs to poll for.
+ */
+export function useLyrics(itemID: number) {
+  return useQuery({
+    queryKey: ["lyrics", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<Lyrics>(`/api/items/${itemID}/lyrics`, signal),
+    enabled: itemID > 0,
+    staleTime: 5 * 60_000,
+  });
+}
+
 // ------------------------------------------------------------- crashes
 
 // Fetched only when the pane is open. A crash list polled in the background is
@@ -2853,6 +2900,45 @@ export function useClearCrashes() {
   return useMutation({
     mutationFn: () => apiSend("/api/crashes", "DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crashes"] }),
+  });
+}
+
+// ------------------------------------------------------------ transcodes
+
+/*
+ * What the server is converting, right now.
+ *
+ * Only fetched while the panel is open, and polled while it is: this is a live
+ * reading rather than a document, and a row whose idle seconds do not climb
+ * while you watch is worse than no row — it is the wrong answer to "is anything
+ * still using this slot".
+ *
+ * The key is `["transcodes"]` and nothing else in the app uses a key it can
+ * reach by prefix, which is the sibling rule in CLAUDE.md.
+ */
+export function useTranscodes(enabled: boolean) {
+  return useQuery({
+    queryKey: ["transcodes"],
+    queryFn: ({ signal }) => apiGet<TranscodeList>("/api/transcodes", signal),
+    enabled,
+    refetchInterval: enabled ? 3000 : false,
+    staleTime: 0,
+  });
+}
+
+export function useStopTranscode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/transcodes/${id}`, "DELETE"),
+    /*
+     * Stopping a conversion changes the list it was stopped from, and it also
+     * changes what the activity indicator is showing — a live transcode is one
+     * of the tasks /api/activity reports.
+     */
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transcodes"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
   });
 }
 
@@ -2951,8 +3037,26 @@ export function useUpdateUser() {
       id: string;
       name?: string;
       role?: Role;
+      /**
+       * A ceiling set *for* this account (ADR 0015). Empty clears it.
+       *
+       * Admin-only on the server, which is the point: a limit the limited
+       * party can lift is not a limit.
+       */
+      max_content_rating?: string;
     }) => apiSend(`/api/users/${id}`, "PATCH", patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    /*
+     * The account list, and everything that account can see.
+     *
+     * A ceiling changes what the *server* will show and play, so a session
+     * already looking at a grid is holding a list that is no longer true. This
+     * is the invalidation rule applied across an account boundary: ask what
+     * somebody could be looking at that this changes, not what it writes.
+     */
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+    },
   });
 }
 

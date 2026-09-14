@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 46
+const CurrentSchemaVersion = 47
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -85,6 +85,7 @@ var migrations = []migration{
 	{version: 44, sql: schemaRevision44},
 	{version: 45, sql: schemaRevision45},
 	{version: 46, sql: schemaRevision46},
+	{version: 47, sql: schemaRevision47},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1599,4 +1600,26 @@ WHERE kind = 'episode'
   AND NOT EXISTS (
     SELECT 1 FROM item_marker m WHERE m.item_id = media_item.id AND m.kind = 'credits'
   );
+`
+
+/*
+ * Revision 47 -- a content-rating ceiling for an account (ADR 0015).
+ *
+ * One nullable-in-effect column on the account row, for the same reason
+ * share_activity is one in revision 22: it is one fact about one person, and
+ * the account row is where facts about a person already live.
+ *
+ * Empty means no limit, and every existing account gets it. An upgrade must not
+ * restrict anybody, and the column existing is not consent to use it.
+ *
+ * Deliberately the opposite of share_activity in who may set it. That one is
+ * the account's own decision and there is no administrator route to it, because
+ * a switch somebody else can flip is not consent (ADR 0035). This one is set
+ * *for* an account by an administrator and cannot be cleared by the account
+ * itself, because a limit you can lift is not a limit. The two rules govern
+ * different things -- what others learn about you, and what a household allows
+ * -- and must not be generalised into each other.
+ */
+const schemaRevision47 = `
+ALTER TABLE user ADD COLUMN max_content_rating TEXT NOT NULL DEFAULT '';
 `

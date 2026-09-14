@@ -203,10 +203,25 @@ moves it onto the chosen display's work area. It never resizes it: a game sized
 its own window for the render target it chose, and changing that is not ours to
 do.
 
-The watch is bounded. It polls for a minute and a half and then gives up
-silently, because a game that has not opened a window by then is either still
-decompressing shaders or never starting, and neither is improved by a client
-that keeps looking for ever.
+The watch is bounded, and it does not stop at the first window it finds.
+
+**Corrected 2026-09-13, after the first real report.** The original watcher moved
+the first qualifying window and returned, which described only the games that
+open their own window. Zenless Zone Zero does not: its Steam entry starts
+HoYoPlay — the install directory holds `HYP.exe` and its helpers, not the game —
+so the first window to appear is a launcher, that got moved, and the watcher
+retired satisfied while the game opened minutes later wherever it liked. The
+setting looked broken and was in fact doing exactly what it had been written to
+do. EA, Ubisoft and Battle.net titles all arrive the same way, so this is the
+common case rather than one game's quirk.
+
+So every new window is considered for the whole watch, and the clock **extends
+from the last window actually moved** — a launcher appearing is evidence the
+game has not yet — with a hard cap, because a watch a busy desktop can keep
+alive indefinitely becomes a process moving windows long after anybody would
+connect it to having pressed Play. A window already on the chosen display is
+recorded rather than ignored, so a game that repositions itself after
+initialising is noticed and put back.
 
 ### What this honestly cannot do, and says so
 

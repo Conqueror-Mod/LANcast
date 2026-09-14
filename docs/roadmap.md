@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-13 · **v0.9.21 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-09-14 · **v0.9.22 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -137,6 +137,7 @@ rather than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.22** | 2026-09-14 | **Nine changes in one release, and none of them reported by a person — they came off the backlog and out of the log.** **What the server is doing, where somebody can see it.** A film refused to play in v0.9.21 and the answer — three sessions holding every slot, none of which had ever delivered a byte — could be had only by reading `lancastd.log` by hand. `GET /api/transcodes` and `DELETE /api/transcodes/{id}` are administrator-only, which is a **privacy** decision rather than a permissions afterthought: a session names an account and a film, so a list of them is a list of who is watching what. Sessions come back **idle-first**, because the list is read when something has just been refused and the row worth looking at is the one nobody is using, and a slot that has served nothing reads as *nothing served* rather than "0 bytes" beside a real figure the eye slides past. **The window keeps a log, and it is readable from the app.** The client is linked `-H=windowsgui`, so every `slog` line it had ever written went to a stderr nobody was holding — three faults in one evening each had to be diagnosed by building an instrumented copy, and twice that detour changed the answer. It writes to its own directory, never the server's, and Settings → App shows the tail. The binding **takes no arguments at all** — no filename, no directory, no line count — so the page names nothing and there is nothing for it to name wrongly. **A ceiling a household can rely on** ([ADR 0015](adr/0015-multi-user-accounts.md), **schema 47**). Approved long ago and mostly assembly, except for the part nobody had decided: `content_rating` is whatever string a provider or an NFO wrote, drawn from a dozen national systems that do not sort next to each other, so `internal/rating` maps the labels libraries actually carry onto a ladder of **ages** — BBFC 15 and TV-14 land a year apart, which is the truth, where pairing the lists by index puts R beside 15 counting one way and 18 counting the other. **An episode is judged by its show**, because episodes almost never carry a certificate and a ceiling without inheritance hides every episode in the library while leaving the films. **What is still unrated is blocked**, which is the uncomfortable half: letting it through puts the hole exactly where home video and anything a provider never matched sit. `GetItem` is the chokepoint, so a blocked item answers **404 rather than 403** — a refusal distinguishable from an absence lets somebody walk the ids to learn what is being kept from them. Admin-only with no self-service route, deliberately the mirror image of the sharing switch: **a switch somebody else can flip is not consent, and a limit you can lift is not a limit.** Two corrections during the build, both from running the rule rather than reading it: refusing an id with no account row **emptied the library on an unsecured loopback server**, where every request reads as the local user; and the blocked-when-unrated rule **emptied the music and picture libraries**, since a track and a photograph carry no certificate and never will. Every test written for the rule passed the whole time it was doing that. **The spotlight can be something other than the last thing watched.** Resume-wins is right for the common case and wrong for the one people complain about — a library nobody is mid-way through, where the hero is a permanent monument to a film abandoned in March. Four modes, per device. Every mode ends with resume-then-recent, because each way of having nothing to show is ordinary and none of them is a reason to draw a hero-shaped hole. **Suggested is deliberately not an engine**: it reads the genres off what you are part-way through and finds something unwatched sharing one, so it can always say *Because you watched X* — a candidate it cannot attribute is not shown at all. **Your year, worked out on your own machine.** Everything Spotify computes in a datacentre, computed here from history that has never left the disk. The constraint decided the design: `playback_state` holds **one row per item per user**, so a year is the titles whose *last* play fell in it, and time spent counts **one viewing of each** rather than `watch_count` viewings — the tally is real and the dates of those viewings are not. The figure is low on purpose; a number that is missing is easier to disbelieve than one that grew on its own, and both caveats are on screen rather than in a tooltip. Year boundaries are **local**, so eight in the evening on New Year's Eve belongs to the year they were in when they watched it. **Lyrics, read off the disk they are already on.** An `.lrc` beside the track or the tag inside it — no provider and no network. **Sidecar first**, as subtitles resolve, and for the same two reasons: it is the one a person can fix and the one that carries timestamps. The discovery rule is stricter than the subtitle one because an album is twelve tracks in a folder and every one is a different song, so a file that does not name its track matches **nothing** rather than everything. `synced` is reported rather than inferred, since "every line at zero" is also what a one-line synced file looks like. **And three client fixes from the previous release**: the client **waits for the installed service instead of racing it** at login and reloads when the server returns; the game-window watcher **keeps watching past the launcher** so the game itself gets moved; and `GetWindowTextW` no longer hangs the watcher on a window that will not answer. **Merging the nine cost its own lesson.** `internal/web/dist` and `web/src/api/schema.ts` are generated **and committed**, so every concurrent branch conflicts — and the conflict is invisible in review because the *source* merges cleanly. `dist` has to be regenerated rather than resolved, or `index.html` points at a bundle missing half the release and nothing fails; `openapi.json` cannot be merged textually at all, because taking both halves produces invalid JSON. **Ships through the installer**, since the client changes cannot ride the in-app updater. **Schema revision 47: additive** |
 | **v0.9.21** | 2026-09-13 | **A film refused to play, and it was not the film.** Reported as one title failing; the server was refusing *everything* — sixteen refusals in sixteen seconds against a `MaxSessions` of three, with fourteen sessions started that day and two reaped. **Two faults, and neither is the ceiling being too low.** **One film held two slots**: each start superseded only its own delivery method — `supersede` for progressive, `supersedeHLS` for segments — so a player that fell back from one to the other left the abandoned half behind, holding a slot for a viewer who had already moved on. Item 6688 opened an HLS session at 22:14:03 and a progressive one at 22:14:04, and the refusals began the second after that. Falling back is one player deciding the first way did not work, not a second viewer, so a start now supersedes the *other* method for the same `(owner, item)` as well as its own — still keyed on owner, because two people watching one film at once is a thing a media server must do, and an anonymous owner is still never collapsed, that being the unconfigured loopback state where treating every request as one player would let a second viewer end the first one's film. **And nothing could be evicted to make room.** `reserve` skips any session touched inside `EvictionGrace`, ninety seconds, which exists to stop a new request taking a slot away from a player mid-picture. It was also defending sessions that had **never handed over a single byte** — which the reaper is meanwhile willing to destroy at `UnreadIdleTimeout`, thirty. Eviction was guarding for ninety seconds exactly what reaping calls dead at thirty, so three never-read sessions started within half a minute refused every request on the machine until the grace expired. An unread session now gets the unread timeout as its grace, capped so it can never exceed the full one. **What deliberately did not change**: `MaxSessions` stays at three, because raising it would have hidden this rather than fixed it; `IdleTimeout` stays at ten minutes, since a paused film keeping its ffmpeg is the whole bargain that number exists for; and a slot that is genuinely feeding a player is still never taken — refusing is the right answer to that case, and it has its own test beside the reported failure. Seven tests in all, including the 22:14 sequence end to end. **Delivered by the ordinary in-app update**, the first release in three that needs no installer. No schema change |
 | **v0.9.20** | 2026-09-12 | **The games feature, as it should have shipped the day before.** Two faults, both reported within hours of v0.9.19 and both invisible to every test that covered them. **Nobody could find the switch.** It shipped as the fourth option inside a pane called "This app", under a heading called "This computer", and nothing on that path says the word *games* — so the first person to go looking concluded the feature had shipped with no interface at all, on a machine where it was installed and working. Off by default is the decision ADR 0066 made and it stands; *off and unfindable* is a different decision, and it was never made. **Games is its own pane** under This device now, which is where somebody hunting for it actually looks and where the later options belong. The move needed one piece of care: `lancastDesktopSet` is deliberately whole-value, so a second pane holding its own copy of the preferences could quietly revert the other three — **both panes write through one `saveDesktopPrefs` that re-reads immediately before writing**, and a test asserts close-to-tray and open-at-login survive turning games on. Confirmed in the running window as well as in jsdom, since a change about whether something can be *found* is not one a layout-blind test can judge. **And three games out of four drew a lettered placeholder while their posters were on disk the whole time.** Steam has reorganised its library cache: every asset now sits in a folder named for its own content, and the portrait poster is called `library_capsule.jpg` where it used to be a flat `library_600x900.jpg`. The reader knew only the flat names, so the single game whose cache predated the change worked and the rest did not — which is precisely what made it look like a Steam inconsistency rather than ours. All three layouts are read now, for the header as well, with the **newest hash folder winning** where replaced artwork has left the superseded one behind, and zero-byte placeholders skipped because Steam leaves those and an empty file is a broken image rather than a poster. **Both bugs share a shape worth naming**: the fixtures were written from the same wrong idea as the code they tested, so the suite agreed with the mistake and passed. A fixture cannot catch an error it shares. What found both was running the thing against a real library on a real desk — the same lesson the display prefix taught the day before, arriving twice more before it was learned. **Ships through the installer** again: the artwork reader lives in the client, so the in-app update alone cannot deliver it. No schema change |
 | **v0.9.19** | 2026-09-12 | **The games installed on this computer, in LANcast — and a say in which screen they open on.** [ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md) — *a game belongs to the machine it is installed on*, the first feature here that is about **this PC rather than about the server**. The request was to sign in to Steam and see the library, and **signing in cannot answer it**: Steam's browser sign-in returns a SteamID, the Web API lists what an account *owns*, and what somebody owns is a different question from what is on this disk — Epic has no legitimate third-party path at all. What is installed lives in the launcher's own files, so LANcast reads `steamapps/libraryfolders.vdf` and each `appmanifest_*.acf`: **no key, no account, no network**, and *no phone-home* holds without an argument. `StateFlags` bit 4 is the whole check, because a half-downloaded game has a perfectly ordinary manifest and listing one offers a Play button for something that cannot start; the not-a-game list is keyed on **app id and never on name**, since a rule matching "Steamworks Common Redistributables" stops matching the day it is renamed, and a filter that fails by matching nothing never looks broken. **The server holds none of it** — no table, no endpoint, no `media_item` rows — so ADR 0002 stands and `api.md`/`openapi.json` are untouched; the tab exists only where the desktop bindings do, and a browser tab is told where games live rather than shown an empty grid. **Off by default**, enforced in the process rather than in the page, because "the page will not ask" is not a boundary. **The page names a game and never a URI or a path**: every binding re-scans and acts only on an app id installed at that moment, an `installdir` escaping its library folder is refused, and artwork goes out as bytes one image at a time rather than twenty megabytes of base64 through a single call. **Which display a game opens on** is the amendment, and it starts from the same shape of constraint — **no launcher can pass a display to a game**, `steam://rungameid` takes no such argument — so the client watches for the window the game opens and moves it: never resizing, giving up after ninety seconds, touching nothing that existed before the launch. Making the target display primary was **rejected**, and it is the only mechanism that would move an exclusive-fullscreen game: it rearranges every icon and window on the desk with no reliable way back, because Steam launches the game detached and the client never sees a process to wait on. Exclusive fullscreen and games running as administrator are outside what this can do, and **the picker says so before anybody chooses**, since that failure is invisible from the inside — the game opens, just not where it was asked. **Verified against a real library rather than fixtures**: four games listed with the redistributable correctly absent, Play started Palworld, Open folder landed in `steamapps\common\Palworld`, and the move was proved by sending a game to the monitor at **x = −2560** and finding it there. **Three faults the whole suite had passed** were found by looking at it — `formatBytes` stopped at megabytes, so a 41GB install read as "42248 MB"; `.browse__head` carries no `display` of its own, so the count and Rescan stacked under the title instead of sitting beside it; and the display-device prefix was written with **one backslash missing in the function and in its fixtures at the same time**, so the picker offered "\\.\DISPLAY1" as the name of a screen while every test agreed with it. A fixture cannot catch an error it shares, so that test now **counts** backslashes: three is a number, and a number cannot be mangled quietly the way a string can. Also here: an intro is accepted when **two comparisons agree within a second** rather than by a majority a network ident could veto (TNG S4 11→24 of 25, DS9 S7 15→21, Sunny S14 5→8); a stopped transcode **reports that it ended**, where two callers raced `cmd.Wait` and a session slot never came back to a ceiling of three; and a resumed stream's **copied audio starts with the picture**, an input-side seek having rebased audio to zero while the video kept the keyframe offset. **Ships through the installer** rather than the in-app updater, because the Games tab needs the client's new window bindings. No schema change |
@@ -557,8 +558,35 @@ group is not priority.
   because the keyboard model came first (ADR 0004): a pointer-only client would
   have needed a rewrite, and this one needed a stylesheet.
 
-- **Homepage hero as a recommendation** — a setting for what the spotlight
-  shows. Today `pickHero` in [Home.tsx](../web/src/screens/Home.tsx) is a fixed
+- ~~**Homepage hero as a recommendation**~~ — **built.** Four modes in
+  [heroMode.ts](../web/src/lib/heroMode.ts), per device beside `bigscreen` and
+  `spoilers`. The description below is what was asked for; three notes on what
+  it turned into.
+
+  **The fallback chain is the feature**, more than the modes are. Every mode
+  ends with resume-then-recent, because each way of having nothing to show is
+  ordinary — a new library has nothing to resume, a fully-watched one nothing to
+  suggest, and a pinned item can be deleted by somebody else while you are
+  looking at the page. None of those is a reason to render a hero-shaped hole.
+
+  **Recommended is not an engine, and the honest description is the design.**
+  It takes the thing you are part-way through, reads the genres off it, and
+  finds something unwatched in the same library sharing one — so it can always
+  say where it came from, and the spotlight renders that sentence: *Because you
+  watched X*. A candidate it cannot attribute is not shown as a suggestion at
+  all, which is the guard against this quietly becoming the recommender the
+  no-phone-home rule exists to refuse. The seed is fetched in full because
+  genres are a detail response only; that request, and the candidate search,
+  fire **only** in this mode. The two default modes still cost nothing, which
+  matters on the first screen of the app.
+
+  **Pinning is a gesture on the item, not a field in Settings.** "Pin to
+  homepage" is a thing you think while looking at a film, and it sets the mode
+  as well as the id — a pin that stored a number and changed nothing you can see
+  would be this project's favourite bug wearing a new hat. Settings shows what
+  is pinned and offers the way out.
+
+  Original entry: `pickHero` in [Home.tsx](../web/src/screens/Home.tsx) is a fixed
   rule: the first resumable item carrying fanart, else the first recently added,
   music and pictures excluded. Resume-wins is right for the common case and
   wrong for the one actually complained about — a library nobody is mid-way
@@ -736,7 +764,37 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
-- **Lyrics, and the rest of music.** [probe](../internal/probe/probe.go) throws
+- **Lyrics** — **built**; the rest of music below is not.
+  [internal/lyrics](../internal/lyrics/lyrics.go) parses LRC,
+  `GET /api/items/{id}/lyrics` resolves **sidecar first then the embedded tag**,
+  and the audio player grows a panel that follows the song. No provider and no
+  network, exactly as the entry below asked.
+
+  Three things the build settled that the entry did not:
+
+  **The album is the case the discovery rule exists for.** Subtitle discovery
+  can use a file named only for its language, because it first works out
+  whether a video is the only one in its folder. Twelve tracks share a folder
+  and every one is a different song, so a lyric file that does not name its
+  track belongs to nothing that can be worked out — the stem must match, and
+  that is the whole rule. `lyrics.lrc` sitting in an album folder is matched to
+  nothing rather than to everything.
+
+  **`synced` is reported rather than inferred.** "Every line at zero" is also
+  what a one-line synced file looks like, and a player deciding which to draw
+  must not have to guess. An unsynced file is still shown, with the panel saying
+  the words are not timed — plenty of `.lrc` files are somebody's
+  copy-and-paste, and words that do not scroll beat no words.
+
+  **The embedded tag cost a new probe call, deliberately.** `probe` discards
+  `LYRICS` on purpose and that stays right; `ReadRawTags` is the other half of
+  that decision rather than a reversal — a caller that wants exactly the blob
+  asks for it, once, when somebody has opened the panel, and nothing is stored.
+
+  Still open from the entry below: **gapless and crossfade**, which is
+  decoder scheduling in the client and nothing the server can fix.
+
+  Original entry: [probe](../internal/probe/probe.go) throws
   the `LYRICS` tag away on purpose — a multi-kilobyte blob has no business in a
   struct that answers "can this client play this file", and that stays true. So
   lyrics are a **separate read**, not a probe field: embedded `USLT`/`LYRICS`
@@ -936,7 +994,67 @@ group is not priority.
   handler check loses — and the prize for losing it is a server nobody can
   administer without `reset-auth` on the machine itself.
 
-- **Managed profiles with a content-rating ceiling** — approved, and mostly
+- ~~**Managed profiles with a content-rating ceiling**~~ — **built**, schema 47.
+  A ceiling on the account row, an administrator-only control in Settings →
+  Users, and enforcement in the listing **and in playback authorisation**. Four
+  notes on what the build decided, since the entry below records only what was
+  approved.
+
+  **There was no ordering to enforce, so one had to be built.**
+  `content_rating` is whatever string a provider or an NFO wrote, drawn from a
+  dozen national systems that do not sort next to each other.
+  [internal/rating](../internal/rating/rating.go) maps the labels libraries
+  actually carry onto a ladder of **ages**, because that is the one thing every
+  system is really saying — BBFC 15 and TV-14 land a year apart, where pairing
+  the lists by index would put R beside 15 counting one way and 18 counting the
+  other. It is deliberately coarse and is not a classification authority.
+
+  **An episode is judged by its show.** Episodes almost never carry a
+  certificate; their shows do. Without inheritance a ceiling hides every episode
+  in the library and leaves the films, which is not a limit anybody asked for —
+  it is how a feature gets switched off and called broken. Own rating, then
+  parent, then grandparent, which is the same shape as the resolved `sensitive`
+  flag ([ADR 0051](adr/0051-sensitive-content.md)).
+
+  **Music and photographs are exempt**, which is the correction the build
+  needed and did not get from reading the rule. A track and a photograph carry
+  no certificate and never will, so "unrated, therefore blocked" meant a child
+  account could not see a single song or a single photograph — a lockout rather
+  than a limit. Found by asking what the rule does to a music library; every
+  test written for the rule passed the whole time it was doing this.
+
+  **What is still unrated is blocked** where a certificate was possible, and
+  that is the uncomfortable half.
+  Letting it through puts the hole exactly where the unlabelled sits — home
+  video, anything a provider never matched, most of what somebody added by hand.
+  A limit that stops at the catalogued and waves the rest past is a filter that
+  looks like a limit. The cost is that a restricted account sees less than the
+  household expects, which is visible, complainable-about, and fixed by rating
+  the item; the other failure is invisible.
+
+  **`GetItem` is the chokepoint**, which is what makes this hold rather than
+  being remembered in a dozen handlers: stream, transcode, download and the
+  detail page all turn an id into an item through it, so a blocked item answers
+  **404 — not 403** — everywhere. The two must be indistinguishable, or walking
+  the ids becomes a way to enumerate what a household is keeping from somebody.
+
+  One error the store's own tests caught, worth recording because the reasoning
+  sounded right: an id naming no account was refused as a stale or forged
+  session. An unsecured loopback server has no accounts and reads every request
+  as `LocalUserID`, so that emptied the whole library for the configuration
+  meant to work out of the box. Deciding whether a session is real is the
+  session layer's job; this one answers what a ceiling permits.
+
+  **Three shapes, not two.** `ListItems` carries the predicate, `GetItem` is
+  the chokepoint for anything that becomes bytes, and the third is a listing
+  that builds its own SQL and hands back rows — a shelf, a collection's
+  members, a container's children. `PermittedItems` covers those in one query
+  with the *same* predicate, applied where every list becomes a response, so it
+  is idempotent on the page `ListItems` already filtered. A restricted account
+  shown a title it cannot open is worse off than one not shown it: the tile
+  names precisely what the household is keeping from them. Original entry:
+
+  approved, and mostly
   assembly: [ADR 0015](adr/0015-multi-user-accounts.md) already gives accounts
   and roles, and `content_rating` already flows through
   [items.go](../internal/api/items.go). What matters is *where it is enforced*.
@@ -953,7 +1071,35 @@ group is not priority.
   limit. The distinction is that ADR 0035 governs what others learn about you and
   this governs what a household allows — and the two rules must not be
   generalised into each other.
-- **A local Wrapped.** Everything Spotify computes about you in a datacentre,
+- ~~**A local Wrapped**~~ — **built**, as *Your year* on the profile page.
+  `GET /api/profile/year` and a section beneath the lifetime totals, computed
+  from `playback_state` with no new table and no request leaving the machine.
+
+  **The constraint below decided the whole design, and it is on screen rather
+  than in a comment.** One row per item per user means a year is *the titles
+  whose last play fell in it* — a film watched in January and again in December
+  belongs to December, and the January sitting cannot be recovered. So
+  `watched_ms` counts **one viewing of each title**, not `watch_count`
+  viewings: the tally is real and the dates of those viewings are not, and
+  multiplying would attribute every rewatch to the year of the most recent one.
+  The figure is deliberately low. A number that is missing is easier to
+  disbelieve than one that grew on its own, and on a page that is believed by
+  default that asymmetry is the design.
+
+  What it says instead of a top list: titles, finished against put down, time
+  spent, a bar for each of the twelve months — **including the empty ones**, or
+  the chart lies about the shape of the year — a breakdown by kind, how many
+  libraries were touched, and the first and last things played. `partial` marks
+  a year still running, because "your 2025" and "your 2025 so far" are a summary
+  and a claim.
+
+  Year boundaries are **local**, in SQLite, the same way the photo timeline
+  buckets: eight in the evening on New Year's Eve belongs to the year they were
+  in when they watched it, and in any US timezone the UTC date is already
+  January. Your own year and nobody else's — there is deliberately no route
+  taking another account's id (ADR 0035). Original entry:
+
+  Everything Spotify computes about you in a datacentre,
   computed on your own machine, from data that has never left it — and the
   novelty is precisely that it is *not* a marketing artefact, so nothing about it
   gets uploaded or shared unless ADR 0035's opt-in says so. The material is
