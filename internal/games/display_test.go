@@ -3,6 +3,7 @@ package games
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // The monitors in these tests are the real shape of a three-screen desk,
@@ -179,5 +180,57 @@ func TestDisplayAnswersSurviveTheFile(t *testing.T) {
 	}
 	if !back.IsFavourite("700010") {
 		t.Error("the other flags should be unharmed")
+	}
+}
+
+/*
+ * How long to keep watching for a game window.
+ *
+ * Written because of Zenless Zone Zero, whose Steam entry starts HoYoPlay
+ * rather than the game: the first window to appear is the launcher, and the
+ * game arrives only once somebody has clicked through it. A watch that ended a
+ * fixed time after Play had already given up by then.
+ */
+func TestWatchDeadlineWithoutAMoveIsTheBaseWindow(t *testing.T) {
+	start := time.Now()
+	got := WatchDeadline(start, time.Time{}, 90*time.Second, 3*time.Minute, 10*time.Minute)
+	if want := start.Add(90 * time.Second); !got.Equal(want) {
+		t.Errorf("deadline = %v, want the base window %v", got, want)
+	}
+}
+
+func TestAMovedWindowKeepsTheWatchAlive(t *testing.T) {
+	// A launcher appearing is evidence the game has not yet.
+	start := time.Now()
+	lastMove := start.Add(80 * time.Second)
+	got := WatchDeadline(start, lastMove, 90*time.Second, 3*time.Minute, 10*time.Minute)
+	if want := lastMove.Add(3 * time.Minute); !got.Equal(want) {
+		t.Errorf("deadline = %v, want it extended from the move to %v", got, want)
+	}
+	if !got.After(start.Add(90 * time.Second)) {
+		t.Error("a move did not extend the watch at all")
+	}
+}
+
+func TestAnEarlyMoveDoesNotShortenTheWatch(t *testing.T) {
+	// Extending from a move must never end the watch sooner than it would have.
+	start := time.Now()
+	got := WatchDeadline(start, start.Add(time.Second), 90*time.Second, 30*time.Second, 10*time.Minute)
+	if want := start.Add(90 * time.Second); !got.Equal(want) {
+		t.Errorf("deadline = %v, want the base window %v", got, want)
+	}
+}
+
+func TestTheWatchIsCapped(t *testing.T) {
+	/*
+	 * The limit matters more than the extension. A watch a busy desktop can
+	 * keep alive indefinitely becomes a process quietly moving windows long
+	 * after anybody would connect it to having pressed Play.
+	 */
+	start := time.Now()
+	lastMove := start.Add(9 * time.Minute)
+	got := WatchDeadline(start, lastMove, 90*time.Second, 5*time.Minute, 10*time.Minute)
+	if want := start.Add(10 * time.Minute); !got.Equal(want) {
+		t.Errorf("deadline = %v, want it capped at %v", got, want)
 	}
 }

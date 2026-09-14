@@ -3,6 +3,7 @@ package games
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 /*
@@ -134,6 +135,33 @@ func LooksLikeGameWindow(title string, width, height int) bool {
 		return false
 	}
 	return width >= 320 && height >= 240
+}
+
+/*
+ * WatchDeadline is when to stop watching for a game's window.
+ *
+ * A flat window from the launch is right for a game that opens its own window
+ * and wrong for one that opens a launcher first. Zenless Zone Zero is the
+ * second kind — its Steam entry starts HoYoPlay, and the game arrives only
+ * after somebody has clicked through it — so a watcher that gave up ninety
+ * seconds after Play was a display setting that silently did nothing.
+ *
+ * So the clock extends from the last window actually moved, which is evidence
+ * the chain is still unfolding, and `limit` ends it regardless: a watch a busy
+ * desktop can keep alive indefinitely becomes a process moving windows long
+ * after anybody would connect it to having pressed Play.
+ */
+func WatchDeadline(start, lastMove time.Time, base, afterMove, limit time.Duration) time.Time {
+	deadline := start.Add(base)
+	if !lastMove.IsZero() {
+		if extended := lastMove.Add(afterMove); extended.After(deadline) {
+			deadline = extended
+		}
+	}
+	if capped := start.Add(limit); deadline.After(capped) {
+		return capped
+	}
+	return deadline
 }
 
 // DisplayFor is the stored answer for a game, empty when it has never been
