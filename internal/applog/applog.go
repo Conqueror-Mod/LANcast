@@ -49,6 +49,23 @@ type File struct {
  */
 const TrayFileName = "lancast-tray.log"
 
+/*
+ * ClientFileName is the desktop window's own log.
+ *
+ * It exists because the client had none, and that cost a whole evening. The
+ * window is a `-H=windowsgui` binary with nowhere to print, so every question
+ * about what it had actually done — did it try to start a server, did it move a
+ * game's window, what did it think the autostart setting was — could only be
+ * answered by building an instrumented copy and running that instead. Twice
+ * that detour changed the answer.
+ *
+ * In the client's own directory rather than the server's: this is one person's
+ * window on one machine, and the server's directory may belong to a service
+ * account it cannot write to — which is the same boundary that stopped the
+ * client starting a server at all.
+ */
+const ClientFileName = "lancast-client.log"
+
 // Open creates or appends to the server's log in dir.
 func Open(dir string) (*File, error) { return OpenNamed(dir, FileName) }
 
@@ -171,10 +188,17 @@ const tailWindow = 512 << 10
 // A missing log is not an error: a server that has only ever run in a terminal
 // may never have opened one, and that is a supported configuration.
 func Tail(dir string, n int) (lines []string, complete bool, err error) {
+	return TailNamed(dir, FileName, n)
+}
+
+// TailNamed is Tail for a process that keeps its own file rather than the
+// server's — the tray and the desktop window both do, for the rotation reason
+// given on TrayFileName.
+func TailNamed(dir, name string, n int) (lines []string, complete bool, err error) {
 	if n <= 0 {
 		return nil, true, nil
 	}
-	f, err := os.Open(filepath.Join(dir, FileName))
+	f, err := os.Open(filepath.Join(dir, name))
 	if os.IsNotExist(err) {
 		return nil, true, nil
 	}

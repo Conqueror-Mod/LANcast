@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"time"
 
 	"lancast/internal/clientwindow"
@@ -56,6 +57,8 @@ func (l *launcher) watchForRecovery(c clientwindow.Controller, url, pinAtLaunch 
 			 */
 			if pinAtLaunch != "" {
 				if pin := l.serverCertPin(); pin != "" && pin != pinAtLaunch {
+					slog.Info("the server came back with a different certificate; " +
+						"this window pinned the old key and cannot be reloaded into it")
 					alert("LANcast", "The server came back with a new certificate, "+
 						"which this window cannot trust: it pinned the old key when "+
 						"it opened, and that cannot be changed while it is running.\n\n"+
@@ -63,6 +66,16 @@ func (l *launcher) watchForRecovery(c clientwindow.Controller, url, pinAtLaunch 
 					return
 				}
 			}
+			/*
+			 * Every navigation this loop performs is recorded.
+			 *
+			 * A window that reloads itself is indistinguishable, from the
+			 * outside, from a window that has gone blank on its own — and one
+			 * blank window has already cost an evening with this loop as the
+			 * leading suspect and no way to confirm it. A line here settles
+			 * that question in one reading instead.
+			 */
+			slog.Info("the server is reachable again; reloading the window", "url", url)
 			c.Navigate(url)
 		}
 		up = now

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -145,8 +146,19 @@ func gamesBindings(dir string) map[string]any {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
 			if err := desktop.OpenBrowser(uri); err != nil {
+				slog.Info("could not hand a launch to Steam", "game", g.Name, "err", err)
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
+			/*
+			 * Recorded because this is where the client's part ends.
+			 *
+			 * Everything after the URI is away belongs to Steam, and the
+			 * difference between "LANcast never asked" and "Steam was asked and
+			 * did nothing" is the first thing worth knowing when a game does not
+			 * start. It could only be had from an instrumented build before the
+			 * window kept a log.
+			 */
+			slog.Info("handed a launch to Steam", "game", g.Name, "id", id)
 			/*
 			 * Started only once the URI is away, and read here rather than
 			 * taken from the page.
@@ -160,6 +172,8 @@ func gamesBindings(dir string) map[string]any {
 			 */
 			if prefs, err := games.LoadPrefs(dir); err == nil {
 				if device := prefs.DisplayFor(id); device != "" && device != games.DisplayDefault {
+					slog.Info("watching for this game's window",
+						"game", g.Name, "display", device)
 					moveGameToDisplay(device, g.Name)
 				}
 			}

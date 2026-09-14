@@ -66,6 +66,7 @@ func main() {
 	// who runs in the browser should get the browser at login, not a window.
 	_ = *window // accepted and ignored; the window is the default now
 	browserMode = *browser
+	startLogging()
 
 	/*
 	 * One client at a time. Launching again — a second press of the shortcut —
@@ -465,6 +466,11 @@ func (l *launcher) desktopBindings() map[string]any {
 	// they are one feature, they are all refused together when the setting is
 	// off, and they have nothing to do with the window's lifecycle.
 	for name, fn := range gamesBindings(dir) {
+		b[name] = fn
+	}
+	// The window's own log, for the same reason: it is a file on this machine
+	// that the server has never seen.
+	for name, fn := range clientLogBindings(dir) {
 		b[name] = fn
 	}
 	return b
