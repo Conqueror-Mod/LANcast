@@ -3238,6 +3238,8 @@ export interface components {
             sharing?: boolean;
             /** @description Whether this account appears in the roster handed to paired servers. `/auth/status` only, and absent rather than false when unreadable. */
             visible_to_peers?: boolean;
+            /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
+            max_content_rating?: string;
         };
         AuthStatus: {
             /** @description Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on. */
@@ -4310,6 +4312,8 @@ export interface components {
             created_at: number;
             /** @description **Live sessions, not a login history.** It answers "is this person here right now", which is the question an administrator asks before changing something under them. */
             sessions: number;
+            /** @description The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it. */
+            max_content_rating?: string;
         };
         ManagedUserList: {
             users: components["schemas"]["ManagedUser"][];
@@ -4322,13 +4326,21 @@ export interface components {
             role?: string;
         };
         /**
-         * @description Rename an account, change its role, or both. **At least one field is required.**
+         * @description Rename an account, change its role, set the content rating it may not exceed, or any combination. **At least one field is required.**
          *
          *     The account **id is unchanged**, which is what makes this a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently.
          */
         PatchUserRequest: {
             name?: string;
             role?: string;
+            /**
+             * @description A ceiling set **for** this account by an administrator (ADR 0015). Empty clears it, and `400` is answered for a label this server cannot place on its scale — a ceiling that means nothing would leave a household believing a limit was in force.
+             *
+             *     Deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit. The two rules must not be generalised into each other.
+             *
+             *     Enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: a refusal that is distinguishable from an absence lets somebody walk the ids to learn what is being kept from them. An item with no rating of its own inherits its parent's, then its grandparent's — an episode is judged by its show — and anything still unrated is blocked — except music and photographs, which carry no certificate and are exempt, since judging them by one would empty those libraries for a limited account rather than limiting them.
+             */
+            max_content_rating?: string;
         };
         ResetPasswordRequest: {
             /** Format: password */

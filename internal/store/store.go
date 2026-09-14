@@ -755,8 +755,24 @@ type ItemFilter struct {
 	Genres         []string // exact genre names
 	Decades        []int    // e.g. 1990 restricts to 1990–1999
 	ContentRatings []string // exact content-rating labels (PG, R, TV-MA…)
-	Years          []int    // exact release years
-	Resolutions    []string // bucket keys: uhd | hd1080 | hd720 | sd
+
+	/*
+	 * MaxContentRating is the ceiling of the account doing the asking, not a
+	 * facet somebody picked (ADR 0015, schema 47).
+	 *
+	 * It lives beside ContentRatings and means something entirely different:
+	 * that one is a filter a person chose and can remove, this one is a limit
+	 * set for them that they cannot. Both can be in force at once, and they
+	 * intersect — choosing "R" under a PG-13 ceiling shows nothing, which is
+	 * the honest answer.
+	 *
+	 * Applied here rather than left to handlers because the failure is silent:
+	 * one listing that forgets it is a hole in a limit a household believes is
+	 * in force.
+	 */
+	MaxContentRating string
+	Years            []int    // exact release years
+	Resolutions      []string // bucket keys: uhd | hd1080 | hd720 | sd
 
 	/*
 	 * Credit filters, by person id rather than by name.
@@ -1240,6 +1256,17 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// 'unmatched' is meta.StateUnmatched; spelled literally because store
 		// owns its SQL and does not import the matcher.
 		where += ` AND (match_state IS NULL OR match_state = 'unmatched')`
+	}
+
+	/*
+	 * The ceiling goes on last, after every other narrowing, so that it is the
+	 * one predicate nothing below can widen past — and on the same `where` the
+	 * count uses, so the total can never describe a larger library than the
+	 * page it is counting.
+	 */
+	if pred, ceilArgs := ceilingPredicate(f.MaxContentRating); pred != "" {
+		where += pred
+		args = append(args, ceilArgs...)
 	}
 
 	var total int
@@ -2487,11 +2514,26 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 	return out, nil
 }
 
-// GetItem returns one item with the given user's playback progress attached.
+/*
+ * GetItem returns one item with the given user's playback progress attached.
+ *
+ * It also applies the account's content-rating ceiling, and this is the
+ * chokepoint that makes that feature hold: the detail page, Continue Watching
+ * and everything else that turns an id into an item comes through here, so the
+ * rule is enforced once rather than remembered in a dozen handlers. A blocked
+ * item answers ErrNotFound — the caller's 404 — because "you may not see this"
+ * and "this does not exist" must look identical from outside, or the refusal
+ * becomes a way to enumerate what the library holds.
+ */
 func (s *Store) GetItem(ctx context.Context, id int64, userID string) (*Item, error) {
 	it, err := scanItem(s.db.QueryRowContext(ctx, `SELECT `+itemCols+` FROM media_item WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
+	}
+	if err == nil {
+		if allowed, cerr := s.MayPlay(ctx, userID, id); cerr == nil && !allowed {
+			return nil, ErrNotFound
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get item: %w", err)

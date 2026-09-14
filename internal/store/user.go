@@ -35,6 +35,15 @@ type User struct {
 	PasswordHash string `json:"-"`
 	Role         string `json:"role"`
 	CreatedAt    int64  `json:"created_at"`
+	/*
+	 * MaxContentRating is the ceiling an administrator has set for this
+	 * account, or empty for none (ADR 0015, schema 47).
+	 *
+	 * Set *for* an account rather than by it, which is the opposite of
+	 * share_activity beside it: a limit the limited party can lift is not a
+	 * limit. The store exposes no route by which an account changes its own.
+	 */
+	MaxContentRating string `json:"max_content_rating,omitempty"`
 }
 
 // ValidRole reports whether r is a role the system recognises.
@@ -66,18 +75,18 @@ func (s *Store) CreateUser(ctx context.Context, id, name, passwordHash, role str
 // because the column is COLLATE NOCASE.
 func (s *Store) UserByName(ctx context.Context, name string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, name, password_hash, role, created_at FROM user WHERE name = ?`, name))
+		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user WHERE name = ?`, name))
 }
 
 // UserByID looks up a user by id.
 func (s *Store) UserByID(ctx context.Context, id string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, name, password_hash, role, created_at FROM user WHERE id = ?`, id))
+		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user WHERE id = ?`, id))
 }
 
 func (s *Store) scanUser(row *sql.Row) (*User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -91,7 +100,7 @@ func (s *Store) scanUser(row *sql.Row) (*User, error) {
 // tagged json:"-", so a handler serializing the slice never leaks them.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, password_hash, role, created_at FROM user ORDER BY created_at, name`)
+		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user ORDER BY created_at, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -100,7 +109,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		out = append(out, u)

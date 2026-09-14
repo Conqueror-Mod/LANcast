@@ -98,14 +98,28 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name *string `json:"name"`
 		Role *string `json:"role"`
+		/*
+		 * MaxContentRating is a ceiling set *for* this account (ADR 0015).
+		 *
+		 * On the administrator's surface and nowhere else, which is the whole
+		 * point: a limit the limited party can lift is not a limit. It is the
+		 * deliberate opposite of the sharing switch, which has no admin route
+		 * at all because a switch somebody else can flip is not consent
+		 * (ADR 0035) — two rules that look alike and must not be generalised
+		 * into each other.
+		 *
+		 * An empty string clears it. A pointer, so "not mentioned" and "set to
+		 * none" are different requests.
+		 */
+		MaxContentRating *string `json:"max_content_rating"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
-	if req.Name == nil && req.Role == nil {
+	if req.Name == nil && req.Role == nil && req.MaxContentRating == nil {
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"nothing to change: send a name, a role, or both")
+			"nothing to change: send a name, a role, a content rating ceiling, or any combination")
 		return
 	}
 
@@ -154,6 +168,32 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("%q is now %s", target.Name, *req.Role), nil)
 	}
 
+	if req.MaxContentRating != nil {
+		if err := s.st.SetMaxContentRating(r.Context(), id, *req.MaxContentRating); err != nil {
+			switch {
+			case errors.Is(err, store.ErrNotFound):
+				writeError(w, http.StatusNotFound, "not_found", "no such account")
+			default:
+				/*
+				 * A label this server cannot place is refused rather than
+				 * stored, and it is a 400 rather than a 500: the request was
+				 * wrong, and silently keeping a ceiling nothing can place would
+				 * leave a household believing a limit was in force that was
+				 * not.
+				 */
+				writeError(w, http.StatusBadRequest, "bad_request",
+					"that is not a content rating this server can place on its scale")
+			}
+			return
+		}
+		what := "removed the content rating limit on %q"
+		if *req.MaxContentRating != "" {
+			what = "limited %q to " + *req.MaxContentRating + " and under"
+		}
+		s.audit(r, "user.rating_ceiling", "user", id,
+			fmt.Sprintf(what, target.Name), nil)
+	}
+
 	updated, err := s.st.UserByID(r.Context(), id)
 	if err != nil {
 		s.writeInternal(w, err, "get user")
@@ -191,11 +231,37 @@ type managedUserView struct {
 	// answers "is this person here right now", which is the question an admin
 	// asks before changing something under them.
 	Sessions int `json:"sessions"`
+	// MaxContentRating is the ceiling set for this account, absent when there
+	// is none. Reported on the management view rather than on the account's own
+	// so that the limit is visible to whoever can change it.
+	MaxContentRating string `json:"max_content_rating,omitempty"`
 }
 
 func managedUser(u store.User, sessions int) managedUserView {
 	return managedUserView{
 		ID: u.ID, Name: u.Name, Role: u.Role,
 		CreatedAt: u.CreatedAt, Sessions: sessions,
+		MaxContentRating: u.MaxContentRating,
 	}
+}
+
+/*
+ * ceilingFor is the content-rating limit of whoever is asking (ADR 0015).
+ *
+ * A helper rather than a field on some request context, so that a listing which
+ * wants it says so at the call site — and one that forgets is a bug somebody
+ * can see, rather than a missing middleware nobody notices.
+ *
+ * An error is answered as "no ceiling". The safety of this feature does not
+ * rest here: GetItem refuses a blocked item on every path that turns an id into
+ * a file, so the worst a failed lookup does is show a tile that will not open,
+ * where treating a database hiccup as "restrict everything" would empty an
+ * adult's library because a query timed out.
+ */
+func (s *Server) ceilingFor(r *http.Request) string {
+	label, err := s.st.MaxContentRating(r.Context(), s.userID(r))
+	if err != nil {
+		return ""
+	}
+	return label
 }
