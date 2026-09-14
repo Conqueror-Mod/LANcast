@@ -958,7 +958,15 @@ group is not priority.
   parent, then grandparent, which is the same shape as the resolved `sensitive`
   flag ([ADR 0051](adr/0051-sensitive-content.md)).
 
-  **What is still unrated is blocked**, and that is the uncomfortable half.
+  **Music and photographs are exempt**, which is the correction the build
+  needed and did not get from reading the rule. A track and a photograph carry
+  no certificate and never will, so "unrated, therefore blocked" meant a child
+  account could not see a single song or a single photograph — a lockout rather
+  than a limit. Found by asking what the rule does to a music library; every
+  test written for the rule passed the whole time it was doing this.
+
+  **What is still unrated is blocked** where a certificate was possible, and
+  that is the uncomfortable half.
   Letting it through puts the hole exactly where the unlabelled sits — home
   video, anything a provider never matched, most of what somebody added by hand.
   A limit that stops at the catalogued and waves the rest past is a filter that

@@ -298,3 +298,72 @@ func TestAChosenFilterAndACeilingIntersect(t *testing.T) {
 		t.Errorf("got %d items, want none: a chosen filter must not widen a ceiling", len(items))
 	}
 }
+
+func TestACeilingDoesNotEmptyAMusicOrPictureLibrary(t *testing.T) {
+	/*
+	 * The consequence that turns a limit into a lockout.
+	 *
+	 * The blocked-when-unrated rule is right for film and television, where a
+	 * missing certificate means nobody catalogued it. A track and a photograph
+	 * carry no certificate and never will, so the same rule applied to them
+	 * means a child account cannot see a single song or a single photograph.
+	 *
+	 * This was found by asking what the rule does to a music library rather
+	 * than by reading it, which is the only way this sort of thing gets found —
+	 * every test written for the rule passed the whole time.
+	 */
+	ctx := context.Background()
+	st := openTestStore(t)
+	root := t.TempDir()
+	// One account, outside the loop: the names are unique per ceiling, not per
+	// call.
+	child := ceilingUser(t, st, "G")
+
+	for _, c := range []struct{ lib, kind, name string }{
+		{"Music", "track", "song.flac"},
+		{"Music", "album", "record"},
+		{"Pictures", "photo", "holiday.jpg"},
+		{"Pictures", "gallery", "album-of-photos"},
+	} {
+		lib, err := st.CreateLibrary(ctx, c.lib+" "+c.kind, "music", filepath.Join(root, c.kind))
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: filepath.Join(root, c.kind, c.name), Kind: c.kind,
+			Title: c.name, SortTitle: c.name, Container: "bin", SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		items, _, err := st.ListItems(ctx, ItemFilter{
+			LibraryID: lib.ID, MaxContentRating: "G", Limit: 10,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) == 0 {
+			t.Errorf("a %s was hidden by a content rating ceiling", c.kind)
+		}
+
+		if ok, _ := st.MayPlay(ctx, child.ID, id); !ok {
+			t.Errorf("a %s was refused playback under a content rating ceiling", c.kind)
+		}
+	}
+}
+
+func TestTheExemptionDoesNotReachFilmAndTelevision(t *testing.T) {
+	// The exemption is about media no system classifies. An unrated *film* is
+	// still blocked, which is the rule this feature turns on.
+	f := seedForCeiling(t)
+	ctx := context.Background()
+	child := ceilingUser(t, f.st, "G")
+
+	if ok, _ := f.st.MayPlay(ctx, child.ID, f.homeVid); ok {
+		t.Error("an unrated film was let through by the music exemption")
+	}
+	if ok, _ := f.st.MayPlay(ctx, child.ID, f.episode); ok {
+		t.Error("an episode of a TV-MA show was let through by the music exemption")
+	}
+}

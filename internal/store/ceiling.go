@@ -33,6 +33,37 @@ import (
  */
 
 /*
+ * Kinds no certificate system describes.
+ *
+ * A ceiling is a statement about film and television, which is what the
+ * national systems on the ladder classify. A track and a photograph carry no
+ * certificate and never will, so judging them by one means "unrated, therefore
+ * blocked" — and that is not a limit, it is a lockout: a child account with a
+ * PG ceiling could not see a single song or a single photograph.
+ *
+ * Found by asking what the rule does to a music library rather than by reading
+ * it, which is the only way this sort of thing gets found. The blocked-when-
+ * unrated rule stands exactly where it is meant to: things somebody could have
+ * rated and did not.
+ *
+ * Spelled literally because store owns its SQL and does not import the client's
+ * notion of kind, the same reason 'unmatched' is spelled out in ListItems.
+ */
+var unratedKinds = []string{
+	"artist", "album", "track", "playlist",
+	"gallery", "photo",
+}
+
+// exemptKindsSQL is unratedKinds as a predicate fragment plus its arguments.
+func exemptKindsSQL() (string, []any) {
+	args := make([]any, 0, len(unratedKinds))
+	for _, k := range unratedKinds {
+		args = append(args, k)
+	}
+	return `media_item.kind IN (` + placeholders(len(unratedKinds)) + `)`, args
+}
+
+/*
  * effectiveRating is the rating an item is judged by: its own, else its
  * parent's, else its grandparent's.
  *
@@ -69,14 +100,22 @@ func ceilingPredicate(ceiling string) (string, []any) {
 	if len(labels) == 0 {
 		return "", nil
 	}
-	args := make([]any, 0, len(labels))
+	args := make([]any, 0, len(labels)+len(unratedKinds))
+	exempt, exemptArgs := exemptKindsSQL()
+	args = append(args, exemptArgs...)
 	for _, l := range labels {
 		args = append(args, l)
 	}
-	// NULL is not IN anything, so an item left unrated after inheritance fails
-	// this automatically. That is the intended reading and not an accident of
-	// three-valued logic — it is asserted in the tests.
-	return ` AND ` + effectiveRating + ` IN (` + placeholders(len(labels)) + `)`, args
+	/*
+	 * Either the kind carries no certificate at all, or its effective rating is
+	 * one the ceiling permits.
+	 *
+	 * NULL is not IN anything, so an item left unrated after inheritance fails
+	 * the second half automatically. That is the intended reading and not an
+	 * accident of three-valued logic — it is asserted in the tests.
+	 */
+	return ` AND (` + exempt + ` OR ` + effectiveRating +
+		` IN (` + placeholders(len(labels)) + `))`, args
 }
 
 /*
@@ -122,11 +161,20 @@ func (s *Store) MayPlay(ctx context.Context, userID string, itemID int64) (bool,
 	}
 
 	var effective *string
+	var kind string
 	err = s.db.QueryRowContext(ctx,
-		`SELECT `+effectiveRating+` FROM media_item WHERE media_item.id = ?`,
-		itemID).Scan(&effective)
+		`SELECT `+effectiveRating+`, media_item.kind FROM media_item WHERE media_item.id = ?`,
+		itemID).Scan(&effective, &kind)
 	if err != nil {
 		return true, nil
+	}
+	// The same exemption the listing makes, and it has to be the same or the
+	// grid and the player disagree — which is the failure this whole feature
+	// exists to prevent.
+	for _, k := range unratedKinds {
+		if kind == k {
+			return true, nil
+		}
 	}
 	if effective == nil {
 		return false, nil

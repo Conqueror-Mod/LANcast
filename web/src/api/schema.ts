@@ -4338,7 +4338,7 @@ export interface components {
              *
              *     Deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit. The two rules must not be generalised into each other.
              *
-             *     Enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: a refusal that is distinguishable from an absence lets somebody walk the ids to learn what is being kept from them. An item with no rating of its own inherits its parent's, then its grandparent's — an episode is judged by its show — and anything still unrated is blocked.
+             *     Enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: a refusal that is distinguishable from an absence lets somebody walk the ids to learn what is being kept from them. An item with no rating of its own inherits its parent's, then its grandparent's — an episode is judged by its show — and anything still unrated is blocked — except music and photographs, which carry no certificate and are exempt, since judging them by one would empty those libraries for a limited account rather than limiting them.
              */
             max_content_rating?: string;
         };
