@@ -128,7 +128,6 @@ export function HomeHero({
   /** For "recommended": the item the suggestion was drawn from. */
   seed?: Item;
 }) {
-  const resuming = reason === "resuming";
   const label = eyebrow(reason, seed);
   const navigate = useNavigate();
 
@@ -277,7 +276,17 @@ export function HomeHero({
           <div className="hero__actions">
             <HeroButton
               primary
-              label={resuming ? "Resume" : "Play"}
+              /*
+               * The label follows the *progress bar*, not the reason the item
+               * is in the spotlight.
+               *
+               * Found by pinning a part-watched film: the bar was drawn and
+               * the button said Play, while pressing it resumed. Before the
+               * spotlight had modes the two could not disagree — resuming was
+               * the only reason an item with progress appeared here — and
+               * adding modes made "pinned, and 88% through" an ordinary state.
+               */
+              label={pct > 0 ? "Resume" : "Play"}
               onPress={resume}
             />
             <HeroButton

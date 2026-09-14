@@ -23,6 +23,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { HomeHero } from "./HomeHero";
+import type { HeroReason } from "@/lib/heroMode";
 import type { Item } from "@/api/types";
 
 declare global {
@@ -144,7 +145,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render(item: Item) {
+async function render(item: Item, reason: HeroReason = "resuming") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -154,7 +155,7 @@ async function render(item: Item) {
         <FocusProvider>
           <MemoryRouter initialEntries={["/"]}>
             <Routes>
-              <Route path="/" element={<HomeHero item={item} reason="resuming" />} />
+              <Route path="/" element={<HomeHero item={item} reason={reason} />} />
               <Route path="/watch/:id" element={<Landing />} />
               <Route path="/item/:id" element={<Landing />} />
             </Routes>
@@ -296,5 +297,40 @@ describe("resuming from the home page", () => {
     await pressResume();
 
     expect(landed?.path).toBe("/item/37946");
+  });
+});
+
+/*
+ * The label follows the progress bar, not the reason.
+ *
+ * Found by pinning a part-watched film in the running app: the resume bar was
+ * drawn and the button said Play, while pressing it resumed. Before the
+ * spotlight had modes the two could not disagree, because resuming was the only
+ * reason an item with progress reached the hero.
+ */
+describe("what the spotlight button offers", () => {
+  it("says Resume for a part-watched film however it got there", async () => {
+    // Progress is what draws the bar, so it is what the label has to follow.
+    const partWatched = {
+      ...episode,
+      duration_ms: 7_200_000,
+      progress: { position_ms: 6_300_000 },
+    } as Item;
+
+    mount([50, 51, 52, 53, 54]);
+    await render(partWatched, "pinned");
+
+    const labels = [...host.querySelectorAll("button")].map((b) => b.textContent ?? "");
+    expect(labels.join(" ")).toContain("Resume");
+  });
+
+  it("says Play for something nobody has started", async () => {
+    // The other half: a freshly-added film in the spotlight is not a resume.
+    mount([50, 51, 52, 53, 54]);
+    await render(episode, "recent");
+
+    const labels = [...host.querySelectorAll("button")].map((b) => b.textContent ?? "");
+    expect(labels.join(" ")).toContain("Play");
+    expect(labels.join(" ")).not.toContain("Resume");
   });
 });
