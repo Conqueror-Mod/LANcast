@@ -1016,6 +1016,24 @@ group is not priority.
   parent, then grandparent, which is the same shape as the resolved `sensitive`
   flag ([ADR 0051](adr/0051-sensitive-content.md)).
 
+  **The column it stands on is empty, and nobody checked.** Measured on the
+  live library the day it shipped: **`content_rating` is NULL on all 19,460
+  items** — 0 of 1,208 films and 0 of 13 shows carry one. So setting any ceiling
+  on an account today hides that account's **entire video library**, because
+  what is unrated is blocked. The feature is not merely unverified on real data;
+  it is **unusable until something populates the column**.
+
+  This is `media_item.edition` again — inert for the same reason, recorded in
+  this document, and the exact check the Timeline entry above says this project
+  learned to run *first*: that one verified 94.4% of photographs carried a
+  capture time **before** the view was designed. Nobody ran it here. Enrichment
+  has a `ContentRating` field and a writer for it, so the gap is a provider
+  pass that never asks TMDB for a certification, not a schema problem.
+
+  **Next, and it comes before anything else here**: fetch certifications during
+  enrichment and backfill, then re-measure. Until then the control should
+  probably say what a ceiling would currently do.
+
   **Music and photographs are exempt**, which is the correction the build
   needed and did not get from reading the rule. A track and a photograph carry
   no certificate and never will, so "unrated, therefore blocked" meant a child
