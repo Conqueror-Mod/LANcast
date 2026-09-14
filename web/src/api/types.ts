@@ -192,6 +192,7 @@ export type Profile = components["schemas"]["Profile"];
 export type CrashReport = components["schemas"]["CrashReport"];
 export type Transcode = components["schemas"]["Transcode"];
 export type TranscodeList = components["schemas"]["TranscodeList"];
+export type YearInReview = components["schemas"]["YearInReview"];
 
 // GET /api/libraries/{id}/trending. `viewers` counts *accounts*, not plays:
 // playback_state holds one row per item per user, so this is how many people

@@ -1220,6 +1220,36 @@ because it changes who can see something about a person.
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
 
+### `GET /api/profile/year`
+
+`?year=2025`, defaulting to the **server's** current year — the calendar the
+household keeps, which is what its history is bucketed on. Answers one account's
+year: how many titles, how many were finished against put down, time spent, a
+count for each of the twelve months, a breakdown by kind, how many libraries
+were touched, and the first and last things played. `years` lists every year
+this account has history in, so a picker exists on first paint, and `partial`
+says the year is still running — the difference between "your 2025" and "your
+2025 so far" is the difference between a summary and a claim.
+
+**It answers about the caller and nobody else**, and there is deliberately no
+variant naming another account: the sharing opt-in publishes *what was watched*,
+never somebody's year assembled for them by somebody else.
+
+Two things it deliberately does not claim, both consequences of `playback_state`
+holding **one row per item per user**:
+
+- A year is *the titles whose last play fell in it*. A film watched in January
+  and again in December belongs to December, and nothing can recover the January
+  sitting — the row was overwritten.
+- `watched_ms` counts **one viewing of each title**, not `watch_count` viewings.
+  The tally is real and the dates of those viewings are not, so multiplying
+  would attribute every rewatch to the year of the most recent one. The figure
+  is therefore low rather than inflated, which is the safer direction: a number
+  that is missing is easier to disbelieve than one that grew on its own.
+
+Nothing here is sent anywhere. It is computed from data that has never left the
+machine, which is the entire point of it existing.
+
 ### `GET /api/profile/history`
 
 `?scope=all|finished|unfinished` and an optional `?under={item_id}` — how many

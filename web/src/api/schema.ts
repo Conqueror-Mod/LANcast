@@ -3225,6 +3225,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/year": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One account's year
+         * @description Answers about **the caller and nobody else** — viewing is private by default (ADR 0035), and there is deliberately no variant naming another account.
+         *
+         *     The year defaults to the **server's** current year, which is the calendar the history is bucketed on: a client in another timezone asking for "now" gets the household's year rather than its own, which is the right answer on a server whose library sits in one house.
+         *
+         *     Nothing here is sent anywhere. It is computed from data that has never left the machine, which is the entire point of it existing.
+         */
+        get: operations["yearInReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5127,6 +5151,52 @@ export interface components {
             tags: components["schemas"]["Tag"][];
             /** @description Whether the calling account has marked this item. Keyed per account like a rating. */
             favourite: boolean;
+        };
+        YearMonth: {
+            /** @description 1–12. **Every month is present, including the empty ones** — a chart with the quiet months missing is a chart that lies about the shape of the year. */
+            month: number;
+            /** @description Distinct titles whose last play fell in this month. */
+            titles: number;
+        };
+        YearKind: {
+            /** @description An item kind — **an open set** (ADR 0018). */
+            kind: string;
+            titles: number;
+        };
+        /**
+         * @description One account's year, computed from `playback_state` and sent nowhere.
+         *
+         *     Two things it deliberately does not claim, both consequences of that table holding **one row per item per user**:
+         *
+         *     - A year is *the titles whose last play fell in it*. A film watched in January and again in December belongs to December; the January sitting cannot be recovered, because the row was overwritten.
+         *     - `watched_ms` counts **one viewing of each title**, not `watch_count` viewings. The tally is real and the dates of those viewings are not, so multiplying would attribute every rewatch to the year of the most recent one. The figure is low rather than inflated, which is the safer direction.
+         */
+        YearInReview: {
+            year: number;
+            /** @description Distinct titles whose last play landed in this year. */
+            titles: number;
+            finished: number;
+            /** @description Titles played and not finished. Derived from `titles - finished` rather than counted separately, so the two cannot disagree about a total. */
+            abandoned: number;
+            /**
+             * Format: int64
+             * @description Time **spent**, not runtime owned: a finished title counts its runtime, an unfinished one counts how far you got, and one viewing each. See the schema description.
+             */
+            watched_ms: number;
+            /** @description Always twelve entries, in order. */
+            months: components["schemas"]["YearMonth"][];
+            /** @description Most-played kind first. */
+            kinds: components["schemas"]["YearKind"][];
+            /** @description Distinct libraries touched — breadth, in the one unit this server can state without an opinion about genre. */
+            libraries: number;
+            /** @description The first thing played in the year. **Absent when the year holds nothing.** */
+            first?: components["schemas"]["Item"];
+            /** @description The last thing played in the year. The same item as `first` when the year holds exactly one. */
+            last?: components["schemas"]["Item"];
+            /** @description Every year this account has history in, newest first, so a picker exists on first paint. */
+            years: number[];
+            /** @description The year is still running. The difference between "your 2025" and "your 2025 so far" is the difference between a summary and a claim. */
+            partial: boolean;
         };
     };
     responses: {
@@ -10591,6 +10661,38 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    yearInReview: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the server's current year. A year outside anything a media library could hold answers `400` rather than an empty summary — the two look identical on screen and only one is worth showing. */
+                year?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The year */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YearInReview"];
+                };
+            };
+            /** @description Invalid year */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

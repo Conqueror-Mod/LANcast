@@ -7217,6 +7217,49 @@
           }
         }
       }
+    },
+    "/profile/year": {
+      "get": {
+        "operationId": "yearInReview",
+        "summary": "One account's year",
+        "description": "Answers about **the caller and nobody else** — viewing is private by default (ADR 0035), and there is deliberately no variant naming another account.\n\nThe year defaults to the **server's** current year, which is the calendar the history is bucketed on: a client in another timezone asking for \"now\" gets the household's year rather than its own, which is the right answer on a server whose library sits in one house.\n\nNothing here is sent anywhere. It is computed from data that has never left the machine, which is the entire point of it existing.",
+        "tags": [
+          "Profile"
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Defaults to the server's current year. A year outside anything a media library could hold answers `400` rather than an empty summary — the two look identical on screen and only one is worth showing."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The year",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearInReview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid year",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12254,6 +12297,113 @@
           "favourite": {
             "type": "boolean",
             "description": "Whether the calling account has marked this item. Keyed per account like a rating."
+          }
+        }
+      },
+      "YearMonth": {
+        "type": "object",
+        "required": [
+          "month",
+          "titles"
+        ],
+        "properties": {
+          "month": {
+            "type": "integer",
+            "description": "1–12. **Every month is present, including the empty ones** — a chart with the quiet months missing is a chart that lies about the shape of the year."
+          },
+          "titles": {
+            "type": "integer",
+            "description": "Distinct titles whose last play fell in this month."
+          }
+        }
+      },
+      "YearKind": {
+        "type": "object",
+        "required": [
+          "kind",
+          "titles"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "An item kind — **an open set** (ADR 0018)."
+          },
+          "titles": {
+            "type": "integer"
+          }
+        }
+      },
+      "YearInReview": {
+        "type": "object",
+        "description": "One account's year, computed from `playback_state` and sent nowhere.\n\nTwo things it deliberately does not claim, both consequences of that table holding **one row per item per user**:\n\n- A year is *the titles whose last play fell in it*. A film watched in January and again in December belongs to December; the January sitting cannot be recovered, because the row was overwritten.\n- `watched_ms` counts **one viewing of each title**, not `watch_count` viewings. The tally is real and the dates of those viewings are not, so multiplying would attribute every rewatch to the year of the most recent one. The figure is low rather than inflated, which is the safer direction.",
+        "required": [
+          "year",
+          "titles",
+          "finished",
+          "abandoned",
+          "watched_ms",
+          "months",
+          "kinds",
+          "libraries",
+          "years",
+          "partial"
+        ],
+        "properties": {
+          "year": {
+            "type": "integer"
+          },
+          "titles": {
+            "type": "integer",
+            "description": "Distinct titles whose last play landed in this year."
+          },
+          "finished": {
+            "type": "integer"
+          },
+          "abandoned": {
+            "type": "integer",
+            "description": "Titles played and not finished. Derived from `titles - finished` rather than counted separately, so the two cannot disagree about a total."
+          },
+          "watched_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Time **spent**, not runtime owned: a finished title counts its runtime, an unfinished one counts how far you got, and one viewing each. See the schema description."
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/YearMonth"
+            },
+            "description": "Always twelve entries, in order."
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/YearKind"
+            },
+            "description": "Most-played kind first."
+          },
+          "libraries": {
+            "type": "integer",
+            "description": "Distinct libraries touched — breadth, in the one unit this server can state without an opinion about genre."
+          },
+          "first": {
+            "$ref": "#/components/schemas/Item",
+            "description": "The first thing played in the year. **Absent when the year holds nothing.**"
+          },
+          "last": {
+            "$ref": "#/components/schemas/Item",
+            "description": "The last thing played in the year. The same item as `first` when the year holds exactly one."
+          },
+          "years": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Every year this account has history in, newest first, so a picker exists on first paint."
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "The year is still running. The difference between \"your 2025\" and \"your 2025 so far\" is the difference between a summary and a claim."
           }
         }
       }

@@ -25,6 +25,7 @@ import type {
   Collision,
   CrashReport,
   TranscodeList,
+  YearInReview,
   MediaToolsState,
   Facets,
   HistoryEntry,
@@ -2832,6 +2833,28 @@ export function useProfile(limit = 50, offset = 0) {
       apiGet<Profile>(`/api/profile?limit=${limit}&offset=${offset}`, signal),
     placeholderData: keepPreviousData,
     staleTime: 10_000,
+  });
+}
+
+// ------------------------------------------------------------ your year
+
+/*
+ * One account's year, computed on the server from data that never left it.
+ *
+ * The year is part of the key rather than a sibling of ["profile"], so a
+ * history reset invalidating the profile does not silently also mean this —
+ * and so switching years is a cache hit rather than a refetch of the one you
+ * just looked at.
+ */
+export function useYearInReview(year?: number) {
+  return useQuery({
+    queryKey: ["year-in-review", year ?? "current"],
+    queryFn: ({ signal }) =>
+      apiGet<YearInReview>(
+        year ? `/api/profile/year?year=${year}` : "/api/profile/year",
+        signal,
+      ),
+    staleTime: 60_000,
   });
 }
 

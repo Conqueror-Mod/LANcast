@@ -356,6 +356,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	// Forgetting what you watched. GET prices it, DELETE does it.
+	/*
+	 * Your year (ADR 0035). On the profile prefix because it is a fact about
+	 * one account and answers only about the caller — there is deliberately no
+	 * variant naming somebody else.
+	 */
+	mux.HandleFunc("GET /api/profile/year", s.yearInReview)
 	mux.HandleFunc("GET /api/profile/history", s.historyPreview)
 	mux.HandleFunc("DELETE /api/profile/history", s.resetHistory)
 
