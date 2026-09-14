@@ -953,7 +953,35 @@ group is not priority.
   limit. The distinction is that ADR 0035 governs what others learn about you and
   this governs what a household allows — and the two rules must not be
   generalised into each other.
-- **A local Wrapped.** Everything Spotify computes about you in a datacentre,
+- ~~**A local Wrapped**~~ — **built**, as *Your year* on the profile page.
+  `GET /api/profile/year` and a section beneath the lifetime totals, computed
+  from `playback_state` with no new table and no request leaving the machine.
+
+  **The constraint below decided the whole design, and it is on screen rather
+  than in a comment.** One row per item per user means a year is *the titles
+  whose last play fell in it* — a film watched in January and again in December
+  belongs to December, and the January sitting cannot be recovered. So
+  `watched_ms` counts **one viewing of each title**, not `watch_count`
+  viewings: the tally is real and the dates of those viewings are not, and
+  multiplying would attribute every rewatch to the year of the most recent one.
+  The figure is deliberately low. A number that is missing is easier to
+  disbelieve than one that grew on its own, and on a page that is believed by
+  default that asymmetry is the design.
+
+  What it says instead of a top list: titles, finished against put down, time
+  spent, a bar for each of the twelve months — **including the empty ones**, or
+  the chart lies about the shape of the year — a breakdown by kind, how many
+  libraries were touched, and the first and last things played. `partial` marks
+  a year still running, because "your 2025" and "your 2025 so far" are a summary
+  and a claim.
+
+  Year boundaries are **local**, in SQLite, the same way the photo timeline
+  buckets: eight in the evening on New Year's Eve belongs to the year they were
+  in when they watched it, and in any US timezone the UTC date is already
+  January. Your own year and nobody else's — there is deliberately no route
+  taking another account's id (ADR 0035). Original entry:
+
+  Everything Spotify computes about you in a datacentre,
   computed on your own machine, from data that has never left it — and the
   novelty is precisely that it is *not* a marketing artefact, so nothing about it
   gets uploaded or shared unless ADR 0035's opt-in says so. The material is

@@ -1,0 +1,155 @@
+/* Your year, on the profile page.
+
+   It borrows Profile's stat cards deliberately — this sits directly beneath
+   that row, and a second visual language for the same shape would read as two
+   pages stapled together. Only the chart and the two end tiles are new.
+
+   Nothing here is gold. These are facts about what happened, not about where
+   you are, and gold means one thing in this app. */
+
+.year {
+  display: flex;
+  flex-direction: column;
+  margin-top: 28px;
+}
+
+.year__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.year__pick {
+  /* A four-digit control; the settings input's full width would be a field for
+     a number that is always the same size. */
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Twelve columns, each a track with a bar in it. A grid rather than flex so a
+   quiet month keeps its width instead of collapsing to its label. */
+.year__chart {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 14px 12px 10px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.year__month {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The track is what gives an empty month a height. Without it the column is
+   its label, and the chart stops reading as twelve months. */
+.year__bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 96px;
+  /* Items in a column that could scroll must not shrink — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.year__bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.28),
+    rgba(255, 255, 255, 0.12)
+  );
+}
+
+.year__month-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.year__month-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  /* Reserved whether or not there is a number, so the labels stay on one line
+     across the chart. */
+  min-height: 14px;
+}
+
+.year__kinds {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.year__ends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.year__end {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 10px 14px 10px 10px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+  color: inherit;
+  min-width: 240px;
+}
+
+.year__end:hover,
+.year__end:focus-visible {
+  border-color: var(--gold-dormant);
+  outline: none;
+}
+
+.year__end-art {
+  grid-row: 1 / 3;
+  width: 56px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-tile);
+  flex-shrink: 0;
+}
+
+.year__end-art--blank {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.year__end-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  align-self: end;
+}
+
+.year__end-title {
+  font-size: 14px;
+  color: var(--text-primary);
+  align-self: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The honest part, and it is not fine print: this page is believed, so what it
+   does not claim has to be as readable as what it does. */
+.year__note {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  max-width: 68ch;
+}
