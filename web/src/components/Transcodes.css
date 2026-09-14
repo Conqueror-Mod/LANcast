@@ -1,0 +1,110 @@
+/* Conversions, in Settings > Activity. Same panel language as the crash
+   reports and the audit log it sits beside. Nothing here is gold: this is what
+   the server is doing, not where you are. */
+
+.trans__intro {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.trans__count {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.trans__empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.trans__error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--danger, #e06c6c);
+}
+
+.trans__list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.trans__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  /* Rows in a scrolling column must not collapse - see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.trans__row:last-child {
+  border-bottom: none;
+}
+
+.trans__what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trans__title {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trans__meta {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.trans__rowerror {
+  font-size: 12px;
+  color: var(--danger, #e06c6c);
+}
+
+.trans__served,
+.trans__idle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A slot held for nobody is the row this panel was built to find. */
+.trans__row.is-held .trans__served {
+  color: var(--danger, #e06c6c);
+}
+
+.trans__stop {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.trans__stop:not(:disabled):hover {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.trans__stop:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

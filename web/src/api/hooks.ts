@@ -24,6 +24,7 @@ import type {
   CastMember,
   Collision,
   CrashReport,
+  TranscodeList,
   MediaToolsState,
   Facets,
   HistoryEntry,
@@ -2853,6 +2854,45 @@ export function useClearCrashes() {
   return useMutation({
     mutationFn: () => apiSend("/api/crashes", "DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crashes"] }),
+  });
+}
+
+// ------------------------------------------------------------ transcodes
+
+/*
+ * What the server is converting, right now.
+ *
+ * Only fetched while the panel is open, and polled while it is: this is a live
+ * reading rather than a document, and a row whose idle seconds do not climb
+ * while you watch is worse than no row — it is the wrong answer to "is anything
+ * still using this slot".
+ *
+ * The key is `["transcodes"]` and nothing else in the app uses a key it can
+ * reach by prefix, which is the sibling rule in CLAUDE.md.
+ */
+export function useTranscodes(enabled: boolean) {
+  return useQuery({
+    queryKey: ["transcodes"],
+    queryFn: ({ signal }) => apiGet<TranscodeList>("/api/transcodes", signal),
+    enabled,
+    refetchInterval: enabled ? 3000 : false,
+    staleTime: 0,
+  });
+}
+
+export function useStopTranscode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/transcodes/${id}`, "DELETE"),
+    /*
+     * Stopping a conversion changes the list it was stopped from, and it also
+     * changes what the activity indicator is showing — a live transcode is one
+     * of the tasks /api/activity reports.
+     */
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transcodes"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
   });
 }
 

@@ -462,6 +462,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/enrich", s.enrichStatus)
 	mux.HandleFunc("GET /api/probe", s.probeStatus)
 	mux.HandleFunc("GET /api/activity", s.activity)
+	/*
+	 * What the server is converting, and the ability to stop one.
+	 *
+	 * Administrator only: a conversion names an account and a film, so the list
+	 * is a list of who is watching what — the thing tags and watch history are
+	 * careful to keep private.
+	 */
+	mux.HandleFunc("GET /api/transcodes", s.adminOnly(s.transcodes))
+	mux.HandleFunc("DELETE /api/transcodes/{id}", s.adminOnly(s.stopTranscode))
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
 	mux.HandleFunc("GET /api/crashes", s.adminOnly(s.listCrashes))
 	mux.HandleFunc("DELETE /api/crashes", s.adminOnly(s.clearCrashes))

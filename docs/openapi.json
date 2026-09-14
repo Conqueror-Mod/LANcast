@@ -3861,6 +3861,69 @@
         }
       }
     },
+    "/transcodes": {
+      "get": {
+        "operationId": "listTranscodes",
+        "tags": [
+          "operations"
+        ],
+        "summary": "What the server is converting right now",
+        "description": "Administrators only, and that is a privacy decision rather than a permissions afterthought: a conversion names an account and a film, so a list of them is a list of who is watching what.\n\n`served_bytes` is the field worth reading. Zero means the slot is being held for nobody — the session was started, never read from, and is keeping other playback from starting. Sessions are returned most-idle first, because the list is read when something has been refused and the useful row is the one nobody is using.\n\nA channel carries `live: true` and a negated `item_id`, the convention that keeps channel and item numbering from being confused.",
+        "responses": {
+          "200": {
+            "description": "The live conversions, most idle first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscodeList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/transcodes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The session id, as returned by `GET /api/transcodes`.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "stopTranscode",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Stop one conversion",
+        "description": "Administrators only. Ends the session and frees its slot.\n\nA session that has already gone answers `404` rather than an error: two administrators pressing Stop on the same row is not a failure, and the second one has got what they asked for.",
+        "responses": {
+          "204": {
+            "description": "Stopped."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/audit": {
       "get": {
         "operationId": "getAuditLog",
@@ -10557,6 +10620,94 @@
           "detail": {
             "type": "string",
             "description": "A JSON blob, as a string."
+          }
+        }
+      },
+      "Transcode": {
+        "type": "object",
+        "description": "One conversion the server is running.",
+        "required": [
+          "id",
+          "item_id",
+          "live",
+          "output",
+          "encoding",
+          "start_at",
+          "idle_seconds",
+          "running_seconds",
+          "served_bytes",
+          "finished"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Negated for a channel; see `live`."
+          },
+          "title": {
+            "type": "string",
+            "description": "Resolved server-side, since the page has no way to look up an item it is not already showing. Absent when the item has gone, and for a channel."
+          },
+          "owner": {
+            "type": "string",
+            "description": "The account this conversion was started for. Absent on an unconfigured loopback server, where every request is anonymous."
+          },
+          "live": {
+            "type": "boolean",
+            "description": "A channel rather than a library item."
+          },
+          "output": {
+            "type": "string",
+            "description": "`hls` or `progressive`."
+          },
+          "encoding": {
+            "type": "boolean",
+            "description": "A real re-encode, as opposed to a remux into a different container. The two cost wildly different amounts."
+          },
+          "start_at": {
+            "type": "number",
+            "description": "Offset into the film this conversion began at, which is what tells a seek apart from a fresh start."
+          },
+          "idle_seconds": {
+            "type": "integer"
+          },
+          "running_seconds": {
+            "type": "integer"
+          },
+          "served_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How much picture has actually been handed over. Zero means the slot is held for nobody."
+          },
+          "finished": {
+            "type": "boolean",
+            "description": "ffmpeg has exited. For segmented output that is normal and the segments remain playable."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why ffmpeg exited, when it exited badly."
+          }
+        }
+      },
+      "TranscodeList": {
+        "type": "object",
+        "required": [
+          "max",
+          "sessions"
+        ],
+        "properties": {
+          "max": {
+            "type": "integer",
+            "description": "The ceiling, so a reader can say \"two of three\" rather than \"two\"."
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transcode"
+            }
           }
         }
       },

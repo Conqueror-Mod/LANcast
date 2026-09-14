@@ -2020,6 +2020,59 @@ truth: the workers are in-process and a restart ended their work.
 Reading progress needs no special role. The endpoints that *start* work
 (`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
 
+### `GET /api/transcodes`
+
+What the server is converting right now. **Admin only.**
+
+```json
+{ "max": 3,
+  "sessions": [
+    { "id": "a9b698226f57ef29", "item_id": 6688, "title": "Scream", "owner": "u_3f9",
+      "live": false, "output": "hls", "encoding": true, "start_at": 0,
+      "idle_seconds": 41, "running_seconds": 52, "served_bytes": 0, "finished": false }
+  ] }
+```
+
+`served_bytes` is the field this exists for. Zero means the slot is being held
+for nobody: the session was started, never read from, and is keeping anything
+else from playing. Everything beside it is context for that number.
+
+Sessions come back **most idle first**, because the list is read when something
+has just been refused and the useful row is the one nobody is using. Sorting by
+age would put the film somebody is actually watching at the top of a list whose
+purpose is deciding what to stop.
+
+`max` is the ceiling, so a client can say "two of three" rather than "two".
+
+A channel carries `live: true` and a negated `item_id` — the convention that
+keeps channel and item numbering from being mistaken for one another — and no
+`title`, since it is not a library item.
+
+Admin only, and that is a privacy decision rather than a permissions
+afterthought: a conversion names an account and a film, so a list of them is a
+list of who is watching what. Tags and watch history are careful to keep that to
+themselves, and a diagnostics panel must not be the way around them.
+
+This exists because of a morning spent without it. A film refused to play, the
+app said only that it could not, and the answer — three sessions holding every
+slot, none of which had ever delivered a byte — was available exclusively by
+reading `lancastd.log` by hand. The server knew everything needed to explain
+itself and had no way to say it.
+
+### `DELETE /api/transcodes/{id}`
+
+Stop one conversion and free its slot. **Admin only.** `204` on success.
+
+A session that has already gone answers `404` rather than an error: two
+administrators pressing Stop on the same row is not a failure, and the second one
+has got what they asked for.
+
+The point of showing the list is being able to act on it. Eviction and reaping
+each decide for themselves when a slot is wasted, and when they are wrong there
+was previously nothing anybody could do from the app — the remedy was waiting ten
+minutes or restarting the server, which is not an answer to "I can see the thing
+that is blocking me".
+
 ### `GET /api/logs`
 
 The tail of `lancastd.log`. **Admin only.**
