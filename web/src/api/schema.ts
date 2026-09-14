@@ -1523,6 +1523,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transcodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the server is converting right now
+         * @description Administrators only, and that is a privacy decision rather than a permissions afterthought: a conversion names an account and a film, so a list of them is a list of who is watching what.
+         *
+         *     `served_bytes` is the field worth reading. Zero means the slot is being held for nobody — the session was started, never read from, and is keeping other playback from starting. Sessions are returned most-idle first, because the list is read when something has been refused and the useful row is the one nobody is using.
+         *
+         *     A channel carries `live: true` and a negated `item_id`, the convention that keeps channel and item numbering from being confused.
+         */
+        get: operations["listTranscodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transcodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The session id, as returned by `GET /api/transcodes`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop one conversion
+         * @description Administrators only. Ends the session and frees its slot.
+         *
+         *     A session that has already gone answers `404` rather than an error: two administrators pressing Stop on the same row is not a failure, and the second one has got what they asked for.
+         */
+        delete: operations["stopTranscode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -4427,6 +4476,43 @@ export interface components {
             summary: string;
             /** @description A JSON blob, as a string. */
             detail?: string;
+        };
+        /** @description One conversion the server is running. */
+        Transcode: {
+            id: string;
+            /**
+             * Format: int64
+             * @description Negated for a channel; see `live`.
+             */
+            item_id: number;
+            /** @description Resolved server-side, since the page has no way to look up an item it is not already showing. Absent when the item has gone, and for a channel. */
+            title?: string;
+            /** @description The account this conversion was started for. Absent on an unconfigured loopback server, where every request is anonymous. */
+            owner?: string;
+            /** @description A channel rather than a library item. */
+            live: boolean;
+            /** @description `hls` or `progressive`. */
+            output: string;
+            /** @description A real re-encode, as opposed to a remux into a different container. The two cost wildly different amounts. */
+            encoding: boolean;
+            /** @description Offset into the film this conversion began at, which is what tells a seek apart from a fresh start. */
+            start_at: number;
+            idle_seconds: number;
+            running_seconds: number;
+            /**
+             * Format: int64
+             * @description How much picture has actually been handed over. Zero means the slot is held for nobody.
+             */
+            served_bytes: number;
+            /** @description ffmpeg has exited. For segmented output that is normal and the segments remain playable. */
+            finished: boolean;
+            /** @description Why ffmpeg exited, when it exited badly. */
+            error?: string;
+        };
+        TranscodeList: {
+            /** @description The ceiling, so a reader can say "two of three" rather than "two". */
+            max: number;
+            sessions: components["schemas"]["Transcode"][];
         };
         AuditPage: {
             /** @description Newest first. */
@@ -8010,6 +8096,52 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listTranscodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The live conversions, most idle first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscodeList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    stopTranscode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The session id, as returned by `GET /api/transcodes`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getAuditLog: {

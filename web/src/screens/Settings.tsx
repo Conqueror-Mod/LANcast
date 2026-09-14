@@ -72,6 +72,7 @@ import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
+import { Transcodes } from "@/components/Transcodes";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -2827,6 +2828,12 @@ export function Settings() {
                     is not.
                   */}
                   <Review />
+                  {/*
+                    Conversions sits above the audit log because it is the only
+                    live reading on the page: everything else here is a record
+                    of what has happened, and this is what is happening.
+                  */}
+                  <Transcodes />
                   <AuditLog />
                 </>
               )}
