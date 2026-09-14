@@ -486,6 +486,10 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 	// Before reserve, so replacing a stream cannot fail on a ceiling that the
 	// stream being replaced is what filled.
 	m.supersede(owner, itemID)
+	// And the other delivery method for the same film: arriving here means this
+	// player has fallen back from HLS, and the segments it walked away from are
+	// a slot spent on nobody.
+	m.supersedeOutput(owner, itemID, HLS)
 
 	if err := m.reserve(); err != nil {
 		return nil, err
@@ -559,6 +563,10 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	 * the server then unable to play anything at all.
 	 */
 	m.supersedeHLS(owner, itemID)
+	// And any progressive stream of the same film for the same viewer: they are
+	// watching it this way now, and the other one is holding a slot for a player
+	// that has moved on.
+	m.supersedeOutput(owner, itemID, Progressive)
 
 	if err := m.reserve(); err != nil {
 		return nil, err
@@ -644,13 +652,30 @@ func (m *Manager) WaitForFile(ctx context.Context, s *Session, name string, time
  * a second viewer end the first one's film.
  */
 func (m *Manager) supersede(owner string, itemID int64) {
+	m.supersedeOutput(owner, itemID, Progressive)
+}
+
+/*
+ * supersedeOutput stops this owner's sessions for this item that were delivered
+ * a particular way.
+ *
+ * The cross-method call is the one that was missing. Each start superseded only
+ * its own kind, so a player that began with HLS and fell back to progressive —
+ * or the reverse — held **two** slots for one film, out of a ceiling of three.
+ * Seen on a real server: item 6688 opened an HLS session at 22:14:03 and a
+ * progressive one at 22:14:04, and the refusals began the second after that.
+ *
+ * Falling back is not a second viewer. It is one player deciding the first way
+ * did not work, and the way it abandoned will never be asked for again.
+ */
+func (m *Manager) supersedeOutput(owner string, itemID int64, out Output) {
 	if owner == "" {
 		return
 	}
 	m.mu.Lock()
 	var dead []*Session
 	for id, s := range m.sessions {
-		if s.Output == Progressive && s.ItemID == itemID && s.Owner == owner {
+		if s.Output == out && s.ItemID == itemID && s.Owner == owner {
 			dead = append(dead, s)
 			delete(m.sessions, id)
 		}
@@ -764,6 +789,35 @@ const EvictionGrace = 90 * time.Second
  * lock and stopped outside it — the same order reap() uses, and for the same
  * reason.
  */
+/*
+ * evictionGrace is how long this particular session is protected from being
+ * taken for somebody else.
+ *
+ * EvictionGrace is ninety seconds because a session that recently handed over
+ * picture is one a player is watching, and taking it would stop a film to start
+ * a film. That reasoning does not describe a session which has never delivered
+ * a single byte: it is feeding nobody, and defending it refuses a viewer on
+ * behalf of one who does not exist.
+ *
+ * Such a session gets UnreadIdleTimeout instead — the same number the reaper
+ * already uses to call an unread session dead. Eviction defending for ninety
+ * seconds what reaping destroys at thirty was the contradiction that produced
+ * sixteen refusals in sixteen seconds on a real server: three sessions, all
+ * started within half a minute, none of them yet read from, and every request
+ * for another film turned away.
+ *
+ * Never longer than EvictionGrace, whatever the timeouts are configured to.
+ */
+func (m *Manager) evictionGrace(s *Session) time.Duration {
+	if s.Served() > 0 {
+		return EvictionGrace
+	}
+	if m.UnreadIdleTimeout <= 0 || m.UnreadIdleTimeout > EvictionGrace {
+		return EvictionGrace
+	}
+	return m.UnreadIdleTimeout
+}
+
 func (m *Manager) reserve() error {
 	m.mu.Lock()
 	if len(m.sessions) < m.MaxSessions {
@@ -773,7 +827,7 @@ func (m *Manager) reserve() error {
 
 	var victim *Session
 	for _, s := range m.sessions {
-		if s.Idle() < EvictionGrace {
+		if s.Idle() < m.evictionGrace(s) {
 			continue
 		}
 		if victim == nil || s.Idle() > victim.Idle() {
