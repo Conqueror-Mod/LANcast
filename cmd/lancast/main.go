@@ -468,6 +468,11 @@ func (l *launcher) desktopBindings() map[string]any {
 	for name, fn := range gamesBindings(dir) {
 		b[name] = fn
 	}
+	// The window's own log, for the same reason: it is a file on this machine
+	// that the server has never seen.
+	for name, fn := range clientLogBindings(dir) {
+		b[name] = fn
+	}
 	return b
 }
 

@@ -188,10 +188,17 @@ const tailWindow = 512 << 10
 // A missing log is not an error: a server that has only ever run in a terminal
 // may never have opened one, and that is a supported configuration.
 func Tail(dir string, n int) (lines []string, complete bool, err error) {
+	return TailNamed(dir, FileName, n)
+}
+
+// TailNamed is Tail for a process that keeps its own file rather than the
+// server's — the tray and the desktop window both do, for the rotation reason
+// given on TrayFileName.
+func TailNamed(dir, name string, n int) (lines []string, complete bool, err error) {
 	if n <= 0 {
 		return nil, true, nil
 	}
-	f, err := os.Open(filepath.Join(dir, FileName))
+	f, err := os.Open(filepath.Join(dir, name))
 	if os.IsNotExist(err) {
 		return nil, true, nil
 	}

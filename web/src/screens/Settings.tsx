@@ -72,6 +72,7 @@ import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
+import { ClientLog } from "@/components/ClientLog";
 import { BackupSettings } from "@/components/BackupSettings";
 import { ApiFailure } from "@/api/client";
 import type {
@@ -2841,7 +2842,19 @@ export function Settings() {
             </>
           )}
           {pane === "account" && <AccountSection />}
-          {pane === "app" && <DesktopSettings />}
+          {pane === "app" && (
+            <>
+              <DesktopSettings />
+              {/*
+                On the device pane rather than the admin Logs one. This file is
+                written by this window, on this machine, and it is not the
+                server's to show: a phone opening Settings has no such file, and
+                an administrator reading it from another device would be reading
+                nothing.
+              */}
+              <ClientLog />
+            </>
+          )}
           {pane === "games" && <GamesSettings />}
           {pane === "keyboard" && <KeyBindings />}
           {pane === "display" && (
