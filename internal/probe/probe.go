@@ -264,9 +264,29 @@ func (p *Prober) Probe(ctx context.Context, path string) (*Result, error) {
 // An untagged file is not an error: it returns empty tags, and the caller falls
 // back to folder and filename.
 func (p *Prober) ReadTags(ctx context.Context, path string) (Tags, error) {
-	bin, err := p.binary()
+	raw, err := p.ReadRawTags(ctx, path)
 	if err != nil {
 		return Tags{}, err
+	}
+	return parseTags(raw), nil
+}
+
+/*
+ * ReadRawTags returns the container tags as ffprobe reported them.
+ *
+ * The Tags struct above deliberately holds four fields, and that stays right:
+ * a real FLAC in the test library carries a multi-kilobyte LYRICS tag, and
+ * pulling every tag into the database to find four of them is not a trade
+ * worth making.
+ *
+ * This is the other half of that decision rather than a reversal of it. A
+ * caller that wants exactly the blob — the lyrics endpoint — asks for it, once,
+ * when somebody has opened a panel that displays it. Nothing here is stored.
+ */
+func (p *Prober) ReadRawTags(ctx context.Context, path string) (map[string]string, error) {
+	bin, err := p.binary()
+	if err != nil {
+		return nil, err
 	}
 
 	timeout := p.Timeout
@@ -286,14 +306,14 @@ func (p *Prober) ReadTags(ctx context.Context, path string) (Tags, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return Tags{}, fmt.Errorf("read tags %s: %w", path, err)
+		return nil, fmt.Errorf("read tags %s: %w", path, err)
 	}
 
 	var doc ffprobeDoc
 	if err := json.Unmarshal(out, &doc); err != nil {
-		return Tags{}, fmt.Errorf("parse tags %s: %w", path, err)
+		return nil, fmt.Errorf("parse tags %s: %w", path, err)
 	}
-	return parseTags(doc.Format.Tags), nil
+	return doc.Format.Tags, nil
 }
 
 // ParseJSON converts ffprobe output into a Result. Kept separate from process

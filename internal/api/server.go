@@ -437,6 +437,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/trailer", s.trailer)
 	// A show's play actions. Not admin-gated: they read what the caller may
 	// already browse, and Continue is per-user by construction.
+	/*
+	 * The words to a track, read off the disk it is already on: an .lrc beside
+	 * the file, or the tag inside it. No provider and no network.
+	 */
+	mux.HandleFunc("GET /api/items/{id}/lyrics", s.itemLyrics)
 	mux.HandleFunc("GET /api/items/{id}/continue", s.continueShow)
 	mux.HandleFunc("GET /api/items/{id}/episodes", s.showEpisodes)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)

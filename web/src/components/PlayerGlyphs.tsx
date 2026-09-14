@@ -104,6 +104,24 @@ export function AudioTrackGlyph(p: Props) {
   );
 }
 
+/* Lines of words with a note beside them.
+ *
+ * Not a microphone, which is the obvious choice and the wrong one: a mic means
+ * "record" or "voice" in every other interface a person has used, and this
+ * shows text. Not quotation marks either — those are already the subtitle
+ * idea, and these two buttons sit next to each other on nothing, since one is
+ * audio-only and the other never is.
+ */
+export function LyricsGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M4 7h9M4 12h11M4 17h7" />
+      <path d="M18 15V6l3-1v9" />
+      <circle cx="16.5" cy="15.5" r="1.8" />
+    </Svg>
+  );
+}
+
 /* Sliders, not a cog.
  *
  * A cog means "application settings" everywhere else in this app, and the row

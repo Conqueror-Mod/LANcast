@@ -26,6 +26,7 @@ import type {
   CrashReport,
   TranscodeList,
   YearInReview,
+  Lyrics,
   MediaToolsState,
   Facets,
   HistoryEntry,
@@ -2855,6 +2856,28 @@ export function useYearInReview(year?: number) {
         signal,
       ),
     staleTime: 60_000,
+  });
+}
+
+// -------------------------------------------------------------- lyrics
+
+/*
+ * The words to a track, read off the server's disk.
+ *
+ * Its own key rather than a sibling of ["item", id]: nothing invalidates
+ * lyrics, and a key reached by prefix from the item would be refetched every
+ * time anything about the item changed — a file on disk that has not moved.
+ *
+ * Long staleTime for the same reason. This answer changes when somebody drops
+ * an .lrc next to a track, which is not something a player needs to poll for.
+ */
+export function useLyrics(itemID: number) {
+  return useQuery({
+    queryKey: ["lyrics", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<Lyrics>(`/api/items/${itemID}/lyrics`, signal),
+    enabled: itemID > 0,
+    staleTime: 5 * 60_000,
   });
 }
 
