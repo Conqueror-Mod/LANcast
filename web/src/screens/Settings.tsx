@@ -135,6 +135,18 @@ function errorMessage(err: unknown): string {
   return "Something went wrong.";
 }
 
+/*
+ * The ceilings offered, in order.
+ *
+ * A short list rather than every label internal/rating can place. The full
+ * table carries six national systems so that *items* from any of them can be
+ * judged; offering all of them here would ask a household to choose between
+ * "15" and "TV-14" as though the difference meant something to them. These are
+ * the rungs somebody actually thinks in, and an item rated in another system is
+ * still placed against whichever one is chosen.
+ */
+const RATING_CEILINGS = ["G", "PG", "PG-13", "TV-14", "R"];
+
 function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
   const del = useDeleteUser();
   const reset = useResetUserPassword();
@@ -153,7 +165,18 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
             {user.name}
             {isSelf && <span className="set-tag">you</span>}
           </div>
-          <div className="set-row__sub">{user.role}</div>
+          <div className="set-row__sub">
+            {user.role}
+            {/*
+              Said on the row rather than hidden behind the control, because
+              the question an administrator has when they open this pane is
+              "which of these accounts is limited", and a limit you have to
+              click each row to discover is one nobody audits.
+            */}
+            {user.max_content_rating
+              ? ` · ${user.max_content_rating} and under`
+              : ""}
+          </div>
           {/* The server refuses to demote the last administrator — inside a
               transaction with the count, because two admins demoting each other
               at once is a race a client-side check cannot win. This surfaces
@@ -257,6 +280,39 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
               >
                 {user.role === "admin" ? "Make member" : "Make admin"}
               </button>
+              {/*
+                A ceiling set *for* this account, which is the opposite of the
+                sharing switch in the Account pane: that one has no
+                administrator route because a switch somebody else can flip is
+                not consent, and this one has no self-service route because a
+                limit you can lift is not a limit. The two look alike and must
+                not be generalised into each other.
+
+                Not offered for yourself. An administrator can lift any ceiling,
+                so one set on your own account is a note rather than a limit,
+                and offering it would suggest otherwise.
+              */}
+              {!isSelf && (
+                <select
+                  className="set-input"
+                  aria-label={`Content rating limit for ${user.name}`}
+                  value={user.max_content_rating ?? ""}
+                  disabled={update.isPending}
+                  onChange={(e) =>
+                    update.mutate({
+                      id: user.id,
+                      max_content_rating: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">No limit</option>
+                  {RATING_CEILINGS.map((label) => (
+                    <option key={label} value={label}>
+                      {label} and under
+                    </option>
+                  ))}
+                </select>
+              )}
               <button className="set-btn" onClick={() => setResetting(true)}>
                 Reset password
               </button>

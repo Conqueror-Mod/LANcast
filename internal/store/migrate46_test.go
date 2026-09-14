@@ -15,6 +15,17 @@ import (
 
 func rewindTo45(t *testing.T, st *Store) {
 	t.Helper()
+	/*
+	 * The version *and* what later revisions added.
+	 *
+	 * Winding the number back on its own is a fiction: the store was opened at
+	 * the current revision, so its tables are already carrying every column
+	 * added since. Replaying from 45 then re-runs those ALTERs against columns
+	 * that exist, and the migration fails for a reason that has nothing to do
+	 * with what is being tested. Revision 47's column is the first to make that
+	 * bite, and anything added after it belongs on this list too.
+	 */
+	dropPost45Additions(t, st)
 	if _, err := st.db.Exec(`UPDATE meta SET value = '45' WHERE key = 'schema_version'`); err != nil {
 		t.Fatal(err)
 	}
@@ -118,5 +129,18 @@ func TestRevision46IsIdempotent(t *testing.T) {
 	// did when this one was added.
 	if v != CurrentSchemaVersion {
 		t.Errorf("schema_version = %d, want %d", v, CurrentSchemaVersion)
+	}
+}
+
+/*
+ * Undo what revisions after 45 added, so a rewind is more than a number.
+ *
+ * Shared by both rewinds because both replay through the same later
+ * migrations. Anything added after revision 47 belongs here too.
+ */
+func dropPost45Additions(t *testing.T, st *Store) {
+	t.Helper()
+	if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN max_content_rating`); err != nil {
+		t.Fatal(err)
 	}
 }

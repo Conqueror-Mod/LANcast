@@ -563,7 +563,18 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	minRating, _ := strconv.ParseFloat(q.Get("min_rating"), 64)
 	f := store.ItemFilter{
 		LibraryID: int64(queryInt(r, "library_id")),
-		Kind:      q.Get("kind"),
+		/*
+		 * The caller's ceiling, read here rather than trusted from anywhere
+		 * (ADR 0015).
+		 *
+		 * GetItem already refuses a blocked item to every path that turns an id
+		 * into bytes, which is where the rule has to hold. This is the other
+		 * half: without it a restricted account browses a grid full of tiles
+		 * that answer 404 when opened, which is a worse experience than not
+		 * seeing them and tells them exactly what they are not allowed.
+		 */
+		MaxContentRating: s.ceilingFor(r),
+		Kind:             q.Get("kind"),
 		// The browse grid passes exclude_kind=collection,playlist: a franchise
 		// tile beside the films it groups, or a playlist tile beside the artists
 		// whose tracks are on it, answers a different question from the grid it

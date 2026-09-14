@@ -2951,8 +2951,26 @@ export function useUpdateUser() {
       id: string;
       name?: string;
       role?: Role;
+      /**
+       * A ceiling set *for* this account (ADR 0015). Empty clears it.
+       *
+       * Admin-only on the server, which is the point: a limit the limited
+       * party can lift is not a limit.
+       */
+      max_content_rating?: string;
     }) => apiSend(`/api/users/${id}`, "PATCH", patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    /*
+     * The account list, and everything that account can see.
+     *
+     * A ceiling changes what the *server* will show and play, so a session
+     * already looking at a grid is holding a list that is no longer true. This
+     * is the invalidation rule applied across an account boundary: ask what
+     * somebody could be looking at that this changes, not what it writes.
+     */
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["items"] });
+    },
   });
 }
 

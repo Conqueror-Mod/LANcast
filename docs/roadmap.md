@@ -936,7 +936,54 @@ group is not priority.
   handler check loses — and the prize for losing it is a server nobody can
   administer without `reset-auth` on the machine itself.
 
-- **Managed profiles with a content-rating ceiling** — approved, and mostly
+- ~~**Managed profiles with a content-rating ceiling**~~ — **built**, schema 47.
+  A ceiling on the account row, an administrator-only control in Settings →
+  Users, and enforcement in the listing **and in playback authorisation**. Four
+  notes on what the build decided, since the entry below records only what was
+  approved.
+
+  **There was no ordering to enforce, so one had to be built.**
+  `content_rating` is whatever string a provider or an NFO wrote, drawn from a
+  dozen national systems that do not sort next to each other.
+  [internal/rating](../internal/rating/rating.go) maps the labels libraries
+  actually carry onto a ladder of **ages**, because that is the one thing every
+  system is really saying — BBFC 15 and TV-14 land a year apart, where pairing
+  the lists by index would put R beside 15 counting one way and 18 counting the
+  other. It is deliberately coarse and is not a classification authority.
+
+  **An episode is judged by its show.** Episodes almost never carry a
+  certificate; their shows do. Without inheritance a ceiling hides every episode
+  in the library and leaves the films, which is not a limit anybody asked for —
+  it is how a feature gets switched off and called broken. Own rating, then
+  parent, then grandparent, which is the same shape as the resolved `sensitive`
+  flag ([ADR 0051](adr/0051-sensitive-content.md)).
+
+  **What is still unrated is blocked**, and that is the uncomfortable half.
+  Letting it through puts the hole exactly where the unlabelled sits — home
+  video, anything a provider never matched, most of what somebody added by hand.
+  A limit that stops at the catalogued and waves the rest past is a filter that
+  looks like a limit. The cost is that a restricted account sees less than the
+  household expects, which is visible, complainable-about, and fixed by rating
+  the item; the other failure is invisible.
+
+  **`GetItem` is the chokepoint**, which is what makes this hold rather than
+  being remembered in a dozen handlers: stream, transcode, download and the
+  detail page all turn an id into an item through it, so a blocked item answers
+  **404 — not 403** — everywhere. The two must be indistinguishable, or walking
+  the ids becomes a way to enumerate what a household is keeping from somebody.
+
+  One error the store's own tests caught, worth recording because the reasoning
+  sounded right: an id naming no account was refused as a stale or forged
+  session. An unsecured loopback server has no accounts and reads every request
+  as `LocalUserID`, so that emptied the whole library for the configuration
+  meant to work out of the box. Deciding whether a session is real is the
+  session layer's job; this one answers what a ceiling permits.
+
+  Still open: the shelves that do not go through either path — Trending, and
+  photo listings — can still show a *title* to a restricted account, though
+  nothing will play. Original entry:
+
+  approved, and mostly
   assembly: [ADR 0015](adr/0015-multi-user-accounts.md) already gives accounts
   and roles, and `content_rating` already flows through
   [items.go](../internal/api/items.go). What matters is *where it is enforced*.
