@@ -66,6 +66,7 @@ func main() {
 	// who runs in the browser should get the browser at login, not a window.
 	_ = *window // accepted and ignored; the window is the default now
 	browserMode = *browser
+	startLogging()
 
 	/*
 	 * One client at a time. Launching again — a second press of the shortcut —
