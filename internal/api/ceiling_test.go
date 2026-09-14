@@ -47,14 +47,19 @@ func accountID(t *testing.T, h *harness, name string) string {
 	return ""
 }
 
+func rate(t *testing.T, h *harness, id int64, label string) {
+	t.Helper()
+	if err := h.st.UpdateItemMetadata(context.Background(), id,
+		store.ItemMetadata{ContentRating: &label}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func ratedFile(t *testing.T, h *harness, name, label string) int64 {
 	t.Helper()
 	id := h.addFile(t, name, []byte("not really a film"))
 	if label != "" {
-		if err := h.st.UpdateItemMetadata(context.Background(), id,
-			store.ItemMetadata{ContentRating: &label}); err != nil {
-			t.Fatal(err)
-		}
+		rate(t, h, id, label)
 	}
 	return id
 }
@@ -199,5 +204,117 @@ func TestACeilingThisServerCannotPlaceIsRefused(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+/*
+ * The listings that build their own SQL.
+ *
+ * ListItems carries the predicate and GetItem is the chokepoint for bytes, so
+ * these are the third shape: a shelf or a container's children, assembled by
+ * hand and handed back. A restricted account shown a title it cannot open is
+ * worse off than one not shown it — the tile names exactly what the household
+ * is keeping from them.
+ */
+
+func TestAShelfDoesNotNameWhatCannotBeOpened(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	blocked := ratedFile(t, h, "grown-up.mkv", "R")
+	allowed := ratedFile(t, h, "cartoon.mkv", "G")
+	child := limitedMember(t, h, "kiddo", "PG")
+
+	// Trending is built from what has been played, so both need a viewing.
+	for _, id := range []int64{blocked, allowed} {
+		resp := h.authed(t, "PUT", fmtPath("/api/items/%d/progress", id),
+			map[string]any{"position_ms": 60000, "watched": true})
+		resp.Body.Close()
+	}
+
+	var got struct {
+		Items []struct {
+			Item struct {
+				Title string `json:"title"`
+			} `json:"item"`
+		} `json:"items"`
+	}
+	decode(t, h.doAs(t, child, "GET", "/api/libraries/1/trending", nil), &got)
+
+	for _, e := range got.Items {
+		if e.Item.Title == "grown-up.mkv" {
+			t.Error("the trending shelf offered an R film to a PG account")
+		}
+	}
+
+	/*
+	 * The positive control, without which this passes on an empty shelf.
+	 *
+	 * The same request as an administrator has to show both films — otherwise
+	 * the assertion above is satisfied by a shelf that was never populated,
+	 * and a regression in the filter would look exactly like a regression in
+	 * the fixture.
+	 */
+	var asAdmin struct {
+		Items []struct {
+			Item struct {
+				Title string `json:"title"`
+			} `json:"item"`
+		} `json:"items"`
+	}
+	decode(t, h.authed(t, "GET", "/api/libraries/1/trending", nil), &asAdmin)
+	titles := map[string]bool{}
+	for _, e := range asAdmin.Items {
+		titles[e.Item.Title] = true
+	}
+	if !titles["grown-up.mkv"] || !titles["cartoon.mkv"] {
+		t.Fatalf("the shelf itself is empty for an unlimited account (%v); this test proves nothing", titles)
+	}
+}
+
+func TestAContainersChildrenAreFilteredToo(t *testing.T) {
+	/*
+	 * A show under the ceiling can hold an episode above it — a late season
+	 * rated harder than the programme it belongs to. The show's page opens,
+	 * because the show is permitted, and the episode list is where the rule has
+	 * to hold.
+	 */
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	ctx := context.Background()
+	show, err := h.st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: h.lib.ID, Path: h.dir + "/Some Programme", Kind: "show",
+		Title: "Some Programme", SortTitle: "Some Programme",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mild := ratedFile(t, h, "S01E01.mkv", "")
+	harsh := ratedFile(t, h, "S01E02.mkv", "TV-MA")
+	for _, ep := range []int64{mild, harsh} {
+		if err := h.st.SetParent(ctx, ep, &show); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rate(t, h, show, "TV-PG")
+	child := limitedMember(t, h, "kiddo", "TV-PG")
+
+	var page struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, h.doAs(t, child, "GET", fmtPath("/api/items?parent_id=%d", show), nil), &page)
+
+	seen := map[int64]bool{}
+	for _, it := range page.Items {
+		seen[it.ID] = true
+	}
+	if seen[harsh] {
+		t.Error("an episode rated above the ceiling was listed under a permitted show")
+	}
+	// And the one with no rating of its own is still there, inheriting the
+	// show's — otherwise this "passes" by hiding the whole season.
+	if !seen[mild] {
+		t.Error("an episode inheriting a permitted show's rating was hidden")
 	}
 }

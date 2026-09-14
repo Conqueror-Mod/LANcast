@@ -69,9 +69,39 @@ func (s *Server) libraryTrending(w http.ResponseWriter, r *http.Request) {
 	// Unwrapped into a slice of Item and written back, because a TrendingItem
 	// carries its Item by value: attaching to a copy would succeed silently and
 	// change nothing, which is the same shape of bug as the omission itself.
+	/*
+	 * The account's content rating ceiling (ADR 0015).
+	 *
+	 * This shelf builds its own SQL, so it gets neither the predicate ListItems
+	 * applies nor the funnel every other listing is written through. Filtered
+	 * before the artwork pass rather than after, so nothing is fetched for a row
+	 * that is about to be dropped — and the counts beside the shelf still
+	 * describe the library rather than this account's view of it, which is
+	 * right: "how many people watched things here" is a fact about the
+	 * household.
+	 */
 	inner := make([]store.Item, len(items))
 	for i := range items {
 		inner[i] = items[i].Item
+	}
+	permitted, err := s.st.PermittedItems(r.Context(), s.userID(r), inner)
+	if err != nil {
+		s.writeInternal(w, err, "apply rating ceiling")
+		return
+	}
+	if len(permitted) != len(inner) {
+		allowed := make(map[int64]bool, len(permitted))
+		for _, it := range permitted {
+			allowed[it.ID] = true
+		}
+		kept := make([]store.TrendingItem, 0, len(permitted))
+		for _, e := range items {
+			if allowed[e.Item.ID] {
+				kept = append(kept, e)
+			}
+		}
+		items = kept
+		inner = permitted
 	}
 	if err := s.st.AttachArtwork(r.Context(), inner); err != nil {
 		s.writeInternal(w, err, "attach artwork")
