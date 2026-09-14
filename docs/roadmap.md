@@ -987,9 +987,14 @@ group is not priority.
   meant to work out of the box. Deciding whether a session is real is the
   session layer's job; this one answers what a ceiling permits.
 
-  Still open: the shelves that do not go through either path — Trending, and
-  photo listings — can still show a *title* to a restricted account, though
-  nothing will play. Original entry:
+  **Three shapes, not two.** `ListItems` carries the predicate, `GetItem` is
+  the chokepoint for anything that becomes bytes, and the third is a listing
+  that builds its own SQL and hands back rows — a shelf, a collection's
+  members, a container's children. `PermittedItems` covers those in one query
+  with the *same* predicate, applied where every list becomes a response, so it
+  is idempotent on the page `ListItems` already filtered. A restricted account
+  shown a title it cannot open is worse off than one not shown it: the tile
+  names precisely what the household is keeping from them. Original entry:
 
   approved, and mostly
   assembly: [ADR 0015](adr/0015-multi-user-accounts.md) already gives accounts

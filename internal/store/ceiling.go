@@ -223,3 +223,72 @@ func (s *Store) MaxContentRating(ctx context.Context, userID string) (string, er
 	}
 	return label, nil
 }
+
+/*
+ * PermittedItems removes what an account's ceiling blocks from a list it did
+ * not build.
+ *
+ * ListItems applies the predicate in its own WHERE, and GetItem is the
+ * chokepoint for anything that turns an id into bytes. This is for the third
+ * shape: a listing that builds its own SQL — a shelf, a collection's members,
+ * a season's episodes — and then hands back rows. Without it those surfaces
+ * show a restricted account a title it cannot open, which is worse than not
+ * showing it: it names precisely what the household is keeping from them.
+ *
+ * One query for the whole slice rather than a check per row, and the *same*
+ * predicate the listing uses, so the two cannot drift apart. Order is
+ * preserved, because these lists are ordered for a reason — a shelf is ranked
+ * and a season is in episode order.
+ *
+ * The unrestricted case costs one indexed lookup and returns the slice it was
+ * given, untouched.
+ */
+func (s *Store) PermittedItems(ctx context.Context, userID string, items []Item) ([]Item, error) {
+	if userID == "" || len(items) == 0 {
+		return items, nil
+	}
+	var ceiling string
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT max_content_rating FROM user WHERE id = ?`, userID).Scan(&ceiling); err != nil {
+		// No account row means no ceiling, for the reason MayPlay records.
+		return items, nil
+	}
+	pred, ceilArgs := ceilingPredicate(ceiling)
+	if pred == "" {
+		return items, nil
+	}
+
+	args := make([]any, 0, len(items)+len(ceilArgs))
+	for _, it := range items {
+		args = append(args, it.ID)
+	}
+	args = append(args, ceilArgs...)
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT media_item.id FROM media_item WHERE media_item.id IN (`+
+			placeholders(len(items))+`)`+pred, args...)
+	if err != nil {
+		return nil, fmt.Errorf("filter by ceiling: %w", err)
+	}
+	defer rows.Close()
+
+	allowed := make(map[int64]bool, len(items))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("filter by ceiling: %w", err)
+		}
+		allowed[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]Item, 0, len(items))
+	for _, it := range items {
+		if allowed[it.ID] {
+			out = append(out, it)
+		}
+	}
+	return out, nil
+}

@@ -673,6 +673,27 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 // the count for a paged query; pass -1 for a whole set (a collection's members),
 // where the response reports len(items).
 func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, items []store.Item, total ...int) {
+	/*
+	 * The account's content rating ceiling, applied where every list becomes a
+	 * response (ADR 0015).
+	 *
+	 * Four handlers funnel through here — a collection's members, a container's
+	 * children among them — and each builds its own SQL, so none of them gets
+	 * the predicate ListItems applies for itself. A restricted account would
+	 * otherwise be shown a title it cannot open, which is worse than not being
+	 * shown it: it names exactly what the household is keeping from them.
+	 *
+	 * Idempotent on the listing that already filtered: nothing is removed from
+	 * a page ListItems built, because the predicate is the same one.
+	 */
+	before := len(items)
+	permitted, err := s.st.PermittedItems(r.Context(), s.userID(r), items)
+	if err != nil {
+		s.writeInternal(w, err, "apply rating ceiling")
+		return
+	}
+	items = permitted
+
 	if err := s.st.AttachProgress(r.Context(), items, s.userID(r)); err != nil {
 		s.writeInternal(w, err, "attach progress")
 		return
@@ -690,7 +711,10 @@ func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, i
 	}
 	n := len(items)
 	if len(total) > 0 {
-		n = total[0]
+		// A supplied total counts the whole result, not this page, so anything
+		// the ceiling removed has to come off it too — otherwise the grid says
+		// there is more to page to than it will ever be given.
+		n = total[0] - (before - len(items))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"total": n, "items": items})
 }
