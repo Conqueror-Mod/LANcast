@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -86,25 +87,52 @@ func FromTag(value string) Lyrics {
 }
 
 /*
- * TagNames are the tag keys that carry lyrics, in the order worth trying.
+ * TagPrefixes are the tag keys that carry lyrics, matched as prefixes.
  *
- * `LYRICS` is what ffprobe reports for the common cases — Vorbis comments in
- * FLAC and OGG, and ID3's USLT frame, which ffmpeg surfaces under this name
- * rather than its own. The unsynchronised and synchronised spellings appear on
- * files written by older taggers.
+ * Prefixes rather than whole names, and that is the correction a real file
+ * taught. An ID3 USLT frame carries a language and a description, and ffmpeg
+ * builds its key out of them: a real MP3 in the library this was tested against
+ * reports **`lyrics-XXX`**, XXX being the undefined-language code, and
+ * `lyrics-eng` turns up elsewhere. Matching whole names found none of them —
+ * the panel said "no lyrics for this track" over a file holding 1,453
+ * characters of them, and every test passed, because the fixture was written
+ * from the same assumption as the code.
+ *
+ * Vorbis comments in FLAC and OGG use the bare `LYRICS`, which the same prefix
+ * covers.
  */
-var TagNames = []string{"LYRICS", "lyrics", "UNSYNCEDLYRICS", "USLT", "SYNCEDLYRICS"}
+var TagPrefixes = []string{"lyrics", "unsyncedlyrics", "syncedlyrics", "uslt"}
 
-// FromTags picks the first tag that carries anything, case-insensitively.
+/*
+ * FromTags picks the first tag that carries anything.
+ *
+ * Case-insensitive, and prefix-matched per TagPrefixes. Keys are considered in
+ * sorted order so that a file carrying two — `lyrics-eng` and `lyrics-XXX`, say
+ * — resolves the same way on every run rather than however the map happened to
+ * be walked. The same reason parseTags sorts in internal/probe.
+ *
+ * `lyricist` is deliberately not matched: it is a different frame naming a
+ * person, and it is not a prefix match for "lyrics" — the two diverge at the
+ * sixth character. The tests hold that, because a rule that put somebody's name
+ * on screen as the words to the song would be a quiet and embarrassing
+ * failure.
+ */
 func FromTags(tags map[string]string) (Lyrics, bool) {
-	lower := make(map[string]string, len(tags))
-	for k, v := range tags {
-		lower[strings.ToLower(k)] = v
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
 	}
-	for _, name := range TagNames {
-		if v, ok := lower[strings.ToLower(name)]; ok && strings.TrimSpace(v) != "" {
-			parsed := FromTag(v)
-			if !parsed.Empty() {
+	sort.Strings(keys)
+
+	for _, prefix := range TagPrefixes {
+		for _, k := range keys {
+			if !strings.HasPrefix(strings.ToLower(k), prefix) {
+				continue
+			}
+			if strings.TrimSpace(tags[k]) == "" {
+				continue
+			}
+			if parsed := FromTag(tags[k]); !parsed.Empty() {
 				return parsed, true
 			}
 		}

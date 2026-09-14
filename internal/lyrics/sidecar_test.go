@@ -135,3 +135,42 @@ func TestATagHoldingNothingIsNotLyrics(t *testing.T) {
 		t.Error("a track with no lyrics tag reported lyrics")
 	}
 }
+
+func TestTheTagNameRealFilesActuallyUse(t *testing.T) {
+	/*
+	 * Found by playing a track rather than by reading a specification.
+	 *
+	 * An ID3 USLT frame carries a language and a description, and ffmpeg
+	 * surfaces it under a key built from them — `lyrics-XXX` on a real MP3 in
+	 * the library this was tested against, where XXX is the undefined-language
+	 * code, and `lyrics-eng` elsewhere. Matching whole key names found none of
+	 * them: the panel said "no lyrics for this track" over a file carrying
+	 * 1,453 characters of them.
+	 *
+	 * The fixture that passed was written from the same wrong assumption as the
+	 * code. A fixture cannot catch an error it shares.
+	 */
+	for _, key := range []string{"lyrics-XXX", "lyrics-eng", "LYRICS-XXX", "lyrics-x-none"} {
+		got, ok := FromTags(map[string]string{key: "[Chorus]\nOh, my Lord\n"})
+		if !ok {
+			t.Errorf("%q was not read as lyrics", key)
+			continue
+		}
+		if len(got.Lines) == 0 {
+			t.Errorf("%q gave no lines", key)
+		}
+	}
+}
+
+func TestALyricistIsNotLyrics(t *testing.T) {
+	/*
+	 * The guard on the rule above. `lyricist` is a different ID3 frame naming a
+	 * person, and a prefix match that swallowed it would put somebody's name on
+	 * screen as the words to the song.
+	 */
+	for _, key := range []string{"lyricist", "LYRICIST", "TEXT"} {
+		if _, ok := FromTags(map[string]string{key: "Somebody Else"}); ok {
+			t.Errorf("%q was read as lyrics", key)
+		}
+	}
+}
