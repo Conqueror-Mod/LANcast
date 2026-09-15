@@ -125,6 +125,48 @@
   letter-spacing: 0.02em;
 }
 
+/*
+ * The finished-tick, bottom-left.
+ *
+ * Same dark scrim and same monochrome reading as the two badges above it, and
+ * for a reason the design rules state outright: gold means *where you are*, and
+ * `unwatched` is named there as one of the states it must never be spent on.
+ * The moment gold means two things the focus signal is dead.
+ *
+ * It clears the progress bar's 3px rather than sitting on it. The two rarely
+ * appear together — finishing something clears its position — but "rarely" is
+ * not "never": marking a half-watched film as watched by hand leaves both true
+ * at once, and a tick with a gold bar through it reads as a rendering fault.
+ */
+.poster-tile__watched {
+  position: absolute;
+  left: 6px;
+  bottom: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(5, 7, 15, 0.72);
+  color: var(--text-primary);
+  backdrop-filter: blur(2px);
+}
+
+.poster-tile__watched svg {
+  width: 12px;
+  height: 12px;
+  /* The glyph is the signal; nothing about it should compete with focus. */
+  display: block;
+}
+
+/* Square art (a record sleeve, an artist) crops tighter, so the badges sit in
+   from the edge by the same amount the poster ones do rather than hugging a
+   corner that is not there. */
+.poster-tile__art--square .poster-tile__watched {
+  bottom: 6px;
+}
+
 /* Continue-watching progress: a 3px gold bar on the tile's bottom edge. */
 .poster-tile__progress {
   position: absolute;

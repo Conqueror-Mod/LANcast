@@ -3613,6 +3613,17 @@ export interface components {
              *     A client uses it to tell a container from a leaf: a container opens its children and offers no Play, so a `movie`-kind parent of `part` children — a two-part film (ADR 0017) — is not given a dead-end Play button. `kind` alone cannot express that, which is why the count is part of the item shape.
              */
             child_count?: number;
+            /**
+             * Format: int64
+             * @description How many of a show's episodes this account has not finished. **Present on shows only**, and absent — not zero — everywhere else.
+             *
+             *     Zero means the series is finished, which is why the field is omitted rather than defaulted for anything that is not a show: a client reading a missing value as zero would mark every film, album and photograph in the library as watched.
+             *
+             *     A show with **no episodes on disk** also omits it. An empty series is not a finished one, and "nothing left to watch" is a true sentence about it that means the opposite.
+             *
+             *     Counted per account, `missing` episodes excluded, and only `watched` episodes count as seen — an episode with a saved position but unfinished is still outstanding, matching what `GET /api/continue` would offer. This is **not** folded into `progress`: a show has no playback position, and a Progress whose position is always zero would make `watched` mean one thing on a film and another on a series.
+             */
+            unwatched_episodes?: number;
             overview: string | null;
             /** @description The single provider scalar, 0–10. Independent of `ratings`. */
             rating: number | null;

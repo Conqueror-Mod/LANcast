@@ -709,6 +709,17 @@ func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, i
 		s.writeInternal(w, err, "attach child counts")
 		return
 	}
+	/*
+	 * And how much of a show is left, so a tile can mark a finished series.
+	 *
+	 * A film carries its own answer in Progress; a show has no playback row of
+	 * its own, so without this the client can draw a tick on a film and has no
+	 * way at all to draw one on the series above it.
+	 */
+	if err := s.st.AttachUnwatchedEpisodes(r.Context(), items, s.userID(r)); err != nil {
+		s.writeInternal(w, err, "attach unwatched episodes")
+		return
+	}
 	n := len(items)
 	if len(total) > 0 {
 		// A supplied total counts the whole result, not this page, so anything

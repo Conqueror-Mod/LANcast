@@ -418,6 +418,25 @@ type Item struct {
 	ChildCount int `json:"child_count,omitempty"`
 
 	/*
+	 * UnwatchedEpisodes is how many of a show's episodes this account has not
+	 * finished. Set on shows only, and nil everywhere else.
+	 *
+	 * A pointer, and that is the whole design of this field. The value that
+	 * matters most is **zero** — it is what "you have seen all of this" looks
+	 * like — so `omitempty` would drop exactly the answer a caller is asking
+	 * for, and an int would make "no episodes left" indistinguishable from
+	 * "this is a film and the question does not apply". Both readings put a
+	 * finished-tick on everything in a music library.
+	 *
+	 * It is deliberately *not* folded into Progress. A show has no playback
+	 * position and never will; giving it a Progress whose position is always
+	 * zero would make `watched` mean one thing on a film and another on a show,
+	 * and this project has already shipped one client type that merged two
+	 * different concepts.
+	 */
+	UnwatchedEpisodes *int `json:"unwatched_episodes,omitempty"`
+
+	/*
 	 * Sensitive is the resolved answer: this row is marked, or something above
 	 * it is (ADR 0051). Every surface that draws a thumbnail reads this one
 	 * field, which is the whole reason it is a field rather than a rule the
