@@ -148,9 +148,27 @@
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: rgba(5, 7, 15, 0.72);
+  /*
+   * Denser than the two badges above it, with a hairline ring.
+   *
+   * Measured by looking, which is the only way this was ever going to be
+   * found: at 0.72 the pill vanished into a dark poster, and the white glyph
+   * then landed on the white SCREAM lettering at the foot of four posters in
+   * one row and read as a smudge. The badges at the *top* do not have this
+   * problem because the top of a poster is usually artwork; the bottom is
+   * where the title treatment lives, so a mark down there has to bring its
+   * own background.
+   *
+   * The ring is white at 16% rather than gold. Gold means where-you-are, and
+   * the design rules name `unwatched` as one of the states it must never be
+   * spent on.
+   */
+  background: rgba(5, 7, 15, 0.88);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 1px 3px rgba(0, 0, 0, 0.5);
   color: var(--text-primary);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(3px);
 }
 
 .poster-tile__watched svg {
