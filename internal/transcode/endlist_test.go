@@ -170,3 +170,36 @@ func TestAPlaylistThatNeverFinishesIsCapped(t *testing.T) {
 		t.Errorf("why = %q, want capped", why)
 	}
 }
+
+/*
+ * A session being waited on is not an abandoned one.
+ *
+ * Found by swapping the build into the installed service and playing the film,
+ * which is the only check that means anything here. The wait ran 38.9 seconds
+ * and ended "failed", because the reaper had destroyed the session underneath
+ * it: an HLS session that has handed over no bytes is reaped after
+ * UnreadIdleTimeout, thirty seconds, and a session being waited on has by
+ * definition handed over nothing yet.
+ *
+ * The playback recovered by falling back to the progressive stream, so from the
+ * front it looked like the fix had worked. The log said otherwise.
+ */
+func TestWaitingOnASessionKeepsItFromBeingReaped(t *testing.T) {
+	m, s := &Manager{}, endlistSession(t)
+	s.lastTouch = time.Now().Add(-time.Hour)
+	writePlaylistFile(t, s, growingBody)
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		writePlaylistFile(t, s, growingBody+"#EXT-X-ENDLIST\n")
+	}()
+
+	if ok, why := m.WaitForEndlist(context.Background(), s,
+		Patience{Stall: 2 * time.Second, Cap: 5 * time.Second}); !ok {
+		t.Fatalf("the remux finished but the wait said %q", why)
+	}
+	// The reaper reads this; an hour-stale session would have been killed.
+	if idle := s.Idle(); idle > time.Second {
+		t.Errorf("session idle = %v after being waited on; the reaper would take it", idle)
+	}
+}

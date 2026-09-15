@@ -127,6 +127,23 @@ func (m *Manager) WaitForEndlist(ctx context.Context, s *Session, p Patience) (b
 	grown := -1
 
 	for {
+		/*
+		 * Somebody is waiting on this session, so it is not abandoned.
+		 *
+		 * The reaper kills an HLS session that has handed over no bytes after
+		 * UnreadIdleTimeout — thirty seconds — and a session being waited on
+		 * has by definition handed over nothing yet. The old twenty-second wait
+		 * fitted inside that window; waiting until the remux is actually done
+		 * does not, and the first run of this against the installed service
+		 * proved it: the wait ran 38.9s and ended `why=failed` because the
+		 * reaper had destroyed the session underneath it at 39s, served_bytes=0.
+		 *
+		 * The playback still recovered, by falling back to the progressive
+		 * stream, which is why it looked like a success from the front. It was
+		 * not one.
+		 */
+		s.Touch()
+
 		if body, err := os.ReadFile(playlist); err == nil {
 			if Finished(string(body)) {
 				return true, ""

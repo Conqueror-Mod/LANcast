@@ -1024,7 +1024,9 @@ func TestArgsLevelFollowsTheCapNotTheSource(t *testing.T) {
 // the keyframe distance. Measured at +3.494s on The Rite resumed at 570. The
 // output half of the seek is what makes the first frame the frame asked for.
 func TestSeekIsSplitAcrossInputAndOutput(t *testing.T) {
-	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 600})
+	// An encode: the split works by decoding the preroll and discarding it,
+	// which is a thing only an encode does. The copied case is below.
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: fullDecision(), StartAt: 600})
 	in := argIndex(args, "-i")
 
 	var before, after []string
@@ -1055,7 +1057,7 @@ func TestSeekIsSplitAcrossInputAndOutput(t *testing.T) {
 // Shorter than one preroll there is no bulk to seek on the input, and decoding
 // the whole way is already cheap.
 func TestShortSeekIsEntirelyOnTheOutput(t *testing.T) {
-	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 4})
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: fullDecision(), StartAt: 4})
 	in := argIndex(args, "-i")
 	ss := argIndex(args, "-ss")
 	if ss < 0 {
@@ -1066,5 +1068,60 @@ func TestShortSeekIsEntirelyOnTheOutput(t *testing.T) {
 	}
 	if args[ss+1] != "4.000" {
 		t.Errorf("output seek = %s, want the full 4.000", args[ss+1])
+	}
+}
+
+/*
+ * A copied video track takes the whole seek on the input.
+ *
+ * Reported as "the audio is severely delayed in Scream". The split seek lands
+ * exactly because the output half *decodes* the preroll and throws it away, and
+ * with `-c:v copy` there is nothing to decode: ffmpeg keeps video from the next
+ * keyframe while cutting audio exactly where it was told and rebasing it to
+ * zero.
+ *
+ * Measured on that film, a matroska remux resumed at 471s, reading the first
+ * packet of each stream out of the first segment:
+ *
+ *	-ss 461 -i in -ss 10   video 4.408  audio 0.026   +4.38s
+ *	-ss 471 -i in          video 0.067  audio 0.095   -0.03s
+ *
+ * Re-encoding the audio was tried and does not help: video 4.429, audio 0.000.
+ * The audio was never the problem.
+ */
+func TestACopiedVideoTrackSeeksOnlyOnTheInput(t *testing.T) {
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 471})
+	in := argIndex(args, "-i")
+
+	var before, after []string
+	for i, v := range args {
+		if v != "-ss" || i+1 >= len(args) {
+			continue
+		}
+		if i < in {
+			before = append(before, args[i+1])
+		} else {
+			after = append(after, args[i+1])
+		}
+	}
+	if len(before) != 1 || before[0] != "471.000" {
+		t.Errorf("input seek = %v, want the whole 471.000", before)
+	}
+	if len(after) != 0 {
+		t.Errorf("output seek = %v, want none: a copy cannot be cut anywhere but a keyframe", after)
+	}
+}
+
+// The same rule for a short seek: a copy has no preroll to decode, so even four
+// seconds goes on the input.
+func TestAShortSeekOnACopyIsAlsoOnTheInput(t *testing.T) {
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: remuxDecision(), StartAt: 4})
+	in := argIndex(args, "-i")
+	ss := argIndex(args, "-ss")
+	if ss < 0 || ss > in {
+		t.Fatalf("-ss at %d, -i at %d; a copied seek belongs on the input", ss, in)
+	}
+	if args[ss+1] != "4.000" {
+		t.Errorf("input seek = %s, want 4.000", args[ss+1])
 	}
 }

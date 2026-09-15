@@ -116,6 +116,17 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		var why string
 		complete, why = s.trans.WaitForEndlist(r.Context(), sess, remuxPatience)
+		if complete {
+			/*
+			 * Success was silent, and verifying this against the installed
+			 * service meant inferring it from the *absence* of the failure
+			 * line below. A wait that decides whether a film plays at all
+			 * should say what it decided either way.
+			 */
+			s.log.Info("hls playlist served complete: the remux finished",
+				"item", it.ID, "session", sess.ID,
+				"waited", time.Since(started).Round(time.Millisecond))
+		}
 		if !complete {
 			/*
 			 * Why it gave up, not just how long it waited. "Stalled after four
