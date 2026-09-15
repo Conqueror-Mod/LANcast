@@ -161,12 +161,20 @@ func TestFetchMovie(t *testing.T) {
 		if r.URL.Path != "/movie/335984" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
-		// Both ride one request. Keywords are what express an umbrella
-		// grouping like the MCU, which belongs_to_collection structurally
-		// cannot -- and a second round trip per film to fetch them would be a
-		// doubled provider bill for one field.
-		if got := r.URL.Query().Get("append_to_response"); got != "credits,keywords" {
-			t.Errorf("append_to_response = %q, want credits and keywords in one call", got)
+		/*
+		 * All three ride one request, and the assertion is exact on purpose.
+		 *
+		 * Keywords express an umbrella grouping like the MCU, which
+		 * belongs_to_collection structurally cannot. Release dates carry the
+		 * certificate, which nothing in this project had ever fetched — the
+		 * account rating ceiling shipped against a column that was NULL on all
+		 * 19,460 items of a real library.
+		 *
+		 * A second round trip per film for either would be a doubled provider
+		 * bill for one field, so this pins that they stay on one call.
+		 */
+		if got := r.URL.Query().Get("append_to_response"); got != "credits,keywords,release_dates" {
+			t.Errorf("append_to_response = %q, want credits, keywords and release dates in one call", got)
 		}
 		w.Write([]byte(`{
 		 "title":"Blade Runner 2049","overview":"K discovers a secret.",
@@ -178,7 +186,11 @@ func TestFetchMovie(t *testing.T) {
 		                         {"id":9715,"name":"superhero"}]},
 		 "credits":{"cast":[{"name":"Ryan Gosling","character":"K","order":0}],
 		            "crew":[{"name":"Denis Villeneuve","job":"Director"},
-		                    {"name":"Some Gaffer","job":"Gaffer"}]}}`))
+		                    {"name":"Some Gaffer","job":"Gaffer"}]},
+		 "release_dates":{"results":[
+		   {"iso_3166_1":"GB","release_dates":[{"certification":"15","type":3}]},
+		   {"iso_3166_1":"US","release_dates":[{"certification":"","type":1},
+		                                       {"certification":"R","type":3}]}]}}`))
 	})
 
 	rec, err := newClient(t, srv).Fetch(context.Background(),
@@ -204,6 +216,18 @@ func TestFetchMovie(t *testing.T) {
 	}
 	if rec.Fields.ReleasedAt == nil {
 		t.Error("ReleasedAt was not parsed")
+	}
+	/*
+	 * The certificate, which is the whole reason the block is requested — and
+	 * the field the account rating ceiling reads. The fixture carries the shape
+	 * a real response has: an empty premiere entry ahead of the theatrical one,
+	 * and a British certificate that must not win over the American.
+	 */
+	if rec.Fields.ContentRating == nil {
+		t.Fatal("ContentRating was not set; the ceiling has nothing to read")
+	}
+	if *rec.Fields.ContentRating != "R" {
+		t.Errorf("ContentRating = %q, want R", *rec.Fields.ContentRating)
 	}
 	if len(rec.Genres) != 2 {
 		t.Errorf("Genres = %v, want 2", rec.Genres)
