@@ -15,7 +15,8 @@ package tmdb
  */
 
 /*
- * countryOrder is which country's certificate to take.
+ * defaultCountryOrder is which country's certificate to take when nobody has
+ * chosen.
  *
  * Measured before it was chosen: of thirty films sampled at random from a real
  * library, **thirty had a US certificate and thirty had a GB one**, so the
@@ -23,13 +24,38 @@ package tmdb
  * this server's other metadata is US-shaped and because a household reading
  * "PG-13" recognises it.
  *
- * GB is the fallback rather than "any country", deliberately. A German FSK or
- * an Australian MA15+ on a film's detail page is a surprise to a household that
- * has never seen one, and internal/rating places them all on the same ladder
- * anyway — so the ceiling gains nothing from a label nobody recognises. A
- * country *setting* is the obvious next step and is not this change.
+ * A configured country is placed *in front of* this rather than replacing it —
+ * see certificationOrder. The fallback is the whole reason a setting is safe
+ * to offer: TMDB's coverage is uneven, and a household that picks Germany
+ * still wants a label on the films that carry no FSK entry.
  */
-var countryOrder = []string{"US", "GB"}
+var defaultCountryOrder = []string{"US", "GB"}
+
+/*
+ * certificationOrder is the order to read countries in for one client.
+ *
+ * The configured country first, then the default order with it removed, so
+ * choosing "GB" reorders rather than narrowing and choosing "DE" adds a rung
+ * on top without taking anything away. An empty or unrecognised preference is
+ * simply the default — this is reached on every fetch and is not the place to
+ * discover that a setting is wrong, which is what the API's validation is for.
+ *
+ * Which countries may be configured at all is `rating.Countries`, and the
+ * constraint behind that list is not cosmetic: a certificate the ladder cannot
+ * place reads as unrated, and a ceiling blocks unrated.
+ */
+func certificationOrder(preferred string) []string {
+	if preferred == "" {
+		return defaultCountryOrder
+	}
+	order := []string{preferred}
+	for _, c := range defaultCountryOrder {
+		if c != preferred {
+			order = append(order, c)
+		}
+	}
+	return order
+}
 
 /*
  * releaseTypeOrder is which release's certificate to take within a country.
@@ -43,9 +69,10 @@ var countryOrder = []string{"US", "GB"}
 var releaseTypeOrder = []int{3, 2, 0}
 
 // movieCertification picks a film's certificate, or empty when it carries none
-// in a country this reads.
-func movieCertification(block releaseDatesBlock) string {
-	for _, country := range countryOrder {
+// in a country this reads. The order is a parameter rather than a package
+// global so that one server's preference cannot leak into another's tests.
+func movieCertification(block releaseDatesBlock, order []string) string {
+	for _, country := range order {
 		for _, result := range block.Results {
 			if result.Country != country {
 				continue
@@ -70,8 +97,8 @@ func movieCertification(block releaseDatesBlock) string {
 // showCertification picks a programme's rating. Television carries one per
 // country with no release types, so this is the same country rule without the
 // inner one.
-func showCertification(block contentRatingsBlock) string {
-	for _, country := range countryOrder {
+func showCertification(block contentRatingsBlock, order []string) string {
+	for _, country := range order {
 		for _, result := range block.Results {
 			if result.Country == country && result.Rating != "" {
 				return result.Rating
