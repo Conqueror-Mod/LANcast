@@ -113,7 +113,33 @@ export function LibraryView({
     if (gathering) return;
     setGathering(shuffle ? "shuffle" : "play");
     try {
-      const ids = await fetchLibraryTracks(qc, libraryID, playKind ?? "track");
+      /*
+       * The filters the grid is showing, handed over with it.
+       *
+       * The button sits directly above a grid that has been narrowed, so "all"
+       * means all of *these*. It used to mean all of everything: picking a
+       * genre or an actor narrowed the grid and Randomize all queued the whole
+       * library regardless.
+       *
+       * The same object the grid queries with, so the two cannot describe
+       * different things.
+       */
+      const ids = await fetchLibraryTracks(qc, libraryID, playKind ?? "track", {
+        q,
+        genres,
+        decades: decades.map(Number),
+        contentRatings,
+        unwatched,
+        years: years.map(Number),
+        resolutions,
+        people: people.map(Number),
+        actors: actors.map(Number),
+        directors: directors.map(Number),
+        collections: collections.map(Number),
+        faceClusters: faceClusters.map(Number),
+        minRating,
+        status,
+      });
       const start = startOf(ids, shuffle);
       if (start === undefined) return;
       /*

@@ -2499,23 +2499,46 @@ export async function fetchLibraryTracks(
   qc: QueryClient,
   libraryID: number,
   kind: PlayableKind = "track",
+  /*
+   * The filters the grid is showing, or nothing for the whole library.
+   *
+   * Reported: pick a genre or an actor, watch the grid narrow, press Randomize
+   * all — and it randomises the *entire* library. The button sits directly above
+   * a grid that has been filtered down, so "all" reads as "all of these", and it
+   * meant all of everything.
+   *
+   * The filters are taken rather than rebuilt, and turned into a query string by
+   * `itemsParams`, which is the same function the grid uses. A second place that
+   * decided what a filter set means would be free to disagree with the thing a
+   * person is looking at, which is the whole fault.
+   */
+  filters?: Omit<ItemQuery, "libraryID" | "kind" | "sort">,
 ): Promise<number[]> {
   const PAGE = 500;
   const ids: number[] = [];
   let offset = 0;
+
+  // Built once: the filters do not change while a queue is being gathered, and
+  // its text is also what keys the cache.
+  const base = itemsParams({ ...(filters ?? {}), libraryID, kind, sort: "title" });
+  base.delete("limit");
+  base.delete("offset");
+  const fingerprint = base.toString();
+
   for (;;) {
-    const params = new URLSearchParams({
-      library_id: String(libraryID),
-      kind,
-      // Title order for everything, which for episodes means the server's
-      // sort_title, season, episode — a show library queued in the order it is
-      // meant to be watched rather than alphabetically by episode name.
-      sort: "title",
-      limit: String(PAGE),
-      offset: String(offset),
-    });
+    const params = new URLSearchParams(fingerprint);
+    // Title order for everything, which for episodes means the server's
+    // sort_title, season, episode — a show library queued in the order it is
+    // meant to be watched rather than alphabetically by episode name.
+    params.set("limit", String(PAGE));
+    params.set("offset", String(offset));
     const page = await qc.fetchQuery({
-      queryKey: ["library-tracks", libraryID, kind, offset],
+      /*
+       * The filters are part of the key. Without them two different narrowings
+       * of one library share a cached page, and the second queue is the first
+       * one's contents — the quiet kind of wrong this project keeps meeting.
+       */
+      queryKey: ["library-tracks", fingerprint, offset],
       queryFn: () => apiGet<ItemsPage>(`/api/items?${params.toString()}`),
     });
     ids.push(...page.items.map((t) => t.id));
