@@ -68,8 +68,24 @@ func (m *Manager) WaitForSegment(ctx context.Context, s *Session, name string, t
 }
 
 /*
+ * Patience bounds a wait for a remux to close its own playlist.
+ *
+ * Two bounds rather than one deadline, because "how long has this taken" is the
+ * wrong question to ask a remux. What matters is whether it is still getting
+ * anywhere: one that is writing fifty segments a second will finish, however
+ * large the film, and one that has written nothing for seconds is not about to.
+ */
+type Patience struct {
+	// Stall gives up when the playlist has not grown for this long.
+	Stall time.Duration
+	// Cap is the longest to wait however well it is going, so a pathological
+	// source cannot hold a response open indefinitely.
+	Cap time.Duration
+}
+
+/*
  * WaitForEndlist reports whether ffmpeg's own playlist is finished — closed with
- * #EXT-X-ENDLIST — waiting up to timeout for it to become so.
+ * #EXT-X-ENDLIST — waiting while the remux is still making progress.
  *
  * It exists for sessions that copy the video and are listed as they grow. The
  * desktop client's engine reads a growing playlist once, plays what it listed,
@@ -80,33 +96,69 @@ func (m *Manager) WaitForSegment(ctx context.Context, s *Session, name string, t
  * wrote the remaining twenty minutes, 205 segments and ENDLIST, in three
  * seconds. A finished playlist is one that engine plays.
  *
- * False means the playlist was not finished in time, and the caller serves it
- * growing, exactly as before. A failed ffmpeg answers false at once rather than
- * waiting out the timeout.
+ * # Why progress rather than a deadline
+ *
+ * The fixed twenty seconds this replaced lost a race by about a second, and the
+ * way it lost was ugly. Reported as *Scream (2022) starts near the end, then the
+ * credits roll*: a 6.1GB MKV, remuxed rather than encoded because the container
+ * is unsupported and both codecs are fine. Measured on that file — **1,095 of
+ * its 1,124 segments were written in the first twenty seconds**, about 1h49m of
+ * a 1h54m film, and the whole remux finished in roughly twenty-one. The wait
+ * gave up one segment-worth short of the answer.
+ *
+ * What the viewer got was not a slow start. A growing playlist is one the engine
+ * treats as **live**, so it joined at the live edge — 1:49:30, past the credits
+ * marker at 1:48:00 — watched the last minutes, ran out of listed media and
+ * stopped. Waiting one more second would have played the film from the
+ * beginning.
+ *
+ * So the wait now ends when the playlist stops growing, not when a clock says
+ * so. A remux runs hundreds of times faster than realtime; if segments are still
+ * appearing, finishing is worth more than the second it costs.
+ *
+ * The second return says why the wait ended, for the log: empty on success,
+ * otherwise "stalled", "capped", "failed" or "cancelled". False means the caller
+ * serves the playlist growing, exactly as before.
  */
-func (m *Manager) WaitForEndlist(ctx context.Context, s *Session, timeout time.Duration) bool {
+func (m *Manager) WaitForEndlist(ctx context.Context, s *Session, p Patience) (bool, string) {
 	playlist := filepath.Join(s.Dir, "index.m3u8")
-	deadline := time.Now().Add(timeout)
+	started := time.Now()
+	lastGrowth := started
+	grown := -1
 
 	for {
-		if body, err := os.ReadFile(playlist); err == nil && Finished(string(body)) {
-			return true
+		if body, err := os.ReadFile(playlist); err == nil {
+			if Finished(string(body)) {
+				return true, ""
+			}
+			// Length is the progress signal: the file is read anyway, and it
+			// grows by a line for every segment ffmpeg lists.
+			if len(body) > grown {
+				grown = len(body)
+				lastGrowth = time.Now()
+			}
 		}
 		if done, ffErr := s.Done(); done {
 			if ffErr != nil {
-				return false
+				return false, "failed"
 			}
 			// ffmpeg writes its final playlist before exiting; read it once more
 			// in case it landed between the read above and the exit.
 			body, err := os.ReadFile(playlist)
-			return err == nil && Finished(string(body))
+			if err == nil && Finished(string(body)) {
+				return true, ""
+			}
+			return false, "failed"
 		}
-		if time.Now().After(deadline) {
-			return false
+		if p.Cap > 0 && time.Since(started) > p.Cap {
+			return false, "capped"
+		}
+		if p.Stall > 0 && time.Since(lastGrowth) > p.Stall {
+			return false, "stalled"
 		}
 		select {
 		case <-ctx.Done():
-			return false
+			return false, "cancelled"
 		case <-time.After(100 * time.Millisecond):
 		}
 	}

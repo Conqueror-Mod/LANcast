@@ -113,10 +113,18 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		 * finish its own playlist, and serve that finished (see WaitForEndlist).
 		 * Past the wait it goes out growing, as before.
 		 */
-		complete = s.trans.WaitForEndlist(r.Context(), sess, remuxPlaylistWait)
+		started := time.Now()
+		var why string
+		complete, why = s.trans.WaitForEndlist(r.Context(), sess, remuxPatience)
 		if !complete {
-			s.log.Info("hls playlist served growing: the remux did not finish in time",
-				"item", it.ID, "session", sess.ID, "waited", remuxPlaylistWait)
+			/*
+			 * Why it gave up, not just how long it waited. "Stalled after four
+			 * seconds" and "still going at sixty" are different faults with
+			 * different fixes, and the old line said neither.
+			 */
+			s.log.Info("hls playlist served growing: the remux did not finish",
+				"item", it.ID, "session", sess.ID,
+				"why", why, "waited", time.Since(started).Round(time.Millisecond))
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -130,16 +138,32 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
- * remuxPlaylistWait is how long the playlist route waits for a copied session's
+ * remuxPatience is how long the playlist route waits for a copied session's
  * playlist to finish before serving it growing.
  *
- * The measured remux wrote twenty minutes of a 1080p episode in three seconds,
- * so twenty seconds covers a two-hour film at the same rate with room for a
- * slower disk. It is a wait on the first response only — a seek re-requests and
- * waits again for the shorter remainder — and a start that takes that long is
- * still cheaper than a reload every forty seconds.
+ * A fixed twenty seconds sat here and lost a race by about a second. Reported as
+ * *Scream (2022) starts near the end, then the credits roll*: a 6.1GB MKV whose
+ * remux wrote **1,095 of its 1,124 segments inside that twenty seconds** and
+ * finished in roughly twenty-one. Serving the playlist growing one second early
+ * did not make the film start slowly — it made the engine treat the playlist as
+ * live and join at the edge, 1:49:30 of a 1:54:10 film.
+ *
+ * So the bound is progress rather than elapsed time. A remux runs hundreds of
+ * times faster than realtime: four seconds with no new segment means it is not
+ * coming, where four seconds of silence on an encode would mean nothing at all.
+ *
+ * The cap exists so a pathological source cannot hold a response open for ever,
+ * and past it the behaviour is what it has always been — a growing playlist,
+ * which the client falls back from. Sixty seconds covers roughly a 15GB remux at
+ * the rate measured on this machine.
+ *
+ * It is a wait on the first response only: a seek re-requests and waits again
+ * for the shorter remainder.
  */
-const remuxPlaylistWait = 20 * time.Second
+var remuxPatience = transcode.Patience{
+	Stall: 4 * time.Second,
+	Cap:   60 * time.Second,
+}
 
 /*
  * PlaylistKindHeader says whether a playlist was listed whole or is growing.
