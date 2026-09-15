@@ -186,7 +186,8 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	// Keywords ride along on the same request rather than costing a second one.
 	// They are what expresses an umbrella grouping like the MCU, which
 	// belongs_to_collection structurally cannot -- see movieDetail.Keywords.
-	if err := c.get(ctx, "/movie/"+id, url.Values{"append_to_response": {"credits,keywords"}}, &m); err != nil {
+	if err := c.get(ctx, "/movie/"+id,
+		url.Values{"append_to_response": {"credits,keywords,release_dates"}}, &m); err != nil {
 		return nil, err
 	}
 
@@ -206,6 +207,9 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	}
 	if m.Runtime > 0 {
 		rec.Fields.DurationMS = meta.I64(int64(m.Runtime) * 60_000)
+	}
+	if cert := movieCertification(m.ReleaseDates); cert != "" {
+		rec.Fields.ContentRating = meta.S(cert)
 	}
 	rec.Genres = genreNames(m.Genres)
 	rec.Credits = convertCredits(m.Credits)
@@ -253,7 +257,8 @@ func (c *Client) collectionName(ctx context.Context, embedded *tmdbCollection) s
 
 func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error) {
 	var s showDetail
-	if err := c.get(ctx, "/tv/"+id, url.Values{"append_to_response": {"credits,external_ids"}}, &s); err != nil {
+	if err := c.get(ctx, "/tv/"+id,
+		url.Values{"append_to_response": {"credits,external_ids,content_ratings"}}, &s); err != nil {
 		return nil, err
 	}
 
@@ -271,6 +276,16 @@ func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error)
 	}
 	if s.VoteAverage > 0 {
 		rec.Fields.Rating = meta.F(s.VoteAverage)
+	}
+	/*
+	 * The show's certificate, which is also every episode's.
+	 *
+	 * Episodes and seasons carry none of their own and never will, so the
+	 * ceiling resolves an episode by inheriting its show — the rule that makes
+	 * the feature usable on television at all.
+	 */
+	if cert := showCertification(s.ContentRatings); cert != "" {
+		rec.Fields.ContentRating = meta.S(cert)
 	}
 	rec.Genres = genreNames(s.Genres)
 	rec.Credits = convertCredits(s.Credits)
@@ -564,6 +579,31 @@ type movieDetail struct {
 	 * Verified against the live API rather than assumed.
 	 */
 	Keywords keywordsBlock `json:"keywords"`
+	/*
+	 * Certifications, per country, riding on the same request.
+	 *
+	 * Asked for because `content_rating` was NULL on all 19,460 items of a real
+	 * library: nothing in this project ever wrote it except an NFO sidecar, and
+	 * the account-level rating ceiling therefore stood on an empty column. The
+	 * block costs no extra request -- `append_to_response` already carried
+	 * credits and keywords.
+	 */
+	ReleaseDates releaseDatesBlock `json:"release_dates"`
+}
+
+// releaseDatesBlock is TMDB's per-country release list. A country appears once,
+// with one entry per release *type* -- premiere, theatrical, digital, physical
+// -- and only some of them carry a certificate.
+type releaseDatesBlock struct {
+	Results []struct {
+		Country string `json:"iso_3166_1"`
+		Dates   []struct {
+			Certification string `json:"certification"`
+			// 1 premiere, 2 limited theatrical, 3 theatrical, 4 digital,
+			// 5 physical, 6 TV.
+			Type int `json:"type"`
+		} `json:"release_dates"`
+	} `json:"results"`
 }
 
 type keywordsBlock struct {
@@ -596,6 +636,16 @@ type showDetail struct {
 	// TV imdb ids live under external_ids, not on the detail root as they do for
 	// movies, so the fetch appends that block.
 	ExternalIDs externalIDs `json:"external_ids"`
+	// Television carries one rating per country rather than one per release
+	// type, so it is a simpler shape than a film's.
+	ContentRatings contentRatingsBlock `json:"content_ratings"`
+}
+
+type contentRatingsBlock struct {
+	Results []struct {
+		Country string `json:"iso_3166_1"`
+		Rating  string `json:"rating"`
+	} `json:"results"`
 }
 
 // externalIDs is TMDB's external_ids block — the cross-service ids for a title.

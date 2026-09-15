@@ -1030,9 +1030,26 @@ group is not priority.
   has a `ContentRating` field and a writer for it, so the gap is a provider
   pass that never asks TMDB for a certification, not a schema problem.
 
-  **Next, and it comes before anything else here**: fetch certifications during
-  enrichment and backfill, then re-measure. Until then the control should
-  probably say what a ceiling would currently do.
+  **The provider half is now built.** TMDB carries certifications and was never
+  asked for them: `append_to_response` already fetched credits and keywords on
+  the same request, so `release_dates` (films) and `content_ratings`
+  (television) ride along at **no extra request**. Measured before the rule was
+  chosen — of thirty films sampled at random from the live library, **thirty
+  carried a US certificate and thirty a GB one**, so the country order decides
+  the label rather than whether there is one. US leads, GB is the fallback, and
+  a country nobody in the house reads is deliberately **not** borrowed: an FSK
+  on a detail page is a surprise, and the ladder places every system anyway. A
+  country setting is the obvious next step and is not that change.
+
+  Verified end to end through the shipping client against the live API rather
+  than against a fixture: The Fifth Element PG-13, Fight Club R, Toy Story G,
+  South Park TV-MA, Friends TV-14 — every one of them placeable on the ladder.
+
+  **The backfill is a deliberate manual step.** Existing rows keep their empty
+  column until something re-enriches them, and *Refresh metadata* on a library
+  already does exactly that with its cost shown first. A migration that
+  re-queued 1,221 titles on everybody's next start would spend somebody else's
+  API budget to fix this library.
 
   **Music and photographs are exempt**, which is the correction the build
   needed and did not get from reading the rule. A track and a photograph carry
