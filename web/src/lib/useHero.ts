@@ -1,5 +1,6 @@
 import { useItem, useItems, useContinueWatching } from "@/api/hooks";
 import type { Item } from "@/api/types";
+import { isMusic, isPicture } from "./kind";
 import {
   pickHero,
   seedGenres,
@@ -30,15 +31,34 @@ export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
   const { data: continueWatching } = useContinueWatching();
 
   /*
-   * The seed is whatever you are already part-way through. It is the one thing
-   * on this page that is a fact about the person looking at it — everything
-   * else is a fact about the library.
+   * The seed is what you are part-way through — the one thing on this page that
+   * is a fact about the person looking at it rather than about the library.
+   *
+   * **The first row is not the seed.** Continue Watching is one mixed list;
+   * Home splits it into a watching shelf and a listening shelf for display, but
+   * the underlying list is ordered by when you last played something, so the
+   * top of it is a music track for anybody who listens to music. A track has no
+   * genres and lives in a library whose every item the spotlight excludes, so
+   * seeding from it disabled the candidate query and Suggested silently became
+   * Continue watching.
+   *
+   * That is exactly what shipped in v0.9.22, and reading the code did not find
+   * it three times. What found it was asking the running app what the seed
+   * actually was: "Building Better Worlds", a track, in the music library.
+   * Skipping to the first watchable row made the same query return **702**
+   * candidates, every one of the first hundred carrying fanart.
+   *
+   * The predicate is the one heroEligible already uses, rather than a second
+   * list of kinds that could disagree with it.
    *
    * Fetched in full because the list shape carries no genres: they are a detail
    * response only, which is one request, once, and only in this mode.
    */
   const wanted = mode === "recommended";
-  const seedID = wanted ? (continueWatching?.[0]?.id ?? 0) : 0;
+  const watchable = (continueWatching ?? []).find(
+    (i) => !isMusic(i) && !isPicture(i),
+  );
+  const seedID = wanted ? (watchable?.id ?? 0) : 0;
   const { data: seed } = useItem(seedID);
 
   const genres = seedGenres(seed);
