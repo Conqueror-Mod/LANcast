@@ -28,7 +28,7 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 	// must: an explanation of a decision the server would not actually make is
 	// worse than no explanation, because it sends the reader looking in the
 	// wrong place.
-	prof := clientProfile(r)
+	prof := s.profileFor(r)
 	audioIndex := queryIntDefault(r, "audio", -1)
 
 	streams, err := s.st.Streams(r.Context(), id)
