@@ -3444,3 +3444,45 @@ export function useDeleteBackup() {
     },
   });
 }
+
+/*
+ * What this account wants to hear, and when it wants subtitles.
+ *
+ * Per account on the server rather than per device in localStorage, unlike the
+ * quality ceiling in playback/prefs.ts. Which language you want follows you to
+ * the next screen you sit at; how much bandwidth there is between here and the
+ * server does not.
+ */
+export interface LanguagePrefs {
+  preferred_audio_lang: string;
+  preferred_subtitle_lang: string;
+  subtitle_mode: string;
+}
+
+export function useLanguagePreferences() {
+  return useQuery({
+    queryKey: ["language-preferences"],
+    queryFn: ({ signal }) =>
+      apiGet<LanguagePrefs>("/api/profile/languages", signal),
+  });
+}
+
+export function useSetLanguagePreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LanguagePrefs) =>
+      apiSend("/api/profile/languages", "PUT", body),
+    /*
+     * The item query is invalidated as well as the preference itself, and that
+     * is the part easy to miss: `track_choice` is computed per account and
+     * rides on the item, so a page already looking at a film would keep the
+     * old answer until something else refetched it. The most-repeated bug in
+     * this project is a write that does not invalidate what a person is
+     * looking at.
+     */
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["language-preferences"] });
+      qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}

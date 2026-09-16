@@ -455,6 +455,17 @@ type Item struct {
 	Streams []MediaStream `json:"streams,omitempty"`
 
 	/*
+	 * TrackChoice is which audio and subtitle track this account's language
+	 * preferences select, attached by GET /api/items/{id} and nil everywhere
+	 * else. See internal/store/trackchoice.go.
+	 *
+	 * Nil, and a nil index inside it, both mean "no opinion" — play what the
+	 * file marks default, which is exactly what happened before preferences
+	 * existed.
+	 */
+	TrackChoice *TrackChoice `json:"track_choice,omitempty"`
+
+	/*
 	 * Markers are the detected intro and credits ranges, carried on the item
 	 * rather than fetched separately (ADR 0054).
 	 *
