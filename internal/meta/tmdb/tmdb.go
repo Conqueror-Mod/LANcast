@@ -44,6 +44,9 @@ type Client struct {
 	http    *http.Client
 	limiter *meta.Limiter
 	cache   Cache
+	// certCountry is the ISO 3166-1 alpha-2 code whose certificate is
+	// preferred. Empty means the default order — see certificationOrder.
+	certCountry string
 
 	// MaxRetries bounds 429 and 5xx retries.
 	MaxRetries int
@@ -56,6 +59,20 @@ func WithBaseURL(u string) Option          { return func(c *Client) { c.baseURL 
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 func WithCache(cache Cache) Option         { return func(c *Client) { c.cache = cache } }
 func WithLimiter(l *meta.Limiter) Option   { return func(c *Client) { c.limiter = l } }
+
+/*
+ * WithCertificationCountry prefers one country's certificate over the default
+ * US-then-GB order.
+ *
+ * Validation belongs to the caller (`rating.KnownCountry`), not here: this
+ * package cannot say whether the ceiling's ladder can place a country's
+ * labels, and a provider that silently corrected a setting would hide the
+ * mistake rather than fix it. An unrecognised code falls back to the default
+ * order, which is the safe direction — a label somebody recognises.
+ */
+func WithCertificationCountry(code string) Option {
+	return func(c *Client) { c.certCountry = strings.ToUpper(strings.TrimSpace(code)) }
+}
 
 // New builds a TMDB client. An empty apiKey yields a client that reports
 // itself unconfigured rather than failing at call time — LANcast must stay
@@ -208,7 +225,7 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	if m.Runtime > 0 {
 		rec.Fields.DurationMS = meta.I64(int64(m.Runtime) * 60_000)
 	}
-	if cert := movieCertification(m.ReleaseDates); cert != "" {
+	if cert := movieCertification(m.ReleaseDates, certificationOrder(c.certCountry)); cert != "" {
 		rec.Fields.ContentRating = meta.S(cert)
 	}
 	rec.Genres = genreNames(m.Genres)
@@ -284,7 +301,7 @@ func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error)
 	 * ceiling resolves an episode by inheriting its show — the rule that makes
 	 * the feature usable on television at all.
 	 */
-	if cert := showCertification(s.ContentRatings); cert != "" {
+	if cert := showCertification(s.ContentRatings, certificationOrder(c.certCountry)); cert != "" {
 		rec.Fields.ContentRating = meta.S(cert)
 	}
 	rec.Genres = genreNames(s.Genres)

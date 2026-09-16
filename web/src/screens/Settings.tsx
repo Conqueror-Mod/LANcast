@@ -1022,6 +1022,55 @@ function AdminSections({ pane }: { pane: string }) {
                 pending={update.isPending}
                 onSave={(v) => update.mutate({ omdb_key: v })}
               />
+              {/*
+                Which country's certificate to store.
+
+                The list comes from the server rather than from a constant
+                here, and that is not ceremony: which countries can be offered
+                is a fact about the server's rating ladder. A certificate the
+                ladder cannot place reads as unrated, and an account ceiling
+                blocks unrated — so a client with its own list would eventually
+                offer a country that empties a child's library.
+              */}
+              {settings.certification_countries &&
+                settings.certification_countries.length > 0 && (
+                  <>
+                    <label className="set-row">
+                      <span>Age rating country</span>
+                      <select
+                        className="set-input"
+                        value={settings.certification_country ?? ""}
+                        disabled={update.isPending}
+                        onChange={(e) =>
+                          update.mutate({
+                            certification_country: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">
+                          United States, then United Kingdom
+                        </option>
+                        {settings.certification_countries.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="set-row__sub">
+                      Which country&rsquo;s age rating to show — PG-13, 15, FSK
+                      16 — on films and shows. The chosen country is preferred;
+                      anything it has no rating for still falls back to the
+                      American or British one, so picking a country never leaves
+                      a title unrated. Only countries whose ratings LANcast can
+                      compare are offered, because an account with a rating
+                      limit hides anything it cannot place. This applies to
+                      metadata fetched from now on — run{" "}
+                      <em>Refresh metadata</em> on a library to change what is
+                      already stored.
+                    </p>
+                  </>
+                )}
               <MediaToolsRow settings={settings} update={update} />
               <ReprobeRow available={!!settings.media_tools?.probe_available} />
               <label className="set-toggle">
