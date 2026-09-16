@@ -9339,6 +9339,13 @@
                 }
               }
             }
+          },
+          "scan_at_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "nullable": true,
+            "description": "The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.\n\nA **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set \"every 6 hours\" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.\n\nThe gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.\n\nLocal time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid."
           }
         }
       },
@@ -9411,6 +9418,13 @@
           "max_quality": {
             "type": "string",
             "description": "The ceiling this server imposes on every stream, as a rung id from `quality_rungs`. Empty means no limit, which is the default.\n\nA **limit, not a target**: it only ever narrows what a client asked for and can never raise it. A laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently, so a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets 720p at 2 Mbps.\n\nDistinct from the quality a client picks for itself, which lives in that client's own storage and is a fact about the screen. This is a fact about the server: what it will spend a core on, and what it will push down a domestic uplink.\n\nServer-wide rather than per client or per network. \"Cap remote clients only\" is the setting people want and it needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside.\n\nA rung this server does not offer is rejected with 400 rather than stored and ignored: a ceiling that silently does nothing is one somebody sets before going away for a week believing their uplink is protected."
+          },
+          "scan_at_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "nullable": true,
+            "description": "The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.\n\nA **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set \"every 6 hours\" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.\n\nThe gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.\n\nLocal time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid.\n\nSend `null` to clear the preference and `0`–`23` to set one. Omitting the field leaves it unchanged; an hour outside the range is **400**."
           }
         }
       },

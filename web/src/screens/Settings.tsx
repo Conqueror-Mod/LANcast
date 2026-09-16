@@ -951,6 +951,54 @@ function AdminSections({ pane }: { pane: string }) {
                 ]}
                 onChange={(v) => update.mutate({ scan_interval_hours: v })}
               />
+              {/*
+                Offered only once a timer is on. "Start scans at 3am" with
+                scanning set to Never is a control that cannot do anything, and
+                one of those invites somebody to set it and wonder why nothing
+                happens.
+              */}
+              {settings.scan_interval_hours > 0 && (
+                <>
+                  <label className="set-row">
+                    <span>Start scans at</span>
+                    <select
+                      className="set-input"
+                      value={
+                        settings.scan_at_hour == null
+                          ? ""
+                          : String(settings.scan_at_hour)
+                      }
+                      disabled={update.isPending}
+                      onChange={(e) =>
+                        update.mutate({
+                          // Null clears it; a number sets it. The empty option
+                          // is "any time", which is a real answer rather than a
+                          // missing one.
+                          scan_at_hour:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value="">Any time</option>
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={String(h)}>
+                          {String(h).padStart(2, "0")}:00
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="set-row__sub">
+                    Holds a scan back until this hour, in this server&rsquo;s own
+                    time. It does not change how often one is due &mdash; a
+                    weekly scan set to 03:00 is still weekly, it just starts at
+                    three in the morning rather than whenever the week happens to
+                    turn over. Useful because a scan competes for the same disk
+                    a film is being read from.
+                  </p>
+                </>
+              )}
               {/* The switch that decides whether this server can destroy media at
                 all. Off is a real answer, and it was not available before:
                 every install could delete files from disk through the API. */}

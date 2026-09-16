@@ -35,6 +35,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"allow_media_deletion": cur.AllowMediaDeletion,
 		"empty_trash_on_scan":  cur.EmptyTrashOnScan,
 		"scan_interval_hours":  cur.ScanIntervalHours,
+		// Null rather than a number when unset: the useful value is the zero
+		// value, so midnight must be choosable.
+		"scan_at_hour":         cur.ScanAtHour,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
@@ -102,7 +105,19 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AllowMediaDeletion *bool `json:"allow_media_deletion"`
 		EmptyTrashOnScan   *bool `json:"empty_trash_on_scan"`
 		ScanIntervalHours  *int  `json:"scan_interval_hours"`
-		AuditRetentionDays *int  `json:"audit_retention_days"`
+		/*
+		 * Raw, because this field has three states and encoding/json cannot
+		 * express them through a pointer.
+		 *
+		 * Absent means "leave it alone", `null` means "clear it", a number
+		 * means "set it". A `*int` collapses the first two — both arrive as nil
+		 * — and so does a `**int`, which is what this tried first: json sets
+		 * the outer pointer to nil for a literal `null` exactly as it does for
+		 * an absent key, so the extra level buys nothing. The raw bytes are the
+		 * only thing that still knows the difference.
+		 */
+		ScanAtHour         json.RawMessage `json:"scan_at_hour"`
+		AuditRetentionDays *int            `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -213,6 +228,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.EmptyTrashOnScan != nil {
 		next.EmptyTrashOnScan = *req.EmptyTrashOnScan
 	}
+	if len(req.ScanAtHour) > 0 {
+		// Present in the request. `null` clears the preference; anything else
+		// has to be an hour of the day.
+		if string(req.ScanAtHour) == "null" {
+			next.ScanAtHour = nil
+		} else {
+			var h int
+			if err := json.Unmarshal(req.ScanAtHour, &h); err != nil || h < 0 || h > 23 {
+				writeError(w, http.StatusBadRequest, "bad_request",
+					"scan_at_hour must be an hour of the day, 0 to 23, or null")
+				return
+			}
+			next.ScanAtHour = &h
+		}
+	}
 	if req.ScanIntervalHours != nil {
 		if *req.ScanIntervalHours < 0 || *req.ScanIntervalHours > 168 {
 			writeError(w, http.StatusBadRequest, "bad_request",
@@ -317,6 +347,16 @@ func changedSettings(prev, next config.Settings) []string {
 	// changes whether the server destroys records without being asked again.
 	add("empty_trash_on_scan", prev.EmptyTrashOnScan != next.EmptyTrashOnScan)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
+	add("scan_at_hour", !sameHour(prev.ScanAtHour, next.ScanAtHour))
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
+}
+
+// sameHour compares two optional hours. Pointers, so `==` would compare
+// addresses and report every write as a change.
+func sameHour(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }

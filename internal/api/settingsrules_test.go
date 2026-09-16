@@ -182,3 +182,68 @@ func TestSettingsReportTheNewRules(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The hour a scan may start.
+ */
+
+func TestScanHourIsUnsetByDefault(t *testing.T) {
+	// Null rather than 0: the useful value is the zero value, so midnight has
+	// to be choosable and cannot double as "unset".
+	h := newHarness(t)
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got, ok := body["scan_at_hour"]; !ok || got != nil {
+		t.Errorf("scan_at_hour = %#v, want null", got)
+	}
+}
+
+func TestMidnightCanBeChosen(t *testing.T) {
+	h := newHarness(t)
+	h.do(t, "PUT", "/api/settings", map[string]any{"scan_at_hour": 0})
+
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got := body["scan_at_hour"]; got != float64(0) {
+		t.Errorf("scan_at_hour = %#v, want 0 — midnight must not read as unset", got)
+	}
+}
+
+func TestAnHourOutsideTheDayIsRefused(t *testing.T) {
+	h := newHarness(t)
+	for _, v := range []int{-1, 24, 47} {
+		wantError(t, h.do(t, "PUT", "/api/settings",
+			map[string]any{"scan_at_hour": v}), 400, "bad_request")
+	}
+}
+
+func TestNullClearsThePreferredHour(t *testing.T) {
+	// Null is how somebody undoes the choice. Without it the setting is
+	// one-way.
+	h := newHarness(t)
+	h.do(t, "PUT", "/api/settings", map[string]any{"scan_at_hour": 3})
+	h.do(t, "PUT", "/api/settings", map[string]any{"scan_at_hour": nil})
+
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got := body["scan_at_hour"]; got != nil {
+		t.Errorf("scan_at_hour = %#v, want it cleared", got)
+	}
+}
+
+func TestOmittingTheFieldLeavesThePreferredHourAlone(t *testing.T) {
+	/*
+	 * The reason the request field is a double pointer. A page sending every
+	 * other setting must not clear this one, and a single pointer cannot tell
+	 * "absent" from "null".
+	 */
+	h := newHarness(t)
+	h.do(t, "PUT", "/api/settings", map[string]any{"scan_at_hour": 3})
+	h.do(t, "PUT", "/api/settings", map[string]any{"watched_threshold": 80})
+
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got := body["scan_at_hour"]; got != float64(3) {
+		t.Errorf("scan_at_hour = %#v; another setting's write cleared it", got)
+	}
+}
