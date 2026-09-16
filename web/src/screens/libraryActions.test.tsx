@@ -53,7 +53,7 @@ let root: Root;
 let writes: { url: string; method: string }[];
 
 /** scanConflict makes POSTing a scan answer the way a busy server does. */
-function mount(opts: { scanConflict?: boolean } = {}) {
+function mount(opts: { scanConflict?: boolean; settledCount?: number } = {}) {
   writes = [];
   vi.stubGlobal(
     "fetch",
@@ -91,8 +91,16 @@ function mount(opts: { scanConflict?: boolean } = {}) {
       // before /scan because both are library sub-paths.
       if (url.includes("/refresh")) {
         return json({
-          count: url.includes("scope=unmatched") ? 3 : 380,
-          scope: url.includes("scope=unmatched") ? "unmatched" : "all",
+          count: url.includes("scope=unmatched")
+            ? 3
+            : url.includes("scope=settled")
+              ? (opts.settledCount ?? 18)
+              : 380,
+          scope: url.includes("scope=unmatched")
+            ? "unmatched"
+            : url.includes("scope=settled")
+              ? "settled"
+              : "all",
         });
       }
       if (url.includes("/scan")) return json({ state: "idle" });
@@ -306,5 +314,58 @@ describe("scanning every library", () => {
     // Saying how many started is the whole point: "nothing happened" and "all
     // of them were already scanning" are different answers.
     expect(text()).toContain("Scanning 1 library");
+  });
+});
+
+/*
+ * The locked-titles scope.
+ *
+ * Worth its own assertions because it is the one refresh that reaches rows
+ * every other scope excludes, and the way it would go wrong is silent: a menu
+ * item wired to the wrong scope still answers 200 and still says it refreshed
+ * something, having asked about the rows that were already reachable.
+ */
+describe("refreshing locked titles", () => {
+  it("offers the action with the count the server priced", async () => {
+    mount();
+    await render();
+    openRowMenu();
+    await settle();
+
+    expect(buttons("Refresh locked titles (18)").length).toBe(1);
+  });
+
+  it("asks for the settled scope and nothing else", async () => {
+    mount();
+    await render();
+    openRowMenu();
+    await settle();
+
+    act(() => buttons("Refresh locked titles (18)")[0].click());
+    await settle();
+
+    const posted = writes.filter((w) => w.url.includes("/refresh"));
+    expect(posted.some((w) => w.url.includes("scope=settled"))).toBe(true);
+    // The expensive neighbour must not have been called as well. These two sit
+    // next to each other in one menu and take the same argument.
+    expect(posted.some((w) => w.url.includes("scope=all"))).toBe(false);
+    expect(posted.some((w) => w.url.includes("scope=unmatched"))).toBe(false);
+  });
+
+  it("does not offer the action when there is nothing locked to re-ask about", async () => {
+    /*
+     * Nothing to do is a reason not to offer the action rather than a reason to
+     * run it and report nothing — the same rule the unmatched scope follows. A
+     * library where every title is matched has no locked rows at all, which is
+     * the ordinary case rather than the exception.
+     */
+    mount({ settledCount: 0 });
+    await render();
+    openRowMenu();
+    await settle();
+
+    const item = buttons("Refresh locked titles (0)")[0];
+    expect(item).toBeTruthy();
+    expect(item.hasAttribute("disabled")).toBe(true);
   });
 });

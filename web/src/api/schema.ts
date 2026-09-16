@@ -7283,6 +7283,14 @@ export interface operations {
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
                  *     **Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.
+                 *
+                 *     `settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.
+                 *
+                 *     `settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.
+                 *
+                 *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
+                 *
+                 *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
                  */
                 scope?: string;
             };
@@ -7327,6 +7335,14 @@ export interface operations {
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
                  *     **Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.
+                 *
+                 *     `settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.
+                 *
+                 *     `settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.
+                 *
+                 *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
+                 *
+                 *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
                  */
                 scope?: string;
             };

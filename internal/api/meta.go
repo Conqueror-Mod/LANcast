@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -410,9 +411,26 @@ func refreshScope(r *http.Request) (store.RefreshScope, bool) {
 		return store.RefreshAll, true
 	case "unmatched":
 		return store.RefreshUnmatched, true
+	case "settled":
+		return scopeSettled, true
 	}
 	return "", false
 }
+
+/*
+ * scopeSettled re-asks about titles whose identity is already settled.
+ *
+ * It is spelled as a RefreshScope so that one `?scope=` parameter covers every
+ * variant a client can ask for, but it is **not** a scope refreshWhere knows
+ * and it must never be passed to RefreshCount or RefreshScoped — both would
+ * reject it, which is the intended outcome rather than a trap: those two work
+ * by clearing a stamp so the search-and-score pass picks the row up, and this
+ * scope exists precisely for rows that must never be re-scored.
+ *
+ * So the handlers branch on it before they reach either. The work is a direct
+ * fetch by each row's own recorded provider id.
+ */
+const scopeSettled store.RefreshScope = "settled"
 
 /*
  * refreshPreview answers how many items a refresh would re-ask about.
@@ -438,7 +456,13 @@ func (s *Server) refreshPreview(w http.ResponseWriter, r *http.Request) {
 			"that is not a scope this server knows")
 		return
 	}
-	n, err := s.st.RefreshCount(r.Context(), id, scope)
+	var n int64
+	var err error
+	if scope == scopeSettled {
+		n, err = s.st.SettledCount(r.Context(), id)
+	} else {
+		n, err = s.st.RefreshCount(r.Context(), id, scope)
+	}
 	if err != nil {
 		s.writeInternal(w, err, "refresh preview")
 		return
@@ -459,6 +483,10 @@ func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
 	if !valid {
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"that is not a scope this server knows")
+		return
+	}
+	if scope == scopeSettled {
+		s.refreshSettled(w, r, id)
 		return
 	}
 	n, err := s.st.RefreshScoped(r.Context(), id, scope)
@@ -591,4 +619,53 @@ func itemTitle(r *http.Request, s *Server, id int64) string {
 		return it.Title
 	}
 	return "item " + auditID(id)
+}
+
+/*
+ * refreshSettled re-asks the provider about a library's locked titles.
+ *
+ * Its own path rather than a branch inside RefreshScoped, because it does the
+ * opposite thing: the ordinary refresh clears a stamp and lets the queue search
+ * and score, and this fetches each row from the id it already carries. Only the
+ * second is safe on a locked row, and the two would be a single function only
+ * in the sense that both are spelled "refresh".
+ *
+ * Runs detached from the request. Eighteen lookups is a few seconds and two
+ * hundred is not, and a browser that gave up waiting would leave the pass
+ * half-done with nothing to say so. The count of what it *will* attempt is
+ * known now and is returned now; what came of it goes to the log, the same
+ * shape `queued` has always had.
+ *
+ * `context.WithoutCancel` rather than the request's context, for the failure
+ * that would otherwise be invisible: a client navigating away mid-pass would
+ * cancel the run at whatever row it had reached, leaving some titles updated
+ * and the rest not, and the only symptom would be a button that "sometimes
+ * does not work".
+ */
+func (s *Server) refreshSettled(w http.ResponseWriter, r *http.Request, libraryID int64) {
+	items, err := s.st.SettledItems(r.Context(), libraryID)
+	if err != nil {
+		s.writeInternal(w, err, "settled refresh")
+		return
+	}
+	if s.worker == nil {
+		// No enrichment worker wired up — the same condition that makes every
+		// other provider action a no-op. Answering 0 is honest; pretending to
+		// have started something is not.
+		writeJSON(w, http.StatusOK, map[string]any{"queued": 0, "scope": string(scopeSettled)})
+		return
+	}
+
+	if len(items) > 0 {
+		ctx := context.WithoutCancel(r.Context())
+		go func() {
+			updated, failed := s.worker.RefetchSettledAll(ctx, items, s.log)
+			s.log.Info("settled refresh finished",
+				"library", libraryID, "attempted", len(items),
+				"updated", updated, "failed", failed)
+		}()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"queued": len(items), "scope": string(scopeSettled),
+	})
 }
