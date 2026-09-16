@@ -4068,6 +4068,29 @@ export interface components {
                 /** @description What a person picking one reads. */
                 name: string;
             }[];
+            /**
+             * @description The ceiling this server imposes on every stream, as a rung id from `quality_rungs`. Empty means no limit, which is the default.
+             *
+             *     A **limit, not a target**: it only ever narrows what a client asked for and can never raise it. A laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently, so a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets 720p at 2 Mbps.
+             *
+             *     Distinct from the quality a client picks for itself, which lives in that client's own storage and is a fact about the screen. This is a fact about the server: what it will spend a core on, and what it will push down a domestic uplink.
+             *
+             *     Server-wide rather than per client or per network. "Cap remote clients only" is the setting people want and it needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside.
+             */
+            max_quality?: string;
+            /** @description The ceilings `max_quality` may be set to. Served rather than known by the client, because the server owns what it will allow — a client carrying its own copy would eventually offer a rung the server does not honour. Each rung pairs a resolution with a bitrate rather than offering them separately: two independent controls make it easy to ask for 1080p at 1 Mbps, which is a worse picture than 480p at 1 Mbps and looks like the server being broken. */
+            quality_rungs?: {
+                /** @description Empty for no limit. */
+                id: string;
+                label: string;
+                /** @description Tallest picture allowed, 0 for no limit. */
+                height: number;
+                /**
+                 * Format: int64
+                 * @description Bits per second, matching the transcode profile. 0 for no limit.
+                 */
+                bitrate: number;
+            }[];
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {
@@ -4097,6 +4120,18 @@ export interface components {
              *     Takes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that.
              */
             certification_country?: string;
+            /**
+             * @description The ceiling this server imposes on every stream, as a rung id from `quality_rungs`. Empty means no limit, which is the default.
+             *
+             *     A **limit, not a target**: it only ever narrows what a client asked for and can never raise it. A laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently, so a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets 720p at 2 Mbps.
+             *
+             *     Distinct from the quality a client picks for itself, which lives in that client's own storage and is a fact about the screen. This is a fact about the server: what it will spend a core on, and what it will push down a domestic uplink.
+             *
+             *     Server-wide rather than per client or per network. "Cap remote clients only" is the setting people want and it needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside.
+             *
+             *     A rung this server does not offer is rejected with 400 rather than stored and ignored: a ceiling that silently does nothing is one somebody sets before going away for a week believing their uplink is protected.
+             */
+            max_quality?: string;
         };
         /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
         ScanIssue: {

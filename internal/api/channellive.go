@@ -65,7 +65,7 @@ func (s *Server) channelLive(w http.ResponseWriter, r *http.Request) {
 	 * failure falls through to copying rather than refusing.
 	 */
 	probed := s.probeChannel(r, ch.URL)
-	decision := transcode.LiveDecision(probed, clientProfile(r), s.log)
+	decision := transcode.LiveDecision(probed, s.profileFor(r), s.log)
 
 	stream, err := s.trans.Live(r.Context(), id, transcode.LiveOptions{
 		URL:      ch.URL,
@@ -252,7 +252,7 @@ func (s *Server) channelLiveHLS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	probed := s.probeChannel(r, ch.URL)
-	decision := transcode.LiveDecision(probed, clientProfile(r), s.log)
+	decision := transcode.LiveDecision(probed, s.profileFor(r), s.log)
 
 	/*
 	 * context.WithoutCancel, and this is the difference that matters against

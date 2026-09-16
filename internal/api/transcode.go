@@ -399,7 +399,7 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 		return playTarget{}, false
 	}
 
-	decision := probe.DecideTrack(res, clientProfile(r), audioIndex)
+	decision := probe.DecideTrack(res, s.profileFor(r), audioIndex)
 	if decision.Method == probe.DirectPlay {
 		// Nothing to do. Transcoding a file the client can already play is
 		// pure waste, so say so rather than quietly burning CPU.
@@ -411,7 +411,7 @@ func (s *Server) transcodeTarget(w http.ResponseWriter, r *http.Request) (playTa
 		// dropped its ?audio= did exactly that, and the silence here is what
 		// made it take a code read to find rather than a log read.
 		s.log.Debug("transcode refused, file direct-plays",
-			"item", id, "audio", audioIndex, "profile", clientProfile(r).Name)
+			"item", id, "audio", audioIndex, "profile", s.profileFor(r).Name)
 		writeError(w, http.StatusConflict, "conflict", "this file can be played directly")
 		return playTarget{}, false
 	}

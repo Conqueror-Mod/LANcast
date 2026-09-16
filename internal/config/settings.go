@@ -35,10 +35,28 @@ type Settings struct {
 	 * blocks unrated. Offering France would therefore make a child's library
 	 * shrink, quietly, with the cause three screens away.
 	 */
-	CertificationCountry string  `json:"certification_country,omitempty"`
-	RatePerSec           float64 `json:"rate_per_sec,omitempty"`
-	WriteNFO             bool    `json:"write_nfo"`
-	AutoEnrich           bool    `json:"auto_enrich"`
+	CertificationCountry string `json:"certification_country,omitempty"`
+	/*
+	 * MaxQuality is the ceiling this server imposes on every stream, as a rung
+	 * id from QualityRungs. Empty means no limit, which is the default.
+	 *
+	 * A limit rather than a target: it only ever *narrows* what a client asked
+	 * for and can never raise it, so a client asking for 480p on a server
+	 * capped at 1080p still gets 480p.
+	 *
+	 * Server-wide rather than per client or per network, deliberately. "Cap
+	 * remote clients only" is the setting people actually want, and it needs a
+	 * way to tell a remote client from a local one that this server does not
+	 * have: the LAN-bound gate knows about the *listener*, not about who is
+	 * connected to it, and guessing from the peer address would be wrong for a
+	 * VPN — which is exactly how this household reaches the server from
+	 * outside.
+	 */
+	MaxQuality string `json:"max_quality,omitempty"`
+
+	RatePerSec float64 `json:"rate_per_sec,omitempty"`
+	WriteNFO   bool    `json:"write_nfo"`
+	AutoEnrich bool    `json:"auto_enrich"`
 	// UpdateCheck asks the project's releases endpoint whether a newer version
 	// exists. On by default: an update nobody hears about is one nobody
 	// installs, and the check is a plain GET carrying no identifier. Off stops
