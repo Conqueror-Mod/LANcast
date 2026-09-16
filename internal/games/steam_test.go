@@ -200,7 +200,7 @@ func TestAppManifestReadsTheFields(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ParseAppManifest: ok=%v err=%v", ok, err)
 	}
-	if g.ID != "700012" || g.Name != "Invented Game" {
+	if g.ID != "steam:700012" || g.Name != "Invented Game" {
 		t.Errorf("identity = %q/%q", g.ID, g.Name)
 	}
 	if g.SizeBytes != 4096 || g.LastPlayed != 1_700_000_000 {

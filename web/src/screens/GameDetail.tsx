@@ -193,6 +193,15 @@ export function GameDetail() {
           folder goes through the client, which checks it first. */}
       <p className="game-detail__path">{game.install_path}</p>
 
+      {/* Which launcher this came from.
+          Worth saying now that there are three: "Play" hands the game to a
+          different program depending on the answer, and when a launch fails
+          the first useful question is which launcher was asked. An older
+          desktop binary sends no source, so this simply does not appear. */}
+      {game.source_label && (
+        <p className="game-detail__source">Installed through {game.source_label}</p>
+      )}
+
       {picking && (
         <DisplayPicker
           game={game}

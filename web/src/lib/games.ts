@@ -17,6 +17,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 export interface GameRow {
   id: string;
   name: string;
+  /**
+   * Which launcher this came from: "steam", "epic" or "battlenet", with
+   * `source_label` the name a person reads.
+   *
+   * Optional because a client can be newer than the desktop binary it is
+   * talking to — the window ships in the installer and the web bundle rides the
+   * server's in-app update, so a page that assumed the field would crash the
+   * grid on a machine that had updated only one of them.
+   */
+  source?: string;
+  source_label?: string;
   size_bytes: number;
   /** Unix seconds, 0 when never played. */
   last_played: number;

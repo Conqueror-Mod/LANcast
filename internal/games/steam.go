@@ -141,7 +141,11 @@ func ParseAppManifest(r io.Reader, library string) (Game, bool, error) {
 	}
 
 	g := Game{
-		ID:          id,
+		// Namespaced, because a bare appid can collide with another launcher's
+		// key once more than one reader exists — and the per-client hidden and
+		// favourite flags are stored by id.
+		ID:          SteamID(id),
+		Source:      SourceSteam,
 		Name:        name,
 		SizeBytes:   parseInt(app.val("sizeondisk")),
 		LastPlayed:  parseInt(app.val("lastplayed")),
@@ -236,7 +240,17 @@ func scanLibraries(root string) ([]Game, error) {
 				continue
 			}
 			seen[g.ID] = true
-			g.PosterPath, g.HeaderPath = artworkPaths(root, g.ID)
+			/*
+			 * Artwork is keyed on Steam's own appid, not on the namespaced id.
+			 *
+			 * The id gained a `steam:` prefix when a second launcher arrived,
+			 * and the cache on disk did not — it is Steam's directory, named
+			 * the way Steam names it. Passing the prefixed id here looked for
+			 * `librarycache/steam:440` and silently found nothing, which is a
+			 * grid of placeholders rather than an error.
+			 */
+			_, appid, _ := SplitID(g.ID)
+			g.PosterPath, g.HeaderPath = artworkPaths(root, appid)
 			out = append(out, g)
 		}
 	}
