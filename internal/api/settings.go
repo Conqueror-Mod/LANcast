@@ -35,6 +35,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"allow_media_deletion": cur.AllowMediaDeletion,
 		"empty_trash_on_scan":  cur.EmptyTrashOnScan,
 		"scan_interval_hours":  cur.ScanIntervalHours,
+		"artwork_cache_mb":     cur.ArtworkCacheMB,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
@@ -96,6 +97,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AllowMediaDeletion *bool `json:"allow_media_deletion"`
 		EmptyTrashOnScan   *bool `json:"empty_trash_on_scan"`
 		ScanIntervalHours  *int  `json:"scan_interval_hours"`
+		ArtworkCacheMB     *int  `json:"artwork_cache_mb"`
 		AuditRetentionDays *int  `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -192,6 +194,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.EmptyTrashOnScan != nil {
 		next.EmptyTrashOnScan = *req.EmptyTrashOnScan
+	}
+	if req.ArtworkCacheMB != nil {
+		/*
+		 * Zero is no limit and is a real answer, so only a negative is refused.
+		 * An upper bound would be arbitrary: somebody with a 40TB array may
+		 * reasonably allow 200GB of artwork, and a number this code invented
+		 * would be wrong for them with no way to say so.
+		 */
+		if *req.ArtworkCacheMB < 0 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"artwork_cache_mb must be zero (no limit) or more")
+			return
+		}
+		next.ArtworkCacheMB = *req.ArtworkCacheMB
 	}
 	if req.ScanIntervalHours != nil {
 		if *req.ScanIntervalHours < 0 || *req.ScanIntervalHours > 168 {
@@ -296,6 +312,7 @@ func changedSettings(prev, next config.Settings) []string {
 	// changes whether the server destroys records without being asked again.
 	add("empty_trash_on_scan", prev.EmptyTrashOnScan != next.EmptyTrashOnScan)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
+	add("artwork_cache_mb", prev.ArtworkCacheMB != next.ArtworkCacheMB)
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
 }

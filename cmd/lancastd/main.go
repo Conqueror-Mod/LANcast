@@ -783,7 +783,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	go periodicGuideRefresh(ctx, apiSrv)
 
 	// Records whose relevance is their age, dropped once a day.
-	go periodicPrune(ctx, st, settings, log)
+	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log)
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
@@ -1207,7 +1207,7 @@ func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
  * short enough that a restart does not defer maintenance by another day.
  */
 func periodicPrune(ctx context.Context, st *store.Store,
-	settings *config.SettingsStore, log *slog.Logger) {
+	settings *config.SettingsStore, artworkDir string, log *slog.Logger) {
 
 	const (
 		every    = 24 * time.Hour
@@ -1240,7 +1240,7 @@ func periodicPrune(ctx context.Context, st *store.Store,
 			now := time.Now()
 			want := store.PrunePolicy(settings.Get().AuditRetentionDays)
 			if store.PruneDue(last, now, every) || store.PolicyChanged(policy, want) {
-				runPrune(ctx, st, settings, log)
+				runPrune(ctx, st, settings, artworkDir, log)
 			}
 		}
 
@@ -1255,7 +1255,7 @@ func periodicPrune(ctx context.Context, st *store.Store,
 // runPrune is one pass: drop what is stale, record that it happened, and
 // reclaim the space only if something was actually removed.
 func runPrune(ctx context.Context, st *store.Store,
-	settings *config.SettingsStore, log *slog.Logger) {
+	settings *config.SettingsStore, artworkDir string, log *slog.Logger) {
 
 	now := time.Now()
 	auditDays := settings.Get().AuditRetentionDays
@@ -1276,6 +1276,8 @@ func runPrune(ctx context.Context, st *store.Store,
 	if err := st.SetLastPrune(ctx, now, store.PrunePolicy(auditDays)); err != nil {
 		log.Error("prune: record run", "error", err)
 	}
+
+	pruneArtwork(ctx, st, settings, artworkDir, log)
 	if !res.Any() {
 		log.Debug("prune: nothing stale")
 		return
@@ -1369,4 +1371,76 @@ func resolveSecret(stored string, s config.Settings, name string) string {
 		return stored
 	}
 	return s.BuiltinSecret(name)
+}
+
+/*
+ * pruneArtwork reclaims the image cache.
+ *
+ * On the daily prune rather than a loop of its own: it walks the cache
+ * directory, which on a large library is tens of thousands of files, and
+ * nothing about it is urgent. The pass that already exists for stale records is
+ * the right cadence.
+ *
+ * The order is the safety property and lives in internal/artwork: orphans go at
+ * any setting, re-derivable sizes go to meet a cap, and a live original is
+ * never deleted. A cap that could remove one would turn a disk-space setting
+ * into missing posters.
+ */
+func pruneArtwork(ctx context.Context, st *store.Store,
+	settings *config.SettingsStore, dir string, log *slog.Logger) {
+
+	if dir == "" {
+		return
+	}
+
+	/*
+	 * Rows first, then files. The database decides what is orphaned — an item
+	 * delete cascades item_artwork and leaves the artwork row behind — and the
+	 * file sweep keeps every hash the database still names, from either table.
+	 */
+	rows, err := st.PruneOrphanArtworkRows(ctx)
+	if err != nil {
+		log.Error("artwork prune: orphan rows", "error", err)
+		return
+	}
+
+	live, err := st.ReferencedArtworkHashes(ctx)
+	if err != nil {
+		/*
+		 * Abandoned rather than continued with what was read.
+		 *
+		 * An empty set means "delete everything", so a failed query must never
+		 * reach the sweep. internal/artwork refuses a nil map for the same
+		 * reason; this is the belt to that brace.
+		 */
+		log.Error("artwork prune: referenced hashes", "error", err)
+		return
+	}
+
+	cap := int64(settings.Get().ArtworkCacheMB) << 20
+	rep, err := artwork.Prune(dir, live, cap)
+	if err != nil {
+		log.Error("artwork prune", "error", err)
+		return
+	}
+	if rows == 0 && rep.OrphanFiles == 0 && rep.DerivedFiles == 0 {
+		log.Debug("artwork prune: nothing to reclaim")
+		return
+	}
+	log.Info("artwork cache pruned",
+		"orphan_rows", rows,
+		"orphan_files", rep.OrphanFiles, "orphan_bytes", rep.OrphanBytes,
+		"derived_files", rep.DerivedFiles, "derived_bytes", rep.DerivedBytes,
+		"now_bytes", rep.AfterBytes, "over_by", rep.OverBy)
+	if rep.OverBy > 0 {
+		/*
+		 * Said plainly rather than left to be inferred from the numbers. The
+		 * cap cannot be met without deleting originals, which this will not do
+		 * — so somebody reading the log learns the setting is too low for the
+		 * library rather than that the prune is broken.
+		 */
+		log.Info("artwork cache is still above its limit; "+
+			"the remainder is original images the library still uses",
+			"over_by", rep.OverBy, "limit_mb", settings.Get().ArtworkCacheMB)
+	}
 }

@@ -934,6 +934,27 @@ function AdminSections({ pane }: { pane: string }) {
 
           {settings && (
             <>
+              {/*
+                On the Libraries pane because it is about what the library
+                costs on disk, beside scanning and the trash. A number rather
+                than a slider: somebody with a large array may reasonably allow
+                a great deal, and a ladder this page invented would be wrong for
+                them with no way to say so.
+              */}
+              <RuleSelect
+                title="Artwork cache limit"
+                sub="Posters and stills LANcast has downloaded. Artwork nothing uses any more is always cleared out, whatever this says. A limit additionally drops resized copies, which are rebuilt from the originals when they are next needed — the originals themselves are never deleted, so a limit below what your library actually uses simply will not be met."
+                value={settings.artwork_cache_mb ?? 0}
+                options={[
+                  { value: 0, label: "No limit" },
+                  { value: 512, label: "512 MB" },
+                  { value: 1024, label: "1 GB" },
+                  { value: 2048, label: "2 GB" },
+                  { value: 5120, label: "5 GB" },
+                  { value: 10240, label: "10 GB" },
+                ]}
+                onChange={(v) => update.mutate({ artwork_cache_mb: v })}
+              />
               <RuleSelect
                 title="Rescan libraries automatically"
                 sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."

@@ -9245,6 +9245,11 @@
                 }
               }
             }
+          },
+          "artwork_cache_mb": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.\n\nA **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:\n\n1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.\n2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.\n3. **Nothing else.** A live *original* is never deleted, at any limit.\n\nAn original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into \"some of your posters are gone now\". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number."
           }
         }
       },
@@ -9313,6 +9318,11 @@
           "certification_country": {
             "type": "string",
             "description": "Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.\n\nTakes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that."
+          },
+          "artwork_cache_mb": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.\n\nA **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:\n\n1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.\n2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.\n3. **Nothing else.** A live *original* is never deleted, at any limit.\n\nAn original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into \"some of your posters are gone now\". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number.\n\nA negative value is 400. There is deliberately no upper bound: somebody with a large array may reasonably allow a great deal of artwork, and an invented ceiling would be wrong for them with no way to say so."
           }
         }
       },
