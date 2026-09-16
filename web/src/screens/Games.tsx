@@ -110,7 +110,7 @@ export function Games() {
       {status === "not-installed" && (
         <p className="browse__message">
           No Steam installation was found on this computer. LANcast reads
-          Steam's own files — it never signs in to your account.
+          each launcher's own files — it never signs in to your account.
         </p>
       )}
 
@@ -240,7 +240,7 @@ function GamesShell({
         )}
       </div>
       <p className="games__note">
-        Installed on this computer, read from Steam's own files. LANcast starts
+        Installed on this computer, read from each launcher's own files. LANcast starts
         them; it does not stream them.
       </p>
       {children}

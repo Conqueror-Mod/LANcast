@@ -187,13 +187,19 @@ func gamesBindings(dir string) map[string]any {
 			/*
 			 * Recorded because this is where the client's part ends.
 			 *
-			 * Everything after the URI is away belongs to Steam, and the
-			 * difference between "LANcast never asked" and "Steam was asked and
-			 * did nothing" is the first thing worth knowing when a game does not
-			 * start. It could only be had from an instrumented build before the
-			 * window kept a log.
+			 * Everything after the URI is away belongs to the launcher, and
+			 * the difference between "LANcast never asked" and "the launcher
+			 * was asked and did nothing" is the first thing worth knowing when
+			 * a game does not start. It could only be had from an instrumented
+			 * build before the window kept a log.
+			 *
+			 * Which launcher is part of the line now. It said "to Steam" for
+			 * every game, which was true when Steam was the only reader and
+			 * became a lie the moment it was not — read back for an Epic
+			 * launch it names the wrong program to go and check.
 			 */
-			slog.Info("handed a launch to Steam", "game", g.Name, "id", id)
+			slog.Info("handed a launch to a launcher",
+				"game", g.Name, "id", id, "launcher", g.Source.Label())
 			/*
 			 * Started only once the URI is away, and read here rather than
 			 * taken from the page.

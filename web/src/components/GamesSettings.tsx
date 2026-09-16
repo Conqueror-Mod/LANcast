@@ -74,7 +74,7 @@ export function GamesSettings() {
 
       <p className="desktop-note">
         LANcast can list the games Steam has installed on this computer and start
-        them. It reads Steam's own files on this disk — there is no sign-in, and
+        them. It reads each launcher's own files on this disk — there is no sign-in, and
         nothing is sent anywhere.
       </p>
 

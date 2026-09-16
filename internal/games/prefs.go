@@ -39,11 +39,39 @@ type Prefs struct {
 	Displays map[string]string `json:"displays,omitempty"`
 }
 
-// IsHidden reports whether an appid is hidden.
-func (p Prefs) IsHidden(id string) bool { return contains(p.Hidden, id) }
+// IsHidden reports whether a game is hidden.
+func (p Prefs) IsHidden(id string) bool {
+	return contains(p.Hidden, id) || contains(p.Hidden, legacyID(id))
+}
 
-// IsFavourite reports whether an appid is a favourite.
-func (p Prefs) IsFavourite(id string) bool { return contains(p.Favourites, id) }
+// IsFavourite reports whether a game is a favourite.
+func (p Prefs) IsFavourite(id string) bool {
+	return contains(p.Favourites, id) || contains(p.Favourites, legacyID(id))
+}
+
+/*
+ * legacyID is the key a Steam game's preferences were stored under before ids
+ * were namespaced, and "" for anything that never had one.
+ *
+ * This file is written by one machine for itself and nothing migrates it. Ids
+ * gained a `steam:` prefix when a second launcher arrived, so every lookup
+ * silently missed: a hidden game came back, a favourite left the top row, and a
+ * game already answered for was asked again which display to open on. Found on
+ * a real client whose games.json held `"displays": {"4162040": ...}` — a bare
+ * appid, written months earlier.
+ *
+ * Reading both spellings is the whole migration. Nothing rewrites the file: a
+ * preference is rewritten under the new key the next time somebody changes it,
+ * and until then the old key keeps working. Rewriting on read would mean a
+ * program that edits a file nobody asked it to touch, every time it starts.
+ */
+func legacyID(id string) string {
+	source, own, ok := SplitID(id)
+	if !ok || source != SourceSteam || own == id {
+		return ""
+	}
+	return own
+}
 
 // Set records both flags for one game. Both at once rather than two setters,
 // so the page cannot half-apply a change — the same reasoning as
