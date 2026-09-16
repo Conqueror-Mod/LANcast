@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -164,9 +165,14 @@ func TestAnUnlimitedAccountIsUnaffected(t *testing.T) {
 	id := ratedFile(t, h, "grown-up.mkv", "R")
 
 	resp := h.authed(t, "GET", fmtPath("/api/items/%d", id), nil)
+	// The body is read rather than discarded: this has failed once under the
+	// load of a full run and a bare status said nothing about which of 404,
+	// 401 and 500 it was, let alone why. The error body names it.
+	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200 for an account with no ceiling", resp.StatusCode)
+		t.Errorf("status = %d, want 200 for an account with no ceiling (item %d): %s",
+			resp.StatusCode, id, body)
 	}
 }
 
