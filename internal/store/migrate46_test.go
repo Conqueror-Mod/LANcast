@@ -138,9 +138,28 @@ func TestRevision46IsIdempotent(t *testing.T) {
  * Shared by both rewinds because both replay through the same later
  * migrations. Anything added after revision 47 belongs here too.
  */
+/*
+ * dropPost45Additions rewinds the `user` table to what revision 44 knew.
+ *
+ * Every column a later revision adds has to be listed here, and that is a
+ * maintenance point rather than an oversight: these tests re-run the migration
+ * chain over a rewound database, so a column left behind makes the next
+ * `ADD COLUMN` fail with `duplicate column name` — which reads as the new
+ * migration being broken rather than as this helper being out of date.
+ *
+ * Revision 47 added max_content_rating; revision 48 added the three language
+ * columns.
+ */
 func dropPost45Additions(t *testing.T, st *Store) {
 	t.Helper()
-	if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN max_content_rating`); err != nil {
-		t.Fatal(err)
+	for _, col := range []string{
+		"max_content_rating",
+		"preferred_audio_lang",
+		"preferred_subtitle_lang",
+		"subtitle_mode",
+	} {
+		if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN ` + col); err != nil {
+			t.Fatalf("drop %s: %v", col, err)
+		}
 	}
 }

@@ -1194,6 +1194,63 @@ hang off the id and follow silently.
 `409 no_account` on an unconfigured loopback server, where there is no account
 to edit.
 
+### `GET /api/profile/languages` and `PUT /api/profile/languages`
+
+What an account wants to hear, and when it wants subtitles.
+
+```json
+{ "preferred_audio_lang": "en", "preferred_subtitle_lang": "en", "subtitle_mode": "foreign" }
+```
+
+Set **by** the account rather than for it — the opposite of `max_content_rating`
+in the same table, which is a limit somebody else decides and the limited party
+cannot lift. A language is a taste, so this acts on the **session** and there is
+no route by which one account sets another's.
+
+Per account rather than per device, unlike the quality ceiling the client keeps
+in its own storage. Which language you want follows you to the next screen you
+sit at; how much bandwidth there is between here and the server does not. Same
+split [ADR 0006](adr/0006-playback-state.md) makes for playback state.
+
+**A language is an ISO 639 code**, two or three letters, or empty for no
+preference. Both spellings are accepted and compared as one: a file says `eng`,
+a person picks `en`, a muxer says `en-US`, and all three are English — a
+preference that matched only its own spelling would look broken on half a
+library. A region suffix is refused on input, because it belongs to a file
+rather than to a preference. Any well-formed code is stored, including one this
+server has never heard of: a closed list would have to be maintained, and being
+wrong about it refuses somebody's language, where accepting an unknown one costs
+a preference that never matches — the same as having none.
+
+**`subtitle_mode` is separate from the language**, because "which subtitles" and
+"when to show them" are different questions and one field cannot answer both.
+
+| mode | when subtitles come on |
+| --- | --- |
+| `off` | never. What every account that has not set this already does |
+| `foreign` | when the audio that ends up **playing** is not in the preferred language |
+| `always` | whenever a track exists in the preferred subtitle language |
+
+`foreign` is judged on **what plays**, not on what the file contains. A foreign
+film whose English track was chosen gets no subtitles; the same film with no
+English track gets them without being asked. Reading it off the file instead
+would put subtitles over an English dub somebody deliberately selected, which is
+the version of this feature people switch off. With no `preferred_audio_lang`
+set it never fires at all — there is nothing for the audio to be foreign *to*,
+and guessing would mean deciding what language the account considers its own.
+
+**All three fields go together.** A subtitle language with no mode, or a mode
+with no language, are states somebody could be left in by a failed second
+request, and both are silently inert. A malformed code or unknown mode is
+`400`; `409 no_account` on an unconfigured loopback server.
+
+Which track this actually selects is [`ChooseTracks`](../internal/store/trackchoice.go),
+and the rules it follows are worth knowing because two of them are about *not*
+acting: a language that is absent from a file leaves the file's own default
+alone rather than picking the first track, and a full subtitle track is
+preferred over a forced one, since a forced track captions three sentences of a
+film and reads as the feature failing.
+
 ### `GET /api/people`
 
 The other accounts on this server. "Find Friends" on a self-hosted household

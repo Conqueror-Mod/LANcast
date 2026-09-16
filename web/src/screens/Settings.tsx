@@ -74,6 +74,7 @@ import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
 import { ClientLog } from "@/components/ClientLog";
+import { LanguagePreferences } from "@/components/LanguagePreferences";
 import { Transcodes } from "@/components/Transcodes";
 import {
   useHeroMode,
@@ -741,6 +742,8 @@ function AccountSection() {
       <span className="section-label">Account</span>
 
       <DisplayNameForm />
+
+      <LanguagePreferences />
 
       <SharingToggle />
 

@@ -353,6 +353,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
+	// A taste rather than a limit, so it acts on the session and needs no role
+	// check — see internal/api/langpref.go.
+	mux.HandleFunc("GET /api/profile/languages", s.languagePreferences)
+	mux.HandleFunc("PUT /api/profile/languages", s.setLanguagePreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	// Forgetting what you watched. GET prices it, DELETE does it.
