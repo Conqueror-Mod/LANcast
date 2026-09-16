@@ -98,3 +98,40 @@ export function resumeSeconds(o: {
 
   return pos / 1000;
 }
+
+/** What the player last reported: the item, and `offset + currentTime`. */
+export interface LivePosition {
+  id: number;
+  at: number;
+}
+
+/**
+ * resumePointAfterFailure decides where to reopen a stream that failed.
+ *
+ * A different question from resumeSeconds above, which is about *arriving* at
+ * an item. This is about a stream that was already playing and died under the
+ * player — the session reaped, the segment refused — where the saved position
+ * is irrelevant because the live one is better.
+ *
+ * `base` is the session's own zero point, the `t=` it was opened with, and it
+ * does **not** move as the film plays. The film's position is `base +
+ * currentTime`, which is what `live.at` already carries.
+ *
+ * Rebuilding from the base rather than from the live position is what lost
+ * ninety minutes of Dogma on 2026-09-16: paused overnight, the session reaped
+ * after ten idle minutes, and on waking the client asked for `seg00994.m4s` —
+ * segment 994 of six seconds, so 1h39m — while opening a new session at
+ * `start_at=736`. Twelve minutes. It then wrote 736 back as the saved position,
+ * destroying the real one.
+ *
+ * The live value is preferred only when it belongs to *this* stream and has
+ * moved. A position from the film before it would reopen this one in the middle
+ * of nowhere, and on a shorter film past its own end.
+ */
+export function resumePointAfterFailure(
+  live: LivePosition,
+  streamItem: number,
+  base: number,
+): number {
+  return live.id === streamItem && live.at > 0 ? live.at : base;
+}
