@@ -575,6 +575,26 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	it.Streams = streams
+
+	/*
+	 * Which track this account wants, decided here rather than in the page.
+	 *
+	 * The comparison is not obvious — `en`, `eng` and `en-US` are one language
+	 * — and a second implementation in TypeScript would be a second opinion
+	 * about what English means. Same reasoning as the one-normalizer rule.
+	 *
+	 * Attached to this handler only, not to every listing: a grid tile has no
+	 * use for it, and computing it for two hundred of them would be a user
+	 * lookup and a pass over every stream to answer a question nobody asked.
+	 */
+	if u, err := s.st.UserByID(r.Context(), s.userID(r)); err == nil && u != nil {
+		choice := store.ChooseTracks(streams, store.LanguagePrefs{
+			Audio:    u.PreferredAudioLang,
+			Subtitle: u.PreferredSubtitleLang,
+			Mode:     u.SubtitleMode,
+		})
+		it.TrackChoice = &choice
+	}
 	// Attach the child count so the detail page can render a container (its
 	// seasons, films, or parts) rather than a dead-end Play (ADR 0017).
 	counted := []store.Item{*it}

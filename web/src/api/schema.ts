@@ -3271,6 +3271,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/languages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's audio and subtitle language preferences
+         * @description Answers the empty preference on a server with no accounts yet, so the page can render.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The caller's preferences. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LanguagePreferences"];
+                    };
+                };
+            };
+        };
+        /**
+         * Set the caller's audio and subtitle language preferences
+         * @description All three fields together. A subtitle language with no mode, or a mode with no language, are states somebody could be left in by a failed second request — and both are silently inert, which is the worst shape a half-applied change can take.
+         *
+         *     Acts on the session; there is no route by which one account sets another's. A malformed language code or unknown mode is **400**.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LanguagePreferences"];
+                };
+            };
+            responses: {
+                /** @description The caller's preferences. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LanguagePreferences"];
+                    };
+                };
+                /** @description A language code or subtitle mode this server will not store. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description This server has no accounts yet. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3687,6 +3769,7 @@ export interface components {
             ratings?: components["schemas"]["ItemRating"][];
             /** @description The full track list including alternate audio. **Detail responses only**, which is why the player reads it from the item it fetched rather than from the grid row that opened it. */
             streams?: components["schemas"]["MediaStream"][];
+            track_choice?: components["schemas"]["TrackChoice"];
             /**
              * @description The **base name** of the file, detail responses only.
              *
@@ -5271,6 +5354,49 @@ export interface components {
             title?: string;
             artist?: string;
             album?: string;
+        };
+        /** @description What an account wants to hear and read. Set **by** the account, not for it — the opposite of `max_content_rating` in the same table, which is a limit somebody else decides. Per account rather than per device, because which language you want follows you to the next screen you sit at; the quality ceiling, which is a fact about the screen, does not. */
+        LanguagePreferences: {
+            /**
+             * @description An ISO 639 code, two or three letters, or empty for no preference.
+             *
+             *     Both spellings are accepted and compared as one — a file says `eng`, a person picks `en`, a muxer says `en-US`, and all three are English. A region suffix is **not** accepted here: it belongs to a file, not to a preference.
+             *
+             *     Any well-formed code is stored, including one this server has never seen. A closed list would have to be maintained, and being wrong about it means refusing somebody's language — where the cost of accepting an unknown one is a preference that never matches, which is the same as having none.
+             */
+            preferred_audio_lang: string;
+            /**
+             * @description An ISO 639 code, two or three letters, or empty for no preference.
+             *
+             *     Both spellings are accepted and compared as one — a file says `eng`, a person picks `en`, a muxer says `en-US`, and all three are English. A region suffix is **not** accepted here: it belongs to a file, not to a preference.
+             *
+             *     Any well-formed code is stored, including one this server has never seen. A closed list would have to be maintained, and being wrong about it means refusing somebody's language — where the cost of accepting an unknown one is a preference that never matches, which is the same as having none.
+             */
+            preferred_subtitle_lang: string;
+            /**
+             * @description When to show subtitles at all.
+             *
+             *     `off` never does, and is what every account that has never set this behaves as. `foreign` shows them when the audio that ends up **playing** is not in the preferred language — judged on what plays rather than on what the file contains, so a foreign film whose English track was chosen gets none. `always` shows them whenever a track exists in the preferred subtitle language.
+             *
+             *     `foreign` with no `preferred_audio_lang` set never fires: there is nothing for the audio to be foreign *to*, and guessing would mean deciding what language the account considers its own.
+             * @enum {string}
+             */
+            subtitle_mode: "off" | "foreign" | "always";
+        };
+        /**
+         * @description Which audio and subtitle track this account's language preferences select for one item. Attached by `GET /api/items/{id}` only — a grid tile has no use for it.
+         *
+         *     Decided by the **server** rather than the client, because the comparison is not obvious: `en`, `eng` and `en-US` are one language, and a second implementation would be a second opinion about what English means.
+         *
+         *     An absent index means **no opinion** — play whatever the file marks default, which is what happened before preferences existed. Distinct from an index of `0`, which is a deliberate choice of the first track.
+         */
+        TrackChoice: {
+            /** @description The chosen audio stream's index, absent for the file's own default. */
+            audio_index?: number;
+            /** @description The chosen subtitle stream's index, absent for none. */
+            subtitle_index?: number;
+            /** @description Why this choice was made, for a client that explains itself and for a test that asserts on it. A choice with no reason cannot be told apart from a bug. */
+            why?: string;
         };
     };
     responses: {

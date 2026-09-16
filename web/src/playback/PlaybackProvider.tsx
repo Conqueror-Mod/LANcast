@@ -687,12 +687,25 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
   // the caller, which reseeks rather than reloading the same source.
-  // A stream index is only meaningful inside one file, so a new item starts
-  // from the file's own default rather than carrying index 3 into something
-  // that has two tracks.
+  /*
+   * A stream index is only meaningful inside one file, so a new item starts
+   * from the file's own default rather than carrying index 3 into something
+   * that has two tracks.
+   *
+   * Unless the account has a language preference, in which case the server has
+   * already worked out which track that selects and sent it with the item. The
+   * choice is *not* made here: `en`, `eng` and `en-US` are one language, and a
+   * second implementation of that comparison would be a second opinion about
+   * what English means.
+   *
+   * An absent index is still "no opinion" and still means the file's default —
+   * so an account with no preference behaves exactly as it did before, and a
+   * preference naming a language the file does not carry leaves the file alone
+   * rather than picking something arbitrary.
+   */
   useEffect(() => {
-    setAudioIndex(null);
-  }, [itemID]);
+    setAudioIndex(item?.track_choice?.audio_index ?? null);
+  }, [itemID, item?.track_choice?.audio_index]);
 
   const advanceQueue = useCallback((): boolean => {
     /*
