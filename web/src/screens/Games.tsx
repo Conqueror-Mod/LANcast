@@ -22,12 +22,12 @@ import "./Games.css";
  *
  * The one screen in LANcast that is about this computer rather than about the
  * server. Nothing here is streamed, nothing here is in a library, and the
- * server does not know any of it exists — the window reads Steam's own files on
- * this disk and starts a game through Steam.
+ * server does not know any of it exists — the window reads each launcher's own
+ * files on this disk and starts a game through the launcher that owns it.
  *
  * So the failure states matter more than usual, and each of them says something
  * different: no bindings means you are not in the desktop app, disabled means
- * you have not asked for this, not-installed means there is no Steam here. An
+ * you have not asked for this, not-installed means no launcher was found. An
  * empty grid would say all three at once and none of them clearly.
  */
 export function Games() {
@@ -107,22 +107,31 @@ export function Games() {
         </p>
       )}
 
+      {/*
+        These three name no launcher, and that is the point now there are
+        three. "No Steam installation was found" is wrong for somebody who has
+        Epic and not Steam — it names the one program they do not use and says
+        nothing about the two they do. The status is about all of them
+        together: the reader that failed is in the client log, where a person
+        chasing it will look, rather than in a sentence that has to guess which
+        launcher the reader cared about.
+      */}
       {status === "not-installed" && (
         <p className="browse__message">
-          No Steam installation was found on this computer. LANcast reads
-          each launcher's own files — it never signs in to your account.
+          No games were found on this computer. LANcast reads Steam, Epic and
+          Battle.net&rsquo;s own files — it never signs in to your accounts.
         </p>
       )}
 
       {status === "error" && (
         <p className="browse__message">
-          Steam is installed but could not be read: {data?.error}
+          A games launcher is installed but could not be read: {data?.error}
         </p>
       )}
 
       {status === "ok" && all.length === 0 && (
         <p className="browse__message">
-          Steam is here, with no games installed yet.
+          A games launcher is here, with no games installed yet.
         </p>
       )}
 
@@ -267,6 +276,8 @@ function GameTile({
           <img src={art} alt="" />
         ) : (
           // A lettered placeholder rather than a broken image: Steam caches
+          // artwork lazily, and Epic and Battle.net keep none at all that can
+          // be tied to a game — so most tiles from those two land here.
           // artwork lazily, so a game installed and never looked at has none.
           <span className="games__placeholder" aria-hidden="true">
             {game.name.slice(0, 1).toUpperCase()}

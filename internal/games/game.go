@@ -1,4 +1,5 @@
-// Package games reads what the Steam client has installed on *this* machine.
+// Package games reads what Steam, Epic and Battle.net have installed on *this*
+// machine.
 //
 // It exists in the desktop client rather than the server, and that is the whole
 // decision (ADR 0066): a game is installed on one PC, cannot be streamed, and
@@ -6,7 +7,7 @@
 // table and serves no games endpoint, so nothing here has a route.
 //
 // Everything is a local file read. There is no sign-in, no API key and no
-// network: Steam's own sign-in answers *which games you own*, which is a
+// network: a launcher's own sign-in answers *which games you own*, which is a
 // different question from the one this package asks, and answering it would
 // mean a credential and a phone-home for a fact that is already on the disk.
 package games
@@ -16,24 +17,28 @@ import (
 	"strings"
 )
 
-// Status says why a list is empty, because "Steam is not installed here" and
-// "Steam is installed and has nothing in it" are different sentences and an
+// Status says why a list is empty, because "no launcher is installed here" and
+// "a launcher is installed and has nothing in it" are different sentences and an
 // empty grid says neither. A reader that cannot tell them apart makes a missing
-// Steam look like a broken LANcast.
+// launcher look like a broken LANcast.
 type Status string
 
 const (
-	// StatusOK means Steam was found and read. The list may still be empty.
+	// StatusOK means at least one launcher was found and read. The list may still
+	// be empty.
 	StatusOK Status = "ok"
-	// StatusNotInstalled means no Steam installation was found on this machine.
+	// StatusNotInstalled means no launcher was found on this machine at all.
 	StatusNotInstalled Status = "not-installed"
-	// StatusError means Steam was found and could not be read.
+	// StatusError means a launcher was found and could not be read, and nothing
+	// else succeeded — see merge, which hides one reader's failure when another
+	// had games to show.
 	StatusError Status = "error"
 )
 
-// Game is one installed Steam title.
+// Game is one installed title, from whichever launcher owns it.
 //
-// ID is the Steam appid as its decimal string. It stays a string all the way to
+// ID is namespaced by launcher — `steam:440`, `epic:a26f…`,
+// `battlenet:Hearthstone`. It stays a string all the way to
 // the page and back: it is an identifier rather than a quantity, nothing here
 // does arithmetic on it, and JSON numbers through a web view binding are a
 // float64 round-trip this does not need.
@@ -63,7 +68,7 @@ type Result struct {
 	Err string `json:"error,omitempty"`
 }
 
-// Scan reads this machine's Steam installation.
+// Scan reads every launcher this machine has.
 //
 // Locating Steam is the only part that is OS-specific; everything after it is
 // ScanRoot, which is a directory away from being testable.

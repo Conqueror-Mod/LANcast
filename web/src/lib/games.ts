@@ -103,7 +103,7 @@ declare global {
  * Feature detection rather than a flag from the server, for the reason the
  * desktop settings section gives: the same server serves this window, a browser
  * tab on the same machine, and a phone in the kitchen, and only one of those is
- * sitting in front of the Steam library.
+ * sitting in front of the games library.
  */
 export function gamesSupported(): boolean {
   return typeof window.lancastGames === "function";
@@ -195,7 +195,7 @@ export function useLaunchGame() {
     /*
      * Launching changes the list.
      *
-     * Not obviously — nothing is installed or removed — but Steam writes the
+     * Not obviously — nothing is installed or removed — but a launcher writes the
      * last-played time, and that is a column somebody may be sorting by. Ask
      * what a person could be *looking at* that this changes, not what it
      * writes.
