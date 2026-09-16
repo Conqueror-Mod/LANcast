@@ -44,6 +44,32 @@ type User struct {
 	 * limit. The store exposes no route by which an account changes its own.
 	 */
 	MaxContentRating string `json:"max_content_rating,omitempty"`
+
+	/*
+	 * PreferredAudioLang and PreferredSubtitleLang are ISO 639 codes, or empty
+	 * for no preference (schema 48).
+	 *
+	 * Set *by* an account rather than for it, which is the opposite of the
+	 * ceiling above: which language you want to hear is a taste, not a limit,
+	 * and there is no reason an administrator decides it for you.
+	 *
+	 * Per account rather than per device, unlike the quality ceiling the client
+	 * keeps in its own storage. Which language you want follows you to the next
+	 * screen you sit at; how much bandwidth there is does not. Same split ADR
+	 * 0006 makes for playback state.
+	 */
+	PreferredAudioLang    string `json:"preferred_audio_lang,omitempty"`
+	PreferredSubtitleLang string `json:"preferred_subtitle_lang,omitempty"`
+	/*
+	 * SubtitleMode is when to turn subtitles on at all: "off", "foreign" or
+	 * "always". Empty means "off", the behaviour every existing account has.
+	 *
+	 * Separate from the language because "which subtitles" and "when to show
+	 * them" are different questions, and one field cannot answer both. Somebody
+	 * who wants English audio usually wants no subtitles; the same person
+	 * watching a film with no English track wants them without asking.
+	 */
+	SubtitleMode string `json:"subtitle_mode,omitempty"`
 }
 
 // ValidRole reports whether r is a role the system recognises.
@@ -75,18 +101,19 @@ func (s *Store) CreateUser(ctx context.Context, id, name, passwordHash, role str
 // because the column is COLLATE NOCASE.
 func (s *Store) UserByName(ctx context.Context, name string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user WHERE name = ?`, name))
+		`SELECT id, name, password_hash, role, created_at, max_content_rating, preferred_audio_lang, preferred_subtitle_lang, subtitle_mode FROM user WHERE name = ?`, name))
 }
 
 // UserByID looks up a user by id.
 func (s *Store) UserByID(ctx context.Context, id string) (*User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user WHERE id = ?`, id))
+		`SELECT id, name, password_hash, role, created_at, max_content_rating, preferred_audio_lang, preferred_subtitle_lang, subtitle_mode FROM user WHERE id = ?`, id))
 }
 
 func (s *Store) scanUser(row *sql.Row) (*User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating)
+	err := row.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating,
+		&u.PreferredAudioLang, &u.PreferredSubtitleLang, &u.SubtitleMode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -100,7 +127,7 @@ func (s *Store) scanUser(row *sql.Row) (*User, error) {
 // tagged json:"-", so a handler serializing the slice never leaks them.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, password_hash, role, created_at, max_content_rating FROM user ORDER BY created_at, name`)
+		`SELECT id, name, password_hash, role, created_at, max_content_rating, preferred_audio_lang, preferred_subtitle_lang, subtitle_mode FROM user ORDER BY created_at, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
@@ -109,7 +136,8 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.MaxContentRating,
+			&u.PreferredAudioLang, &u.PreferredSubtitleLang, &u.SubtitleMode); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		out = append(out, u)

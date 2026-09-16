@@ -35,10 +35,28 @@ type Settings struct {
 	 * blocks unrated. Offering France would therefore make a child's library
 	 * shrink, quietly, with the cause three screens away.
 	 */
-	CertificationCountry string  `json:"certification_country,omitempty"`
-	RatePerSec           float64 `json:"rate_per_sec,omitempty"`
-	WriteNFO             bool    `json:"write_nfo"`
-	AutoEnrich           bool    `json:"auto_enrich"`
+	CertificationCountry string `json:"certification_country,omitempty"`
+	/*
+	 * MaxQuality is the ceiling this server imposes on every stream, as a rung
+	 * id from QualityRungs. Empty means no limit, which is the default.
+	 *
+	 * A limit rather than a target: it only ever *narrows* what a client asked
+	 * for and can never raise it, so a client asking for 480p on a server
+	 * capped at 1080p still gets 480p.
+	 *
+	 * Server-wide rather than per client or per network, deliberately. "Cap
+	 * remote clients only" is the setting people actually want, and it needs a
+	 * way to tell a remote client from a local one that this server does not
+	 * have: the LAN-bound gate knows about the *listener*, not about who is
+	 * connected to it, and guessing from the peer address would be wrong for a
+	 * VPN — which is exactly how this household reaches the server from
+	 * outside.
+	 */
+	MaxQuality string `json:"max_quality,omitempty"`
+
+	RatePerSec float64 `json:"rate_per_sec,omitempty"`
+	WriteNFO   bool    `json:"write_nfo"`
+	AutoEnrich bool    `json:"auto_enrich"`
 	// UpdateCheck asks the project's releases endpoint whether a newer version
 	// exists. On by default: an update nobody hears about is one nobody
 	// installs, and the check is a plain GET carrying no identifier. Off stops
@@ -131,6 +149,20 @@ type Settings struct {
 	// a periodic scan is for a server whose media arrives by other means —
 	// a downloader, a sync job, another machine's writes.
 	ScanIntervalHours int `json:"scan_interval_hours,omitempty"`
+	/*
+	 * ScanAtHour holds a due scan back until this hour of the local day, 0-23.
+	 * Nil means any time, which is what every existing server does.
+	 *
+	 * A pointer rather than an int with a sentinel, because the useful value
+	 * *is* the zero value: midnight is the hour somebody is most likely to
+	 * pick, and `0` meaning "unset" would make it the one hour that cannot be
+	 * chosen.
+	 *
+	 * A gate on top of the interval rather than a schedule replacing it. See
+	 * scanDue: the interval still says how often, and this says when a due scan
+	 * may start, so the two compose without contradicting each other on screen.
+	 */
+	ScanAtHour *int `json:"scan_at_hour,omitempty"`
 	/*
 	 * ArtworkCacheMB caps the artwork cache. Zero is no limit, the default.
 	 *
@@ -313,6 +345,12 @@ func clamp(s *Settings) {
 	}
 	if s.ArtworkCacheMB < 0 {
 		s.ArtworkCacheMB = 0
+	}
+	if s.ScanAtHour != nil && (*s.ScanAtHour < 0 || *s.ScanAtHour > 23) {
+		// Dropped rather than wrapped. A hand-edited file asking for hour 47 is
+		// a mistake, and wrapping it to 23 would schedule a scan for a time
+		// nobody chose while looking like the setting worked.
+		s.ScanAtHour = nil
 	}
 	if s.ScanIntervalHours < 0 {
 		s.ScanIntervalHours = 0

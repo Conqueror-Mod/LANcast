@@ -74,6 +74,7 @@ import { UpdateSettings } from "@/components/UpdateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
 import { ClientLog } from "@/components/ClientLog";
+import { LanguagePreferences } from "@/components/LanguagePreferences";
 import { Transcodes } from "@/components/Transcodes";
 import {
   useHeroMode,
@@ -742,6 +743,8 @@ function AccountSection() {
 
       <DisplayNameForm />
 
+      <LanguagePreferences />
+
       <SharingToggle />
 
       <HistoryReset />
@@ -969,6 +972,54 @@ function AdminSections({ pane }: { pane: string }) {
                 ]}
                 onChange={(v) => update.mutate({ scan_interval_hours: v })}
               />
+              {/*
+                Offered only once a timer is on. "Start scans at 3am" with
+                scanning set to Never is a control that cannot do anything, and
+                one of those invites somebody to set it and wonder why nothing
+                happens.
+              */}
+              {settings.scan_interval_hours > 0 && (
+                <>
+                  <label className="set-row">
+                    <span>Start scans at</span>
+                    <select
+                      className="set-input"
+                      value={
+                        settings.scan_at_hour == null
+                          ? ""
+                          : String(settings.scan_at_hour)
+                      }
+                      disabled={update.isPending}
+                      onChange={(e) =>
+                        update.mutate({
+                          // Null clears it; a number sets it. The empty option
+                          // is "any time", which is a real answer rather than a
+                          // missing one.
+                          scan_at_hour:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value="">Any time</option>
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={String(h)}>
+                          {String(h).padStart(2, "0")}:00
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="set-row__sub">
+                    Holds a scan back until this hour, in this server&rsquo;s own
+                    time. It does not change how often one is due &mdash; a
+                    weekly scan set to 03:00 is still weekly, it just starts at
+                    three in the morning rather than whenever the week happens to
+                    turn over. Useful because a scan competes for the same disk
+                    a film is being read from.
+                  </p>
+                </>
+              )}
               {/* The switch that decides whether this server can destroy media at
                 all. Off is a real answer, and it was not available before:
                 every install could delete files from disk through the API. */}
@@ -1175,6 +1226,45 @@ function AdminSections({ pane }: { pane: string }) {
               {/* Applied by the server on every progress write, so every client
                 agrees about what is finished — the reason this is here and not
                 in each player. */}
+              {/*
+                The ceiling this server imposes, as opposed to the one each
+                screen picks for itself in its own settings. On the Playback
+                pane because that is where the other rules about how media is
+                delivered live, and because it is an administrator's decision
+                rather than a viewer's.
+              */}
+              {settings.quality_rungs && settings.quality_rungs.length > 0 && (
+                <>
+                  <label className="set-row">
+                    <span>Maximum streaming quality</span>
+                    <select
+                      className="set-input"
+                      value={settings.max_quality ?? ""}
+                      disabled={update.isPending}
+                      onChange={(e) =>
+                        update.mutate({ max_quality: e.target.value })
+                      }
+                    >
+                      {settings.quality_rungs.map((q) => (
+                        <option key={q.id} value={q.id}>
+                          {q.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="set-row__sub">
+                    A limit on every stream this server sends, whatever a device
+                    asks for. It only ever lowers quality &mdash; a laptop set to
+                    480p still gets 480p here. Leave it at <em>No limit</em> for
+                    a server only reachable on your own network: anything lower
+                    is a re-encode that makes the picture worse and the machine
+                    hotter to solve a problem a gigabit link does not have.
+                    Lower it if this server is reachable from outside the house
+                    and you would rather cap what leaves it.
+                  </p>
+                </>
+              )}
+
               <RuleSelect
                 title="Counts as watched at"
                 sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."

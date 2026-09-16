@@ -35,7 +35,10 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"allow_media_deletion": cur.AllowMediaDeletion,
 		"empty_trash_on_scan":  cur.EmptyTrashOnScan,
 		"scan_interval_hours":  cur.ScanIntervalHours,
+		// Null rather than a number when unset: the useful value is the zero
+		// value, so midnight must be choosable.
 		"artwork_cache_mb":     cur.ArtworkCacheMB,
+		"scan_at_hour":         cur.ScanAtHour,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
@@ -46,6 +49,11 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		// because what may be offered is a fact about the rating ladder the
 		// *server* owns — a client with its own copy would eventually offer a
 		// country whose labels no ceiling could place.
+		// The ceiling this server imposes, and the rungs it may be set to. The
+		// ladder is served rather than known by the client for the reason the
+		// certification countries are: the server owns what it will allow.
+		"max_quality":           cur.MaxQuality,
+		"quality_rungs":         config.QualityRungs,
 		"certification_country": cur.CertificationCountry,
 		"certification_countries": func() []map[string]string {
 			out := make([]map[string]string, 0, len(rating.Countries))
@@ -89,6 +97,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
+		MaxQuality           *string `json:"max_quality"`
 
 		DebugLogging       *bool `json:"debug_logging"`
 		WatchedThreshold   *int  `json:"watched_threshold"`
@@ -97,8 +106,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AllowMediaDeletion *bool `json:"allow_media_deletion"`
 		EmptyTrashOnScan   *bool `json:"empty_trash_on_scan"`
 		ScanIntervalHours  *int  `json:"scan_interval_hours"`
-		ArtworkCacheMB     *int  `json:"artwork_cache_mb"`
-		AuditRetentionDays *int  `json:"audit_retention_days"`
+		/*
+		 * Raw, because this field has three states and encoding/json cannot
+		 * express them through a pointer.
+		 *
+		 * Absent means "leave it alone", `null` means "clear it", a number
+		 * means "set it". A `*int` collapses the first two — both arrive as nil
+		 * — and so does a `**int`, which is what this tried first: json sets
+		 * the outer pointer to nil for a literal `null` exactly as it does for
+		 * an absent key, so the extra level buys nothing. The raw bytes are the
+		 * only thing that still knows the difference.
+		 */
+		ScanAtHour         json.RawMessage `json:"scan_at_hour"`
+		ArtworkCacheMB     *int            `json:"artwork_cache_mb"`
+		AuditRetentionDays *int            `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -140,6 +161,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
+	}
+	if req.MaxQuality != nil {
+		/*
+		 * Refused rather than stored-and-ignored, the same as every other
+		 * enumerated setting here. A ceiling that silently does nothing is one
+		 * somebody sets before going away for a week believing their uplink is
+		 * protected.
+		 */
+		if !config.KnownQuality(*req.MaxQuality) {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"max_quality must be one of the rungs reported by GET /api/settings")
+			return
+		}
+		next.MaxQuality = *req.MaxQuality
 	}
 	if req.CertificationCountry != nil {
 		/*
@@ -208,6 +243,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		next.ArtworkCacheMB = *req.ArtworkCacheMB
+	}
+	if len(req.ScanAtHour) > 0 {
+		// Present in the request. `null` clears the preference; anything else
+		// has to be an hour of the day.
+		if string(req.ScanAtHour) == "null" {
+			next.ScanAtHour = nil
+		} else {
+			var h int
+			if err := json.Unmarshal(req.ScanAtHour, &h); err != nil || h < 0 || h > 23 {
+				writeError(w, http.StatusBadRequest, "bad_request",
+					"scan_at_hour must be an hour of the day, 0 to 23, or null")
+				return
+			}
+			next.ScanAtHour = &h
+		}
 	}
 	if req.ScanIntervalHours != nil {
 		if *req.ScanIntervalHours < 0 || *req.ScanIntervalHours > 168 {
@@ -297,6 +347,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
 	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
 	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
+	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
@@ -312,7 +363,17 @@ func changedSettings(prev, next config.Settings) []string {
 	// changes whether the server destroys records without being asked again.
 	add("empty_trash_on_scan", prev.EmptyTrashOnScan != next.EmptyTrashOnScan)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
+	add("scan_at_hour", !sameHour(prev.ScanAtHour, next.ScanAtHour))
 	add("artwork_cache_mb", prev.ArtworkCacheMB != next.ArtworkCacheMB)
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
+}
+
+// sameHour compares two optional hours. Pointers, so `==` would compare
+// addresses and report every write as a change.
+func sameHour(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }

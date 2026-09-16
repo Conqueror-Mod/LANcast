@@ -1131,7 +1131,7 @@ func applyStagedUpdate(dataDir string, log *slog.Logger) {
 // that moment rather than firing immediately, so switching it on does not
 // launch a scan for a period that elapsed while it was switched off — and
 // switching it off resets the clock, so switching it back on does not either.
-func scanDue(last, now time.Time, hours int) (time.Time, bool) {
+func scanDue(last, now time.Time, hours int, atHour *int) (time.Time, bool) {
 	if hours <= 0 {
 		return time.Time{}, false
 	}
@@ -1139,6 +1139,32 @@ func scanDue(last, now time.Time, hours int) (time.Time, bool) {
 		return now, false
 	}
 	if now.Sub(last) < time.Duration(hours)*time.Hour {
+		return last, false
+	}
+	/*
+	 * A preferred hour is a *gate*, not a schedule.
+	 *
+	 * It composes with the interval rather than replacing it: the interval
+	 * still says how often, and this says when a due scan is allowed to
+	 * actually start. So "every 24 hours" plus "at 3" is a nightly scan, and
+	 * "every hour" plus "at 3" is also nightly — the gate simply holds the
+	 * others back.
+	 *
+	 * Redefining the interval instead would have been the obvious move and is
+	 * worse: somebody who had set "every 6 hours" and then picked an hour would
+	 * silently get a daily scan, with two settings on screen that contradict
+	 * each other.
+	 *
+	 * `last` is deliberately *not* advanced while the gate holds. Advancing it
+	 * would restart the interval every minute the scan was refused, so a due
+	 * scan would never arrive — the shape of bug that looks like the timer
+	 * being off entirely.
+	 *
+	 * Local time, because 3am means 3am here. A server that scanned at 3am UTC
+	 * would wake the disk at 10pm for this household, which is the one time of
+	 * day the setting exists to avoid.
+	 */
+	if atHour != nil && now.Hour() != *atHour {
 		return last, false
 	}
 	return now, true
@@ -1316,9 +1342,10 @@ func periodicScan(ctx context.Context, st *store.Store, scanner *scan.Scanner,
 		case <-ctx.Done():
 			return
 		case now := <-t.C:
-			hours := settings.Get().ScanIntervalHours
+			cur := settings.Get()
+			hours := cur.ScanIntervalHours
 			var due bool
-			last, due = scanDue(last, now, hours)
+			last, due = scanDue(last, now, hours, cur.ScanAtHour)
 			if !due {
 				continue
 			}
@@ -1335,7 +1362,8 @@ func periodicScan(ctx context.Context, st *store.Store, scanner *scan.Scanner,
 					log.Debug("periodic scan skipped", "library", lib.ID, "error", err)
 					continue
 				}
-				log.Info("periodic scan started", "library", lib.ID, "every_hours", hours)
+				log.Info("periodic scan started", "library", lib.ID,
+					"every_hours", hours, "at_hour", cur.ScanAtHour)
 			}
 		}
 	}
