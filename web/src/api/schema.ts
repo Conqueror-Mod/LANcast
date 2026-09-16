@@ -3972,6 +3972,19 @@ export interface components {
             scan_interval_hours: number;
             /** @description How long audit entries are kept (ADR 0026). */
             audit_retention_days: number;
+            /**
+             * @description Whose certificate is preferred on films and programmes, as an ISO 3166-1 alpha-2 code. Empty means the default order: the US certificate, falling back to the British one.
+             *
+             *     A chosen country is placed **in front of** that default rather than replacing it. TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for — which a rating ceiling then reads as unrated and blocks.
+             */
+            certification_country?: string;
+            /** @description The countries `certification_country` may be set to. Served rather than known by the client, because what may be offered is a fact about the server's rating ladder: a certificate the ladder cannot place reads as unrated, and an account ceiling blocks unrated. A client carrying its own list would eventually offer a country whose labels no ceiling could place. */
+            certification_countries?: {
+                /** @description ISO 3166-1 alpha-2. */
+                code: string;
+                /** @description What a person picking one reads. */
+                name: string;
+            }[];
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {
@@ -3995,6 +4008,12 @@ export interface components {
             empty_trash_on_scan?: boolean;
             scan_interval_hours?: number;
             audit_retention_days?: number;
+            /**
+             * @description Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.
+             *
+             *     Takes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that.
+             */
+            certification_country?: string;
         };
         /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
         ScanIssue: {

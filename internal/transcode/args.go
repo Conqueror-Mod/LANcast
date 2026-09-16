@@ -410,8 +410,37 @@ func Args(o Options) []string {
 	 * container has no per-frame timestamps. That guard stays: it was measured
 	 * and it addresses a cause this does not.
 	 */
+	/*
+	 * A copied video track takes the whole seek here, not a split one.
+	 *
+	 * The split above works because the output side *decodes* the preroll and
+	 * discards it, which is how the first frame comes out being the frame that
+	 * was asked for. With `-c:v copy` there is no decoding: ffmpeg can only
+	 * begin at a keyframe, so it keeps video from the next one while cutting
+	 * the audio exactly where it was told and rebasing it to zero. The two
+	 * then start at different places.
+	 *
+	 * Measured on Scream (2022), a matroska remux resumed at 471s, reading the
+	 * first packet of each stream out of the first segment:
+	 *
+	 *	-ss 461 -i in -ss 10   video 4.408  audio 0.026   +4.38s
+	 *	-ss 471 -i in          video 0.067  audio 0.095   -0.03s
+	 *
+	 * Re-encoding the audio does not help and was tried: video 4.429, audio
+	 * 0.000. The audio was never the problem — the video is the stream that
+	 * cannot be cut where it was asked.
+	 *
+	 * The cost is that a copied resume starts at the keyframe at or before the
+	 * requested second rather than exactly on it, which is the most a copy can
+	 * offer and is invisible beside four seconds of lip-sync.
+	 */
+	copiedVideo := o.Decision.VideoAction == "copy"
+
 	if o.StartAt > 0 && !o.Live {
-		if o.StartAt > seekPreroll {
+		switch {
+		case copiedVideo:
+			a = append(a, "-ss", strconv.FormatFloat(o.StartAt, 'f', 3, 64))
+		case o.StartAt > seekPreroll:
 			a = append(a, "-ss", strconv.FormatFloat(o.StartAt-seekPreroll, 'f', 3, 64))
 		}
 	}
@@ -504,7 +533,9 @@ func Args(o Options) []string {
 	// seek could not cover — the preroll, or the whole offset when it is
 	// shorter than one — is decoded and discarded so the first frame is the
 	// frame asked for and the copied audio starts alongside it.
-	if o.StartAt > 0 && !o.Live {
+	// Not when video is copied: there is nothing to decode and discard, so this
+	// would cut the audio where the video could not follow. See above.
+	if o.StartAt > 0 && !o.Live && !copiedVideo {
 		out := seekPreroll
 		if o.StartAt <= seekPreroll {
 			out = o.StartAt

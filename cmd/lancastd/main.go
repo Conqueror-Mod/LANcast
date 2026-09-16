@@ -357,6 +357,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			next.AddProvider(tmdb.New(s.TMDBKey,
 				tmdb.WithCache(st),
 				tmdb.WithLimiter(meta.NewLimiter(s.RatePerSec, int(s.RatePerSec)+1)),
+				// Rebuilt on every settings change, so choosing a country takes
+				// effect on the next fetch. It does not rewrite what is already
+				// stored — a refresh does that, and the settings page says so.
+				tmdb.WithCertificationCountry(s.CertificationCountry),
 			))
 		}
 		// External ratings (ADR 0019): registered only when a key is present, so

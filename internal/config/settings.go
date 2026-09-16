@@ -23,10 +23,22 @@ type Settings struct {
 	// OMDbKey enables external ratings (Rotten Tomatoes / Metacritic / IMDb via
 	// OMDb, ADR 0019). Optional and write-only like the other keys; without it
 	// the rating pass never runs and nothing leaves the machine.
-	OMDbKey    string  `json:"omdb_key,omitempty"`
-	RatePerSec float64 `json:"rate_per_sec,omitempty"`
-	WriteNFO   bool    `json:"write_nfo"`
-	AutoEnrich bool    `json:"auto_enrich"`
+	OMDbKey string `json:"omdb_key,omitempty"`
+	/*
+	 * CertificationCountry is whose certificate to prefer on films and
+	 * programmes — an ISO 3166-1 alpha-2 code, or empty for the default
+	 * US-then-GB order.
+	 *
+	 * Constrained to rating.Countries rather than to any valid code, and the
+	 * constraint is a safety one rather than a convenience: a certificate the
+	 * rating ladder cannot place reads as unrated, and an account ceiling
+	 * blocks unrated. Offering France would therefore make a child's library
+	 * shrink, quietly, with the cause three screens away.
+	 */
+	CertificationCountry string  `json:"certification_country,omitempty"`
+	RatePerSec           float64 `json:"rate_per_sec,omitempty"`
+	WriteNFO             bool    `json:"write_nfo"`
+	AutoEnrich           bool    `json:"auto_enrich"`
 	// UpdateCheck asks the project's releases endpoint whether a newer version
 	// exists. On by default: an update nobody hears about is one nobody
 	// installs, and the check is a plain GET carrying no identifier. Off stops

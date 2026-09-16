@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"lancast/internal/config"
+	"lancast/internal/rating"
 )
 
 // getSettings returns the current configuration.
@@ -39,7 +40,20 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
 		"sensitive_marking":    cur.SensitiveMarking,
-		"detect_markers":       cur.DetectMarkers,
+		// The chosen certification country, and the list it may be chosen
+		// from. The list is served rather than hard-coded in the client
+		// because what may be offered is a fact about the rating ladder the
+		// *server* owns — a client with its own copy would eventually offer a
+		// country whose labels no ceiling could place.
+		"certification_country": cur.CertificationCountry,
+		"certification_countries": func() []map[string]string {
+			out := make([]map[string]string, 0, len(rating.Countries))
+			for _, c := range rating.Countries {
+				out = append(out, map[string]string{"code": c.Code, "name": c.Name})
+			}
+			return out
+		}(),
+		"detect_markers": cur.DetectMarkers,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -72,6 +86,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		SensitiveMarking *bool    `json:"sensitive_marking"`
 		DetectMarkers    *bool    `json:"detect_markers"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
+
+		CertificationCountry *string `json:"certification_country"`
 
 		DebugLogging       *bool `json:"debug_logging"`
 		WatchedThreshold   *int  `json:"watched_threshold"`
@@ -122,6 +138,24 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
+	}
+	if req.CertificationCountry != nil {
+		/*
+		 * Empty clears it back to the default order; anything else must be a
+		 * country the ladder can place.
+		 *
+		 * Refused rather than ignored. A setting that stores a value it will
+		 * not act on is one somebody sets, watches change nothing, and reports
+		 * as broken — and the alternative here is worse than confusing, since
+		 * an unplaceable certificate is read as unrated by every ceiling.
+		 */
+		code := strings.ToUpper(strings.TrimSpace(*req.CertificationCountry))
+		if code != "" && !rating.KnownCountry(code) {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"certification_country must be one of the countries reported by GET /api/settings")
+			return
+		}
+		next.CertificationCountry = code
 	}
 	// Ranges are rejected rather than clamped, because a client sending 200%
 	// has a bug and silently storing 90 hides it. config.clamp is the floor
@@ -246,6 +280,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
 	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
+	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)

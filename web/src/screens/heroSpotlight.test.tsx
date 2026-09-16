@@ -46,6 +46,19 @@ const suggestion = {
   artwork: { fanart: "/g.jpg" },
 };
 
+/*
+ * A track at the top of the list, which is where a real one usually is.
+ *
+ * Continue Watching is one mixed list ordered by when you last played
+ * something; Home splits it for display and the underlying list does not. So
+ * the top row belongs to whoever listened to music most recently — and a track
+ * has no genres and lives in a library the spotlight excludes entirely.
+ */
+const track = {
+  id: 9, library_id: 18, kind: "track", title: "Building Better Worlds",
+  missing: false, artwork: {},
+};
+
 function stub() {
   asked = [];
   vi.stubGlobal(
@@ -54,9 +67,17 @@ function stub() {
       const u = String(url);
       asked.push(u);
       let body: unknown = {};
-      if (u.includes("/api/continue")) body = { items: [film] };
+      if (u.includes("/api/continue")) body = { items: [track, film] };
       else if (u.startsWith("/api/items?")) body = { items: [suggestion], total: 1 };
-      else if (u.startsWith("/api/items/")) body = film;
+      else if (u.startsWith("/api/items/")) {
+        /*
+         * Answer with the item that was asked for, not with the film every
+         * time. A stub that hands back a usable record whatever the id cannot
+         * tell "seeded from the track" apart from "seeded from the film" — and
+         * that is precisely the bug under test.
+         */
+        body = u.endsWith("/9") ? track : film;
+      }
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -196,5 +217,36 @@ describe("pinning", () => {
     expect(text()).toContain("pinned/42");
     expect(JSON.parse(localStorage.getItem(HERO_MODE_KEY)!)).toBe("pinned");
     expect(JSON.parse(localStorage.getItem(HERO_PINNED_KEY)!)).toBe(42);
+  });
+});
+
+describe("what the suggestion is seeded from", () => {
+  /*
+   * The fault that shipped in v0.9.22 and survived three readings of the code.
+   *
+   * Seeding from the literal first row meant a track, which has no genres, so
+   * the candidate query switched itself off and Suggested silently became
+   * Continue watching. Found by asking the running app what the seed was.
+   */
+  it("skips a track at the top of the list", async () => {
+    stub();
+    writeDevice(HERO_MODE_KEY, "recommended");
+    await render(<Probe />);
+
+    // The film's detail, not the track's — 1 is the film, 9 is the track.
+    expect(asked).toContain("/api/items/1");
+    expect(asked).not.toContain("/api/items/9");
+  });
+
+  it("still asks for candidates when a track leads the list", async () => {
+    // The symptom: with the track as seed there was no query at all.
+    stub();
+    writeDevice(HERO_MODE_KEY, "recommended");
+    await render(<Probe />);
+
+    const query = asked.find((u) => u.startsWith("/api/items?"));
+    expect(query, "no candidate search was made").toBeTruthy();
+    expect(query).toContain("genre=Horror");
+    expect(query).toContain("library_id=3");
   });
 });
