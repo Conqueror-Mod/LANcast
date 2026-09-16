@@ -3985,6 +3985,16 @@ export interface components {
                 /** @description What a person picking one reads. */
                 name: string;
             }[];
+            /**
+             * @description The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.
+             *
+             *     A **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.
+             *
+             *     The gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.
+             *
+             *     Local time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid.
+             */
+            scan_at_hour?: number | null;
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {
@@ -4014,6 +4024,18 @@ export interface components {
              *     Takes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that.
              */
             certification_country?: string;
+            /**
+             * @description The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.
+             *
+             *     A **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.
+             *
+             *     The gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.
+             *
+             *     Local time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid.
+             *
+             *     Send `null` to clear the preference and `0`–`23` to set one. Omitting the field leaves it unchanged; an hour outside the range is **400**.
+             */
+            scan_at_hour?: number | null;
         };
         /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
         ScanIssue: {

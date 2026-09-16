@@ -9245,6 +9245,13 @@
                 }
               }
             }
+          },
+          "scan_at_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "nullable": true,
+            "description": "The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.\n\nA **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set \"every 6 hours\" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.\n\nThe gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.\n\nLocal time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid."
           }
         }
       },
@@ -9313,6 +9320,13 @@
           "certification_country": {
             "type": "string",
             "description": "Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.\n\nTakes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that."
+          },
+          "scan_at_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "nullable": true,
+            "description": "The hour of the **local** day a due scan is allowed to start, 0–23. `null` means any time, which is what every server does by default.\n\nA **gate on top of `scan_interval_hours`, not a schedule replacing it**. The interval still says how often; this says when a due scan may actually begin. So `24` + `3` is a nightly scan, and `1` + `3` is also nightly — the gate holds the others back. Redefining the interval instead would mean somebody who had set \"every 6 hours\" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other.\n\nThe gate does **not** make a scan due: `at 3` on a weekly interval is still weekly.\n\nLocal time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid.\n\nSend `null` to clear the preference and `0`–`23` to set one. Omitting the field leaves it unchanged; an hour outside the range is **400**."
           }
         }
       },

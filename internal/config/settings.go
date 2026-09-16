@@ -131,6 +131,20 @@ type Settings struct {
 	// a periodic scan is for a server whose media arrives by other means —
 	// a downloader, a sync job, another machine's writes.
 	ScanIntervalHours int `json:"scan_interval_hours,omitempty"`
+	/*
+	 * ScanAtHour holds a due scan back until this hour of the local day, 0-23.
+	 * Nil means any time, which is what every existing server does.
+	 *
+	 * A pointer rather than an int with a sentinel, because the useful value
+	 * *is* the zero value: midnight is the hour somebody is most likely to
+	 * pick, and `0` meaning "unset" would make it the one hour that cannot be
+	 * chosen.
+	 *
+	 * A gate on top of the interval rather than a schedule replacing it. See
+	 * scanDue: the interval still says how often, and this says when a due scan
+	 * may start, so the two compose without contradicting each other on screen.
+	 */
+	ScanAtHour *int `json:"scan_at_hour,omitempty"`
 
 	// AuditRetentionDays drops audit events older than this many days. Zero
 	// keeps them for ever, which is a real answer for somebody running this
@@ -297,6 +311,12 @@ func clamp(s *Settings) {
 	}
 	if s.ContinueLimit <= 0 || s.ContinueLimit > 100 {
 		s.ContinueLimit = d.ContinueLimit
+	}
+	if s.ScanAtHour != nil && (*s.ScanAtHour < 0 || *s.ScanAtHour > 23) {
+		// Dropped rather than wrapped. A hand-edited file asking for hour 47 is
+		// a mistake, and wrapping it to 23 would schedule a scan for a time
+		// nobody chose while looking like the setting worked.
+		s.ScanAtHour = nil
 	}
 	if s.ScanIntervalHours < 0 {
 		s.ScanIntervalHours = 0
