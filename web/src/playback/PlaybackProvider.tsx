@@ -36,6 +36,7 @@ import {
   prevPos,
 } from "./queueOrder";
 import { usePrefs, qualityQuery, type Prefs } from "./prefs";
+import { resumePointAfterFailure } from "./resumePoint";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
 import {
@@ -687,12 +688,25 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
   // the caller, which reseeks rather than reloading the same source.
-  // A stream index is only meaningful inside one file, so a new item starts
-  // from the file's own default rather than carrying index 3 into something
-  // that has two tracks.
+  /*
+   * A stream index is only meaningful inside one file, so a new item starts
+   * from the file's own default rather than carrying index 3 into something
+   * that has two tracks.
+   *
+   * Unless the account has a language preference, in which case the server has
+   * already worked out which track that selects and sent it with the item. The
+   * choice is *not* made here: `en`, `eng` and `en-US` are one language, and a
+   * second implementation of that comparison would be a second opinion about
+   * what English means.
+   *
+   * An absent index is still "no opinion" and still means the file's default —
+   * so an account with no preference behaves exactly as it did before, and a
+   * preference naming a language the file does not carry leaves the file alone
+   * rather than picking something arbitrary.
+   */
   useEffect(() => {
-    setAudioIndex(null);
-  }, [itemID]);
+    setAudioIndex(item?.track_choice?.audio_index ?? null);
+  }, [itemID, item?.track_choice?.audio_index]);
 
   const advanceQueue = useCallback((): boolean => {
     /*
@@ -2028,11 +2042,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                  * the declared level, the MIME types and the URL rewrite from
                  * outside the application, all of which came back clean.
                  */
+                /*
+                 * Where the film actually is, which is not where this stream
+                 * started.
+                 *
+                 * `offset.current` is the *session's base* — the `t=` it was
+                 * opened with — and it does not move as the film plays. Using
+                 * it to rebuild is how an overnight pause lost ninety minutes:
+                 * the session was reaped, the element raised an error, and the
+                 * fallback restarted a film at 1h39m from its original 12m
+                 * base, then wrote 12m back as the saved position.
+                 *
+                 * Observed on Dogma, 2026-09-16: the client asked for
+                 * `seg00994.m4s` — segment 994 of six seconds, so 99 minutes —
+                 * and in the same millisecond opened a new session at
+                 * `start_at=736`.
+                 *
+                 * livePos carries `offset + currentTime`, which is the sum the
+                 * clock on screen shows, and it is read rather than recomputed
+                 * because the element's own currentTime is not dependable at
+                 * the instant it reports an error.
+                 */
+                const resumeAt = resumePointAfterFailure(
+                  livePos.current,
+                  sourceItem.current,
+                  offset.current,
+                );
+
                 const incidentClock = Date.now();
                 noteHLSIncident(
                   readIncident(
                     e.currentTarget,
-                    offset.current,
+                    resumeAt,
                     incidentClock,
                     itemID,
                     item?.title ?? "",
@@ -2042,7 +2083,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                   sourceURL(
                     itemID,
                     decision.current.method,
-                    offset.current,
+                    resumeAt,
                     audioIndex,
                     qualityRef.current,
                     "hls",
@@ -2062,11 +2103,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
                 });
                 const v = e.currentTarget;
                 chosenPath.current = "progressive";
+                /*
+                 * Rebased before the URL is built, the way seekTo does it.
+                 *
+                 * `offset` is the new stream's zero point, so leaving it at the
+                 * old base would make every later sum wrong by the difference:
+                 * the clock on screen, the subtitle timing, and the position
+                 * written to the server — which is how the old value came to
+                 * overwrite the good one.
+                 */
+                offset.current = resumeAt;
+                setSubOffset(resumeAt);
+                setCurrent(0);
                 setLoading(true);
                 v.src = sourceURL(
                   itemID,
                   decision.current.method,
-                  offset.current,
+                  resumeAt,
                   audioIndex,
                   qualityRef.current,
                   "progressive",

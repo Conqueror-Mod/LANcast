@@ -1194,6 +1194,63 @@ hang off the id and follow silently.
 `409 no_account` on an unconfigured loopback server, where there is no account
 to edit.
 
+### `GET /api/profile/languages` and `PUT /api/profile/languages`
+
+What an account wants to hear, and when it wants subtitles.
+
+```json
+{ "preferred_audio_lang": "en", "preferred_subtitle_lang": "en", "subtitle_mode": "foreign" }
+```
+
+Set **by** the account rather than for it — the opposite of `max_content_rating`
+in the same table, which is a limit somebody else decides and the limited party
+cannot lift. A language is a taste, so this acts on the **session** and there is
+no route by which one account sets another's.
+
+Per account rather than per device, unlike the quality ceiling the client keeps
+in its own storage. Which language you want follows you to the next screen you
+sit at; how much bandwidth there is between here and the server does not. Same
+split [ADR 0006](adr/0006-playback-state.md) makes for playback state.
+
+**A language is an ISO 639 code**, two or three letters, or empty for no
+preference. Both spellings are accepted and compared as one: a file says `eng`,
+a person picks `en`, a muxer says `en-US`, and all three are English — a
+preference that matched only its own spelling would look broken on half a
+library. A region suffix is refused on input, because it belongs to a file
+rather than to a preference. Any well-formed code is stored, including one this
+server has never heard of: a closed list would have to be maintained, and being
+wrong about it refuses somebody's language, where accepting an unknown one costs
+a preference that never matches — the same as having none.
+
+**`subtitle_mode` is separate from the language**, because "which subtitles" and
+"when to show them" are different questions and one field cannot answer both.
+
+| mode | when subtitles come on |
+| --- | --- |
+| `off` | never. What every account that has not set this already does |
+| `foreign` | when the audio that ends up **playing** is not in the preferred language |
+| `always` | whenever a track exists in the preferred subtitle language |
+
+`foreign` is judged on **what plays**, not on what the file contains. A foreign
+film whose English track was chosen gets no subtitles; the same film with no
+English track gets them without being asked. Reading it off the file instead
+would put subtitles over an English dub somebody deliberately selected, which is
+the version of this feature people switch off. With no `preferred_audio_lang`
+set it never fires at all — there is nothing for the audio to be foreign *to*,
+and guessing would mean deciding what language the account considers its own.
+
+**All three fields go together.** A subtitle language with no mode, or a mode
+with no language, are states somebody could be left in by a failed second
+request, and both are silently inert. A malformed code or unknown mode is
+`400`; `409 no_account` on an unconfigured loopback server.
+
+Which track this actually selects is [`ChooseTracks`](../internal/store/trackchoice.go),
+and the rules it follows are worth knowing because two of them are about *not*
+acting: a language that is absent from a file leaves the file's own default
+alone rather than picking the first track, and a full subtitle track is
+preferred over a forced one, since a forced track captions three sentences of a
+film and reads as the feature failing.
+
 ### `GET /api/people`
 
 The other accounts on this server. "Find Friends" on a self-hosted household
@@ -3809,6 +3866,7 @@ to "have I watched this".
 | `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime. **Switching it on starts a pass immediately** rather than waiting for the next scan — it did wait, and a setting whose effect arrives hours later cannot be told apart from one that does nothing |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
 | `scan_at_hour` | `null` | 0–23 or `null` | The hour of the **local** day a due scan may start. `null` is any time, the default. A **gate on top of `scan_interval_hours`, not a schedule replacing it**: the interval still says how often, this says when a due scan may begin — so `24`+`3` is nightly, and `1`+`3` is also nightly because the gate holds the others back. It does **not** make a scan due: `at 3` on a weekly interval is still weekly. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other. **Local time**, because 3am means 3am where the server is; 3am UTC would wake the disk at 10pm for this household, which is the one time of day the setting exists to avoid. Send `null` to clear it; omitting the field leaves it alone |
+| `max_quality` | `""` | one of `quality_rungs` | The ceiling this server imposes on **every** stream. Empty is no limit, the default, and the right answer for a LAN-only server — any rung below Original is a re-encode that makes the picture worse and the machine hotter to solve a problem nobody on a gigabit link has. A **limit, not a target**: it only ever narrows what a client asked for and can never raise it, so a laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently — a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets **720p at 2 Mbps**. Distinct from the quality a client picks for itself, which is a fact about that screen; this is a fact about the server. **Server-wide rather than per network**, deliberately: "cap remote clients only" is the setting people want and needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside. A rung outside `quality_rungs` is **400**, not stored-and-ignored |
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending

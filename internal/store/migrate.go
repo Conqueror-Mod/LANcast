@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 47
+const CurrentSchemaVersion = 48
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -86,6 +86,7 @@ var migrations = []migration{
 	{version: 45, sql: schemaRevision45},
 	{version: 46, sql: schemaRevision46},
 	{version: 47, sql: schemaRevision47},
+	{version: 48, sql: schemaRevision48},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1622,4 +1623,31 @@ WHERE kind = 'episode'
  */
 const schemaRevision47 = `
 ALTER TABLE user ADD COLUMN max_content_rating TEXT NOT NULL DEFAULT '';
+`
+
+/*
+ * Preferred audio and subtitle language, per account.
+ *
+ * Per account rather than per device, unlike the quality ceiling in the
+ * client's own prefs: which language you want to hear is a fact about *you* and
+ * should follow you to the next screen you sit at, where how much bandwidth
+ * there is is a fact about the screen. Same split ADR 0006 makes for playback
+ * state.
+ *
+ * Empty means "no preference", which is the behaviour every existing account
+ * has today: play whichever track the file marks default. A migration that
+ * defaulted these to English would be choosing on behalf of somebody who never
+ * asked — and on a library of foreign-language films it would change what
+ * plays, silently, on the next start. New accounts are offered English by the
+ * page that creates them, which is a suggestion somebody can see and decline.
+ *
+ * `subtitle_mode` is separate from the language because "which subtitles" and
+ * "when to show them" are different questions. A person who wants English audio
+ * usually wants no subtitles; a person watching a Japanese film with English
+ * audio unavailable wants them automatically. One field cannot say both.
+ */
+const schemaRevision48 = `
+ALTER TABLE user ADD COLUMN preferred_audio_lang TEXT NOT NULL DEFAULT '';
+ALTER TABLE user ADD COLUMN preferred_subtitle_lang TEXT NOT NULL DEFAULT '';
+ALTER TABLE user ADD COLUMN subtitle_mode TEXT NOT NULL DEFAULT '';
 `

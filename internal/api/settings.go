@@ -48,6 +48,11 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		// because what may be offered is a fact about the rating ladder the
 		// *server* owns — a client with its own copy would eventually offer a
 		// country whose labels no ceiling could place.
+		// The ceiling this server imposes, and the rungs it may be set to. The
+		// ladder is served rather than known by the client for the reason the
+		// certification countries are: the server owns what it will allow.
+		"max_quality":           cur.MaxQuality,
+		"quality_rungs":         config.QualityRungs,
 		"certification_country": cur.CertificationCountry,
 		"certification_countries": func() []map[string]string {
 			out := make([]map[string]string, 0, len(rating.Countries))
@@ -91,6 +96,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
+		MaxQuality           *string `json:"max_quality"`
 
 		DebugLogging       *bool `json:"debug_logging"`
 		WatchedThreshold   *int  `json:"watched_threshold"`
@@ -153,6 +159,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
+	}
+	if req.MaxQuality != nil {
+		/*
+		 * Refused rather than stored-and-ignored, the same as every other
+		 * enumerated setting here. A ceiling that silently does nothing is one
+		 * somebody sets before going away for a week believing their uplink is
+		 * protected.
+		 */
+		if !config.KnownQuality(*req.MaxQuality) {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"max_quality must be one of the rungs reported by GET /api/settings")
+			return
+		}
+		next.MaxQuality = *req.MaxQuality
 	}
 	if req.CertificationCountry != nil {
 		/*
@@ -311,6 +331,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
 	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
 	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
+	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"lancast/internal/config"
 	"lancast/internal/probe"
 )
 
@@ -48,4 +49,41 @@ func clientProfile(r *http.Request) probe.Profile {
 		}
 	}
 	return p
+}
+
+/*
+ * withServerCeiling narrows a profile by the limit an administrator set.
+ *
+ * Applied *after* the client's own ceiling and by the same rule — the lower
+ * wins, and neither can raise the other. So the two compose without either
+ * needing to know about the other: a client asking for 480p on a server capped
+ * at 1080p still gets 480p, and a client asking for Original gets 1080p.
+ *
+ * Separate from clientProfile, which is pure and takes only a request, because
+ * this needs the settings. Keeping the request-parsing testable without a
+ * server is worth one more function.
+ */
+func withServerCeiling(p probe.Profile, ceiling config.QualityRung) probe.Profile {
+	if ceiling.Height > 0 && (p.MaxHeight == 0 || ceiling.Height < p.MaxHeight) {
+		p.MaxHeight = ceiling.Height
+	}
+	if ceiling.Bitrate > 0 && (p.MaxVideoBitRate == 0 || ceiling.Bitrate < p.MaxVideoBitRate) {
+		p.MaxVideoBitRate = ceiling.Bitrate
+	}
+	return p
+}
+
+/*
+ * profileFor is what every handler should use: the caller's profile, narrowed
+ * by the server's own ceiling.
+ *
+ * A method rather than each handler composing the two itself. There are five
+ * call sites, and the failure of the composed version is silent — a handler
+ * that called clientProfile directly would serve at full quality with no error
+ * anywhere, and the setting would look like it did nothing on that one path.
+ * One function means a new call site gets the ceiling by default rather than by
+ * remembering.
+ */
+func (s *Server) profileFor(r *http.Request) probe.Profile {
+	return withServerCeiling(clientProfile(r), config.QualityByID(s.settings.Get().MaxQuality))
 }
