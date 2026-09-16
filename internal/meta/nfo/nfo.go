@@ -96,9 +96,31 @@ func (s *Source) Read(ctx context.Context, path string, kind meta.Kind) (*meta.R
 			edited.Source = ID
 			return edited, nil
 		}
-		// No per-field information: a marker written before this existed. The
-		// whole file is authoritative, which is the older behaviour and stays
-		// correct — just blunter.
+		/*
+		 * No per-field information, so nothing can be attributed — and an
+		 * unattributable mismatch is not proof of an edit.
+		 *
+		 * This used to promote the whole file, on the reasoning that a v1
+		 * marker is still verifiable because the digest never changed. A real
+		 * library disproved it: of 201 sidecars LANcast had written, **every
+		 * one** carried a v1 marker and **not one** digest could be reproduced
+		 * by this build. So every one of them was being treated as a person's
+		 * edit and outvoting the provider — invisibly, because 193 of them
+		 * happened to agree with their match.
+		 *
+		 * The eight that did not agree are what surfaced it. Four films had
+		 * been matched to a remake, written to disk, then corrected to the
+		 * right film and locked; the stale sidecar kept serving the remake's
+		 * year and plot for months, and the row and the file agreed with each
+		 * other, so nothing looked wrong from the UI.
+		 *
+		 * A file we wrote is ours unless a human change can be *shown*, and
+		 * only per-field digests can show one. Losing the ability to honour
+		 * hand-edits to pre-v2 sidecars is the price, and it is a small one:
+		 * those files can no longer be told apart from our own stale output,
+		 * which is exactly why they must not outrank the provider.
+		 */
+		return nil, nil
 	}
 
 	rec.Source = ID
@@ -248,6 +270,45 @@ func recordDigest(rec *meta.Record) string {
 	return digest
 }
 
+// minuteTruncated drops sub-minute precision, the granularity `<runtime>`
+// stores. A nil duration stays nil so "absent" and "zero" keep differing.
+func minuteTruncated(ms *int64) *int64 {
+	if ms == nil {
+		return nil
+	}
+	v := *ms / 60_000 * 60_000
+	return &v
+}
+
+/*
+ * legacyRecordDigest is the whole-record digest as builds before this computed
+ * it, with the duration at full millisecond precision.
+ *
+ * Kept so that markers already on disk still verify. Without it, correcting the
+ * canonical form would make every existing sidecar fail mirror detection at
+ * once — turning a fault that affected four files in a real library into one
+ * that affected all two hundred.
+ */
+func legacyRecordDigest(rec *meta.Record) string {
+	if rec == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, name := range hashedFields {
+		b.WriteString(name)
+		b.WriteByte('=')
+		if name == "duration_ms" {
+			// The one field whose canonical form changed: full milliseconds.
+			b.WriteString(int64Str(rec.Fields.DurationMS))
+		} else {
+			b.WriteString(canonicalField(rec, name))
+		}
+		b.WriteByte('\n')
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
+}
+
 // hashedFields is the set covered by the marker, in a fixed order because the
 // whole-record digest is built by concatenation.
 var hashedFields = []string{
@@ -275,7 +336,25 @@ func canonicalField(rec *meta.Record, name string) string {
 	case "released_at":
 		return int64Str(f.ReleasedAt)
 	case "duration_ms":
-		return int64Str(f.DurationMS)
+		/*
+		 * Digested at the precision the file can actually hold.
+		 *
+		 * `<runtime>` is written in whole minutes, so a film of 125:18 comes
+		 * back as 125:00 and the parsed record can never equal the written one.
+		 * Digesting the raw milliseconds therefore made our own sidecar fail
+		 * mirror detection, and a file that fails it is treated as a person's
+		 * edit — which makes it *authoritative*, outvoting the provider.
+		 *
+		 * With a v1 marker that promotes the whole file, which is how four
+		 * films in a real library kept serving the year and plot of the remake
+		 * they had been matched to months after the match was corrected. Every
+		 * test that covered this used an exact number of minutes, so the
+		 * fixtures shared the assumption with the code.
+		 *
+		 * Truncating here loses nothing that was ever on disk: the sidecar
+		 * never carried the seconds.
+		 */
+		return int64Str(minuteTruncated(f.DurationMS))
 	case "series":
 		return deref(f.Series)
 	case "season":
@@ -791,7 +870,15 @@ func provesUserEdit(marker string, rec *meta.Record) bool {
 	if !hasVer {
 		digest = strings.TrimPrefix(marker, "sha256:")
 	}
-	return digest != recordDigest(rec)
+	/*
+	 * Either canonical form counts as ours.
+	 *
+	 * The duration used to be digested at full millisecond precision, which the
+	 * file cannot store — so a sidecar we wrote failed its own check and was
+	 * promoted to a person's edit. Accepting the older form as well is what
+	 * stops the correction from invalidating every marker already on disk.
+	 */
+	return digest != recordDigest(rec) && digest != legacyRecordDigest(rec)
 }
 
 // hashSchemeOf extracts the scheme version from a marker hash.

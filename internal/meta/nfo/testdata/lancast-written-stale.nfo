@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>&#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;&#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;  &#xA;
+  <title>Batman and Robin</title>
+  <sorttitle>batman and robin</sorttitle>
+  <plot>This 15-chapter serial pits Batman and Robin against The Wizard, who uses a device that allows him to control machinery to hold the city hostage.</plot>
+  <year>1949</year>
+  <rating>5.7</rating>
+  <runtime>263</runtime>
+  <premiered>1949-05-26</premiered>
+  <genre>Action</genre>
+  <genre>Science Fiction</genre>
+  <genre>Thriller</genre>
+  <genre>Adventure</genre>
+  <genre>Crime</genre>
+  <actor>
+    <name>Robert Lowery</name>
+    <role>Batman / Bruce Wayne</role>
+  </actor>
+  <actor>
+    <name>Johnny Duncan</name>
+    <role>Robin / Dick Grayson</role>
+  </actor>
+  <actor>
+    <name>Lyle Talbot</name>
+    <role>Commissioner Jim Gordon</role>
+  </actor>
+  <actor>
+    <name>Jane Adams</name>
+    <role>Vicki Vale</role>
+  </actor>
+  <actor>
+    <name>Ralph Graves</name>
+    <role>Winslow Harrison [Chs. 7-8]</role>
+  </actor>
+  <actor>
+    <name>Don C. Harvey</name>
+    <role>Henchman Nolan [Chs. 1-6]</role>
+  </actor>
+  <actor>
+    <name>William Fawcett</name>
+    <role>Prof. Hammil</role>
+  </actor>
+  <actor>
+    <name>Leonard Penn</name>
+    <role>Carter - Hammil&#39;s Valet</role>
+  </actor>
+  <actor>
+    <name>Rick Vallin</name>
+    <role>Barry Brown</role>
+  </actor>
+  <actor>
+    <name>Michael Whalen</name>
+    <role>Private Investigator Dunne [Chs. 2, 9, 12]</role>
+  </actor>
+  <actor>
+    <name>Greg McClure</name>
+    <role>Henchman Evans [Chs. 1-6]</role>
+  </actor>
+  <actor>
+    <name>House Peters Jr.</name>
+    <role>Henchman Earl [Chs. 7-15]</role>
+  </actor>
+  <director>Spencer Gordon Bennet</director>
+  <lancast generated="2026-07-25T18:55:39Z" hash="sha256:b0903a1c0cde43acfbd0c8124f8dd2b03a597320190e9918416e76077087a869"></lancast>
+</movie>
