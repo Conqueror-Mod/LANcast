@@ -217,6 +217,7 @@ export function LibraryRow({ library }: { library: Library }) {
   const [pricing, setPricing] = useState(false);
   const unmatched = useRefreshPreview(library.id, "unmatched", pricing);
   const all = useRefreshPreview(library.id, "all", pricing);
+  const settled = useRefreshPreview(library.id, "settled", pricing);
   const reparse = useReparseLibrary();
   const reprobeLib = useReprobeLibrary();
   const del = useDeleteLibrary();
@@ -489,6 +490,33 @@ export function LibraryRow({ library }: { library: Library }) {
                   onSelect: () => {
                     setReported("refresh");
                     refresh.mutate({ libraryID: library.id, scope: "unmatched" });
+                  },
+                },
+                /*
+                 * The rows nothing else can reach.
+                 *
+                 * A locked title is one whose identity somebody settled, and
+                 * every other refresh excludes it — rightly, since they requeue
+                 * for a pass that would re-pick the candidate a person
+                 * rejected. The consequence went unnoticed until it was
+                 * counted: a locked row can never learn a field the provider
+                 * did not used to return, and certificates were not fetched at
+                 * all before v0.9.23. An unrated title is one a rating ceiling
+                 * hides, so eighteen locked titles and the 88 episodes beneath
+                 * three locked shows were invisible to a limited account.
+                 *
+                 * Offered separately rather than folded into "everything"
+                 * because it costs differently and means differently: this
+                 * re-asks about identities nobody is questioning.
+                 */
+                {
+                  label: refresh.isPending
+                    ? "Refreshing…"
+                    : `Refresh locked titles${countLabel(settled.data?.count)}`,
+                  disabled: refresh.isPending || settled.data?.count === 0,
+                  onSelect: () => {
+                    setReported("refresh");
+                    refresh.mutate({ libraryID: library.id, scope: "settled" });
                   },
                 },
                 {

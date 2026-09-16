@@ -515,7 +515,17 @@ export function useScanAllLibraries() {
 }
 
 /** Which items a metadata refresh re-asks about. */
-export type RefreshScope = "all" | "unmatched";
+/*
+ * Which rows a metadata refresh re-asks about.
+ *
+ * `settled` is a different operation wearing the same parameter, and the
+ * difference is worth knowing at the call site: `all` and `unmatched` requeue
+ * rows for a pass that searches and scores, so both exclude locked rows.
+ * `settled` names exactly those locked rows and re-fetches each by the provider
+ * id it already carries — nothing searched, nothing re-scored. It is the only
+ * way a locked title can learn a field the provider did not used to return.
+ */
+export type RefreshScope = "all" | "unmatched" | "settled";
 
 /**
  * How many items a refresh would re-ask about, before it is asked for.

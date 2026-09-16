@@ -3640,6 +3640,7 @@ prevent.
 | --- | --- |
 | `all` | every item a provider could answer for |
 | `unmatched` | only items no provider identified |
+| `settled` | only items whose match is **locked**, re-fetched by the id they already carry |
 
 **GET prices it without performing it**, the way the history reset does. This is
 not destructive but it *is* expensive — roughly 1,480 lookups for a real film
@@ -3664,6 +3665,38 @@ that will never happen, which on a music library means quoting twelve thousand
 and doing none of it. And rows whose match is `locked`, because a refresh that
 requeued them would undo a decision somebody made, and a rescan reconciles files
 rather than re-litigating identity.
+
+#### `settled` is a different operation wearing the same parameter
+
+`all` and `unmatched` clear an item's metadata stamp so the enrichment queue
+picks it up again, and **that queue searches and scores** — which is exactly why
+both exclude `locked`.
+
+`settled` names those locked rows and does something else with them: it
+re-fetches each one **by the provider id already recorded on it**. No search is
+issued, so no candidate can be re-picked, and `match_state` and `match_score`
+are written back unchanged. Field locks are honoured exactly as everywhere else.
+So the rule is not bent — a locked field is still never overwritten and a locked
+match is still never re-litigated. This re-asks about an identity that is not in
+question.
+
+It exists because a locked row could otherwise **never learn a field the
+provider did not used to return**. Certificates are the case that found it:
+nothing fetched them before v0.9.23, so every title enriched earlier carries
+none — and an unrated title is one an account rating ceiling **blocks**. On the
+library this was built for that was 18 locked titles, three of them shows, and
+the 88 episodes beneath them inheriting nothing.
+
+Rows carrying **no provider id** are excluded from this scope: there is nothing
+to fetch by, and counting them would price a lookup that cannot happen.
+
+Unlike the other scopes, POST here reports how many items it will **attempt**,
+not how many rows it moved, and the work runs detached from the request — a
+browser that gave up waiting would otherwise leave the pass half-done with
+nothing to say so. What came of it goes to the log: `settled refresh finished`
+with `attempted`, `updated` and `failed`. Those differing is information rather
+than a fault: a row whose provider is no longer configured, or whose id no
+longer resolves at the provider, is skipped rather than failed.
 
 ### `POST /api/libraries/{id}/reparse`
 
