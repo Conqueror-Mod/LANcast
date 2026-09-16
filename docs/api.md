@@ -1026,6 +1026,26 @@ container opens its children (via `parent_id`) and offers no Play, so a
 — is not given a dead-end Play button. `kind` alone cannot express that, which
 is why the count is part of the item shape.
 
+`unwatched_episodes` is how many of a show's episodes this account has not
+finished. It is present **on shows only**, and *absent* rather than zero
+everywhere else — zero is what a finished series looks like, so a client that
+read a missing value as zero would tick every film, album and photograph in the
+library as watched. A show with **no episodes on disk** omits it too: an empty
+series is not a finished one, and "nothing left to watch" is a true sentence
+about it that means the opposite.
+
+Counted per account, with `missing` episodes excluded, and only `watched`
+episodes count as seen — an episode carrying a saved position but not finished
+is still outstanding, which is the same answer `GET /api/continue` gives. The
+two must agree: a series ticked as finished while Continue Watching still
+offers it an episode is two parts of one screen contradicting each other with
+nothing failing.
+
+It is deliberately **not** folded into `progress`. A show has no playback
+position and never will — nobody plays a show, they play its episodes — and a
+`progress` whose `position_ms` were always zero would make `watched` mean one
+thing on a film and another on a series.
+
 ### `GET /api/continue`
 
 The user's in-progress items, most recently played first — the home screen's

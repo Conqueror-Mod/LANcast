@@ -6,6 +6,7 @@ import { useFocusable } from "@/focus/FocusController";
 import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
 import { containerCountLabel, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
+import { isWatched, watchedLabel } from "@/lib/watchedMark";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
@@ -156,6 +157,10 @@ export function PosterTile({
    */
   const episode = episodeLabel(item.next_episode ?? item);
   const score = rating(item.rating);
+  // Bottom-left, opposite the rating and under the certificate. Not gold:
+  // gold means where-you-are and the design rules name `unwatched` as one of
+  // the states it must never be spent on.
+  const watched = isWatched(item);
 
   return (
     /*
@@ -260,6 +265,25 @@ export function PosterTile({
               ★
             </span>
             {score}
+          </span>
+        )}
+        {watched && (
+          <span
+            className="poster-tile__watched"
+            title={watchedLabel(item)}
+            aria-label={watchedLabel(item)}
+            role="img"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M2.5 8.5l3.5 3.5 7.5-7.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
         )}
         {pct > 0 && (
