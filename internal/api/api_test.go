@@ -108,8 +108,28 @@ func (h *harness) addFile(t *testing.T, name string, body []byte) int64 {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	known, _ := h.st.KnownFiles(context.Background(), h.lib.ID)
-	return known[path].ID
+	/*
+	 * The error is not discarded, and the id is checked before it is returned.
+	 *
+	 * This read used to be `known, _ :=` followed by indexing the map, which
+	 * turns any failure here into the id 0 -- and 0 is a perfectly well-formed
+	 * id that no row has. Every caller then asks the API about item 0, gets a
+	 * truthful 404, and asserts a status. So a failure in the *fixture* is
+	 * reported as the handler answering wrongly, several layers from the cause
+	 * and with nothing in the output naming it.
+	 */
+	known, err := h.st.KnownFiles(context.Background(), h.lib.ID)
+	if err != nil {
+		t.Fatalf("addFile %s: known files: %v", name, err)
+	}
+	file, ok := known[path]
+	if !ok {
+		t.Fatalf("addFile %s: upserted but KnownFiles does not list %s", name, path)
+	}
+	if file.ID == 0 {
+		t.Fatalf("addFile %s: came back with id 0", name)
+	}
+	return file.ID
 }
 
 func (h *harness) do(t *testing.T, method, path string, body any) *http.Response {

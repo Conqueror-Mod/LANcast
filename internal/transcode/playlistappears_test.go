@@ -108,6 +108,46 @@ func ffmpegOrSkip(t *testing.T) *Manager {
  * writes as it goes. Testing the cause is exact where testing the symptom is a
  * race, and it does catch the shipped bug — verified by putting it back.
  */
+/*
+ * readWhileWritten reads a file ffmpeg may still have open.
+ *
+ * WaitForFile proves a file *exists* with something in it — it stats, and
+ * nothing more. It does not prove the file can be *opened*, and on Windows
+ * those are different questions: a read landing inside ffmpeg's own write
+ * window is refused outright with a sharing violation rather than returning a
+ * short read. That is what failed here, once, under the load of a full test
+ * run:
+ *
+ *     open ...\index.m3u8: The process cannot access the file because it is
+ *     being used by another process.
+ *
+ * Every reader of these files in the package proper already copes with it,
+ * because each one does its os.ReadFile inside a poll loop and simply comes
+ * back round on error — WaitForSegment and WaitForEndlist both. A single
+ * un-retried read in a test was the only thing here that was not tolerant of
+ * a file being written, which made it the only thing that could fail.
+ *
+ * So this reads the way the package reads, rather than asserting a timing
+ * property nobody relies on.
+ */
+func readWhileWritten(t *testing.T, path string) []byte {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		body, err := os.ReadFile(path)
+		if err == nil && len(body) > 0 {
+			return body
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				t.Fatalf("reading %s: %v", filepath.Base(path), err)
+			}
+			t.Fatalf("reading %s: still empty after 10s", filepath.Base(path))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func TestARealFFmpegWritesAUsableEventPlaylist(t *testing.T) {
 	m := ffmpegOrSkip(t)
 	film := syntheticFilm(t)
@@ -127,11 +167,7 @@ func TestARealFFmpegWritesAUsableEventPlaylist(t *testing.T) {
 		t.Fatalf("no playlist at all: %v\n\nffmpeg said: %s", err, sess.Stderr())
 	}
 
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading the playlist: %v", err)
-	}
-	text := string(body)
+	text := string(readWhileWritten(t, path))
 
 	/*
 	 * EVENT, which is the whole fix.
@@ -200,14 +236,9 @@ func TestASegmentThePlaylistNamesIsRealMedia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no init segment: %v", err)
 	}
-	head := make([]byte, 12)
-	f, err := os.Open(initPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if _, err := f.Read(head); err != nil {
-		t.Fatalf("reading the init segment: %v", err)
+	head := readWhileWritten(t, initPath)
+	if len(head) < 12 {
+		t.Fatalf("init segment is only %d bytes: % x", len(head), head)
 	}
 	if got := string(head[4:8]); got != "ftyp" {
 		t.Errorf("init segment does not begin with an ftyp box, got %q: % x", got, head)

@@ -226,6 +226,20 @@ func readPayload(addr uintptr) string {
  * is how Windows spells "memory only". It lives exactly as long as the handle,
  * so a client that exits takes its section with it and a tray signalling
  * afterwards learns there is nobody home.
+ *
+ * ERROR_ALREADY_EXISTS comes back *with a valid handle*, and it is mapped
+ * rather than refused -- the same reasoning openOwn spells out for the events,
+ * and it has to be the same answer here. A second client is an ordinary state,
+ * and the first version of this treated the name already existing as a failure:
+ * every listener but the first held no section at all, so it woke with the
+ * destination sitting in shared memory it had never mapped and read nothing.
+ * Two clients running meant the tray's "Update libraries..." raised the second
+ * one to whatever pane it was already showing -- precisely the wrongness this
+ * section exists to remove.
+ *
+ * Opening the existing section is also what makes the destination *shared*
+ * rather than owned: whichever listener the auto-reset event happens to wake
+ * reads the same bytes, so delivery no longer depends on which one won.
  */
 func createPayload() (windows.Handle, uintptr, error) {
 	name, err := windows.UTF16PtrFromString(payloadName())
@@ -234,8 +248,11 @@ func createPayload() (windows.Handle, uintptr, error) {
 	}
 	h, err := windows.CreateFileMapping(windows.InvalidHandle, nil,
 		windows.PAGE_READWRITE, 0, payloadBytes, name)
-	if err != nil {
+	if err != nil && err != windows.ERROR_ALREADY_EXISTS {
 		return 0, 0, err
+	}
+	if h == 0 {
+		return 0, 0, fmt.Errorf("raise: no section for %s", payloadName())
 	}
 	addr, err := windows.MapViewOfFile(h, windows.FILE_MAP_WRITE, 0, 0, payloadBytes)
 	if err != nil {
