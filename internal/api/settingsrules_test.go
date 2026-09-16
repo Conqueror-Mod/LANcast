@@ -247,3 +247,39 @@ func TestOmittingTheFieldLeavesThePreferredHourAlone(t *testing.T) {
 		t.Errorf("scan_at_hour = %#v; another setting's write cleared it", got)
 	}
 }
+
+/*
+ * The artwork cache limit.
+ */
+
+func TestNoArtworkLimitByDefault(t *testing.T) {
+	// Every server so far has had no limit, and must keep behaving that way.
+	h := newHarness(t)
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got := body["artwork_cache_mb"]; got != float64(0) {
+		t.Errorf("artwork_cache_mb = %#v, want 0", got)
+	}
+}
+
+func TestANegativeArtworkLimitIsRefused(t *testing.T) {
+	h := newHarness(t)
+	wantError(t, h.do(t, "PUT", "/api/settings",
+		map[string]any{"artwork_cache_mb": -1}), 400, "bad_request")
+}
+
+func TestALargeArtworkLimitIsAllowed(t *testing.T) {
+	/*
+	 * No upper bound, deliberately. Somebody with a 40TB array may reasonably
+	 * allow 200GB of artwork, and a ceiling this code invented would be wrong
+	 * for them with no way to say so.
+	 */
+	h := newHarness(t)
+	h.do(t, "PUT", "/api/settings", map[string]any{"artwork_cache_mb": 200_000})
+
+	var body map[string]any
+	decode(t, h.do(t, "GET", "/api/settings", nil), &body)
+	if got := body["artwork_cache_mb"]; got != float64(200_000) {
+		t.Errorf("artwork_cache_mb = %#v", got)
+	}
+}

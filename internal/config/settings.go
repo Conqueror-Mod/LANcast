@@ -163,6 +163,19 @@ type Settings struct {
 	 * may start, so the two compose without contradicting each other on screen.
 	 */
 	ScanAtHour *int `json:"scan_at_hour,omitempty"`
+	/*
+	 * ArtworkCacheMB caps the artwork cache. Zero is no limit, the default.
+	 *
+	 * A *target* rather than a guarantee, and the distinction is the whole
+	 * safety property: artwork nothing references is removed at any setting,
+	 * then re-derivable sizes are dropped to get under the cap, and a live
+	 * original is never deleted. A cap that could remove one would turn a
+	 * disk-space setting into "some of your posters are gone now".
+	 *
+	 * Megabytes because that is the unit somebody types. Everything below this
+	 * line works in bytes.
+	 */
+	ArtworkCacheMB int `json:"artwork_cache_mb,omitempty"`
 
 	// AuditRetentionDays drops audit events older than this many days. Zero
 	// keeps them for ever, which is a real answer for somebody running this
@@ -329,6 +342,9 @@ func clamp(s *Settings) {
 	}
 	if s.ContinueLimit <= 0 || s.ContinueLimit > 100 {
 		s.ContinueLimit = d.ContinueLimit
+	}
+	if s.ArtworkCacheMB < 0 {
+		s.ArtworkCacheMB = 0
 	}
 	if s.ScanAtHour != nil && (*s.ScanAtHour < 0 || *s.ScanAtHour > 23) {
 		// Dropped rather than wrapped. A hand-edited file asking for hour 47 is

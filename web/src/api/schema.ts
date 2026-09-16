@@ -4101,6 +4101,18 @@ export interface components {
              *     Local time, because 3am means 3am where the server is. Scanning at 3am UTC would wake the disk at 10pm for a household in the Americas — the one time of day this setting exists to avoid.
              */
             scan_at_hour?: number | null;
+            /**
+             * @description A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.
+             *
+             *     A **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:
+             *
+             *     1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.
+             *     2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.
+             *     3. **Nothing else.** A live *original* is never deleted, at any limit.
+             *
+             *     An original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into "some of your posters are gone now". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number.
+             */
+            artwork_cache_mb?: number;
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {
@@ -4154,6 +4166,20 @@ export interface components {
              *     Send `null` to clear the preference and `0`–`23` to set one. Omitting the field leaves it unchanged; an hour outside the range is **400**.
              */
             scan_at_hour?: number | null;
+            /**
+             * @description A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.
+             *
+             *     A **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:
+             *
+             *     1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.
+             *     2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.
+             *     3. **Nothing else.** A live *original* is never deleted, at any limit.
+             *
+             *     An original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into "some of your posters are gone now". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number.
+             *
+             *     A negative value is 400. There is deliberately no upper bound: somebody with a large array may reasonably allow a great deal of artwork, and an invented ceiling would be wrong for them with no way to say so.
+             */
+            artwork_cache_mb?: number;
         };
         /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
         ScanIssue: {

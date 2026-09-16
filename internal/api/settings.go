@@ -37,6 +37,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"scan_interval_hours":  cur.ScanIntervalHours,
 		// Null rather than a number when unset: the useful value is the zero
 		// value, so midnight must be choosable.
+		"artwork_cache_mb":     cur.ArtworkCacheMB,
 		"scan_at_hour":         cur.ScanAtHour,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
@@ -117,6 +118,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		 * only thing that still knows the difference.
 		 */
 		ScanAtHour         json.RawMessage `json:"scan_at_hour"`
+		ArtworkCacheMB     *int            `json:"artwork_cache_mb"`
 		AuditRetentionDays *int            `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -227,6 +229,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.EmptyTrashOnScan != nil {
 		next.EmptyTrashOnScan = *req.EmptyTrashOnScan
+	}
+	if req.ArtworkCacheMB != nil {
+		/*
+		 * Zero is no limit and is a real answer, so only a negative is refused.
+		 * An upper bound would be arbitrary: somebody with a 40TB array may
+		 * reasonably allow 200GB of artwork, and a number this code invented
+		 * would be wrong for them with no way to say so.
+		 */
+		if *req.ArtworkCacheMB < 0 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"artwork_cache_mb must be zero (no limit) or more")
+			return
+		}
+		next.ArtworkCacheMB = *req.ArtworkCacheMB
 	}
 	if len(req.ScanAtHour) > 0 {
 		// Present in the request. `null` clears the preference; anything else
@@ -348,6 +364,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("empty_trash_on_scan", prev.EmptyTrashOnScan != next.EmptyTrashOnScan)
 	add("scan_interval_hours", prev.ScanIntervalHours != next.ScanIntervalHours)
 	add("scan_at_hour", !sameHour(prev.ScanAtHour, next.ScanAtHour))
+	add("artwork_cache_mb", prev.ArtworkCacheMB != next.ArtworkCacheMB)
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
 	return out
 }
