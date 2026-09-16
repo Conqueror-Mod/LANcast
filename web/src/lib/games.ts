@@ -17,6 +17,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 export interface GameRow {
   id: string;
   name: string;
+  /**
+   * Which launcher this came from: "steam", "epic" or "battlenet", with
+   * `source_label` the name a person reads.
+   *
+   * Optional because a client can be newer than the desktop binary it is
+   * talking to — the window ships in the installer and the web bundle rides the
+   * server's in-app update, so a page that assumed the field would crash the
+   * grid on a machine that had updated only one of them.
+   */
+  source?: string;
+  source_label?: string;
   size_bytes: number;
   /** Unix seconds, 0 when never played. */
   last_played: number;
@@ -92,7 +103,7 @@ declare global {
  * Feature detection rather than a flag from the server, for the reason the
  * desktop settings section gives: the same server serves this window, a browser
  * tab on the same machine, and a phone in the kitchen, and only one of those is
- * sitting in front of the Steam library.
+ * sitting in front of the games library.
  */
 export function gamesSupported(): boolean {
   return typeof window.lancastGames === "function";
@@ -184,7 +195,7 @@ export function useLaunchGame() {
     /*
      * Launching changes the list.
      *
-     * Not obviously — nothing is installed or removed — but Steam writes the
+     * Not obviously — nothing is installed or removed — but a launcher writes the
      * last-played time, and that is a column somebody may be sorting by. Ask
      * what a person could be *looking at* that this changes, not what it
      * writes.

@@ -15,8 +15,8 @@ import "./DesktopSettings.css";
  * lived as the fourth option inside "This app", and the first person to go
  * looking for games in LANcast did not find it and reported the feature as
  * shipped with nothing to show. Off by default is a decision worth keeping —
- * a media server should not start listing somebody's games because it found
- * Steam — but off *and* unfindable is indistinguishable from missing.
+ * a media server should not start listing somebody's games because it found a
+ * launcher — but off *and* unfindable is indistinguishable from missing.
  *
  * So the word "Games" now appears in the settings list, which is where somebody
  * hunting for it actually looks. It is also where the later options belong:
@@ -73,14 +73,14 @@ export function GamesSettings() {
       <span className="section-label">Games</span>
 
       <p className="desktop-note">
-        LANcast can list the games Steam has installed on this computer and start
-        them. It reads Steam's own files on this disk — there is no sign-in, and
-        nothing is sent anywhere.
+        LANcast can list the games Steam, Epic and Battle.net have installed on
+        this computer and start them. It reads each launcher&rsquo;s own files on
+        this disk — there is no sign-in, and nothing is sent anywhere.
       </p>
 
       <LifecycleOption
         title="Show my installed games"
-        sub="List the games Steam has installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
+        sub="List the games Steam, Epic and Battle.net have installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
         checked={state.games}
         onChange={save}
         busy={saving}

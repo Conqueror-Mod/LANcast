@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"lancast/internal/childproc"
@@ -63,8 +64,14 @@ func gamesBindings(dir string) map[string]any {
 			list := make([]map[string]any, 0, len(res.Games))
 			for _, g := range res.Games {
 				list = append(list, map[string]any{
-					"id":           g.ID,
-					"name":         g.Name,
+					"id":   g.ID,
+					"name": g.Name,
+					// Which launcher this came from, so a tile can say so. With
+					// three readers the name alone no longer identifies where a
+					// game lives, and "Play" behaving differently per launcher
+					// is worth being visible rather than surprising.
+					"source":       string(g.Source),
+					"source_label": g.Source.Label(),
 					"size_bytes":   g.SizeBytes,
 					"last_played":  g.LastPlayed,
 					"install_path": g.InstallPath,
@@ -141,24 +148,58 @@ func gamesBindings(dir string) map[string]any {
 			if !ok {
 				return map[string]any{"ok": false, "error": "that game is not installed"}
 			}
+			/*
+			 * Two ways to start a game, and which one is not the page's
+			 * business.
+			 *
+			 * Steam and Epic take a URI their launcher is registered for, built
+			 * here from the id the rescan just confirmed. Battle.net cannot:
+			 * the code its protocol expects is not the identifier anything on
+			 * disk records, so a Blizzard game is started from the executable
+			 * beside it — re-derived from the install path this rescan
+			 * returned, never from anything the page sent.
+			 */
+			if g.Source == games.SourceBattleNet {
+				target, err := games.BattleNetLaunchTarget(g.InstallPath)
+				if err != nil {
+					slog.Info("could not find what starts a Blizzard game",
+						"game", g.Name, "err", err)
+					return map[string]any{"ok": false, "error": err.Error()}
+				}
+				if err := startDetached(target); err != nil {
+					slog.Info("could not start a Blizzard game",
+						"game", g.Name, "target", target, "err", err)
+					return map[string]any{"ok": false, "error": err.Error()}
+				}
+				slog.Info("handed a launch to a Blizzard game", "game", g.Name, "target", target)
+				return map[string]any{"ok": true}
+			}
+
 			uri, err := games.LaunchURI(id)
 			if err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
 			if err := desktop.OpenBrowser(uri); err != nil {
-				slog.Info("could not hand a launch to Steam", "game", g.Name, "err", err)
+				slog.Info("could not hand a launch to a launcher",
+					"game", g.Name, "source", string(g.Source), "err", err)
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
 			/*
 			 * Recorded because this is where the client's part ends.
 			 *
-			 * Everything after the URI is away belongs to Steam, and the
-			 * difference between "LANcast never asked" and "Steam was asked and
-			 * did nothing" is the first thing worth knowing when a game does not
-			 * start. It could only be had from an instrumented build before the
-			 * window kept a log.
+			 * Everything after the URI is away belongs to the launcher, and
+			 * the difference between "LANcast never asked" and "the launcher
+			 * was asked and did nothing" is the first thing worth knowing when
+			 * a game does not start. It could only be had from an instrumented
+			 * build before the window kept a log.
+			 *
+			 * Which launcher is part of the line now. It said "to Steam" for
+			 * every game, which was true when Steam was the only reader and
+			 * became a lie the moment it was not — read back for an Epic
+			 * launch it names the wrong program to go and check.
 			 */
-			slog.Info("handed a launch to Steam", "game", g.Name, "id", id)
+			slog.Info("handed a launch to a launcher",
+				"game", g.Name, "id", id, "launcher", g.Source.Label())
 			/*
 			 * Started only once the URI is away, and read here rather than
 			 * taken from the page.
@@ -345,4 +386,29 @@ func openFolder(path string) error {
 	// fire-and-forget like OpenBrowser: Start reports "could not run it at all",
 	// which is the only failure worth showing.
 	return cmd.Start()
+}
+
+/*
+ * startDetached runs an executable without waiting for it.
+ *
+ * For Blizzard games, which have no launch URI. `exec.Command` with the path as
+ * its own argument and no shell anywhere — the same property `desktop.OpenBrowser`
+ * has for the URI launchers, and the reason ADR 0066 lets the page name a game
+ * but never a path.
+ *
+ * The working directory is the game's own folder. Games routinely load data
+ * relative to it, and one started from LANcast's working directory fails in
+ * ways that look like the game being broken.
+ *
+ * Not waited on, deliberately: a game runs for hours and the binding answers in
+ * milliseconds. Release drops the handle rather than leaving a zombie, and what
+ * happens after the process starts belongs to the game.
+ */
+func startDetached(target string) error {
+	cmd := exec.Command(target)
+	cmd.Dir = filepath.Dir(target)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
 }

@@ -205,16 +205,26 @@ describe("the games tab", () => {
     expect(text()).toContain("Show my installed games");
   });
 
-  it("says Steam is absent rather than showing an empty grid", async () => {
-    // The distinction the Status type exists for: no Steam is a sentence, an
-    // empty grid is not.
+  it("says no launcher was found rather than showing an empty grid", async () => {
+    /*
+     * The distinction the Status type exists for: "nothing is installed" is a
+     * sentence, an empty grid is not.
+     *
+     * It used to say "No Steam installation was found", which was true when
+     * Steam was the only reader and became wrong the moment it was not: it
+     * names the one launcher somebody with Epic does not use, and says nothing
+     * about the two they do.
+     */
     stub({ status: "not-installed" });
     await render();
-    expect(text()).toContain("No Steam installation");
+    expect(text()).toContain("No games were found");
+    // And it still names what was looked at, so the sentence is informative
+    // rather than merely vague.
+    expect(text()).toContain("Epic");
     expect(text()).not.toContain("Filter by name");
   });
 
-  it("reports a Steam it could not read", async () => {
+  it("reports a launcher it could not read", async () => {
     stub({ status: "error", error: "the library list is unreadable" });
     await render();
     expect(text()).toContain("the library list is unreadable");

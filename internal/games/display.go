@@ -166,7 +166,14 @@ func WatchDeadline(start, lastMove time.Time, base, afterMove, limit time.Durati
 
 // DisplayFor is the stored answer for a game, empty when it has never been
 // asked about.
-func (p Prefs) DisplayFor(id string) string { return p.Displays[id] }
+func (p Prefs) DisplayFor(id string) string {
+	if v, ok := p.Displays[id]; ok {
+		return v
+	}
+	// The pre-namespace spelling, so a game already answered for is not asked
+	// again. See legacyID.
+	return p.Displays[legacyID(id)]
+}
 
 // SetDisplay records an answer. An empty device forgets it, which is what the
 // detail page's "ask me again" does.

@@ -89,3 +89,67 @@ func TestSavePrefsLeavesNoTempFile(t *testing.T) {
 		t.Errorf("directory holds %v, want only %s", entries, PrefsFileName)
 	}
 }
+
+/*
+ * Preferences written before ids were namespaced.
+ *
+ * games.json is written by one machine for itself and nothing migrates it, so
+ * when ids gained a `steam:` prefix every lookup silently missed: a hidden game
+ * came back, a favourite left the top row, and a game already answered for was
+ * asked again which display to open on.
+ *
+ * Found against a real client, not by reading the code — its games.json held
+ * `"displays": {"4162040": "\\.\DISPLAY3"}`, a bare appid written months
+ * before the prefix existed.
+ */
+
+func TestPreferencesWrittenBeforeNamespacingStillApply(t *testing.T) {
+	p := Prefs{
+		Hidden:     []string{"700012"},
+		Favourites: []string{"440"},
+		Displays:   map[string]string{"4162040": `\.\DISPLAY3`},
+	}
+	if !p.IsHidden(SteamID("700012")) {
+		t.Error("a game hidden before the prefix existed came back")
+	}
+	if !p.IsFavourite(SteamID("440")) {
+		t.Error("a favourite from before the prefix existed was dropped")
+	}
+	if got := p.DisplayFor(SteamID("4162040")); got != `\.\DISPLAY3` {
+		t.Errorf("display = %q; the picker would ask again about a game already answered for", got)
+	}
+}
+
+func TestTheNewSpellingIsPreferred(t *testing.T) {
+	// Once a preference is rewritten under the namespaced key, that is the one
+	// that answers — the old key must not shadow it.
+	p := Prefs{Displays: map[string]string{
+		"4162040":       `\.\DISPLAY3`,
+		"steam:4162040": `\.\DISPLAY1`,
+	}}
+	if got := p.DisplayFor(SteamID("4162040")); got != `\.\DISPLAY1` {
+		t.Errorf("display = %q, want the namespaced entry", got)
+	}
+}
+
+func TestOnlySteamHasALegacySpelling(t *testing.T) {
+	/*
+	 * Epic and Battle.net ids never existed unprefixed, so stripping their
+	 * prefix would invent a key. A Battle.net key is a display name and an Epic
+	 * AppName is hex — either could collide with a bare Steam appid somebody
+	 * really does have stored.
+	 */
+	if got := legacyID(BattleNetID("Hearthstone")); got != "" {
+		t.Errorf("legacyID = %q, want none for a launcher that never had one", got)
+	}
+	if got := legacyID(EpicID("a26f991a")); got != "" {
+		t.Errorf("legacyID = %q, want none", got)
+	}
+	if got := legacyID(SteamID("440")); got != "440" {
+		t.Errorf("legacyID = %q, want 440", got)
+	}
+	// A bare id is already the legacy spelling; it has no older one.
+	if got := legacyID("440"); got != "" {
+		t.Errorf("legacyID = %q, want none for an already-bare id", got)
+	}
+}
