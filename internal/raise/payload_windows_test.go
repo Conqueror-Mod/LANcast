@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 /*
@@ -148,22 +150,67 @@ func TestAnOversizedDestinationIsDropped(t *testing.T) {
 }
 
 /*
- * A listener that could not make a section still listens.
+ * A listener that did not create the section still reads the destination.
  *
- * Asserted through the front door: two listeners share a prefix, so the second
- * meets a section that already exists. It must still receive its signals —
- * refusing to listen because the optional half was unavailable would trade a
- * working window for a missing convenience.
+ * Deterministic on purpose, and the reason this file has two tests about it.
+ * One listener means there is no question who wakes, so the assertion is about
+ * the section and nothing else: the pane is written into a mapping this
+ * listener did not create, and it must still come back.
+ *
+ * This is the regression. createPayload treated the name already existing as a
+ * failure, so every listener but the first mapped nothing and read "" — and
+ * because a second client is an ordinary state, two clients running meant the
+ * tray could raise a window but never say where to.
+ */
+func TestAListenerReadsASectionItDidNotCreate(t *testing.T) {
+	isolate(t)
+
+	// Somebody else owns the section before this listener starts, which is what
+	// a client meeting an already-running client finds.
+	ownerH, ownerAddr, err := createPayload()
+	if err != nil {
+		t.Fatalf("owning section: %v", err)
+	}
+	t.Cleanup(func() {
+		windows.UnmapViewOfFile(ownerAddr)
+		windows.CloseHandle(ownerH)
+	})
+
+	got := make(chan string, 1)
+	stop, err := Listen(func(pane string) { got <- pane }, func() {})
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer stop()
+
+	if _, err := Show("libraries"); err != nil {
+		t.Fatal(err)
+	}
+	if pane := waitFor(t, got); pane != "libraries" {
+		t.Errorf("pane = %q, want libraries — the destination was written to a section this listener never mapped", pane)
+	}
+}
+
+/*
+ * The same rule through the front door, with two real listeners.
+ *
+ * Two Listen calls share a prefix, so the second meets a section that already
+ * exists. The event is auto-reset, so exactly one of them wakes and which one
+ * is the operating system's choice — so *both* report here and the assertion is
+ * about what arrived rather than who brought it. Asserting on only one of the
+ * two is what made this flaky: it passed while the section's owner happened to
+ * win the wake-up, which is what an idle machine does, and failed under the
+ * load of a full test run when the other one did.
  */
 func TestListeningSurvivesASectionItDidNotCreate(t *testing.T) {
 	isolate(t)
-	first, err := Listen(func(string) {}, func() {})
+	got := make(chan string, 2)
+	first, err := Listen(func(pane string) { got <- pane }, func() {})
 	if err != nil {
 		t.Fatalf("first listen: %v", err)
 	}
 	defer first()
 
-	got := make(chan string, 1)
 	second, err := Listen(func(pane string) { got <- pane }, func() {})
 	if err != nil {
 		t.Fatalf("second listen: %v", err)
@@ -173,14 +220,14 @@ func TestListeningSurvivesASectionItDidNotCreate(t *testing.T) {
 	if _, err := Show("libraries"); err != nil {
 		t.Fatal(err)
 	}
-	// Auto-reset: exactly one of the two wakes. Either is fine; what must not
-	// happen is nobody waking, or the destination being lost.
+	// Whichever woke, the destination must have survived the trip.
+	if pane := waitFor(t, got); pane != "libraries" {
+		t.Errorf("pane = %q, want libraries", pane)
+	}
+	// And only one of them woke, which is what auto-reset means.
 	select {
-	case pane := <-got:
-		if pane != "libraries" {
-			t.Errorf("pane = %q, want libraries", pane)
-		}
-	case <-time.After(3 * time.Second):
-		// The first listener took it, which is correct behaviour.
+	case extra := <-got:
+		t.Errorf("both listeners woke on one signal (second got %q)", extra)
+	case <-time.After(250 * time.Millisecond):
 	}
 }
