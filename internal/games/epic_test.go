@@ -59,7 +59,17 @@ func TestTheMixedSeparatorsAreCleaned(t *testing.T) {
 	if !ok {
 		t.Fatal("not read as a game")
 	}
-	if got := g.InstallPath; got != filepath.Clean(`D:\Epic Library\NeonAbyss`) {
+	/*
+	 * Asserted as a literal Windows path rather than through `filepath`, which
+	 * is what made this test lie.
+	 *
+	 * `filepath.Clean` is platform-dependent: on Windows it agreed with the
+	 * parser and this passed, and on Linux neither side touched the backslashes
+	 * so it compared one mangled value against another. CI caught it. A
+	 * manifest always holds a Windows path whatever is reading it, so the
+	 * expected value is the same string everywhere.
+	 */
+	if got := g.InstallPath; got != `D:\Epic Library\NeonAbyss` {
 		t.Errorf("install path = %q, want the separators normalised", got)
 	}
 }
@@ -171,5 +181,33 @@ func TestAnEmptyManifestDirectoryIsInstalledWithNothingInIt(t *testing.T) {
 	}
 	if len(res.Games) != 0 {
 		t.Errorf("games = %+v, want none", res.Games)
+	}
+}
+
+func TestAnInstallLocationIsCanonicalOnEveryPlatform(t *testing.T) {
+	/*
+	 * The rule, stated directly, because the version that used `filepath` was
+	 * right on Windows and a no-op on Linux — and the CI that builds on Linux
+	 * is the only place that could tell.
+	 *
+	 * Every expectation here is a Windows path, on every operating system,
+	 * because that is what a manifest holds regardless of what is reading it.
+	 */
+	cases := []struct{ in, want string }{
+		{`D:\Epic Library/NeonAbyss`, `D:\Epic Library\NeonAbyss`},
+		{`D:/Epic Library/NeonAbyss`, `D:\Epic Library\NeonAbyss`},
+		{`D:\Epic Library\NeonAbyss`, `D:\Epic Library\NeonAbyss`},
+		{`D:\Epic Library\\NeonAbyss`, `D:\Epic Library\NeonAbyss`},
+		{`D:\Epic Library\NeonAbyss\`, `D:\Epic Library\NeonAbyss`},
+		{`  D:/Games/Thing  `, `D:\Games\Thing`},
+		// A UNC path keeps its leading pair; collapsing that would point it at
+		// a different machine, which is the one case where two separators mean
+		// something.
+		{`\\nas\games\Thing`, `\\nas\games\Thing`},
+	}
+	for _, tc := range cases {
+		if got := windowsPath(tc.in); got != tc.want {
+			t.Errorf("windowsPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }

@@ -90,14 +90,7 @@ func ParseEpicManifest(raw []byte) (Game, bool) {
 		return Game{}, false
 	}
 
-	/*
-	 * Epic writes the install location with mixed separators — `D:\Epic
-	 * Library/NeonAbyss` is verbatim from a real manifest, backslash then
-	 * forward slash in one path. Cleaning it is not tidiness: the launch
-	 * executable is joined onto it, and a path that half the code agrees on is
-	 * the kind of thing that works until somebody compares two of them.
-	 */
-	install := filepath.Clean(strings.ReplaceAll(m.InstallLocation, "/", string(filepath.Separator)))
+	install := windowsPath(m.InstallLocation)
 
 	return Game{
 		ID:          EpicID(m.AppName),
@@ -110,6 +103,59 @@ func ParseEpicManifest(raw []byte) (Game, bool) {
 		// answer rather than inventing a date from a file's mtime.
 		LastPlayed: 0,
 	}, true
+}
+
+/*
+ * windowsPath is one Epic install location, canonicalised.
+ *
+ * Epic writes these with mixed separators — `D:\Epic Library/NeonAbyss` is
+ * verbatim from a real manifest, backslash then forward slash in one path.
+ * Cleaning it is not tidiness: the launch executable is joined onto it and it is
+ * compared against other paths, and a value half the code agrees on is the kind
+ * of thing that works until two of them meet.
+ *
+ * Deliberately **not** `filepath` anything, and that is the whole point of this
+ * function existing. A manifest always holds a Windows path, whatever is parsing
+ * it — so the canonical form is a Windows path on every operating system.
+ * `filepath.Separator` is `/` on Linux, which makes the replacement a no-op, and
+ * `filepath.Clean` does not treat a backslash as a separator there either, so
+ * the mangled value survived untouched. CI caught it; the Windows run could not,
+ * because there the platform-dependent version happens to be right.
+ *
+ * The same reasoning as safeStagedName in internal/selfupdate: a value produced
+ * on one operating system and read on another is judged by one rule everywhere,
+ * rather than by whatever the running platform treats as a separator.
+ */
+func windowsPath(raw string) string {
+	p := strings.ReplaceAll(strings.TrimSpace(raw), "/", `\`)
+
+	/*
+	 * Collapse repeated separators, keeping a *leading* pair.
+	 *
+	 * `\\nas\games` is a UNC path and the two leading backslashes name the
+	 * machine; collapsing them points it at a directory on this one. The first
+	 * version of this collapsed everything and the comment claimed otherwise —
+	 * the test written for the case caught it immediately, which is the whole
+	 * argument for writing the awkward case down rather than reasoning about
+	 * it.
+	 */
+	prefix := ""
+	if strings.HasPrefix(p, `\\`) {
+		prefix, p = `\\`, strings.TrimPrefix(p, `\\`)
+	}
+	var b strings.Builder
+	for i, r := range p {
+		if r == '\\' && i > 0 && p[i-1] == '\\' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := prefix + b.String()
+	// A trailing separator makes two spellings of one directory.
+	if len(out) > 3 && strings.HasSuffix(out, `\`) {
+		out = strings.TrimRight(out, `\`)
+	}
+	return out
 }
 
 // hasCategory reports whether a manifest carries one of Epic's categories.
