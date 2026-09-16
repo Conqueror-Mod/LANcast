@@ -4,6 +4,7 @@
 package edge
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -118,6 +119,17 @@ func (e *Chromium) Navigate(url string) {
 		uintptr(unsafe.Pointer(e.webview)),
 		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(url))),
 	)
+}
+
+// SetTransparentBackground makes the page's default background fully
+// transparent, so a window beneath the controller shows through. SPIKE: added
+// for ADR 0067 Phase 0 (cmd/mpvspike).
+func (e *Chromium) SetTransparentBackground() error {
+	c2 := e.controller.GetICoreWebView2Controller2()
+	if c2 == nil {
+		return errors.New("ICoreWebView2Controller2 unavailable")
+	}
+	return c2.PutDefaultBackgroundColor(COREWEBVIEW2_COLOR{})
 }
 
 func (e *Chromium) NavigateToString(htmlContent string) {
