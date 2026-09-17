@@ -115,6 +115,15 @@ type Controller interface {
 	Hide()
 	// Close ends the window and its message loop.
 	Close()
+	// Window is the native handle of the main window, for a renderer to draw
+	// into (ADR 0067). Zero where there is no native window.
+	Window() uintptr
+	// EnterVideoOverlay and LeaveVideoOverlay move the page into and out of the
+	// transparent overlay that sits above native video (ADR 0067).
+	EnterVideoOverlay()
+	LeaveVideoOverlay()
+	// Eval runs script in the page, on the window's thread.
+	Eval(js string)
 }
 
 // Open shows the window and blocks until it is closed.

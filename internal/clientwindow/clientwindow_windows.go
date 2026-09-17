@@ -274,6 +274,20 @@ func (c *controller) Navigate(url string) {
 	c.w.Dispatch(func() { c.w.Navigate(url) })
 }
 
+func (c *controller) Window() uintptr { return uintptr(c.w.Window()) }
+
+func (c *controller) EnterVideoOverlay() {
+	c.w.Dispatch(func() { _, _ = c.w.EnterVideoOverlay() })
+}
+
+func (c *controller) LeaveVideoOverlay() {
+	c.w.Dispatch(func() { c.w.LeaveVideoOverlay() })
+}
+
+func (c *controller) Eval(js string) {
+	c.w.Dispatch(func() { c.w.Eval(js) })
+}
+
 func (c *controller) Hide() {
 	c.w.Dispatch(func() {
 		_, _, _ = procShowWindow.Call(uintptr(c.w.Window()), swHide)

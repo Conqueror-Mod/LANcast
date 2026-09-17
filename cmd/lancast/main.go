@@ -225,6 +225,9 @@ func runWindow(l *launcher) {
 		}
 	}
 
+	// Native playback (ADR 0067). Built before the window so its bindings are
+	// injected with the rest; it learns the window itself in OnReady.
+	native := &nativePlayer{origin: url, pin: pin}
 	err = clientwindow.Open(clientwindow.Options{
 		URL:    url,
 		Title:  "LANcast",
@@ -287,6 +290,7 @@ func runWindow(l *launcher) {
 			return false
 		},
 		OnReady: func(c clientwindow.Controller) {
+			native.attach(c)
 			/*
 			 * Reload when the server comes back.
 			 *
@@ -359,7 +363,7 @@ func runWindow(l *launcher) {
 		DataDir:  clientDataDir(),
 		CertPin:  pin,
 		DevTools: devToolsWanted(),
-		Bindings: l.desktopBindings(),
+		Bindings: l.desktopBindings(native),
 	})
 	if err != nil {
 		alert("LANcast", err.Error())
@@ -373,7 +377,7 @@ func runWindow(l *launcher) {
 // running, and that is what decides whether closing the window may stop
 // anything at all. The server cannot answer it — from its side both look
 // identical — and the page cannot infer it.
-func (l *launcher) desktopBindings() map[string]any {
+func (l *launcher) desktopBindings(native *nativePlayer) map[string]any {
 	dir := clientDataDir()
 	b := map[string]any{
 		// lancastDesktopState reports the current preferences and how this
@@ -472,6 +476,12 @@ func (l *launcher) desktopBindings() map[string]any {
 	// that the server has never seen.
 	for name, fn := range clientLogBindings(dir) {
 		b[name] = fn
+	}
+	// Native playback, only where a window exists to play into.
+	if native != nil {
+		for name, fn := range native.bindings() {
+			b[name] = fn
+		}
 	}
 	return b
 }
