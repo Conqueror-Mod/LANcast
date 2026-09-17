@@ -39,6 +39,10 @@ func Options(wid uint64, logFile string) []Option {
 		// the Phase 0 spike proved composites under the overlay.
 		{"gpu-api", "d3d11"},
 		{"hwdec", "auto-safe"},
+		// Subtitles are the page's to draw (web/src/playback/nativeTracks.ts):
+		// one renderer for both backends, so a track chosen in the player is
+		// the only one on screen rather than mpv adding the file's default.
+		{"sid", "no"},
 		{"wid", uitoa(wid)},
 	}
 	if logFile != "" {

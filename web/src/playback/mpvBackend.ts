@@ -79,6 +79,8 @@ class NativeMediaError {
 
 export class MpvBackend extends EventTarget implements MediaBackend {
   src = "";
+  /** mpv's `aid` to select once the file opens (nativeTracks.ts), or null. */
+  audioTrack: number | null = null;
   readonly videoWidth = 0;
   readonly videoHeight = 0;
 
@@ -176,6 +178,9 @@ export class MpvBackend extends EventTarget implements MediaBackend {
         await window.lancastMpvOpen!(id, t.ticket);
         // play() usually arrives before the player exists, and the client opens
         // files paused; honour it now that there is something to play.
+        if (gen === this.generation && this.audioTrack !== null) {
+          await this.command("audio", this.audioTrack);
+        }
         if (gen === this.generation && !this.isPaused) await this.command("play", 0);
       } catch (e) {
         if (gen !== this.generation) return;

@@ -61,6 +61,7 @@ import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { mpvBackend, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
+import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
@@ -590,6 +591,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const displayTime = transcoding.current ? offset.current + current : current;
 
+  /*
+   * Subtitles under native playback are drawn by the page (nativeTracks.ts):
+   * the same WebVTT the <track> would load, parsed here, shown at the
+   * current time with the same offset preference.
+   */
+  const [nativeCues, setNativeCues] = useState<Cue[]>([]);
+  useEffect(() => {
+    setNativeCues([]);
+    if (!nativeOn || !itemID) return;
+    const key = subtitles.find((t) => t.key === subKey && t.available)?.key;
+    if (!key) return;
+    let cancelled = false;
+    fetch(`/api/items/${itemID}/subtitles/${encodeURIComponent(key)}.vtt`)
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((text) => {
+        if (!cancelled) setNativeCues(parseVTT(text));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [nativeOn, itemID, subKey, subtitles]);
+
   // ---- progress persistence -------------------------------------------------
   const lastSaved = useRef(0);
   const saveProgress = useCallback(
@@ -1027,6 +1051,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         chosenPath.current = "progressive";
         sourceItem.current = item.id;
         hlsPlayingFrom.current = null;
+        mpvBackend().audioTrack = mpvAudioTrack(item.streams, audioIndex);
         v.src = sourceURL(item.id, "direct", 0);
         v.load();
         void v.play().catch(() => {});
@@ -2363,6 +2388,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             display: contents, so the wrapper generates no box: the element's
             percentage sizing still resolves against .playback and no other rule
             in playback.css has to know this div exists. */}
+        {nativeOn && nativeCues.length > 0 && (
+          <div className="playback__native-cues" aria-live="off">
+            {activeCues(nativeCues, displayTime, prefs.subOffset).map((c, i) => (
+              <span key={`${c.start}-${i}`} className="playback__native-cue">
+                {c.text}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="playback__slot">
           <video
             ref={videoRef}

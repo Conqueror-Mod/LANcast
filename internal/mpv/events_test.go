@@ -24,6 +24,9 @@ func TestOptionsKeepTheNoPhoneHomeRule(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got[k], v)
 		}
 	}
+	if got["sid"] != "no" {
+		t.Error("mpv would draw the file's default subtitles over the page's own")
+	}
 	if got["wid"] != "4660" {
 		t.Errorf("wid = %q, want decimal 4660", got["wid"])
 	}
