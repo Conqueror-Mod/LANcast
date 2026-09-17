@@ -371,3 +371,10 @@ func (e *Chromium) Focus() {
 	}
 	_ = e.controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
 }
+
+// Reparent moves the controller to another host window. SPIKE (ADR 0067).
+func (e *Chromium) Reparent(hwnd uintptr) {
+	_, _, _ = e.controller.vtbl.PutParentWindow.Call(uintptr(unsafe.Pointer(e.controller)), hwnd)
+	e.hwnd = hwnd
+	e.Resize()
+}

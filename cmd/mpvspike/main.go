@@ -51,6 +51,7 @@ var (
 	pGetMonitorInfo  = user32.NewProc("GetMonitorInfoW")
 	pLoadCursor      = user32.NewProc("LoadCursorW")
 	pClientToScreen  = user32.NewProc("ClientToScreen")
+	pDestroyWindow   = user32.NewProc("DestroyWindow")
 	pGetStockObject  = windows.NewLazySystemDLL("gdi32.dll").NewProc("GetStockObject")
 )
 
@@ -164,7 +165,12 @@ func main() {
 	browser.NavigateToString(page)
 	browser.Focus()
 
-	if *mode != "page" {
+	if *mode == "reparent" {
+		fileArg = *file
+		hinstArg = uintptr(hinst)
+		clsArg = cls
+		browser.Eval("setTimeout(()=>s('enter'),4000);setTimeout(()=>s('leave'),16000)")
+	} else if *mode != "page" {
 		must(mpv.command("loadfile", *file))
 	}
 	pump()
@@ -233,6 +239,10 @@ func onMessage(m string) {
 		_ = mpv.command("seek", "-10")
 	case "fwd":
 		_ = mpv.command("seek", "30")
+	case "enter":
+		enterPlayback()
+	case "leave":
+		leavePlayback()
 	case "fs":
 		toggleFullscreen()
 	}
@@ -352,3 +362,31 @@ for(const t of ['video/mp4; codecs="hvc1"','video/mp4; codecs="hev1.1.6.L93.B0"'
 </script></body></html>`
 
 var flipModel = "yes"
+
+var (
+	fileArg  string
+	hinstArg uintptr
+	clsArg   *uint16
+)
+
+// enterPlayback moves the page into an overlay popup and starts mpv in the
+// main window: the ADR 0067 shape, entered only for the length of a video.
+func enterPlayback() {
+	popup, _, _ = pCreateWindowEx.Call(0x00200000|0x08000000, uintptr(unsafe.Pointer(clsArg)), 0,
+		0x80000000|wsVisible, 0, 0, 100, 100, parent, 0, hinstArg, 0)
+	_, _, _ = pShowWindow.Call(videoHwnd, 0)
+	browser.Reparent(popup)
+	layout()
+	_ = mpv.opt("wid", strconv.FormatUint(uint64(parent), 10))
+	_ = mpv.command("loadfile", fileArg)
+	browser.Focus()
+}
+
+func leavePlayback() {
+	_ = mpv.command("stop")
+	browser.Reparent(parent)
+	_, _, _ = pDestroyWindow.Call(popup)
+	popup = 0
+	layout()
+	browser.Focus()
+}
