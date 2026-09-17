@@ -418,6 +418,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/stream-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A narrow credential for a native player to open this item's stream
+         * @description For players that are not the browser and cannot carry the session cookie, such as the desktop client's libmpv (ADR 0067, ADR 0068). The ticket opens `GET /stream/{id}` for this item and nothing else, lasts twenty-four hours so an overnight pause survives it, and ends early with the session or key that minted it. Tickets are held in memory; a server restart forgets them and the player mints another.
+         *
+         *     The item must be visible to the caller, exactly as for the stream itself.
+         */
+        post: operations["mintStreamTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stream/{id}": {
         parameters: {
             query?: never;
@@ -5481,6 +5506,20 @@ export interface components {
             /** @description Why this choice was made, for a client that explains itself and for a test that asserts on it. A choice with no reason cannot be told apart from a bug. */
             why?: string;
         };
+        StreamTicket: {
+            /** @description The secret. Presented as `Authorization: Ticket <ticket>`; shown once and never stored in plain text. */
+            ticket: string;
+            /**
+             * Format: int64
+             * @description The one item whose stream this opens.
+             */
+            item_id: number;
+            /**
+             * Format: int64
+             * @description Unix seconds. Twenty-four hours after minting.
+             */
+            expires_at: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -6491,6 +6530,31 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    mintStreamTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ticket. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamTicket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     streamItem: {
