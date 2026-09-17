@@ -2672,6 +2672,37 @@ Direct play only: bytes are served as stored, with range support. Files that a
 browser cannot play use the transcode endpoints below, chosen by the client
 after consulting `/playback`.
 
+Besides the session cookie and an API key, this one endpoint accepts a **stream
+ticket** — see the next section.
+
+### `POST /api/items/{id}/stream-ticket`
+
+> Design reference: [ADR 0068](adr/0068-a-native-player-streams-with-a-ticket.md).
+
+A narrow credential for a player that is not the browser — the desktop client's
+libmpv (ADR 0067) — and so cannot carry the HttpOnly session cookie.
+
+```json
+{ "ticket": "…", "item_id": 42, "expires_at": 1789600000 }
+```
+
+Presented as a header, never in a query parameter:
+
+```
+Authorization: Ticket <ticket>
+```
+
+- **One item, one endpoint.** It opens `GET`/`HEAD /api/stream/{id}` for the
+  item it was minted for. On any other path or item it is not a credential and
+  the request is `401` as if it carried nothing.
+- **Borrowed.** It re-checks the session or API key that minted it on every
+  request, so signing out, changing the password or revoking the key ends it.
+- **Twenty-four hours**, so a film paused overnight still resumes.
+- **In memory.** A server restart forgets every ticket; the player mints another.
+
+The item must be visible to the caller, exactly as for the stream: `404`
+otherwise.
+
 ### `GET /api/stream/{id}/transcode`
 
 Streams a progressive fragmented MP4 produced by ffmpeg on demand. Plays in any
