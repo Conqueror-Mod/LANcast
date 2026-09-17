@@ -13,26 +13,32 @@ import (
 )
 
 /*
- * The video overlay. LOCAL ADDITION — see PROVENANCE.md and ADR 0067.
+ * Native video layout. LOCAL ADDITION — see PROVENANCE.md and ADR 0067.
  *
- * A native video renderer (libmpv) draws a GPU swapchain into the main window.
- * A transparent WebView2 *in the same window* does not show that swapchain
- * through — the Phase 0 spike proved it composites sibling GDI painting and
- * nothing else — so during video playback the page moves into a second window:
+ * A native renderer (libmpv) draws a GPU swapchain. The Phase 0 spike proved a
+ * transparent WebView2 in the same window never shows one through, so video
+ * gets windows of its own. Two, both owned by the main window (so they minimise
+ * and stack with it) and both kept out of the taskbar:
  *
- *   - WS_POPUP, owned by the main window, so it minimises and stacks with it;
- *   - WS_EX_NOREDIRECTIONBITMAP, so DWM composites the transparent page
- *     directly over whatever is beneath it, swapchains included;
- *   - WS_EX_TOOLWINDOW, so it never becomes a second taskbar button.
+ *   - the **video window**, which the renderer draws into. It is placed where
+ *     the picture belongs.
+ *   - the **page overlay**, a WS_EX_NOREDIRECTIONBITMAP popup the page moves
+ *     into so DWM composites it, transparent, over the video window.
  *
- * It exists only while a video plays. Browsing never sees it: the page lives
- * in the main window as it always has, and leaving the overlay puts it back.
+ * Three layouts:
  *
- * Keeping two top-level windows in step is the cost, and every piece of it is
- * in this file or the window procedure: position and size (WM_MOVE, WM_SIZE),
- * visibility (WM_SHOWWINDOW, since hiding an owner does not hide what it owns),
- * and focus (WM_ACTIVATE — Alt-Tab lands on the main window, and the keyboard
- * has to follow to the page, which was the rough edge the spike reported).
+ *   full   video window over the whole client area, the page overlay above it:
+ *          the React chrome draws on the picture.
+ *   mini   the page is back in the main window, opaque, and the video window
+ *          floats above it at the docked rectangle. A hole in a transparent
+ *          page cannot do this — everything beneath the hole is the page's own
+ *          opaque content — so the picture goes on top instead.
+ *   hidden video window hidden, page in the main window: browsing as ever.
+ *
+ * Keeping these in step with the main window is the cost, and all of it is in
+ * this file: position and size (WM_MOVE, WM_SIZE), visibility (WM_SHOWWINDOW,
+ * since hiding an owner does not hide what it owns), and focus (WM_ACTIVATE,
+ * since Alt-Tab lands on the main window and the keyboard belongs to the page).
  */
 
 var (
@@ -43,65 +49,122 @@ var (
 )
 
 const (
-	wmShowWindow           = 0x0018
-	wsPopup                = 0x80000000
-	wsVisible              = 0x10000000
-	wsExToolWindow         = 0x00000080
-	wsExNoRedirectionBitmp = 0x00200000
-	swpNoZOrder            = 0x0004
-	swpNoActivate          = 0x0010
-	swHide                 = 0
-	swShowNA               = 8
+	wmShowWindow            = 0x0018
+	wmMouseActivate         = 0x0021
+	maNoActivate            = 3
+	wsPopup                 = 0x80000000
+	wsExToolWindow          = 0x00000080
+	wsExNoActivate          = 0x08000000
+	wsExNoRedirectionBitmap = 0x00200000
+	swpNoMove               = 0x0002
+	swpNoSize               = 0x0001
+	swpNoZOrder             = 0x0004
+	swpNoActivate           = 0x0010
+	swpShowWindow           = 0x0040
+	swpHideWindow           = 0x0080
+	swHide                  = 0
+	swShowNA                = 8
 )
 
-// overlayOf marks an overlay window in the window-context map, so the shared
-// window procedure can tell it from the main window.
+// VideoLayout is where native video goes.
+type VideoLayout int
+
+const (
+	VideoHidden VideoLayout = iota
+	VideoFull
+	VideoMini
+)
+
+// videoRect is a rectangle in the main window's client coordinates, physical
+// pixels.
+type videoRect struct{ x, y, w, h int32 }
+
+// overlayOf and videoOf mark the extra windows in the window-context map, so
+// the shared window procedure can tell them from the main window.
 type overlayOf struct{ w *webview }
+type videoOf struct{ w *webview }
 
 var opaqueWhite = edge.COREWEBVIEW2_COLOR{A: 255, R: 255, G: 255, B: 255}
 
-// EnterVideoOverlay moves the page into a transparent overlay above the main
-// window and returns the main window's handle, for the renderer to draw into.
-// Calling it while already in the overlay returns the same handle.
-func (w *webview) EnterVideoOverlay() (uintptr, error) {
-	ch, ok := w.browser.(*edge.Chromium)
-	if !ok {
-		return 0, errors.New("webview2: overlay needs the Chromium browser")
-	}
-	if w.overlay != 0 {
-		return w.hwnd, nil
-	}
+func (w *webview) createOwned(exStyle uintptr) uintptr {
 	var hinstance windows.Handle
 	_ = windows.GetModuleHandleEx(0, nil, &hinstance)
 	className, _ := windows.UTF16PtrFromString("webview")
-	style := uintptr(wsPopup)
-	if v, _, _ := procIsWindowVisible.Call(w.hwnd); v != 0 {
-		style |= wsVisible
-	}
-	popup, _, _ := w32.User32CreateWindowExW.Call(
-		wsExNoRedirectionBitmp|wsExToolWindow,
-		uintptr(unsafe.Pointer(className)), 0, style,
+	h, _, _ := w32.User32CreateWindowExW.Call(
+		exStyle|wsExToolWindow,
+		uintptr(unsafe.Pointer(className)), 0, wsPopup,
 		0, 0, 1, 1, w.hwnd, 0, uintptr(hinstance), 0,
 	)
+	return h
+}
+
+// VideoWindow returns the window a native renderer draws into, creating it
+// hidden on first use.
+func (w *webview) VideoWindow() (uintptr, error) {
+	if w.video != 0 {
+		return w.video, nil
+	}
+	// Never activated: focus stays with the page whichever layout is showing.
+	h := w.createOwned(wsExNoActivate)
+	if h == 0 {
+		return 0, errors.New("webview2: could not create the video window")
+	}
+	setWindowContext(h, videoOf{w})
+	w.video = h
+	return h, nil
+}
+
+// SetVideoLayout places native video. x, y, width and height are the docked
+// rectangle in client pixels and are read only for VideoMini.
+func (w *webview) SetVideoLayout(layout VideoLayout, x, y, width, height int) error {
+	w.layout = layout
+	w.mini = videoRect{int32(x), int32(y), int32(width), int32(height)}
+	switch layout {
+	case VideoFull:
+		if _, err := w.VideoWindow(); err != nil {
+			return err
+		}
+		if err := w.enterOverlay(); err != nil {
+			return err
+		}
+	case VideoMini:
+		if _, err := w.VideoWindow(); err != nil {
+			return err
+		}
+		w.leaveOverlay()
+	default:
+		w.leaveOverlay()
+	}
+	w.syncVideo()
+	return nil
+}
+
+func (w *webview) enterOverlay() error {
+	if w.overlay != 0 {
+		return nil
+	}
+	ch, ok := w.browser.(*edge.Chromium)
+	if !ok {
+		return errors.New("webview2: overlay needs the Chromium browser")
+	}
+	popup := w.createOwned(wsExNoRedirectionBitmap)
 	if popup == 0 {
-		return 0, errors.New("webview2: could not create the overlay window")
+		return errors.New("webview2: could not create the overlay window")
 	}
 	if err := ch.SetBackground(edge.COREWEBVIEW2_COLOR{}); err != nil {
 		_, _, _ = w32.User32DestroyWindow.Call(popup)
-		return 0, err
+		return err
 	}
 	setWindowContext(popup, overlayOf{w})
 	w.overlay = popup
-	w.syncOverlay()
+	w.syncVideo()
 	ch.Reparent(popup)
 	_, _, _ = procSetActiveWindow.Call(popup)
 	ch.Focus()
-	return w.hwnd, nil
+	return nil
 }
 
-// LeaveVideoOverlay puts the page back in the main window and destroys the
-// overlay. Safe to call when not in the overlay.
-func (w *webview) LeaveVideoOverlay() {
+func (w *webview) leaveOverlay() {
 	if w.overlay == 0 {
 		return
 	}
@@ -120,40 +183,75 @@ func (w *webview) LeaveVideoOverlay() {
 	}
 }
 
-// syncOverlay lays the overlay exactly over the main window's client area.
-func (w *webview) syncOverlay() {
-	if w.overlay == 0 {
-		return
-	}
+// syncVideo lays both extra windows out for the current layout.
+func (w *webview) syncVideo() {
 	var rc w32.Rect
 	_, _, _ = w32.User32GetClientRect.Call(w.hwnd, uintptr(unsafe.Pointer(&rc)))
-	pt := w32.Point{}
-	_, _, _ = procClientToScreen.Call(w.hwnd, uintptr(unsafe.Pointer(&pt)))
-	_, _, _ = w32.User32SetWindowPos.Call(w.overlay, 0,
-		uintptr(pt.X), uintptr(pt.Y), uintptr(rc.Right-rc.Left), uintptr(rc.Bottom-rc.Top),
-		swpNoZOrder|swpNoActivate)
-	w.browser.Resize()
+	origin := w32.Point{}
+	_, _, _ = procClientToScreen.Call(w.hwnd, uintptr(unsafe.Pointer(&origin)))
+	visible, _, _ := procIsWindowVisible.Call(w.hwnd)
+	full := videoRect{origin.X, origin.Y, rc.Right - rc.Left, rc.Bottom - rc.Top}
+
+	if w.overlay != 0 {
+		flags := uintptr(swpNoZOrder | swpNoActivate)
+		if visible != 0 {
+			flags |= swpShowWindow
+		}
+		_, _, _ = w32.User32SetWindowPos.Call(w.overlay, 0,
+			uintptr(full.x), uintptr(full.y), uintptr(full.w), uintptr(full.h), flags)
+		w.browser.Resize()
+	}
+
+	if w.video == 0 {
+		return
+	}
+	switch {
+	case visible == 0 || w.layout == VideoHidden:
+		_, _, _ = w32.User32SetWindowPos.Call(w.video, 0, 0, 0, 0, 0,
+			swpNoMove|swpNoSize|swpNoZOrder|swpNoActivate|swpHideWindow)
+	case w.layout == VideoFull:
+		// Directly beneath the page overlay: SetWindowPos places a window
+		// *after* the one named, which in z-order means under it.
+		_, _, _ = w32.User32SetWindowPos.Call(w.video, w.overlay,
+			uintptr(full.x), uintptr(full.y), uintptr(full.w), uintptr(full.h),
+			swpNoActivate|swpShowWindow)
+	case w.layout == VideoMini:
+		// Owned windows already stack above their owner; no z-order needed.
+		_, _, _ = w32.User32SetWindowPos.Call(w.video, 0,
+			uintptr(origin.X+w.mini.x), uintptr(origin.Y+w.mini.y), uintptr(w.mini.w), uintptr(w.mini.h),
+			swpNoZOrder|swpNoActivate|swpShowWindow)
+	}
 }
 
-// overlayMessage handles the main window's messages that the overlay has to
-// follow. It reports whether it consumed the message.
+// overlayMessage handles the main window's messages the extra windows follow.
+// It reports whether it consumed the message.
 func (w *webview) overlayMessage(msg, wp uintptr) bool {
-	if w.overlay == 0 {
+	if w.overlay == 0 && w.video == 0 {
 		return false
 	}
 	switch msg {
 	case w32.WMMove, w32.WMSize:
-		w.syncOverlay()
-		return msg == w32.WMSize // the browser is not in this window to resize
+		w.syncVideo()
+		// With the page in the overlay there is no browser in this window to
+		// resize; otherwise the ordinary handling still has to run.
+		return msg == w32.WMSize && w.overlay != 0
 	case wmShowWindow:
 		if wp == 0 {
-			_, _, _ = w32.User32ShowWindow.Call(w.overlay, swHide)
-		} else {
+			if w.overlay != 0 {
+				_, _, _ = w32.User32ShowWindow.Call(w.overlay, swHide)
+			}
+			if w.video != 0 {
+				_, _, _ = w32.User32ShowWindow.Call(w.video, swHide)
+			}
+			return false
+		}
+		if w.overlay != 0 {
 			_, _, _ = w32.User32ShowWindow.Call(w.overlay, swShowNA)
 		}
+		w.syncVideo()
 	case w32.WMActivate:
 		// The low word is the state; the high word says whether it is minimised.
-		if wp&0xffff != w32.WAInactive {
+		if w.overlay != 0 && wp&0xffff != w32.WAInactive {
 			// Alt-Tab and taskbar clicks land here, on the main window; the
 			// keyboard belongs to the page in the overlay.
 			_, _, _ = procSetActiveWindow.Call(w.overlay)

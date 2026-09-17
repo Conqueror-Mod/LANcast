@@ -79,7 +79,11 @@ func (n *nativePlayer) ensure() error {
 	if !n.available() {
 		return errors.New("native playback is not available")
 	}
-	if n.window == nil || n.window.Window() == 0 {
+	if n.window == nil {
+		return errors.New("no window to play into")
+	}
+	wid := n.window.VideoWindow()
+	if wid == 0 {
 		return errors.New("no window to play into")
 	}
 	if n.relay == nil {
@@ -90,7 +94,7 @@ func (n *nativePlayer) ensure() error {
 		n.relay = r
 	}
 	if n.player == nil {
-		p, err := mpv.New(uint64(n.window.Window()), filepath.Join(clientDataDir(), "mpv.log"), n.emit)
+		p, err := mpv.New(uint64(wid), filepath.Join(clientDataDir(), "mpv.log"), n.emit)
 		if err != nil {
 			return err
 		}
@@ -150,7 +154,6 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 	if err != nil {
 		return err
 	}
-	n.window.EnterVideoOverlay()
 	slog.Info("native playback", "item", itemID)
 	return n.player.Load(u, 0)
 }
@@ -196,7 +199,7 @@ func (n *nativePlayer) stop() {
 		n.relay.Forget()
 	}
 	if n.window != nil {
-		n.window.LeaveVideoOverlay()
+		n.window.SetVideoLayout("hidden", 0, 0, 0, 0)
 	}
 }
 
@@ -234,5 +237,23 @@ func (n *nativePlayer) bindings() map[string]any {
 		},
 		"lancastMpvCommand": n.command,
 		"lancastMpvStop":    n.stop,
+		// Where the picture goes: "full", "mini" with the docked rectangle in
+		// client pixels, or "hidden". The page knows its own layout; this
+		// window only follows it.
+		"lancastMpvLayout": func(layout string, x, y, w, h float64) error {
+			n.mu.Lock()
+			win := n.window
+			n.mu.Unlock()
+			if win == nil {
+				return errors.New("no window")
+			}
+			switch layout {
+			case "full", "mini", "hidden":
+			default:
+				return fmt.Errorf("unknown layout %q", layout)
+			}
+			win.SetVideoLayout(layout, int(x), int(y), int(w), int(h))
+			return nil
+		},
 	}
 }

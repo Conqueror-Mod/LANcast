@@ -28,6 +28,13 @@ declare global {
     lancastMpvOpen?: (itemID: number, ticket: string) => Promise<void>;
     lancastMpvCommand?: (name: string, value: number) => Promise<void>;
     lancastMpvStop?: () => Promise<void>;
+    lancastMpvLayout?: (
+      layout: "full" | "mini" | "hidden",
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+    ) => Promise<void>;
     __lancastMpvEvent?: (e: MpvEvent) => void;
   }
 }

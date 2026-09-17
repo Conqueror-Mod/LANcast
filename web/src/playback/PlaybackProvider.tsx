@@ -60,6 +60,7 @@ import {
 import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { mpvBackend, nativePlaybackAvailable } from "./mpvBackend";
+import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
@@ -419,6 +420,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * the source-selection effect; media() is what everything else talks to.
    */
   const nativeRef = useRef(false);
+  // The same fact as state, for the layout effect to react to.
+  const [nativeOn, setNativeOn] = useState(false);
   const media = useCallback(
     (): MediaBackend | null => (nativeRef.current ? mpvBackend() : videoRef.current),
     [],
@@ -544,6 +547,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       ? "idle"
       : "mini";
 
+  /*
+   * Tell the desktop client where the native picture goes (nativeLayout.ts).
+   *
+   * Full size is the whole window under a see-through page. Docked, the page is
+   * opaque and the client floats the picture over the docked box, so the box's
+   * position is sent in device pixels and re-sent whenever it moves: a resize,
+   * a window move within the page, the strip changing height.
+   */
+  const sentLayout = useRef(HIDDEN);
+  useEffect(() => {
+    if (!window.lancastMpvLayout) return;
+    const el = containerRef.current;
+    const send = () => {
+      const r = el?.getBoundingClientRect();
+      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio);
+      if (sameLayout(next, sentLayout.current)) return;
+      sentLayout.current = next;
+      void window
+        .lancastMpvLayout?.(next.layout, next.x, next.y, next.width, next.height)
+        .catch(() => {});
+    };
+    send();
+    if (!nativeOn || surface !== "mini" || !el) return;
+    const ro = new ResizeObserver(send);
+    ro.observe(el);
+    window.addEventListener("resize", send);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", send);
+    };
+  }, [surface, nativeOn]);
+
   // Total runtime. A transcode or remux streams a fragmented MP4 whose element
   // duration is whatever has been produced so far — a few seconds — so for those
   // the probed runtime is authoritative and the element's value is ignored.
@@ -651,6 +686,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const stop = useCallback(() => {
     saveRef.current(true);
+    setNativeOn(false);
     const v = media();
     if (v) {
       v.pause();
@@ -979,6 +1015,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (nativeRef.current && !native) mpvBackend().removeAttribute("src");
       nativeRef.current = native;
+      setNativeOn(native);
       v = native ? mpvBackend() : videoRef.current ?? v;
       if (native) {
         decision.current = { method: "direct", reason: "" };

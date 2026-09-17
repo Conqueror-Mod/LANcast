@@ -40,11 +40,11 @@ type WebView interface {
 	// window.
 	Dispatch(f func())
 
-	// EnterVideoOverlay moves the page into a transparent overlay window above
-	// the main one and returns the main window's handle for a native renderer
-	// to draw into. LeaveVideoOverlay undoes it. LOCAL ADDITION (ADR 0067).
-	EnterVideoOverlay() (uintptr, error)
-	LeaveVideoOverlay()
+	// VideoWindow is the window a native renderer draws into, and
+	// SetVideoLayout places it: full-size under a transparent page, docked
+	// above an opaque one, or hidden. LOCAL ADDITION (ADR 0067, overlay.go).
+	VideoWindow() (uintptr, error)
+	SetVideoLayout(layout VideoLayout, x, y, width, height int) error
 
 	// Destroy destroys a webview and closes the native window.
 	Destroy()
