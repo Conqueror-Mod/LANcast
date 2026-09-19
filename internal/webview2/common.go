@@ -40,6 +40,12 @@ type WebView interface {
 	// window.
 	Dispatch(f func())
 
+	// VideoWindow is the window a native renderer draws into, and
+	// SetVideoLayout places it: full-size under a transparent page, docked
+	// above an opaque one, or hidden. LOCAL ADDITION (ADR 0067, overlay.go).
+	VideoWindow() (uintptr, error)
+	SetVideoLayout(layout VideoLayout, x, y, width, height int) error
+
 	// Destroy destroys a webview and closes the native window.
 	Destroy()
 

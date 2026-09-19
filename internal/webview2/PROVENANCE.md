@@ -86,3 +86,17 @@ process, and `WM_CLOSE` is handled inside this package — there is no hook from
 outside. Recorded here because every local change to a vendored copy has to stay
 visible; the alternative was forking the window procedure into the caller, which
 is more code in a worse place.
+
+## Local addition — the video overlay (2026-09-16)
+
+`overlay.go`, the `overlay` field and one early branch in `wndproc`, two
+interface methods on `WebView` (`EnterVideoOverlay`, `LeaveVideoOverlay`), and
+`SetBackground` / `Reparent` on `edge.Chromium`.
+
+During native video playback (ADR 0067) the page moves into a transparent,
+owned `WS_EX_NOREDIRECTIONBITMAP` popup above the main window, which libmpv
+draws into. The ADR 0067 Phase 0 spike established that a transparent WebView2
+in the *same* window never shows a GPU swapchain beneath it, so a second window
+is the only shape that works. It keeps position, size, visibility and focus in
+step with the main window from inside this package's window procedure, which is
+the only place those messages arrive. Outside playback none of it runs.

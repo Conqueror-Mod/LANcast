@@ -115,6 +115,15 @@ type Controller interface {
 	Hide()
 	// Close ends the window and its message loop.
 	Close()
+	// VideoWindow is the native handle a renderer draws into (ADR 0067),
+	// created on first use. Call it on the window's thread (a binding or
+	// OnReady). Zero where there is no native window.
+	VideoWindow() uintptr
+	// SetVideoLayout places native video: "full", "mini" with the docked
+	// rectangle in client pixels, or "hidden".
+	SetVideoLayout(layout string, x, y, width, height int)
+	// Eval runs script in the page, on the window's thread.
+	Eval(js string)
 }
 
 // Open shows the window and blocks until it is closed.

@@ -169,6 +169,32 @@ and fullscreen are clean, focus returns to the page. Outcome decides Option A or
 decode (`canPlayType` for HEVC, AC-3, E-AC-3). Whatever it reports narrows the
 conversions *browser* clients need — which this ADR does not otherwise touch.
 
+**Phase 0 result (2026-09-16): Option A passes, in a different shape.** Spike
+code on branch `spike/mpv-under-webview` (`cmd/mpvspike`), tested on an HEVC MKV
+with d3d11va decoding on an RTX 3060.
+
+- *Same-window layering fails.* With mpv in a child window beneath the WebView2
+  controller, the transparent page composites the sibling's GDI painting and
+  never mpv's D3D11 swapchain — flip model and blit model alike. Transparency
+  over a sibling native window is not a route to video.
+- *An owned overlay window works.* mpv renders into the player window itself.
+  The WebView2 lives in a borderless `WS_POPUP` with
+  `WS_EX_NOREDIRECTIONBITMAP`, owned by the player window and glued to its
+  client rect on move and resize. DWM composites the transparent page straight
+  over the video: picture shows through, controls draw on top, move, resize and
+  fullscreen were clean.
+- *Focus is the rough edge.* Alt-Tab away and back works but is inconsistent
+  about which of the two windows ends up with focus. Phase 1 must forward
+  activation from the player window to the overlay (`WM_ACTIVATE` →
+  controller `MoveFocus`) and keep the overlay from taking the taskbar entry.
+- *canPlayType in WebView2:* `hev1` "probably", `hvc1` empty, AC-3, E-AC-3 and
+  AV1 "probably". Claims only — nothing was played through the browser path.
+- mpv loaded with `config=no load-scripts=no ytdl=no input-default-bindings=no`
+  read no configuration and ran no scripts.
+
+The cost this adds over the original Option A is a second top-level window to
+keep in step: position, size, minimise/restore, fullscreen, and focus.
+
 **Phase 1 — the backend seam.** Extract a player-backend interface from
 PlaybackProvider with no behaviour change. `html5` is today's code moved behind
 it. The full client suite must pass unchanged; that is the proof the seam is

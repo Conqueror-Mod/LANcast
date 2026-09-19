@@ -4,6 +4,7 @@
 package edge
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -358,4 +359,29 @@ func (e *Chromium) Focus() {
 		return
 	}
 	_ = e.controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+}
+
+// SetBackground sets the colour WebView2 paints before and behind the page.
+// A zero alpha makes it transparent, so whatever DWM composites beneath the
+// host window shows through. LOCAL ADDITION (PROVENANCE.md, ADR 0067).
+func (e *Chromium) SetBackground(c COREWEBVIEW2_COLOR) error {
+	if e.controller == nil {
+		return errors.New("webview2: no controller yet")
+	}
+	c2 := e.controller.GetICoreWebView2Controller2()
+	if c2 == nil {
+		return errors.New("webview2: ICoreWebView2Controller2 unavailable")
+	}
+	return c2.PutDefaultBackgroundColor(c)
+}
+
+// Reparent moves the controller to another host window and fits it there.
+// LOCAL ADDITION (PROVENANCE.md, ADR 0067).
+func (e *Chromium) Reparent(hwnd uintptr) {
+	if e.controller == nil {
+		return
+	}
+	_, _, _ = e.controller.vtbl.PutParentWindow.Call(uintptr(unsafe.Pointer(e.controller)), hwnd)
+	e.hwnd = hwnd
+	e.Resize()
 }

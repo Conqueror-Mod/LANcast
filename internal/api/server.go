@@ -178,6 +178,8 @@ type Server struct {
 	// presence is who is watching what, right now. In memory and never
 	// persisted, which is ADR 0045 §4 and not an optimisation.
 	presence *presence.Tracker
+	// tickets are the stream tickets a native player presents (ADR 0068).
+	tickets *ticketBook
 	// rosterAt is when each peer's roster was last fetched. In memory because
 	// it describes this process, not the pairing.
 	rosterMu sync.Mutex
@@ -219,6 +221,7 @@ func New(d Deps) *Server {
 		ident:      d.Identity,
 		listenAddr: d.ListenAddr,
 		presence:   presence.New(),
+		tickets:    newTicketBook(),
 		rosterAt:   map[string]time.Time{},
 		goodAddr:   map[string]string{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
@@ -531,6 +534,7 @@ func (s *Server) Handler() http.Handler {
 	// the client knows items, not paths, and paths never leave the server.
 	mux.HandleFunc("GET /api/items/{id}/photo", s.photo)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
+	mux.HandleFunc("POST /api/items/{id}/stream-ticket", s.mintStreamTicket)
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)
 	mux.HandleFunc("GET /api/stream/{id}/hls/{session}/{name}", s.hlsSegment)

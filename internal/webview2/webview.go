@@ -57,6 +57,11 @@ type webview struct {
 	m          sync.Mutex
 	bindings   map[string]interface{}
 	dispatchq  []func()
+	// Native video windows and layout (overlay.go).
+	overlay uintptr
+	video   uintptr
+	layout  VideoLayout
+	mini    videoRect
 }
 
 type WindowOptions struct {
@@ -233,6 +238,9 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 
 func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 	if w, ok := getWindowContext(hwnd).(*webview); ok {
+		if w.overlayMessage(msg, wp) {
+			return 0
+		}
 		switch msg {
 		case w32.WMMove, w32.WMMoving:
 			_ = w.browser.NotifyParentWindowPositionChanged()
@@ -272,6 +280,17 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			r, _, _ := w32.User32DefWindowProcW.Call(hwnd, msg, wp, lp)
 			return r
 		}
+		return 0
+	}
+	if _, ok := getWindowContext(hwnd).(videoOf); ok && msg == wmMouseActivate {
+		// Clicking the picture must not take focus from the page.
+		return maNoActivate
+	}
+	if o, ok := getWindowContext(hwnd).(overlayOf); ok && msg == w32.WMClose {
+		// Alt+F4 with the page focused lands on the overlay. Closing it would
+		// destroy the window the page lives in; closing the app is what the
+		// person asked for, so it goes to the main window.
+		_, _, _ = w32.User32PostMessageW.Call(o.w.hwnd, w32.WMClose, 0, 0)
 		return 0
 	}
 	r, _, _ := w32.User32DefWindowProcW.Call(hwnd, msg, wp, lp)

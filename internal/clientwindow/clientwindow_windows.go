@@ -274,6 +274,33 @@ func (c *controller) Navigate(url string) {
 	c.w.Dispatch(func() { c.w.Navigate(url) })
 }
 
+// VideoWindow must be called on the window's thread — from a binding or from
+// OnReady, both of which run there. It is not dispatched, because the callers
+// are on that thread already and waiting for a dispatch from it would wait for
+// ever.
+func (c *controller) VideoWindow() uintptr {
+	h, err := c.w.VideoWindow()
+	if err != nil {
+		return 0
+	}
+	return h
+}
+
+func (c *controller) SetVideoLayout(layout string, x, y, width, height int) {
+	l := webview2.VideoHidden
+	switch layout {
+	case "full":
+		l = webview2.VideoFull
+	case "mini":
+		l = webview2.VideoMini
+	}
+	c.w.Dispatch(func() { _ = c.w.SetVideoLayout(l, x, y, width, height) })
+}
+
+func (c *controller) Eval(js string) {
+	c.w.Dispatch(func() { c.w.Eval(js) })
+}
+
 func (c *controller) Hide() {
 	c.w.Dispatch(func() {
 		_, _, _ = procShowWindow.Call(uintptr(c.w.Window()), swHide)
