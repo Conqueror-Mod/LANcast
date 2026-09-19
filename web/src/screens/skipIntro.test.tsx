@@ -139,6 +139,15 @@ async function render() {
   await flush();
   await act(async () => pb.play(7, []));
   await flush();
+  /*
+   * The source announcing itself, which every real player does before it
+   * reports a position — and which the provider now waits for before trusting
+   * the clock, so that the end of one item cannot be filed under the next.
+   */
+  await act(async () => {
+    host.querySelector("video")?.dispatchEvent(new Event("loadedmetadata"));
+  });
+  await flush();
 }
 
 /** Move the playhead and let the element tell the player about it. */

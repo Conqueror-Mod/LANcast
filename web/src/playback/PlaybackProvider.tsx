@@ -454,6 +454,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const sourceItem = useRef(0);
   /*
+   * The item whose clock the player is actually reporting.
+   *
+   * Not the same as sourceItem, which is set when a source is *asked* for. In
+   * between the two, the player is still reporting the position of whatever
+   * played before — for a few hundred milliseconds with the element, longer
+   * with a native player, which keeps the old file open until the new one is
+   * ready. Anything that reads the clock in that window reads the wrong film's
+   * position and files it under the new one.
+   *
+   * Claimed by any of loadedmetadata, loadeddata or playing, because all three
+   * mean "this source is the one talking now" and no player is required to
+   * send all of them. Waiting for one in particular would be a rule that
+   * silently stops progress being saved on the engine that skips it.
+   */
+  const clockItem = useRef(0);
+  /*
    * Where playback of a playlist began, so it can be proven only once enough of
    * it has actually played. Null when there is nothing to prove — not on the
    * playlist path, already proven, or it failed. See HLS_PROVEN_SECONDS.
@@ -640,6 +656,44 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!force && now - lastSaved.current < 5000) return;
       lastSaved.current = now;
       const pos = transcoding.current ? offset.current + current : current;
+      /*
+       * Nothing is written while the clock and the queue disagree about what
+       * is playing.
+       *
+       * They agree except for an instant: an item ends, the queue advances
+       * immediately, and the clock still reads the end of what just finished
+       * because the next source has not reported yet. A save landing in that
+       * window carried one item's ending onto the next — and an ending arrives
+       * as **watched**.
+       *
+       * Seen with Futurama playing in order: the episode that had just
+       * finished was recorded correctly, and the episode that had played for
+       * no time at all was recorded as finished too, at its full duration, in
+       * the same second. It arrived already watched, on the Continue shelf,
+       * with its watch count up by one.
+       *
+       * Skipping rather than re-attributing, because the item that finished
+       * has already been written: the `ended` handler forces a save before it
+       * advances the queue. The write this drops is a duplicate of that one.
+       */
+      /*
+       * All three have to agree: the clock, the source it belongs to, and the
+       * item the queue is on. They differ for an instant when something ends —
+       * the queue advances at once, while the clock still reads the end of
+       * what just finished — and a save landing there carried one item's
+       * ending onto the next. An ending arrives as **watched**.
+       *
+       * Seen with Futurama playing in order: the episode that had just
+       * finished was recorded correctly, and the episode that had played for
+       * no time at all was recorded as finished too, at its full duration, in
+       * the same second. It appeared already watched, on the Continue shelf,
+       * with its watch count up by one.
+       *
+       * Nothing is lost by skipping: the item that finished is written by the
+       * `ended` handler before the queue moves, so the dropped write is a
+       * duplicate of one already made.
+       */
+      if (clockItem.current !== itemID) return;
       if (pos <= 0 || !itemID) return;
       /*
        * A position this early is not a bookmark, and writing one does damage.
@@ -1068,6 +1122,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         chosenPath.current = "progressive";
         sourceItem.current = item.id;
+        clockItem.current = 0;
         hlsPlayingFrom.current = null;
         mpvBackend().audioTrack = mpvAudioTrack(item.streams, audioIndex);
         v.src = sourceURL(item.id, "direct", 0);
@@ -1144,6 +1199,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         hlsWorthTrying(mediaCapability().canPlayType),
       );
       sourceItem.current = item.id;
+      clockItem.current = 0;
       hlsPlayingFrom.current = null;
       v.src = sourceURL(
         item.id,
@@ -2014,6 +2070,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const mediaHandlers: Partial<Record<MediaEventName, (media: MediaBackend) => void>> = {
     loadedmetadata: (media: MediaBackend) => {
       const v = media;
+      // From here the clock is this source's own.
+      clockItem.current = sourceItem.current;
       if (isFinite(v.duration)) setDuration(v.duration);
       // The element resets to full volume on every new source, so the
       // remembered level has to be re-applied — including across a
@@ -2043,13 +2101,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         own.mode = "showing";
       }
     },
-    loadeddata: () => setLoading(false),
+    loadeddata: () => {
+      // Frames from this source: its clock is its own from here.
+      clockItem.current = sourceItem.current;
+      setLoading(false);
+    },
     // The note explains a wait ("Converting — audio codec ac3 is not
     // supported"). Once frames are arriving there is no wait left to
     // explain, and a permanent banner over the picture reads as a warning
     // about the thing you are currently watching happily. A later stall
     // shows the spinner on its own, which is the honest signal for it.
     playing: (media: MediaBackend) => {
+      clockItem.current = sourceItem.current;
       setLoading(false);
       setNote("");
       // Frames from a playlist are the only proof that this engine can
@@ -2212,6 +2275,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       else retryWithoutClaims();
     },
     timeupdate: (media: MediaBackend) => {
+      // Between asking for a source and it reporting, these disagree and the
+      // position belongs to the film before this one.
+      if (clockItem.current !== sourceItem.current) return;
       const t = media.currentTime;
       setCurrent(t);
       // What a reload should come back in at. offset.current is zero on
