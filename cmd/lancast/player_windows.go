@@ -198,9 +198,19 @@ func (n *nativePlayer) stop() {
 	if n.relay != nil {
 		n.relay.Forget()
 	}
-	if n.window != nil {
-		n.window.SetVideoLayout("hidden", 0, 0, 0, 0)
-	}
+	/*
+	 * The window is left where the page put it.
+	 *
+	 * Hiding it here read as an obvious tidy-up and broke every film after the
+	 * first: stopping one source to open the next hid the video window, and the
+	 * page only re-sends a layout when its own layout changes — which moving
+	 * from one film to the next is not. mpv played to a hidden window. Randomize
+	 * all was the shape it showed up in, because it is the path that plays one
+	 * film after another without ever leaving the player screen.
+	 *
+	 * So layout has exactly one owner, the page, which is the only side that
+	 * knows whether the player is on screen at all.
+	 */
 }
 
 func clamp(v, lo, hi float64) float64 {
