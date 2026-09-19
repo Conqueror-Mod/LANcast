@@ -120,6 +120,15 @@ archives:
       - src: third_party/webview2/x64/WebView2Loader.dll
         dst: WebView2Loader.dll
 
+      # libmpv, the desktop client's player (ADR 0067/0069). The release
+      # workflow fetches it and checks its hash before this runs; it is not in
+      # git. Beside it goes its licence, because the LGPL asks that the terms
+      # travel with the binary.
+      - src: third_party/libmpv/out/libmpv-2.dll
+        dst: libmpv-2.dll
+      - src: third_party/libmpv/LICENSE.LGPL
+        dst: libmpv-LICENSE.txt
+
   - id: unix
     ids: [lancastd-unix, lancast-unix]
     name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
