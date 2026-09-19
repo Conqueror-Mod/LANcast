@@ -72,3 +72,8 @@ Thumbs.db
 # Local run configuration for the preview tooling. Machine-specific: it names
 # a data directory that exists on one computer.
 .claude/launch.json
+
+# The libmpv the release fetches and the build script produces (ADR 0069).
+# Tens of megabytes of decoder, published as a release asset instead.
+third_party/libmpv/out/
+third_party/libmpv/LICENSE.LGPL
