@@ -58,6 +58,7 @@ import {
   type FilePath,
 } from "./fileTransport";
 import { mediaCapability } from "@/lib/liveTransport";
+import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
@@ -1885,6 +1886,336 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     togglePopout,
   };
 
+  /*
+   * The media events, attached to whichever backend is playing (backend.ts).
+   * Read through a ref on every event so each handler sees this render's
+   * closure, exactly as the JSX props these replaced did.
+   */
+  const mediaHandlers: Partial<Record<MediaEventName, (media: MediaBackend) => void>> = {
+    loadedmetadata: (media: MediaBackend) => {
+      const v = media;
+      if (isFinite(v.duration)) setDuration(v.duration);
+      // The element resets to full volume on every new source, so the
+      // remembered level has to be re-applied — including across a
+      // transcode seek, which reloads the source.
+      v.volume = volume;
+      // Same reason as volume: a fresh source resets playbackRate to 1,
+      // so a chosen speed has to be re-applied or it silently reverts on
+      // the next episode.
+      v.playbackRate = speed;
+      // Resume: for direct play the element carries the offset itself.
+      if (!transcoding.current && startedFrom.current > 0) {
+        v.currentTime = startedFrom.current;
+      }
+      // A transcode seek reloads the source, which re-parses the <track>
+      // at its default mode. Re-assert the selection so subtitles survive
+      // a seek rather than silently switching off — and re-assert it the
+      // same way the effect above does, one track showing and every
+      // other one off. Setting the whole list to showing here would put
+      // a stale track back on screen at the first seek even once the
+      // effect had cleared it.
+      // Text tracks are an element feature (backend.ts).
+      for (const tt of videoRef.current?.textTracks ?? []) {
+        tt.mode = "disabled";
+      }
+      const own = trackRef.current?.track;
+      if (activeSub && own) {
+        own.mode = "showing";
+      }
+    },
+    loadeddata: () => setLoading(false),
+    // The note explains a wait ("Converting — audio codec ac3 is not
+    // supported"). Once frames are arriving there is no wait left to
+    // explain, and a permanent banner over the picture reads as a warning
+    // about the thing you are currently watching happily. A later stall
+    // shows the spinner on its own, which is the honest signal for it.
+    playing: (media: MediaBackend) => {
+      setLoading(false);
+      setNote("");
+      // Frames from a playlist are the only proof that this engine can
+      // read one. Recorded so the question is not re-opened on every
+      // film, and so a later decode error cannot be mistaken for the
+      // engine lacking HLS altogether.
+      // Not proof yet: the desktop client fires `playing` on a playlist
+      // and fails a few seconds later on every film. Start counting,
+      // and record it once enough has really played (onTimeUpdate).
+      if (chosenPath.current === "hls" && hlsPlayingFrom.current === null) {
+        hlsPlayingFrom.current = media.currentTime;
+      }
+    },
+    waiting: () => setLoading(true),
+    error: (media: MediaBackend) => {
+      /*
+       * A playlist this engine cannot read, which is not a failure of
+       * the film or the server.
+       *
+       * `canPlayType` answers "maybe" to a playlist on Chromium whether
+       * or not it will play one, so the capability cannot be asked for
+       * up front — it is discovered here, once, and remembered for the
+       * device (fileTransport.ts). Falling straight back to the
+       * progressive source means the cost of finding out is a reload
+       * rather than a dead player.
+       *
+       * Narrow deliberately: only *unsupported source* counts. A decode
+       * or network error says something about this file or this moment,
+       * and retiring the better path over one of those would be a
+       * permanent decision made from a transient fault.
+       *
+       * And narrow was still not narrow enough. The element raises
+       * *unsupported source* for anything that is not media, including
+       * the `503 {"error":…}` this server returns when ffmpeg has not
+       * written index.m3u8 within thirty seconds — so one slow start
+       * was recorded as "this device cannot play HLS" and every later
+       * film took the progressive path, with the eviction fault the
+       * playlist exists to avoid. Observed on this server: one failed
+       * playlist on 31 August, and not one HLS file session since.
+       *
+       * So the fallback happens now — it is right either way and the
+       * viewer should not wait on a question — and the *verdict* waits
+       * to hear whether a playlist was ever served.
+       */
+      hlsPlayingFrom.current = null;
+      if (
+        chosenPath.current === "hls" &&
+        isUnsupportedSource(media.error)
+      ) {
+        /*
+         * Write down *why*, before doing anything about it.
+         *
+         * The element is holding `MediaError.message` at this instant
+         * and nothing else in the system will ever see it. Keeping only
+         * `code === 4` is keeping the one fact that distinguishes
+         * nothing, since the element reports 4 for "this is not media"
+         * and for "I could not fetch the media" alike — and chasing
+         * that ambiguity meant eliminating the playlist, the encoder,
+         * the declared level, the MIME types and the URL rewrite from
+         * outside the application, all of which came back clean.
+         */
+        /*
+         * Where the film actually is, which is not where this stream
+         * started.
+         *
+         * `offset.current` is the *session's base* — the `t=` it was
+         * opened with — and it does not move as the film plays. Using
+         * it to rebuild is how an overnight pause lost ninety minutes:
+         * the session was reaped, the element raised an error, and the
+         * fallback restarted a film at 1h39m from its original 12m
+         * base, then wrote 12m back as the saved position.
+         *
+         * Observed on Dogma, 2026-09-16: the client asked for
+         * `seg00994.m4s` — segment 994 of six seconds, so 99 minutes —
+         * and in the same millisecond opened a new session at
+         * `start_at=736`.
+         *
+         * livePos carries `offset + currentTime`, which is the sum the
+         * clock on screen shows, and it is read rather than recomputed
+         * because the element's own currentTime is not dependable at
+         * the instant it reports an error.
+         */
+        const resumeAt = resumePointAfterFailure(
+          livePos.current,
+          sourceItem.current,
+          offset.current,
+        );
+
+        const incidentClock = Date.now();
+        noteHLSIncident(
+          readIncident(
+            // The HLS path exists only on the html5 backend, where media is the element.
+            media as HTMLVideoElement,
+            resumeAt,
+            incidentClock,
+            itemID,
+            item?.title ?? "",
+          ),
+        );
+        void probePlaylist(
+          sourceURL(
+            itemID,
+            decision.current.method,
+            resumeAt,
+            audioIndex,
+            qualityRef.current,
+            "hls",
+          ),
+        ).then(({ served, growing }) => {
+          // The probe's answer belongs to the incident above, and is
+          // kept whichever way it goes — "the server refused" is as
+          // much of a diagnosis as "the engine refused", and the panel
+          // should not have to guess which.
+          noteHLSPlaylistServed(incidentClock, served);
+          // Only a playlist that arrived and was still refused says
+          // anything about this engine. Anything else is the server or
+          // the moment, and is not remembered — and neither is a
+          // growing playlist, which WebView2 refuses where it plays a
+          // complete one (see probePlaylist).
+          if (served && !growing) rememberHLS("refused");
+        });
+        const v = media;
+        chosenPath.current = "progressive";
+        /*
+         * Rebased before the URL is built, the way seekTo does it.
+         *
+         * `offset` is the new stream's zero point, so leaving it at the
+         * old base would make every later sum wrong by the difference:
+         * the clock on screen, the subtitle timing, and the position
+         * written to the server — which is how the old value came to
+         * overwrite the good one.
+         */
+        offset.current = resumeAt;
+        setSubOffset(resumeAt);
+        setCurrent(0);
+        setLoading(true);
+        v.src = sourceURL(
+          itemID,
+          decision.current.method,
+          resumeAt,
+          audioIndex,
+          qualityRef.current,
+          "progressive",
+        );
+        v.load();
+        void v.play().catch(() => {});
+        return;
+      }
+      // Two different failures wearing one event. A direct play that
+      // fails is a claim to withdraw; a transcode that fails is the
+      // server saying no, and only one of them is worth retrying.
+      if (transcoding.current) transcodeFailed();
+      else retryWithoutClaims();
+    },
+    timeupdate: (media: MediaBackend) => {
+      const t = media.currentTime;
+      setCurrent(t);
+      // What a reload should come back in at. offset.current is zero on
+      // direct play and the transcode's own zero point otherwise, which
+      // is the same sum displayTime makes.
+      if (
+        chosenPath.current === "hls" &&
+        hlsPlayingFrom.current !== null &&
+        t - hlsPlayingFrom.current >= HLS_PROVEN_SECONDS
+      ) {
+        rememberHLS("playable");
+        hlsPlayingFrom.current = null;
+      }
+      livePos.current = {
+        // The stream's own item, not the one the queue has moved to.
+        id: sourceItem.current,
+        at: (transcoding.current ? offset.current : 0) + t,
+      };
+      saveProgress();
+    },
+    play: () => setPlaying(true),
+    pause: () => {
+      setPlaying(false);
+      saveProgress(true);
+      // Pausing is a person. Not the pause this feature performs
+      // itself, which happens after the prompt is already set and
+      // would otherwise clear it on the way past.
+      if (!stillWatchingRef.current) noteAttention();
+    },
+    ended: (media: MediaBackend) => {
+      saveProgress(true);
+      /*
+       * A stream that was cut is not a film that ended.
+       *
+       * A progressive fMP4 has no duration in it — the element learns
+       * how long the film is only by reaching the end of the bytes. So
+       * when the server stops sending, for any reason, the browser
+       * fires `ended`, exactly as it would at the real end. This handler
+       * believed it and rolled on to the next title.
+       *
+       * The reason it stops is the idle reaper. Pausing a progressive
+       * stream applies backpressure, the session stops being read, and
+       * nothing distinguishes "paused" from "gone" — so a film paused
+       * longer than the idle timeout had its ffmpeg killed underneath
+       * it, and pressing play skipped to the next film. It only ever
+       * happened to convertible codecs, because direct play serves a
+       * real file whose duration is known up front.
+       *
+       * The probed runtime is the authority on where the end actually
+       * is, so short of it means cut. seekTo re-requests the transcode
+       * from there, which is the same thing a seek already does.
+       */
+      if (
+        transcoding.current &&
+        totalDuration > 0 &&
+        displayTime < totalDuration - TRUNCATION_SLACK
+      ) {
+        const at = displayTime;
+        const looping =
+          recoveredAt.current !== null &&
+          Math.abs(recoveredAt.current - at) < TRUNCATION_SLACK;
+        if (!looping) {
+          recoveredAt.current = at;
+          setNote("Reconnecting…");
+          setLoading(true);
+          seekTo(at);
+          return;
+        }
+        // Cut twice at the same spot. Recovering again would reload for
+        // ever, so fall through and treat it as the end.
+      }
+      recoveredAt.current = null;
+      // Repeat one reseeks rather than reloading: the source is already
+      // the right file, and re-requesting it would restart a transcode
+      // that is already running.
+      if (repeat === "one") {
+        const v = media;
+        if (v) {
+          v.currentTime = 0;
+          void v.play().catch(() => {});
+          return;
+        }
+      }
+      /*
+       * Auto play, and what it does *not* cover.
+       *
+       * Only the end of a track consults it. Pressing Next is an
+       * explicit request to move on and must work regardless — a
+       * setting that disabled the next button would be a broken
+       * control, not an honoured preference. Repeat one is likewise
+       * above this: it is a loop the user asked for, not an advance.
+       *
+       * With it off the queue stays intact and the position stays put,
+       * so pressing play again resumes into it. Clearing the queue here
+       * would make "don't roll on automatically" mean "throw away the
+       * album", which is not what it says.
+       */
+      if (!prefsRef.current.autoPlay) {
+        setPlaying(false);
+        return;
+      }
+      /*
+       * The queue moving on by itself is the thing being counted.
+       *
+       * Asked *before* advancing rather than after, because the point
+       * is to stop the next transcode from starting and the next
+       * progress record from being written — a prompt that appears
+       * over an episode already playing has let the thing happen that
+       * it exists to prevent.
+       */
+      const now = Date.now();
+      const next = advanced(runRef.current, now);
+      runRef.current = next;
+      if (shouldAsk(next)) {
+        stillWatchingRef.current = describeRun(next, now);
+        setStillWatching(stillWatchingRef.current);
+        setPlaying(false);
+        return;
+      }
+      // Roll on to the next queued item; if there is none, it ends here.
+      if (!advanceQueue()) setPlaying(false);
+    },
+  };
+  const mediaHandlersRef = useRef(mediaHandlers);
+  mediaHandlersRef.current = mediaHandlers;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    return attachMediaHandlers(v, () => mediaHandlersRef.current);
+  }, []);
+
   return (
     <Ctx.Provider value={value}>
       {children}
@@ -1944,319 +2275,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             ref={videoRef}
             className={`playback__video${isAudio ? " playback__video--audio" : ""}`}
             playsInline
-            onLoadedMetadata={(e) => {
-              const v = e.currentTarget;
-              if (isFinite(v.duration)) setDuration(v.duration);
-              // The element resets to full volume on every new source, so the
-              // remembered level has to be re-applied — including across a
-              // transcode seek, which reloads the source.
-              v.volume = volume;
-              // Same reason as volume: a fresh source resets playbackRate to 1,
-              // so a chosen speed has to be re-applied or it silently reverts on
-              // the next episode.
-              v.playbackRate = speed;
-              // Resume: for direct play the element carries the offset itself.
-              if (!transcoding.current && startedFrom.current > 0) {
-                v.currentTime = startedFrom.current;
-              }
-              // A transcode seek reloads the source, which re-parses the <track>
-              // at its default mode. Re-assert the selection so subtitles survive
-              // a seek rather than silently switching off — and re-assert it the
-              // same way the effect above does, one track showing and every
-              // other one off. Setting the whole list to showing here would put
-              // a stale track back on screen at the first seek even once the
-              // effect had cleared it.
-              for (const tt of v.textTracks) {
-                tt.mode = "disabled";
-              }
-              const own = trackRef.current?.track;
-              if (activeSub && own) {
-                own.mode = "showing";
-              }
-            }}
-            onLoadedData={() => setLoading(false)}
-            // The note explains a wait ("Converting — audio codec ac3 is not
-            // supported"). Once frames are arriving there is no wait left to
-            // explain, and a permanent banner over the picture reads as a warning
-            // about the thing you are currently watching happily. A later stall
-            // shows the spinner on its own, which is the honest signal for it.
-            onPlaying={(e) => {
-              setLoading(false);
-              setNote("");
-              // Frames from a playlist are the only proof that this engine can
-              // read one. Recorded so the question is not re-opened on every
-              // film, and so a later decode error cannot be mistaken for the
-              // engine lacking HLS altogether.
-              // Not proof yet: the desktop client fires `playing` on a playlist
-              // and fails a few seconds later on every film. Start counting,
-              // and record it once enough has really played (onTimeUpdate).
-              if (chosenPath.current === "hls" && hlsPlayingFrom.current === null) {
-                hlsPlayingFrom.current = e.currentTarget.currentTime;
-              }
-            }}
-            onWaiting={() => setLoading(true)}
-            onError={(e) => {
-              /*
-               * A playlist this engine cannot read, which is not a failure of
-               * the film or the server.
-               *
-               * `canPlayType` answers "maybe" to a playlist on Chromium whether
-               * or not it will play one, so the capability cannot be asked for
-               * up front — it is discovered here, once, and remembered for the
-               * device (fileTransport.ts). Falling straight back to the
-               * progressive source means the cost of finding out is a reload
-               * rather than a dead player.
-               *
-               * Narrow deliberately: only *unsupported source* counts. A decode
-               * or network error says something about this file or this moment,
-               * and retiring the better path over one of those would be a
-               * permanent decision made from a transient fault.
-               *
-               * And narrow was still not narrow enough. The element raises
-               * *unsupported source* for anything that is not media, including
-               * the `503 {"error":…}` this server returns when ffmpeg has not
-               * written index.m3u8 within thirty seconds — so one slow start
-               * was recorded as "this device cannot play HLS" and every later
-               * film took the progressive path, with the eviction fault the
-               * playlist exists to avoid. Observed on this server: one failed
-               * playlist on 31 August, and not one HLS file session since.
-               *
-               * So the fallback happens now — it is right either way and the
-               * viewer should not wait on a question — and the *verdict* waits
-               * to hear whether a playlist was ever served.
-               */
-              hlsPlayingFrom.current = null;
-              if (
-                chosenPath.current === "hls" &&
-                isUnsupportedSource(e.currentTarget.error)
-              ) {
-                /*
-                 * Write down *why*, before doing anything about it.
-                 *
-                 * The element is holding `MediaError.message` at this instant
-                 * and nothing else in the system will ever see it. Keeping only
-                 * `code === 4` is keeping the one fact that distinguishes
-                 * nothing, since the element reports 4 for "this is not media"
-                 * and for "I could not fetch the media" alike — and chasing
-                 * that ambiguity meant eliminating the playlist, the encoder,
-                 * the declared level, the MIME types and the URL rewrite from
-                 * outside the application, all of which came back clean.
-                 */
-                /*
-                 * Where the film actually is, which is not where this stream
-                 * started.
-                 *
-                 * `offset.current` is the *session's base* — the `t=` it was
-                 * opened with — and it does not move as the film plays. Using
-                 * it to rebuild is how an overnight pause lost ninety minutes:
-                 * the session was reaped, the element raised an error, and the
-                 * fallback restarted a film at 1h39m from its original 12m
-                 * base, then wrote 12m back as the saved position.
-                 *
-                 * Observed on Dogma, 2026-09-16: the client asked for
-                 * `seg00994.m4s` — segment 994 of six seconds, so 99 minutes —
-                 * and in the same millisecond opened a new session at
-                 * `start_at=736`.
-                 *
-                 * livePos carries `offset + currentTime`, which is the sum the
-                 * clock on screen shows, and it is read rather than recomputed
-                 * because the element's own currentTime is not dependable at
-                 * the instant it reports an error.
-                 */
-                const resumeAt = resumePointAfterFailure(
-                  livePos.current,
-                  sourceItem.current,
-                  offset.current,
-                );
-
-                const incidentClock = Date.now();
-                noteHLSIncident(
-                  readIncident(
-                    e.currentTarget,
-                    resumeAt,
-                    incidentClock,
-                    itemID,
-                    item?.title ?? "",
-                  ),
-                );
-                void probePlaylist(
-                  sourceURL(
-                    itemID,
-                    decision.current.method,
-                    resumeAt,
-                    audioIndex,
-                    qualityRef.current,
-                    "hls",
-                  ),
-                ).then(({ served, growing }) => {
-                  // The probe's answer belongs to the incident above, and is
-                  // kept whichever way it goes — "the server refused" is as
-                  // much of a diagnosis as "the engine refused", and the panel
-                  // should not have to guess which.
-                  noteHLSPlaylistServed(incidentClock, served);
-                  // Only a playlist that arrived and was still refused says
-                  // anything about this engine. Anything else is the server or
-                  // the moment, and is not remembered — and neither is a
-                  // growing playlist, which WebView2 refuses where it plays a
-                  // complete one (see probePlaylist).
-                  if (served && !growing) rememberHLS("refused");
-                });
-                const v = e.currentTarget;
-                chosenPath.current = "progressive";
-                /*
-                 * Rebased before the URL is built, the way seekTo does it.
-                 *
-                 * `offset` is the new stream's zero point, so leaving it at the
-                 * old base would make every later sum wrong by the difference:
-                 * the clock on screen, the subtitle timing, and the position
-                 * written to the server — which is how the old value came to
-                 * overwrite the good one.
-                 */
-                offset.current = resumeAt;
-                setSubOffset(resumeAt);
-                setCurrent(0);
-                setLoading(true);
-                v.src = sourceURL(
-                  itemID,
-                  decision.current.method,
-                  resumeAt,
-                  audioIndex,
-                  qualityRef.current,
-                  "progressive",
-                );
-                v.load();
-                void v.play().catch(() => {});
-                return;
-              }
-              // Two different failures wearing one event. A direct play that
-              // fails is a claim to withdraw; a transcode that fails is the
-              // server saying no, and only one of them is worth retrying.
-              if (transcoding.current) transcodeFailed();
-              else retryWithoutClaims();
-            }}
-            onTimeUpdate={(e) => {
-              const t = e.currentTarget.currentTime;
-              setCurrent(t);
-              // What a reload should come back in at. offset.current is zero on
-              // direct play and the transcode's own zero point otherwise, which
-              // is the same sum displayTime makes.
-              if (
-                chosenPath.current === "hls" &&
-                hlsPlayingFrom.current !== null &&
-                t - hlsPlayingFrom.current >= HLS_PROVEN_SECONDS
-              ) {
-                rememberHLS("playable");
-                hlsPlayingFrom.current = null;
-              }
-              livePos.current = {
-                // The stream's own item, not the one the queue has moved to.
-                id: sourceItem.current,
-                at: (transcoding.current ? offset.current : 0) + t,
-              };
-              saveProgress();
-            }}
-            onPlay={() => setPlaying(true)}
-            onPause={() => {
-              setPlaying(false);
-              saveProgress(true);
-              // Pausing is a person. Not the pause this feature performs
-              // itself, which happens after the prompt is already set and
-              // would otherwise clear it on the way past.
-              if (!stillWatchingRef.current) noteAttention();
-            }}
-            onEnded={() => {
-              saveProgress(true);
-              /*
-               * A stream that was cut is not a film that ended.
-               *
-               * A progressive fMP4 has no duration in it — the element learns
-               * how long the film is only by reaching the end of the bytes. So
-               * when the server stops sending, for any reason, the browser
-               * fires `ended`, exactly as it would at the real end. This handler
-               * believed it and rolled on to the next title.
-               *
-               * The reason it stops is the idle reaper. Pausing a progressive
-               * stream applies backpressure, the session stops being read, and
-               * nothing distinguishes "paused" from "gone" — so a film paused
-               * longer than the idle timeout had its ffmpeg killed underneath
-               * it, and pressing play skipped to the next film. It only ever
-               * happened to convertible codecs, because direct play serves a
-               * real file whose duration is known up front.
-               *
-               * The probed runtime is the authority on where the end actually
-               * is, so short of it means cut. seekTo re-requests the transcode
-               * from there, which is the same thing a seek already does.
-               */
-              if (
-                transcoding.current &&
-                totalDuration > 0 &&
-                displayTime < totalDuration - TRUNCATION_SLACK
-              ) {
-                const at = displayTime;
-                const looping =
-                  recoveredAt.current !== null &&
-                  Math.abs(recoveredAt.current - at) < TRUNCATION_SLACK;
-                if (!looping) {
-                  recoveredAt.current = at;
-                  setNote("Reconnecting…");
-                  setLoading(true);
-                  seekTo(at);
-                  return;
-                }
-                // Cut twice at the same spot. Recovering again would reload for
-                // ever, so fall through and treat it as the end.
-              }
-              recoveredAt.current = null;
-              // Repeat one reseeks rather than reloading: the source is already
-              // the right file, and re-requesting it would restart a transcode
-              // that is already running.
-              if (repeat === "one") {
-                const v = e2(videoRef);
-                if (v) {
-                  v.currentTime = 0;
-                  void v.play().catch(() => {});
-                  return;
-                }
-              }
-              /*
-               * Auto play, and what it does *not* cover.
-               *
-               * Only the end of a track consults it. Pressing Next is an
-               * explicit request to move on and must work regardless — a
-               * setting that disabled the next button would be a broken
-               * control, not an honoured preference. Repeat one is likewise
-               * above this: it is a loop the user asked for, not an advance.
-               *
-               * With it off the queue stays intact and the position stays put,
-               * so pressing play again resumes into it. Clearing the queue here
-               * would make "don't roll on automatically" mean "throw away the
-               * album", which is not what it says.
-               */
-              if (!prefsRef.current.autoPlay) {
-                setPlaying(false);
-                return;
-              }
-              /*
-               * The queue moving on by itself is the thing being counted.
-               *
-               * Asked *before* advancing rather than after, because the point
-               * is to stop the next transcode from starting and the next
-               * progress record from being written — a prompt that appears
-               * over an episode already playing has let the thing happen that
-               * it exists to prevent.
-               */
-              const now = Date.now();
-              const next = advanced(runRef.current, now);
-              runRef.current = next;
-              if (shouldAsk(next)) {
-                stillWatchingRef.current = describeRun(next, now);
-                setStillWatching(stillWatchingRef.current);
-                setPlaying(false);
-                return;
-              }
-              // Roll on to the next queued item; if there is none, it ends here.
-              if (!advanceQueue()) setPlaying(false);
-            }}
           >
             {activeSub && (
               <track
@@ -2282,8 +2300,3 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// e2 reads a ref inside a JSX handler without widening its type at every call
-// site. Small, but it keeps the handler above readable.
-function e2(ref: React.RefObject<HTMLVideoElement>): HTMLVideoElement | null {
-  return ref.current;
-}
