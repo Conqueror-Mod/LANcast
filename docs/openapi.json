@@ -1342,6 +1342,39 @@
         }
       }
     },
+    "/items/{id}/stream-ticket": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "post": {
+        "operationId": "mintStreamTicket",
+        "tags": [
+          "playback"
+        ],
+        "summary": "A narrow credential for a native player to open this item's stream",
+        "description": "For players that are not the browser and cannot carry the session cookie, such as the desktop client's libmpv (ADR 0067, ADR 0068). The ticket opens `GET /stream/{id}` for this item and nothing else, lasts twenty-four hours so an overnight pause survives it, and ends early with the session or key that minted it. Tickets are held in memory; a server restart forgets them and the player mints another.\n\nThe item must be visible to the caller, exactly as for the stream itself.",
+        "responses": {
+          "200": {
+            "description": "The ticket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/stream/{id}": {
       "parameters": [
         {
@@ -1394,7 +1427,18 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
       }
     },
     "/stream/{id}/transcode": {
@@ -7373,6 +7417,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "An API key (ADR 0061). Presented as `Authorization: Bearer <key>`, never in a query parameter — a credential in a URL is a credential in the server log, the browser history and the next request's Referer.\n\nA key authenticates as the account that made it, and may **never** perform administration or manage keys, whoever owns it. Cross-origin requests authenticated this way are allowed: the CSRF check exists because a browser attaches cookies by itself, and nothing attaches this header by itself."
+      },
+      "streamTicket": {
+        "type": "http",
+        "scheme": "ticket",
+        "description": "A stream ticket (ADR 0068), minted by `POST /items/{id}/stream-ticket` and presented as `Authorization: Ticket <ticket>`. Accepted **only** on `GET`/`HEAD` of `/stream/{id}` for the item it was minted for; everywhere else it is not a credential. It re-checks the session or key that minted it on every use, so signing out, a password change or revoking the key ends it."
       }
     },
     "parameters": {
@@ -12703,6 +12752,30 @@
           "why": {
             "type": "string",
             "description": "Why this choice was made, for a client that explains itself and for a test that asserts on it. A choice with no reason cannot be told apart from a bug."
+          }
+        }
+      },
+      "StreamTicket": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "item_id",
+          "expires_at"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "The secret. Presented as `Authorization: Ticket <ticket>`; shown once and never stored in plain text."
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The one item whose stream this opens."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds. Twenty-four hours after minting."
           }
         }
       }

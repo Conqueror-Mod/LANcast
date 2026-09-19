@@ -94,6 +94,16 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		 */
 		keySess, keyID, keyed := s.apiKey(r)
 
+		// A stream ticket (streamticket.go) stands in for the session that
+		// minted it, on its one item's stream and nowhere else. Reads only, so
+		// the CSRF check below has nothing to say about it.
+		if !keyed {
+			if sess, ok := s.streamTicket(r); ok {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
+				return
+			}
+		}
+
 		if !keyed {
 			// CSRF: a state-changing request must come from this origin. Paired
 			// with SameSite=Strict on the cookie — either alone leaves a gap,
