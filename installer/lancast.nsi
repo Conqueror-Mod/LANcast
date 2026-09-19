@@ -38,6 +38,10 @@ RequestExecutionLevel admin
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+; $PLUGINSDIR is where OpenInBrowser writes its temporary shortcut, and NSIS
+; only creates it on demand — for a page that uses a plugin, which none here
+; does. Asking for it explicitly is the documented way.
+!define MUI_CUSTOMFUNCTION_GUIINIT MakePluginsDir
 ; Two ways to finish, because the two are genuinely different applications of
 ; the same client and the installer is the one place a person picks.
 ;
@@ -72,12 +76,44 @@ RequestExecutionLevel admin
 ; So both checkboxes start the tray first and then the surface the person asked
 ; for. Starting it twice is harmless — the tray holds a lock of its own and a
 ; second launch opens the UI instead of adding an icon.
+; Started as the person, not as the installer.
+;
+; This installer runs elevated (RequestExecutionLevel admin, because it writes
+; to Program Files and installs a service) and `Exec` hands its own token to
+; whatever it starts. Finishing into the client therefore left LANcast running
+; **as administrator** until the next time it was closed and reopened — a
+; privilege the client has no use for, and one Windows enforces in ways that
+; read as bugs rather than as security: drag and drop from Explorer stops
+; working, and input from any lower-integrity process is silently discarded.
+; That last one is how this was found, a week after it started happening.
+;
+; `explorer.exe` is the way out without a third-party plugin (the UAC and
+; ShellExecAsUser plugins are not in the NSIS the release job installs): it is
+; already running as the signed-in user, so anything it opens inherits **that**
+; token. It takes a file to open rather than a command line, which is why each
+; launch goes through a shortcut — the two the installer just wrote already
+; carry the right arguments, and the browser one is made here for the purpose.
+;
+; $9 is the shortcut to open.
+Function MakePluginsDir
+  InitPluginsDir
+FunctionEnd
+
+Function LaunchAsUser
+  ClearErrors
+  Exec 'explorer.exe "$9"'
+  IfErrors 0 +3
+    ; No Explorer to borrow a token from — a locked-down shell, or a machine
+    ; where it has crashed. Starting it elevated is worse than not starting it.
+    MessageBox MB_OK|MB_ICONINFORMATION "LANcast is installed. Open it from the Start menu."
+FunctionEnd
+
 Function StartTray
-  ; The same -data pin the Start Menu shortcut uses: without it the tray reads
-  ; a relative directory and opens a second database beside the install, which
-  ; is the failure v0.4.1 was about.
-  ReadEnvStr $1 "ProgramData"
-  Exec '"$INSTDIR\LANcast-Server.exe" tray -data "$1\LANcast"'
+  ; The Start Menu shortcut, which already pins -data to the machine-wide
+  ; directory: without that the tray reads a relative directory and opens a
+  ; second database beside the install, which is the failure v0.4.1 was about.
+  StrCpy $9 "$SMPROGRAMS\LANcast\LANcast Server.lnk"
+  Call LaunchAsUser
   ; A moment for the icon to appear before the window opens on top of it. Not a
   ; synchronisation — nothing depends on the order — but a person watching sees
   ; the tray populate rather than a window arriving from nowhere.
@@ -86,14 +122,22 @@ FunctionEnd
 
 Function StartLANcast
   Call StartTray
-  Exec '"$INSTDIR\LANcast-Client.exe"'
+  StrCpy $9 "$SMPROGRAMS\LANcast\LANcast Client.lnk"
+  Call LaunchAsUser
 FunctionEnd
 
 Function OpenInBrowser
   Call StartTray
-  ; -browser is the documented opt-out. Launched detached so the installer can
-  ; finish rather than waiting on a client the user is about to use.
-  Exec '"$INSTDIR\LANcast-Client.exe" -browser'
+  ; -browser is the documented opt-out, and no shortcut carries it, so one is
+  ; written for this launch. $PLUGINSDIR because it is temporary by definition
+  ; and removed when the installer exits; the Sleep is what keeps it alive long
+  ; enough for Explorer to read it, which takes milliseconds.
+  CreateShortcut "$PLUGINSDIR\LANcast in browser.lnk" "$INSTDIR\LANcast-Client.exe" \
+    "-browser" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" \
+    "Open LANcast in the default browser"
+  StrCpy $9 "$PLUGINSDIR\LANcast in browser.lnk"
+  Call LaunchAsUser
+  Sleep 1500
 FunctionEnd
 
 !insertmacro MUI_UNPAGE_CONFIRM
