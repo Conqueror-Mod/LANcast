@@ -29,6 +29,18 @@ Go dependencies (see go.mod for exact versions):
   github.com/google/uuid              BSD 3-Clause
   github.com/remyoudompheng/bigfft    BSD 3-Clause
 
+Built by this project and shipped beside the client:
+
+  libmpv (mpv, FFmpeg, libplacebo,   GNU Lesser General Public License v2.1
+  dav1d, shaderc, SPIRV-Cross,       or later, as configured
+  zlib)                              third_party/libmpv/PROVENANCE.md
+
+    Built from pinned sources with mpv's -Dgpl=false and FFmpeg without
+    --enable-gpl, so the result is LGPL rather than GPL (ADR 0069). It is
+    loaded at runtime by full path and never linked, so replacing the file
+    replaces the library. The recipe that builds it, and the exact source
+    revisions, are in third_party/libmpv/.
+
 Vendored, with their own licence files beside them:
 
   hls.js                              Apache License 2.0
