@@ -59,6 +59,7 @@ import {
 } from "./fileTransport";
 import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
+import { mpvBackend, nativePlaybackAvailable } from "./mpvBackend";
 import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
@@ -412,6 +413,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const subtitles = useMemo(() => subtitleData ?? [], [subtitleData]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  /*
+   * Whether the current source plays natively through the desktop client's
+   * libmpv (ADR 0067) rather than the <video> element. Decided per source in
+   * the source-selection effect; media() is what everything else talks to.
+   */
+  const nativeRef = useRef(false);
+  const media = useCallback(
+    (): MediaBackend | null => (nativeRef.current ? mpvBackend() : videoRef.current),
+    [],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   // The <track> element currently mounted. Its .track is the one TextTrack
   // allowed to be showing; see the effect that enforces that below.
@@ -640,7 +651,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const stop = useCallback(() => {
     saveRef.current(true);
-    const v = videoRef.current;
+    const v = media();
     if (v) {
       v.pause();
       v.removeAttribute("src");
@@ -794,7 +805,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // it, "previous" three minutes into a song is a mis-press that loses your
   // place in the song you meant to keep.
   const playPrev = useCallback(() => {
-    const v = videoRef.current;
+    const v = media();
     const elapsed = v ? offset.current + v.currentTime : 0;
     if (elapsed > 3) {
       seekTo(0);
@@ -898,7 +909,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // playbackRate to 1 — the same reason volume is re-applied on loadedmetadata.
   const setSpeed = useCallback((rate: number) => {
     setSpeedState(rate);
-    const v = videoRef.current;
+    const v = media();
     if (v) v.playbackRate = rate;
   }, []);
 
@@ -918,9 +929,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // ---- source selection + resume -------------------------------------------
   useEffect(() => {
     if (!item) return;
-    const v = videoRef.current;
-    if (!v) return;
+    if (!videoRef.current) return;
     let cancelled = false;
+    // Settled inside the async block below, once native playback has answered;
+    // the cleanup reads whichever backend this run actually used.
+    let v: MediaBackend = videoRef.current;
 
     /*
      * Where to come back in.
@@ -957,6 +970,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           });
 
     (async () => {
+      /*
+       * Native first (ADR 0067). Video in the desktop client with libmpv plays
+       * the file's own bytes: no decision to ask for, nothing to convert. Music
+       * stays on the element — there is no picture to put an overlay over.
+       */
+      const native = !isAudio && (await nativePlaybackAvailable());
+      if (cancelled) return;
+      if (nativeRef.current && !native) mpvBackend().removeAttribute("src");
+      nativeRef.current = native;
+      v = native ? mpvBackend() : videoRef.current ?? v;
+      if (native) {
+        decision.current = { method: "direct", reason: "" };
+        transcoding.current = false;
+        setNote("");
+        offset.current = 0;
+        setSubOffset(0);
+        setLoading(true);
+        chosenPath.current = "progressive";
+        sourceItem.current = item.id;
+        hlsPlayingFrom.current = null;
+        v.src = sourceURL(item.id, "direct", 0);
+        v.load();
+        void v.play().catch(() => {});
+        return;
+      }
       try {
         // The chosen audio track has to be part of the question. The decision
         // depends on it — a file that direct-plays with its own track may have
@@ -1211,6 +1249,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const fallBackFromPoorDecode = useCallback(() => {
     const v = videoRef.current;
+    // Dropped frames are the browser decoder's problem; mpv has none of it.
+    if (nativeRef.current) return;
     if (!v || !item || transcoding.current) return;
 
     const claimed = capabilities();
@@ -1296,7 +1336,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // ---- seeking --------------------------------------------------------------
   const seekTo = useCallback(
     (target: number) => {
-      const v = videoRef.current;
+      const v = media();
       if (!v) return;
       // Seeking is somebody at the controls, so it ends the run.
       noteAttention();
@@ -1339,14 +1379,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   // ---- transport ------------------------------------------------------------
   const togglePlay = useCallback(() => {
-    const v = videoRef.current;
+    const v = media();
     if (!v) return;
     if (v.paused) void v.play().catch(() => {});
     else v.pause();
   }, []);
 
   const toggleMute = useCallback(() => {
-    const v = videoRef.current;
+    const v = media();
     if (!v) return;
     v.muted = !v.muted;
     setMuted(v.muted);
@@ -1458,7 +1498,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // dragging the slider up plainly means.
   const changeVolume = useCallback((next: number) => {
     const clamped = Math.min(1, Math.max(0, next));
-    const v = videoRef.current;
+    const v = media();
     setVolume(clamped);
     localStorage.setItem("lancast:volume", String(clamped));
     if (!v) return;
@@ -1975,6 +2015,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        * to hear whether a playlist was ever served.
        */
       hlsPlayingFrom.current = null;
+      if (nativeRef.current) {
+        // Nothing to fall back to inside the native path, and nothing the
+        // browser claimed; say what happened rather than convert silently.
+        setLoading(false);
+        setNote(`This file could not be played: ${media.error?.message ?? "unknown error"}`);
+        return;
+      }
       if (
         chosenPath.current === "hls" &&
         isUnsupportedSource(media.error)
@@ -2213,7 +2260,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    return attachMediaHandlers(v, () => mediaHandlersRef.current);
+    const detach = attachMediaHandlers(v, () => mediaHandlersRef.current);
+    // The native backend raises its events only while it is the one playing,
+    // so listening to both is not listening twice.
+    const detachNative = window.lancastMpvOpen
+      ? attachMediaHandlers(mpvBackend(), () => mediaHandlersRef.current)
+      : () => {};
+    return () => {
+      detach();
+      detachNative();
+    };
   }, []);
 
   return (

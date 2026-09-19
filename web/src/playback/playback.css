@@ -292,3 +292,32 @@
 .popout__ui {
   position: relative;
 }
+
+/*
+ * Native video (ADR 0067). The picture is drawn by libmpv in the window
+ * *beneath* this page, so while it plays full-size the page must be see-through
+ * wherever the picture is: the document, the player surface and the unused
+ * <video> element give up their black, and the screens underneath the player —
+ * which the black surface used to cover — are hidden rather than shown through.
+ * The player chrome keeps its own backgrounds and draws over the picture as it
+ * did over the element.
+ *
+ * Full surface only, for now: the mini player would need mpv told where the
+ * small rectangle is, which is Phase 3 work.
+ */
+html.lancast-native-video:has(.playback--full),
+html.lancast-native-video:has(.playback--full) body,
+html.lancast-native-video:has(.playback--full) #root,
+html.lancast-native-video .playback--full {
+  background: transparent !important;
+}
+html.lancast-native-video:has(.playback--full) body * {
+  visibility: hidden;
+}
+html.lancast-native-video:has(.playback--full) .player,
+html.lancast-native-video:has(.playback--full) .player * {
+  visibility: visible;
+}
+html.lancast-native-video .playback__video {
+  visibility: hidden !important;
+}
