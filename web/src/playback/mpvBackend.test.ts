@@ -109,6 +109,37 @@ describe("MpvBackend", () => {
     expect(b.paused).toBe(false);
   });
 
+  it("says nothing about the position until the resume seek has landed", () => {
+    /*
+     * Between opening a file and seeking to the resume point, mpv reports 0:00.
+     * The provider records every timeupdate as the live position and rebuilds
+     * a source from it, so one such tick made the *next* rebuild fall back to
+     * the saved progress — up to five seconds stale. Found by changing the
+     * audio track twice: the first change held its place, the second lost nine
+     * seconds.
+     */
+    const b = new MpvBackend();
+    const seen: string[] = [];
+    b.addEventListener("timeupdate", () => seen.push("timeupdate"));
+    b.currentTime = 2836; // where the film is; applied once the file opens
+
+    b.receive({ events: ["timeupdate"], current_time: 0, duration: 7741, paused: false, ended: false });
+    expect(seen).toEqual([]);
+
+    b.receive({
+      events: ["loadedmetadata"],
+      current_time: 0,
+      duration: 7741,
+      paused: false,
+      ended: false,
+    });
+    expect(commands).toContainEqual(["seek", 2836]);
+
+    b.receive({ events: ["timeupdate"], current_time: 2836.5, duration: 7741, paused: false, ended: false });
+    expect(seen).toEqual(["timeupdate"]);
+    expect(b.currentTime).toBe(2836.5);
+  });
+
   it("reports an unknown duration as NaN, like the element", () => {
     const b = new MpvBackend();
     b.receive({ events: [], current_time: 0, duration: null, paused: true, ended: false });

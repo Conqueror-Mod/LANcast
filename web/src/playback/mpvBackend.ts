@@ -225,6 +225,18 @@ export class MpvBackend extends EventTarget implements MediaBackend {
     this.dur = e.duration ?? NaN;
     this.isPaused = e.paused;
     for (const name of e.events) {
+      /*
+       * A file that has just opened reports a position of zero until the
+       * resume seek lands, and that zero is not where anything is.
+       *
+       * The provider records every timeupdate as the live position, and reads
+       * the live position when it rebuilds a source — so one tick of "we are
+       * at 0:00" between load and seek made the *next* rebuild fall back to
+       * the saved progress instead, which is up to five seconds stale. Found
+       * by changing the audio track twice: the first change held its place,
+       * the second went back nine seconds.
+       */
+      if (name === "timeupdate" && this.pendingSeek !== null) continue;
       if (name === "loadedmetadata") {
         this.loaded = true;
         // Re-assert what the element would have kept across a load.
