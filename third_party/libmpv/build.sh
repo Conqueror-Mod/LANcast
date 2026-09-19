@@ -47,6 +47,12 @@ mkdir -p "$src" "$prefix" "$out"
 
 say() { printf '\n=== %s\n' "$*"; }
 
+# Each component stamps the prefix when it installs, so a re-run after a failure
+# picks up where it stopped. Shaderc alone is several minutes; losing it to a
+# typo in a later step is how a one-command recipe becomes a thing nobody runs.
+done_already() { [ -f "$prefix/.stamp-$1" ]; }
+stamp() { touch "$prefix/.stamp-$1"; }
+
 # fetch clones one pinned tag, shallow, and leaves it alone on a re-run.
 fetch() { # name url tag
 	local name=$1 url=$2 tag=$3
@@ -62,6 +68,10 @@ cpp = '$target-g++'
 ar = '$target-ar'
 strip = '$target-strip'
 windres = '$target-windres'
+# libplacebo looks for 'llvm-dlltool' then 'dlltool'; in a cross build it
+# exists only under the target prefix, so meson is told where it is.
+dlltool = '$target-dlltool'
+llvm-dlltool = '$target-dlltool'
 pkg-config = 'pkg-config'
 
 [host_machine]
@@ -89,69 +99,127 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 EOF
 
-cmake_build() { # dir [extra cmake args…]
-	local dir=$1
+# Output goes to a per-component log and is printed on failure. Sending it all
+# to /dev/null cost an evening: the build stopped at libplacebo saying nothing,
+# and the reason (a missing dlltool) was one line that had been discarded.
+run() { # name command…
+	local name=$1
 	shift
-	cmake -S "$dir" -B "$dir/build-lancast" -G Ninja \
+	if ! "$@" > "$work/$name.log" 2>&1; then
+		echo "--- $name failed; last 30 lines of $work/$name.log" >&2
+		tail -30 "$work/$name.log" >&2
+		return 1
+	fi
+}
+
+cmake_build() { # name dir [extra cmake args…]
+	local name=$1 dir=$2
+	shift 2
+	run "$name-configure" cmake -S "$dir" -B "$dir/build-lancast" -G Ninja \
 		-DCMAKE_TOOLCHAIN_FILE="$work/toolchain.cmake" \
 		-DCMAKE_INSTALL_PREFIX="$prefix" \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DBUILD_SHARED_LIBS=OFF \
-		"$@" >/dev/null
-	cmake --build "$dir/build-lancast" -j "$jobs" >/dev/null
-	cmake --install "$dir/build-lancast" >/dev/null
+		"$@"
+	run "$name-build" cmake --build "$dir/build-lancast" -j "$jobs"
+	run "$name-install" cmake --install "$dir/build-lancast"
+	stamp "$name"
 }
 
-meson_build() { # dir [extra meson args…]
-	local dir=$1
-	shift
-	meson setup "$dir/build-lancast" "$dir" --cross-file "$work/cross.ini" \
-		--wipe >/dev/null 2>&1 ||
-		meson setup "$dir/build-lancast" "$dir" --cross-file "$work/cross.ini" "$@" >/dev/null
-	meson configure "$dir/build-lancast" "$@" >/dev/null
-	ninja -C "$dir/build-lancast" -j "$jobs" >/dev/null
-	ninja -C "$dir/build-lancast" install >/dev/null
+meson_build() { # name dir [extra meson args…]
+	local name=$1 dir=$2
+	shift 2
+	rm -rf "$dir/build-lancast"
+	run "$name-configure" meson setup "$dir/build-lancast" "$dir" \
+		--cross-file "$work/cross.ini" "$@"
+	run "$name-build" ninja -C "$dir/build-lancast" -j "$jobs"
+	run "$name-install" ninja -C "$dir/build-lancast" install
+	stamp "$name"
 }
 
 # ---- zlib ------------------------------------------------------------------
 fetch zlib https://github.com/madler/zlib.git "$ZLIB_TAG"
-say "build zlib"
-cmake_build "$src/zlib" -DZLIB_BUILD_EXAMPLES=OFF
+done_already zlib || {
+	say "build zlib"
+	# zlib's own mingw makefile rather than its CMake build: CMake installs the
+	# static library as `zlibstatic`, and both FFmpeg (-lz) and meson look for
+	# `libz.a`. FFmpeg's configure said only "zlib requested but not found",
+	# which is true and says nothing about the name being the problem.
+	(
+		cd "$src/zlib"
+		run zlib-build make -f win32/Makefile.gcc -j "$jobs" PREFIX="$target-" libz.a
+		mkdir -p "$prefix/lib" "$prefix/include" "$prefix/lib/pkgconfig"
+		cp libz.a "$prefix/lib/"
+		cp zlib.h zconf.h "$prefix/include/"
+		sed -e "s|@prefix@|$prefix|; s|@exec_prefix@|$prefix|" \
+			-e "s|@libdir@|$prefix/lib|; s|@sharedlibdir@|$prefix/lib|" \
+			-e "s|@includedir@|$prefix/include|; s|@VERSION@|${ZLIB_TAG#v}|" \
+			zlib.pc.in > "$prefix/lib/pkgconfig/zlib.pc"
+	)
+	stamp zlib
+}
 
 # ---- dav1d -----------------------------------------------------------------
 fetch dav1d https://code.videolan.org/videolan/dav1d.git "$DAV1D_TAG"
-say "build dav1d"
-meson_build "$src/dav1d" -Denable_tools=false -Denable_tests=false
+done_already dav1d || {
+	say "build dav1d"
+meson_build dav1d "$src/dav1d" -Denable_tools=false -Denable_tests=false
+}
 
 # ---- SPIRV-Cross -----------------------------------------------------------
 fetch spirv-cross https://github.com/KhronosGroup/SPIRV-Cross.git "$SPIRV_CROSS_TAG"
-say "build SPIRV-Cross"
-cmake_build "$src/spirv-cross" \
+done_already spirv-cross || {
+	say "build SPIRV-Cross"
+cmake_build spirv-cross "$src/spirv-cross" \
 	-DSPIRV_CROSS_SHARED=OFF -DSPIRV_CROSS_CLI=OFF \
 	-DSPIRV_CROSS_ENABLE_TESTS=OFF -DSPIRV_CROSS_ENABLE_C_API=ON
+}
+
+# libplacebo asks pkg-config for `spirv-cross-c-shared`, which only a shared
+# SPIRV-Cross installs. Shipping that would mean a second DLL beside libmpv for
+# no benefit, so the static build gets an alias naming the same C API and the
+# libraries it needs behind it. This is recipe glue, not a patch to anybody's
+# source — the distinction PROVENANCE.md makes about being able to say
+# "unmodified".
+cat > "$prefix/lib/pkgconfig/spirv-cross-c-shared.pc" <<EOF
+prefix=$prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include/spirv_cross
+
+Name: spirv-cross-c-shared
+Description: C API for SPIRV-Cross (static build, aliased for libplacebo)
+Version: 0.68.0
+Libs: -L\${libdir} -lspirv-cross-c -lspirv-cross-glsl -lspirv-cross-hlsl -lspirv-cross-msl -lspirv-cross-cpp -lspirv-cross-reflect -lspirv-cross-util -lspirv-cross-core -lstdc++
+Cflags: -I\${includedir}
+EOF
 
 # ---- shaderc (with its own pinned dependencies) -----------------------------
 fetch shaderc https://github.com/google/shaderc.git "$SHADERC_TAG"
-say "build shaderc"
-( cd "$src/shaderc" && python3 ./utils/git-sync-deps >/dev/null )
-cmake_build "$src/shaderc" \
+done_already shaderc || {
+	say "build shaderc"
+( cd "$src/shaderc" && run shaderc-deps python3 ./utils/git-sync-deps )
+cmake_build shaderc "$src/shaderc" \
 	-DSHADERC_SKIP_TESTS=ON -DSHADERC_SKIP_EXAMPLES=ON \
 	-DSHADERC_SKIP_COPYRIGHT_CHECK=ON -DSHADERC_ENABLE_SHARED_CRT=OFF \
 	-DENABLE_GLSLANG_BINARIES=OFF -DSPIRV_SKIP_EXECUTABLES=ON
+}
 
 # ---- libplacebo ------------------------------------------------------------
 fetch libplacebo https://code.videolan.org/videolan/libplacebo.git "$LIBPLACEBO_TAG"
-say "build libplacebo"
-meson_build "$src/libplacebo" \
+done_already libplacebo || {
+	say "build libplacebo"
+meson_build libplacebo "$src/libplacebo" \
 	-Dvulkan=disabled -Dopengl=disabled -Dd3d11=enabled \
 	-Dshaderc=enabled -Ddemos=false -Dtests=false
+}
 
 # ---- FFmpeg (LGPL: no --enable-gpl, no GPL externals) ----------------------
 fetch ffmpeg https://github.com/FFmpeg/FFmpeg.git "$FFMPEG_TAG"
 say "build FFmpeg"
-(
+done_already ffmpeg || (
 	cd "$src/ffmpeg"
-	./configure \
+	run ffmpeg-configure ./configure \
 		--prefix="$prefix" \
 		--arch=x86_64 --target-os=mingw32 --enable-cross-compile \
 		--cross-prefix="$target-" --pkg-config=pkg-config --pkg-config-flags=--static \
@@ -159,15 +227,16 @@ say "build FFmpeg"
 		--enable-zlib --enable-libdav1d \
 		--enable-d3d11va --enable-dxva2 \
 		--disable-programs --disable-doc --disable-encoders --disable-muxers \
-		--disable-debug --disable-autodetect >/dev/null
-	make -j "$jobs" >/dev/null
-	make install >/dev/null
+		--disable-debug --disable-autodetect
+	run ffmpeg-build make -j "$jobs"
+	run ffmpeg-install make install
+	stamp ffmpeg
 )
 
 # ---- mpv --------------------------------------------------------------------
 fetch mpv https://github.com/mpv-player/mpv.git "$MPV_TAG"
 say "build libmpv"
-meson_build "$src/mpv" \
+meson_build mpv "$src/mpv" \
 	-Dgpl=false -Dlibmpv=true -Dcplayer=false \
 	-Dlibass=disabled -Dlua=disabled -Djavascript=disabled \
 	-Dd3d11=enabled -Dspirv-cross=enabled -Dshaderc=enabled \

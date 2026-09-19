@@ -158,8 +158,19 @@ Section "LANcast"
   ; there by the release job, because a large decoder does not belong in git.
   ; The client falls back to the browser player when it is absent, so an install
   ; without it is degraded rather than broken.
-  File "..\third_party\libmpv\out\libmpv-2.dll"
-  File /oname=libmpv-LICENSE.txt "..\third_party\libmpv\LICENSE.LGPL"
+  ; Compiled in only when the DLL is actually there: CI builds this script with
+  ; placeholder executables and no payload, and the release job fetches the
+  ; published build first (third_party/libmpv/fetch.sh). An installer without
+  ; it is a working installer whose client uses the browser player, which is
+  ; the same fallback a machine that loses the file gets.
+  !if /FileExists "..\third_party\libmpv\out\libmpv-2.dll"
+    File "..\third_party\libmpv\out\libmpv-2.dll"
+    File /oname=libmpv-LICENSE.txt "..\third_party\libmpv\LICENSE.LGPL"
+  !else
+    ; Said out loud, not warned: CI compiles this with -WX and a warning here
+    ; would turn "no payload staged" into a red build for the script being right.
+    !echo "libmpv-2.dll is absent: this installer ships without the native player"
+  !endif
   File "..\README.md"
   File "..\LICENSE"
 
