@@ -48,6 +48,17 @@ jobs:
       - name: install the mingw cross-compiler for lancast-faces
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
 
+      # libmpv, the desktop client's player (ADR 0067/0069). Built out of band
+      # by third_party/libmpv/build.sh and published as a release asset, because
+      # 46 MB of decoder does not belong in git. fetch.sh verifies it against the
+      # hash in artifact.env and refuses anything else — this file ends up inside
+      # an installer people run.
+      #
+      # Fatal if it cannot be had. The archives name it, and goreleaser treats a
+      # file it cannot find as an error anyway; failing here says why.
+      - name: fetch libmpv
+        run: third_party/libmpv/fetch.sh
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
@@ -82,6 +93,13 @@ jobs:
           # client falling back to the browser with no obvious cause.
           test -f third_party/webview2/x64/WebView2Loader.dll \
             || { echo "WebView2Loader.dll is missing from third_party/"; exit 1; }
+          # libmpv is optional in the same way it is optional at runtime: the
+          # .nsi compiles it in only when the file is there (!if /FileExists).
+          if [ -f third_party/libmpv/out/libmpv-2.dll ]; then
+            echo "installer will include libmpv-2.dll"
+          else
+            echo "installer will ship without libmpv-2.dll"
+          fi
           version="${GITHUB_REF_NAME#v}"
           makensis -DVERSION="${version}" installer/lancast.nsi
           gh release upload "${GITHUB_REF_NAME}" installer/LANcast-Setup-*.exe --clobber
