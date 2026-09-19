@@ -274,14 +274,27 @@ func (c *controller) Navigate(url string) {
 	c.w.Dispatch(func() { c.w.Navigate(url) })
 }
 
-func (c *controller) Window() uintptr { return uintptr(c.w.Window()) }
-
-func (c *controller) EnterVideoOverlay() {
-	c.w.Dispatch(func() { _, _ = c.w.EnterVideoOverlay() })
+// VideoWindow must be called on the window's thread — from a binding or from
+// OnReady, both of which run there. It is not dispatched, because the callers
+// are on that thread already and waiting for a dispatch from it would wait for
+// ever.
+func (c *controller) VideoWindow() uintptr {
+	h, err := c.w.VideoWindow()
+	if err != nil {
+		return 0
+	}
+	return h
 }
 
-func (c *controller) LeaveVideoOverlay() {
-	c.w.Dispatch(func() { c.w.LeaveVideoOverlay() })
+func (c *controller) SetVideoLayout(layout string, x, y, width, height int) {
+	l := webview2.VideoHidden
+	switch layout {
+	case "full":
+		l = webview2.VideoFull
+	case "mini":
+		l = webview2.VideoMini
+	}
+	c.w.Dispatch(func() { _ = c.w.SetVideoLayout(l, x, y, width, height) })
 }
 
 func (c *controller) Eval(js string) {

@@ -57,8 +57,11 @@ type webview struct {
 	m          sync.Mutex
 	bindings   map[string]interface{}
 	dispatchq  []func()
-	// overlay is the video overlay window while one exists (overlay.go).
+	// Native video windows and layout (overlay.go).
 	overlay uintptr
+	video   uintptr
+	layout  VideoLayout
+	mini    videoRect
 }
 
 type WindowOptions struct {
@@ -278,6 +281,10 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			return r
 		}
 		return 0
+	}
+	if _, ok := getWindowContext(hwnd).(videoOf); ok && msg == wmMouseActivate {
+		// Clicking the picture must not take focus from the page.
+		return maNoActivate
 	}
 	if o, ok := getWindowContext(hwnd).(overlayOf); ok && msg == w32.WMClose {
 		// Alt+F4 with the page focused lands on the overlay. Closing it would

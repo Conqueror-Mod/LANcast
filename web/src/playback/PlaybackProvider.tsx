@@ -60,6 +60,8 @@ import {
 import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { mpvBackend, nativePlaybackAvailable } from "./mpvBackend";
+import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
+import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 /*
  * What to say during the wait, in words written for the person waiting.
@@ -419,6 +421,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * the source-selection effect; media() is what everything else talks to.
    */
   const nativeRef = useRef(false);
+  // The same fact as state, for the layout effect to react to.
+  const [nativeOn, setNativeOn] = useState(false);
   const media = useCallback(
     (): MediaBackend | null => (nativeRef.current ? mpvBackend() : videoRef.current),
     [],
@@ -544,6 +548,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       ? "idle"
       : "mini";
 
+  /*
+   * Tell the desktop client where the native picture goes (nativeLayout.ts).
+   *
+   * Full size is the whole window under a see-through page. Docked, the page is
+   * opaque and the client floats the picture over the docked box, so the box's
+   * position is sent in device pixels and re-sent whenever it moves: a resize,
+   * a window move within the page, the strip changing height.
+   */
+  const sentLayout = useRef(HIDDEN);
+  useEffect(() => {
+    if (!window.lancastMpvLayout) return;
+    const el = containerRef.current;
+    const send = () => {
+      const r = el?.getBoundingClientRect();
+      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio);
+      if (sameLayout(next, sentLayout.current)) return;
+      sentLayout.current = next;
+      void window
+        .lancastMpvLayout?.(next.layout, next.x, next.y, next.width, next.height)
+        .catch(() => {});
+    };
+    send();
+    if (!nativeOn || surface !== "mini" || !el) return;
+    const ro = new ResizeObserver(send);
+    ro.observe(el);
+    window.addEventListener("resize", send);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", send);
+    };
+  }, [surface, nativeOn]);
+
   // Total runtime. A transcode or remux streams a fragmented MP4 whose element
   // duration is whatever has been produced so far — a few seconds — so for those
   // the probed runtime is authoritative and the element's value is ignored.
@@ -554,6 +590,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     : duration || probedDuration;
 
   const displayTime = transcoding.current ? offset.current + current : current;
+
+  /*
+   * Subtitles under native playback are drawn by the page (nativeTracks.ts):
+   * the same WebVTT the <track> would load, parsed here, shown at the
+   * current time with the same offset preference.
+   */
+  const [nativeCues, setNativeCues] = useState<Cue[]>([]);
+  useEffect(() => {
+    setNativeCues([]);
+    if (!nativeOn || !itemID) return;
+    const key = subtitles.find((t) => t.key === subKey && t.available)?.key;
+    if (!key) return;
+    let cancelled = false;
+    fetch(`/api/items/${itemID}/subtitles/${encodeURIComponent(key)}.vtt`)
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((text) => {
+        if (!cancelled) setNativeCues(parseVTT(text));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [nativeOn, itemID, subKey, subtitles]);
 
   // ---- progress persistence -------------------------------------------------
   const lastSaved = useRef(0);
@@ -651,6 +710,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const stop = useCallback(() => {
     saveRef.current(true);
+    setNativeOn(false);
     const v = media();
     if (v) {
       v.pause();
@@ -979,6 +1039,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (nativeRef.current && !native) mpvBackend().removeAttribute("src");
       nativeRef.current = native;
+      setNativeOn(native);
       v = native ? mpvBackend() : videoRef.current ?? v;
       if (native) {
         decision.current = { method: "direct", reason: "" };
@@ -990,6 +1051,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         chosenPath.current = "progressive";
         sourceItem.current = item.id;
         hlsPlayingFrom.current = null;
+        mpvBackend().audioTrack = mpvAudioTrack(item.streams, audioIndex);
         v.src = sourceURL(item.id, "direct", 0);
         v.load();
         void v.play().catch(() => {});
@@ -2326,6 +2388,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             display: contents, so the wrapper generates no box: the element's
             percentage sizing still resolves against .playback and no other rule
             in playback.css has to know this div exists. */}
+        {nativeOn && nativeCues.length > 0 && (
+          <div className="playback__native-cues" aria-live="off">
+            {activeCues(nativeCues, displayTime, prefs.subOffset).map((c, i) => (
+              <span key={`${c.start}-${i}`} className="playback__native-cue">
+                {c.text}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="playback__slot">
           <video
             ref={videoRef}
