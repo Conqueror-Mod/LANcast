@@ -11,8 +11,8 @@ licence cannot distribute a GPL library ([ADR 0069](../../docs/adr/0069-lancast-
 |---|---|
 | File | `libmpv-2.dll`, beside `LANcast-Client.exe` |
 | Licence | **LGPL-2.1-or-later** (mpv built `-Dgpl=false`, FFmpeg without `--enable-gpl`) |
-| mpv | _recorded at build time — see "Builds" below_ |
-| SHA-256 | _recorded at build time_ |
+| mpv | v0.41.0, FFmpeg n9.0.2 (see Builds) |
+| SHA-256 | `1466ac41514fa50b0ea7e9be87e104bcb28c2ab0d9f8d26b31e83ddd8e5814a7` |
 
 **The binary is not in this repository.** It is built by [`build.sh`](build.sh)
 from the tags pinned in [`versions.env`](versions.env), verified against the
@@ -31,11 +31,11 @@ the x264 and x265 **encoders**, and GPL-only filters such as `vf_delogo`. The
 client decodes and never encodes; the server's conversion pipeline is a
 separate ffmpeg process the user installs (ADR 0048) and is unaffected.
 
-Also left out for now, and not a licence matter: **libass**. Subtitles are
-drawn by the page over the picture (`web/src/playback/nativeTracks.ts`), so the
-library needs no text shaping. Adding libass, freetype, fribidi and harfbuzz —
-all permissive or LGPL — is what image-based and styled embedded subtitles
-would need later.
+**libass and its text-shaping stack are in** — freetype, fribidi, harfbuzz and
+libass, all permissive or LGPL. Not by choice: mpv 0.41 has no option to build
+without libass. LANcast draws subtitles in the page today
+(`web/src/playback/nativeTracks.ts`), so nothing uses it yet; having it is what
+styled embedded subtitles will need later.
 
 ## The four things the LGPL asks, and where each is met
 
@@ -56,7 +56,12 @@ Each row is a DLL that shipped. Verify a file with
 
 | date | mpv | FFmpeg | size | SHA-256 |
 |---|---|---|---|---|
-| _first build pending_ | | | | |
+| 2026-09-19 | v0.41.0 | n9.0.2 | 46,655,395 | `1466ac41514fa50b0ea7e9be87e104bcb28c2ab0d9f8d26b31e83ddd8e5814a7` |
+
+The first build, and 46 MB against the 115 MB of the GPL builds published for
+Windows — the difference is the encoders and the scripting this one leaves out.
+It depends on nothing but Windows' own DLLs, which the recipe now asserts:
+anything else would be a file the installer does not place.
 
 ## Rebuilding
 
