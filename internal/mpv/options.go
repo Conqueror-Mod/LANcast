@@ -6,7 +6,22 @@
 package mpv
 
 // Option is one mpv option, set before initialisation.
-type Option struct{ Name, Value string }
+type Option struct {
+	Name, Value string
+	/*
+	 * IfPresent marks an option that may not exist in the library at all.
+	 *
+	 * LANcast's own build (ADR 0069) leaves out mpv's scripting, and the
+	 * options implemented *by* scripts go with it: there is no `ytdl` when
+	 * there is no Lua to run ytdl_hook, and no `osc` without the on-screen
+	 * controller script. Refusing to start on those would be refusing the
+	 * build for not having the thing the option exists to switch off.
+	 *
+	 * Every other option stays mandatory. An unknown name is a typo, and a
+	 * typo in this list is a privacy setting that silently did nothing.
+	 */
+	IfPresent bool
+}
 
 // Options is what every embedded instance starts with, in order.
 //
@@ -24,29 +39,29 @@ type Option struct{ Name, Value string }
 // video down first.
 func Options(wid uint64, logFile string) []Option {
 	opts := []Option{
-		{"config", "no"},
-		{"load-scripts", "no"},
-		{"ytdl", "no"},
-		{"input-default-bindings", "no"},
-		{"input-vo-keyboard", "no"},
-		{"input-cursor", "no"},
-		{"osc", "no"},
-		{"osd-level", "0"},
-		{"keep-open", "yes"},
-		{"idle", "yes"},
-		{"force-window", "no"},
+		{Name: "config", Value: "no"},
+		{Name: "load-scripts", Value: "no"},
+		{Name: "ytdl", Value: "no", IfPresent: true},
+		{Name: "input-default-bindings", Value: "no"},
+		{Name: "input-vo-keyboard", Value: "no"},
+		{Name: "input-cursor", Value: "no"},
+		{Name: "osc", Value: "no", IfPresent: true},
+		{Name: "osd-level", Value: "0"},
+		{Name: "keep-open", Value: "yes"},
+		{Name: "idle", Value: "yes"},
+		{Name: "force-window", Value: "no"},
 		// Named, not chosen at random by mpv's probing order: d3d11 is what
 		// the Phase 0 spike proved composites under the overlay.
-		{"gpu-api", "d3d11"},
-		{"hwdec", "auto-safe"},
+		{Name: "gpu-api", Value: "d3d11"},
+		{Name: "hwdec", Value: "auto-safe"},
 		// Subtitles are the page's to draw (web/src/playback/nativeTracks.ts):
 		// one renderer for both backends, so a track chosen in the player is
 		// the only one on screen rather than mpv adding the file's default.
-		{"sid", "no"},
-		{"wid", uitoa(wid)},
+		{Name: "sid", Value: "no"},
+		{Name: "wid", Value: uitoa(wid)},
 	}
 	if logFile != "" {
-		opts = append(opts, Option{"log-file", logFile})
+		opts = append(opts, Option{Name: "log-file", Value: logFile})
 	}
 	return opts
 }

@@ -133,3 +133,26 @@ func TestResetKeepsPauseAndForgetsTheFile(t *testing.T) {
 		t.Fatalf("reset = %+v", n)
 	}
 }
+
+func TestOptionsThatMayBeAbsentAreMarked(t *testing.T) {
+	/*
+	 * LANcast's own libmpv (ADR 0069) has no scripting, and the options
+	 * implemented by scripts go with it — `ytdl` is not an option when there is
+	 * no Lua to run ytdl_hook. Starting must survive that, and must not survive
+	 * a typo in one of the options that really do exist.
+	 */
+	byName := map[string]Option{}
+	for _, o := range Options(1, "") {
+		byName[o.Name] = o
+	}
+	for _, name := range []string{"ytdl", "osc"} {
+		if !byName[name].IfPresent {
+			t.Errorf("%s must tolerate a build without scripting", name)
+		}
+	}
+	for _, name := range []string{"config", "load-scripts", "input-default-bindings", "wid"} {
+		if byName[name].IfPresent {
+			t.Errorf("%s is core mpv: a missing one is a typo, not a smaller build", name)
+		}
+	}
+}
