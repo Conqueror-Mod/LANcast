@@ -76,4 +76,3 @@ Thumbs.db
 # The libmpv the release fetches and the build script produces (ADR 0069).
 # Tens of megabytes of decoder, published as a release asset instead.
 third_party/libmpv/out/
-third_party/libmpv/LICENSE.LGPL
