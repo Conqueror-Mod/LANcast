@@ -203,6 +203,10 @@ for banned in x264 x265 libxavs libdavs2; do
 	fi
 done
 
+# The licence text ships beside the DLL, so the copy a user has came with its
+# own terms rather than a link to them.
+cp "$src/mpv/LICENSE.LGPL" "$here/LICENSE.LGPL"
+
 sha="$(sha256sum "$out/libmpv-2.dll" | cut -d' ' -f1)"
 say "built $out/libmpv-2.dll"
 printf 'size   %s bytes\nsha256 %s\n' "$(stat -c%s "$out/libmpv-2.dll")" "$sha"

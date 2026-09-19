@@ -149,6 +149,17 @@ Section "LANcast"
   ; Most installs never do, and pay nothing for it.
   File "lancast-faces.exe"
   File "..\third_party\webview2\x64\WebView2Loader.dll"
+
+  ; libmpv, the desktop client's player (ADR 0067). LGPL, built by this project
+  ; rather than taken from mpv's own Windows builds, which are GPL and so cannot
+  ; ship beside a commercially licensed binary (ADR 0069).
+  ;
+  ; Built and hashed out of band -- third_party/libmpv/build.sh -- and placed
+  ; there by the release job, because a large decoder does not belong in git.
+  ; The client falls back to the browser player when it is absent, so an install
+  ; without it is degraded rather than broken.
+  File "..\third_party\libmpv\out\libmpv-2.dll"
+  File /oname=libmpv-LICENSE.txt "..\third_party\libmpv\LICENSE.LGPL"
   File "..\README.md"
   File "..\LICENSE"
 
@@ -213,6 +224,8 @@ Section "Uninstall"
   Delete "$INSTDIR\LANcast-Client.exe"
   Delete "$INSTDIR\lancast-faces.exe"
   Delete "$INSTDIR\WebView2Loader.dll"
+  Delete "$INSTDIR\libmpv-2.dll"
+  Delete "$INSTDIR\libmpv-LICENSE.txt"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\uninstall.exe"
