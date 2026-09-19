@@ -555,6 +555,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * opaque and the client floats the picture over the docked box, so the box's
    * position is sent in device pixels and re-sent whenever it moves: a resize,
    * a window move within the page, the strip changing height.
+   *
+   * It is also re-asserted whenever a file opens, and that is not belt and
+   * braces. Moving from one film to the next changes neither the surface nor
+   * whether playback is native, so nothing here re-runs — and anything that
+   * moved the picture in between would stay moved for the rest of the session.
+   * Randomize all is what found it: every film after the first played to a
+   * window the client had hidden on the way out of the one before.
    */
   const sentLayout = useRef(HIDDEN);
   useEffect(() => {
@@ -570,11 +577,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         .catch(() => {});
     };
     send();
-    if (!nativeOn || surface !== "mini" || !el) return;
+    // A new file is a new chance for the two sides to disagree about where the
+    // picture is; say it again rather than assume.
+    const resend = () => {
+      sentLayout.current = HIDDEN;
+      send();
+    };
+    const backend = mpvBackend();
+    backend.addEventListener("loadedmetadata", resend);
+    if (!nativeOn || surface !== "mini" || !el) {
+      return () => backend.removeEventListener("loadedmetadata", resend);
+    }
     const ro = new ResizeObserver(send);
     ro.observe(el);
     window.addEventListener("resize", send);
     return () => {
+      backend.removeEventListener("loadedmetadata", resend);
       ro.disconnect();
       window.removeEventListener("resize", send);
     };

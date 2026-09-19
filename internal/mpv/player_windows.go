@@ -27,6 +27,9 @@ import (
  *    version this loads — see Load.
  */
 
+// errOptionNotFound is MPV_ERROR_OPTION_NOT_FOUND.
+const errOptionNotFound = -5
+
 const (
 	eventNone           = 0
 	eventShutdown       = 1
@@ -117,7 +120,13 @@ func New(wid uint64, logFile string, onEvents func(State, []string)) (*Player, e
 	}
 	p := &Player{h: h, state: NewState(), onEvents: onEvents, done: make(chan struct{})}
 	for _, o := range Options(wid, logFile) {
-		if err := p.check("option "+o.Name, callStr2(loaded.setOption, h, o.Name, o.Value)); err != nil {
+		rc := callStr2(loaded.setOption, h, o.Name, o.Value)
+		if o.IfPresent && int32(rc) == errOptionNotFound {
+			// The option is implemented by a component this build leaves out
+			// (options.go). Nothing to switch off.
+			continue
+		}
+		if err := p.check("option "+o.Name, rc); err != nil {
 			_, _, _ = loaded.destroy.Call(h)
 			return nil, err
 		}
