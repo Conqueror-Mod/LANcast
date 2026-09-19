@@ -140,6 +140,30 @@ describe("MpvBackend", () => {
     expect(b.currentTime).toBe(2836.5);
   });
 
+  it("never withholds a real position, even with a seek still pending", () => {
+    /*
+     * The first version of the rule above suppressed on "a seek is pending"
+     * alone, and a pending seek is only cleared by loadedmetadata. A source
+     * that never raised one — a reload where nothing mpv observes actually
+     * changed — swallowed every position for the rest of the film: the clock
+     * sat at 0:00 while the picture played on, and nothing was saved either,
+     * because progress is written from the same events.
+     */
+    const b = new MpvBackend();
+    const seen: number[] = [];
+    b.addEventListener("timeupdate", () => seen.push(b.currentTime));
+    b.currentTime = 2836; // pending: no file open yet
+
+    // The opening zeros are still discarded.
+    b.receive({ events: ["timeupdate"], current_time: 0, duration: 7741, paused: false, ended: false });
+    expect(seen).toEqual([]);
+
+    // A real position arrives with no loadedmetadata in between, and is kept.
+    b.receive({ events: ["timeupdate"], current_time: 2929.2, duration: 7741, paused: false, ended: false });
+    b.receive({ events: ["timeupdate"], current_time: 2934.4, duration: 7741, paused: false, ended: false });
+    expect(seen).toEqual([2929.2, 2934.4]);
+  });
+
   it("reports an unknown duration as NaN, like the element", () => {
     const b = new MpvBackend();
     b.receive({ events: [], current_time: 0, duration: null, paused: true, ended: false });
