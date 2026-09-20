@@ -1775,6 +1775,19 @@ black rectangles happen.
 | `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 | mp4, webm, mov, mp3, flac, ogg, wav |
 | `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus, alac, pcm_s16le, pcm_s24le, pcm_u8 | mp4, mov, mp3, flac, wav |
 | `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, vorbis, flac, alac, ac3, eac3, dts, truehd, pcm_s16le, pcm_s24le, pcm_u8 | mp4, matroska, webm, mov, mpegts, mp3, flac, ogg, wav, aac |
+| `native` | anything | anything | anything |
+
+`native` is a client that decodes with FFmpeg itself — LANcast's desktop
+client plays through libmpv ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)),
+so the files it cannot play are the files this server could not have converted
+either. It carries no codec lists, because the honest claim is not "these forty
+codecs" but "the same library the probe was made with", and a list would be
+that claim written twice with the second copy going stale.
+
+**A ceiling still applies to it.** `max_quality` is policy about what may leave
+this server, not a statement about what a client can decode, so a native client
+above the ceiling is converted like any other — and the answer comes back
+`transcode`, which is the client's cue to play it the ordinary way.
 
 `browser` excludes HEVC deliberately: Chrome's support is conditional on
 hardware and Firefox has none, so claiming it for an unidentified client trades

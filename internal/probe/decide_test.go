@@ -1119,3 +1119,82 @@ func TestHEVCProfilesDeeperThanTenBitAreCaught(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The native profile: a client that decodes with FFmpeg itself (ADR 0067).
+ *
+ * Each of these is a real file from the library this was built against, and
+ * each cost a conversion before the desktop client played natively.
+ */
+func TestNativeClientDirectPlaysWhatTheServerWouldHaveConverted(t *testing.T) {
+	cases := []struct {
+		name string
+		r    *Result
+	}{
+		// Dogma: the full video *and* audio encode that started ADR 0067.
+		{"4K HEVC 10-bit with TrueHD in Matroska", func() *Result {
+			v := video("hevc", 2160)
+			v.PixFmt = "yuv420p10le"
+			return result("matroska", v, audio("truehd", 8))
+		}()},
+		// TMNT III: 41 seconds of remux before a frame appeared.
+		{"H.264 with AC-3 in Matroska", result("matroska", video("h264", 1080), audio("ac3", 6))},
+		// Jay and Silent Bob Reboot: copied video, re-encoded sound, froze.
+		{"H.264 with DTS in Matroska", result("matroska", video("h264", 1080), audio("dts", 6))},
+		// Most of an anime library, and a full video re-encode every time.
+		{"10-bit H.264", func() *Result {
+			v := video("h264", 1080)
+			v.PixFmt = "yuv420p10le"
+			return result("matroska", v, audio("flac", 2))
+		}()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Decide(tc.r, NativeProfile())
+			if d.Method != DirectPlay {
+				t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+			}
+			if d.VideoAction != "copy" || d.AudioAction != "copy" {
+				t.Errorf("actions = %s/%s, want copy/copy", d.VideoAction, d.AudioAction)
+			}
+		})
+	}
+}
+
+/*
+ * A ceiling is policy, not a statement about the client.
+ *
+ * This is the half that would be easy to lose: "plays everything" is about
+ * decoding, and a limit an administrator set on what may leave this server has
+ * nothing to do with decoding. Before the desktop asked at all, its ceiling was
+ * simply not applied to it — the setting was on the screen and did nothing.
+ */
+func TestNativeClientStillObeysAServerCeiling(t *testing.T) {
+	p := NativeProfile()
+	p.MaxHeight = 1080
+
+	d := Decide(result("matroska", video("hevc", 2160), audio("truehd", 8)), p)
+	if d.Method != Transcode {
+		t.Fatalf("Method = %q (%s), want transcode: the ceiling has to bind", d.Method, d.Reason)
+	}
+	if d.VideoAction != "encode" {
+		t.Errorf("VideoAction = %q, want encode", d.VideoAction)
+	}
+
+	// Below the ceiling, the same client is left alone.
+	under := Decide(result("matroska", video("hevc", 1080), audio("truehd", 8)), p)
+	if under.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play under the ceiling", under.Method, under.Reason)
+	}
+}
+
+func TestNativeProfileIsNamedAndReachable(t *testing.T) {
+	if got := ProfileByName("native"); !got.PlaysEverything || got.Name != "native" {
+		t.Errorf("ProfileByName(native) = %+v", got)
+	}
+	// An unknown name still falls back to the conservative default rather than
+	// to the generous one.
+	if got := ProfileByName("nativ"); got.PlaysEverything {
+		t.Error("a typo must not buy the everything profile")
+	}
+}

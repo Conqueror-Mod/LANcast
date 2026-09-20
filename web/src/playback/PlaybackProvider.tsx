@@ -1107,8 +1107,37 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        * the file's own bytes: no decision to ask for, nothing to convert. Music
        * stays on the element — there is no picture to put an overlay over.
        */
-      const native = !isAudio && (await nativePlaybackAvailable());
+      /*
+       * Native playback asks the server the same question every client asks,
+       * under a profile that says it decodes whatever FFmpeg decodes (ADR 0067
+       * phase 4, `?profile=native`).
+       *
+       * Asking rather than assuming, because the answer is not always "play
+       * it as it is". A ceiling set by whoever runs the server is policy about
+       * what may leave it, not a statement about this client — and while the
+       * desktop skipped the question, that setting was on the screen doing
+       * nothing for the one client most likely to be pointed outside the
+       * house. When the server says convert, this item goes to the browser
+       * player, which is the engine that reads the server's conversions.
+       */
+      let native = !isAudio && (await nativePlaybackAvailable());
       if (cancelled) return;
+      if (native) {
+        try {
+          const ask = await apiGet<{ decision: Decision }>(
+            `/api/items/${item.id}/playback?profile=native` +
+              (qualityQuery(qualityRef.current) ? `&${qualityQuery(qualityRef.current)}` : ""),
+          );
+          if (cancelled) return;
+          if (ask.decision.method !== "direct") {
+            native = false;
+            setNote(waitNote(ask.decision));
+          }
+        } catch {
+          // The server not answering is not a reason to refuse to play
+          // something this client can open by itself.
+        }
+      }
       if (nativeRef.current && !native) mpvBackend().removeAttribute("src");
       nativeRef.current = native;
       setNativeOn(native);

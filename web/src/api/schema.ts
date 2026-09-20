@@ -5586,6 +5586,8 @@ export interface components {
          *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
          *
          *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+         *
+         *     `native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.
          */
         Profile: string;
         /**
@@ -6407,6 +6409,8 @@ export interface operations {
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *
                  *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 *
+                 *     `native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.
                  */
                 profile?: components["parameters"]["Profile"];
                 /**
@@ -6623,6 +6627,8 @@ export interface operations {
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *
                  *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 *
+                 *     `native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.
                  */
                 profile?: components["parameters"]["Profile"];
                 /**
@@ -6746,6 +6752,8 @@ export interface operations {
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *
                  *     The bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.
+                 *
+                 *     `native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.
                  */
                 profile?: components["parameters"]["Profile"];
                 /**
