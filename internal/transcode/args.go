@@ -432,7 +432,35 @@ func Args(o Options) []string {
 	 *
 	 * The cost is that a copied resume starts at the keyframe at or before the
 	 * requested second rather than exactly on it, which is the most a copy can
-	 * offer and is invisible beside four seconds of lip-sync.
+	 * offer.
+	 *
+	 * That cost is **not** invisible, and this comment said it was until
+	 * somebody watched a film. The gap is however far back the previous
+	 * keyframe is, so it is a property of the file and of where the resume
+	 * lands rather than a small constant — the Scream row above happens to be
+	 * a file where it was 30ms, which is what made it look negligible.
+	 *
+	 * Measured 2026-09-20 on `Jay and Silent Bob Reboot (2019).mkv`
+	 * (H.264 + DTS, so video copy with an audio encode), first packet of each
+	 * stream, through `-f mpegts` directly rather than the HLS muxer the rows
+	 * above used — so these are comparable with each other and only roughly
+	 * with those:
+	 *
+	 *	no seek        video 1.483  audio 1.462   +0.021
+	 *	-ss 400 -i in  video 1.483  audio 1.813   -0.330
+	 *	-ss 356 -i in  video 1.483  audio 4.610   -3.127
+	 *
+	 * Reported from a phone as the picture running about two tenths of a
+	 * second behind the sound, on the 400s resume.
+	 *
+	 * What is *not* settled: those timestamps are internally consistent — the
+	 * file is saying the video has a lead-in before the audio starts — so a
+	 * player honouring them would show silent picture and then stay in sync.
+	 * Whether this is output that needs fixing or a player mishandling the
+	 * lead-in is decided by playing the same film from the start, where the
+	 * table above says it is clean. Do that before changing any of this:
+	 * timestamp handling is where a plausible fix quietly breaks three other
+	 * containers.
 	 */
 	copiedVideo := o.Decision.VideoAction == "copy"
 
