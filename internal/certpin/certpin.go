@@ -71,6 +71,18 @@ func SPKIFromPEM(pemBytes []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse server certificate: %w", err)
 	}
-	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-	return base64.StdEncoding.EncodeToString(sum[:]), nil
+	return SPKIFromDER(cert.RawSubjectPublicKeyInfo), nil
+}
+
+// SPKIFromDER is the pin over a SubjectPublicKeyInfo already in hand -- from a
+// certificate parsed elsewhere, such as one read off a live connection rather
+// than off disk.
+//
+// The single place this project turns a public key into a pin. A second one
+// that hashed or encoded differently would not fail; it would quietly disagree
+// with the first, and the symptom would be a trusted server reading as an
+// impostor.
+func SPKIFromDER(spki []byte) string {
+	sum := sha256.Sum256(spki)
+	return base64.StdEncoding.EncodeToString(sum[:])
 }
