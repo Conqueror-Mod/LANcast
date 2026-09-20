@@ -34,6 +34,7 @@ const (
 	eventNone           = 0
 	eventShutdown       = 1
 	eventStartFile      = 6
+	eventFileLoaded     = 8
 	eventPropertyChange = 22
 
 	formatNone   = 0
@@ -202,6 +203,15 @@ func (p *Player) loop() {
 		switch ev.ID {
 		case eventShutdown:
 			return
+		case eventFileLoaded:
+			p.mu.Lock()
+			var events []string
+			p.state, events = Opened(p.state)
+			st := p.state
+			p.mu.Unlock()
+			if len(events) > 0 && p.onEvents != nil {
+				p.onEvents(st, events)
+			}
 		case eventPropertyChange:
 			c, ok := readChange((*cProperty)(ev.Data))
 			if !ok {

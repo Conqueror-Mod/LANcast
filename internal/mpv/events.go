@@ -62,12 +62,8 @@ func Apply(s State, c Change) (State, []string) {
 		}
 		s.Duration = c.Double
 		if !s.Loaded {
-			// The element raises loadedmetadata once it knows the duration
-			// and dimensions, then loadeddata when a frame is ready. mpv
-			// knowing the duration means the demuxer has the file open; the
-			// provider only uses loadeddata to drop the spinner, which
-			// `playing` also does, so raising both here is faithful enough
-			// and keeps one source of truth for "the file opened".
+			// Duration arriving is one way to learn a file is open, and it is
+			// not dependable on its own — see Opened, which is the other.
 			s.Loaded = true
 			ev = append(ev, "loadedmetadata", "loadeddata")
 		}
@@ -114,6 +110,34 @@ func Apply(s State, c Change) (State, []string) {
 		}
 	}
 	return s, ev
+}
+
+/*
+ * Opened is mpv's own "the file is open" event, and it is what the page waits
+ * for before it trusts anything the player says.
+ *
+ * Duration alone cannot carry that news. mpv reports a property when its
+ * **value changes**, so re-opening the same file — which is what changing the
+ * audio track does — leaves the duration exactly as it was and reports
+ * nothing. The page then never hears that a file opened: it goes on
+ * suppressing the position it does not yet trust, the clock sits at 0:00 for
+ * the rest of the film, and nothing is written to the server either, because
+ * progress is saved from the same events.
+ *
+ * Seen twice before it was understood, both times after changing the audio
+ * track and both times diagnosed as something else.
+ *
+ * The element raises loadedmetadata once it knows the file, then loadeddata
+ * when a frame is ready. The provider only uses loadeddata to drop the
+ * spinner, which `playing` also does, so raising both here is faithful enough
+ * and keeps one source of truth for "the file opened".
+ */
+func Opened(s State) (State, []string) {
+	if s.Loaded {
+		return s, nil
+	}
+	s.Loaded = true
+	return s, []string{"loadedmetadata", "loadeddata"}
 }
 
 // Reset is the state after a new source is loaded: position and duration
