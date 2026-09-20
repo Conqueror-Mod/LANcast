@@ -139,6 +139,25 @@ type Profile struct {
 	MaxAudioChannels int `json:"max_audio_channels,omitempty"`
 
 	/*
+	 * PlaysEverything says this client decodes whatever the file holds, so the
+	 * codec and container lists above do not apply to it.
+	 *
+	 * It is a flag rather than an exhaustive list because the honest statement
+	 * is not "these forty codecs" but "the same library the server probes
+	 * with". The desktop client plays through libmpv (ADR 0067), which decodes
+	 * what FFmpeg decodes — and FFmpeg is what produced the probe this
+	 * decision is being made from. A list would be that claim, written twice,
+	 * with the second copy going stale.
+	 *
+	 * The ceilings still apply, and that is the point of keeping them separate:
+	 * MaxHeight and MaxVideoBitRate are an administrator's policy about what
+	 * may leave this server, not a statement about what the client can decode.
+	 * A client that plays everything still gets 1080p on a server capped at
+	 * 1080p.
+	 */
+	PlaysEverything bool `json:"plays_everything,omitempty"`
+
+	/*
 	 * Claims are the capability names the client sent, recorded as well as
 	 * applied.
 	 *
@@ -183,6 +202,21 @@ func BrowserProfile() Profile {
 		VideoCodecs: []string{"h264", "vp8", "vp9", "av1"},
 		AudioCodecs: []string{"aac", "mp3", "opus", "vorbis", "flac", "pcm_s16le", "pcm_u8"},
 	}
+}
+
+/*
+ * NativeProfile is a client that decodes with FFmpeg itself.
+ *
+ * LANcast's desktop client plays through libmpv (ADR 0067), so the files it
+ * cannot play are the files the server could not have converted either. Asking
+ * it to remux Matroska, or to re-encode TrueHD, is work with no beneficiary.
+ *
+ * It carries no codec lists at all — see PlaysEverything. What it does carry is
+ * everything else a profile decides: a ceiling set by whoever runs the server
+ * applies to this client exactly as it does to a phone.
+ */
+func NativeProfile() Profile {
+	return Profile{Name: "native", PlaysEverything: true}
 }
 
 // SafariProfile is Safari on macOS, iOS and tvOS.
@@ -234,6 +268,8 @@ func ProfileByName(name string) Profile {
 		return SafariProfile()
 	case "tv":
 		return TVProfile()
+	case "native":
+		return NativeProfile()
 	default:
 		return BrowserProfile()
 	}
@@ -449,7 +485,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 	videoOK, videoWhy := videoCompatible(video, p)
 	audioOK, audioWhy := audioCompatible(audio, p)
 
-	if videoOK && audioOK && contains(p.Containers, r.Container) && !alternateAudio {
+	if videoOK && audioOK && (p.PlaysEverything || contains(p.Containers, r.Container)) && !alternateAudio {
 		return Decision{
 			Method: DirectPlay, Reason: "container and codecs are supported",
 			VideoAction: "copy", AudioAction: "copy", AudioOnly: audioOnly,
@@ -614,7 +650,7 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 		// Audio-only content has no video to be incompatible.
 		return true, ""
 	}
-	if !contains(p.VideoCodecs, s.Codec) {
+	if !p.PlaysEverything && !contains(p.VideoCodecs, s.Codec) {
 		return false, fmt.Sprintf("video codec %s is not supported", s.Codec)
 	}
 	if p.MaxHeight > 0 && s.Height > p.MaxHeight {
@@ -639,7 +675,7 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	 * `probably` for `avc1.6e0033`, and High 10 is most of an anime library —
 	 * a full video re-encode, every time, on files it can play.
 	 */
-	if strings.EqualFold(s.Codec, "h264") && isTenBit(s) && !p.Allows("high10") {
+	if !p.PlaysEverything && strings.EqualFold(s.Codec, "h264") && isTenBit(s) && !p.Allows("high10") {
 		return false, "10-bit H.264 needs a decoder this client did not claim"
 	}
 	/*
@@ -712,7 +748,7 @@ func audioCompatible(s *Stream, p Profile) (bool, string) {
 	if s == nil {
 		return true, ""
 	}
-	if !contains(p.AudioCodecs, s.Codec) {
+	if !p.PlaysEverything && !contains(p.AudioCodecs, s.Codec) {
 		return false, fmt.Sprintf("audio codec %s is not supported", s.Codec)
 	}
 	if p.MaxAudioChannels > 0 && s.Channels > p.MaxAudioChannels {
