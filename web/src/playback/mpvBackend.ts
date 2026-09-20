@@ -39,6 +39,16 @@ declare global {
   }
 }
 
+/**
+ * How much reported position counts as "this file has only just opened".
+ *
+ * mpv reports 0 between opening a file and the resume seek landing. A second
+ * is far longer than that gap and far shorter than anything a viewer would
+ * notice being withheld; a film genuinely playing its first second reaches
+ * this in one tick.
+ */
+const OPENING_SECONDS = 1;
+
 let availability: Promise<boolean> | null = null;
 
 /** Whether this window can play natively. Asked once per page load. */
@@ -229,14 +239,23 @@ export class MpvBackend extends EventTarget implements MediaBackend {
        * A file that has just opened reports a position of zero until the
        * resume seek lands, and that zero is not where anything is.
        *
-       * The provider records every timeupdate as the live position, and reads
-       * the live position when it rebuilds a source — so one tick of "we are
-       * at 0:00" between load and seek made the *next* rebuild fall back to
-       * the saved progress instead, which is up to five seconds stale. Found
-       * by changing the audio track twice: the first change held its place,
-       * the second went back nine seconds.
+       * The provider records every timeupdate as the live position and reads
+       * it back when it rebuilds a source, so one tick of "we are at 0:00"
+       * made the *next* rebuild fall back to saved progress — up to five
+       * seconds stale. Found by changing the audio track twice: the first
+       * change held its place and the second went back nine seconds.
+       *
+       * The bound matters as much as the rule. Suppressing on "a seek is
+       * pending" alone froze the clock at 0:00 for the rest of a film: a
+       * pending seek is only cleared by `loadedmetadata`, and a source that
+       * never raises one leaves every later position swallowed. Only the
+       * opening zeros are worth discarding, so a real position is never
+       * withheld and a stale pending seek cannot outlive the first of them.
        */
-      if (name === "timeupdate" && this.pendingSeek !== null) continue;
+      if (name === "timeupdate" && this.pendingSeek !== null) {
+        if (this.time < OPENING_SECONDS) continue;
+        this.pendingSeek = null;
+      }
       if (name === "loadedmetadata") {
         this.loaded = true;
         // Re-assert what the element would have kept across a load.
