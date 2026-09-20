@@ -1,0 +1,421 @@
+<!doctype html>
+<!--
+  The server picker (ADR 0070).
+
+  Carried by the client rather than served, because every case that puts this
+  on screen is a case where there is no server to ask. It has no origin and no
+  network: everything it does goes through the bindings in servers.go, which
+  are what decide. This page draws and asks.
+
+  Styled from the same tokens as the app rather than importing them, because
+  the app's stylesheet lives on a server this page may not be able to reach.
+  Gold follows the discipline rule in docs/design.md: it marks focus and the
+  current server, and nothing else. The refusal screen is not gold -- a key
+  that has changed is not "where you are".
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>LANcast</title>
+    <style>
+      :root {
+        --space-void: #05070f;
+        --space-deep: #070b18;
+        --space-raised: #0a0f22;
+        --gold: #c6a35a;
+        --gold-bright: #e3c179;
+        --gold-dormant: rgba(198, 163, 90, 0.2);
+        --gold-ring: rgba(198, 163, 90, 0.13);
+        --text-primary: #f4f7fd;
+        --text-secondary: #d8dce6;
+        --text-muted: #a3aab9;
+        --text-faint: #878ea0;
+        --danger: #e0707f;
+        --radius-tile: 6px;
+        --radius-panel: 12px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(1200px 700px at 50% -10%, #12183a 0%, transparent 60%),
+          var(--space-void);
+        color: var(--text-primary);
+        font: 15px/1.55 "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+      }
+      .panel {
+        width: 100%;
+        max-width: 560px;
+        background: var(--space-raised);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: var(--radius-panel);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+        padding: 28px;
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        margin: 0 0 4px;
+      }
+      .reason {
+        color: var(--text-muted);
+        font-size: 14px;
+        margin: 0 0 22px;
+      }
+      h2 {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        margin: 22px 0 10px;
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 12px 14px;
+        border-radius: var(--radius-tile);
+        background: rgba(10, 15, 34, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        margin-bottom: 8px;
+      }
+      .row__main { flex: 1 1 200px; min-width: 0; }
+      .row__title { font-weight: 500; }
+      .row__sub {
+        color: var(--text-faint);
+        font-size: 12.5px;
+        overflow-wrap: anywhere;
+      }
+      /* The one thing gold means here: the server you are on. */
+      .row[data-current="true"] {
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px var(--gold-ring);
+      }
+      /* The actions wrap inside themselves as well as dropping to their own
+         line -- the fault fixed in the settings pane, not repeated here. */
+      .row__actions { display: flex; gap: 8px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; }
+      button {
+        font: inherit;
+        padding: 7px 14px;
+        border-radius: var(--radius-tile);
+        border: 1px solid var(--gold-dormant);
+        background: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+      }
+      button:hover:not(:disabled), button:focus-visible {
+        border-color: var(--gold);
+        color: var(--text-primary);
+        outline: none;
+        box-shadow: 0 0 0 3px var(--gold-ring);
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      button.danger { border-color: rgba(224, 112, 127, 0.4); color: var(--danger); }
+      button.danger:hover:not(:disabled) {
+        border-color: var(--danger);
+        box-shadow: 0 0 0 3px rgba(224, 112, 127, 0.13);
+      }
+      input {
+        font: inherit;
+        padding: 8px 12px;
+        border-radius: var(--radius-tile);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(5, 7, 15, 0.6);
+        color: var(--text-primary);
+        width: 100%;
+      }
+      input:focus-visible {
+        outline: none;
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px var(--gold-ring);
+      }
+      .add { display: flex; gap: 8px; align-items: stretch; }
+      .add input { flex: 1 1 auto; }
+      .add button { flex: 0 0 auto; }
+      .note { color: var(--text-faint); font-size: 12.5px; margin-top: 8px; }
+      .error {
+        color: var(--danger);
+        font-size: 13.5px;
+        margin-top: 12px;
+        white-space: pre-wrap;
+      }
+      .fingerprint {
+        font-family: Consolas, "Cascadia Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        color: var(--gold-bright);
+        background: rgba(5, 7, 15, 0.6);
+        border: 1px solid var(--gold-dormant);
+        border-radius: var(--radius-tile);
+        padding: 10px 12px;
+        margin: 10px 0;
+        overflow-wrap: anywhere;
+      }
+      /* A changed key is not "where you are", so it is not gold. */
+      .fingerprint--stale {
+        color: var(--text-muted);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+      .fingerprint--bad { color: var(--danger); border-color: rgba(224, 112, 127, 0.4); }
+      .hidden { display: none; }
+      .spacer { height: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <!-- Step 1: choose a server. -->
+      <section id="list-view">
+        <h1>Which server?</h1>
+        <p class="reason" id="reason">__REASON__</p>
+
+        <h2>This machine</h2>
+        <div id="local"></div>
+
+        <h2 id="known-heading" class="hidden">Other servers</h2>
+        <div id="known"></div>
+
+        <h2>Add a server</h2>
+        <div class="add">
+          <input id="address" placeholder="192.168.1.66" aria-label="Server address"
+                 autocomplete="off" spellcheck="false" />
+          <button id="look">Look</button>
+        </div>
+        <p class="note">
+          The address of a LANcast server on your network. Port 8080 unless you say otherwise.
+        </p>
+        <p class="error hidden" id="list-error"></p>
+      </section>
+
+      <!-- Step 2: look at the key before trusting it. -->
+      <section id="trust-view" class="hidden">
+        <h1>Is this the right server?</h1>
+        <p class="reason">
+          LANcast has not seen <span id="trust-address"></span> before. Check this fingerprint
+          against the one that server shows in <strong>Settings &rsaquo; General &rsaquo;
+          Certificate fingerprint</strong> &mdash; asked of somebody already using it, not
+          over this connection, which is the one being checked.
+        </p>
+        <div class="fingerprint" id="trust-fingerprint"></div>
+        <p class="note" id="trust-detail"></p>
+        <div class="spacer"></div>
+        <input id="trust-name" placeholder="A name for this server (optional)"
+               aria-label="A name for this server" autocomplete="off" />
+        <div class="spacer"></div>
+        <div class="row__actions">
+          <button id="trust-accept">Accept and connect</button>
+          <button id="trust-cancel">Back</button>
+        </div>
+        <p class="error hidden" id="trust-error"></p>
+      </section>
+
+      <!-- Step 3, which is a refusal and not a choice. -->
+      <section id="refuse-view" class="hidden">
+        <h1>This is not the key you accepted</h1>
+        <p class="error" id="refuse-message"></p>
+        <h2>Accepted</h2>
+        <div class="fingerprint fingerprint--stale" id="refuse-old"></div>
+        <h2>Offered now</h2>
+        <div class="fingerprint fingerprint--bad" id="refuse-new"></div>
+        <div class="spacer"></div>
+        <div class="row__actions">
+          <button id="refuse-back">Back</button>
+          <button class="danger" id="refuse-forget">Forget this server</button>
+        </div>
+        <p class="note">
+          Forgetting it lets you add it again from scratch, and you will be shown the new
+          key to check. Do that only once you know why the key changed.
+        </p>
+        <p class="error hidden" id="refuse-error"></p>
+      </section>
+    </div>
+
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      const show = (id) => {
+        for (const v of ["list-view", "trust-view", "refuse-view"]) {
+          $(v).classList.toggle("hidden", v !== id);
+        }
+      };
+      const setError = (id, message) => {
+        const el = $(id);
+        el.textContent = message || "";
+        el.classList.toggle("hidden", !message);
+      };
+      const text = (el, s) => { el.textContent = s; };
+
+      let probed = null;
+
+      function row(opts) {
+        const div = document.createElement("div");
+        div.className = "row";
+        if (opts.current) div.dataset.current = "true";
+
+        const main = document.createElement("div");
+        main.className = "row__main";
+        const title = document.createElement("div");
+        title.className = "row__title";
+        text(title, opts.title);
+        const sub = document.createElement("div");
+        sub.className = "row__sub";
+        text(sub, opts.sub);
+        main.append(title, sub);
+
+        const actions = document.createElement("div");
+        actions.className = "row__actions";
+        for (const a of opts.actions) {
+          const b = document.createElement("button");
+          text(b, a.label);
+          if (a.danger) b.className = "danger";
+          b.disabled = !!a.disabled;
+          b.addEventListener("click", a.onClick);
+          actions.append(b);
+        }
+        div.append(main, actions);
+        return div;
+      }
+
+      async function draw() {
+        const state = await window.lancastServers();
+        setError("list-error", state.error || "");
+
+        const local = $("local");
+        local.replaceChildren(
+          row({
+            title: "LANcast on this computer",
+            sub: state.local.current ? "connected" : state.local.address,
+            current: state.local.current,
+            actions: state.local.current
+              ? [{ label: "Connected", disabled: true, onClick: () => {} }]
+              : [{ label: "Connect", onClick: () => connectLocal() }],
+          }),
+        );
+
+        const known = $("known");
+        known.replaceChildren();
+        $("known-heading").classList.toggle("hidden", state.servers.length === 0);
+        for (const s of state.servers) {
+          known.append(
+            row({
+              title: s.name || s.address,
+              sub: s.name ? s.address : "added " + s.accepted.slice(0, 10),
+              current: s.current,
+              actions: [
+                s.current
+                  ? { label: "Connected", disabled: true, onClick: () => {} }
+                  : { label: "Connect", onClick: () => connect(s.address) },
+                { label: "Forget", danger: true, onClick: () => forget(s.address) },
+              ],
+            }),
+          );
+        }
+      }
+
+      function busy(id, on, label) {
+        const b = $(id);
+        b.disabled = on;
+        text(b, on ? label : b.dataset.label);
+      }
+
+      async function look() {
+        const raw = $("address").value;
+        if (!raw.trim()) return;
+        setError("list-error", "");
+        busy("look", true, "Looking…");
+        try {
+          const result = await window.lancastServerProbe(raw);
+          if (result.error) { setError("list-error", result.error); return; }
+          probed = result;
+          if (result.trust === "match") { await connect(result.address); return; }
+          if (result.trust === "mismatch") { showRefusal(result); return; }
+          showTrust(result);
+        } finally {
+          busy("look", false);
+        }
+      }
+
+      function showTrust(result) {
+        text($("trust-address"), result.address);
+        text($("trust-fingerprint"), result.fingerprint);
+        text(
+          $("trust-detail"),
+          "Certificate: " + result.subject + " · valid to " + result.expires.slice(0, 10),
+        );
+        $("trust-name").value = result.known_name || "";
+        setError("trust-error", "");
+        show("trust-view");
+        $("trust-name").focus();
+      }
+
+      function showRefusal(result) {
+        text($("refuse-message"), result.refusal || "");
+        text($("refuse-old"), result.known_fingerprint || "(not recorded)");
+        text($("refuse-new"), result.fingerprint);
+        setError("refuse-error", "");
+        show("refuse-view");
+      }
+
+      async function connect(address) {
+        setError("list-error", "");
+        const result = await window.lancastServerConnect(address);
+        if (result.error) {
+          // A mismatch found here rather than at the probe: same refusal.
+          if (probed && probed.address === address && result.error.indexOf("not the one") >= 0) {
+            probed.refusal = result.error;
+            showRefusal(probed);
+            return;
+          }
+          setError("list-error", result.error);
+        }
+      }
+
+      async function connectLocal() {
+        const result = await window.lancastServerConnectLocal();
+        if (result.error) setError("list-error", result.error);
+      }
+
+      async function forget(address) {
+        const result = await window.lancastServerForget(address);
+        if (result.error) { setError("list-error", result.error); return; }
+        await draw();
+      }
+
+      $("look").dataset.label = "Look";
+      $("look").addEventListener("click", look);
+      $("address").addEventListener("keydown", (e) => { if (e.key === "Enter") look(); });
+
+      $("trust-cancel").addEventListener("click", () => { show("list-view"); });
+      $("trust-accept").dataset.label = "Accept and connect";
+      $("trust-accept").addEventListener("click", async () => {
+        busy("trust-accept", true, "Connecting…");
+        setError("trust-error", "");
+        try {
+          const result = await window.lancastServerAccept(
+            probed.address, $("trust-name").value.trim());
+          if (result.error) setError("trust-error", result.error);
+        } finally {
+          busy("trust-accept", false);
+        }
+      });
+
+      $("refuse-back").addEventListener("click", () => { show("list-view"); });
+      $("refuse-forget").addEventListener("click", async () => {
+        await forget(probed.address);
+        show("list-view");
+      });
+
+      draw().catch((e) => setError("list-error", String(e)));
+      $("address").focus();
+    </script>
+  </body>
+</html>

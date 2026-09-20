@@ -3861,6 +3861,24 @@ database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
 empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
 
+**`certificate_fingerprint`** is the base64 SHA-256 of this server's TLS
+certificate public key, in the same form a desktop client pins. It is what
+makes trust on first use answerable: a client meeting this server for the first
+time shows the key it was offered and asks whether it is right
+([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md)),
+and that question can only be answered by comparing it against the server
+**somewhere else** — read off this field by somebody already on the server and
+told to whoever is being asked to trust it.
+
+Reading it through the connection being verified proves nothing, which is also
+why it is **not a secret**: it is a hash of a public key the server hands to
+anyone who opens a TLS connection to it. Its protection comes entirely from
+being compared out of band, so withholding it would cost the feature its point
+and buy nothing. It is `""` on a loopback-only server, which has no certificate
+and is the one server nobody needs to verify — nothing can reach it from
+another machine. It follows a supplied certificate when `tls_cert_file` is set,
+because the fingerprint must describe the certificate actually being served.
+
 **Diagnostics.** `debug_logging` raises the server's log level to debug. It
 takes effect on the next line logged — no restart — and is persisted, because
 the faults worth turning it on for are the intermittent ones and losing the

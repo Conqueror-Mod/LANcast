@@ -9406,6 +9406,11 @@
             "minimum": 1,
             "maximum": 64,
             "description": "How many conversions may run at once. Each is a whole ffmpeg, so the ceiling is a statement about the machine rather than a preference: three suits a laptop-class server, a NAS with a weak CPU wants fewer, a desktop with a modern encoder handles many more.\n\nA **ceiling rather than a queue**. Past it a request is refused and the client reports a busy server, which is honest; admitting everybody and letting every stream stutter is not. Direct play is unaffected — a file sent as it is costs no session, however many people are watching.\n\nApplied live: sessions already running are left alone and the new ceiling decides what is admitted next. Absent, or zero from an older file, means the built-in default of 3."
+          },
+          "certificate_fingerprint": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Base64 SHA-256 of this server's TLS certificate public key, in the form a desktop client pins (ADR 0070). Not a secret: it is a hash of a public key handed to anyone who opens a TLS connection here, and its protection comes entirely from being compared out of band. Empty on a loopback-only server, which has no certificate. Follows a supplied certificate when tls_cert_file is set."
           }
         }
       },

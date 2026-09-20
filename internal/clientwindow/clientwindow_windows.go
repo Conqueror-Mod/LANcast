@@ -134,7 +134,11 @@ func open(o Options) error {
 		o.OnReady(&controller{w: w, placed: &placed})
 	}
 
-	w.Navigate(o.URL)
+	if o.HTML != "" {
+		w.SetHtml(o.HTML)
+	} else {
+		w.Navigate(o.URL)
+	}
 	w.Run()
 
 	/*
@@ -270,6 +274,10 @@ func (c *controller) Show() {
  * call that works until it does not — and the caller is always a background
  * goroutine, since it is woken by a named event.
  */
+func (c *controller) ShowHTML(html string) {
+	c.w.Dispatch(func() { c.w.SetHtml(html) })
+}
+
 func (c *controller) Navigate(url string) {
 	c.w.Dispatch(func() { c.w.Navigate(url) })
 }
