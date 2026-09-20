@@ -3862,7 +3862,7 @@ empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
 
 **`certificate_fingerprint`** is the base64 SHA-256 of this server's TLS
-certificate public key — the **connection key**, in the form a desktop client
+certificate public key — the **TLS certificate fingerprint**, in the form a desktop client
 pins. It is not the server's identity, and the distinction matters:
 
 | | answers | lifetime |

@@ -2881,17 +2881,25 @@ function GeneralSection() {
         the correction the amendment to ADR 0070 makes. The **identity**
         (ADR 0044) is generated once and never regenerated, survives being
         restored from a backup, and is what says this is the same server. The
-        **connection key** is the TLS certificate's, and it is reissued for
-        ordinary reasons -- a reinstall, a deleted certificate picking up a new
-        network address, an operator rotating one they supplied.
+        **TLS certificate fingerprint** secures the connection, and it is
+        reissued for ordinary reasons -- a reinstall, a deleted certificate
+        picking up a new network address, an operator rotating one they
+        supplied.
+
+        Neither is called a "key" on this screen, deliberately. A key is
+        something you are given and that lets you in; the thing that pairs two
+        servers is an *invite* (ADR 0044), and somebody handed one of those
+        reasonably expects it to grant access. Both values here grant nothing
+        whatsoever. They are compared, never presented.
 
         Identity first, because it is the durable one and the one somebody
-        checking a changed connection key is sent here to read. The connection
-        key is still shown, because it is the only value both ends can compare
-        before anyone has signed in, which is exactly the first-contact case.
+        checking a changed certificate is sent here to read. The certificate
+        fingerprint is still shown, because it is the only value both ends can
+        compare before anyone has signed in, which is exactly the first-contact
+        case.
 
         Neither is a secret. The identity's public half is what an invite
-        carries; the connection key is handed to anyone who opens a TLS
+        carries; the certificate fingerprint is handed to anyone who opens a TLS
         connection. Both get their protection from being compared out of band.
       */}
       {identity?.fingerprint_display ? (
@@ -2913,12 +2921,12 @@ function GeneralSection() {
       {settings?.certificate_fingerprint ? (
         <div className="set-row">
           <div className="set-row__main">
-            <div className="set-row__title">Connection key</div>
+            <div className="set-row__title">TLS certificate fingerprint</div>
             <div className="set-row__sub set-row__sub--mono">
               {groupFingerprint(settings.certificate_fingerprint)}
             </div>
             <div className="set-row__sub">
-              The TLS certificate&rsquo;s key. Read this out to somebody adding this
+              Read this out to somebody adding this
               server on another computer for the first time, before they have
               signed in. It is reissued for ordinary reasons, so a change in it
               is not by itself a problem. Not a secret.

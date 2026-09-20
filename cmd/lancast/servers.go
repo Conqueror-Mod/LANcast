@@ -121,7 +121,7 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				// is entitled to see that this is what that looks like.
 				out["known_fingerprint"] = knownserver.Fingerprint(prev.Pin)
 				// The anchor, for the rotation screen to show beside the new
-				// connection key. Grouped by identity's own rule so it looks
+				// certificate. Grouped by identity's own rule so it looks
 				// the same here as on the server's settings screen.
 				if prev.Identity != "" {
 					out["identity_display"] = identity.Group(prev.Identity)
@@ -368,7 +368,7 @@ func serverRows(l knownserver.List, current string) []map[string]any {
 // It sends the person to the one value that does not rotate.
 func rotationMessage(addr string) string {
 	return fmt.Sprintf(
-		"The connection key at %s has changed.\n\n"+
+		"The TLS certificate at %s has changed.\n\n"+
 			"This is what a reissued certificate looks like, and certificates are "+
 			"reissued for ordinary reasons: the server was reinstalled, its "+
 			"certificate was deleted to pick up a new network address, or whoever "+
@@ -391,7 +391,7 @@ func rotationMessage(addr string) string {
  */
 func mismatchMessage(addr string) string {
 	return fmt.Sprintf(
-		"The connection key at %s has changed, and there is no way to check it.\n\n"+
+		"The TLS certificate at %s has changed, and there is no way to check it.\n\n"+
 			"LANcast confirms a changed key against the server's identity, which "+
 			"is a separate key that is never regenerated. This client never got "+
 			"far enough into that server to learn its identity, so a reissued "+
