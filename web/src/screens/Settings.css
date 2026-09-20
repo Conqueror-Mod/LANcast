@@ -129,7 +129,27 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: none;
+  /*
+   * The group wraps inside itself as well as dropping to its own line.
+   *
+   * Dropping alone was not enough. A row whose action group is wider than the
+   * whole card has nowhere to drop to: it took its own line and then ran off
+   * the right edge of the card, because `flex: none` fixes the group at its
+   * content width and nothing was allowed to reconsider that. It showed up on
+   * a member account, which carries one control more than an administrator's
+   * own row -- the content-rating ceiling, which is not offered for yourself.
+   * So the row that overflowed was never the row the person editing it was
+   * looking at.
+   *
+   * Shrinking is what lets the wrap happen: on its own line the group is
+   * offered the card's width, `flex-shrink` accepts it, and the buttons wrap
+   * onto a second line instead of leaving the card. The parent still wraps
+   * first, so a group that fits is still whole on one line and nothing about
+   * the narrow-pane case above changes.
+   */
+  flex-wrap: wrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .set-btn {
