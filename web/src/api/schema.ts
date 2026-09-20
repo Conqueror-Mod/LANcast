@@ -4146,6 +4146,8 @@ export interface components {
              *     Applied live: sessions already running are left alone and the new ceiling decides what is admitted next. Absent, or zero from an older file, means the built-in default of 3.
              */
             max_transcodes?: number;
+            /** @description Base64 SHA-256 of this server's TLS certificate public key, in the form a desktop client pins (ADR 0070). Not a secret: it is a hash of a public key handed to anyone who opens a TLS connection here, and its protection comes entirely from being compared out of band. Empty on a loopback-only server, which has no certificate. Follows a supplied certificate when tls_cert_file is set. */
+            readonly certificate_fingerprint?: string;
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {

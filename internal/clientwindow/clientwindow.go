@@ -19,6 +19,20 @@ type Options struct {
 	// URL is the address to show. The caller resolves scheme and host; this
 	// package does no discovery of its own.
 	URL string
+	/*
+	 * HTML is a page the caller carries, shown instead of URL when set.
+	 *
+	 * It exists for the server picker (ADR 0070), and the reason it cannot be
+	 * a URL is the situation it is for: the picker appears precisely when
+	 * there is no server to fetch a page from -- nothing trusted yet, the
+	 * remembered server forgotten, or the one that was there refusing to be
+	 * what it was.
+	 *
+	 * The page is given no origin, so it has no cookies and no network. It can
+	 * only reach the bindings, which is what makes it safe to carry a page
+	 * that decides nothing and asks for everything.
+	 */
+	HTML string
 	// Title is the window title.
 	Title string
 	// Width and Height are the initial size in logical pixels. Zero means the
@@ -124,6 +138,9 @@ type Controller interface {
 	SetVideoLayout(layout string, x, y, width, height int)
 	// Eval runs script in the page, on the window's thread.
 	Eval(js string)
+	// ShowHTML replaces the page with one the caller carries -- the server
+	// picker, reached from the app rather than at startup. See Options.HTML.
+	ShowHTML(html string)
 }
 
 // Open shows the window and blocks until it is closed.

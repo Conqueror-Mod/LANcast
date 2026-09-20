@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/desktop"
 	"lancast/internal/desktopprefs"
+	"lancast/internal/knownserver"
 	"lancast/internal/raise"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
@@ -98,7 +100,43 @@ func main() {
 	}
 	defer release()
 
-	l := &launcher{addr: *addr, dataDir: *dataDir}
+	/*
+	 * Which server this launch opens (ADR 0070).
+	 *
+	 * Before ensureServer, because the answer decides whether there is
+	 * anything here to start: a client pointed at another machine must not
+	 * spawn a server of its own, and must not wait for one.
+	 *
+	 * flag.Visit rather than comparing against the default, because ":8080" is
+	 * both the default and a perfectly reasonable thing to type, and the
+	 * difference between those two is exactly what resolve is asking about.
+	 */
+	addrGiven := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "addr" {
+			addrGiven = true
+		}
+	})
+	l := &launcher{addr: *addr, dataDir: *dataDir, localAddr: *addr}
+	prefs, _ := desktopprefs.Load(clientDataDir())
+	trusted, trustErr := knownserver.Load(clientDataDir())
+	if trustErr != nil {
+		// Not fatal, and not silent. Every server is unknown again, which is
+		// the safe direction to fail in -- but a fingerprint prompt nobody can
+		// explain is the one that gets clicked through, so it goes in the log.
+		slog.Warn("known servers unreadable", "error", trustErr)
+	}
+	target, ask := resolve(facts{
+		addrFlagGiven: addrGiven,
+		flagAddr:      *addr,
+		lastServer:    prefs.Server,
+		known:         trusted,
+		localPin:      l.serverCertPin(),
+	})
+	l.target = target
+	l.addr = target.address
+	l.askWhichServer = ask
+
 	if err := l.ensureServer(); err != nil {
 		alert("LANcast", err.Error())
 		os.Exit(1)
@@ -157,6 +195,17 @@ func runWindow(l *launcher) {
 	// is the worst version of this feature.
 	var quitting bool
 	var tray clientwindow.Controller
+	/*
+	 * The live window, for the bindings that end it.
+	 *
+	 * Choosing a different server starts a successor process and closes this
+	 * one (ADR 0070, and connect.go for why it cannot be a navigation), so
+	 * those bindings need the controller -- which does not exist until
+	 * OnReady. A function rather than the value, so the bindings built before
+	 * the window can still reach it afterwards.
+	 */
+	var win clientwindow.Controller
+	windowNow := func() clientwindow.Controller { return win }
 	stopRaise := func() {}
 	defer func() { stopRaise() }()
 
@@ -202,8 +251,17 @@ func runWindow(l *launcher) {
 	 * for the window to imply.
 	 */
 	url := desktop.ResolvedURL(l.addr)
-	pin := l.serverCertPin()
-	if pin == "" && strings.HasPrefix(url, "https://") {
+	pin := l.target.pin
+	/*
+	 * Only a *local* server's missing pin is worth waiting for.
+	 *
+	 * The honest reason a local pin is missing is a server still writing its
+	 * certificate, which a moment fixes. A remote server's pin comes from the
+	 * trust record, so an empty one there means the record has no entry -- and
+	 * no amount of waiting writes one. That case is a question for a person,
+	 * which is what the picker is.
+	 */
+	if pin == "" && l.target.local && strings.HasPrefix(url, "https://") {
 		deadline := time.Now().Add(5 * time.Second)
 		for pin == "" && time.Now().Before(deadline) {
 			time.Sleep(250 * time.Millisecond)
@@ -228,8 +286,33 @@ func runWindow(l *launcher) {
 	// Native playback (ADR 0067). Built before the window so its bindings are
 	// injected with the rest; it learns the window itself in OnReady.
 	native := &nativePlayer{origin: url, pin: pin}
+	/*
+	 * Open on the picker rather than on a server, when there is no server this
+	 * launch can honestly open (ADR 0070).
+	 *
+	 * Two cases, and they need different sentences. A remembered server that
+	 * is no longer trusted is a consequence of something the person did -- so
+	 * it says so, because opening the local server silently would read as the
+	 * remote one having been lost. A remote server that is not answering is a
+	 * fact about the network, and this machine cannot fix it by starting
+	 * anything; the local server is still one click away, which is the whole
+	 * reason the picker lists it.
+	 */
+	pickerReason := ""
+	switch {
+	case l.askWhichServer:
+		pickerReason = "The server you were using is no longer one you have accepted."
+	case !l.target.local && !desktop.ServerRunning(l.addr):
+		pickerReason = "LANcast could not reach " + l.target.address + "."
+	}
+	page := ""
+	if pickerReason != "" {
+		page = pickerPage(pickerReason)
+	}
+
 	err = clientwindow.Open(clientwindow.Options{
 		URL:    url,
+		HTML:   page,
 		Title:  "LANcast",
 		Width:  1280,
 		Height: 800,
@@ -290,6 +373,7 @@ func runWindow(l *launcher) {
 			return false
 		},
 		OnReady: func(c clientwindow.Controller) {
+			win = c
 			native.attach(c)
 			/*
 			 * Reload when the server comes back.
@@ -363,7 +447,7 @@ func runWindow(l *launcher) {
 		DataDir:  clientDataDir(),
 		CertPin:  pin,
 		DevTools: devToolsWanted(),
-		Bindings: l.desktopBindings(native),
+		Bindings: withServerBindings(l.desktopBindings(native), l.serverBindings(windowNow)),
 	})
 	if err != nil {
 		alert("LANcast", err.Error())
@@ -554,6 +638,20 @@ type launcher struct {
 	// dataDir is the operator's explicit choice, empty when they made none.
 	dataDir string
 	started *exec.Cmd
+	/*
+	 * target is the server this launch opens, and localAddr is the server on
+	 * this machine whether or not that is the one being opened (ADR 0070).
+	 *
+	 * Both are kept because the picker needs to offer "this machine" while
+	 * pointed somewhere else, and because ensureServer has to know which of
+	 * the two it is looking at: starting a server is something this process
+	 * may do for a local address and must never do for a remote one.
+	 */
+	target    target
+	localAddr string
+	// askWhichServer is set when the remembered server is no longer trusted,
+	// so the window opens on the picker rather than silently somewhere else.
+	askWhichServer bool
 }
 
 // serverDataDir is the directory the server uses: what was asked for, or the
@@ -570,6 +668,17 @@ func (l *launcher) serverDataDir() (string, bool) {
 // ensureServer opens the app to a running server, starting the sibling lancastd
 // (windowless) first if nothing is answering.
 func (l *launcher) ensureServer() error {
+	/*
+	 * A server on another machine is not this process's to start or to wait
+	 * for (ADR 0070). Everything below -- spawning lancastd, pinning the data
+	 * directory, waiting on the installed service -- is about a server that
+	 * lives here. A remote one that is not answering is reported as not
+	 * answering by the code that tries to reach it, which is honest; there is
+	 * nothing this machine can do about it.
+	 */
+	if !l.target.local {
+		return nil
+	}
 	if desktop.ServerRunning(l.addr) {
 		return nil
 	}

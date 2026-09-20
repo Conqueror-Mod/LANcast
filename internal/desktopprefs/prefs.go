@@ -81,6 +81,24 @@ type Prefs struct {
 	Games bool `json:"games"`
 
 	/*
+	 * Server is the address this client opened last, empty for the server on
+	 * this machine (ADR 0070).
+	 *
+	 * A preference and not a permission. It records where somebody was, and
+	 * the trust record decides whether that is still somewhere they may go --
+	 * so forgetting a server in the trust record is enough to stop opening it,
+	 * without this file needing to be kept in step. Two copies of one fact,
+	 * kept by one of its owners, is the mistake OpenAtLogin above is a
+	 * monument to.
+	 *
+	 * Here rather than in server settings for the reason the package comment
+	 * gives, and more completely than anything else in this file: which server
+	 * this client talks to cannot be stored on a server, because the answer
+	 * may be a different one.
+	 */
+	Server string `json:"server,omitempty"`
+
+	/*
 	 * Window is where the window was when it last closed: which screen, and
 	 * where on it.
 	 *

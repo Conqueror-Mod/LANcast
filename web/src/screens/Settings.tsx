@@ -2833,10 +2833,23 @@ function SemanticSearchRow() {
   );
 }
 
+/*
+ * groupFingerprint breaks a pin into readable runs.
+ *
+ * Base64 in one unbroken run is unreadable at the only moment it matters: two
+ * people on the phone, one of them reading it to the other. Grouped, it can be
+ * read aloud and lost place in without starting over. The server's own client
+ * groups it identically, so the two screens being compared look alike.
+ */
+function groupFingerprint(pin: string): string {
+  return (pin.match(/.{1,8}/g) ?? [pin]).join(" ");
+}
+
 // Megabytes, rounded, because nobody reading a download size wants three
 // decimal places of a hundred-megabyte number.
 function GeneralSection() {
   const { data: health } = useHealth();
+  const { data: settings } = useSettings(true);
   return (
     <section className="settings__section">
       <span className="section-label">Server</span>
@@ -2859,6 +2872,39 @@ function GeneralSection() {
           </div>
         </div>
       </div>
+      {/*
+        The fingerprint, which exists so somebody can read it out loud.
+
+        A desktop client meeting this server for the first time shows the key
+        it was offered and asks whether it is right (ADR 0070). That question
+        is only answerable by comparing it against the server *somewhere else*
+        — and this is that somewhere. Without it the prompt is a formality and
+        the honest description of the feature is "accept whatever answers".
+
+        Which is why reading it through the connection being checked proves
+        nothing, and why it is not hidden: it is a hash of a public key handed
+        to anyone who opens a TLS connection here. Grouped into runs because
+        the moment it matters is two people on the phone, one of them reading.
+
+        Absent on a loopback-only server, which has no certificate — and is the
+        one server nobody needs to verify, since nothing can reach it from
+        another machine.
+      */}
+      {settings?.certificate_fingerprint ? (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">Certificate fingerprint</div>
+            <div className="set-row__sub set-row__sub--mono">
+              {groupFingerprint(settings.certificate_fingerprint)}
+            </div>
+            <div className="set-row__sub">
+              Read this out to somebody adding this server on another computer,
+              so they can check it against what their app shows them. It is not
+              a secret.
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/*
         The source link, and it is a licence obligation rather than a courtesy.
 

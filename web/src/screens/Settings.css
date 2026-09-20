@@ -692,3 +692,18 @@
   padding: 10px 12px;
   margin-bottom: 10px;
 }
+
+/*
+ * A fingerprint being read aloud.
+ *
+ * Monospace so the runs line up between two screens being compared, and
+ * wrapping anywhere because it is a long unbroken token that must not widen
+ * its row — the same containment rule the action group above needed.
+ */
+.set-row__sub--mono {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  margin-bottom: 4px;
+}

@@ -28,6 +28,19 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		},
 		"rate_per_sec":  cur.RatePerSec,
 		"debug_logging": cur.DebugLogging,
+		/*
+		 * The fingerprint of the certificate this server serves, so that a
+		 * client meeting it for the first time can be verified against
+		 * something (ADR 0070).
+		 *
+		 * Not a secret, and deliberately not treated as one: it is a hash of a
+		 * public key handed to anybody who opens a TLS connection here. Its
+		 * whole value is in being compared out of band -- read off this screen
+		 * by somebody already on this server, and told to whoever is being
+		 * asked to trust it. Empty on a loopback-only server, which has no
+		 * certificate and needs none.
+		 */
+		"certificate_fingerprint": s.certFingerprint(),
 		// The server's rules about what a client shows and what it may do.
 		"watched_threshold":    cur.WatchedThreshold,
 		"continue_weeks":       cur.ContinueWeeks,
