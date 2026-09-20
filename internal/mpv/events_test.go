@@ -156,3 +156,34 @@ func TestOptionsThatMayBeAbsentAreMarked(t *testing.T) {
 		}
 	}
 }
+
+func TestReopeningTheSameFileStillSaysItOpened(t *testing.T) {
+	/*
+	 * Changing the audio track re-opens the same file, so its duration does
+	 * not change — and mpv reports a property only when its value changes.
+	 * Waiting for duration therefore misses the second open entirely, and the
+	 * page goes on distrusting a clock that never becomes trustworthy: 0:00
+	 * for the rest of the film, with nothing saved to the server.
+	 */
+	s, ev := run(NewState(), Change{Name: "duration", Double: 7741})
+	if len(ev) == 0 {
+		t.Fatal("the first open said nothing")
+	}
+
+	// A new file: the player resets, and mpv says the file is open before any
+	// property it happens to share with the last one.
+	s = Reset(s)
+	s, ev = Opened(s)
+	if !reflect.DeepEqual(ev, []string{"loadedmetadata", "loadeddata"}) {
+		t.Fatalf("reopen events = %v", ev)
+	}
+
+	// And it is said once, however the news arrives.
+	_, again := Opened(s)
+	if again != nil {
+		t.Errorf("a second announcement for the same file: %v", again)
+	}
+	if _, dup := Apply(s, Change{Name: "duration", Double: 7741}); dup != nil {
+		t.Errorf("duration announced an open file again: %v", dup)
+	}
+}

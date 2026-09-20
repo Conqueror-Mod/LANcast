@@ -75,11 +75,26 @@ func TestRealLibmpvRaisesElementEvents(t *testing.T) {
 	waitFor("playing")
 	waitFor("timeupdate")
 
-	mu.Lock()
-	d := last.Duration
-	mu.Unlock()
+	/*
+	 * Duration, once it arrives — which is not necessarily by the first frame.
+	 * mpv says a file is open before it knows how long it is, exactly as the
+	 * element reports NaN until it does, so this waits rather than assuming
+	 * the order. What it is really checking is the double read out of mpv's
+	 * memory, which would be garbage rather than late if the layout were wrong.
+	 */
+	deadline := time.Now().Add(15 * time.Second)
+	var d float64
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		d = last.Duration
+		mu.Unlock()
+		if d > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if !(d > 0) {
-		t.Fatalf("duration = %v; the double read from mpv's memory is wrong", d)
+		t.Fatalf("duration = %v after 15s; the double read from mpv's memory is wrong", d)
 	}
 	if err := p.Command("seek", "100", "absolute-percent"); err != nil {
 		t.Fatal(err)
