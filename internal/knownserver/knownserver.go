@@ -42,8 +42,28 @@ type Server struct {
 	Address string `json:"address"`
 	// Name is what the person called it. Cosmetic, and never matched on.
 	Name string `json:"name,omitempty"`
-	// Pin is the base64 SHA-256 SPKI, the same form certpin produces.
+	// Pin is the base64 SHA-256 SPKI of the TLS **serving** key, the same form
+	// certpin produces. It answers "is this connection private", and it may be
+	// replaced at any time: tlscert regenerates a missing or corrupt
+	// certificate by design, and the bring-your-own-certificate path exists so
+	// an operator can rotate one.
 	Pin string `json:"pin"`
+	/*
+	 * Identity is the server's ADR 0044 fingerprint, once this client has been
+	 * far enough into that server to read it.
+	 *
+	 * The anchor. It answers a different question from Pin, "is this the
+	 * server I know" rather than "is this connection private", and it has a
+	 * different lifetime: the identity key is generated only when none exists
+	 * and is an error in every other case, so unlike a serving certificate it
+	 * cannot quietly become somebody else.
+	 *
+	 * Empty until recorded, which is an ordinary state and not a fault.
+	 * `GET /api/identity` is session-gated (ADR 0044 section 7), so it cannot
+	 * be read before there is a trusted transport to sign in over: a record
+	 * with no identity is one that has never been signed in to.
+	 */
+	Identity string `json:"identity,omitempty"`
 	// Accepted is when somebody looked at that key and said yes. Kept so the
 	// refusal path can say how long the old key had been trusted, which is the
 	// difference between "you set this up this morning" and "this has been
@@ -61,11 +81,21 @@ type List struct {
 /*
  * Trust is what a stored record says about the key being offered right now.
  *
- * Three outcomes and not two: "no record" and "wrong key" are the same
- * comparison failing, and treating them alike is how a trust-on-first-use
- * prompt turns into a habit of clicking through warnings. One of them is a
- * question for somebody who has not been asked yet. The other is the answer to
- * a question that was already asked, contradicted.
+ * Four outcomes, because three distinct things can be true and collapsing any
+ * two of them produces a prompt that lies.
+ *
+ * "No record" and "wrong key" are the same comparison failing, but one is a
+ * question for somebody who has not been asked yet and the other contradicts
+ * an answer already given.
+ *
+ * And a changed *serving* key is not, by itself, either of those. The serving
+ * certificate is designed to regenerate: ADR 0044 rejected pinning it as an
+ * identity for exactly this reason, and in this project deleting the
+ * certificate and key is the documented repair for a certificate whose SANs
+ * predate a network interface. A rule that fires on maintenance is worse than
+ * no rule, because its refusal is the one people learn to click past. So when
+ * an identity is on record, a changed serving key is reported as a rotation to
+ * be confirmed rather than as an attack.
  */
 type Trust int
 
@@ -73,10 +103,25 @@ const (
 	// TrustUnknown means nothing is stored for this address. Ask, showing the
 	// key.
 	TrustUnknown Trust = iota
-	// TrustMatch means the offered key is the one that was accepted. Connect.
+	// TrustMatch means the offered serving key is the one that was accepted.
+	// Connect.
 	TrustMatch
-	// TrustMismatch means a different key is being offered at an address that
-	// already has one. Refuse — see Check.
+	/*
+	 * TrustRotated means the serving key changed at an address whose
+	 * *identity* this client knows.
+	 *
+	 * The likely explanation is a regenerated certificate. It is not proof of
+	 * one, so it is confirmed rather than accepted: the client shows the
+	 * identity it has and asks for it to be checked out of band. Nothing is
+	 * sent to the new key before that, so an impostor answering in the
+	 * server's place receives no session.
+	 */
+	TrustRotated
+	/*
+	 * TrustMismatch is a changed key that cannot be explained as a rotation:
+	 * no identity on record to appeal to, so a replaced certificate and an
+	 * impostor are indistinguishable. Refuse.
+	 */
 	TrustMismatch
 )
 
@@ -84,6 +129,8 @@ func (t Trust) String() string {
 	switch t {
 	case TrustMatch:
 		return "match"
+	case TrustRotated:
+		return "rotated"
 	case TrustMismatch:
 		return "mismatch"
 	default:
@@ -91,8 +138,6 @@ func (t Trust) String() string {
 	}
 }
 
-// ErrNoAddress is an empty or whitespace-only address, which is a person who
-// has not finished typing rather than a malformed one.
 var ErrNoAddress = errors.New("no server address")
 
 /*
@@ -214,23 +259,24 @@ func (l List) Find(address string) (Server, bool) {
 }
 
 /*
- * Check is the whole trust decision: what does the record say about the key
- * being offered at this address?
+ * Check is the whole trust decision: what does the record say about the
+ * serving key being offered at this address?
  *
- * A mismatch is a refusal and not a prompt, which is the part of [ADR 0070]
- * worth defending here rather than in a UI. The pin is over the *public key*
- * (see certpin), so the ordinary reasons a certificate changes do not change
- * it: the server regenerating its certificate near expiry keeps the key, and
- * gaining a network interface changes the SANs and not the key. A pin that has
- * changed therefore means the key itself was replaced -- a reinstall, a
- * recreated data directory, or something at that address that is not the
- * server. The first two are things the owner did on purpose and can confirm;
- * the third is the attack the pin exists to catch, and it is the one that
- * arrives wearing the same clothes as the other two.
+ * The rule this encodes is the amendment to ADR 0070, and the part worth
+ * defending here rather than in a UI is *which key is authoritative*. The pin
+ * is over the TLS serving key, and a serving key legitimately changes:
+ * tlscert regenerates a missing or corrupt certificate by design, an operator
+ * may rotate a supplied one, and deleting the certificate is this project's
+ * own documented repair for stale SANs. Treating that as an attack would spend
+ * the strongest warning the client has on routine maintenance.
  *
- * So there is no "continue anyway" here to be called from a dialog. Getting
- * past it means forgetting the server and adding it again, which is an act on
- * the record rather than a button on an error.
+ * So the identity decides. With one on record, a changed serving key is a
+ * rotation to be confirmed against something that does not rotate. Without
+ * one, the two explanations are indistinguishable and the refusal stands.
+ *
+ * Neither outcome is a "continue anyway" button. A rotation is confirmed by
+ * checking a fingerprint out of band; a mismatch is escaped only by forgetting
+ * the server, which is an act on the record rather than a button on an error.
  */
 func (l List) Check(address, offeredPin string) Trust {
 	known, ok := l.Find(address)
@@ -246,7 +292,88 @@ func (l List) Check(address, offeredPin string) Trust {
 	if offeredPin != "" && known.Pin == offeredPin {
 		return TrustMatch
 	}
+	if known.Identity != "" {
+		return TrustRotated
+	}
 	return TrustMismatch
+}
+
+/*
+ * CheckIdentity is the question the serving key cannot answer: is this the
+ * server this record is about?
+ *
+ * Asked once a session exists, since ADR 0044 section 7 keeps
+ * `GET /api/identity` behind one. A record with no identity yet accepts the
+ * first answer it gets, which is what recording it means; after that a
+ * different answer is the strongest refusal this package has, because an
+ * identity key is generated only when none exists and never regenerated.
+ */
+func (l List) CheckIdentity(address, offered string) Trust {
+	known, ok := l.Find(address)
+	if !ok || known.Identity == "" {
+		return TrustUnknown
+	}
+	if offered != "" && Normalize(known.Identity) == Normalize(offered) {
+		return TrustMatch
+	}
+	return TrustMismatch
+}
+
+// Normalize makes two spellings of one fingerprint comparable: case, and the
+// grouping separators a person may have typed or a screen may have shown.
+func Normalize(fingerprint string) string {
+	var b strings.Builder
+	for _, r := range fingerprint {
+		if r == ' ' || r == '-' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.ToUpper(b.String())
+}
+
+/*
+ * RecordIdentity stores the identity of a server this client has signed in to,
+ * and is the moment a record gains its anchor.
+ *
+ * It never overwrites one. An identity that appears to have changed is a
+ * refusal (see CheckIdentity), and a function that quietly wrote the new value
+ * would turn that refusal into a formality, which is the whole failure this
+ * amendment exists to correct.
+ */
+func (l List) RecordIdentity(address, fingerprint string) List {
+	if fingerprint == "" {
+		return l
+	}
+	out := List{Servers: make([]Server, 0, len(l.Servers))}
+	for _, s := range l.Servers {
+		if strings.EqualFold(s.Address, address) && s.Identity == "" {
+			s.Identity = fingerprint
+		}
+		out.Servers = append(out.Servers, s)
+	}
+	return out
+}
+
+/*
+ * AcceptRotation records a new serving key for a server whose identity was
+ * confirmed, keeping everything else about the record.
+ *
+ * Separate from Accept because it is a different act with a different
+ * precondition: Accept is somebody meeting a server for the first time, this
+ * is somebody confirming that a server they already know has a new
+ * certificate. Folding them together would let the first path silently replace
+ * an identity.
+ */
+func (l List) AcceptRotation(address, newPin string) List {
+	out := List{Servers: make([]Server, 0, len(l.Servers))}
+	for _, s := range l.Servers {
+		if strings.EqualFold(s.Address, address) {
+			s.Pin = newPin
+		}
+		out.Servers = append(out.Servers, s)
+	}
+	return out
 }
 
 // Accept records a key as trusted, replacing any earlier record for the same

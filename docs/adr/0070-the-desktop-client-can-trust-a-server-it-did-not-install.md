@@ -1,6 +1,6 @@
 # ADR 0070 — The desktop client can trust a server it did not install
 
-Date: 2026-09-20 · Status: proposed
+Date: 2026-09-20 · Status: accepted as amended — see [Amendment: identity, not the serving certificate](#amendment-identity-not-the-serving-certificate)
 
 ## Context
 
@@ -97,6 +97,13 @@ exists to avoid.
 
 ### A changed pin is refused
 
+> **Amended.** This section was wrong, and the amendment at the end of this
+> document replaces it. The rule below treats a changed *serving* key as
+> evidence of an attack; [ADR 0044](0044-server-identity-and-peering.md) had
+> already established that a serving certificate legitimately rotates and that
+> identity is a separate, longer-lived key. Read the amendment for the rule
+> that is implemented.
+
 If the key at a known address does not match the stored pin, **the client
 refuses to connect** and says what happened. It does not offer a "continue
 anyway" button in the same breath as the warning.
@@ -178,3 +185,101 @@ way it previously could not, because previously there was only one answer. Any
 display of server-specific state — library counts, the current user, Watch
 Together rooms — must be clear about *which* server it belongs to, and a stale
 cache from one server must never be shown while connected to another.
+
+
+---
+
+## Amendment: identity, not the serving certificate
+
+Date: 2026-09-20 · Amends the decision above before any of it shipped.
+
+### What was wrong
+
+This ADR pinned the **TLS serving key** and treated a change in it as evidence
+that the server had been replaced. [ADR 0044](0044-server-identity-and-peering.md)
+had already considered that exact design, under the heading *"Pin the TLS
+certificate and skip the second keypair"*, and rejected it on two grounds that
+apply here unchanged:
+
+- The serving certificate is **designed to regenerate silently.** `tlscert`
+  treats a missing file, a corrupt PEM or an aging certificate as a cache miss
+  rather than an error, so that one bad file cannot stop a server starting.
+  Correct for a serving certificate; fatal for an identity.
+- Under the **bring-your-own-certificate** path — ADR 0014's *recommended*
+  production configuration — the operator supplies and rotates the
+  certificate. Rotation is routine maintenance.
+
+There is a third, specific to this project: the known fix for a certificate
+whose SANs predate a new network interface is to **delete the certificate and
+key and restart**. That is a documented repair. Under the original rule it
+would have shown the other household the sentence reserved for an attacker.
+
+A rule that fires on routine maintenance is worse than no rule, because the
+refusal it produces is the one people learn to click past.
+
+LANcast already had the right anchor. `internal/identity` is an Ed25519 keypair
+that is generated **only** when none exists and is an error in every other case,
+precisely so that it cannot quietly become somebody else.
+
+### The corrected rule
+
+**Two keys, two lifetimes, two questions.**
+
+| | answers | lifetime |
+|---|---|---|
+| TLS serving key (SPKI) | *is this connection private* | rotates; may be replaced at any time |
+| Identity key (ADR 0044) | *is this the server I know* | generated once, never regenerated |
+
+The client stores both against an address, and judges on the identity.
+
+**First contact** cannot use the identity, and that is a constraint rather than
+a choice: `GET /api/identity` is session-gated by ADR 0044 §7, and there is no
+session before there is a trusted transport. So first contact is still
+trust-on-first-use over the serving key, with the fingerprint shown and a person
+looking at it — compared against the same value on the server's own screen. That
+is what the serving key is good for: it is the only thing both ends can see
+before anyone has logged in.
+
+**Once connected and signed in**, the page reports the server's identity
+fingerprint and the client records it against that address. The record then has
+an anchor that does not rotate.
+
+**When the serving key changes** at a known address, the client no longer calls
+it an attack. What it does depends on what it knows:
+
+- **An identity is on record.** This is what a rotation looks like. The client
+  says the connection key changed, shows the identity fingerprint it has, and
+  asks the person to confirm out of band that the server is still that one.
+  Confirming accepts the new serving key. Nothing is sent to the new key before
+  that, so a server answering in the impostor's place receives no session.
+- **No identity on record**, because nothing ever got as far as signing in.
+  Then the two cases genuinely cannot be told apart, and the refusal stands.
+
+**When the identity changes**, the refusal stands absolutely, and it is the
+stronger statement of the two: the serving key may rotate under a server that
+is still itself, but an identity that has changed means the data directory was
+recreated or something else is answering. ADR 0044 §6 is why: identity belongs
+to the data directory, so restoring a backup onto new hardware keeps it.
+
+### What the server shows
+
+`GET /api/settings` reports `certificate_fingerprint`, and Settings › General
+shows it. That stays, because it is what the two ends compare at first contact
+— but it is labelled as the **connection** key, and it sits beside the identity
+fingerprint that `GET /api/identity` already served, so the durable one is the
+one a person sees first.
+
+### What this does not change
+
+The trust record, address canonicalisation, the picker, the one-key-per-window
+constraint and the relaunch are unaffected. This amendment changes which key is
+authoritative and what a change in each one means — not how a server is chosen
+or how a window is pinned.
+
+### The process lesson
+
+`CLAUDE.md` says to read the decision records before re-deciding, and this is
+what it is for. ADR 0044 had already had this argument, written down the
+answer, and named the losing option. The cost of not reading it was a security
+rule that would have fired on maintenance, and a second fingerprint concept
+alongside one that already existed.

@@ -3862,22 +3862,34 @@ empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
 
 **`certificate_fingerprint`** is the base64 SHA-256 of this server's TLS
-certificate public key, in the same form a desktop client pins. It is what
-makes trust on first use answerable: a client meeting this server for the first
-time shows the key it was offered and asks whether it is right
-([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md)),
-and that question can only be answered by comparing it against the server
-**somewhere else** — read off this field by somebody already on the server and
-told to whoever is being asked to trust it.
+certificate public key — the **connection key**, in the form a desktop client
+pins. It is not the server's identity, and the distinction matters:
 
-Reading it through the connection being verified proves nothing, which is also
-why it is **not a secret**: it is a hash of a public key the server hands to
-anyone who opens a TLS connection to it. Its protection comes entirely from
-being compared out of band, so withholding it would cost the feature its point
-and buy nothing. It is `""` on a loopback-only server, which has no certificate
-and is the one server nobody needs to verify — nothing can reach it from
-another machine. It follows a supplied certificate when `tls_cert_file` is set,
-because the fingerprint must describe the certificate actually being served.
+| | answers | lifetime |
+|---|---|---|
+| `certificate_fingerprint` (here) | is this connection private | reissued for ordinary reasons |
+| `fingerprint` from [`GET /api/identity`](#server-identity) | is this the server I know | generated once, never regenerated |
+
+A serving certificate is regenerated whenever its file is missing or corrupt,
+an operator may rotate a supplied one, and deleting it is the documented repair
+for a certificate whose names predate a new network interface. So a change in
+this value is **not** by itself evidence of anything wrong, and a client must
+not treat it as such
+([ADR 0070 as amended](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md#amendment-identity-not-the-serving-certificate)).
+
+What it is good for is **first contact**: `GET /api/identity` is session-gated
+([ADR 0044](adr/0044-server-identity-and-peering.md) §7), so before anyone has
+signed in this is the only value both ends can compare. A desktop client
+meeting this server for the first time shows the key it was offered, and this
+is what it is checked against — read off the server's own screen by somebody
+already using it, not over the connection being checked.
+
+It is **not a secret**: it is a hash of a public key handed to anyone who opens
+a TLS connection here, and its protection comes entirely from being compared
+out of band. It is `""` on a loopback-only server, which has no certificate and
+is the one server nobody needs to verify. It follows a supplied certificate
+when `tls_cert_file` is set, because it must describe the certificate actually
+being served.
 
 **Diagnostics.** `debug_logging` raises the server's log level to debug. It
 takes effect on the next line logged — no restart — and is persisted, because

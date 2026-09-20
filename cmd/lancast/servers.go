@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"lancast/internal/clientwindow"
+	"lancast/internal/identity"
 	"lancast/internal/knownserver"
 )
 
@@ -103,11 +104,14 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				"expires":     offered.NotAfter.Format(time.RFC3339),
 				"trust":       trust.String(),
 			}
-			if trust == knownserver.TrustMismatch {
+			switch trust {
+			case knownserver.TrustMismatch:
 				// The sentence travels with the finding, so the page never has
-				// to compose it -- and so a refusal reads identically wherever
+				// to compose it, and so a refusal reads identically wherever
 				// it is met.
 				out["refusal"] = mismatchMessage(addr)
+			case knownserver.TrustRotated:
+				out["rotation"] = rotationMessage(addr)
 			}
 			if prev, ok := known.Find(addr); ok {
 				out["known_name"] = prev.Name
@@ -116,6 +120,12 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				// than merely asserted. Somebody who reinstalled their server
 				// is entitled to see that this is what that looks like.
 				out["known_fingerprint"] = knownserver.Fingerprint(prev.Pin)
+				// The anchor, for the rotation screen to show beside the new
+				// connection key. Grouped by identity's own rule so it looks
+				// the same here as on the server's settings screen.
+				if prev.Identity != "" {
+					out["identity_display"] = identity.Group(prev.Identity)
+				}
 			}
 			return out
 		},
@@ -184,6 +194,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 			switch known.Check(addr, offered.Pin) {
 			case knownserver.TrustMatch:
 				return connect(addr, win)
+			case knownserver.TrustRotated:
+				// Not an error and not a connection: a question, which the
+				// page turns into the rotation screen.
+				return map[string]any{"rotation": rotationMessage(addr), "address": addr}
 			case knownserver.TrustMismatch:
 				return map[string]any{"error": mismatchMessage(addr)}
 			default:
@@ -195,6 +209,85 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		// probe: it is trusted off disk, which is the stronger check.
 		"lancastServerConnectLocal": func() map[string]any {
 			return connect("", win)
+		},
+
+		/*
+		 * lancastServerIdentity records who the server this window is on turned
+		 * out to be (ADR 0070, as amended).
+		 *
+		 * Called by the page once it is authenticated, because ADR 0044 keeps
+		 * `GET /api/identity` behind a session and the session lives in the web
+		 * view. This process cannot read it for itself.
+		 *
+		 * It records and never replaces. The page is talking to whatever
+		 * actually answered, so an impostor that got as far as a session could
+		 * otherwise rewrite the anchor and make every later check agree with
+		 * it. Replacing an identity is not an operation this client has.
+		 *
+		 * Nothing to do for the local server: it is trusted off disk, which is
+		 * a stronger check than anything over a network, and it has no record
+		 * to anchor.
+		 */
+		"lancastServerIdentity": func(fingerprint string) map[string]any {
+			if l.target.local || l.target.address == "" {
+				return map[string]any{"ok": true}
+			}
+			known, err := knownserver.Load(dir)
+			if err != nil {
+				return map[string]any{"error": err.Error()}
+			}
+			switch known.CheckIdentity(l.target.address, fingerprint) {
+			case knownserver.TrustMismatch:
+				/*
+				 * The strong refusal, and the only one that is not about a
+				 * certificate. An identity key is generated once and never
+				 * regenerated, so a different one means the data directory was
+				 * recreated or this is not the server that was accepted.
+				 */
+				slog.Warn("server identity does not match the record",
+					"address", l.target.address)
+				return map[string]any{"error": identityMismatchMessage(l.target.address)}
+			case knownserver.TrustMatch:
+				return map[string]any{"ok": true}
+			}
+			if err := knownserver.Save(dir, known.RecordIdentity(l.target.address, fingerprint)); err != nil {
+				return map[string]any{"error": err.Error()}
+			}
+			slog.Info("recorded server identity", "address", l.target.address)
+			return map[string]any{"ok": true}
+		},
+
+		/*
+		 * lancastServerAcceptRotation records a new serving key for a server
+		 * whose identity the person has confirmed out of band.
+		 *
+		 * Separate from Accept, and reachable only from the rotation screen.
+		 * It keeps the identity, so confirming one rotation does not spend the
+		 * anchor that makes the next one explicable.
+		 */
+		"lancastServerAcceptRotation": func(raw string) map[string]any {
+			addr, err := knownserver.ParseAddress(raw)
+			if err != nil {
+				return map[string]any{"error": err.Error()}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+			defer cancel()
+
+			offered, err := knownserver.Fetch(ctx, addr)
+			if err != nil {
+				return map[string]any{"error": err.Error()}
+			}
+			known, _ := knownserver.Load(dir)
+			// Only a rotation may be accepted here. Without an identity on
+			// record there is nothing this confirmation could have been
+			// checked against, so the refusal stands.
+			if known.Check(addr, offered.Pin) != knownserver.TrustRotated {
+				return map[string]any{"error": "this server has no confirmed identity to check against"}
+			}
+			if err := knownserver.Save(dir, known.AcceptRotation(addr, offered.Pin)); err != nil {
+				return map[string]any{"error": err.Error()}
+			}
+			return connect(addr, win)
 		},
 
 		/*
@@ -261,25 +354,72 @@ func serverRows(l knownserver.List, current string) []map[string]any {
 }
 
 /*
- * mismatchMessage is the refusal, and it is written out here rather than in
- * the page because it is the sentence this whole feature is judged by.
+ * The two things a changed key can mean, and they read differently on purpose.
  *
- * It says what changed, what that means, and what the two honest explanations
- * are -- in that order, because somebody who has just reinstalled their server
- * needs to recognise themselves in it immediately, and somebody who has not
- * needs to not be reassured.
+ * The original version of this feature had only the second, and applied it to
+ * every change. That was wrong: a serving certificate is regenerated whenever
+ * its file is missing or corrupt, an operator may rotate a supplied one, and
+ * deleting the certificate is this project's own documented repair for a
+ * certificate whose names predate a network interface. Spending the
+ * impostor warning on maintenance is how people learn to click past it.
+ */
+
+// rotationMessage is the likely-innocent case, and it asks rather than accuses.
+// It sends the person to the one value that does not rotate.
+func rotationMessage(addr string) string {
+	return fmt.Sprintf(
+		"The connection key at %s has changed.\n\n"+
+			"This is what a reissued certificate looks like, and certificates are "+
+			"reissued for ordinary reasons: the server was reinstalled, its "+
+			"certificate was deleted to pick up a new network address, or whoever "+
+			"runs it replaced one they supplied.\n\n"+
+			"It is not proof of that, so check the one thing that does not change. "+
+			"Ask whoever runs this server to read out its identity fingerprint "+
+			"from Settings, General, and compare it with the one shown here.\n\n"+
+			"If they match, this is the same server and you can carry on. If they "+
+			"do not, do not connect.", addr)
+}
+
+/*
+ * mismatchMessage is the refusal, for a changed key with no identity on record
+ * to appeal to.
+ *
+ * It says what changed, what that means, and what the honest explanations are,
+ * in that order, because somebody who has just reinstalled their server needs
+ * to recognise themselves in it immediately and somebody who has not needs to
+ * not be reassured.
  */
 func mismatchMessage(addr string) string {
 	return fmt.Sprintf(
-		"The key at %s is not the one you accepted.\n\n"+
-			"LANcast pins a server's public key, and that key does not change when "+
-			"a certificate is renewed or when the server gains a network address. "+
-			"So this means the key itself was replaced.\n\n"+
-			"If the server was reinstalled, or its data directory was recreated, "+
-			"that is the explanation -- forget this server and add it again, after "+
+		"The connection key at %s has changed, and there is no way to check it.\n\n"+
+			"LANcast confirms a changed key against the server's identity, which "+
+			"is a separate key that is never regenerated. This client never got "+
+			"far enough into that server to learn its identity, so a reissued "+
+			"certificate and something answering in its place look the same "+
+			"from here.\n\n"+
+			"If the server was reinstalled, or its certificate was deleted, that "+
+			"is the explanation. Forget this server and add it again, after "+
 			"checking with whoever runs it.\n\n"+
-			"If nothing like that happened, something on the network is answering "+
-			"in its place, and you should not connect.", addr)
+			"If nothing like that happened, do not connect.", addr)
+}
+
+/*
+ * identityMismatchMessage is the strongest thing this client says, and the
+ * only refusal that is not about a certificate.
+ *
+ * An identity key is generated once and is an error to regenerate (ADR 0044),
+ * and it belongs to the data directory rather than the machine, so restoring a
+ * backup keeps it. A different one is therefore not maintenance.
+ */
+func identityMismatchMessage(addr string) string {
+	return fmt.Sprintf(
+		"The server at %s is not the one you accepted.\n\n"+
+			"Its identity has changed. Unlike a certificate, a LANcast server's "+
+			"identity is never regenerated, and it survives being restored from "+
+			"a backup onto another machine.\n\n"+
+			"That leaves two explanations: its data directory was recreated from "+
+			"scratch, or this is a different server. Check with whoever runs it "+
+			"before connecting again.", addr)
 }
 
 // withServerBindings merges the picker's bindings into the window's.

@@ -64,6 +64,13 @@ beforeEach(() => {
           certificate_fingerprint: fingerprint,
         });
       }
+      if (url.includes("/api/identity")) {
+        return json({
+          fingerprint: "AEJE4G6XEG33AUPJU7LGSTT4N74U6D4B",
+          fingerprint_display: "AEJE-4G6X-EG33-AUPJ-U7LG-STT4-N74U-6D4B",
+          name: "test server",
+        });
+      }
       if (url.includes("/api/libraries")) return json([]);
       return json({ items: [], total: 0 });
     }),
@@ -96,9 +103,29 @@ async function render() {
 }
 
 describe("the server's certificate fingerprint", () => {
-  it("is on the General pane, where the server's other identity facts are", async () => {
+  it("shows the identity and the connection key, identity first", async () => {
     await render();
-    expect(host.textContent ?? "").toContain("Certificate fingerprint");
+    const text = host.textContent ?? "";
+
+    expect(text).toContain("Identity fingerprint");
+    expect(text).toContain("Connection key");
+
+    /*
+     * Order matters, and it is the whole correction. The identity is the
+     * durable one and the one somebody checking a changed connection key is
+     * sent here to read; leading with the value that is reissued for ordinary
+     * reasons is what made the first version of this wrong.
+     */
+    expect(text.indexOf("Identity fingerprint")).toBeLessThan(
+      text.indexOf("Connection key"),
+    );
+  });
+
+  it("says which of the two changes and which does not", async () => {
+    await render();
+    const text = host.textContent ?? "";
+    expect(text).toContain("does not change when the certificate is");
+    expect(text).toContain("reissued for ordinary reasons");
   });
 
   it("shows the server's own value, grouped for reading aloud", async () => {
@@ -115,11 +142,11 @@ describe("the server's certificate fingerprint", () => {
     expect(text.replace(/\s/g, "")).toContain(PIN.replace(/\s/g, ""));
   });
 
-  it("says what it is for, since nobody arrives knowing", async () => {
+  it("says what the connection key is for, since nobody arrives knowing", async () => {
     await render();
     const text = host.textContent ?? "";
     expect(text).toContain("another computer");
-    expect(text).toContain("not a secret");
+    expect(text).toContain("Not a secret");
   });
 
   /*
@@ -127,9 +154,12 @@ describe("the server's certificate fingerprint", () => {
    * empty or as a placeholder. It is also the one server nobody needs to
    * verify — nothing can reach it from another machine.
    */
-  it("is absent entirely when the server has no certificate", async () => {
+  it("omits the connection key when the server has no certificate", async () => {
     fingerprint = "";
     await render();
-    expect(host.textContent ?? "").not.toContain("Certificate fingerprint");
+    const text = host.textContent ?? "";
+    expect(text).not.toContain("Connection key");
+    // The identity is unaffected: a loopback-only server still is somebody.
+    expect(text).toContain("Identity fingerprint");
   });
 });
