@@ -116,28 +116,66 @@ func TestServerRowsDoNotCarryThePin(t *testing.T) {
 }
 
 /*
- * The refusal is the sentence this feature is judged by, so its content is
- * asserted rather than left to whoever edits it next.
+ * The three things a changed key can mean, and they must not read alike.
  *
- * It has to do three things: say the key changed, rule out the innocent
- * explanations that are not explanations, and name the two that are -- in an
- * order where somebody who reinstalled their server recognises themselves
- * before somebody who did not is reassured.
+ * The first version of this feature had one sentence and used it for every
+ * change, including the ones caused by ordinary maintenance. These assert the
+ * distinction rather than leaving it to whoever edits the strings next.
  */
-func TestTheRefusalExplainsItself(t *testing.T) {
+func TestARotationAsksRatherThanAccuses(t *testing.T) {
+	msg := rotationMessage("192.168.1.66:8080")
+	lower := strings.ToLower(msg)
+
+	for _, want := range []string{
+		"192.168.1.66:8080",
+		"reissued",
+		"identity fingerprint", // where the value that does not change lives
+		"reinstalled",
+	} {
+		if !strings.Contains(lower, strings.ToLower(want)) {
+			t.Errorf("the rotation message does not mention %q:\n%s", want, msg)
+		}
+	}
+	// It must not be the impostor sentence. Spending that warning on a
+	// reissued certificate is what the amendment to ADR 0070 exists to stop.
+	for _, forbidden := range []string{"in its place", "impersonat"} {
+		if strings.Contains(lower, forbidden) {
+			t.Errorf("the rotation message accuses (%q):\n%s", forbidden, msg)
+		}
+	}
+}
+
+// The refusal is for a changed key with nothing to check it against, and it
+// has to say *why* it cannot be checked, or it reads as an accusation nobody
+// can act on.
+func TestTheRefusalExplainsWhyItCannotCheck(t *testing.T) {
 	msg := mismatchMessage("192.168.1.66:8080")
 
 	for _, want := range []string{
 		"192.168.1.66:8080",
-		"public key",
-		"renewed",       // the rotation that does NOT change a pin
-		"network addre", // nor does gaining one
-		"reinstalled",
+		"identity",
+		"never got far enough",
 		"forget this server",
-		"should not connect",
+		"do not connect",
 	} {
 		if !strings.Contains(strings.ToLower(msg), strings.ToLower(want)) {
 			t.Errorf("the refusal does not mention %q:\n%s", want, msg)
+		}
+	}
+}
+
+// The strongest one, and the only refusal that is not about a certificate.
+func TestAChangedIdentityIsTheStrongestRefusal(t *testing.T) {
+	msg := identityMismatchMessage("192.168.1.66:8080")
+
+	for _, want := range []string{
+		"identity has changed",
+		"never regenerated",
+		"backup", // it survives one, so a restore is not the explanation
+		"data directory",
+	} {
+		if !strings.Contains(strings.ToLower(msg), strings.ToLower(want)) {
+			t.Errorf("the identity refusal does not mention %q:\n%s", want, msg)
 		}
 	}
 }

@@ -2691,6 +2691,34 @@ export function useSetWatched(parentID: number) {
 
 // Server identity. /api/health has always returned this and nothing has ever
 // asked — so the settings page could not say which version it was talking to.
+/*
+ * Who this server is (ADR 0044).
+ *
+ * Its own key rather than a field on settings, because it answers a different
+ * question with a different lifetime: an identity is generated once and never
+ * regenerated, where the certificate settings reports is reissued for ordinary
+ * reasons. The two being adjacent on one screen is the point; being one value
+ * would be the mistake the amendment to ADR 0070 corrects.
+ *
+ * Session-gated on the server, so it simply fails for a signed-out page and
+ * every caller treats that as nothing to show.
+ */
+export function useServerIdentity() {
+  return useQuery({
+    queryKey: ["identity"],
+    queryFn: ({ signal }) =>
+      apiGet<{ fingerprint: string; fingerprint_display: string; name: string }>(
+        "/api/identity",
+        signal,
+      ),
+    // It cannot change while the server is running: the key is generated only
+    // when none exists, and a server that regenerated one would be a different
+    // server and a different process.
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 export function useHealth(watch = false) {
   return useQuery({
     queryKey: ["health"],

@@ -149,6 +149,18 @@
         margin-top: 12px;
         white-space: pre-wrap;
       }
+      /*
+        A rotation is a question, not an accusation, so it does not get the
+        danger colour. The refusal below does. If these two read alike, the
+        strong one stops meaning anything -- which is the fault the amendment
+        to ADR 0070 corrects, carried through to the screen.
+      */
+      .caution {
+        color: var(--text-secondary);
+        font-size: 13.5px;
+        margin-top: 12px;
+        white-space: pre-wrap;
+      }
       .fingerprint {
         font-family: Consolas, "Cascadia Mono", monospace;
         font-size: 13px;
@@ -218,6 +230,30 @@
         <p class="error hidden" id="trust-error"></p>
       </section>
 
+      <!--
+        A reissued certificate. Not a refusal: it asks, and it sends the person
+        to the identity, which is the value that does not rotate.
+      -->
+      <section id="rotate-view" class="hidden">
+        <h1>This server has a new connection key</h1>
+        <p class="caution" id="rotate-message"></p>
+        <h2>Connection key now</h2>
+        <div class="fingerprint fingerprint--stale" id="rotate-new"></div>
+        <h2>Identity you accepted</h2>
+        <div class="fingerprint" id="rotate-identity"></div>
+        <p class="note">
+          Ask whoever runs this server to read out the identity fingerprint on their
+          Settings &rsaquo; General screen. It is the one value a reissued certificate
+          does not change.
+        </p>
+        <div class="spacer"></div>
+        <div class="row__actions">
+          <button id="rotate-back">Back</button>
+          <button id="rotate-accept">The identity matches &mdash; connect</button>
+        </div>
+        <p class="error hidden" id="rotate-error"></p>
+      </section>
+
       <!-- Step 3, which is a refusal and not a choice. -->
       <section id="refuse-view" class="hidden">
         <h1>This is not the key you accepted</h1>
@@ -243,7 +279,7 @@
       "use strict";
       const $ = (id) => document.getElementById(id);
       const show = (id) => {
-        for (const v of ["list-view", "trust-view", "refuse-view"]) {
+        for (const v of ["list-view", "trust-view", "rotate-view", "refuse-view"]) {
           $(v).classList.toggle("hidden", v !== id);
         }
       };
@@ -337,6 +373,7 @@
           if (result.error) { setError("list-error", result.error); return; }
           probed = result;
           if (result.trust === "match") { await connect(result.address); return; }
+          if (result.trust === "rotated") { showRotation(result); return; }
           if (result.trust === "mismatch") { showRefusal(result); return; }
           showTrust(result);
         } finally {
@@ -357,6 +394,14 @@
         $("trust-name").focus();
       }
 
+      function showRotation(result) {
+        text($("rotate-message"), result.rotation || "");
+        text($("rotate-new"), result.fingerprint || "");
+        text($("rotate-identity"), result.identity_display || "(not recorded)");
+        setError("rotate-error", "");
+        show("rotate-view");
+      }
+
       function showRefusal(result) {
         text($("refuse-message"), result.refusal || "");
         text($("refuse-old"), result.known_fingerprint || "(not recorded)");
@@ -368,15 +413,15 @@
       async function connect(address) {
         setError("list-error", "");
         const result = await window.lancastServerConnect(address);
-        if (result.error) {
-          // A mismatch found here rather than at the probe: same refusal.
-          if (probed && probed.address === address && result.error.indexOf("not the one") >= 0) {
-            probed.refusal = result.error;
-            showRefusal(probed);
-            return;
-          }
-          setError("list-error", result.error);
+        if (result.rotation) {
+          // Found on connecting rather than on probing: the same question, so
+          // the same screen. Probe again so the fingerprints shown are the
+          // ones this decision is about.
+          const fresh = await window.lancastServerProbe(address);
+          showRotation(fresh.error ? { rotation: result.rotation } : fresh);
+          return;
         }
+        if (result.error) setError("list-error", result.error);
       }
 
       async function connectLocal() {
@@ -405,6 +450,19 @@
           if (result.error) setError("trust-error", result.error);
         } finally {
           busy("trust-accept", false);
+        }
+      });
+
+      $("rotate-back").addEventListener("click", () => { show("list-view"); });
+      $("rotate-accept").dataset.label = "The identity matches \u2014 connect";
+      $("rotate-accept").addEventListener("click", async () => {
+        busy("rotate-accept", true, "Connecting\u2026");
+        setError("rotate-error", "");
+        try {
+          const result = await window.lancastServerAcceptRotation(probed.address);
+          if (result.error) setError("rotate-error", result.error);
+        } finally {
+          busy("rotate-accept", false);
         }
       });
 

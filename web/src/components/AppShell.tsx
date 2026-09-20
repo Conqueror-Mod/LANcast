@@ -18,6 +18,7 @@ import { ActivityPanel } from "./ActivityPanel";
 import { KeyHelp } from "./KeyHelp";
 import { plainVersion } from "./UpdateSettings";
 import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
+import { reportServerIdentity } from "@/lib/serverIdentity";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
 import { useGamesTab } from "@/lib/games";
 import {
@@ -501,6 +502,19 @@ function RestartBanner() {
       .lancastDesktopState;
     if (!state) return;
     state().then(setDesktop).catch(() => setDesktop(null));
+  }, []);
+
+  /*
+   * Tell the desktop client which server this is (ADR 0070, as amended).
+   *
+   * Here because this renders only behind an authenticated page, and
+   * `GET /api/identity` is session-gated, so this is the earliest point the
+   * durable identity can be read at all. The client pins the TLS serving key to
+   * open the window and that key legitimately rotates; the identity is what
+   * survives a regenerated certificate, and it can only be read from inside.
+   */
+  useEffect(() => {
+    void reportServerIdentity();
   }, []);
 
   const stale = clientIsStale(desktop, health?.version);

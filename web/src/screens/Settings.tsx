@@ -52,6 +52,7 @@ import {
   useCancelSemanticModels,
   useInstallFaceModels,
   useCancelFaceModels,
+  useServerIdentity,
 } from "@/api/hooks";
 import {
   capabilities,
@@ -2850,6 +2851,7 @@ function groupFingerprint(pin: string): string {
 function GeneralSection() {
   const { data: health } = useHealth();
   const { data: settings } = useSettings(true);
+  const { data: identity } = useServerIdentity();
   return (
     <section className="settings__section">
       <span className="section-label">Server</span>
@@ -2873,34 +2875,53 @@ function GeneralSection() {
         </div>
       </div>
       {/*
-        The fingerprint, which exists so somebody can read it out loud.
+        Two fingerprints, and the order is the point.
 
-        A desktop client meeting this server for the first time shows the key
-        it was offered and asks whether it is right (ADR 0070). That question
-        is only answerable by comparing it against the server *somewhere else*
-        — and this is that somewhere. Without it the prompt is a formality and
-        the honest description of the feature is "accept whatever answers".
+        They answer different questions and have different lifetimes, which is
+        the correction the amendment to ADR 0070 makes. The **identity**
+        (ADR 0044) is generated once and never regenerated, survives being
+        restored from a backup, and is what says this is the same server. The
+        **connection key** is the TLS certificate's, and it is reissued for
+        ordinary reasons -- a reinstall, a deleted certificate picking up a new
+        network address, an operator rotating one they supplied.
 
-        Which is why reading it through the connection being checked proves
-        nothing, and why it is not hidden: it is a hash of a public key handed
-        to anyone who opens a TLS connection here. Grouped into runs because
-        the moment it matters is two people on the phone, one of them reading.
+        Identity first, because it is the durable one and the one somebody
+        checking a changed connection key is sent here to read. The connection
+        key is still shown, because it is the only value both ends can compare
+        before anyone has signed in, which is exactly the first-contact case.
 
-        Absent on a loopback-only server, which has no certificate — and is the
-        one server nobody needs to verify, since nothing can reach it from
-        another machine.
+        Neither is a secret. The identity's public half is what an invite
+        carries; the connection key is handed to anyone who opens a TLS
+        connection. Both get their protection from being compared out of band.
       */}
+      {identity?.fingerprint_display ? (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">Identity fingerprint</div>
+            <div className="set-row__sub set-row__sub--mono">
+              {identity.fingerprint_display}
+            </div>
+            <div className="set-row__sub">
+              Who this server is. It does not change when the certificate is
+              reissued, and it survives being restored from a backup onto
+              another machine &mdash; so this is the one to read out when somebody
+              is checking that this is still the same server.
+            </div>
+          </div>
+        </div>
+      ) : null}
       {settings?.certificate_fingerprint ? (
         <div className="set-row">
           <div className="set-row__main">
-            <div className="set-row__title">Certificate fingerprint</div>
+            <div className="set-row__title">Connection key</div>
             <div className="set-row__sub set-row__sub--mono">
               {groupFingerprint(settings.certificate_fingerprint)}
             </div>
             <div className="set-row__sub">
-              Read this out to somebody adding this server on another computer,
-              so they can check it against what their app shows them. It is not
-              a secret.
+              The TLS certificate&rsquo;s key. Read this out to somebody adding this
+              server on another computer for the first time, before they have
+              signed in. It is reissued for ordinary reasons, so a change in it
+              is not by itself a problem. Not a secret.
             </div>
           </div>
         </div>

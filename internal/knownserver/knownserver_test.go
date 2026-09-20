@@ -99,13 +99,16 @@ func TestCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("a different key at a known address is refused", func(t *testing.T) {
+	// Refused because this record carries no identity to appeal to. With one,
+	// the same change is a rotation to confirm -- see rotation_test.go, which
+	// is where the interesting half of this rule lives.
+	t.Run("a different key with nothing to appeal to is refused", func(t *testing.T) {
 		if got := l.Check("192.168.1.66:8080", other); got != TrustMismatch {
 			t.Errorf("Check = %v, want mismatch", got)
 		}
 	})
 
-	t.Run("no key offered at a known address is refused", func(t *testing.T) {
+	t.Run("no key offered at a known address is not a match", func(t *testing.T) {
 		// A server that answered without TLS where a pin was accepted is the
 		// same fault as the wrong key: whatever is there is not what was
 		// trusted.
@@ -123,22 +126,24 @@ func TestCheck(t *testing.T) {
 }
 
 /*
- * The rule that makes a mismatch mean something.
+ * The same key is the same server, whatever the certificate around it says.
  *
- * If the ordinary reasons a certificate changes also changed the pin, a
- * refusal would be noise and people would learn to clear it. certpin hashes
- * the public key for exactly this reason; this test states the consequence in
- * the terms this package cares about, so that nobody later "fixes" Check by
- * making it tolerant.
+ * The pin is over the SubjectPublicKeyInfo rather than the whole certificate,
+ * so a certificate reissued with new dates over the same key still matches.
+ * That is worth holding, and it is *all* this proves.
+ *
+ * It is deliberately no longer offered as the reason a mismatch means an
+ * attack. It does not: a serving certificate is regenerated whenever its file
+ * is missing or corrupt, and deleting cert and key is this project's own
+ * documented repair for stale SANs. The identity is what carries that weight
+ * now -- rotation_test.go.
  */
-func TestAKnownServerKeepsItsPinAcrossACertificateItRotates(t *testing.T) {
+func TestTheSameKeyInANewCertificateStillMatches(t *testing.T) {
 	const key = "3Xk0aBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 	l := List{}.Accept(Server{Address: "media-pc:8080", Pin: key})
 
-	// The same key, offered later by a certificate with new dates and new SANs:
-	// the pin is over the key, so it is the same string.
 	if got := l.Check("media-pc:8080", key); got != TrustMatch {
-		t.Fatalf("Check = %v, want match — a rotated certificate must not read as an attack", got)
+		t.Fatalf("Check = %v, want match", got)
 	}
 }
 
