@@ -77,14 +77,45 @@ import { struggling, type Sample } from "./decodeHealth";
  * panel, which is where a sentence in that vocabulary belongs. What a viewer
  * needs is how long to expect to wait and why there is a wait at all.
  */
-export function waitNote(d: { method: string; reason?: string }): string {
+export function waitNote(d: {
+  method: string;
+  reason?: string;
+  video_action?: string;
+}): string {
   if (d.method === "remux") {
     // A container rewrite copies both streams, so it is quick and lossless.
     // Naming that is the difference between "my file is unsupported" and "it
     // is being put in a different box".
     return "Repackaging for your browser — this is quick, and nothing is re-encoded";
   }
-  return "Converting for your browser — this can take a few seconds to start";
+  /*
+   * A film whose picture is copied and whose sound is re-encoded is the
+   * **slowest** thing to start, which is the opposite of what the words
+   * suggest and the opposite of what the cost suggests.
+   *
+   * The reason is the playlist. When the picture is re-encoded the server
+   * chooses the segment boundaries, so it can write the whole playlist
+   * before anything is encoded and the film starts in about a second. When
+   * the picture is copied the boundaries fall on the source's own
+   * keyframes, which nobody knows in advance, so the server waits for the
+   * conversion to finish and serves a playlist it can describe completely.
+   *
+   * Measured on a 1h45 film resuming at 6m40: one minute fifty-eight. The
+   * message this replaced said "a few seconds", which is how a working
+   * conversion came to be reported as the app being broken.
+   *
+   * It also says not to start again, and that is not politeness. A second
+   * request for the same item supersedes the first, destroying a
+   * conversion that was nearly done: seen here as a session torn down
+   * after 111 seconds having served nothing.
+   */
+  if (d.video_action === "copy") {
+    return (
+      "Converting the sound for your browser — on a long film this takes a " +
+      "minute or two. The picture is untouched. Starting it again makes it slower."
+    );
+  }
+  return "Converting for your browser — this usually starts within a few seconds";
 }
 
 // Playback lives above the router.
@@ -103,6 +134,12 @@ export function waitNote(d: { method: string; reason?: string }): string {
 interface Decision {
   method: "direct" | "remux" | "transcode";
   reason: string;
+  /*
+   * Which of the two streams is being re-encoded, because it decides how long
+   * the wait is and the two answers are the opposite way round from what
+   * anyone expects. See waitNote.
+   */
+  video_action?: string;
 }
 
 // A direct/remux source is a real file with Range support, so the browser seeks
