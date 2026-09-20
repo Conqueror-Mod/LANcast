@@ -1,0 +1,250 @@
+# ADR 0071 — A shared library is a standing grant
+
+Date: 2026-09-20 · Status: proposed
+
+Answers the question [ADR 0046](0046-remote-guests.md) and the
+[federation plan](../watch-together-federation-plan.md) both named and both
+deliberately refused:
+
+> **Whether a guest may ever browse a shared library.** Deliberately forbidden
+> here. Sharing a library is a much larger question than watching one film
+> together, and answering it as a side effect of this ADR would be smuggling
+> it in.
+
+This is that larger question, asked on purpose.
+
+## Context
+
+### What was asked for
+
+> When a user is given a connection key, the host is prompted in People as to
+> whether to share the host's library with them, and the user is added as a
+> Friend. If content has been shared with you, that server's content appears in
+> the left-hand navigation under the server's name, with its libraries beneath
+> it. And in People you can see what another person is watching, and join them.
+
+Two of those three are built or designed. The middle one is not, and it is the
+one that changes the shape of the system.
+
+### What already exists
+
+More than it looks like, and none of it is visible:
+
+| Piece | State |
+|---|---|
+| Server identity, Ed25519, never regenerated ([ADR 0044](0044-server-identity-and-peering.md)) | **Built** — `internal/identity`, `GET /api/identity` |
+| Pairing by out-of-band invite | **Built** — `internal/peer`, `GET /api/peers/invite`, `POST /api/peers` |
+| Live presence between paired servers ([ADR 0045](0045-live-presence-between-paired-servers.md)) | **Built** — `internal/presence` |
+| Remote guests in a room ([ADR 0046](0046-remote-guests.md)) | Accepted, not built |
+| Host caps remote streaming ([ADR 0047](0047-remote-streaming-is-capped-by-the-host.md)) | Accepted, not built |
+| **Any client UI for any of the above** | **None.** No screen calls `/api/peers` or `/api/presence` |
+
+So "add a Friend" is largely surfacing machinery that exists. "See what they are
+watching" is the same. **"Browse their library" is the new thing**, and it is
+new in a way that touches the security boundary rather than extending it.
+
+### Why the guest cannot simply be widened
+
+ADR 0046's remote guest is deliberately tiny, and its smallness is the argument
+for its existence:
+
+> The restricted session is the security boundary and must stay small enough to
+> review: it may join a room it was invited to, and stream *the item that room
+> is playing*. It may not browse, may not search, may not list libraries, may
+> not read anybody's history.
+
+Its permission is **object-level and derived from a room** — a room that moves
+to a new item moves the permission with it, and a room that ends takes it away.
+There is no room in "browse Chris's films on a Tuesday afternoon", so there is
+nothing for that model to hang a permission on. Relaxing it until there is
+would dissolve the property that makes it reviewable.
+
+There is also a lifetime mismatch. A guest session **dies with the room** and
+**writes nothing**. Browsing a library is a standing relationship, and anyone
+browsing will expect to resume what they started.
+
+## Decision
+
+**A shared library is a standing grant from one server to one paired server,
+and it admits a second kind of remote principal: a friend.**
+
+### 1. The unit of sharing is a library, chosen by the host, per peer
+
+Not an item, not a collection, not "everything". A library is the unit people
+already reason about, it is the unit the scanner and the ceiling already work
+in, and it is the unit a host can hold in their head when deciding.
+
+Per peer, because "Georgia may see my films" and "anyone I have ever paired
+with may see my films" are different sentences, and a household will eventually
+want both. This is the same rule [ADR 0045](0045-live-presence-between-paired-servers.md)
+applies to presence, for the same reason.
+
+**Off by default, and retroactively off.** Pairing grants nothing; it records
+that two servers know each other. Un-sharing a library takes it away
+immediately, and unpairing takes away everything with one action and nothing
+per-person to clean up — the property ADR 0044 was designed for.
+
+### 2. A friend is a principal, not an account
+
+The rule ADR 0046 established, kept without exception: no `user` row, no
+password, no entry in the household's people list. Georgia does not become a
+member of Chris's server by being able to see his films.
+
+A friend session is admitted exactly as a guest is — her server signs a
+short-lived ticket with its identity key, audience-bound to the server it is
+for, verified against the key pinned at pairing. **No password crosses and no
+account is created.**
+
+What differs is what the ticket asks for and what the session may then do.
+
+### 3. Default-deny, in middleware, scoped to what was shared
+
+A friend session carries the set of shared library ids, and **every** route is
+denied unless it is on the friend list. The check is **object-level, never
+route-level**, which is ADR 0046's rule and is more important here rather than
+less: a friend has a much larger surface, and `/api/stream/{id}` still streams
+whatever id it is handed.
+
+A friend may:
+
+- **List the libraries shared with them**, and browse, sort and filter inside
+  those libraries.
+- **Read metadata and artwork** for items in those libraries.
+- **Search — scoped to those libraries.** An unscoped search is a read of the
+  whole database with a filter applied afterwards, which is the same mistake as
+  a route-level permission.
+- **Stream** an item in those libraries, with its subtitles, under
+  [ADR 0047](0047-remote-streaming-is-capped-by-the-host.md)'s cap.
+- **Join a room** as ADR 0046 already allows.
+
+A friend may **not**: see a library that was not shared, see who else is on the
+host, read anybody's history or ratings or tags, see playlists (a playlist may
+span libraries, and one that does would leak the names of items in libraries
+that were never shared), download originals, or reach anything administrative.
+
+**Every handler that turns a row into a filesystem path re-verifies containment
+within the owning library root.** `CLAUDE.md` names this the boundary that rule
+was written for; a friend is that boundary with somebody else's machine behind
+it.
+
+### 4. A friend's progress lives on the friend's own server
+
+The one place this ADR departs from ADR 0046's "a guest writes nothing", and it
+is the interesting decision.
+
+Somebody browsing a library will start a film, stop, and come back. That
+position has to live somewhere, and the host is the wrong place: a row keyed to
+a remote principal is an account by another name, it outlives the evening, it
+has to be listed and deleted, and unpairing would no longer be complete.
+
+So **the friend's server stores it**, keyed by peer fingerprint and remote item
+id, exactly as it stores progress for its own library. The host writes nothing
+and knows nothing about where a friend is in a film.
+
+This falls out of the identity model rather than being bolted on: the peer
+fingerprint is stable across address changes and survives a restore
+([ADR 0044](0044-server-identity-and-peering.md) §5, §6), so it is a durable
+key. It also means a friend's viewing history is private to their own
+household, which is the answer [ADR 0035](0035-who-may-see-whose-viewing.md)
+would give if asked.
+
+### 5. Shared libraries appear as their server, never merged
+
+In the client, a peer's shared libraries appear under that peer's name, with
+its libraries beneath it. They are **never mixed into the host's own lists** —
+not in Home, not in Continue Watching, not in Recently Added, not in search
+results, not in counts.
+
+This is not only presentation. A person needs to know at a glance whose disk a
+film is on, because everything about it differs: it is gone when that server is
+off, it counts against that host's streaming cap, and deleting it is not
+theirs to do. A merged list makes all of that invisible at exactly the moment
+it matters.
+
+### 6. A rating ceiling does not travel, and must not be assumed to
+
+A host's ceiling is about the host's household
+([ADR 0015](0015-multi-user-accounts.md)); it is applied per account, and a
+friend has no account. So sharing is decided **per library**, and a library a
+host would not show a child is a library they should not share.
+
+This is stated because there is a specific trap with the shape of a good idea.
+`media_item.content_rating` is **NULL on every row in a real library** — 19,460
+of them on the reference install — so a ceiling applied to friend browsing
+would hide the entire shared library and read as a broken feature. Whether
+ratings can constrain sharing is a question to revisit once the column carries
+data; today it can only mislead.
+
+### 7. Nothing here is reachable without UI, and the UI is the feature
+
+Phases 1 to 3 of the federation plan are built and invisible. Repeating that
+would produce a fourth invisible phase. So the People screen gaining **Friends**
+— paired servers, their presence, what was shared, and the controls to share or
+stop — is part of this decision and not a follow-up.
+
+## Rejected
+
+**Widen the ADR 0046 guest.** Its permission is derived from a room; there is
+no room in browsing. Stretching it would cost the property that makes it
+reviewable, and leave one principal doing two jobs with the union of both
+surfaces.
+
+**Share individual items, or a collection.** Finer control that is harder to
+reason about and harder to audit. A host asked "which of these 1,200 films may
+Georgia see" gives a worse answer than one asked "may Georgia see my films".
+
+**Give the friend an account on the host.** The obvious implementation, and
+ADR 0046 already rejected it: under LANcast's model an account carries full
+member access the moment it exists, has to be managed and deleted, and
+revocation stops being one action.
+
+**Store friend progress on the host.** An account by another name. See §4.
+
+**Merge shared libraries into the host's own lists.** Discussed in §5: it hides
+the facts a person most needs.
+
+**A public directory of shareable servers.** Phone-home, and a different
+product. The federation plan says so and nothing here changes it.
+
+## Consequences
+
+The household's second viewer stops being a guest who can only be invited into
+a film somebody else chose, and becomes somebody who can go and find one. That
+is the difference between the feature working and the feature being used.
+
+**The remote surface grows a great deal**, and honestly: from "one item, tied
+to a room" to "every item in a shared library, standing". The mitigations are
+that it is off by default, per peer, per library, object-level checked, and
+revoked completely by one action — but the reviewable-in-an-afternoon property
+of ADR 0046 does not survive this, and pretending otherwise would be the
+failure. This ADR should be reviewed as a security change.
+
+**Two principals now exist** where there was one: a room guest and a friend. A
+principal doing two jobs is worse than two principals, but two is still more
+than one, and the middleware that tells them apart is now security-critical
+code.
+
+**`internal/together`, `internal/peer` and `internal/presence` finally get a
+screen**, which is overdue independently of this.
+
+## What this does not decide
+
+**Whether a friend may write anything to the host** — a rating, a tag, a
+playlist entry. §4 keeps progress on the friend's side; everything else stays
+forbidden and can be revisited once one of them is actually wanted.
+
+**Whether more than two peers work.** Nothing here prevents it; nothing here
+has been thought through for it either, which is the same position the
+federation plan took.
+
+**Transcoding policy for friends beyond ADR 0047's cap** — in particular
+whether a host may refuse to convert for a friend at all and offer only what
+direct-plays.
+
+**Whether ratings can ever constrain sharing.** §6 defers it to the column
+carrying data.
+
+## Revisit when
+
+`media_item.content_rating` is populated (§6), or when somebody wants a friend
+to write something to the host's server (§4).

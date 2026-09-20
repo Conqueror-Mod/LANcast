@@ -412,5 +412,13 @@ public directory of LANcast servers is a different product.
 Phase 4 deliberately forbids it. Sharing a library is a much larger question
 than watching one film together, and answering it here would smuggle it in.
 
+> Asked and answered since, in
+> [ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) (**proposed**):
+> a shared library is a standing grant from one server to one paired server,
+> admitting a *friend* alongside Phase 4's room guest rather than widening it.
+> It does not change this plan's phases — the guest stays as small as ADR 0046
+> makes it — but it does mean Phase 3's presence and Phase 2's pairing finally
+> get a screen, which this plan never allocated.
+
 **Whether more than two peers work.** Nothing above prevents it; nothing above
 has been thought through for it either.
