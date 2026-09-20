@@ -104,6 +104,21 @@ export class MpvBackend extends EventTarget implements MediaBackend {
   private rate = 1;
   // A seek asked for before the file is open, applied when it is.
   private pendingSeek: number | null = null;
+  /*
+   * Whether the page wants this playing, which is not the same as whether it
+   * is playing.
+   *
+   * Opening a file pauses it -- the client loads paused so the resume seek can
+   * land before a frame is shown -- and that pause comes back like any other.
+   * Deciding whether to start from the *reported* state therefore asked "is it
+   * paused?" at the one moment the answer is always yes, and playback stopped
+   * dead: every audio-track change left the film frozen, and a paused player
+   * reports no new position, so the clock sat at 0:00 and looked like a
+   * different bug entirely.
+   *
+   * Intent belongs to the page, so it is kept rather than inferred.
+   */
+  private wantPlay = false;
   // Which load the current events belong to; a stale open must not win.
   private generation = 0;
 
@@ -187,11 +202,12 @@ export class MpvBackend extends EventTarget implements MediaBackend {
         document.documentElement.classList.add(NATIVE_VIDEO_CLASS);
         await window.lancastMpvOpen!(id, t.ticket);
         // play() usually arrives before the player exists, and the client opens
-        // files paused; honour it now that there is something to play.
+        // files paused; honour the page's intent now there is something to
+        // play.
         if (gen === this.generation && this.audioTrack !== null) {
           await this.command("audio", this.audioTrack);
         }
-        if (gen === this.generation && !this.isPaused) await this.command("play", 0);
+        if (gen === this.generation && this.wantPlay) await this.command("play", 0);
       } catch (e) {
         if (gen !== this.generation) return;
         this.fail(2, e instanceof Error ? e.message : String(e));
@@ -200,11 +216,13 @@ export class MpvBackend extends EventTarget implements MediaBackend {
   }
 
   play(): Promise<void> {
+    this.wantPlay = true;
     this.isPaused = false;
     return this.command("play", 0);
   }
 
   pause(): void {
+    this.wantPlay = false;
     this.isPaused = true;
     void this.command("pause", 0);
   }

@@ -73,6 +73,35 @@ describe("MpvBackend", () => {
     expect(lastPlay).toBe(commands.length - 1);
   });
 
+  it("resumes a reopened file, though opening it reported a pause", async () => {
+    /*
+     * Changing the audio track reopens the file, and the client opens files
+     * paused so the resume seek lands before a frame is shown. That pause is
+     * reported back, so a backend that decides from the reported state asks
+     * "is it paused?" at the one moment the answer is always yes — and the
+     * film never restarts. Every track change froze the picture, and a paused
+     * player reports no new position, so the clock sat at 0:00 as well.
+     */
+    const b = new MpvBackend();
+    b.src = "/api/stream/42";
+    b.load();
+    void b.play();
+    await flush();
+    await flush();
+    await flush();
+    commands.length = 0;
+
+    // The client reports the pause that opening the next file caused.
+    b.receive({ events: ["pause"], current_time: 0, duration: 7741, paused: true, ended: false });
+
+    b.src = "/api/stream/42";
+    b.load();
+    await flush();
+    await flush();
+    await flush();
+    expect(commands.filter(([n]) => n === "play").length).toBe(1);
+  });
+
   it("refuses a source that is not a direct stream with an unsupported error", () => {
     const b = new MpvBackend();
     const seen: string[] = [];
