@@ -99,13 +99,28 @@ Function MakePluginsDir
   InitPluginsDir
 FunctionEnd
 
+; A named label, never a relative jump.
+;
+; This function shipped in v0.9.29 as `IfErrors 0 +3`, and +3 is one past the
+; end of it: +1 is the MessageBox, +2 is the Return that FunctionEnd compiles
+; to, and +3 is the first instruction of whatever function follows — StartTray.
+; So on **success**, which is the ordinary path, it skipped its own return and
+; fell into StartTray, which calls this function again. Unbounded recursion,
+; starting a LANcast on every pass: thirty in under thirty seconds, and the
+; machine went down with them.
+;
+; It compiled without a warning, and `makensis -WX` in CI proved only that. A
+; relative jump cannot be checked by the assembler because every target is
+; arithmetically valid; a label that does not exist is a compile error. That is
+; the whole argument for never counting instructions in this file.
 Function LaunchAsUser
   ClearErrors
   Exec 'explorer.exe "$9"'
-  IfErrors 0 +3
+  IfErrors 0 launched
     ; No Explorer to borrow a token from — a locked-down shell, or a machine
     ; where it has crashed. Starting it elevated is worse than not starting it.
     MessageBox MB_OK|MB_ICONINFORMATION "LANcast is installed. Open it from the Start menu."
+  launched:
 FunctionEnd
 
 Function StartTray
