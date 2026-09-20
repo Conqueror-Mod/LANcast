@@ -15,6 +15,11 @@ import (
 //
 // The TMDB key lives here rather than in the database because it is a secret:
 // the file is written 0600, and the API never echoes the value back.
+// DefaultMaxTranscodes is the ceiling on concurrent conversions when nothing
+// has been chosen: what the transcode manager shipped with before the setting
+// existed, so an install that never touches it behaves exactly as it did.
+const DefaultMaxTranscodes = 3
+
 type Settings struct {
 	TMDBKey string `json:"tmdb_key,omitempty"`
 	// OpenSubtitlesKey enables subtitle search. Optional, like the TMDB key:
@@ -177,6 +182,24 @@ type Settings struct {
 	 */
 	ArtworkCacheMB int `json:"artwork_cache_mb,omitempty"`
 
+	/*
+	 * MaxTranscodes bounds how many conversions may run at once.
+	 *
+	 * Each one is a whole ffmpeg, so the ceiling is really a statement about
+	 * the machine: three is right for the laptop-class server this was written
+	 * on and wrong in both directions elsewhere — a NAS with a weak CPU wants
+	 * fewer, a desktop with a modern encoder chip handles many more.
+	 *
+	 * It is a ceiling rather than a queue on purpose. Past it a request is
+	 * refused and the client says the server is busy, which is honest;
+	 * admitting everybody and letting every stream stutter is not, and it is
+	 * what happens without a ceiling at all.
+	 *
+	 * Zero means the built-in default, so an unset field and a file written by
+	 * an older build both behave as they did.
+	 */
+	MaxTranscodes int `json:"max_transcodes,omitempty"`
+
 	// AuditRetentionDays drops audit events older than this many days. Zero
 	// keeps them for ever, which is a real answer for somebody running this
 	// where the audit trail is the point.
@@ -244,7 +267,7 @@ func Defaults() Settings {
 		// default.
 		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
-		AuditRetentionDays: 90}
+		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes}
 }
 
 // SettingsStore reads and writes the settings file.
@@ -342,6 +365,18 @@ func clamp(s *Settings) {
 	}
 	if s.ContinueLimit <= 0 || s.ContinueLimit > 100 {
 		s.ContinueLimit = d.ContinueLimit
+	}
+	/*
+	 * A ceiling of zero would refuse every conversion, and a negative one is
+	 * nonsense; both read as "unset" and take the default. The upper bound is
+	 * deliberately generous — it exists to catch a typed 300 rather than to
+	 * tell somebody with 64 cores what their machine can do.
+	 */
+	if s.MaxTranscodes <= 0 {
+		s.MaxTranscodes = DefaultMaxTranscodes
+	}
+	if s.MaxTranscodes > 64 {
+		s.MaxTranscodes = 64
 	}
 	if s.ArtworkCacheMB < 0 {
 		s.ArtworkCacheMB = 0

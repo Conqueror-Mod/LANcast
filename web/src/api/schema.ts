@@ -4138,6 +4138,14 @@ export interface components {
              *     An original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into "some of your posters are gone now". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number.
              */
             artwork_cache_mb?: number;
+            /**
+             * @description How many conversions may run at once. Each is a whole ffmpeg, so the ceiling is a statement about the machine rather than a preference: three suits a laptop-class server, a NAS with a weak CPU wants fewer, a desktop with a modern encoder handles many more.
+             *
+             *     A **ceiling rather than a queue**. Past it a request is refused and the client reports a busy server, which is honest; admitting everybody and letting every stream stutter is not. Direct play is unaffected — a file sent as it is costs no session, however many people are watching.
+             *
+             *     Applied live: sessions already running are left alone and the new ceiling decides what is admitted next. Absent, or zero from an older file, means the built-in default of 3.
+             */
+            max_transcodes?: number;
         };
         /** @description Every field optional; an omitted field is left alone. */
         SettingsUpdate: {
@@ -4205,6 +4213,8 @@ export interface components {
              *     A negative value is 400. There is deliberately no upper bound: somebody with a large array may reasonably allow a great deal of artwork, and an invented ceiling would be wrong for them with no way to say so.
              */
             artwork_cache_mb?: number;
+            /** @description How many conversions may run at once; see the same field on `Settings`. Applied live. */
+            max_transcodes?: number;
         };
         /** @description The recorded list is capped at 50 so a pathological library cannot grow scan status without bound. The counts keep counting past the cap. */
         ScanIssue: {

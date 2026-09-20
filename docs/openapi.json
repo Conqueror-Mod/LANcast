@@ -9400,6 +9400,12 @@
             "type": "integer",
             "minimum": 0,
             "description": "A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.\n\nA **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:\n\n1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.\n2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.\n3. **Nothing else.** A live *original* is never deleted, at any limit.\n\nAn original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into \"some of your posters are gone now\". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number."
+          },
+          "max_transcodes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": "How many conversions may run at once. Each is a whole ffmpeg, so the ceiling is a statement about the machine rather than a preference: three suits a laptop-class server, a NAS with a weak CPU wants fewer, a desktop with a modern encoder handles many more.\n\nA **ceiling rather than a queue**. Past it a request is refused and the client reports a busy server, which is honest; admitting everybody and letting every stream stutter is not. Direct play is unaffected — a file sent as it is costs no session, however many people are watching.\n\nApplied live: sessions already running are left alone and the new ceiling decides what is admitted next. Absent, or zero from an older file, means the built-in default of 3."
           }
         }
       },
@@ -9484,6 +9490,12 @@
             "type": "integer",
             "minimum": 0,
             "description": "A cap on the artwork cache, in megabytes. Zero is no limit, the default and the behaviour of every server so far.\n\nA **target rather than a guarantee**, and the distinction is the safety property. A daily pass removes things in the order of what can be recovered:\n\n1. **Orphans** — artwork nothing references any more. Removed at any setting, including no limit, because they are waste under every policy.\n2. **Derived sizes** of live artwork — a thumbnail, a poster, a 2x. Dropped oldest-first to get under the cap, and recoverable locally by decoding the original again.\n3. **Nothing else.** A live *original* is never deleted, at any limit.\n\nAn original is the only copy that cannot be rebuilt without going back to a provider — which needs a key, a network, and the provider still holding the image. A cap that could remove one would turn a disk-space setting into \"some of your posters are gone now\". So a library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number.\n\nA negative value is 400. There is deliberately no upper bound: somebody with a large array may reasonably allow a great deal of artwork, and an invented ceiling would be wrong for them with no way to say so."
+          },
+          "max_transcodes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": "How many conversions may run at once; see the same field on `Settings`. Applied live."
           }
         }
       },

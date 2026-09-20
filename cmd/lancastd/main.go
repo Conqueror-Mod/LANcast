@@ -478,6 +478,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	subs := subtitle.NewExtractor(filepath.Join(cfg.DataDir, "subtitles"))
 	trans := transcode.NewManager(filepath.Join(cfg.DataDir, "transcode"), log)
+	// The operator's ceiling, or the manager's own default when nothing has
+	// been chosen (config.Normalize decides which).
+	trans.MaxSessions = settings.Get().MaxTranscodes
 	if !trans.Available() {
 		log.Info("ffmpeg not found; files that cannot be played directly will not be converted")
 	}
@@ -738,6 +741,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			// something is misbehaving, and a restart throws away the
 			// state they were trying to look at.
 			setLogLevel(s.DebugLogging)
+			// Live, like the log level: the moment to change this is while
+			// the server is struggling, and a restart to apply it would drop
+			// the very sessions the operator is trying to relieve. Sessions
+			// already running are left alone; the new ceiling decides what is
+			// admitted next.
+			trans.MaxSessions = s.MaxTranscodes
 		},
 		ReloadPlugins: reloadPlugins,
 		Enrich:        enrichSoon,
