@@ -129,8 +129,11 @@ type Manager struct {
 // NewManager builds a manager rooted at dir for scratch space.
 func NewManager(dir string, log *slog.Logger) *Manager {
 	m := &Manager{
-		root:              dir,
-		log:               log,
+		root: dir,
+		log:  log,
+		// The operator sets this (config.DefaultMaxTranscodes, which is this
+		// number); a manager built without one still has a ceiling, because a
+		// manager with none is a home server on its knees.
 		MaxSessions:       3,
 		IdleTimeout:       10 * time.Minute,
 		LiveIdleTimeout:   30 * time.Second,

@@ -1265,6 +1265,21 @@ function AdminSections({ pane }: { pane: string }) {
                 </>
               )}
 
+              {/*
+                Beside the quality ceiling because both are the same kind of
+                decision: what this machine is willing to spend on delivering
+                media, set by whoever runs it rather than by whoever is
+                watching.
+              */}
+              <RuleNumber
+                title="Conversions at once"
+                sub="How many files this server will convert at the same time. Each one is a separate ffmpeg working flat out, so this is really a statement about the machine: past the limit the next person is told the server is busy, which is better than everybody's picture stuttering at once. Files that play as they are do not count — they are sent untouched, however many people are watching."
+                value={settings.max_transcodes ?? 3}
+                min={1}
+                max={64}
+                onCommit={(v) => update.mutate({ max_transcodes: v })}
+              />
+
               <RuleSelect
                 title="Counts as watched at"
                 sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."

@@ -38,6 +38,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		// Null rather than a number when unset: the useful value is the zero
 		// value, so midnight must be choosable.
 		"artwork_cache_mb":     cur.ArtworkCacheMB,
+		"max_transcodes":       cur.MaxTranscodes,
 		"scan_at_hour":         cur.ScanAtHour,
 		"audit_retention_days": cur.AuditRetentionDays,
 		"write_nfo":            cur.WriteNFO,
@@ -119,6 +120,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		 */
 		ScanAtHour         json.RawMessage `json:"scan_at_hour"`
 		ArtworkCacheMB     *int            `json:"artwork_cache_mb"`
+		MaxTranscodes      *int            `json:"max_transcodes"`
 		AuditRetentionDays *int            `json:"audit_retention_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -229,6 +231,19 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.EmptyTrashOnScan != nil {
 		next.EmptyTrashOnScan = *req.EmptyTrashOnScan
+	}
+	if req.MaxTranscodes != nil {
+		/*
+		 * One is a real answer — a machine that should only ever convert for
+		 * one viewer — so the floor is one rather than a number that sounds
+		 * more comfortable. The ceiling catches a typo; see the field.
+		 */
+		if *req.MaxTranscodes < 1 || *req.MaxTranscodes > 64 {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"max_transcodes must be between 1 and 64")
+			return
+		}
+		next.MaxTranscodes = *req.MaxTranscodes
 	}
 	if req.ArtworkCacheMB != nil {
 		/*
@@ -353,6 +368,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
 	add("debug_logging", prev.DebugLogging != next.DebugLogging)
+	add("max_transcodes", prev.MaxTranscodes != next.MaxTranscodes)
 	add("watched_threshold", prev.WatchedThreshold != next.WatchedThreshold)
 	add("continue_weeks", prev.ContinueWeeks != next.ContinueWeeks)
 	add("continue_limit", prev.ContinueLimit != next.ContinueLimit)

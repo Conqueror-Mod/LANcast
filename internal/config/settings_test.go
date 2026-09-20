@@ -85,3 +85,30 @@ func TestClampRepairsAHandEditedFile(t *testing.T) {
 		t.Errorf("clamp changed valid settings: %+v", ok)
 	}
 }
+
+func TestTranscodeCeilingAlwaysHasAValue(t *testing.T) {
+	/*
+	 * A ceiling of zero would refuse every conversion, which is the setting
+	 * failing in the most destructive direction available to it — exactly the
+	 * shape TestClampRepairsAHandEditedFile exists for. Zero is also what a
+	 * settings file written before this field existed contains, so it has to
+	 * mean "the default" rather than "never convert anything".
+	 */
+	for _, tc := range []struct{ given, want int }{
+		{0, DefaultMaxTranscodes},  // absent, or an older file
+		{-4, DefaultMaxTranscodes}, // hand-edited nonsense
+		{1, 1},                     // a real answer: convert for one viewer
+		{12, 12},
+		{500, 64}, // a typed 300 is a mistake, not a machine with 300 cores
+	} {
+		s := Settings{MaxTranscodes: tc.given}
+		clamp(&s)
+		if s.MaxTranscodes != tc.want {
+			t.Errorf("clamp(%d) = %d, want %d", tc.given, s.MaxTranscodes, tc.want)
+		}
+	}
+
+	if Defaults().MaxTranscodes != DefaultMaxTranscodes {
+		t.Errorf("defaults = %d, want %d", Defaults().MaxTranscodes, DefaultMaxTranscodes)
+	}
+}

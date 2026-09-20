@@ -131,7 +131,15 @@ describe("server rules on the settings screen", () => {
     await render("/settings?pane=playback");
     const select = host.querySelector<HTMLSelectElement>("select.set-select");
     expect(select?.value).toBe("90");
-    const weeks = host.querySelector<HTMLInputElement>('input[type="number"]');
+    /*
+     * By its label, not by being the first number on the pane. It was the
+     * first, and adding a rule above it made this test fail while describing
+     * the wrong field — a fixture that pins layout when it means to pin a
+     * value.
+     */
+    const weeks = [...host.querySelectorAll<HTMLElement>(".set-row")]
+      .find((row) => row.textContent?.includes("Weeks to keep in Continue Watching"))
+      ?.querySelector<HTMLInputElement>('input[type="number"]');
     expect(weeks?.value).toBe("16");
   });
 
