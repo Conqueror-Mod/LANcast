@@ -1463,6 +1463,30 @@ group is not priority.
   that happens. An automatic skip that is a few seconds wrong is indistinguishable
   from a broken file, and the first thing it will eat is a cold open.
 
+- **The desktop client connects to a server on another machine**
+  ([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md),
+  proposed). A second person in the household has an account on the server and
+  no way to reach it from their own PC: their copy of the client opens their
+  own empty server, and the shared library is simply not in the app.
+
+  A browser reaches it today and that is not the answer. A browser cannot play
+  through libmpv, so the server converts for that viewer — undoing exactly the
+  work [ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md) did, for
+  the one person whose files are most likely to need it. The household's second
+  viewer would cost more server CPU than its owner, permanently.
+
+  **The blocker is trust, not a missing screen.** `serverCertPin()` reads the
+  pin out of the *local* data directory, so there is nothing on this disk to
+  pin for a server on another machine. The decision the ADR makes is
+  trust-on-first-use with the fingerprint on screen, and a **changed pin
+  refused** rather than clicked through — strict because the pin is over the
+  public key, so neither certificate rotation nor a new network interface
+  changes it, and a pin that has changed means the key really was replaced.
+
+  Nothing on the server moves: the window sits on the server's own origin, so
+  the cookie is first-party and the `Origin`/`Host` check matches. No endpoint,
+  no API change.
+
 - **The audio pass — loudness leveling, a dialogue-clarity knob, and an
   equaliser** across music, shows and films. The most-felt gap on this page:
   whispered dialogue and deafening explosions are the standing complaint about
