@@ -145,7 +145,6 @@ function AddPeer() {
           Paste the invite somebody sent you. Nothing is shared by pairing;
           you both decide separately what the other may see.
         </div>
-        <div className="spacer" />
         <input
           className="set-input"
           placeholder="Paste an invite"

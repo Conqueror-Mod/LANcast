@@ -707,3 +707,16 @@
   overflow-wrap: anywhere;
   margin-bottom: 4px;
 }
+
+/*
+ * An input sitting under explanatory text inside a row.
+ *
+ * The text is a sibling rather than a label, so nothing gives the input any
+ * air and it renders flush against the sentence above it. Caught by checking
+ * that every class used actually exists rather than by looking — jsdom
+ * performs no layout, so a stylesheet that silently lacks a rule is invisible
+ * to the whole client suite.
+ */
+.set-row__main > .set-input {
+  margin-top: 8px;
+}
