@@ -66,6 +66,9 @@ import {
 import { forgetHLS, hlsRecord } from "@/playback/fileTransport";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
+import { PeerSettings } from "@/components/PeerSettings";
+import { useSetPeerVisibility } from "@/api/hooks";
+import { errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
 import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { useLiveTransport } from "@/lib/liveTransport";
@@ -83,7 +86,6 @@ import {
   type HeroMode,
 } from "@/lib/heroMode";
 import { BackupSettings } from "@/components/BackupSettings";
-import { ApiFailure } from "@/api/client";
 import type {
   AuthUser,
   Plugin,
@@ -137,12 +139,6 @@ function ProviderKey({
       </div>
     </div>
   );
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiFailure) return err.message;
-  if (err instanceof Error) return err.message;
-  return "Something went wrong.";
 }
 
 /*
@@ -531,7 +527,69 @@ function SharingToggle() {
       {set.isError && (
         <span className="set-error">{(set.error as Error).message}</span>
       )}
+      <PeerVisibility />
     </section>
+  );
+}
+
+/*
+ * Appearing to other servers, which is a **third** disclosure category and not
+ * a wider setting of the one above (ADR 0045 §1).
+ *
+ * Its own switch, deliberately. Somebody who agreed to publish the films they
+ * have finished did not thereby agree to be watched in real time, and silently
+ * widening an existing opt-in is the failure ADR 0035 exists to prevent. The
+ * two are next to each other because they are both about you; they are not
+ * nested because they are not the same promise.
+ *
+ * What this switch does is narrower than it sounds, and the copy has to carry
+ * that: it makes you **listable**, not visible. Nothing is disclosed until
+ * somebody on the other server grants you presence by name, and that grant is
+ * theirs to make. But it is also load-bearing in the other direction — an
+ * account that has not opted in cannot be named by anybody's grant, in either
+ * direction, which the schema enforces rather than a handler. So while this is
+ * off, the People screen's peers section has nothing to draw however many
+ * servers are paired.
+ *
+ * No administrator version exists and none should: a switch somebody else can
+ * flip is not consent.
+ */
+function PeerVisibility() {
+  const me = useCurrentUser();
+  const set = useSetPeerVisibility();
+  const stored = me?.visible_to_peers ?? false;
+  const [pending, setPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    setPending(null);
+  }, [stored]);
+  const on = pending ?? stored;
+
+  return (
+    <>
+      <label className="set-toggle set-toggle--described">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => {
+            setPending(e.target.checked);
+            set.mutate(e.target.checked);
+          }}
+        />
+        <span>
+          <strong>Let paired servers list me</strong>
+          <span className="set-toggle__desc">
+            Puts your name in the list this server hands to servers it is
+            paired with, so somebody there can choose to see when you are
+            watching something. <strong>It shares nothing by itself</strong>
+            {" — "}they still have to ask for you by name, and you have to
+            grant them the same, on the People page. Off unless you turn it on.
+          </span>
+        </span>
+      </label>
+      {set.isError && (
+        <span className="set-error">{(set.error as Error).message}</span>
+      )}
+    </>
   );
 }
 
@@ -927,6 +985,7 @@ function AdminSections({ pane }: { pane: string }) {
 
   return (
     <>
+      {pane === "peers" && <PeerSettings />}
       {pane === "libraries" && (
         <section className="settings__section">
           <span className="section-label">Libraries</span>
@@ -3083,6 +3142,14 @@ const SERVER_PANES: Pane[] = [
   { id: "metadata", label: "Metadata", admin: true },
   { id: "playback", label: "Playback", admin: true },
   { id: "users", label: "Users", admin: true },
+  /*
+   * Other servers sits beside Users because they are the same question asked
+   * of two different populations: who may do what here. Its own pane rather
+   * than a corner of Users because a peer is not an account and must never
+   * come to look like one — pairing grants nothing, where adding a user grants
+   * the whole library.
+   */
+  { id: "peers", label: "Other servers", admin: true },
   { id: "livetv", label: "Live TV", admin: true },
   { id: "addons", label: "Add-ons", admin: true },
   { id: "updates", label: "Updates", admin: true },

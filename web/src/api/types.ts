@@ -298,6 +298,18 @@ export type PeerPerson = components["schemas"]["PeerPerson"];
 export type PeerPresence = components["schemas"]["PeerPresence"];
 
 /*
+ * A paired server as this one records it, and the invite that introduces one.
+ *
+ * `state` is `added` until the far side is confirmed to hold us too, and only
+ * the transport can move it to `paired`: accepting an invite is not a pairing
+ * (ADR 0044 §3, introduction is mutual). A screen that renders `added` as
+ * "connected" would be claiming the other person agreed.
+ */
+export type Peer = components["schemas"]["Peer"];
+
+export type PeerInvite = components["schemas"]["PeerInvite"];
+
+/*
  * A work claimed by more than one file (ADR 0042).
  *
  * LANcast reports these and resolves none of them. A shared provider id is
