@@ -84,7 +84,25 @@ type videoRect struct{ x, y, w, h int32 }
 type overlayOf struct{ w *webview }
 type videoOf struct{ w *webview }
 
-var opaqueWhite = edge.COREWEBVIEW2_COLOR{A: 255, R: 255, G: 255, B: 255}
+/*
+ * The backdrop the web view paints when it is not the transparent overlay.
+ *
+ * It used to be opaque **white**, which is WebView2's own default and was
+ * simply what "put it back" meant. The cost showed up as a white rectangle
+ * flashing across the window every time a film started, was skipped, or
+ * stopped: leaving the overlay reparents the Chromium control back to the main
+ * window, and for the moment between the background turning opaque and the
+ * page painting over it, the backdrop is all there is to see. At a stale size,
+ * mid-reparent, on a black screen.
+ *
+ * `--space-void` is what the page paints there anyway, so matching it makes
+ * the gap invisible rather than merely shorter. The client has no light theme
+ * (`web/src/styles/tokens.css`), so there is no case where a pale backdrop is
+ * the right one.
+ */
+var opaqueBackdrop = edge.COREWEBVIEW2_COLOR{
+	A: 255, R: backdropR, G: backdropG, B: backdropB,
+}
 
 func (w *webview) createOwned(exStyle uintptr) uintptr {
 	var hinstance windows.Handle
@@ -171,7 +189,7 @@ func (w *webview) leaveOverlay() {
 	ch, ok := w.browser.(*edge.Chromium)
 	if ok {
 		ch.Reparent(w.hwnd)
-		_ = ch.SetBackground(opaqueWhite)
+		_ = ch.SetBackground(opaqueBackdrop)
 	}
 	popup := w.overlay
 	w.overlay = 0
