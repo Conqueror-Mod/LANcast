@@ -237,14 +237,28 @@ func (w *webview) enterOverlay() error {
 	if popup == 0 {
 		return errors.New("webview2: could not create the overlay window")
 	}
-	if err := ch.SetBackground(edge.COREWEBVIEW2_COLOR{}); err != nil {
-		_, _, _ = w32.User32DestroyWindow.Call(popup)
-		return err
-	}
 	setWindowContext(popup, overlayOf{w})
 	w.overlay = popup
 	w.syncVideo()
 	ch.Reparent(popup)
+	/*
+	 * Transparent **after** the reparent, not before.
+	 *
+	 * Reparenting re-creates the controller's visual, and the new one starts
+	 * at WebView2's default background, which is white. A colour set before
+	 * the move is therefore discarded by the very next line -- which is what
+	 * made starting a film flash white while stopping one did not, because
+	 * leaveOverlay below happened to set its background the other way round.
+	 *
+	 * Found by asymmetry rather than by reading: the two halves were changed
+	 * together and only the half that sets after reparenting came out clean.
+	 */
+	if err := ch.SetBackground(edge.COREWEBVIEW2_COLOR{}); err != nil {
+		ch.Reparent(w.hwnd)
+		w.overlay = 0
+		_, _, _ = w32.User32DestroyWindow.Call(popup)
+		return err
+	}
 	_, _, _ = procSetActiveWindow.Call(popup)
 	ch.Focus()
 	return nil
