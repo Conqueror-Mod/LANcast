@@ -33,13 +33,22 @@ const SegmentSeconds = 6
 
 // Options describe one transcode.
 type Options struct {
-	Input      string
-	Output     Output
-	Decision   probe.Decision
-	StartAt    float64 // seconds into the file
-	Duration   float64 // the whole file's length in seconds; 0 when unknown
-	OutputDir  string  // HLS only
-	AudioIndex int     // absolute stream index; -1 means let ffmpeg choose
+	Input string
+	/*
+	 * AudioStartAt is where the audio input is seeked to, when that differs
+	 * from StartAt (ADR 0072).
+	 *
+	 * Set to the keyframe a copied video will actually begin at, so the audio
+	 * can be taken from its own input and start in the same place. Zero means
+	 * no alignment: the caller found no keyframe, or none was wanted.
+	 */
+	AudioStartAt float64
+	Output       Output
+	Decision     probe.Decision
+	StartAt      float64 // seconds into the file
+	Duration     float64 // the whole file's length in seconds; 0 when unknown
+	OutputDir    string  // HLS only
+	AudioIndex   int     // absolute stream index; -1 means let ffmpeg choose
 
 	// AudioBitrate for re-encoded audio, in kbit/s.
 	AudioBitrate int
@@ -464,6 +473,18 @@ func Args(o Options) []string {
 	 */
 	copiedVideo := o.Decision.VideoAction == "copy"
 
+	/*
+	 * Whether the audio comes from its own input, seeked to the keyframe.
+	 *
+	 * Every condition is a case where there is nothing to align: a re-encoded
+	 * video starts exactly where asked, a resume at zero has nothing to be out
+	 * of step with, live has no resume, and a keyframe later than the resume
+	 * would push the audio *forward* of the picture, which is the same fault
+	 * pointed the other way.
+	 */
+	alignAudio := copiedVideo && o.StartAt > 0 && !o.Live &&
+		o.AudioStartAt > 0 && o.AudioStartAt <= o.StartAt
+
 	if o.StartAt > 0 && !o.Live {
 		switch {
 		case copiedVideo:
@@ -557,6 +578,34 @@ func Args(o Options) []string {
 
 	a = append(a, "-i", o.Input)
 
+	/*
+	 * A second demuxer of the same file, for the audio alone (ADR 0072).
+	 *
+	 * A copied video cannot start where it was asked: there is nothing to
+	 * decode, so ffmpeg begins at a keyframe. The audio is re-encoded and
+	 * begins exactly where it was told, so the two start at different points
+	 * in the film and the picture runs behind the sound by the distance
+	 * between them -- 0.33s on the resume this was measured on, 3.1s on
+	 * another of the same film.
+	 *
+	 * The seek cannot fix it. ffmpeg will not use a keyframe until the target
+	 * is about 200ms past it, so asking for the keyframe itself drops to the
+	 * one before -- measured at five seconds rather than a third of one -- and
+	 * the margin puts a floor of ~0.18s under every value that does work.
+	 *
+	 * So the audio is taken from its own input, seeked to the keyframe the
+	 * video will actually start on. Both streams then begin at the same point
+	 * and the gap measures one AAC frame.
+	 *
+	 * AudioStartAt is zero unless the caller found a keyframe, so this whole
+	 * paragraph costs nothing on a re-encode, a resume at zero, or a file
+	 * whose keyframes could not be read.
+	 */
+	if alignAudio {
+		a = append(a, "-ss", strconv.FormatFloat(o.AudioStartAt, 'f', 3, 64))
+		a = append(a, "-i", o.Input)
+	}
+
 	// The output half of the split seek described above. Whatever the input
 	// seek could not cover — the preroll, or the whole offset when it is
 	// shorter than one — is decoded and discarded so the first frame is the
@@ -582,10 +631,18 @@ func Args(o Options) []string {
 	if !o.Decision.AudioOnly {
 		a = append(a, "-map", "0:v:0")
 	}
+	/*
+	 * The audio may be coming from the second input. The stream index is the
+	 * same either way -- it is the same file, opened twice.
+	 */
+	audioFrom := "0"
+	if alignAudio {
+		audioFrom = "1"
+	}
 	if o.AudioIndex >= 0 {
-		a = append(a, "-map", fmt.Sprintf("0:%d", o.AudioIndex))
+		a = append(a, "-map", fmt.Sprintf("%s:%d", audioFrom, o.AudioIndex))
 	} else {
-		a = append(a, "-map", "0:a:0?")
+		a = append(a, "-map", audioFrom+":a:0?")
 	}
 
 	// Subtitles are dropped for now. Burning them in forces a video re-encode

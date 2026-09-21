@@ -29,11 +29,16 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 	}
 	it := t.item
 
+	startAt := s.startAt(r, it)
 	opts := transcode.Options{
-		Input:      it.Path,
-		Decision:   t.decision,
-		StartAt:    s.startAt(r, it),
-		AudioIndex: t.audioIndex,
+		Input:    it.Path,
+		Decision: t.decision,
+		StartAt:  startAt,
+		// Where the audio input is seeked to, when a copied video will start
+		// somewhere other than where it was asked (ADR 0072). Zero for
+		// everything else, which is most playback.
+		AudioStartAt: s.audioStartFor(r, it.Path, t.decision, startAt),
+		AudioIndex:   t.audioIndex,
 	}
 
 	// The caller's account, so a seek replaces this viewer's own stream for
@@ -79,12 +84,15 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	if it.DurationMS != nil {
 		duration = float64(*it.DurationMS) / 1000
 	}
+	startAt := s.startAt(r, it)
 	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.userID(r), transcode.Options{
-		Input:      it.Path,
-		Decision:   t.decision,
-		StartAt:    s.startAt(r, it),
-		Duration:   duration,
-		AudioIndex: t.audioIndex,
+		Input:    it.Path,
+		Decision: t.decision,
+		StartAt:  startAt,
+		Duration: duration,
+		// See the progressive path above, and ADR 0072.
+		AudioStartAt: s.audioStartFor(r, it.Path, t.decision, startAt),
+		AudioIndex:   t.audioIndex,
 	})
 	if err != nil {
 		s.writeTranscodeError(w, err)
