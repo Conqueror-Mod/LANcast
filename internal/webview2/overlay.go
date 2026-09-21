@@ -4,6 +4,7 @@ package webview2
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 
 	"lancast/internal/webview2/edge"
@@ -46,7 +47,62 @@ var (
 	procClientToScreen  = user32overlay.NewProc("ClientToScreen")
 	procSetActiveWindow = user32overlay.NewProc("SetActiveWindow")
 	procIsWindowVisible = user32overlay.NewProc("IsWindowVisible")
+
+	gdi32overlay       = windows.NewLazySystemDLL("gdi32.dll")
+	procGetStockObject = gdi32overlay.NewProc("GetStockObject")
 )
+
+// blackBrush is GetStockObject(BLACK_BRUSH). A stock object is owned by the
+// system and never freed.
+const stockBlackBrush = 4
+
+/*
+ * videoClass is a window class of its own for the picture, and it exists for
+ * one field: a background brush.
+ *
+ * The class everything else here uses leaves HbrBackground unset, which means
+ * a null brush, which means nothing erases the window. For the main window
+ * that is right -- the web view paints every pixel of it -- but the picture
+ * window is empty until mpv presents its first frame, and what shows in the
+ * meantime is whatever the compositor had. In practice, white.
+ *
+ * That was reported twice. First as a black-and-white pattern on every start
+ * and stop, which was this on top of a white page backdrop; the backdrop was
+ * fixed and what remained was a plain white rectangle over the whole picture
+ * area, longer on starting than on stopping because opening a file takes
+ * longer than closing one.
+ *
+ * Black rather than the page's near-black: this is the surface a video sits
+ * on, it is what every player letterboxes to, and it is what the picture
+ * itself fades from.
+ */
+var videoClass = sync.OnceValue(func() *uint16 {
+	name, err := windows.UTF16PtrFromString("webview-video")
+	if err != nil {
+		return nil
+	}
+	var hinstance windows.Handle
+	_ = windows.GetModuleHandleEx(0, nil, &hinstance)
+
+	brush, _, _ := procGetStockObject.Call(stockBlackBrush)
+	if brush == 0 {
+		// No brush is the behaviour that was already there, not a reason to
+		// fail to create the window the picture goes in.
+		return nil
+	}
+
+	wc := w32.WndClassExW{
+		CbSize:        uint32(unsafe.Sizeof(w32.WndClassExW{})),
+		HInstance:     hinstance,
+		LpszClassName: name,
+		LpfnWndProc:   windows.NewCallback(wndproc),
+		HbrBackground: windows.Handle(brush),
+	}
+	if ret, _, _ := w32.User32RegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))); ret == 0 {
+		return nil
+	}
+	return name
+})
 
 const (
 	wmShowWindow            = 0x0018
@@ -105,9 +161,19 @@ var opaqueBackdrop = edge.COREWEBVIEW2_COLOR{
 }
 
 func (w *webview) createOwned(exStyle uintptr) uintptr {
+	return w.createOwnedOf(exStyle, nil)
+}
+
+// createOwnedOf creates an owned popup of a given class, or of the shared one
+// when class is nil -- which is also what a failed registration falls back to,
+// since a window with the wrong background is better than no picture at all.
+func (w *webview) createOwnedOf(exStyle uintptr, class *uint16) uintptr {
 	var hinstance windows.Handle
 	_ = windows.GetModuleHandleEx(0, nil, &hinstance)
-	className, _ := windows.UTF16PtrFromString("webview")
+	className := class
+	if className == nil {
+		className, _ = windows.UTF16PtrFromString("webview")
+	}
 	h, _, _ := w32.User32CreateWindowExW.Call(
 		exStyle|wsExToolWindow,
 		uintptr(unsafe.Pointer(className)), 0, wsPopup,
@@ -123,7 +189,9 @@ func (w *webview) VideoWindow() (uintptr, error) {
 		return w.video, nil
 	}
 	// Never activated: focus stays with the page whichever layout is showing.
-	h := w.createOwned(wsExNoActivate)
+	// Its own class, for a background that is black rather than whatever the
+	// compositor left there -- see videoClass.
+	h := w.createOwnedOf(wsExNoActivate, videoClass())
 	if h == 0 {
 		return 0, errors.New("webview2: could not create the video window")
 	}
@@ -169,14 +237,28 @@ func (w *webview) enterOverlay() error {
 	if popup == 0 {
 		return errors.New("webview2: could not create the overlay window")
 	}
-	if err := ch.SetBackground(edge.COREWEBVIEW2_COLOR{}); err != nil {
-		_, _, _ = w32.User32DestroyWindow.Call(popup)
-		return err
-	}
 	setWindowContext(popup, overlayOf{w})
 	w.overlay = popup
 	w.syncVideo()
 	ch.Reparent(popup)
+	/*
+	 * Transparent **after** the reparent, not before.
+	 *
+	 * Reparenting re-creates the controller's visual, and the new one starts
+	 * at WebView2's default background, which is white. A colour set before
+	 * the move is therefore discarded by the very next line -- which is what
+	 * made starting a film flash white while stopping one did not, because
+	 * leaveOverlay below happened to set its background the other way round.
+	 *
+	 * Found by asymmetry rather than by reading: the two halves were changed
+	 * together and only the half that sets after reparenting came out clean.
+	 */
+	if err := ch.SetBackground(edge.COREWEBVIEW2_COLOR{}); err != nil {
+		ch.Reparent(w.hwnd)
+		w.overlay = 0
+		_, _, _ = w32.User32DestroyWindow.Call(popup)
+		return err
+	}
 	_, _, _ = procSetActiveWindow.Call(popup)
 	ch.Focus()
 	return nil
