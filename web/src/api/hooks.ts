@@ -54,6 +54,8 @@ import type {
   SubtitleTrack,
   Trailer,
   Trending,
+  Peer,
+  PeerInvite,
   PeerPresence,
 } from "./types";
 
@@ -3360,6 +3362,111 @@ export function useSetSharing() {
  * swept by every prefix invalidation aimed at the other thing, and the two
  * lists answer different questions from different servers.
  */
+/*
+ * Pairing: the half of ADR 0044 that had no way in.
+ *
+ * `internal/peer` and every route below have existed since August. Nothing in
+ * the client called any of them, so a server could not be introduced to another
+ * one at all — which also meant the People screen's peers section, built and
+ * correct since ADR 0045, could never show a single person.
+ *
+ * Keyed `["peers"]`, which is **not** a prefix of `["peer-presence"]` and must
+ * not become one. They answer different questions at different costs: this one
+ * reads local rows, that one calls every paired server and takes seconds. A key
+ * that swept both would put a network round trip behind every unpair.
+ */
+export function usePeers() {
+  return useQuery({
+    queryKey: ["peers"],
+    queryFn: ({ signal }) => apiGet<{ peers: Peer[] }>("/api/peers", signal),
+  });
+}
+
+/*
+ * This server's own invite, to hand to somebody else.
+ *
+ * Fetched on demand rather than with the page: it answers `409 not_reachable`
+ * on a server no other machine can reach, and that is a real answer worth
+ * showing at the moment somebody asks for an invite — not an error on a
+ * settings screen they opened for something else.
+ *
+ * `staleTime: Infinity` because it cannot change while the server runs: the
+ * identity is generated once and never regenerated (ADR 0044), and a server
+ * that gained an address did so by restarting.
+ */
+export function usePeerInvite(enabled: boolean) {
+  return useQuery({
+    queryKey: ["peer-invite"],
+    queryFn: ({ signal }) => apiGet<PeerInvite>("/api/peers/invite", signal),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/*
+ * Adding a peer from a pasted invite.
+ *
+ * Invalidates the presence list as well as the peer list, because the thing a
+ * person is about to look at is *the other screen*: they pasted an invite in
+ * order to see somebody, and People is where that happens. A write that
+ * changes what a list holds must invalidate that list, and the question is
+ * always what somebody could be looking at.
+ */
+export function useAddPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (invite: string) => apiSend("/api/peers", "POST", { invite }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["peers"] });
+      void qc.invalidateQueries({ queryKey: ["peer-presence"] });
+    },
+  });
+}
+
+/*
+ * Un-pairing, which is the revocation mechanism rather than a tidy-up.
+ *
+ * The peer's addresses and roster go with it through the schema's cascade, and
+ * in later phases so does every grant naming one of its people (ADR 0046). So
+ * both lists are invalidated: a person who has just revoked somebody must not
+ * be left looking at them.
+ */
+export function useRemovePeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fingerprint: string) =>
+      apiSend(`/api/peers/${encodeURIComponent(fingerprint)}`, "DELETE"),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["peers"] });
+      void qc.invalidateQueries({ queryKey: ["peer-presence"] });
+    },
+  });
+}
+
+/*
+ * Whether *your* account appears in the roster handed to paired servers.
+ *
+ * Self-service and deliberately has no administrator version: an account that
+ * has not opted in cannot be named by anybody's grant in either direction, and
+ * a switch somebody else can flip is not consent (ADR 0045 §6).
+ *
+ * This is the gate everything else waits behind. Until somebody turns it on,
+ * every paired server's roster is empty and the People screen has nothing to
+ * draw, however many peers exist.
+ */
+export function useSetPeerVisibility() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (visible: boolean) =>
+      apiSend("/api/profile/peer-visibility", "PUT", { visible }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["me"] });
+      void qc.invalidateQueries({ queryKey: ["peer-presence"] });
+    },
+  });
+}
+
 export function usePeerPresence() {
   return useQuery({
     queryKey: ["peer-presence"],

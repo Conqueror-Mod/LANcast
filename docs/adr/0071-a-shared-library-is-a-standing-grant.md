@@ -37,11 +37,26 @@ More than it looks like, and none of it is visible:
 | Live presence between paired servers ([ADR 0045](0045-live-presence-between-paired-servers.md)) | **Built** — `internal/presence` |
 | Remote guests in a room ([ADR 0046](0046-remote-guests.md)) | Accepted, not built |
 | Host caps remote streaming ([ADR 0047](0047-remote-streaming-is-capped-by-the-host.md)) | Accepted, not built |
-| **Any client UI for any of the above** | **None.** No screen calls `/api/peers` or `/api/presence` |
+| Presence in the People screen | **Built** — `PeersSection`, with per-person grants |
+| **Pairing UI** — invite out, invite in, list, unpair | **Missing** |
+| **Roster opt-in** — `PUT /api/profile/peer-visibility` | **Missing** |
 
-So "add a Friend" is largely surfacing machinery that exists. "See what they are
-watching" is the same. **"Browse their library" is the new thing**, and it is
-new in a way that touches the security boundary rather than extending it.
+So "add a Friend" is largely surfacing machinery that exists, and "see what they
+are watching" is *already surfaced* — the People screen has listed people on
+paired servers since ADR 0045, with the three-way distinction between not
+sharing, offline and idle that page insists on.
+
+An earlier draft of this table said there was no client UI at all. That was
+wrong: it came from grepping for `/api/peers` in the client, which finds
+nothing because the screen reaches presence through a hook at
+`/api/people/peers`. The correction matters because it narrows the work — what
+is missing is not the whole surface but the two ends of the chain, and the
+chain is broken at both. **Nothing can pair**, and **no account can opt into a
+peer's roster**, which the contract requires before anybody's grant may name
+them. So the presence section that exists cannot show a single person today.
+
+**"Browse their library" is still the new thing**, and it is new in a way that
+touches the security boundary rather than extending it.
 
 ### Why the guest cannot simply be widened
 
