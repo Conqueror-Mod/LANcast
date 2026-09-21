@@ -44,7 +44,7 @@ func TestFallingBackToTheOtherDeliveryDoesNotHoldTwoSlots(t *testing.T) {
 
 	// The player gave up on segments and asked for a progressive stream. That is
 	// one viewer changing their mind, not a second viewer arriving.
-	m.supersedeOutput("u1", 6688, HLS)
+	m.supersedeOutput("u1", 6688, HLS, spareFinished)
 
 	if _, ok := m.sessions["segments"]; ok {
 		t.Error("the abandoned HLS session still holds a slot after the fallback")
@@ -57,7 +57,7 @@ func TestSupersedingOneViewerLeavesAnother(t *testing.T) {
 	m.sessions["mine"] = viewerSession("mine", 6688, "u1", HLS, 0, 0)
 	m.sessions["theirs"] = viewerSession("theirs", 6688, "u2", HLS, 0, 0)
 
-	m.supersedeOutput("u1", 6688, HLS)
+	m.supersedeOutput("u1", 6688, HLS, spareFinished)
 
 	if _, ok := m.sessions["theirs"]; !ok {
 		t.Error("another account watching the same film lost its session")
@@ -73,7 +73,7 @@ func TestAnAnonymousOwnerIsNeverCollapsed(t *testing.T) {
 	m := NewManager(t.TempDir(), quiet())
 	m.sessions["a"] = viewerSession("a", 6688, "", HLS, 0, 0)
 
-	m.supersedeOutput("", 6688, HLS)
+	m.supersedeOutput("", 6688, HLS, spareFinished)
 
 	if _, ok := m.sessions["a"]; !ok {
 		t.Error("an anonymous session was collapsed into another")

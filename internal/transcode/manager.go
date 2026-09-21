@@ -535,10 +535,30 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 	// Before reserve, so replacing a stream cannot fail on a ceiling that the
 	// stream being replaced is what filled.
 	m.supersede(owner, itemID)
-	// And the other delivery method for the same film: arriving here means this
-	// player has fallen back from HLS, and the segments it walked away from are
-	// a slot spent on nobody.
-	m.supersedeOutput(owner, itemID, HLS)
+	/*
+	 * And the other delivery method for the same film: arriving here means this
+	 * player has fallen back from HLS, and the segments it walked away from are
+	 * a slot spent on nobody.
+	 *
+	 * Unless the remux **finished**, in which case they are the opposite of
+	 * that. The claim this rested on was that "the way it abandoned will never
+	 * be asked for again", which holds when a fallback is permanent and is
+	 * false when it is impatience: the next attempt goes back to HLS, and
+	 * EnsureHLS reuses a session at the same offset before superseding
+	 * anything.
+	 *
+	 * Measured on Jay and Silent Bob Reboot, where this cost the most it could.
+	 * A copy-plus-audio-encode ran 111 seconds of a 118-second job; the viewer
+	 * gave up, the client fell back, and starting progressive destroyed the
+	 * session **six seconds from done**. The retry then found index.m3u8 gone
+	 * and started the whole thing again.
+	 *
+	 * A finished session costs no CPU -- its ffmpeg has exited and its segments
+	 * are files -- so what it holds is a slot, and an unread one is idle and
+	 * reclaimed by reserve's eviction under pressure. It yields rather than
+	 * blocks, which is the right trade against redoing two minutes of work.
+	 */
+	m.supersedeOutput(owner, itemID, HLS, spareFinished)
 
 	if err := m.reserve(); err != nil {
 		return nil, err
@@ -615,7 +635,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	// And any progressive stream of the same film for the same viewer: they are
 	// watching it this way now, and the other one is holding a slot for a player
 	// that has moved on.
-	m.supersedeOutput(owner, itemID, Progressive)
+	m.supersedeOutput(owner, itemID, Progressive, spareNothing)
 
 	if err := m.reserve(); err != nil {
 		return nil, err
@@ -701,7 +721,7 @@ func (m *Manager) WaitForFile(ctx context.Context, s *Session, name string, time
  * a second viewer end the first one's film.
  */
 func (m *Manager) supersede(owner string, itemID int64) {
-	m.supersedeOutput(owner, itemID, Progressive)
+	m.supersedeOutput(owner, itemID, Progressive, spareNothing)
 }
 
 /*
@@ -717,17 +737,44 @@ func (m *Manager) supersede(owner string, itemID int64) {
  * Falling back is not a second viewer. It is one player deciding the first way
  * did not work, and the way it abandoned will never be asked for again.
  */
-func (m *Manager) supersedeOutput(owner string, itemID int64, out Output) {
+/*
+ * spare says which sessions supersedeOutput must leave alone.
+ *
+ * A named type rather than a bool at the call site, because the two callers
+ * want opposite things for good reasons and `false` would say neither of them.
+ */
+type spare int
+
+const (
+	// spareNothing stops every matching session. What a seek wants: each one
+	// is a position this viewer has left and nothing will ask for its segments
+	// again, finished or not.
+	spareNothing spare = iota
+	// spareFinished leaves a session whose remux is complete. What a fallback
+	// wants: the next attempt may come straight back to it, and it costs no
+	// CPU in the meantime.
+	spareFinished
+)
+
+func (m *Manager) supersedeOutput(owner string, itemID int64, out Output, keep spare) {
 	if owner == "" {
 		return
 	}
 	m.mu.Lock()
 	var dead []*Session
 	for id, s := range m.sessions {
-		if s.Output == out && s.ItemID == itemID && s.Owner == owner {
-			dead = append(dead, s)
-			delete(m.sessions, id)
+		if s.Output != out || s.ItemID != itemID || s.Owner != owner {
+			continue
 		}
+		if keep == spareFinished && s.remuxFinished() {
+			// Left in the map on purpose: it is what the next request for this
+			// offset will reuse, and reserve evicts it if a slot is needed.
+			m.log.Info("sparing a finished transcode", "session", s.ID,
+				"item", itemID, "age_ms", time.Since(s.Started()).Milliseconds())
+			continue
+		}
+		dead = append(dead, s)
+		delete(m.sessions, id)
 	}
 	m.mu.Unlock()
 
