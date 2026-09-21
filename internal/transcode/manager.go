@@ -589,9 +589,18 @@ func (m *Manager) Progressive(ctx context.Context, itemID int64, owner string, o
 	 * different faults with different fixes. An evening was spent narrowing
 	 * that by elimination — polling the log and screenshotting the player to
 	 * prove the timecode had not reset — which this field answers outright.
+	 *
+	 * `audio_start_at` is beside it for the same reason, one release later.
+	 * A copied resume takes its audio from a second input seeked to the
+	 * keyframe (ADR 0072), and when that number is zero the alignment is
+	 * simply not applied — no error, no warning, and a stream that plays.
+	 * The symptom is several seconds of picture with no sound after a seek,
+	 * which reads as a stutter rather than as a decision, and it shipped in
+	 * v0.9.32 without anyone being able to see which half had failed.
 	 */
 	m.log.Info("transcode started", "session", s.ID, "item", itemID,
 		"output", "progressive", "start_at", o.StartAt,
+		"audio_start_at", o.AudioStartAt,
 		"video", o.Decision.VideoAction,
 		"audio", o.Decision.AudioAction, "reason", o.Decision.Reason)
 
@@ -665,6 +674,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	}
 	m.log.Info("transcode started", "session", id, "item", itemID,
 		"output", "hls", "start_at", o.StartAt,
+		"audio_start_at", o.AudioStartAt,
 		"video", o.Decision.VideoAction, "audio", o.Decision.AudioAction,
 		"playlist", playlist, "segment_seconds", s.SegmentLength,
 		"reason", o.Decision.Reason)
