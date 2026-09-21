@@ -1,6 +1,6 @@
 # ADR 0071 — A shared library is a standing grant
 
-Date: 2026-09-20 · Status: proposed
+Date: 2026-09-20 · Status: proposed · Revised 2026-09-20 with the per-share ceiling (§6)
 
 Answers the question [ADR 0046](0046-remote-guests.md) and the
 [federation plan](../watch-together-federation-plan.md) both named and both
@@ -182,67 +182,116 @@ it changes nothing decided here, and it is worth having only once the rest is
 stable enough to be boring. Naming it now is what keeps it from arriving by
 accident as somebody "just merging the lists".
 
-### 6. Sharing is decided per library, and a ceiling is the next revision
+### 6. A share may carry a ceiling, and an unrated item is not shown
 
-A host's ceiling is about the host's household
+A host's own ceiling is about the host's household
 ([ADR 0015](0015-multi-user-accounts.md)): it is applied per account, and a
-friend deliberately has no account (§2). So **this revision decides sharing at
-library granularity only**. A library a host would not show a child is a
-library they should not share.
+friend deliberately has no account (§2). So a friend's limit rides on **the
+share** — per peer, per library — chosen from the same rungs an account ceiling
+offers.
 
-That is a real limit rather than a comfortable one, and it is worth saying
-plainly: on the reference library 511 of 1,212 films are R-rated, so
-all-or-nothing on "films" is a blunt instrument.
-
-**A per-share ceiling is the intended next revision of this ADR**, not a
-follow-up feature, and two things have to be settled first.
-
-**The data is now there, which it was not.** A rating ceiling was previously
-impossible on evidence: `content_rating` was NULL on every row. Counted again
-on 2026-09-20, before writing this:
+This was deferred in the first draft on the grounds that `content_rating` was
+NULL on every row, which made any ceiling a way to hide a whole library.
+Counted again on 2026-09-20:
 
 | kind | rows | rated |
 |---|---|---|
 | movie | 1,212 | **1,202** |
 | show | 13 | **13** |
-| episode | 995 | 0 — correct; an episode is judged by its show |
-| track, album, artist, photo, gallery, collection, season | — | 0 — correct; no certificate exists |
+| episode | 995 | 0 — correct; judged by its show, two levels up if need be |
+| track, album, artist, playlist, photo, gallery | — | 0 — correct; no certificate exists |
 
-Twelve distinct labels, mostly MPAA with a few TV-\* and BBFC strays — which is
-the mixed-system case `internal/rating`'s age ladder exists to reconcile. So a
-ceiling would now hide **ten films**, not a library. Count the rows before
-designing on a column; this ADR's first draft did not, and said the opposite.
+Twelve distinct labels, mostly MPAA with TV-\* and BBFC strays, which is the
+mixed-system case `internal/rating`'s age ladder exists to reconcile. A ceiling
+now costs **ten films**, not a library. Count the rows before designing on a
+column; the first draft did not, and said the opposite of the truth.
 
-**The enforcement path fails open for a principal that is not an account**, and
-that is the finding that makes this a revision rather than a patch.
-`ceilingPredicate` and `rating.AllowedLabels` already take a *label* rather
-than a user, so the listing half generalises untouched. But
-`Store.MayPlay` — the object-level check that "stands between a hand-written
-request and a file" — resolves the ceiling by reading `max_content_rating`
-**from the `user` row**, and returns *permitted* when there is no such row:
+#### The ceiling belongs to the principal, not the route
+
+A friend who may not browse an R film **may not join a room playing one
+either.** This is the consequence worth stating because it is the one that
+would otherwise be discovered as a hole: ADR 0046 derives a guest's permission
+from the room, so without this rule "join a room" is a complete bypass of every
+ceiling a host set — the host starts the film, and the permission follows the
+room rather than the person.
+
+It costs something real. A host who has set a ceiling for a friend cannot then
+invite that friend into a film above it, and the refusal will arrive at an
+awkward moment. That is the correct trade: a ceiling somebody can be walked
+around by being invited is not a ceiling.
+
+#### An unrated item is not shown, and the host is told what that costs
+
+Blocked, the same as the local rule, and for a stronger reason rather than
+merely for consistency. An unrated item in a shared library is the one most
+likely to be personal — home video is exactly where the gap sits — and a
+ceiling that let the unrated through would leak precisely the material nobody
+meant to share.
+
+The cost is that those items are **invisible with no explanation**, which is
+the same discomfort the local rule already carries. The mitigation is not to
+explain it to the friend, who should not be told what they cannot see, but to
+tell **the host at the moment they choose**: *"12 of 1,212 items in this
+library are unrated and will not be shown."* A number the host sees beats a
+mystery the friend does not.
+
+#### Kinds with no certificate are exempt, so some shares cannot be limited
+
+`artist`, `album`, `track`, `playlist`, `gallery` and `photo` are exempt from
+every ceiling, because no certificate exists for them and never will. A ceiling
+on a music or picture share is therefore **a control that does nothing**, and
+the UI must say so rather than offer it — an inert switch on a sharing screen
+is worse than no switch, because it reads as a limit that was applied.
+
+#### Two ceilings may both apply, and neither server needs to know the other's
+
+A friend's own household may limit its own people; that is their server's
+business, applied by their server to their accounts. The host's share ceiling
+is applied by the host. They compose without coordination, and neither side
+has to disclose its rules to the other — which is the same property the
+identity model gives everywhere else here.
+
+#### Resolution is split from application, because fail-open must not travel
+
+This is the finding that made the ceiling a revision rather than a patch, and
+it is a real defect waiting in the current code for anyone who wires a friend
+in naively.
+
+`ceilingPredicate` and `rating.AllowedLabels` already take a **label** rather
+than a user, so every listing, filter and search generalises untouched. But
+`Store.MayPlay` — the object-level check that the code itself describes as
+standing "between a hand-written request and a file" — resolves the ceiling by
+reading `max_content_rating` **from the `user` row**, and returns *permitted*
+when there is no such row:
 
 > No account row means no ceiling, not a refusal. […] an unsecured loopback
 > server has no accounts at all and reads everything as `store.LocalUserID`, so
 > refusing the unknown emptied the entire library for the one configuration
 > that is meant to work out of the box.
 
-That default is correct for every caller it has today and **wrong for a
-friend**, who has no `user` row by design and would therefore be admitted past
-any ceiling. Wiring a friend into the existing signature would fail open
-silently, which is the worst available outcome and would look like it worked.
+That default is right for every caller it has today and **wrong for a friend**,
+who has no `user` row by design and would therefore be admitted past every
+ceiling. Worse, it would fail **silently and openly** — the feature would look
+like it worked.
 
-So the next revision must split the two jobs the function currently does:
-resolving *which* ceiling applies to a principal (account → the user row;
-friend → the share), and applying a ceiling to an item (already pure in
-effect). Fail-open stays for the account case that needs it; a friend
-principal that cannot be resolved is refused.
+So the two jobs that function currently does are separated:
 
-The other question it must answer is the uncomfortable one, and it is the same
-half that already bites locally: **what a ceiling does with an unrated item.**
-Locally, unrated is blocked — right for a household, where the alternative
-leaves a hole exactly where home video sits. For a friend it is harsher: those
-ten films simply do not exist to them, with nothing to explain why. That is a
-decision, not a detail.
+- **Resolving** which ceiling applies to a principal. An account resolves from
+  its `user` row and keeps today's fail-open, for the reason quoted. A friend
+  resolves from the share record. **A friend whose ceiling cannot be resolved
+  is refused**, which is the opposite default and deliberately so.
+- **Applying** a ceiling to an item, which is already pure in effect and is the
+  half that needs no change.
+
+A friend principal must never reach the account-resolving path. That is a
+property worth a test that fails loudly rather than a comment.
+
+#### Lowering a ceiling takes effect on the next request
+
+Not mid-stream on the segment already being served, and not retroactively on
+what was watched. The same rule presence uses for revocation, for the same
+reason: a permission check answers about now, and a stream already in flight
+finishes.
 
 ### 7. Nothing here is reachable without UI, and the UI is the feature
 
@@ -293,6 +342,14 @@ principal doing two jobs is worse than two principals, but two is still more
 than one, and the middleware that tells them apart is now security-critical
 code.
 
+**The ceiling's default inverts between them**, which is the sharpest edge in
+this document. An account with no resolvable ceiling is permitted, because an
+unsecured loopback server has no accounts and refusing the unknown would empty
+the library. A friend with no resolvable ceiling is refused. Two opposite
+defaults in one area is how a mistake becomes invisible, so §6 requires the
+resolving step to be a separate, tested thing rather than a branch inside the
+check.
+
 **`internal/together`, `internal/peer` and `internal/presence` finally get a
 screen**, which is overdue independently of this.
 
@@ -310,15 +367,17 @@ federation plan took.
 whether a host may refuse to convert for a friend at all and offer only what
 direct-plays.
 
-**A per-share rating ceiling.** §6 makes it the next revision of this ADR
-rather than an open question, and names the two things it has to settle: the
-fail-open in `Store.MayPlay` for a non-account principal, and what a ceiling
-does with an unrated item.
+**Whether the ten unrated films can be rated.** §6 blocks unrated items and
+tells the host the count. Backfilling those ten is worth doing and is not a
+decision — it changes the number, not the rule.
+
+**Whether a host may set a *floor* rather than a ceiling**, or exclude named
+items from a share. Both are finer control than a library, which §1 rejected
+for good reasons that apply again here.
 
 **A "new on this server" shelf on Home.** §5 defers it deliberately.
 
 ## Revisit when
 
-This ADR is revised for a per-share ceiling (§6) — which is expected, not
-hypothetical — or when somebody wants a friend to write something to the
-host's server (§4).
+Somebody wants a friend to write something to the host's server (§4), or a
+second sharing shape is wanted that a library cannot express (§1).
