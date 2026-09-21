@@ -190,3 +190,21 @@ func Finished(playlist string) bool {
 	}
 	return false
 }
+
+/*
+ * remuxFinished reports whether this session's own playlist is closed, which
+ * is to say ffmpeg has written everything it is going to.
+ *
+ * A read of one small file, and deliberately non-blocking: WaitForEndlist is
+ * the version that waits, and the callers of this one are holding a lock or
+ * deciding whether to destroy something. Unreadable counts as unfinished,
+ * because the only thing a caller does with "finished" is spare the session,
+ * and sparing on a failed read would keep a slot on a guess.
+ */
+func (s *Session) remuxFinished() bool {
+	body, err := os.ReadFile(filepath.Join(s.Dir, "index.m3u8"))
+	if err != nil {
+		return false
+	}
+	return Finished(string(body))
+}
