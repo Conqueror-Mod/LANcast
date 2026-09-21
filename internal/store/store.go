@@ -41,7 +41,27 @@ func Open(path string) (*Store, error) {
 	// Every transaction in this package writes, so taking the lock up front
 	// costs no read concurrency — it converts an instant failure into the wait
 	// busy_timeout was always meant to provide.
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_txlock=immediate", path)
+	/*
+	 * journal_size_limit gives the disk back after a burst of writing.
+	 *
+	 * WAL mode reuses the write-ahead log rather than shrinking it, so a file
+	 * that grew during a scan stays that size for ever. Found on a real
+	 * install: `lancast.db` at 118MB with a `lancast.db-wal` of **122MB**
+	 * beside it, idle, larger than the database it belongs to. Nothing was
+	 * leaking -- all 109 row-returning queries in this package close their
+	 * rows -- the file had simply never been asked to shrink.
+	 *
+	 * This does not throttle anything. A burst still grows the log as far as
+	 * it needs to; the limit only says how much of it to hand back once a
+	 * checkpoint has made the space reusable. 32MB is comfortably more than
+	 * ordinary running needs and returns about ninety after a scan.
+	 */
+	const walLimitBytes = 32 << 20
+
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
+			"&_pragma=foreign_keys(1)&_pragma=journal_size_limit(%d)&_txlock=immediate",
+		path, walLimitBytes)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
