@@ -103,12 +103,12 @@ async function render() {
 }
 
 describe("the server's certificate fingerprint", () => {
-  it("shows the identity and the connection key, identity first", async () => {
+  it("shows the identity and the certificate fingerprint, identity first", async () => {
     await render();
     const text = host.textContent ?? "";
 
     expect(text).toContain("Identity fingerprint");
-    expect(text).toContain("Connection key");
+    expect(text).toContain("TLS certificate fingerprint");
 
     /*
      * Order matters, and it is the whole correction. The identity is the
@@ -117,7 +117,7 @@ describe("the server's certificate fingerprint", () => {
      * reasons is what made the first version of this wrong.
      */
     expect(text.indexOf("Identity fingerprint")).toBeLessThan(
-      text.indexOf("Connection key"),
+      text.indexOf("TLS certificate fingerprint"),
     );
   });
 
@@ -142,7 +142,7 @@ describe("the server's certificate fingerprint", () => {
     expect(text.replace(/\s/g, "")).toContain(PIN.replace(/\s/g, ""));
   });
 
-  it("says what the connection key is for, since nobody arrives knowing", async () => {
+  it("says what the certificate fingerprint is for, since nobody arrives knowing", async () => {
     await render();
     const text = host.textContent ?? "";
     expect(text).toContain("another computer");
@@ -154,11 +154,11 @@ describe("the server's certificate fingerprint", () => {
    * empty or as a placeholder. It is also the one server nobody needs to
    * verify — nothing can reach it from another machine.
    */
-  it("omits the connection key when the server has no certificate", async () => {
+  it("omits the certificate fingerprint when the server has no certificate", async () => {
     fingerprint = "";
     await render();
     const text = host.textContent ?? "";
-    expect(text).not.toContain("Connection key");
+    expect(text).not.toContain("TLS certificate fingerprint");
     // The identity is unaffected: a loopback-only server still is somebody.
     expect(text).toContain("Identity fingerprint");
   });
