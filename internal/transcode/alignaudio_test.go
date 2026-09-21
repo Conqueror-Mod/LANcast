@@ -192,3 +192,64 @@ func TestLiveIsNotAligned(t *testing.T) {
 		t.Errorf("%d inputs, want 1: live has no resume", got)
 	}
 }
+
+/*
+ * The second input is inert without -copyts, and this is the test that would
+ * have caught that.
+ *
+ * ffmpeg normalises each input to its own seek point. The copied video starts
+ * at the keyframe *before* input 0's seek, so it carries a negative timestamp;
+ * clearing that shifts everything forward and lands the shift on the audio,
+ * moving it later by exactly the distance the second input had corrected.
+ *
+ * Measured against the installed service on a real browser resume: the shipped
+ * two-input form produced output identical to the single-input form to the
+ * millisecond, on both delivery paths. Every existing test in this file passed
+ * throughout, because they all assert the *shape* of the command and the shape
+ * was right. What was missing was the one flag that gives it an effect.
+ */
+func TestAlignedResumeKeepsTheSourceClock(t *testing.T) {
+	a := argsFor(Options{
+		Input: "film.mkv", Decision: copyVideoEncodeAudio(),
+		StartAt: 400, AudioStartAt: 399.649, AudioIndex: -1,
+	})
+
+	if countArg(a, "-copyts") != 1 {
+		t.Errorf("no -copyts: the two seeks are rebased apart and the "+
+			"alignment does nothing:\n%s", strings.Join(a, " "))
+	}
+
+	// -copyts leaves the stream on the film's clock, so it is put back to zero
+	// for the client. Both streams move together, so alignment is unaffected.
+	offs := valuesAfter(a, "-output_ts_offset")
+	if len(offs) != 1 || offs[0] != "-399.649" {
+		t.Errorf("output_ts_offset = %v, want one entry of -399.649 so the "+
+			"stream still starts at zero:\n%s", offs, strings.Join(a, " "))
+	}
+}
+
+// Neither flag belongs on a stream that is not being aligned: -copyts changes
+// how every downstream duration is read, and paying that on ordinary playback
+// would be a wide blast radius for no gain.
+func TestUnalignedResumeKeepsTheOrdinaryClock(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		o    Options
+	}{
+		{"resume at zero", Options{StartAt: 0, AudioStartAt: 0, AudioIndex: -1}},
+		{"no keyframe found", Options{StartAt: 400, AudioStartAt: 0, AudioIndex: -1}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			c.o.Input = "film.mkv"
+			c.o.Decision = copyVideoEncodeAudio()
+			a := argsFor(c.o)
+			if countArg(a, "-copyts") != 0 {
+				t.Errorf("-copyts on an unaligned stream:\n%s", strings.Join(a, " "))
+			}
+			if countArg(a, "-output_ts_offset") != 0 {
+				t.Errorf("-output_ts_offset on an unaligned stream:\n%s",
+					strings.Join(a, " "))
+			}
+		})
+	}
+}

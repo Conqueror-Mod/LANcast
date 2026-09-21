@@ -462,14 +462,16 @@ func Args(o Options) []string {
 	 * Reported from a phone as the picture running about two tenths of a
 	 * second behind the sound, on the 400s resume.
 	 *
-	 * What is *not* settled: those timestamps are internally consistent — the
-	 * file is saying the video has a lead-in before the audio starts — so a
-	 * player honouring them would show silent picture and then stay in sync.
-	 * Whether this is output that needs fixing or a player mishandling the
-	 * lead-in is decided by playing the same film from the start, where the
-	 * table above says it is clean. Do that before changing any of this:
-	 * timestamp handling is where a plausible fix quietly breaks three other
-	 * containers.
+	 * Settled 2026-09-21: it is output that needs fixing, and the symptom is
+	 * silent picture followed by audio that then stays in sync — exactly what
+	 * "internally consistent" predicted. Watched in a browser on a real
+	 * resume, then measured off the session's own segments.
+	 *
+	 * The caution about timestamp handling stands, and earned itself twice in
+	 * one afternoon: the second input did nothing at all without -copyts, and
+	 * -copyts in turn makes -t absolute, so a duration limit added later has
+	 * to be -to. There is no such limit today, which is the only reason this
+	 * change is as small as it is.
 	 */
 	copiedVideo := o.Decision.VideoAction == "copy"
 
@@ -484,6 +486,30 @@ func Args(o Options) []string {
 	 */
 	alignAudio := copiedVideo && o.StartAt > 0 && !o.Live &&
 		o.AudioStartAt > 0 && o.AudioStartAt <= o.StartAt
+
+	/*
+	 * -copyts is what makes the second input mean anything, and without it the
+	 * alignment below is an elaborate no-op.
+	 *
+	 * ffmpeg normalises each input to its own seek point. The copied video's
+	 * first frame is the keyframe *before* input 0's seek, so it carries a
+	 * negative timestamp; clearing that shifts the whole output forward, and
+	 * the shift lands on the already-correctly-seeked audio -- moving it later
+	 * by exactly the distance it was meant to correct. Measured on both
+	 * delivery paths, the two-input form produced output identical to the
+	 * single-input form to the millisecond.
+	 *
+	 * -copyts keeps both inputs on the source's own clock, where the two seeks
+	 * agree. Measured on the same file and resume:
+	 *
+	 *	two inputs, no -copyts   video 486.127  audio 488.978  +2.851
+	 *	two inputs, -copyts      video 486.127  audio 486.105  -0.022
+	 *
+	 * -0.022s is one AAC frame, which is the floor.
+	 */
+	if alignAudio {
+		a = append(a, "-copyts")
+	}
 
 	if o.StartAt > 0 && !o.Live {
 		switch {
@@ -643,6 +669,21 @@ func Args(o Options) []string {
 		a = append(a, "-map", fmt.Sprintf("%s:%d", audioFrom, o.AudioIndex))
 	} else {
 		a = append(a, "-map", audioFrom+":a:0?")
+	}
+
+	/*
+	 * -copyts leaves the output on the source's clock, so a resume at 489s
+	 * would hand the client a stream that starts at 489 rather than at zero.
+	 * The offset puts it back where every other stream this server produces
+	 * starts, so nothing downstream has to know which of the two forms built
+	 * it.
+	 *
+	 * It does not disturb the alignment: both streams move together, and the
+	 * measured gap after the offset is the same -0.022s.
+	 */
+	if alignAudio {
+		a = append(a, "-output_ts_offset",
+			strconv.FormatFloat(-o.AudioStartAt, 'f', 3, 64))
 	}
 
 	// Subtitles are dropped for now. Burning them in forces a video re-encode

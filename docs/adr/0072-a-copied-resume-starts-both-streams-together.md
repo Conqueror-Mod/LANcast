@@ -1,6 +1,6 @@
 # ADR 0072 — A copied resume starts both streams together
 
-Date: 2026-09-21 · Status: proposed
+Date: 2026-09-21 · Status: accepted, amended 2026-09-21 (see *Amendment*)
 
 Records a decision that has until now lived only in comments in
 [`internal/transcode/args.go`](../../internal/transcode/args.go), and changes
@@ -168,6 +168,67 @@ than trusting a doubtful answer.
 **This does not fix the drift for anyone already watching.** It applies to
 conversions started after it ships.
 
+## Amendment — the second input does nothing without `-copyts`
+
+**Added 2026-09-21, after this shipped in v0.9.32 and was found not to work.**
+
+The decision below is right and the implementation was incomplete. Verified
+against the installed service on a real browser resume of a copied-video file:
+the keyframe *is* found and passed to the transcoder, and the output is still
+misaligned by exactly the keyframe distance.
+
+```
+start_at=489 audio_start_at=486.127 video=copy audio=encode output=hls
+```
+
+First segment of that session — video first packet 0.083, audio first packet
+2.934. A gap of 2.851s against a keyframe distance of 2.873s. Reproduced at a
+second resume point: 7.674s against 7.696s.
+
+**Why.** ffmpeg normalises each input to its own seek point. The copied video's
+first frame is the keyframe *before* input 0's seek, so it carries a negative
+timestamp; clearing that shifts the whole output forward, and the shift lands
+on the already-correctly-seeked audio, moving it later by exactly the distance
+the second input had corrected. The two forms produce identical output:
+
+```
+                              video     audio     delta
+single input (pre-0072)       486.127   488.978   +2.851
+two inputs, as shipped        486.127   488.978   +2.851
+two inputs, -copyts           486.127   486.105   -0.022
+```
+
+Measured on both delivery paths. The first two rows are identical **to the
+millisecond**, on HLS and progressive alike — so the technique never worked
+anywhere, and §Decision's claim of "one AAC frame" was evidently measured with
+`-copyts` present by hand and shipped without it.
+
+`-copyts` keeps both inputs on the source's own clock, where the two seeks
+agree. `-output_ts_offset -<keyframe>` then puts the stream back at zero so
+nothing downstream has to know which form built it; both streams move together,
+so the measured gap stays at −0.022s, which is one AAC frame.
+
+**What this cost, and the lesson.** Every test in `alignaudio_test.go` passed
+throughout, because they assert the *shape* of the command — two inputs, two
+seeks, audio mapped from the second — and the shape was correct. The missing
+piece was the one flag that gives that shape an effect, and no test about shape
+can see it. `TestAlignedResumeKeepsTheSourceClock` now asserts the flag, and was
+confirmed to fail with it removed.
+
+It also stayed invisible for a release because a failed alignment is silent:
+`audio_start_at=0` and a full alignment produce the same successful stream with
+no error anywhere. That number is now in the `transcode started` log line, which
+is what distinguishes "no keyframe found" from "found and ignored" without
+pulling a live session's segments off disk.
+
+**Two constraints `-copyts` introduces**, neither of which bites today:
+
+- `-t` becomes absolute, so a duration limit added later must be `-to`. There is
+  no duration limit in the arguments today, which is the only reason this
+  change is three lines.
+- The output sits on the film's clock until `-output_ts_offset` moves it, so
+  the two must be changed together.
+
 ## What this does not decide
 
 **Whether the picture should start at the keyframe or the requested second.**
@@ -180,4 +241,6 @@ it.
 ## Revisit when
 
 A file is found whose keyframes ffprobe reports wrongly (§ Consequences), or
-ffmpeg's seek margin changes and the measurements in Context stop holding.
+ffmpeg's seek margin changes and the measurements in Context stop holding, or
+a duration limit is added to the transcode arguments — `-copyts` makes `-t`
+absolute and it would have to be `-to` (§ Amendment).
