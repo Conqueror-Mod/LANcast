@@ -24,15 +24,25 @@ internal/artwork/  content-addressed image cache
 internal/auth/     password hashing, server-side sessions
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
 internal/transcode/ ffmpeg pipeline: segmented file output and the live path
+internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
+internal/rating/   national certificates onto one ladder of ages
+internal/marker/   intro and credit detection
 internal/subtitle/ discovery, WebVTT conversion
 internal/playlist/ .m3u parsing and import (pure parser + importer)
 internal/livetv/   channel lists and EPG (its own parser, not playlist's)
-internal/together/ synchronised rooms; peer/, presence/, identity/ for other servers
+internal/together/ synchronised rooms, in memory, within one server
+internal/identity/ this server's Ed25519 identity (ADR 0044) — never regenerated
+internal/peer/     pairing: invites in and out, addresses, mutual state
+internal/presence/ who is watching what, across paired servers (ADR 0045)
 internal/plugin/   wazero sandbox, deny-by-default capabilities
 internal/api/      HTTP handlers
 internal/web/      embedded client assets (React source in web/, built to dist)
-cmd/lancast/       LANcast-Client: the window (clientwindow/, webview2/, certpin/)
-docs/adr/          decision records (50 and counting — read before re-deciding)
+internal/games/    installed Steam games, read locally (ADR 0066)
+internal/knownserver/ which servers this client trusts, and by which key (ADR 0070)
+cmd/lancast/       LANcast-Client. The window itself is internal/clientwindow,
+                   internal/webview2 and internal/certpin — not subdirectories
+                   of this one, which is only the entrypoint and its bindings.
+docs/adr/          decision records (71 and counting — read before re-deciding)
 ```
 
 ## Rules
