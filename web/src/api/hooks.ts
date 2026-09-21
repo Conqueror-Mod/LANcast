@@ -3461,7 +3461,20 @@ export function useSetPeerVisibility() {
     mutationFn: (visible: boolean) =>
       apiSend("/api/profile/peer-visibility", "PUT", { visible }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["me"] });
+      /*
+       * `auth-status`, which is where the signed-in user actually lives.
+       *
+       * This said `["me"]` first, which matches no query in this file. The
+       * write succeeded, the server was right, and the switch simply never
+       * reconciled -- it kept showing whatever was last clicked. For a privacy
+       * control that is the worst available failure: a screen telling somebody
+       * they are listed to other servers when they are not, or the reverse.
+       *
+       * Exactly the mistake CLAUDE.md names as the most-repeated in this
+       * project, and it is quiet every time: nothing fails, only the picture
+       * is stale.
+       */
+      void qc.invalidateQueries({ queryKey: ["auth-status"] });
       void qc.invalidateQueries({ queryKey: ["peer-presence"] });
     },
   });

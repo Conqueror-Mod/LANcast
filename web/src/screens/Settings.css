@@ -719,4 +719,12 @@
  */
 .set-row__main > .set-input {
   margin-top: 8px;
+  /*
+   * Full width inside a row, which `.set-input--wide` alone does not give it:
+   * that modifier is `flex: 1`, and `.set-row__main` is an ordinary block, so
+   * the flex grow has nothing to act on and the input keeps its default width.
+   * A box showing twenty-five characters of a three-hundred-character invite
+   * is one somebody cannot check before pressing Add.
+   */
+  width: 100%;
 }

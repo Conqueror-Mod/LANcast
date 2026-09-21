@@ -571,8 +571,15 @@ function PeerVisibility() {
           type="checkbox"
           checked={on}
           onChange={(e) => {
-            setPending(e.target.checked);
-            set.mutate(e.target.checked);
+            const next = e.target.checked;
+            setPending(next);
+            /*
+             * Put it back if the write fails. Without this a refused write
+             * leaves the switch claiming a state the server does not hold,
+             * and for a privacy control that is worse than an error: somebody
+             * reads it and believes they opted in, or out, when they did not.
+             */
+            set.mutate(next, { onError: () => setPending(null) });
           }}
         />
         <span>

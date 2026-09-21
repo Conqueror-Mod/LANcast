@@ -145,8 +145,14 @@ function AddPeer() {
           Paste the invite somebody sent you. Nothing is shared by pairing;
           you both decide separately what the other may see.
         </div>
+        {/*
+          Full width, because an invite is about three hundred characters and
+          a default-width box shows twenty-five of them. Somebody pasting one
+          cannot tell a complete paste from a truncated one, which is the only
+          check available to them before pressing Add.
+        */}
         <input
-          className="set-input"
+          className="set-input set-input--wide"
           placeholder="Paste an invite"
           aria-label="Paste an invite"
           value={invite}
