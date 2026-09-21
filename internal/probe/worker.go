@@ -337,3 +337,17 @@ func derefString(p *string) string {
 	}
 	return *p
 }
+
+/*
+ * KeyframeBefore asks where a copied video can actually start (ADR 0072).
+ *
+ * Delegated rather than exposing the prober, so the API keeps one probing
+ * dependency rather than two. Nil-safe for the same reason everything else
+ * here is: a server built without probing must degrade, not panic.
+ */
+func (w *Worker) KeyframeBefore(ctx context.Context, path string, at time.Duration) (time.Duration, bool) {
+	if w == nil || w.prober == nil {
+		return 0, false
+	}
+	return w.prober.KeyframeBefore(ctx, path, at)
+}
