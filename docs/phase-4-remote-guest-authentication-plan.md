@@ -104,10 +104,19 @@ Every refusal is the same refusal from outside. A verifier that distinguishes
 
 ### The nonce store
 
-In memory, keyed by `jti`, swept on expiry. Bounded, and the bound is a
-decision: a peer that floods nonces must not grow the host's memory without
-limit. Over the bound, refuse rather than evict — evicting the oldest makes
-replay possible again, which is the one thing this store exists to stop.
+In memory, swept on expiry, and bounded — a peer that floods nonces must not
+grow the host's memory without limit.
+
+**Keyed by issuer *and* `jti`, and bounded per issuer.** Written first as a
+single global bound keyed by `jti` alone, which is the obvious reading of
+"bounded" and is wrong twice over: one peer could spend a nonce another peer
+was about to use, and one peer flooding the bound would refuse every other
+peer's tickets. Both are a friend able to lock out the host's other friends.
+
+Over the bound, **refuse rather than evict**. Evicting the oldest makes that
+nonce spendable again, so anybody able to push entries through the store could
+replay at will — a denial of service against one peer is the cheaper failure
+than a replay vulnerability for all of them.
 
 Lost on restart, which is correct: every outstanding ticket expires in minutes,
 and the alternative is a durable table of credentials.
