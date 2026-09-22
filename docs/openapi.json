@@ -7403,6 +7403,49 @@
           }
         }
       }
+    },
+    "/peers/{fingerprint}/ticket": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "post": {
+        "operationId": "mintGuestTicket",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Mint a ticket admitting you to a paired server",
+        "description": "Signs a short-lived ticket with this server's identity key, naming the calling account and audience-bound to the peer (ADR 0046 §2). The peer is not contacted: it verifies the signature against the key it pinned at pairing.\n\nAny signed-in account may ask, **for itself only** — there is no route to mint one in somebody else's name, and an administrator has no special position. The pairing must be complete; a peer that is merely added has no confirmed key, so a ticket for it could not be verified.\n\nThe ticket says nothing about what may be reached. What the far server shows is resolved there, from what it granted this server (ADR 0071 §1), at the moment of each request.",
+        "responses": {
+          "200": {
+            "description": "A ticket to present to that peer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The pairing is not complete, so a ticket for it could not be verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12793,6 +12836,29 @@
             "type": "integer",
             "format": "int64",
             "description": "Unix seconds. Twenty-four hours after minting."
+          }
+        }
+      },
+      "GuestTicket": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "expires_at",
+          "peer"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "The signed ticket, presented to the peer as a bearer credential."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds. Short by design; mint another rather than holding one."
+          },
+          "peer": {
+            "type": "string",
+            "description": "The audience fingerprint this ticket is bound to."
           }
         }
       }

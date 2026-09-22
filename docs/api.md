@@ -215,6 +215,7 @@ ADR 0044 declines to build.
 | `POST /api/peers` | `{invite}` → adds a peer from a pasted invite. **Admin** |
 | `GET /api/peers/invite` | `{invite, fingerprint, fingerprint_display, name, addrs}` — this server's own invite, to hand out. **Admin** |
 | `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
+| `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
 
 Pairing is administrative and granting is not, which is why the first four are

@@ -388,6 +388,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/peers", s.adminOnly(s.addPeer))
 	mux.HandleFunc("GET /api/peers/invite", s.adminOnly(s.ourInvite))
 	mux.HandleFunc("DELETE /api/peers/{fingerprint}", s.adminOnly(s.removePeer))
+	// Not adminOnly: a ticket names the person asking, and every account is
+	// entitled to one for itself (ADR 0046 §2). An administrator has no
+	// special position here and there is deliberately no route to mint one in
+	// somebody else's name.
+	mux.HandleFunc("POST /api/peers/{fingerprint}/ticket", s.mintGuestTicket)
 
 	// Personal, not administrative: whether this account appears in the roster
 	// handed to peers. Beside the other thing an account decides about itself.

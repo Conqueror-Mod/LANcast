@@ -3378,6 +3378,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a ticket admitting you to a paired server
+         * @description Signs a short-lived ticket with this server's identity key, naming the calling account and audience-bound to the peer (ADR 0046 §2). The peer is not contacted: it verifies the signature against the key it pinned at pairing.
+         *
+         *     Any signed-in account may ask, **for itself only** — there is no route to mint one in somebody else's name, and an administrator has no special position. The pairing must be complete; a peer that is merely added has no confirmed key, so a ticket for it could not be verified.
+         *
+         *     The ticket says nothing about what may be reached. What the far server shows is resolved there, from what it granted this server (ADR 0071 §1), at the moment of each request.
+         */
+        post: operations["mintGuestTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5531,6 +5558,17 @@ export interface components {
              * @description Unix seconds. Twenty-four hours after minting.
              */
             expires_at: number;
+        };
+        GuestTicket: {
+            /** @description The signed ticket, presented to the peer as a bearer credential. */
+            ticket: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Short by design; mint another rather than holding one.
+             */
+            expires_at: number;
+            /** @description The audience fingerprint this ticket is bound to. */
+            peer: string;
         };
     };
     responses: {
@@ -11100,6 +11138,40 @@ export interface operations {
             };
             /** @description No such item */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    mintGuestTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ticket to present to that peer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestTicket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The pairing is not complete, so a ticket for it could not be verified */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
