@@ -2,7 +2,6 @@ package guestticket
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
 	"errors"
 	"strings"
 	"testing"
@@ -13,18 +12,17 @@ import (
 
 // two servers, so "the right key" and "a key" are never the same thing.
 type server struct {
-	priv ed25519.PrivateKey
-	pub  ed25519.PublicKey
-	fp   string
+	id identity.Identity
+	fp string
 }
 
 func newServer(t *testing.T) server {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	id, err := identity.LoadOrCreate(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return server{priv: priv, pub: pub, fp: identity.FingerprintOf(pub)}
+	return server{id: id, fp: id.Fingerprint()}
 }
 
 type fixture struct {
@@ -42,18 +40,14 @@ func newFixture(t *testing.T) fixture {
 	}
 }
 
-// pinned is what the host knows: the key it recorded at pairing, and nothing
-// about anybody it has not paired with.
-func (f fixture) pinned(issuer string) (ed25519.PublicKey, bool) {
-	if strings.EqualFold(issuer, identity.Normalize(f.georgia.fp)) {
-		return f.georgia.pub, true
-	}
-	return nil, false
+// pinned is what the host knows: the fingerprints it recorded at pairing, and
+// nothing about anybody it has not paired with.
+func (f fixture) pinned(issuer string) bool {
+	return strings.EqualFold(issuer, identity.Normalize(f.georgia.fp))
 }
 
 func (f fixture) claims() Claims {
 	return Claims{
-		Issuer:   f.georgia.fp,
 		Subject:  "u_georgia",
 		Audience: f.chris.fp,
 		Nonce:    "nonce-1",
@@ -64,7 +58,7 @@ func (f fixture) claims() Claims {
 
 func (f fixture) mint(t *testing.T, c Claims) string {
 	t.Helper()
-	tok, err := Mint(f.georgia.priv, c)
+	tok, err := Mint(f.georgia.id, c)
 	if err != nil {
 		t.Fatalf("mint: %v", err)
 	}
@@ -116,9 +110,7 @@ func TestEveryBadTicketIsRefused(t *testing.T) {
 		{
 			name: "issuer is not paired",
 			token: func() string {
-				c := f.claims()
-				c.Issuer = f.mallory.fp
-				tok, err := Mint(f.mallory.priv, c)
+				tok, err := Mint(f.mallory.id, f.claims())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -127,16 +119,17 @@ func TestEveryBadTicketIsRefused(t *testing.T) {
 			reason: "not a paired server",
 		},
 		{
-			name: "signed by the wrong key",
+			// Georgia's key in the payload so the pin passes, Mallory's
+			// signature over it. The substitution attack the key-in-ticket
+			// design has to survive: carrying the key must not mean trusting
+			// whoever assembled the bytes around it.
+			name: "georgia's key, mallory's signature",
 			token: func() string {
-				// Claims say Georgia, signature is Mallory's. The pinned key
-				// is Georgia's, so this is the substitution attack.
 				c := f.claims()
-				tok, err := Mint(f.mallory.priv, c)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return tok
+				c.Key = f.georgia.id.Public()
+				payload := c.encode()
+				sig := ed25519.Sign(f.mallory.id.Signer().(ed25519.PrivateKey), payload)
+				return enc.EncodeToString(payload) + "." + enc.EncodeToString(sig)
 			},
 			reason: "signature does not verify",
 		},
@@ -235,8 +228,9 @@ func TestASignatureOverAnotherDomainIsRefused(t *testing.T) {
 
 	// The same fields, signed under a different prefix — what a future format
 	// revision, or another feature reusing this key, would produce.
+	c.Key = f.georgia.id.Public()
 	payload := append([]byte("lancast-something-else/1"), c.encode()[len(domain):]...)
-	sig := ed25519.Sign(f.georgia.priv, payload)
+	sig := ed25519.Sign(f.georgia.id.Signer().(ed25519.PrivateKey), payload)
 	tok := enc.EncodeToString(payload) + "." + enc.EncodeToString(sig)
 
 	_, err := Verify(tok, f.chris.fp, f.pinned, f.now)
@@ -253,8 +247,9 @@ func TestASignatureOverAnotherDomainIsRefused(t *testing.T) {
 func TestTrailingBytesAreRefused(t *testing.T) {
 	f := newFixture(t)
 	c := f.claims()
+	c.Key = f.georgia.id.Public()
 	payload := append(c.encode(), 0x00)
-	sig := ed25519.Sign(f.georgia.priv, payload)
+	sig := ed25519.Sign(f.georgia.id.Signer().(ed25519.PrivateKey), payload)
 	tok := enc.EncodeToString(payload) + "." + enc.EncodeToString(sig)
 
 	_, err := Verify(tok, f.chris.fp, f.pinned, f.now)
@@ -300,7 +295,7 @@ func TestMintRefusesAnUnsafeTicket(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			cl := f.claims()
 			c.break_(&cl)
-			if _, err := Mint(f.georgia.priv, cl); err == nil {
+			if _, err := Mint(f.georgia.id, cl); err == nil {
 				t.Error("minted it anyway")
 			}
 		})
@@ -312,14 +307,14 @@ func TestMintRefusesAnUnsafeTicket(t *testing.T) {
 func TestEncodingRoundTrips(t *testing.T) {
 	f := newFixture(t)
 	want := f.claims()
-	want.Issuer = identity.Normalize(want.Issuer)
+	want.Key = f.georgia.id.Public()
 	want.Audience = identity.Normalize(want.Audience)
 
 	got, err := decode(want.encode())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Issuer != want.Issuer || got.Subject != want.Subject ||
+	if got.Issuer() != want.Issuer() || got.Subject != want.Subject ||
 		got.Audience != want.Audience || got.Nonce != want.Nonce ||
 		!got.IssuedAt.Equal(want.IssuedAt) || !got.Expires.Equal(want.Expires) {
 		t.Errorf("round trip changed the claims:\n got %+v\nwant %+v", got, want)

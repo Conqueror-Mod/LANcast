@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/ed25519"
 	"net/http"
 	"testing"
 	"time"
@@ -66,13 +65,10 @@ func TestAMintedTicketVerifiesAtThePeer(t *testing.T) {
 	 * on a ticket nobody could actually redeem.
 	 */
 	ours := h.srvAPI.ident
-	keyFor := func(issuer string) (ed25519.PublicKey, bool) {
-		if issuer == identity.Normalize(ours.Fingerprint()) {
-			return ours.Public(), true
-		}
-		return nil, false
+	paired := func(issuer string) bool {
+		return issuer == identity.Normalize(ours.Fingerprint())
 	}
-	claims, err := guestticket.Verify(got.Ticket, georgia.Fingerprint(), keyFor, time.Now())
+	claims, err := guestticket.Verify(got.Ticket, georgia.Fingerprint(), paired, time.Now())
 	if err != nil {
 		t.Fatalf("the peer would refuse this ticket: %v (%s)", err, guestticket.Reason(err))
 	}
@@ -97,9 +93,8 @@ func TestATicketNamesTheAccountThatAsked(t *testing.T) {
 		t.Helper()
 		var got mintedTicket
 		decode(t, resp, &got)
-		ours := h.srvAPI.ident
 		claims, err := guestticket.Verify(got.Ticket, georgia.Fingerprint(),
-			func(string) (ed25519.PublicKey, bool) { return ours.Public(), true }, time.Now())
+			func(string) bool { return true }, time.Now())
 		if err != nil {
 			t.Fatalf("verify: %v", err)
 		}
@@ -210,14 +205,13 @@ func TestEachTicketHasItsOwnNonce(t *testing.T) {
 	georgia := anotherServer(t)
 	pairedPeer(t, h, georgia, "Utopia")
 
-	ours := h.srvAPI.ident
-	keyFor := func(string) (ed25519.PublicKey, bool) { return ours.Public(), true }
+	paired := func(string) bool { return true }
 
 	seen := map[string]bool{}
 	for i := range 5 {
 		var got mintedTicket
 		decode(t, h.authed(t, "POST", "/api/peers/"+georgia.Fingerprint()+"/ticket", nil), &got)
-		claims, err := guestticket.Verify(got.Ticket, georgia.Fingerprint(), keyFor, time.Now())
+		claims, err := guestticket.Verify(got.Ticket, georgia.Fingerprint(), paired, time.Now())
 		if err != nil {
 			t.Fatalf("ticket %d: %v", i, err)
 		}

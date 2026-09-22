@@ -102,8 +102,7 @@ func (s *Server) mintGuestTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	tok, err := guestticket.Mint(s.ident.Signer(), guestticket.Claims{
-		Issuer:   s.ident.Fingerprint(),
+	tok, err := guestticket.Mint(s.ident, guestticket.Claims{
 		Subject:  sess.UserID,
 		Audience: p.Fingerprint,
 		Nonce:    nonce,

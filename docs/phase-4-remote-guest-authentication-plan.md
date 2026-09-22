@@ -63,12 +63,26 @@ Minted by the friend's server, signed with its identity key.
 
 | claim | meaning | why it is not optional |
 |---|---|---|
-| `iss` | issuer fingerprint | which pinned key verifies it |
+| key | the issuing server's public key | the issuer is *derived* from it — see below |
 | `sub` | the person, as that server's own account id | the same id already in the host's `remote_person`, so it joins |
 | `aud` | audience fingerprint — the host | without it, a ticket for Chris replays against every peer she has |
 | `iat` | issued at | skew window, and audit |
 | `exp` | expiry, short | bounds replay to the nonce window |
 | `jti` | nonce | spent on use, remembered until `exp` |
+
+**The key travels in the ticket, and the issuer is derived from it.** Written
+first as an `iss` fingerprint verified against a stored key — and nothing
+stores a peer's key. An invite carries only the fingerprint, and mTLS gets away
+with that because the key arrives on the connection; a ticket carries only a
+signature. Recording the key at pairing would need a migration *and* has a
+bootstrap problem: the key is not known until a TLS connection happens, so a
+friend could not redeem before one had.
+
+A fingerprint is SHA-256 of a key, so a fingerprint pinned at pairing is
+already a commitment to exactly one key. The host hashes the key the ticket
+carries, compares against what it pinned, and verifies with it. Equally strong,
+no migration, no bootstrap gap — and stating the issuer separately is dropped,
+because two fields that must agree are two fields that can disagree.
 
 **It does not name what it may reach.** No library ids, no room id, no
 permissions. The host resolves what this person's server was granted, from its

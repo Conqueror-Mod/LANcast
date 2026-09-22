@@ -114,8 +114,26 @@ func Reason(err error) string {
  * themselves.
  */
 type Claims struct {
-	// Issuer is the fingerprint of the server that signed this.
-	Issuer string
+	/*
+	 * Key is the issuing server's public key, and the issuer is derived from
+	 * it rather than stated beside it.
+	 *
+	 * A fingerprint is SHA-256 of the key, so a fingerprint pinned at pairing
+	 * is already a commitment to exactly one key. Carrying the key therefore
+	 * discloses nothing and proves everything: the host hashes it, compares
+	 * against what it pinned, and verifies with it. Supplying a different key
+	 * that hashed the same would be a SHA-256 collision.
+	 *
+	 * The alternative was recording the key at pairing, which needs a schema
+	 * change and has a bootstrap problem — an invite carries only the
+	 * fingerprint, so the key is not known until a TLS connection happens, and
+	 * a friend could not redeem a ticket before one had.
+	 *
+	 * Stating the issuer as a separate field was rejected for a smaller
+	 * reason: two fields that must agree are two fields that can disagree, and
+	 * the disagreement would have to be checked somewhere.
+	 */
+	Key ed25519.PublicKey
 	// Subject is the person, as their own server's account id.
 	Subject string
 	// Audience is the fingerprint of the server this ticket is for.
@@ -130,37 +148,39 @@ type Claims struct {
 	Expires  time.Time
 }
 
+// Issuer is the fingerprint of the server that signed this, derived from the
+// key it carries.
+func (c Claims) Issuer() string { return identity.FingerprintOf(c.Key) }
+
 var enc = base64.RawURLEncoding
 
 /*
- * Mint signs a ticket. The signer is the issuing server's identity key
- * (ADR 0044), which is the only key a peer has pinned for it.
+ * Mint signs a ticket with this server's identity (ADR 0044) and carries its
+ * public key, which is the only key a peer has pinned for it.
  *
  * Every field is required. A ticket missing an audience is the replayable one,
  * a ticket missing a nonce cannot be spent, and a ticket with no expiry does
  * not expire — each is a security property rather than a formatting nicety, so
  * none of them defaults.
  */
-func Mint(signer crypto.Signer, c Claims) (string, error) {
-	c.Issuer = identity.Normalize(c.Issuer)
+func Mint(id identity.Identity, c Claims) (string, error) {
+	c.Key = id.Public()
 	c.Audience = identity.Normalize(c.Audience)
 
 	if err := c.validate(); err != nil {
 		return "", err
 	}
-	priv, ok := signer.(ed25519.PrivateKey)
-	if !ok {
-		return "", errors.New("guestticket: identity key is not ed25519")
-	}
-
 	payload := c.encode()
-	sig := ed25519.Sign(priv, payload)
+	sig, err := id.Signer().Sign(nil, payload, crypto.Hash(0))
+	if err != nil {
+		return "", err
+	}
 	return enc.EncodeToString(payload) + "." + enc.EncodeToString(sig), nil
 }
 
 func (c Claims) validate() error {
 	for _, f := range []struct{ name, v string }{
-		{"issuer", c.Issuer}, {"subject", c.Subject},
+		{"subject", c.Subject},
 		{"audience", c.Audience}, {"nonce", c.Nonce},
 	} {
 		if f.v == "" {
@@ -169,6 +189,9 @@ func (c Claims) validate() error {
 		if len(f.v) > maxField {
 			return errors.New("guestticket: " + f.name + " is too long")
 		}
+	}
+	if len(c.Key) != ed25519.PublicKeySize {
+		return errors.New("guestticket: the issuing key is missing or the wrong size")
 	}
 	if c.IssuedAt.IsZero() || c.Expires.IsZero() {
 		return errors.New("guestticket: a ticket without times does not expire")
@@ -184,10 +207,13 @@ func (c Claims) validate() error {
 // One representation per ticket, so the verifier signs over exactly what the
 // minter did.
 func (c Claims) encode() []byte {
-	out := make([]byte, 0, len(domain)+len(c.Issuer)+len(c.Subject)+
+	out := make([]byte, 0, len(domain)+ed25519.PublicKeySize+len(c.Subject)+
 		len(c.Audience)+len(c.Nonce)+8+8+8)
 	out = append(out, domain...)
-	for _, f := range []string{c.Issuer, c.Subject, c.Audience, c.Nonce} {
+	// The key is fixed width, so it needs no length prefix and cannot be
+	// confused with the fields that follow.
+	out = append(out, c.Key...)
+	for _, f := range []string{c.Subject, c.Audience, c.Nonce} {
 		out = binary.BigEndian.AppendUint16(out, uint16(len(f)))
 		out = append(out, f...)
 	}
@@ -206,8 +232,14 @@ func decode(b []byte) (Claims, error) {
 	}
 	p := b[len(domain):]
 
-	fields := make([]string, 0, 4)
-	for range 4 {
+	if len(p) < ed25519.PublicKeySize {
+		return c, refuse("truncated key")
+	}
+	c.Key = ed25519.PublicKey(append([]byte(nil), p[:ed25519.PublicKeySize]...))
+	p = p[ed25519.PublicKeySize:]
+
+	fields := make([]string, 0, 3)
+	for range 3 {
 		if len(p) < 2 {
 			return c, refuse("truncated field length")
 		}
@@ -222,7 +254,7 @@ func decode(b []byte) (Claims, error) {
 	if len(p) != 16 {
 		return c, refuse("times are the wrong size")
 	}
-	c.Issuer, c.Subject, c.Audience, c.Nonce = fields[0], fields[1], fields[2], fields[3]
+	c.Subject, c.Audience, c.Nonce = fields[0], fields[1], fields[2]
 	c.IssuedAt = time.Unix(int64(binary.BigEndian.Uint64(p[:8])), 0)
 	c.Expires = time.Unix(int64(binary.BigEndian.Uint64(p[8:])), 0)
 	return c, nil
@@ -246,10 +278,13 @@ const Skew = 60 * time.Second
 /*
  * Verify checks a ticket for this server and returns what it asserts.
  *
- * keyFor is how the caller supplies the key pinned at pairing, and returning
- * false is how it says "not a paired server". Injecting it keeps this package
- * free of the store and makes the pairing check impossible to skip: there is
- * no verification path that does not go through it.
+ * isPaired is how the caller answers "have we paired with this fingerprint".
+ * Injecting it keeps this package free of the store and makes the pairing
+ * check impossible to skip: there is no verification path around it.
+ *
+ * It takes a fingerprint rather than returning a key because the key travels
+ * in the ticket — see Claims.Key. The caller therefore needs to store nothing
+ * beyond what pairing already records.
  *
  * The nonce is **not** checked here. Spending it is the caller's, because it
  * needs state and this does not — see the nonce store. A caller that verifies
@@ -260,7 +295,7 @@ const Skew = 60 * time.Second
  * so that rubbish costs nothing to refuse, and the signature precedes the time
  * checks so that a valid-looking expiry on an unsigned ticket is never read.
  */
-func Verify(token, audience string, keyFor func(issuer string) (ed25519.PublicKey, bool), now time.Time) (Claims, error) {
+func Verify(token, audience string, isPaired func(issuer string) bool, now time.Time) (Claims, error) {
 	var zero Claims
 	if len(token) > MaxTokenLen {
 		return zero, refuse("token too long")
@@ -292,11 +327,16 @@ func Verify(token, audience string, keyFor func(issuer string) (ed25519.PublicKe
 		return zero, refuse("audience is another server")
 	}
 
-	key, ok := keyFor(identity.Normalize(c.Issuer))
-	if !ok {
+	/*
+	 * The pin. The fingerprint recorded at pairing is SHA-256 of a key, so
+	 * asking whether *this* key's fingerprint is one we paired with is exactly
+	 * the pinning check — and the key is then the right one to verify with by
+	 * construction.
+	 */
+	if !isPaired(c.Issuer()) {
 		return zero, refuse("issuer is not a paired server")
 	}
-	if !ed25519.Verify(key, payload, sig) {
+	if !ed25519.Verify(c.Key, payload, sig) {
 		return zero, refuse("signature does not verify")
 	}
 
