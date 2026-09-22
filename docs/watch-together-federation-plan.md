@@ -228,6 +228,12 @@ start this phase ahead of reading it.**
 **Large, and the security-critical phase. Budget review time, not just build
 time.**
 
+Planned in detail in
+[the Phase 4 implementation plan](phase-4-remote-guest-authentication-plan.md),
+which also records the one question neither ADR settles: a friend session
+(ADR 0071) has no room to die with, so its lifetime has to be decided rather
+than inherited.
+
 The flow, and the reason it is worth the complexity:
 
 1. Georgia's client asks **her own server** for a ticket for peer *Chris*.
