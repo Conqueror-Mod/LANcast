@@ -167,7 +167,7 @@ func TestAnEpisodeIsJudgedByItsShow(t *testing.T) {
 	ctx := context.Background()
 	child := ceilingUser(t, f.st, "PG")
 
-	ok, err := f.st.MayPlay(ctx, child.ID, f.episode)
+	ok, err := f.st.MayPlay(ctx, Account(child.ID), f.episode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestAnEpisodeIsJudgedByItsShow(t *testing.T) {
 
 	// And the other direction: the inheritance must not block what it permits.
 	teen := ceilingUser(t, f.st, "TV-MA")
-	if ok, _ := f.st.MayPlay(ctx, teen.ID, f.episode); !ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(teen.ID), f.episode); !ok {
 		t.Error("the same episode was refused to an account whose ceiling allows it")
 	}
 }
@@ -191,13 +191,13 @@ func TestPlaybackIsRefusedEvenWhenNobodyAskedForAListing(t *testing.T) {
 	ctx := context.Background()
 	child := ceilingUser(t, f.st, "PG")
 
-	if ok, _ := f.st.MayPlay(ctx, child.ID, f.film); ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.film); ok {
 		t.Error("an R film was authorised for a PG account")
 	}
-	if ok, _ := f.st.MayPlay(ctx, child.ID, f.kids); !ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.kids); !ok {
 		t.Error("a G film was refused to a PG account")
 	}
-	if ok, _ := f.st.MayPlay(ctx, child.ID, f.homeVid); ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.homeVid); ok {
 		t.Error("an unrated film was authorised for a PG account")
 	}
 }
@@ -210,7 +210,7 @@ func TestAnAccountWithNoCeilingPlaysAnything(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []int64{f.film, f.homeVid, f.episode} {
-		if ok, _ := f.st.MayPlay(ctx, adult.ID, id); !ok {
+		if ok, _ := f.st.MayPlay(ctx, Account(adult.ID), id); !ok {
 			t.Errorf("item %d was refused to an account with no ceiling", id)
 		}
 	}
@@ -229,7 +229,7 @@ func TestAnIdWithNoAccountHasNoCeiling(t *testing.T) {
 	 * none is not restricted.
 	 */
 	f := seedForCeiling(t)
-	if ok, _ := f.st.MayPlay(context.Background(), LocalUserID, f.film); !ok {
+	if ok, _ := f.st.MayPlay(context.Background(), Account(LocalUserID), f.film); !ok {
 		t.Error("the local user of an unsecured server was refused its own library")
 	}
 }
@@ -347,7 +347,7 @@ func TestACeilingDoesNotEmptyAMusicOrPictureLibrary(t *testing.T) {
 			t.Errorf("a %s was hidden by a content rating ceiling", c.kind)
 		}
 
-		if ok, _ := st.MayPlay(ctx, child.ID, id); !ok {
+		if ok, _ := st.MayPlay(ctx, Account(child.ID), id); !ok {
 			t.Errorf("a %s was refused playback under a content rating ceiling", c.kind)
 		}
 	}
@@ -360,10 +360,10 @@ func TestTheExemptionDoesNotReachFilmAndTelevision(t *testing.T) {
 	ctx := context.Background()
 	child := ceilingUser(t, f.st, "G")
 
-	if ok, _ := f.st.MayPlay(ctx, child.ID, f.homeVid); ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.homeVid); ok {
 		t.Error("an unrated film was let through by the music exemption")
 	}
-	if ok, _ := f.st.MayPlay(ctx, child.ID, f.episode); ok {
+	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.episode); ok {
 		t.Error("an episode of a TV-MA show was let through by the music exemption")
 	}
 }

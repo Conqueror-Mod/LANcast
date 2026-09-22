@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 48
+const CurrentSchemaVersion = 49
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -87,6 +87,7 @@ var migrations = []migration{
 	{version: 46, sql: schemaRevision46},
 	{version: 47, sql: schemaRevision47},
 	{version: 48, sql: schemaRevision48},
+	{version: 49, sql: schemaRevision49},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1650,4 +1651,48 @@ const schemaRevision48 = `
 ALTER TABLE user ADD COLUMN preferred_audio_lang TEXT NOT NULL DEFAULT '';
 ALTER TABLE user ADD COLUMN preferred_subtitle_lang TEXT NOT NULL DEFAULT '';
 ALTER TABLE user ADD COLUMN subtitle_mode TEXT NOT NULL DEFAULT '';
+`
+
+/*
+ * Revision 49 — a shared library is a standing grant
+ * ([ADR 0071](../../docs/adr/0071-a-shared-library-is-a-standing-grant.md)).
+ *
+ * One row per (peer, library). The shape is the decision, the same way
+ * `presence_grant` in revision 28 was: not a `shared` column on `library`,
+ * which would be a grant to *every* paired server wearing a per-peer disguise,
+ * and not a row per item, which is not a unit anybody reasons about.
+ *
+ * **The absence of a row is the default**, which is how "off by default"
+ * becomes true rather than merely intended — there is no column to have been
+ * initialised wrongly, and no migration in which anything starts being shared.
+ * Pairing grants nothing; it records that two servers know each other.
+ *
+ * **It cascades from both ends, and that is the revocation mechanism.** From
+ * `peer`, so unpairing takes away every share with one statement and nothing
+ * per-library to clean up — the property ADR 0044 was designed for. From
+ * `library`, so deleting a library does not leave a grant naming something
+ * that is gone.
+ *
+ * `ceiling` is the per-share age limit (ADR 0071 §6), empty for none. It lives
+ * here rather than on the peer because the unit of the decision is the share:
+ * a host may reasonably share films with a limit and music without one, and
+ * music cannot carry a limit at all since no certificate exists for it.
+ *
+ * It is deliberately **not** a foreign key to anything in `rating`: the ladder
+ * is code, the labels arrive from providers in twelve spellings, and a
+ * constraint here would turn a new certificate system into a failed write in
+ * the scanner rather than an unrated item. `rating.Known` is the check, at the
+ * point of use.
+ */
+const schemaRevision49 = `
+CREATE TABLE IF NOT EXISTS library_share (
+    fingerprint TEXT    NOT NULL REFERENCES peer(fingerprint) ON DELETE CASCADE,
+    library_id  INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    ceiling     TEXT    NOT NULL DEFAULT '',
+    shared_at   INTEGER NOT NULL,
+    PRIMARY KEY (fingerprint, library_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_share_library
+    ON library_share(library_id);
 `

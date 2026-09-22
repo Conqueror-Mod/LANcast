@@ -1,6 +1,6 @@
 # ADR 0071 — A shared library is a standing grant
 
-Date: 2026-09-20 · Status: proposed · Revised 2026-09-20 with the per-share ceiling (§6)
+Date: 2026-09-20 · Status: accepted · Revised 2026-09-20 with the per-share ceiling (§6)
 
 Answers the question [ADR 0046](0046-remote-guests.md) and the
 [federation plan](../watch-together-federation-plan.md) both named and both
