@@ -2581,7 +2581,11 @@ func (s *Store) GetItem(ctx context.Context, id int64, userID string) (*Item, er
 		return nil, ErrNotFound
 	}
 	if err == nil {
-		if allowed, cerr := s.MayPlay(ctx, userID, id); cerr == nil && !allowed {
+		// An error here is also a refusal. The account path cannot currently
+		// produce one, but a friend's can — a question this check could not
+		// answer must not resolve to "yes" at the only place that stands
+		// between a request and a file (ADR 0071 §6).
+		if allowed, cerr := s.MayPlay(ctx, Account(userID), id); cerr != nil || !allowed {
 			return nil, ErrNotFound
 		}
 	}

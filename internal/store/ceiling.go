@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"lancast/internal/rating"
@@ -119,50 +120,79 @@ func ceilingPredicate(ceiling string) (string, []any) {
 }
 
 /*
- * MayPlay reports whether an account's ceiling permits one item.
+ * Principal is who a permission question is about.
  *
- * This is the half that matters. A listing that hides a tile is a convenience;
- * this is the check that stands between a hand-written request and a file. It
- * takes an item id rather than an Item so that a caller cannot pass a struct it
- * assembled from something the client sent.
+ * It exists because the two kinds are both strings. An account id and a peer
+ * fingerprint are indistinguishable to a compiler, and ADR 0071 §6 names the
+ * confusion between them as a real defect waiting in this code: a friend has no
+ * `user` row by design, and the account path answers *permitted* when there is
+ * no row. Pass a fingerprint where a user id was expected and every ceiling a
+ * host set is bypassed — silently, and looking like it worked.
  *
- * An account with no ceiling, an item that does not exist, and a caller with no
- * account at all all take the fast path: there is no limit to apply. A missing
- * item is somebody else's 404 to report, and answering "forbidden" here would
- * turn a wrong id into a claim about what this library holds.
+ * So the two are constructed differently and cannot be mixed by accident. The
+ * fields are unexported: there is no way to build one of these except by
+ * saying which kind it is.
  */
-func (s *Store) MayPlay(ctx context.Context, userID string, itemID int64) (bool, error) {
-	if userID == "" {
-		return true, nil
-	}
-	var ceiling string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT max_content_rating FROM user WHERE id = ?`, userID).Scan(&ceiling)
-	if err != nil {
-		/*
-		 * No account row means no ceiling, not a refusal.
-		 *
-		 * This started out the other way — an id naming no account looked like
-		 * a stale or forged session, so it was refused — and the store's own
-		 * tests caught what that actually does. An unsecured loopback server
-		 * has no accounts at all and reads everything as store.LocalUserID, so
-		 * refusing the unknown emptied the entire library for the one
-		 * configuration that is meant to work out of the box.
-		 *
-		 * The deeper error was making this function do two jobs. Deciding
-		 * whether a session is real belongs to the session layer, which does it
-		 * on every request; this one answers what a ceiling permits, and an
-		 * account that has none is not restricted.
-		 */
-		return true, nil
-	}
-	if !rating.Known(ceiling) {
-		return true, nil
+type Principal struct {
+	account string
+	peer    string
+}
+
+// Account names one of this server's own people. Empty is the unsecured
+// loopback case, which has no accounts at all and no ceiling to apply.
+func Account(userID string) Principal { return Principal{account: userID} }
+
+// Friend names a paired server. Its permission comes from what that server was
+// granted, never from a user row (ADR 0071 §2).
+func Friend(fingerprint string) Principal { return Principal{peer: fingerprint} }
+
+/*
+ * resolveCeiling answers which ceiling applies to a principal, and the two
+ * kinds fail in opposite directions **on purpose**.
+ *
+ * An account with no row resolves to no ceiling, for the reason that default
+ * was written: an unsecured loopback server has no accounts at all and reads
+ * everything as store.LocalUserID, so refusing the unknown emptied the entire
+ * library for the one configuration meant to work out of the box.
+ *
+ * A friend whose share cannot be found is refused. There is no equivalent
+ * configuration to protect — a friend is admitted by a ticket from a server
+ * this one paired with, and a grant that is missing means it was never made or
+ * has been taken away. Both of those are "no".
+ */
+func (s *Store) resolveCeiling(ctx context.Context, who Principal, itemID int64) (string, error) {
+	if who.peer != "" {
+		var libraryID int64
+		err := s.db.QueryRowContext(ctx,
+			`SELECT library_id FROM media_item WHERE id = ?`, itemID).Scan(&libraryID)
+		if err != nil {
+			// An item that cannot be placed in a library cannot be shown to
+			// belong to a share, so it is not shown at all.
+			return "", ErrNotShared
+		}
+		return s.CeilingFor(ctx, who.peer, libraryID)
 	}
 
+	if who.account == "" {
+		return "", nil
+	}
+	var ceiling string
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT max_content_rating FROM user WHERE id = ?`, who.account).Scan(&ceiling); err != nil {
+		return "", nil
+	}
+	return ceiling, nil
+}
+
+/*
+ * ceilingPermits applies a ceiling to one item. The half that needed no
+ * change: it was already about a label and an item rather than about who is
+ * asking, which is why every listing, filter and search generalised untouched.
+ */
+func (s *Store) ceilingPermits(ctx context.Context, ceiling string, itemID int64) (bool, error) {
 	var effective *string
 	var kind string
-	err = s.db.QueryRowContext(ctx,
+	err := s.db.QueryRowContext(ctx,
 		`SELECT `+effectiveRating+`, media_item.kind FROM media_item WHERE media_item.id = ?`,
 		itemID).Scan(&effective, &kind)
 	if err != nil {
@@ -180,6 +210,36 @@ func (s *Store) MayPlay(ctx context.Context, userID string, itemID int64) (bool,
 		return false, nil
 	}
 	return rating.Allowed(*effective, ceiling), nil
+}
+
+/*
+ * MayPlay reports whether a principal's ceiling permits one item.
+ *
+ * This is the half that matters. A listing that hides a tile is a convenience;
+ * this is the check that stands between a hand-written request and a file. It
+ * takes an item id rather than an Item so that a caller cannot pass a struct it
+ * assembled from something the client sent.
+ *
+ * Refusal is (false, nil). An error means the question could not be answered,
+ * which callers must also treat as no — see GetItem, which does.
+ *
+ * An item that does not exist is somebody else's 404 to report for an account:
+ * answering "forbidden" here would turn a wrong id into a claim about what this
+ * library holds. For a friend it is a refusal, because a friend has no business
+ * learning the difference either way.
+ */
+func (s *Store) MayPlay(ctx context.Context, who Principal, itemID int64) (bool, error) {
+	ceiling, err := s.resolveCeiling(ctx, who, itemID)
+	if errors.Is(err, ErrNotShared) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if ceiling == "" || !rating.Known(ceiling) {
+		return true, nil
+	}
+	return s.ceilingPermits(ctx, ceiling, itemID)
 }
 
 /*

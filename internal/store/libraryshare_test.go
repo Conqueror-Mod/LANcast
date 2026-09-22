@@ -233,3 +233,104 @@ func TestUnratedCountIgnoresKindsWithNoCertificate(t *testing.T) {
 			"certificate exists for a track", unrated, total)
 	}
 }
+
+/*
+ * The test ADR 0071 §6 asks for by name: one that fails loudly if a friend
+ * ever reaches the account-resolving path.
+ *
+ * Both principals are strings underneath, and the two paths fail in opposite
+ * directions — an account with no row resolves to no ceiling, a friend with no
+ * share is refused. Confuse them and every ceiling a host set is bypassed
+ * silently, which is the defect the split exists to prevent.
+ *
+ * So an account is planted whose id *is* the fingerprint, with no ceiling of
+ * its own. If Friend(fp) ever resolved through the user table it would find
+ * that row, read "no ceiling", and permit. The only way this passes is if the
+ * friend path never looks there.
+ */
+func TestAFriendNeverResolvesThroughTheUserTable(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+
+	if err := f.st.AddPeer(ctx, samplePeer(fpA)); err != nil {
+		t.Fatal(err)
+	}
+	// An account whose id collides with the fingerprint, with no ceiling —
+	// the row that would fail open if the paths were confused.
+	if _, err := f.st.db.ExecContext(ctx,
+		`INSERT INTO user (id, name, password_hash, role, created_at)
+		 VALUES (?, 'collision', 'x', 'member', 0)`, fpA); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing has been shared with this peer.
+	if ok, err := f.st.MayPlay(ctx, Friend(fpA), f.kids); err != nil || ok {
+		t.Errorf("friend with no share: allowed=%v err=%v — want refused. "+
+			"An account row with the same id must not be consulted", ok, err)
+	}
+}
+
+// With a share and no ceiling, a friend sees what the library holds — the
+// ordinary case, and the one that would break if the fix were "refuse friends".
+func TestASharedLibraryWithNoCeilingPermits(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+	if err := f.st.AddPeer(ctx, samplePeer(fpA)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ShareLibrary(ctx, fpA, f.lib.ID, "", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, id := range []int64{f.film, f.kids, f.episode} {
+		if ok, err := f.st.MayPlay(ctx, Friend(fpA), id); err != nil || !ok {
+			t.Errorf("item %d: allowed=%v err=%v, want permitted", id, ok, err)
+		}
+	}
+}
+
+// The share's ceiling applies to the friend, including the rule that an
+// unrated item is not shown (ADR 0071 §6).
+func TestAShareCeilingLimitsTheFriend(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+	if err := f.st.AddPeer(ctx, samplePeer(fpA)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ShareLibrary(ctx, fpA, f.lib.ID, "PG", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.kids); !ok {
+		t.Error("a G film is under a PG ceiling and must be permitted")
+	}
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.film); ok {
+		t.Error("an R film is over a PG ceiling and must be refused")
+	}
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.homeVid); ok {
+		t.Error("an unrated item must not be shown to a friend under a ceiling")
+	}
+}
+
+// Un-sharing takes effect on the next request (ADR 0071 §6), so the same
+// principal that was permitted a moment ago is refused now.
+func TestUnsharingRefusesTheNextRequest(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+	if err := f.st.AddPeer(ctx, samplePeer(fpA)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ShareLibrary(ctx, fpA, f.lib.ID, "", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.kids); !ok {
+		t.Fatal("fixture is wrong: the share should permit before it is removed")
+	}
+
+	if err := f.st.UnshareLibrary(ctx, fpA, f.lib.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.kids); ok {
+		t.Error("still permitted after the share was removed")
+	}
+}
