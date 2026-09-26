@@ -57,6 +57,7 @@ import type {
   Peer,
   PeerInvite,
   PeerPresence,
+  SharedLibrary,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -3631,6 +3632,63 @@ export function useSetLanguagePreferences() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["language-preferences"] });
       qc.invalidateQueries({ queryKey: ["item"] });
+    },
+  });
+}
+
+/*
+ * What one paired server may see (ADR 0071 §1).
+ *
+ * Keyed `["peer-shares", fingerprint]` — deliberately **not** `["peers", …]`.
+ * `["peers"]` is invalidated whenever the peer list changes, and this answer
+ * is about a different thing at a different cost; sharing it would put a
+ * refetch of every peer's shares behind every unpair. The project's own rule:
+ * do not let a query key be a sibling of the thing callers invalidate.
+ */
+export function usePeerShares(fingerprint: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["peer-shares", fingerprint],
+    enabled: enabled && fingerprint !== "",
+    queryFn: ({ signal }) =>
+      apiGet<{ libraries: SharedLibrary[] }>(
+        `/api/peers/${encodeURIComponent(fingerprint)}/shares`,
+        signal,
+      ),
+  });
+}
+
+/*
+ * Share a library, or change its limit.
+ *
+ * Invalidates this peer's shares and nothing else. What a *friend* can see
+ * changes, but nothing on this server's own screens does — the host's own
+ * browsing is unaffected by who else may look at it.
+ */
+export function useSetPeerShare(fingerprint: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ library, ceiling }: { library: number; ceiling: string }) =>
+      apiSend(
+        `/api/peers/${encodeURIComponent(fingerprint)}/shares/${library}`,
+        "PUT",
+        { ceiling },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["peer-shares", fingerprint] });
+    },
+  });
+}
+
+export function useUnsetPeerShare(fingerprint: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (library: number) =>
+      apiSend(
+        `/api/peers/${encodeURIComponent(fingerprint)}/shares/${library}`,
+        "DELETE",
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["peer-shares", fingerprint] });
     },
   });
 }

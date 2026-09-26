@@ -271,3 +271,112 @@
   cursor: pointer;
 }
 
+
+/*
+ * Choosing what a paired server may see (ADR 0071 §7).
+ *
+ * Folded away behind a button rather than open on the page. The People screen
+ * is read far more often than it is changed — "is Georgia online" — and a list
+ * of every library with a checkbox beside it would make a settings form out of
+ * a status page.
+ */
+.peer-shares {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.peer-shares__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.peer-shares__toggle:hover,
+.peer-shares__toggle:focus-visible {
+  color: var(--text);
+}
+
+.peer-shares__count {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.peer-shares__body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * flex-shrink: 0 on the rows.
+ *
+ * In a flex column that may gain a max-height later, items shrink to fit
+ * rather than overflowing — collapsing to near-zero height with every style
+ * still reading as applied. Set up front rather than diagnosed later.
+ */
+.peer-shares__row {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.peer-shares__lib {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.peer-shares__lib-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-shares__limit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.peer-shares__limit-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  color: var(--text-dim);
+}
+
+/*
+ * What a limit costs, and what a limit that cannot apply would be. Quiet, but
+ * on the row rather than behind anything: the host has to see it at the moment
+ * they choose, which is the whole mitigation ADR 0071 §6 offers for items that
+ * vanish from a friend's view with no explanation.
+ */
+.peer-shares__cost,
+.peer-shares__note {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.peer-shares__note {
+  margin-top: 4px;
+}

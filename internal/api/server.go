@@ -403,6 +403,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/peers/{fingerprint}/ticket", s.mintGuestTicket)
 
 	/*
+	 * What a paired server may see. Administrative for the reason in
+	 * libraryshare.go: it is a decision about this server's content, not an
+	 * exercise of anybody's personal consent -- which is exactly why the
+	 * presence grants next door are not gated this way.
+	 */
+	mux.HandleFunc("GET /api/peers/{fingerprint}/shares", s.adminOnly(s.listShares))
+	mux.HandleFunc("PUT /api/peers/{fingerprint}/shares/{library}", s.adminOnly(s.putShare))
+	mux.HandleFunc("DELETE /api/peers/{fingerprint}/shares/{library}", s.adminOnly(s.deleteShare))
+
+	/*
 	 * Redemption, on the host. No session gate: this is how somebody who has
 	 * none gets one, and the ticket is the credential (ADR 0046 §2).
 	 */

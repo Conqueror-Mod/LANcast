@@ -310,6 +310,16 @@ export type Peer = components["schemas"]["Peer"];
 export type PeerInvite = components["schemas"]["PeerInvite"];
 
 /*
+ * One library and what a paired server may see of it (ADR 0071 §1).
+ *
+ * `supports_ceiling` is false where no certificate exists and never will —
+ * music, pictures. The UI must *say* a limit does not apply rather than offer
+ * one that does nothing: an inert switch on a sharing screen reads as a limit
+ * that was applied.
+ */
+export type SharedLibrary = components["schemas"]["SharedLibrary"];
+
+/*
  * A work claimed by more than one file (ADR 0042).
  *
  * LANcast reports these and resolves none of them. A shared provider id is

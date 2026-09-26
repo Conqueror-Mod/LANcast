@@ -215,10 +215,19 @@ ADR 0044 declines to build.
 | `POST /api/peers` | `{invite}` → adds a peer from a pasted invite. **Admin** |
 | `GET /api/peers/invite` | `{invite, fingerprint, fingerprint_display, name, addrs}` — this server's own invite, to hand out. **Admin** |
 | `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
+| `GET /api/peers/{fingerprint}/shares` | `{libraries: [...]}` — every library, whether this peer may see it, its limit, and what a limit would cost. **Admin** |
+| `PUT /api/peers/{fingerprint}/shares/{library}` | `{ceiling}` — shares a library, or changes its limit. **Admin** |
+| `DELETE /api/peers/{fingerprint}/shares/{library}` | Stops sharing, from the peer's next request. **Admin** |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
+
+Sharing is administrative for the same reason pairing is: it is a decision
+about this server's *content*, not an exercise of anybody's personal consent —
+which is exactly why the presence grants below are **not** gated that way. A
+limit is refused on a library whose contents carry no certificate, rather than
+stored and ignored (ADR 0071 §6).
 
 Guest routes answer CORS for the origin of a **currently paired** peer, and
 nothing else does. Never `*`, never with credentials — the guest credential is

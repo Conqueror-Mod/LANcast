@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { RATING_RUNGS } from "@/lib/ratings";
 import { formatBytes } from "@/lib/format";
 import {
   useItem,
@@ -141,17 +142,9 @@ function ProviderKey({
   );
 }
 
-/*
- * The ceilings offered, in order.
- *
- * A short list rather than every label internal/rating can place. The full
- * table carries six national systems so that *items* from any of them can be
- * judged; offering all of them here would ask a household to choose between
- * "15" and "TV-14" as though the difference meant something to them. These are
- * the rungs somebody actually thinks in, and an item rated in another system is
- * still placed against whichever one is chosen.
- */
-const RATING_CEILINGS = ["G", "PG", "PG-13", "TV-14", "R"];
+// The rungs, shared with the peer-sharing screen so the two cannot drift
+// apart (ADR 0071 §6).
+const RATING_CEILINGS = RATING_RUNGS;
 
 function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
   const del = useDeleteUser();

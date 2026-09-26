@@ -3455,6 +3455,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What this peer may see
+         * @description Administrators only. Every library, whether this peer has been granted it, its limit, and — for libraries whose contents carry a certificate — how many items a limit would hide for being unrated.
+         *
+         *     That count is reported for unshared libraries too, because the host needs it *before* deciding. A blocked unrated item vanishes from the friend's view with no explanation, and the mitigation is telling the host what it costs rather than telling the friend what they cannot see (ADR 0071 §6).
+         */
+        get: operations["listShares"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/shares/{library}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+                /** @description The library being shared. */
+                library: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Share a library, or change its limit
+         * @description Administrators only. Sharing is a decision about this server's content rather than an exercise of anybody's personal consent, which is why it is gated here and the presence grants are not.
+         *
+         *     A limit is **refused** on a library whose contents carry no certificate — music, pictures — rather than stored and ignored, because a stored limit that does nothing leaves a host believing one is in force (ADR 0071 §6).
+         */
+        put: operations["putShare"];
+        post?: never;
+        /**
+         * Stop sharing a library
+         * @description Administrators only. Takes effect on the peer's **next** request, not mid-stream: a permission check answers about now, and a stream already in flight finishes (ADR 0071 §6). Removing a share that is not there is not an error — the caller asked for a state and that state holds.
+         */
+        delete: operations["deleteShare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5645,6 +5701,34 @@ export interface components {
              * @description Unix seconds. Redeem a fresh ticket when it lapses.
              */
             expires_at: number;
+        };
+        ShareRequest: {
+            /** @description Age limit for this share, empty for none. Refused on a library whose contents carry no certificate. */
+            ceiling?: string;
+        };
+        SharedLibrary: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            kind: string;
+            /** @description Whether this peer has been granted it. */
+            shared: boolean;
+            /** @description The limit on this share, empty for none. */
+            ceiling: string;
+            /**
+             * Format: int64
+             * @description When it was shared. Unchanged by adjusting the limit.
+             */
+            shared_at?: number;
+            /** @description False where no certificate exists and never will. The UI must say so rather than offer an inert control. */
+            supports_ceiling: boolean;
+            /** @description Items a limit would hide for being unrated. */
+            unrated: number;
+            /** @description Items a limit could apply to. */
+            total: number;
+        };
+        SharedLibraries: {
+            libraries: components["schemas"]["SharedLibrary"][];
         };
     };
     responses: {
@@ -11311,6 +11395,86 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Libraries and their share state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedLibraries"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+                /** @description The library being shared. */
+                library: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Shared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+                /** @description The library being shared. */
+                library: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No longer shared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

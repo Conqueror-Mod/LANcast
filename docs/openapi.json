@@ -7519,6 +7519,107 @@
           }
         }
       }
+    },
+    "/peers/{fingerprint}/shares": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "get": {
+        "operationId": "listShares",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What this peer may see",
+        "description": "Administrators only. Every library, whether this peer has been granted it, its limit, and — for libraries whose contents carry a certificate — how many items a limit would hide for being unrated.\n\nThat count is reported for unshared libraries too, because the host needs it *before* deciding. A blocked unrated item vanishes from the friend's view with no explanation, and the mitigation is telling the host what it costs rather than telling the friend what they cannot see (ADR 0071 §6).",
+        "responses": {
+          "200": {
+            "description": "Libraries and their share state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedLibraries"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/shares/{library}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        },
+        {
+          "name": "library",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": "The library being shared."
+        }
+      ],
+      "put": {
+        "operationId": "putShare",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Share a library, or change its limit",
+        "description": "Administrators only. Sharing is a decision about this server's content rather than an exercise of anybody's personal consent, which is why it is gated here and the presence grants are not.\n\nA limit is **refused** on a library whose contents carry no certificate — music, pictures — rather than stored and ignored, because a stored limit that does nothing leaves a host believing one is in force (ADR 0071 §6).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Shared"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteShare",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Stop sharing a library",
+        "description": "Administrators only. Takes effect on the peer's **next** request, not mid-stream: a permission check answers about now, and a stream already in flight finishes (ADR 0071 §6). Removing a share that is not there is not an error — the caller asked for a state and that state holds.",
+        "responses": {
+          "204": {
+            "description": "No longer shared"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12990,6 +13091,79 @@
             "type": "integer",
             "format": "int64",
             "description": "Unix seconds. Redeem a fresh ticket when it lapses."
+          }
+        }
+      },
+      "ShareRequest": {
+        "type": "object",
+        "properties": {
+          "ceiling": {
+            "type": "string",
+            "description": "Age limit for this share, empty for none. Refused on a library whose contents carry no certificate."
+          }
+        }
+      },
+      "SharedLibrary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "shared",
+          "ceiling",
+          "supports_ceiling",
+          "unrated",
+          "total"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "shared": {
+            "type": "boolean",
+            "description": "Whether this peer has been granted it."
+          },
+          "ceiling": {
+            "type": "string",
+            "description": "The limit on this share, empty for none."
+          },
+          "shared_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When it was shared. Unchanged by adjusting the limit."
+          },
+          "supports_ceiling": {
+            "type": "boolean",
+            "description": "False where no certificate exists and never will. The UI must say so rather than offer an inert control."
+          },
+          "unrated": {
+            "type": "integer",
+            "description": "Items a limit would hide for being unrated."
+          },
+          "total": {
+            "type": "integer",
+            "description": "Items a limit could apply to."
+          }
+        }
+      },
+      "SharedLibraries": {
+        "type": "object",
+        "required": [
+          "libraries"
+        ],
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedLibrary"
+            }
           }
         }
       }

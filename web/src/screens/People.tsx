@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PeerShares } from "@/components/PeerShares";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
@@ -227,6 +228,13 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
           reachable={peer.reachable}
         />
       ))}
+
+      {/*
+       * What this server may see of ours, which is the other half of the
+       * relationship and belongs beside the half already here (ADR 0071 §7).
+       * Administrators only, and it renders nothing for anybody else.
+       */}
+      <PeerShares fingerprint={peer.fingerprint} />
     </div>
   );
 }
