@@ -4,12 +4,14 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"lancast/internal/identity"
+	"lancast/internal/store"
 )
 
 /*
@@ -369,5 +371,219 @@ func TestEveryRouteWithAnIdDeclaresItsObject(t *testing.T) {
 			t.Errorf("%s %s has an {id} segment and declares no object, so the "+
 				"object check does not run for it", r.method, r.pattern)
 		}
+	}
+}
+
+// --- scoped browse and search (ADR 0071 §3) --------------------------------
+
+/*
+ * A friend browses what was shared and nothing else, and the scope comes from
+ * the share rather than from anything the caller sends.
+ */
+func TestAGuestBrowsesOnlySharedLibraries(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+
+	other, err := f.h.st.CreateLibrary(ctx, "Private", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	var got struct {
+		Libraries []struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		} `json:"libraries"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet, "/api/guest/libraries"), &got)
+
+	if len(got.Libraries) != 1 || got.Libraries[0].ID != f.h.lib.ID {
+		t.Fatalf("libraries = %+v, want only the shared one (%d)",
+			got.Libraries, f.h.lib.ID)
+	}
+
+	// And the unshared one is a 404 when asked for directly — the same answer
+	// a library that does not exist would give.
+	resp := f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(other.ID))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d for an unshared library, want 404", resp.StatusCode)
+	}
+}
+
+// Nothing shared is an empty list, not an error: "you may see nothing here"
+// is an answer a client has to be able to render.
+func TestAGuestWithNoSharesSeesAnEmptyList(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+
+	var got struct {
+		Libraries []any `json:"libraries"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet, "/api/guest/libraries"), &got)
+	if len(got.Libraries) != 0 {
+		t.Errorf("libraries = %+v, want none", got.Libraries)
+	}
+}
+
+/*
+ * The share's ceiling applies to browsing, and it is looked up with the scope
+ * so there is no path where one is applied without the other.
+ */
+func TestAShareCeilingFiltersWhatAGuestBrowses(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+
+	kids := f.h.addFile(t, "paddington.mkv", []byte("x"))
+	grown := f.h.addFile(t, "scream.mkv", []byte("x"))
+	g, r := "G", "R"
+	if err := f.h.st.UpdateItemMetadata(ctx, kids, store.ItemMetadata{ContentRating: &g}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.st.UpdateItemMetadata(ctx, grown, store.ItemMetadata{ContentRating: &r}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "PG", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	var got struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(f.h.lib.ID)), &got)
+
+	seen := map[int64]bool{}
+	for _, it := range got.Items {
+		seen[it.ID] = true
+	}
+	if !seen[kids] {
+		t.Error("a G film was hidden under a PG share ceiling")
+	}
+	if seen[grown] {
+		t.Error("an R film was shown under a PG share ceiling")
+	}
+	if got.Total != len(got.Items) {
+		t.Errorf("total = %d but the page holds %d; the count is not filtered",
+			got.Total, len(got.Items))
+	}
+}
+
+// Un-sharing takes effect on the next browse, because the scope is resolved
+// per request rather than carried on the session.
+func TestUnsharingEmptiesTheGuestsNextBrowse(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp := f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(f.h.lib.ID))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("fixture: status %d while shared", resp.StatusCode)
+	}
+
+	if err := f.h.st.UnshareLibrary(ctx, peer, f.h.lib.ID); err != nil {
+		t.Fatal(err)
+	}
+	resp = f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(f.h.lib.ID))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d after un-sharing, want 404 on the next request",
+			resp.StatusCode)
+	}
+}
+
+// A library must be named. Without one there is no ceiling to apply, and a
+// listing with no ceiling is the hole this whole feature exists to prevent.
+func TestGuestBrowsingRequiresALibrary(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+
+	for _, q := range []string{"", "?library=", "?library=abc", "?library=0", "?library=-1"} {
+		resp := f.asGuest(t, token, http.MethodGet, "/api/guest/items"+q)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("%q was accepted without naming a library", q)
+		}
+	}
+}
+
+/*
+ * Browsing a shared library must not return items from an unshared one.
+ *
+ * This is the test the scope exists for, and it was missing: the others check
+ * that an unshared *library id* is refused, which a handler could pass while
+ * still listing the whole database for a library it does accept. Removing the
+ * scope broke nothing until this existed.
+ */
+func TestBrowsingAShareDoesNotReachOtherLibraries(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+
+	shared := f.h.addFile(t, "shared.mkv", []byte("x"))
+
+	// A second library, never shared, with an item in it.
+	private, err := f.h.st.CreateLibrary(ctx, "Private", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden, err := f.h.st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: private.ID, Path: filepath.Join(t.TempDir(), "private.mkv"),
+		Kind: "movie", Title: "Private", SortTitle: "Private",
+		Container: "mkv", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	var got struct {
+		Items []struct {
+			ID        int64 `json:"id"`
+			LibraryID int64 `json:"library_id"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(f.h.lib.ID)), &got)
+
+	var sawShared bool
+	for _, it := range got.Items {
+		if it.ID == hidden || it.LibraryID == private.ID {
+			t.Errorf("an item from an unshared library was listed (id %d, library %d)",
+				it.ID, it.LibraryID)
+		}
+		if it.ID == shared {
+			sawShared = true
+		}
+	}
+	if !sawShared {
+		t.Error("the shared library's own item was not listed")
+	}
+	if got.Total != len(got.Items) {
+		t.Errorf("total = %d but the page holds %d; the count is not scoped",
+			got.Total, len(got.Items))
 	}
 }

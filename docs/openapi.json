@@ -7620,6 +7620,124 @@
           }
         }
       }
+    },
+    "/guest/libraries": {
+      "get": {
+        "operationId": "guestLibraries",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Libraries shared with this guest's server",
+        "description": "Resolved per request from what the host granted this peer, so un-sharing and unpairing take effect immediately with nothing cached to invalidate (ADR 0071 §1).\n\nA peer granted nothing gets an empty list rather than an error: \"you may see nothing here\" is an answer a client has to render.",
+        "responses": {
+          "200": {
+            "description": "The shared libraries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLibraries"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/guest/items": {
+      "get": {
+        "operationId": "guestItems",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Browse or search one shared library",
+        "description": "The scope and the limit both come from the share, looked up together, so there is no path where one applies and the other does not. The scope is applied in the query rather than to the results: an unscoped read filtered afterwards is a read of the whole database, which ADR 0071 §3 names as the same mistake as a route-level permission.\n\nA library that is not shared answers **404**, indistinguishable from one that does not exist, so this cannot be used to learn what the host holds.\n\n**One library at a time.** A limit rides on the share, so two shared libraries can carry different ones and a search spanning them has no single correct answer. A search across everything a guest may see is owed.",
+        "parameters": [
+          {
+            "name": "library",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The shared library to browse. Required."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict to one item kind."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search text, matched within this library only."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "title | year | added | rating | track"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page size, capped at 200."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page offset."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of items, and the total inside the scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestItems"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13164,6 +13282,59 @@
             "items": {
               "$ref": "#/components/schemas/SharedLibrary"
             }
+          }
+        }
+      },
+      "GuestLibrary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "GuestLibraries": {
+        "type": "object",
+        "required": [
+          "libraries"
+        ],
+        "properties": {
+          "libraries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuestLibrary"
+            }
+          }
+        }
+      },
+      "GuestItems": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Matches inside the scope, describing the same set as the page."
           }
         }
       }
