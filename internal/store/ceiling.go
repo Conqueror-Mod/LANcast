@@ -49,10 +49,30 @@ import (
  *
  * Spelled literally because store owns its SQL and does not import the client's
  * notion of kind, the same reason 'unmatched' is spelled out in ListItems.
+ *
+ * # Collection was missing, and the omission was a lockout
+ *
+ * A collection is a grouping, exactly as a playlist is: nothing rates one and
+ * nothing ever will. Leaving it out meant every collection failed the
+ * unrated-therefore-blocked rule, and on the library this was found with that
+ * was **285 of 285 hidden** from any account with a ceiling — the same lockout
+ * the paragraph above describes for music, arriving by the same route.
+ *
+ * It was invisible for a release because nothing displayed the number. It
+ * surfaced only when a screen was built that told a host what a limit would
+ * cost, and reported "295 of 1499 unrated" for a library holding ten unrated
+ * films and 285 collections.
+ *
+ * The cost of exempting it: a collection whose every member is blocked is
+ * still listed, and opening it shows nothing. That is the honest version —
+ * its members are filtered individually either way, and a library is not
+ * hidden for being unrated either. Hiding a collection with no permitted
+ * member would be more precise and is deliberately **not** done here: it is a
+ * different rule, it costs a query per tile, and no other kind works that way.
  */
 var unratedKinds = []string{
 	"artist", "album", "track", "playlist",
-	"gallery", "photo",
+	"gallery", "photo", "collection",
 }
 
 // exemptKindsSQL is unratedKinds as a predicate fragment plus its arguments.
