@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 )
 
 /*
@@ -365,5 +367,85 @@ func TestTheExemptionDoesNotReachFilmAndTelevision(t *testing.T) {
 	}
 	if ok, _ := f.st.MayPlay(ctx, Account(child.ID), f.episode); ok {
 		t.Error("an episode of a TV-MA show was let through by the music exemption")
+	}
+}
+
+/*
+ * A collection is a grouping and nothing rates one, so a ceiling must not hide
+ * it — the same rule the music kinds already had, and collection was simply
+ * missing from the list.
+ *
+ * Measured on a real library before the fix: **285 of 285 collections hidden**
+ * from any account with a ceiling. It stayed invisible for a release because
+ * nothing displayed the number; it surfaced only when a screen was built that
+ * told a host what a limit would cost and reported "295 of 1499 unrated" for a
+ * library holding ten unrated films and 285 collections.
+ */
+func TestACeilingDoesNotHideCollections(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+
+	coll, err := f.st.UpsertItem(ctx, ScanFile{
+		LibraryID: f.lib.ID,
+		Path:      filepath.Join(t.TempDir(), "scream-collection"),
+		Kind:      "collection", Title: "Scream Collection",
+		SortTitle: "Scream Collection", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	child := ceilingUser(t, f.st, "G")
+	if ok, err := f.st.MayPlay(ctx, Account(child.ID), coll); err != nil || !ok {
+		t.Errorf("a collection was hidden by a ceiling: allowed=%v err=%v. "+
+			"Nothing rates a collection, so judging it by a rating is a "+
+			"lockout rather than a limit", ok, err)
+	}
+
+	// And a friend under a share ceiling sees it too: the exemption is a fact
+	// about the kind, not about which principal is asking.
+	if err := f.st.AddPeer(ctx, samplePeer(fpA)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ShareLibrary(ctx, fpA, f.lib.ID, "G", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), coll); !ok {
+		t.Error("a collection was hidden from a friend by a share ceiling")
+	}
+}
+
+/*
+ * The number a host is shown before choosing a limit (ADR 0071 §6) must not
+ * count groupings. Reporting 295 where the truth is 10 would make a host
+ * refuse a limit they would otherwise be content with, which is the opposite
+ * of what the number is for.
+ */
+func TestTheUnratedCountIgnoresCollections(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+
+	before, _, err := f.st.UnratedInShare(ctx, f.lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 5 {
+		if _, err := f.st.UpsertItem(ctx, ScanFile{
+			LibraryID: f.lib.ID,
+			Path:      filepath.Join(t.TempDir(), "coll", strconv.Itoa(i)),
+			Kind:      "collection", Title: "Collection " + strconv.Itoa(i),
+			SortTitle: "Collection", SizeBytes: 1, MTime: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	after, _, err := f.st.UnratedInShare(ctx, f.lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Errorf("adding 5 collections moved the unrated count from %d to %d; "+
+			"a grouping is not an item a limit hides", before, after)
 	}
 }
