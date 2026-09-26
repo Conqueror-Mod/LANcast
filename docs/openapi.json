@@ -7491,6 +7491,34 @@
           }
         }
       }
+    },
+    "/guest/me": {
+      "get": {
+        "operationId": "guestMe",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What this guest session is",
+        "description": "Answers with what the caller already proved by presenting a ticket: the issuing server and the person that server named.\n\n**This is the only route a guest session may reach.** A guest is gated by an explicit allow-list in middleware, and a route that is not on it is refused before it is routed (ADR 0046 §3) — including every route added in future, until somebody deliberately adds it. The list grows one entry at a time, each alongside the object-level check that makes it safe.\n\nRequires the bearer token from redeeming a ticket, never a cookie.",
+        "responses": {
+          "200": {
+            "description": "The guest session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestIdentity"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12939,6 +12967,29 @@
           "peer": {
             "type": "string",
             "description": "The issuing server's fingerprint — the unit a share is granted to."
+          }
+        }
+      },
+      "GuestIdentity": {
+        "type": "object",
+        "required": [
+          "peer",
+          "subject",
+          "expires_at"
+        ],
+        "properties": {
+          "peer": {
+            "type": "string",
+            "description": "The issuing server's fingerprint."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The person, as their own server named them. For display; never for authorization."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds. Redeem a fresh ticket when it lapses."
           }
         }
       }

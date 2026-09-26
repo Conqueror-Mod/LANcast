@@ -407,6 +407,7 @@ func (s *Server) Handler() http.Handler {
 	 * none gets one, and the ticket is the credential (ADR 0046 §2).
 	 */
 	mux.HandleFunc("POST /api/guest/session", s.redeemGuestTicket)
+	mux.HandleFunc("GET /api/guest/me", s.guestMe)
 
 	// Personal, not administrative: whether this account appears in the roster
 	// handed to peers. Beside the other thing an account decides about itself.

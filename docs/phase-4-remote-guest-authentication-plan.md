@@ -205,6 +205,16 @@ Each step is reviewable on its own and lands as its own commit.
 5. **The middleware and the allow-list**, with the list in one file and a test
    that enumerates it — so the guest's entire power stays readable in one
    place, which is the property ADR 0046 §3 is buying.
+
+   The test enumerates the *router*, not the list: it scrapes every registered
+   route and requires each to be on the list or unreachable. "A route added
+   next year is refused" is a claim about handlers nobody has written, so it
+   cannot be tested by naming them.
+
+   **The list starts almost empty and grows one entry at a time, each with the
+   object-level check that makes it safe.** Allow-listing a stream route
+   without the check that the item is one this guest may see is not a smaller
+   version of the feature; it is the library, handed over.
 6. **Object-level checks** on stream, subtitles and artwork, each with a test
    that a valid session for item A is refused item B.
 7. **CORS to paired origins only, on guest routes only** (ADR 0046 §7).

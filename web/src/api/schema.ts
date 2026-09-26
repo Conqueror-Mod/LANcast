@@ -3429,6 +3429,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/guest/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this guest session is
+         * @description Answers with what the caller already proved by presenting a ticket: the issuing server and the person that server named.
+         *
+         *     **This is the only route a guest session may reach.** A guest is gated by an explicit allow-list in middleware, and a route that is not on it is refused before it is routed (ADR 0046 §3) — including every route added in future, until somebody deliberately adds it. The list grows one entry at a time, each alongside the object-level check that makes it safe.
+         *
+         *     Requires the bearer token from redeeming a ticket, never a cookie.
+         */
+        get: operations["guestMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5608,6 +5632,17 @@ export interface components {
             expires_at: number;
             /** @description The issuing server's fingerprint — the unit a share is granted to. */
             peer: string;
+        };
+        GuestIdentity: {
+            /** @description The issuing server's fingerprint. */
+            peer: string;
+            /** @description The person, as their own server named them. For display; never for authorization. */
+            subject: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Redeem a fresh ticket when it lapses.
+             */
+            expires_at: number;
         };
     };
     responses: {
@@ -11252,6 +11287,28 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    guestMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The guest session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestIdentity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

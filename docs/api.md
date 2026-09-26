@@ -217,6 +217,7 @@ ADR 0044 declines to build.
 | `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
+| `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is. The only route a guest session may reach; everything else is refused |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
 
 Pairing is administrative and granting is not, which is why the first four are

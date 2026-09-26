@@ -22,6 +22,11 @@ const (
 	// the distinction survives all the way to authorization instead of being
 	// flattened into "authenticated" at the door.
 	apiKeyCtxKey
+	// guestCtxKey carries a redeemed remote-guest session. Its own key rather
+	// than a variant of sessionCtxKey, so nothing that reads a session can
+	// accidentally be handed a principal from another household
+	// (ADR 0046 §3).
+	guestCtxKey
 )
 
 // isPublicPath reports paths reachable without a session. Deliberately short:
@@ -100,6 +105,33 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		if !keyed {
 			if sess, ok := s.streamTicket(r); ok {
 				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
+				return
+			}
+		}
+
+		/*
+		 * A redeemed guest, resolved before the CSRF check and gated by its
+		 * own allow-list.
+		 *
+		 * Exempt from CSRF for the reason the API key path gives above: a
+		 * bearer header is not attached by a browser on its own, so a
+		 * cross-origin page cannot forge this request — while a guest *is*
+		 * cross-origin by construction, so applying the check would refuse
+		 * every legitimate call.
+		 *
+		 * Default-deny is applied here rather than inside handlers. A route
+		 * not on the list is refused before it is routed, which is what makes
+		 * the guest's whole power readable in one file and makes tomorrow's
+		 * new handler closed by default (ADR 0046 §3).
+		 */
+		if !keyed {
+			if g, ok := s.guestFromRequest(r); ok {
+				if !guestMayReach(r.Method, r.URL.Path) {
+					writeError(w, http.StatusForbidden, "forbidden",
+						"not permitted for a guest session")
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(withGuest(r.Context(), g)))
 				return
 			}
 		}
