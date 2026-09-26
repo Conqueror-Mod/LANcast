@@ -24,7 +24,17 @@ import { RATING_RUNGS } from "@/lib/ratings";
 export function PeerShares({ fingerprint }: { fingerprint: string }) {
   const isAdmin = useIsAdmin();
   const [open, setOpen] = useState(false);
-  const { data, isLoading } = usePeerShares(fingerprint, isAdmin && open);
+  /*
+   * Fetched whenever an administrator is looking, not only once the pane is
+   * open, so the summary below is a live number rather than dead code.
+   *
+   * It was gated on `open` first, which meant the count could never render:
+   * the only moment it would be shown was the only moment it was not fetched.
+   * The query reads local rows, and "have I shared anything with this server"
+   * is exactly the question somebody has while looking at this screen — worth
+   * answering without a click.
+   */
+  const { data, isLoading } = usePeerShares(fingerprint, isAdmin);
 
   if (!isAdmin) return null;
 
@@ -33,20 +43,33 @@ export function PeerShares({ fingerprint }: { fingerprint: string }) {
 
   return (
     <div className="peer-shares">
+      {/*
+       * One label in both states, and it names the *pane* rather than an
+       * action.
+       *
+       * It read "Hide what they can see" when open, which on a sharing screen
+       * could plausibly be read as *revoke their access*. A control whose
+       * label might describe the dangerous action is worth nobody's second
+       * guess. The chevron carries open/closed, and aria-expanded carries it
+       * for anything not looking at pixels.
+       */}
       <button
         type="button"
         className="peer-shares__toggle"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? "Hide what they can see" : "Choose what they can see"}
-        {open || !data ? null : (
-          <span className="peer-shares__count">
-            {sharedCount === 0
+        <span className="peer-shares__chevron" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        Choose what they can see
+        <span className="peer-shares__count">
+          {!data
+            ? ""
+            : sharedCount === 0
               ? "nothing shared"
-              : `${sharedCount} shared`}
-          </span>
-        )}
+              : `${sharedCount} of ${libraries.length} shared`}
+        </span>
       </button>
 
       {open && (
@@ -91,6 +114,14 @@ function ShareRow({
     else share.mutate({ library: library.id, ceiling: "" });
   };
 
+  /*
+   * Two lines, with the limit indented under the library it belongs to.
+   *
+   * It was one row with the limit pushed right by `margin-left: auto`, which
+   * on a maximised window put "Up to PG-13" more than a thousand pixels from
+   * the checkbox it applied to, with three other libraries in between. Nothing
+   * in jsdom could see that; it took looking at the thing.
+   */
   return (
     <div className="peer-shares__row">
       <label className="peer-shares__lib">
@@ -110,6 +141,7 @@ function ShareRow({
               <label className="peer-shares__limit-label">
                 Up to
                 <select
+          className="peer-shares__select"
                   value={library.ceiling}
                   disabled={busy}
                   onChange={(e) =>

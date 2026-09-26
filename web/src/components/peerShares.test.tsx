@@ -250,17 +250,40 @@ describe("peer shares", () => {
     expect(text()).not.toContain("will not be shown");
   });
 
-  // Nothing is fetched until the pane is opened: the People screen is read far
-  // more often than it is changed.
-  it("does not ask the server anything until it is opened", async () => {
+  /*
+   * The summary is live without opening the pane, which is the whole reason
+   * it is fetched up front.
+   *
+   * This was gated on the pane being open, and the count could therefore never
+   * render: the only moment it would be shown was the only moment it was not
+   * fetched. Looking at the screen is what found it — the toggle simply had no
+   * summary beside it, ever.
+   */
+  it("says whether anything is shared without being opened", async () => {
     await render();
-    const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock
-      .calls;
-    expect(calls.some((c) => String(c[0]).includes("/shares"))).toBe(false);
+    await settle(() => text().includes("shared"), "the summary to load");
+    expect(text()).toContain("nothing shared");
+  });
 
+  it("counts what is shared, still without being opened", async () => {
+    libraries = [{ ...FILMS, shared: true }, MUSIC];
+    await render();
+    await settle(() => text().includes("shared"), "the summary to load");
+    expect(text()).toContain("1 of 2 shared");
+  });
+
+  /*
+   * One label in both states. It read "Hide what they can see" when open,
+   * which on a sharing screen could be read as revoking access rather than
+   * collapsing a pane.
+   */
+  it("never labels the toggle as hiding what they can see", async () => {
+    await render();
     await open();
-    const after = (fetch as unknown as { mock: { calls: unknown[][] } }).mock
-      .calls;
-    expect(after.some((c) => String(c[0]).includes("/shares"))).toBe(true);
+    expect(text()).not.toContain("Hide what they can see");
+    expect(text()).toContain("Choose what they can see");
+
+    const toggle = button("Choose what they can see");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 });
