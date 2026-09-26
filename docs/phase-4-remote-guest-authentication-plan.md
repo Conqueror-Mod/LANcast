@@ -146,11 +146,14 @@ what they carry:
   with nothing to invalidate.
 
 A friend session has **no room to die with**, which ADR 0046 never had to
-answer. It therefore needs its own lifetime, and the plan is a short expiry
-with re-presentation of a fresh ticket — the client already has to be able to
-obtain one, so renewal is not new machinery. **This is the one design question
-neither ADR settles, and it should be decided before the session type is
-written**, not discovered while wiring it.
+answer. **Decided: a short life (15 minutes), and the client presents a fresh
+ticket when it lapses.** Short wins because the alternative is a bearer token
+that stays useful for as long as somebody keeps it, and renewal costs nothing
+new — the client already has to be able to obtain a ticket.
+
+It is not what makes revocation work. Un-sharing and unpairing take effect on
+the next request, because what a friend may reach is resolved per request from
+the host's own rows rather than frozen into the session at admission.
 
 The credential is a **bearer token, never a cookie** (ADR 0046 §6): a guest is
 cross-origin by construction, and a cookie that works cross-origin is a cookie
@@ -195,6 +198,10 @@ Each step is reviewable on its own and lands as its own commit.
 3. **The mint endpoint**, on the friend's own server: which of *its* people may
    ask, for which peer. Authenticated as an ordinary session.
 4. **The redeem endpoint**, on the host: ticket in, restricted session out.
+   Exempt from the CSRF origin check, before it rather than after: the request
+   carries no ambient credential — there is no session yet, which is the point
+   — and a guest is cross-origin by construction, so an Origin check would
+   refuse every legitimate redemption and no attack.
 5. **The middleware and the allow-list**, with the list in one file and a test
    that enumerates it — so the guest's entire power stays readable in one
    place, which is the property ADR 0046 §3 is buying.

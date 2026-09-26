@@ -104,6 +104,30 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			}
 		}
 
+		/*
+		 * Redeeming a guest ticket is exempt from the CSRF check, before it
+		 * rather than after, and the reason is the same one the API key path
+		 * gives above.
+		 *
+		 * CSRF exists because **a browser attaches cookies by itself**. This
+		 * request carries no ambient credential at all -- there is no session
+		 * yet, which is the point of it -- and its entire authority is a
+		 * signed ticket in the body that an attacker would have to possess
+		 * already. A third-party page cannot cause a browser to produce one.
+		 *
+		 * Meanwhile a guest is cross-origin *by construction* (ADR 0046
+		 * Fact 3): the request comes from the friend's own client, served by
+		 * the friend's own server. Applying an Origin check here would refuse
+		 * every legitimate redemption and no attack.
+		 *
+		 * The handler is the gate: it verifies signature, audience, pairing,
+		 * expiry and nonce before anything is issued.
+		 */
+		if r.URL.Path == "/api/guest/session" && r.Method == http.MethodPost {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		if !keyed {
 			// CSRF: a state-changing request must come from this origin. Paired
 			// with SameSite=Strict on the cookie — either alone leaves a gap,

@@ -3405,6 +3405,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/guest/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a ticket for a restricted session
+         * @description Verifies a ticket minted by a paired server and returns a short-lived bearer token (ADR 0046 §2). **No session is required** — this is how a caller who has none obtains one — and the CSRF origin check does not apply, because the request carries no ambient credential and a guest is cross-origin by construction.
+         *
+         *     Every refusal is 401 with the same message. A caller must not learn whether a ticket failed on its signature, its audience, its expiry or its nonce; the detail goes to the host's log.
+         *
+         *     The token says nothing about what may be reached. That is resolved per request from what this server granted the issuing peer (ADR 0071 §1), so un-sharing and unpairing take effect on the next request.
+         */
+        post: operations["redeemGuestTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5568,6 +5592,21 @@ export interface components {
              */
             expires_at: number;
             /** @description The audience fingerprint this ticket is bound to. */
+            peer: string;
+        };
+        GuestTicketRedemption: {
+            /** @description A ticket minted by a paired server, audience-bound to this one. */
+            ticket: string;
+        };
+        GuestSession: {
+            /** @description Bearer credential for the restricted session. Never a cookie (ADR 0046 §6). */
+            token: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Short by design; redeem a fresh ticket when it lapses.
+             */
+            expires_at: number;
+            /** @description The issuing server's fingerprint — the unit a share is granted to. */
             peer: string;
         };
     };
@@ -11172,6 +11211,40 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description The pairing is not complete, so a ticket for it could not be verified */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    redeemGuestTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestTicketRedemption"];
+            };
+        };
+        responses: {
+            /** @description A restricted session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description This server is holding as many guest sessions as it can */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

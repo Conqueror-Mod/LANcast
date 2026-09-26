@@ -7446,6 +7446,51 @@
           }
         }
       }
+    },
+    "/guest/session": {
+      "post": {
+        "operationId": "redeemGuestTicket",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Redeem a ticket for a restricted session",
+        "description": "Verifies a ticket minted by a paired server and returns a short-lived bearer token (ADR 0046 §2). **No session is required** — this is how a caller who has none obtains one — and the CSRF origin check does not apply, because the request carries no ambient credential and a guest is cross-origin by construction.\n\nEvery refusal is 401 with the same message. A caller must not learn whether a ticket failed on its signature, its audience, its expiry or its nonce; the detail goes to the host's log.\n\nThe token says nothing about what may be reached. That is resolved per request from what this server granted the issuing peer (ADR 0071 §1), so un-sharing and unpairing take effect on the next request.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestTicketRedemption"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A restricted session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "This server is holding as many guest sessions as it can",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12859,6 +12904,41 @@
           "peer": {
             "type": "string",
             "description": "The audience fingerprint this ticket is bound to."
+          }
+        }
+      },
+      "GuestTicketRedemption": {
+        "type": "object",
+        "required": [
+          "ticket"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "A ticket minted by a paired server, audience-bound to this one."
+          }
+        }
+      },
+      "GuestSession": {
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "peer"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer credential for the restricted session. Never a cookie (ADR 0046 §6)."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds. Short by design; redeem a fresh ticket when it lapses."
+          },
+          "peer": {
+            "type": "string",
+            "description": "The issuing server's fingerprint — the unit a share is granted to."
           }
         }
       }
