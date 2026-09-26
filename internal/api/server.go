@@ -22,6 +22,7 @@ import (
 	"lancast/internal/crashlog"
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
+	"lancast/internal/guestticket"
 	"lancast/internal/identity"
 	"lancast/internal/marker"
 	"lancast/internal/meta"
@@ -180,6 +181,11 @@ type Server struct {
 	presence *presence.Tracker
 	// tickets are the stream tickets a native player presents (ADR 0068).
 	tickets *ticketBook
+	// nonces and guests are the two halves of remote-guest admission: the
+	// replay defence and the redeemed sessions. Both in memory, both lost on
+	// restart, neither written down -- a guest writes nothing (ADR 0046 §5).
+	nonces *guestticket.NonceStore
+	guests *guestBook
 	// rosterAt is when each peer's roster was last fetched. In memory because
 	// it describes this process, not the pairing.
 	rosterMu sync.Mutex
@@ -222,6 +228,8 @@ func New(d Deps) *Server {
 		listenAddr: d.ListenAddr,
 		presence:   presence.New(),
 		tickets:    newTicketBook(),
+		nonces:     guestticket.NewNonceStore(0),
+		guests:     newGuestBook(),
 		rosterAt:   map[string]time.Time{},
 		goodAddr:   map[string]string{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
@@ -388,6 +396,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/peers", s.adminOnly(s.addPeer))
 	mux.HandleFunc("GET /api/peers/invite", s.adminOnly(s.ourInvite))
 	mux.HandleFunc("DELETE /api/peers/{fingerprint}", s.adminOnly(s.removePeer))
+	// Not adminOnly: a ticket names the person asking, and every account is
+	// entitled to one for itself (ADR 0046 §2). An administrator has no
+	// special position here and there is deliberately no route to mint one in
+	// somebody else's name.
+	mux.HandleFunc("POST /api/peers/{fingerprint}/ticket", s.mintGuestTicket)
+
+	/*
+	 * Redemption, on the host. No session gate: this is how somebody who has
+	 * none gets one, and the ticket is the credential (ADR 0046 §2).
+	 */
+	mux.HandleFunc("POST /api/guest/session", s.redeemGuestTicket)
+	mux.HandleFunc("GET /api/guest/me", s.guestMe)
 
 	// Personal, not administrative: whether this account appears in the roster
 	// handed to peers. Beside the other thing an account decides about itself.

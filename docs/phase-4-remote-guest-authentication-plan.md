@@ -63,12 +63,26 @@ Minted by the friend's server, signed with its identity key.
 
 | claim | meaning | why it is not optional |
 |---|---|---|
-| `iss` | issuer fingerprint | which pinned key verifies it |
+| key | the issuing server's public key | the issuer is *derived* from it — see below |
 | `sub` | the person, as that server's own account id | the same id already in the host's `remote_person`, so it joins |
 | `aud` | audience fingerprint — the host | without it, a ticket for Chris replays against every peer she has |
 | `iat` | issued at | skew window, and audit |
 | `exp` | expiry, short | bounds replay to the nonce window |
 | `jti` | nonce | spent on use, remembered until `exp` |
+
+**The key travels in the ticket, and the issuer is derived from it.** Written
+first as an `iss` fingerprint verified against a stored key — and nothing
+stores a peer's key. An invite carries only the fingerprint, and mTLS gets away
+with that because the key arrives on the connection; a ticket carries only a
+signature. Recording the key at pairing would need a migration *and* has a
+bootstrap problem: the key is not known until a TLS connection happens, so a
+friend could not redeem before one had.
+
+A fingerprint is SHA-256 of a key, so a fingerprint pinned at pairing is
+already a commitment to exactly one key. The host hashes the key the ticket
+carries, compares against what it pinned, and verifies with it. Equally strong,
+no migration, no bootstrap gap — and stating the issuer separately is dropped,
+because two fields that must agree are two fields that can disagree.
 
 **It does not name what it may reach.** No library ids, no room id, no
 permissions. The host resolves what this person's server was granted, from its
@@ -104,10 +118,19 @@ Every refusal is the same refusal from outside. A verifier that distinguishes
 
 ### The nonce store
 
-In memory, keyed by `jti`, swept on expiry. Bounded, and the bound is a
-decision: a peer that floods nonces must not grow the host's memory without
-limit. Over the bound, refuse rather than evict — evicting the oldest makes
-replay possible again, which is the one thing this store exists to stop.
+In memory, swept on expiry, and bounded — a peer that floods nonces must not
+grow the host's memory without limit.
+
+**Keyed by issuer *and* `jti`, and bounded per issuer.** Written first as a
+single global bound keyed by `jti` alone, which is the obvious reading of
+"bounded" and is wrong twice over: one peer could spend a nonce another peer
+was about to use, and one peer flooding the bound would refuse every other
+peer's tickets. Both are a friend able to lock out the host's other friends.
+
+Over the bound, **refuse rather than evict**. Evicting the oldest makes that
+nonce spendable again, so anybody able to push entries through the store could
+replay at will — a denial of service against one peer is the cheaper failure
+than a replay vulnerability for all of them.
 
 Lost on restart, which is correct: every outstanding ticket expires in minutes,
 and the alternative is a durable table of credentials.
@@ -123,11 +146,14 @@ what they carry:
   with nothing to invalidate.
 
 A friend session has **no room to die with**, which ADR 0046 never had to
-answer. It therefore needs its own lifetime, and the plan is a short expiry
-with re-presentation of a fresh ticket — the client already has to be able to
-obtain one, so renewal is not new machinery. **This is the one design question
-neither ADR settles, and it should be decided before the session type is
-written**, not discovered while wiring it.
+answer. **Decided: a short life (15 minutes), and the client presents a fresh
+ticket when it lapses.** Short wins because the alternative is a bearer token
+that stays useful for as long as somebody keeps it, and renewal costs nothing
+new — the client already has to be able to obtain a ticket.
+
+It is not what makes revocation work. Un-sharing and unpairing take effect on
+the next request, because what a friend may reach is resolved per request from
+the host's own rows rather than frozen into the session at admission.
 
 The credential is a **bearer token, never a cookie** (ADR 0046 §6): a guest is
 cross-origin by construction, and a cookie that works cross-origin is a cookie
@@ -172,12 +198,49 @@ Each step is reviewable on its own and lands as its own commit.
 3. **The mint endpoint**, on the friend's own server: which of *its* people may
    ask, for which peer. Authenticated as an ordinary session.
 4. **The redeem endpoint**, on the host: ticket in, restricted session out.
+   Exempt from the CSRF origin check, before it rather than after: the request
+   carries no ambient credential — there is no session yet, which is the point
+   — and a guest is cross-origin by construction, so an Origin check would
+   refuse every legitimate redemption and no attack.
 5. **The middleware and the allow-list**, with the list in one file and a test
    that enumerates it — so the guest's entire power stays readable in one
    place, which is the property ADR 0046 §3 is buying.
-6. **Object-level checks** on stream, subtitles and artwork, each with a test
-   that a valid session for item A is refused item B.
+
+   The test enumerates the *router*, not the list: it scrapes every registered
+   route and requires each to be on the list or unreachable. "A route added
+   next year is refused" is a claim about handlers nobody has written, so it
+   cannot be tested by naming them.
+
+   **The list starts almost empty and grows one entry at a time, each with the
+   object-level check that makes it safe.** Allow-listing a stream route
+   without the check that the item is one this guest may see is not a smaller
+   version of the feature; it is the library, handed over.
+6. **Object-level checks** on stream and subtitles, each with a test that a
+   valid session for item A is refused item B.
+
+   The check is declared **on the allow-list entry**, not inside each handler:
+   an entry names the segment holding the item, and the gate resolves it. A
+   handler cannot be trusted to remember, because `userID()` answers
+   `store.LocalUserID` for a guest — so a handler taking its usual path would
+   apply the *local* account's ceiling to a stranger and hand the file over.
+
+   **Artwork is deliberately not here.** It is content-addressed
+   (`/api/artwork/{hash}`) rather than item-scoped, so the same check does not
+   fit: a hash has no library. Whether the hash being unguessable is itself
+   sufficient is a real question and not one to answer in passing, so a guest
+   currently gets no artwork and the decision is owed.
+
+   A wildcard segment can swallow a sibling literal the router would send
+   elsewhere — `/subtitles/{key}` matches `/subtitles/search`, which calls
+   OpenSubtitles with the host's own API key. Entries therefore carry
+   exclusions, and the enumeration test is what keeps them honest: it found
+   this one on its first run.
 7. **CORS to paired origins only, on guest routes only** (ADR 0046 §7).
+   Never `*`, never credentialed, computed per request from the peer table so
+   unpairing closes it with nothing to invalidate. Preflight is answered ahead
+   of the session gate because the browser strips Authorization from it, and
+   it authorises nothing — the real request still carries a token and still
+   passes the allow-list and the object check.
 
 `docs/api.md` and `docs/openapi.json` change in the same commits as the
 handlers. Both are enforced.
