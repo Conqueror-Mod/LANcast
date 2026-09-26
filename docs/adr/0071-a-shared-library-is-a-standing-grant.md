@@ -1,6 +1,8 @@
 # ADR 0071 — A shared library is a standing grant
 
-Date: 2026-09-20 · Status: accepted · Revised 2026-09-20 with the per-share ceiling (§6)
+Date: 2026-09-20 · Status: accepted · Revised 2026-09-20 with the per-share
+ceiling (§6), amended 2026-09-26 with how a friend's client reaches the host
+(see *Amendment*)
 
 Answers the question [ADR 0046](0046-remote-guests.md) and the
 [federation plan](../watch-together-federation-plan.md) both named and both
@@ -352,6 +354,117 @@ check.
 
 **`internal/together`, `internal/peer` and `internal/presence` finally get a
 screen**, which is overdue independently of this.
+
+## Amendment — a friend's client never talks to the host
+
+**Added 2026-09-26, after §3 was built and §5 could not be.**
+
+§5 says a peer's shared libraries appear in the client under that peer's name.
+Building it found that the client cannot reach the peer at all, and neither
+this ADR nor [ADR 0046](0046-remote-guests.md) says how it was supposed to.
+
+### The conflict
+
+A LANcast server serves a **self-signed certificate**
+([ADR 0014](0014-tls-and-the-browser.md)). The desktop client makes that work
+by pinning exactly one server's key per window, and
+[ADR 0070](0070-the-desktop-client-can-trust-a-server-it-did-not-install.md)
+rejected pinning more than one for a stated reason — `cmd/lancast/connect.go`
+carries it:
+
+> the switch takes a comma-separated *list*, so every known server's key could
+> be pinned at startup and switching would be a mere Navigate — at the cost
+> that the window would then accept any trusted key at any address, because
+> Chromium's list is not scoped to a host. […] a list quietly widens it to "any
+> key we have ever trusted, anywhere", which is a different and weaker claim.
+
+So a window pinned to Georgia's server answers `ERR_CERT_AUTHORITY_INVALID`
+when it calls Chris's. Everything in Phase 4 assumed the client could reach the
+host directly over HTTPS; nothing lets it, and nothing was going to.
+
+### A correction, which changes the answer
+
+The Phase 4 plan declined proxying through the friend's own server on the
+grounds that *"a proxied stream crosses Georgia's server on its way to
+Georgia's screen — twice the bandwidth, on the leg most likely to be a domestic
+uplink"*.
+
+**That is wrong, and it was the main argument against proxying.** The path is
+
+    Chris's server → internet → Georgia's server → her LAN → her client
+
+The internet leg is traversed **once**. What is doubled is her local network,
+which is free. The expensive link carries the film exactly as many times as it
+would if her client had fetched it directly.
+
+The case where it does cost something is a friend watching away from their own
+home — then their server's uplink carries what their client receives. That is
+a real cost and a narrower one than claimed, and it is not the common case the
+decision was being made for.
+
+### Decision
+
+**A friend's client talks only to its own server, which fetches from the host
+over the mutual-TLS peer channel that already exists.**
+
+This is what presence already does
+([ADR 0045](0045-live-presence-between-paired-servers.md)): the caller proves
+which *server* it is with the key pinned at pairing, and which *person* is
+asking is that server's word. A pairing is a statement that you trust the far
+server about its own people; if that is not true, the pairing is the thing to
+undo.
+
+It needs no new trust, no second pin, and no weakening of the one-key-per-window
+rule. It also means the friend's client is an ordinary same-origin client of
+its own server, so §5's "appear under that peer's name" becomes a listing
+decision rather than a cross-origin problem.
+
+### What this does to the work already done
+
+**Phase 4's ticket is not wasted and is not on the browse path.** It remains
+the mechanism for admitting a principal to a session on the host — which is
+what [ADR 0046](0046-remote-guests.md) needs for a **room**, where a guest's
+player must reach the host directly to stay in sync, and what a browser opened
+straight at a host would use.
+
+What changes is that browsing, searching and streaming a shared library do not
+use it: those become federation endpoints authenticated by the peer pin, in the
+same family as `/api/federation/presence`.
+
+**CORS (ADR 0046 §7) stops being needed for this path**, because there is no
+cross-origin request in it. It stays for the room case and is no wider than it
+was.
+
+**The scoping work is unaffected.** `ItemFilter.Scope`, the share ceiling
+resolution and the fail-closed `store.Friend` principal are about *what* a peer
+may see, not about *how* the request arrived, and they are what the federation
+endpoints will apply.
+
+### Rejected, again and with the new information
+
+**Pin a list of keys.** Still no. The reasoning in ADR 0070 has not changed,
+and "any key we have ever trusted, anywhere" is a worse trade than a proxy hop
+on a link that is free.
+
+**Treat a peer's libraries as a server you switch to**, using ADR 0070's
+relaunch. Coherent with what exists and cheap to build, but it is not §5: you
+would leave your own library to look at somebody else's, which is exactly the
+merged-versus-separate distinction §5 exists to make — one of them is "whose
+disk is this on", the other is "which application am I in".
+
+**Have the host present a certificate the friend can verify.** The host's
+identity key could sign its TLS certificate, and a friend holding the pinned
+key could check the chain. Browsers do not do custom chain validation, so this
+would work only for a non-browser client, which the desktop client is not.
+
+### What this does not decide
+
+**Whether a direct session is ever worth arranging** for a friend who is not
+in a room. It might be, for a large library browsed heavily, and the ticket
+already exists if so.
+
+**Phase 5, the room crossing the boundary.** A room needs the host's own
+timing, and that is where the ticket earns itself.
 
 ## What this does not decide
 
