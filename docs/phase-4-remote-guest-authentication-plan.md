@@ -236,6 +236,11 @@ Each step is reviewable on its own and lands as its own commit.
    exclusions, and the enumeration test is what keeps them honest: it found
    this one on its first run.
 7. **CORS to paired origins only, on guest routes only** (ADR 0046 §7).
+   Never `*`, never credentialed, computed per request from the peer table so
+   unpairing closes it with nothing to invalidate. Preflight is answered ahead
+   of the session gate because the browser strips Authorization from it, and
+   it authorises nothing — the real request still carries a token and still
+   passes the allow-list and the object check.
 
 `docs/api.md` and `docs/openapi.json` change in the same commits as the
 handlers. Both are enforced.

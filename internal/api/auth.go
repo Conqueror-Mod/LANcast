@@ -71,6 +71,19 @@ func (s *Server) secured(ctx context.Context) bool {
 // stashes the resolved session so handlers authorize without re-querying.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		/*
+		 * CORS for guest routes, before anything else.
+		 *
+		 * A preflight arrives with no Authorization header -- the browser
+		 * strips it -- so nothing below would recognise it, and it must be
+		 * answered before the session gate refuses it. It authorises nothing:
+		 * the real request still carries a token and still passes the
+		 * allow-list and the object check.
+		 */
+		if s.guestCORS(w, r) {
+			return
+		}
+
 		// An unconfigured server (no accounts) is loopback-only, so requiring a
 		// session before setup exists would lock the owner out of their own
 		// setup form.

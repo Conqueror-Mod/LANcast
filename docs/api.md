@@ -220,6 +220,11 @@ ADR 0044 declines to build.
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
 
+Guest routes answer CORS for the origin of a **currently paired** peer, and
+nothing else does. Never `*`, never with credentials — the guest credential is
+a bearer token precisely so no cookie is involved — and unpairing closes it on
+the next request (ADR 0046 §7).
+
 A guest session reaches an explicit allow-list and nothing else: `guest/me`,
 plus streaming and subtitles for an item in a library shared with its server.
 Every other route is refused before it is routed, including routes added in
