@@ -126,10 +126,25 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		 */
 		if !keyed {
 			if g, ok := s.guestFromRequest(r); ok {
-				if !guestMayReach(r.Method, r.URL.Path) {
+				route, allowed := guestMayReach(r.Method, r.URL.Path)
+				if !allowed {
 					writeError(w, http.StatusForbidden, "forbidden",
 						"not permitted for a guest session")
 					return
+				}
+				/*
+				 * The object check, for routes that name one. A 404 rather
+				 * than a 403: "you may not see this" and "this does not
+				 * exist" must be indistinguishable, or the refusal becomes a
+				 * way to enumerate what the library holds — the same reasoning
+				 * GetItem gives for the account path.
+				 */
+				if route.item != "" {
+					id, ok := route.objectID(r.URL.Path)
+					if !ok || !s.guestMayReachObject(r, g, id) {
+						writeError(w, http.StatusNotFound, "not_found", "no such item")
+						return
+					}
 				}
 				next.ServeHTTP(w, r.WithContext(withGuest(r.Context(), g)))
 				return

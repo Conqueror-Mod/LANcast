@@ -6,7 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"strconv"
+
 	"lancast/internal/auth"
+	"lancast/internal/store"
 )
 
 /*
@@ -34,12 +37,62 @@ import (
 var guestAllowed = []guestRoute{
 	// A session reading what it is. No object to check: it discloses only what
 	// the caller already proved by presenting a ticket.
-	{http.MethodGet, "/api/guest/me"},
+	{method: http.MethodGet, pattern: "/api/guest/me"},
+
+	/*
+	 * Playing something, and its subtitles, and nothing else about it.
+	 *
+	 * Each names the segment holding the item, which is what turns an
+	 * allow-listed *route* into an allow-listed *object*. ADR 0046 §4 is
+	 * explicit that route-level is not enough: /api/stream/{id} streams
+	 * whatever id it is handed, so a guest permitted the route is a guest
+	 * permitted the library.
+	 */
+	{method: http.MethodGet, pattern: "/api/stream/{id}", item: "{id}"},
+	{method: http.MethodGet, pattern: "/api/stream/{id}/transcode", item: "{id}"},
+	{method: http.MethodGet, pattern: "/api/stream/{id}/hls/index.m3u8", item: "{id}"},
+	{method: http.MethodGet, pattern: "/api/stream/{id}/hls/{session}/{name}", item: "{id}"},
+	{method: http.MethodGet, pattern: "/api/items/{id}/subtitles", item: "{id}"},
+	/*
+	 * except names sibling literals the router would route elsewhere.
+	 *
+	 * `{key}` happily matches "search", and /api/items/{id}/subtitles/search
+	 * is a different handler that calls OpenSubtitles with the host's own API
+	 * key. Go's mux gives a literal segment precedence over a wildcard; this
+	 * matcher runs before routing and has to be told.
+	 *
+	 * Found by the test that enumerates the router rather than by reading, on
+	 * its first run after this entry was added.
+	 */
+	{method: http.MethodGet, pattern: "/api/items/{id}/subtitles/{key}", item: "{id}",
+		except: map[string][]string{"{key}": {"search"}}},
 }
 
 type guestRoute struct {
 	method  string
 	pattern string
+	/*
+	 * item names the pattern segment holding the item id, and a route that
+	 * has one **must** declare it.
+	 *
+	 * Declaring it here rather than checking inside each handler is what makes
+	 * the object check impossible to forget. A handler resolves the caller
+	 * with userID(), which answers store.LocalUserID for a guest — so a
+	 * handler that simply trusted its usual path would apply the *local*
+	 * account's ceiling to a stranger from another household and hand the file
+	 * over. The check cannot live where it can be omitted.
+	 */
+	item string
+	/*
+	 * except lists, per wildcard segment, the values the router would send to
+	 * a different handler. A wildcard that matches one of them is not a match
+	 * here, because the request will not reach the handler this entry names.
+	 *
+	 * The enumeration test is what keeps this honest: add a literal sibling
+	 * route later and forget to list it here, and the test reports that a
+	 * guest can reach a route nobody allow-listed.
+	 */
+	except map[string][]string
 }
 
 /*
@@ -55,13 +108,75 @@ type guestRoute struct {
  * does not match exactly is refused, which is the safe direction: a matcher
  * that is generous about spelling is a matcher somebody can spell around.
  */
-func guestMayReach(method, path string) bool {
+func guestMayReach(method, path string) (guestRoute, bool) {
 	for _, r := range guestAllowed {
-		if r.method == method && segmentsMatch(r.pattern, path) {
-			return true
+		if r.method == method && r.matches(path) {
+			return r, true
 		}
 	}
-	return false
+	return guestRoute{}, false
+}
+
+/*
+ * objectID pulls the item id out of a path, using the segment the allow-list
+ * entry named. Returns false when the route has no object, or when what is
+ * there is not an id.
+ */
+func (r guestRoute) objectID(path string) (int64, bool) {
+	if r.item == "" {
+		return 0, false
+	}
+	p := strings.Split(strings.TrimPrefix(r.pattern, "/"), "/")
+	q := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(p) != len(q) {
+		return 0, false
+	}
+	for i := range p {
+		if p[i] == r.item {
+			id, err := strconv.ParseInt(q[i], 10, 64)
+			if err != nil || id <= 0 {
+				return 0, false
+			}
+			return id, true
+		}
+	}
+	return 0, false
+}
+
+/*
+ * guestMayReachObject answers whether this guest may see one item, now.
+ *
+ * Resolved per request from the host's own rows rather than from anything the
+ * session carries, which is what makes un-sharing and unpairing take effect on
+ * the next request with nothing to invalidate (ADR 0071 §6).
+ *
+ * store.Friend is the principal that fails closed: a peer with no share
+ * resolves to a refusal rather than to "no ceiling", which is the opposite of
+ * what an account with no row does and the whole reason the two were split.
+ */
+func (s *Server) guestMayReachObject(r *http.Request, g guestSession, itemID int64) bool {
+	ok, err := s.st.MayPlay(r.Context(), store.Friend(g.Peer), itemID)
+	return err == nil && ok
+}
+
+// matches is segmentsMatch plus this entry's exclusions.
+func (r guestRoute) matches(path string) bool {
+	if !segmentsMatch(r.pattern, path) {
+		return false
+	}
+	if len(r.except) == 0 {
+		return true
+	}
+	p := strings.Split(strings.TrimPrefix(r.pattern, "/"), "/")
+	q := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i := range p {
+		for _, bad := range r.except[p[i]] {
+			if q[i] == bad {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func segmentsMatch(pattern, path string) bool {

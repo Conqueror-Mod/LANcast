@@ -3440,7 +3440,9 @@ export interface paths {
          * What this guest session is
          * @description Answers with what the caller already proved by presenting a ticket: the issuing server and the person that server named.
          *
-         *     **This is the only route a guest session may reach.** A guest is gated by an explicit allow-list in middleware, and a route that is not on it is refused before it is routed (ADR 0046 §3) — including every route added in future, until somebody deliberately adds it. The list grows one entry at a time, each alongside the object-level check that makes it safe.
+         *     A guest session reaches an explicit allow-list and nothing else — this route, plus streaming and subtitles for an item in a library shared with its server. Every other route is refused before it is routed, including routes added in future, until somebody adds them deliberately (ADR 0046 §3).
+         *
+         *     The streaming and subtitle routes are checked **per item**: being allowed `/api/stream/{id}` is not being allowed every id, and an item outside a shared library answers 404 — indistinguishable from one that does not exist, so a refusal cannot be used to enumerate the library.
          *
          *     Requires the bearer token from redeeming a ticket, never a cookie.
          */

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"regexp"
@@ -75,7 +76,7 @@ func TestAGuestIsRefusedEveryRouteNotOnTheList(t *testing.T) {
 	var reachable []string
 	for _, r := range allRoutes(t) {
 		method, pattern := r[0], r[1]
-		if guestMayReach(method, concrete(pattern)) && !allowed[[2]string{method, pattern}] {
+		if _, ok := guestMayReach(method, concrete(pattern)); ok && !allowed[[2]string{method, pattern}] {
 			reachable = append(reachable, method+" "+pattern)
 		}
 	}
@@ -124,7 +125,7 @@ func TestTheMatcherIsNotGenerous(t *testing.T) {
 		{"unrelated", http.MethodGet, "/api/items/1", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := guestMayReach(c.method, c.path); got != c.want {
+			if _, got := guestMayReach(c.method, c.path); got != c.want {
 				t.Errorf("guestMayReach(%q, %q) = %v, want %v", c.method, c.path, got, c.want)
 			}
 		})
@@ -252,5 +253,121 @@ func TestAnInventedGuestTokenIsRefused(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		t.Error("an invented token was accepted")
+	}
+}
+
+// --- the object check ------------------------------------------------------
+
+/*
+ * Allow-listing a route is not allow-listing the library.
+ *
+ * ADR 0046 §4 is explicit that the item check must be object-level, because
+ * /api/stream/{id} streams whatever id it is handed. These are the tests that
+ * a guest permitted the route is not thereby permitted everything behind it.
+ */
+func TestAGuestReachesOnlySharedItems(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	shared := f.h.addFile(t, "shared.mkv", []byte("x"))
+
+	// Nothing shared yet: the route is allow-listed and the object is not.
+	resp := f.asGuest(t, token, http.MethodGet, "/api/stream/"+itoa(shared))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d before sharing, want 404", resp.StatusCode)
+	}
+
+	// Share the library the item is in, and the same request is admitted as
+	// far as the handler.
+	if err := f.h.st.ShareLibrary(context.Background(),
+		identity.Normalize(f.georgia.Fingerprint()), f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp = f.asGuest(t, token, http.MethodGet, "/api/stream/"+itoa(shared))
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Error("still 404 after the library was shared: the gate is refusing a shared item")
+	}
+}
+
+/*
+ * Un-sharing takes effect on the next request (ADR 0071 §6). The session is
+ * untouched, because it never carried the permission in the first place.
+ */
+func TestUnsharingRefusesTheGuestsNextRequest(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	item := f.h.addFile(t, "film.mkv", []byte("x"))
+	peer := identity.Normalize(f.georgia.Fingerprint())
+
+	if err := f.h.st.ShareLibrary(context.Background(), peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp := f.asGuest(t, token, http.MethodGet, "/api/stream/"+itoa(item))
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Fatal("fixture: the shared item was refused before un-sharing")
+	}
+
+	if err := f.h.st.UnshareLibrary(context.Background(), peer, f.h.lib.ID); err != nil {
+		t.Fatal(err)
+	}
+	resp = f.asGuest(t, token, http.MethodGet, "/api/stream/"+itoa(item))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d after un-sharing, want 404 on the very next request",
+			resp.StatusCode)
+	}
+}
+
+// An id that is not a number, or is zero or negative, is not an object. The
+// gate must refuse rather than hand a nonsense id to a handler.
+func TestAGuestIsRefusedANonsenseObject(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+
+	for _, id := range []string{"abc", "0", "-1", ""} {
+		resp := f.asGuest(t, token, http.MethodGet, "/api/stream/"+id)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("id %q was accepted", id)
+		}
+	}
+}
+
+/*
+ * The sibling-literal trap, kept as a test of its own because it is the one
+ * the enumeration test found and the one a future entry could reintroduce.
+ *
+ * /api/items/{id}/subtitles/search is a different handler that calls
+ * OpenSubtitles with the host's own API key. A wildcard that swallowed it
+ * would hand a stranger the host's quota and credentials.
+ */
+func TestAGuestCannotReachSubtitleSearchThroughTheWildcard(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	item := f.h.addFile(t, "film.mkv", []byte("x"))
+	if err := f.h.st.ShareLibrary(context.Background(),
+		identity.Normalize(f.georgia.Fingerprint()), f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := f.asGuest(t, token, http.MethodGet,
+		"/api/items/"+itoa(item)+"/subtitles/search?query=x")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403: the wildcard must not swallow a "+
+			"sibling literal the router sends elsewhere", resp.StatusCode)
+	}
+}
+
+// Every entry naming an id segment must declare it, or the object check is
+// silently skipped for that route.
+func TestEveryRouteWithAnIdDeclaresItsObject(t *testing.T) {
+	for _, r := range guestAllowed {
+		if strings.Contains(r.pattern, "{id}") && r.item == "" {
+			t.Errorf("%s %s has an {id} segment and declares no object, so the "+
+				"object check does not run for it", r.method, r.pattern)
+		}
 	}
 }

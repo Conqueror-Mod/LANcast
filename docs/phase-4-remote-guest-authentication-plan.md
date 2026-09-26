@@ -215,8 +215,26 @@ Each step is reviewable on its own and lands as its own commit.
    object-level check that makes it safe.** Allow-listing a stream route
    without the check that the item is one this guest may see is not a smaller
    version of the feature; it is the library, handed over.
-6. **Object-level checks** on stream, subtitles and artwork, each with a test
-   that a valid session for item A is refused item B.
+6. **Object-level checks** on stream and subtitles, each with a test that a
+   valid session for item A is refused item B.
+
+   The check is declared **on the allow-list entry**, not inside each handler:
+   an entry names the segment holding the item, and the gate resolves it. A
+   handler cannot be trusted to remember, because `userID()` answers
+   `store.LocalUserID` for a guest — so a handler taking its usual path would
+   apply the *local* account's ceiling to a stranger and hand the file over.
+
+   **Artwork is deliberately not here.** It is content-addressed
+   (`/api/artwork/{hash}`) rather than item-scoped, so the same check does not
+   fit: a hash has no library. Whether the hash being unguessable is itself
+   sufficient is a real question and not one to answer in passing, so a guest
+   currently gets no artwork and the decision is owed.
+
+   A wildcard segment can swallow a sibling literal the router would send
+   elsewhere — `/subtitles/{key}` matches `/subtitles/search`, which calls
+   OpenSubtitles with the host's own API key. Entries therefore carry
+   exclusions, and the enumeration test is what keeps them honest: it found
+   this one on its first run.
 7. **CORS to paired origins only, on guest routes only** (ADR 0046 §7).
 
 `docs/api.md` and `docs/openapi.json` change in the same commits as the
