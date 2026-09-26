@@ -271,3 +271,156 @@
   cursor: pointer;
 }
 
+
+/*
+ * Choosing what a paired server may see (ADR 0071 §7).
+ *
+ * Folded away behind a button rather than open on the page. The People screen
+ * is read far more often than it is changed — "is Georgia online" — and a list
+ * of every library with a checkbox beside it would make a settings form out of
+ * a status page.
+ */
+.peer-shares {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.peer-shares__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.peer-shares__toggle:hover,
+.peer-shares__toggle:focus-visible {
+  color: var(--text);
+}
+
+.peer-shares__count {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.peer-shares__body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * flex-shrink: 0 on the rows.
+ *
+ * In a flex column that may gain a max-height later, items shrink to fit
+ * rather than overflowing — collapsing to near-zero height with every style
+ * still reading as applied. Set up front rather than diagnosed later.
+ */
+/*
+ * A column, not a row.
+ *
+ * This was a flex row with the limit pushed right by `margin-left: auto`,
+ * which on a maximised window put the limit more than a thousand pixels from
+ * the library it applied to. Stacking keeps them together at every width, and
+ * the limit is indented so it reads as belonging to the line above.
+ */
+.peer-shares__row {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.peer-shares__lib {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.peer-shares__lib-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-shares__limit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  /* Indented under the library name, past the checkbox. */
+  margin-left: 26px;
+  min-width: 0;
+}
+
+.peer-shares__limit-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  color: var(--text-dim);
+}
+
+/*
+ * What a limit costs, and what a limit that cannot apply would be. Quiet, but
+ * on the row rather than behind anything: the host has to see it at the moment
+ * they choose, which is the whole mitigation ADR 0071 §6 offers for items that
+ * vanish from a friend's view with no explanation.
+ */
+.peer-shares__cost,
+.peer-shares__note {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.peer-shares__note {
+  margin-top: 4px;
+}
+
+/*
+ * The controls, styled to the house pattern rather than left as the browser
+ * draws them.
+ *
+ * A checkbox takes --nebula-blue, as the settings toggles already do. Not
+ * gold: gold means *where you are* and nothing else, and a checked box meaning
+ * "shared" would be a second meaning — the moment gold means two things the
+ * focus signal is dead (docs/design.md).
+ */
+.peer-shares__lib input[type="checkbox"] {
+  accent-color: var(--nebula-blue);
+  flex-shrink: 0;
+}
+
+/* Matches .set-input: a dormant gold hairline at rest, full gold on focus. */
+.peer-shares__select {
+  padding: 4px 8px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(5, 7, 15, 0.6);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.peer-shares__select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.peer-shares__chevron {
+  display: inline-block;
+  width: 1em;
+  flex-shrink: 0;
+}
