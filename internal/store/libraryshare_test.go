@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -333,4 +334,117 @@ func TestUnsharingRefusesTheNextRequest(t *testing.T) {
 	if ok, _ := f.st.MayPlay(ctx, Friend(fpA), f.kids); ok {
 		t.Error("still permitted after the share was removed")
 	}
+}
+
+// --- scoped listing (ADR 0071 §3) ------------------------------------------
+
+/*
+ * A scope is applied in the query, not by whoever calls it.
+ *
+ * §3 is explicit that an unscoped search filtered afterwards "is a read of the
+ * whole database with a filter applied afterwards, which is the same mistake
+ * as a route-level permission". These are the tests that it is the query.
+ */
+func TestAScopeLimitsAListingToItsLibraries(t *testing.T) {
+	st, ctx, films, music := shareFixture(t)
+	inFilms := addScanned(t, st, films.ID, "film.mkv", "movie")
+	inMusic := addScanned(t, st, music.ID, "song.flac", "track")
+
+	got, total, err := st.ListItems(ctx, ItemFilter{
+		Scoped: true, Scope: []int64{films.ID}, Limit: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[int64]bool{}
+	for _, it := range got {
+		ids[it.ID] = true
+	}
+	if !ids[inFilms] {
+		t.Error("an item in the scoped library was not listed")
+	}
+	if ids[inMusic] {
+		t.Error("an item outside the scope was listed")
+	}
+	// The total must describe the same set as the page, or the client is told
+	// there is more behind a scope than there is.
+	if total != len(got) {
+		t.Errorf("total = %d but the page holds %d; the count is not scoped",
+			total, len(got))
+	}
+}
+
+/*
+ * The dangerous case, and the reason Scoped is a separate field.
+ *
+ * A friend granted nothing must see nothing. If an empty scope were treated
+ * as "no restriction" — which is what a nil check would do — a peer with no
+ * shares would read the entire library.
+ */
+func TestAnEmptyScopeSeesNothing(t *testing.T) {
+	st, ctx, films, _ := shareFixture(t)
+	addScanned(t, st, films.ID, "film.mkv", "movie")
+
+	got, total, err := st.ListItems(ctx, ItemFilter{
+		Scoped: true, Scope: nil, Limit: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 || total != 0 {
+		t.Errorf("a scope granting nothing returned %d items (total %d); a peer "+
+			"with no shares must see nothing", len(got), total)
+	}
+}
+
+// An account sets no scope and is unaffected: the zero value must stay
+// "everything", or every existing listing silently empties.
+func TestNoScopeIsUnrestricted(t *testing.T) {
+	st, ctx, films, music := shareFixture(t)
+	addScanned(t, st, films.ID, "film.mkv", "movie")
+	addScanned(t, st, music.ID, "song.flac", "track")
+
+	got, _, err := st.ListItems(ctx, ItemFilter{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Errorf("an unscoped listing returned %d items, want both", len(got))
+	}
+}
+
+// Searching is the same query, so the scope has to survive a text match.
+func TestAScopeSurvivesASearch(t *testing.T) {
+	st, ctx, films, music := shareFixture(t)
+	addScanned(t, st, films.ID, "Zephyr.mkv", "movie")
+	addScanned(t, st, music.ID, "Zephyr.flac", "track")
+
+	got, _, err := st.ListItems(ctx, ItemFilter{
+		Scoped: true, Scope: []int64{films.ID}, Query: "Zephyr", Limit: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range got {
+		if it.LibraryID != films.ID {
+			t.Errorf("search returned an item from library %d, outside the scope",
+				it.LibraryID)
+		}
+	}
+	if len(got) == 0 {
+		t.Error("search found nothing inside the scope")
+	}
+}
+
+// addScanned puts one file in a library and returns its id.
+func addScanned(t *testing.T, st *Store, lib int64, name, kind string) int64 {
+	t.Helper()
+	id, err := st.UpsertItem(context.Background(), ScanFile{
+		LibraryID: lib, Path: filepath.Join(t.TempDir(), name), Kind: kind,
+		Title: name, SortTitle: name, Container: "mkv", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

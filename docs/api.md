@@ -221,6 +221,8 @@ ADR 0044 declines to build.
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
+| `GET /api/guest/libraries` | `{libraries: [...]}` — the libraries shared with this guest's server, and nothing else |
+| `GET /api/guest/items` | `?library=&kind=&q=&sort=&limit=&offset=` → `{items, total}` — browse or search **one** shared library, under that share's limit |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
 
 Sharing is administrative for the same reason pairing is: it is a decision
@@ -233,6 +235,12 @@ Guest routes answer CORS for the origin of a **currently paired** peer, and
 nothing else does. Never `*`, never with credentials — the guest credential is
 a bearer token precisely so no cookie is involved — and unpairing closes it on
 the next request (ADR 0046 §7).
+
+Browsing takes a library and applies that share's own limit, because a limit
+rides on the share and two shared libraries can carry different ones. A search
+across everything a guest may see is owed and not yet built: doing it honestly
+needs the query to carry a limit per library rather than one for the lot
+(ADR 0071 §6).
 
 A guest session reaches an explicit allow-list and nothing else: `guest/me`,
 plus streaming and subtitles for an item in a library shared with its server.

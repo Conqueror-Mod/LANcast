@@ -48,6 +48,15 @@ var guestAllowed = []guestRoute{
 	 * whatever id it is handed, so a guest permitted the route is a guest
 	 * permitted the library.
 	 */
+	/*
+	 * Browsing what was shared (ADR 0071 §3). No item to check: these answer
+	 * about libraries, and each derives its scope from the share rather than
+	 * from anything the caller sends — guestItems looks the ceiling up with
+	 * CeilingFor, which fails closed on a library that is not shared.
+	 */
+	{method: http.MethodGet, pattern: "/api/guest/libraries"},
+	{method: http.MethodGet, pattern: "/api/guest/items"},
+
 	{method: http.MethodGet, pattern: "/api/stream/{id}", item: "{id}"},
 	{method: http.MethodGet, pattern: "/api/stream/{id}/transcode", item: "{id}"},
 	{method: http.MethodGet, pattern: "/api/stream/{id}/hls/index.m3u8", item: "{id}"},

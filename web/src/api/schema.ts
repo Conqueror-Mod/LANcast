@@ -3511,6 +3511,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/guest/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libraries shared with this guest's server
+         * @description Resolved per request from what the host granted this peer, so un-sharing and unpairing take effect immediately with nothing cached to invalidate (ADR 0071 §1).
+         *
+         *     A peer granted nothing gets an empty list rather than an error: "you may see nothing here" is an answer a client has to render.
+         */
+        get: operations["guestLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guest/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse or search one shared library
+         * @description The scope and the limit both come from the share, looked up together, so there is no path where one applies and the other does not. The scope is applied in the query rather than to the results: an unscoped read filtered afterwards is a read of the whole database, which ADR 0071 §3 names as the same mistake as a route-level permission.
+         *
+         *     A library that is not shared answers **404**, indistinguishable from one that does not exist, so this cannot be used to learn what the host holds.
+         *
+         *     **One library at a time.** A limit rides on the share, so two shared libraries can carry different ones and a search spanning them has no single correct answer. A search across everything a guest may see is owed.
+         */
+        get: operations["guestItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5729,6 +5775,20 @@ export interface components {
         };
         SharedLibraries: {
             libraries: components["schemas"]["SharedLibrary"][];
+        };
+        GuestLibrary: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            kind: string;
+        };
+        GuestLibraries: {
+            libraries: components["schemas"]["GuestLibrary"][];
+        };
+        GuestItems: {
+            items: components["schemas"]["Item"][];
+            /** @description Matches inside the scope, describing the same set as the page. */
+            total: number;
         };
     };
     responses: {
@@ -11473,6 +11533,65 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    guestLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shared libraries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestLibraries"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    guestItems: {
+        parameters: {
+            query: {
+                /** @description The shared library to browse. Required. */
+                library: number;
+                /** @description Restrict to one item kind. */
+                kind?: string;
+                /** @description Search text, matched within this library only. */
+                q?: string;
+                /** @description title | year | added | rating | track */
+                sort?: string;
+                /** @description Page size, capped at 200. */
+                limit?: number;
+                /** @description Page offset. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items, and the total inside the scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestItems"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };

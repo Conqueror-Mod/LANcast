@@ -821,8 +821,29 @@ type ItemFilter struct {
 	 * in force.
 	 */
 	MaxContentRating string
-	Years            []int    // exact release years
-	Resolutions      []string // bucket keys: uhd | hd1080 | hd720 | sd
+
+	/*
+	 * Scope is the set of libraries the caller may see *at all*
+	 * ([ADR 0071](../../docs/adr/0071-a-shared-library-is-a-standing-grant.md)
+	 * §3), and Scoped says whether one applies.
+	 *
+	 * Two fields rather than a nil check, because nil and empty would have to
+	 * mean opposite things — "no restriction" and "sees nothing" — and the
+	 * zero value would be the dangerous one. A friend granted no libraries
+	 * must see nothing; an account with no scope must see everything. Getting
+	 * that backwards by forgetting to set a slice is exactly the silent
+	 * failure this whole feature exists to prevent.
+	 *
+	 * Applied in the query beside MaxContentRating and for the same stated
+	 * reason: an unscoped search filtered afterwards is a read of the whole
+	 * database, which §3 names as the same mistake as a route-level
+	 * permission.
+	 */
+	Scoped bool
+	Scope  []int64
+
+	Years       []int    // exact release years
+	Resolutions []string // bucket keys: uhd | hd1080 | hd720 | sd
 
 	/*
 	 * Credit filters, by person id rather than by name.
@@ -1317,6 +1338,25 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	if pred, ceilArgs := ceilingPredicate(f.MaxContentRating); pred != "" {
 		where += pred
 		args = append(args, ceilArgs...)
+	}
+
+	/*
+	 * And the share scope, last of all, for the same reason the ceiling is
+	 * late: nothing after it can widen past it.
+	 *
+	 * An empty scope is `AND 0` rather than a skipped clause. A friend granted
+	 * nothing sees nothing, and the shape of that answer must not depend on a
+	 * slice being empty rather than absent.
+	 */
+	if f.Scoped {
+		if len(f.Scope) == 0 {
+			where += ` AND 0`
+		} else {
+			where += ` AND library_id IN (` + placeholders(len(f.Scope)) + `)`
+			for _, id := range f.Scope {
+				args = append(args, id)
+			}
+		}
 	}
 
 	var total int

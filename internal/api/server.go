@@ -418,6 +418,8 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("POST /api/guest/session", s.redeemGuestTicket)
 	mux.HandleFunc("GET /api/guest/me", s.guestMe)
+	mux.HandleFunc("GET /api/guest/libraries", s.guestLibraries)
+	mux.HandleFunc("GET /api/guest/items", s.guestItems)
 
 	// Personal, not administrative: whether this account appears in the roster
 	// handed to peers. Beside the other thing an account decides about itself.
