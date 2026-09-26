@@ -46,14 +46,27 @@ It would work, and it needs no new credential: Georgia's client talks only to
 her server, which fetches from Chris's over the existing pinned channel, as
 presence already does.
 
-It is rejected for one reason, and it is about video rather than architecture.
-A proxied stream crosses Georgia's server on its way to Georgia's screen —
-twice the bandwidth, on the leg most likely to be a domestic uplink, for every
-remote viewing. [ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md)
-caps what a host serves precisely because that leg is scarce.
+It was rejected here for one reason, and **that reason was wrong**. The claim
+was that a proxied stream crosses the friend's server on its way to their
+screen — "twice the bandwidth, on the leg most likely to be a domestic uplink".
+The path is:
 
-Recording it here so the option is visibly declined rather than never
-considered.
+    host → internet → friend's server → their LAN → their client
+
+The internet leg is traversed **once**. What is doubled is the friend's local
+network, which is free. Only a friend watching away from their own home pays
+anything, and their server's uplink then carries what their client receives.
+
+Corrected in
+[ADR 0071's amendment](adr/0071-a-shared-library-is-a-standing-grant.md), which
+reverses this: a friend's client talks only to its own server, because it
+*cannot* reach the host — one key is pinned per window (ADR 0070) and a
+self-signed host certificate is refused. Browsing and streaming a shared
+library therefore go over the mutual-TLS peer channel, and the ticket below
+remains what admits a principal to a **room** on the host.
+
+Recording the mistake rather than editing it away: the argument that decided
+this was checked only after it had been used to decide.
 
 ## 1. The ticket
 
