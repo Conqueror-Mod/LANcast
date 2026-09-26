@@ -22,6 +22,11 @@ const (
 	// the distinction survives all the way to authorization instead of being
 	// flattened into "authenticated" at the door.
 	apiKeyCtxKey
+	// guestCtxKey carries a redeemed remote-guest session. Its own key rather
+	// than a variant of sessionCtxKey, so nothing that reads a session can
+	// accidentally be handed a principal from another household
+	// (ADR 0046 §3).
+	guestCtxKey
 )
 
 // isPublicPath reports paths reachable without a session. Deliberately short:
@@ -66,6 +71,19 @@ func (s *Server) secured(ctx context.Context) bool {
 // stashes the resolved session so handlers authorize without re-querying.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		/*
+		 * CORS for guest routes, before anything else.
+		 *
+		 * A preflight arrives with no Authorization header -- the browser
+		 * strips it -- so nothing below would recognise it, and it must be
+		 * answered before the session gate refuses it. It authorises nothing:
+		 * the real request still carries a token and still passes the
+		 * allow-list and the object check.
+		 */
+		if s.guestCORS(w, r) {
+			return
+		}
+
 		// An unconfigured server (no accounts) is loopback-only, so requiring a
 		// session before setup exists would lock the owner out of their own
 		// setup form.
@@ -102,6 +120,72 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
 				return
 			}
+		}
+
+		/*
+		 * A redeemed guest, resolved before the CSRF check and gated by its
+		 * own allow-list.
+		 *
+		 * Exempt from CSRF for the reason the API key path gives above: a
+		 * bearer header is not attached by a browser on its own, so a
+		 * cross-origin page cannot forge this request — while a guest *is*
+		 * cross-origin by construction, so applying the check would refuse
+		 * every legitimate call.
+		 *
+		 * Default-deny is applied here rather than inside handlers. A route
+		 * not on the list is refused before it is routed, which is what makes
+		 * the guest's whole power readable in one file and makes tomorrow's
+		 * new handler closed by default (ADR 0046 §3).
+		 */
+		if !keyed {
+			if g, ok := s.guestFromRequest(r); ok {
+				route, allowed := guestMayReach(r.Method, r.URL.Path)
+				if !allowed {
+					writeError(w, http.StatusForbidden, "forbidden",
+						"not permitted for a guest session")
+					return
+				}
+				/*
+				 * The object check, for routes that name one. A 404 rather
+				 * than a 403: "you may not see this" and "this does not
+				 * exist" must be indistinguishable, or the refusal becomes a
+				 * way to enumerate what the library holds — the same reasoning
+				 * GetItem gives for the account path.
+				 */
+				if route.item != "" {
+					id, ok := route.objectID(r.URL.Path)
+					if !ok || !s.guestMayReachObject(r, g, id) {
+						writeError(w, http.StatusNotFound, "not_found", "no such item")
+						return
+					}
+				}
+				next.ServeHTTP(w, r.WithContext(withGuest(r.Context(), g)))
+				return
+			}
+		}
+
+		/*
+		 * Redeeming a guest ticket is exempt from the CSRF check, before it
+		 * rather than after, and the reason is the same one the API key path
+		 * gives above.
+		 *
+		 * CSRF exists because **a browser attaches cookies by itself**. This
+		 * request carries no ambient credential at all -- there is no session
+		 * yet, which is the point of it -- and its entire authority is a
+		 * signed ticket in the body that an attacker would have to possess
+		 * already. A third-party page cannot cause a browser to produce one.
+		 *
+		 * Meanwhile a guest is cross-origin *by construction* (ADR 0046
+		 * Fact 3): the request comes from the friend's own client, served by
+		 * the friend's own server. Applying an Origin check here would refuse
+		 * every legitimate redemption and no attack.
+		 *
+		 * The handler is the gate: it verifies signature, audience, pairing,
+		 * expiry and nonce before anything is issued.
+		 */
+		if r.URL.Path == "/api/guest/session" && r.Method == http.MethodPost {
+			next.ServeHTTP(w, r)
+			return
 		}
 
 		if !keyed {

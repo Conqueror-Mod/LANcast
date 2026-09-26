@@ -3378,6 +3378,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a ticket admitting you to a paired server
+         * @description Signs a short-lived ticket with this server's identity key, naming the calling account and audience-bound to the peer (ADR 0046 §2). The peer is not contacted: it verifies the signature against the key it pinned at pairing.
+         *
+         *     Any signed-in account may ask, **for itself only** — there is no route to mint one in somebody else's name, and an administrator has no special position. The pairing must be complete; a peer that is merely added has no confirmed key, so a ticket for it could not be verified.
+         *
+         *     The ticket says nothing about what may be reached. What the far server shows is resolved there, from what it granted this server (ADR 0071 §1), at the moment of each request.
+         */
+        post: operations["mintGuestTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guest/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a ticket for a restricted session
+         * @description Verifies a ticket minted by a paired server and returns a short-lived bearer token (ADR 0046 §2). **No session is required** — this is how a caller who has none obtains one — and the CSRF origin check does not apply, because the request carries no ambient credential and a guest is cross-origin by construction.
+         *
+         *     Every refusal is 401 with the same message. A caller must not learn whether a ticket failed on its signature, its audience, its expiry or its nonce; the detail goes to the host's log.
+         *
+         *     The token says nothing about what may be reached. That is resolved per request from what this server granted the issuing peer (ADR 0071 §1), so un-sharing and unpairing take effect on the next request.
+         */
+        post: operations["redeemGuestTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guest/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this guest session is
+         * @description Answers with what the caller already proved by presenting a ticket: the issuing server and the person that server named.
+         *
+         *     A guest session reaches an explicit allow-list and nothing else — this route, plus streaming and subtitles for an item in a library shared with its server. Every other route is refused before it is routed, including routes added in future, until somebody adds them deliberately (ADR 0046 §3).
+         *
+         *     The streaming and subtitle routes are checked **per item**: being allowed `/api/stream/{id}` is not being allowed every id, and an item outside a shared library answers 404 — indistinguishable from one that does not exist, so a refusal cannot be used to enumerate the library.
+         *
+         *     Requires the bearer token from redeeming a ticket, never a cookie.
+         */
+        get: operations["guestMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5529,6 +5606,43 @@ export interface components {
             /**
              * Format: int64
              * @description Unix seconds. Twenty-four hours after minting.
+             */
+            expires_at: number;
+        };
+        GuestTicket: {
+            /** @description The signed ticket, presented to the peer as a bearer credential. */
+            ticket: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Short by design; mint another rather than holding one.
+             */
+            expires_at: number;
+            /** @description The audience fingerprint this ticket is bound to. */
+            peer: string;
+        };
+        GuestTicketRedemption: {
+            /** @description A ticket minted by a paired server, audience-bound to this one. */
+            ticket: string;
+        };
+        GuestSession: {
+            /** @description Bearer credential for the restricted session. Never a cookie (ADR 0046 §6). */
+            token: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Short by design; redeem a fresh ticket when it lapses.
+             */
+            expires_at: number;
+            /** @description The issuing server's fingerprint — the unit a share is granted to. */
+            peer: string;
+        };
+        GuestIdentity: {
+            /** @description The issuing server's fingerprint. */
+            peer: string;
+            /** @description The person, as their own server named them. For display; never for authorization. */
+            subject: string;
+            /**
+             * Format: int64
+             * @description Unix seconds. Redeem a fresh ticket when it lapses.
              */
             expires_at: number;
         };
@@ -11107,6 +11221,96 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    mintGuestTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A ticket to present to that peer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestTicket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The pairing is not complete, so a ticket for it could not be verified */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    redeemGuestTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestTicketRedemption"];
+            };
+        };
+        responses: {
+            /** @description A restricted session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description This server is holding as many guest sessions as it can */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    guestMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The guest session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestIdentity"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

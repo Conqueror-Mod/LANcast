@@ -215,7 +215,22 @@ ADR 0044 declines to build.
 | `POST /api/peers` | `{invite}` → adds a peer from a pasted invite. **Admin** |
 | `GET /api/peers/invite` | `{invite, fingerprint, fingerprint_display, name, addrs}` — this server's own invite, to hand out. **Admin** |
 | `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
+| `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
+| `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
+| `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
+
+Guest routes answer CORS for the origin of a **currently paired** peer, and
+nothing else does. Never `*`, never with credentials — the guest credential is
+a bearer token precisely so no cookie is involved — and unpairing closes it on
+the next request (ADR 0046 §7).
+
+A guest session reaches an explicit allow-list and nothing else: `guest/me`,
+plus streaming and subtitles for an item in a library shared with its server.
+Every other route is refused before it is routed, including routes added in
+future, until somebody adds them to that list deliberately (ADR 0046 §3). The
+streaming and subtitle routes are checked **per item**, not per route: being
+allowed `/api/stream/{id}` is not being allowed every id.
 
 Pairing is administrative and granting is not, which is why the first four are
 admin-gated and the last is not. Adding a peer opens a network relationship for
