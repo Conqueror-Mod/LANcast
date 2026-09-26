@@ -320,3 +320,45 @@ func TestEncodingRoundTrips(t *testing.T) {
 		t.Errorf("round trip changed the claims:\n got %+v\nwant %+v", got, want)
 	}
 }
+
+/*
+ * The skew allowance at its edges, which the Phase 4 plan asks for by name.
+ *
+ * Two domestic machines are not synchronised and a minute of drift is
+ * ordinary, so an allowance exists — but it widens the window in which a
+ * captured ticket is usable, which makes its exact size a security parameter
+ * rather than a tolerance to raise when something does not work.
+ *
+ * Tested at the boundary in both directions so that changing the constant
+ * without meaning to is a failing test rather than a quiet widening.
+ */
+func TestTheSkewAllowanceHoldsAtItsEdges(t *testing.T) {
+	f := newFixture(t)
+
+	future := func(ahead time.Duration) string {
+		c := f.claims()
+		c.IssuedAt = f.now.Add(ahead)
+		c.Expires = c.IssuedAt.Add(2 * time.Minute)
+		return f.mint(t, c)
+	}
+
+	// Exactly at the allowance is inside it.
+	if _, err := Verify(future(Skew), f.chris.fp, f.pinned, f.now); err != nil {
+		t.Errorf("a ticket issued exactly Skew ahead was refused: %v (%s)",
+			err, Reason(err))
+	}
+	// One second past is not.
+	if _, err := Verify(future(Skew+time.Second), f.chris.fp, f.pinned, f.now); err == nil {
+		t.Error("a ticket issued beyond the allowance was accepted")
+	}
+
+	// Expiry is the other edge: good up to it, refused after.
+	c := f.claims()
+	tok := f.mint(t, c)
+	if _, err := Verify(tok, f.chris.fp, f.pinned, c.Expires); err != nil {
+		t.Errorf("a ticket at its expiry instant was refused: %v (%s)", err, Reason(err))
+	}
+	if _, err := Verify(tok, f.chris.fp, f.pinned, c.Expires.Add(time.Second)); err == nil {
+		t.Error("an expired ticket was accepted")
+	}
+}
