@@ -3629,6 +3629,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What a paired server shared with us
+         * @description Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).
+         *
+         *     This server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.
+         *
+         *     A peer that is not answering is **502**, never 500.
+         */
+        get: operations["peerLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Browse or search one of their shared libraries
+         * @description Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).
+         *
+         *     This server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.
+         *
+         *     A peer that is not answering is **502**, never 500.
+         *
+         *     The query is forwarded whole, so a filter added to the far server's browse endpoint works the day it ships.
+         */
+        get: operations["peerItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Play something from a paired server
+         * @description Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).
+         *
+         *     This server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.
+         *
+         *     A peer that is not answering is **502**, never 500.
+         *
+         *     The bytes are copied rather than buffered and the Range header goes both ways, so a viewer dragging the scrubber here produces the same partial request there. Holding the file first would turn a seek into a wait for a whole film.
+         */
+        get: operations["peerStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -11757,6 +11842,131 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    peerLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Their shared libraries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestLibraries"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    peerItems: {
+        parameters: {
+            query: {
+                /** @description The shared library. */
+                library: number;
+                /** @description Restrict to one item kind. */
+                kind?: string;
+                /** @description Search text. */
+                q?: string;
+                /** @description title | year | added | rating | track */
+                sort?: string;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Page offset. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of their items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestItems"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    peerStream: {
+        parameters: {
+            query: {
+                /** @description The item on their server. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A requested byte range */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }
