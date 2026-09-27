@@ -217,11 +217,34 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
 
       <PeerSharedWithUs fingerprint={peer.fingerprint} name={peer.name} />
 
-      {peer.people.length === 0 && (
-        <p className="people__peer-empty">
-          Nobody on this server has chosen to appear in its roster yet.
-        </p>
-      )}
+      {/*
+       * An empty roster has two causes and they are not the same sentence.
+       *
+       * Nobody opting in is a *choice made over there*. Never having been able
+       * to ask is a fact about *this* server's reach — and it was rendered as
+       * the choice, directly beneath the words "Not answering", which is this
+       * page's own forbidden collapse committed about a household rather than
+       * about a person.
+       *
+       * It matters beyond the wording. The roster is what `refreshPeer` fetches
+       * into `remote_person`, and a presence grant can only name somebody
+       * already in it. So an unreachable peer cannot be granted presence — not
+       * by us, and, because our answer to *them* is "nobody granted you",
+       * not in the other direction either, however well their server reaches
+       * ours. The screen has to say that the asking failed, or the only visible
+       * explanation is a choice nobody made.
+       */}
+      {peer.people.length === 0 &&
+        (peer.reachable ? (
+          <p className="people__peer-empty">
+            Nobody on this server has chosen to appear in its roster yet.
+          </p>
+        ) : (
+          <p className="people__peer-empty">
+            This server has not answered, so who is on it is not known here yet.
+            Nobody can be granted presence until it does.
+          </p>
+        ))}
 
       {peer.people.map((person) => (
         <PeerPersonRow

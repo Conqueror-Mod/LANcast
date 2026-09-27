@@ -246,6 +246,27 @@ describe("people on paired servers", () => {
     );
   });
 
+  /*
+   * An empty roster from a server that never answered is not a choice.
+   *
+   * This page's whole discipline is refusing to render an absence of
+   * information as a decision, and it was doing exactly that about a whole
+   * household: "nobody has chosen to appear" printed under "Not answering".
+   *
+   * The consequence is worse than the wording. A presence grant can only name
+   * somebody already in the roster, so an unreachable peer cannot be granted
+   * presence in *either* direction — and a real pairing spent a day looking
+   * like a broken feature because the only explanation on screen was a choice
+   * nobody had made.
+   */
+  it("does not call an unfetched roster a choice", async () => {
+    mockServer(onePeer([], false));
+    await render();
+
+    expect(host.textContent).toContain("has not answered");
+    expect(host.textContent).not.toContain("has chosen to appear");
+  });
+
   it("distinguishes an idle person from one watching something", async () => {
     mockServer(
       onePeer([
