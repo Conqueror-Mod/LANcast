@@ -40,7 +40,7 @@ type PeerPersonFixture = {
 
 const puts: { url: string; body: unknown }[] = [];
 
-function mockServer(peers: unknown) {
+function mockServer(peers: unknown, sharedLibraries: unknown[] = []) {
   puts.length = 0;
   vi.stubGlobal(
     "fetch",
@@ -54,6 +54,7 @@ function mockServer(peers: unknown) {
         puts.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(null, { status: 204 });
       }
+      if (url.includes("/libraries")) return json({ libraries: sharedLibraries });
       if (url.includes("/api/people/peers")) return json({ peers });
       if (url.includes("/api/people")) return json({ people: [] });
       return json({});
@@ -192,7 +193,7 @@ describe("people on paired servers", () => {
     );
     await render();
 
-    expect(host.textContent).toContain("Not sharing with you");
+    expect(host.textContent).toContain("Not showing you what they watch");
     expect(host.textContent).not.toContain("Offline");
   });
 
@@ -207,7 +208,42 @@ describe("people on paired servers", () => {
     );
     await render();
 
-    expect(host.textContent).toContain("Not sharing with you");
+    expect(host.textContent).toContain("Not showing you what they watch");
+  });
+
+  /*
+   * What they share with us, on the card that asks whether the pairing works.
+   *
+   * Found by two people looking at two machines: four libraries were rendering
+   * in the rail and this screen said nothing about them, while three lines of
+   * presence copy used the word "sharing" for something else entirely. The
+   * conclusion drawn was that sharing was broken. It was not — the screen was
+   * simply silent about the only half that had succeeded.
+   */
+  it("says on the card what a peer has shared with us", async () => {
+    mockServer(
+      onePeer([{ id: "g-1", name: "Georgia", granted: true, shares: false }]),
+      [
+        { id: 1, name: "Movies", kind: "movie" },
+        { id: 2, name: "Music", kind: "music" },
+      ],
+    );
+    await render(() => host.textContent!.includes("sidebar"));
+
+    expect(host.textContent).toContain("Sharing 2 libraries with this server");
+  });
+
+  // And says so plainly when there is nothing, rather than leaving a silence
+  // that reads the same as a screen that has not loaded.
+  it("says when a peer has shared nothing", async () => {
+    mockServer(
+      onePeer([{ id: "g-1", name: "Georgia", granted: true, shares: false }]),
+    );
+    await render(() => host.textContent!.includes("has not shared"));
+
+    expect(host.textContent).toContain(
+      "Georgia's LANcast has not shared a library with this server",
+    );
   });
 
   it("distinguishes an idle person from one watching something", async () => {

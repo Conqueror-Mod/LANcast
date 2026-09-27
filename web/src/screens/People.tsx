@@ -3,6 +3,7 @@ import { PeerShares } from "@/components/PeerShares";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
+  usePeerLibraries,
   usePeerPresence,
   usePeople,
   usePersonActivity,
@@ -214,6 +215,8 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
         </span>
       </div>
 
+      <PeerSharedWithUs fingerprint={peer.fingerprint} name={peer.name} />
+
       {peer.people.length === 0 && (
         <p className="people__peer-empty">
           Nobody on this server has chosen to appear in its roster yet.
@@ -236,6 +239,41 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
        */}
       <PeerShares fingerprint={peer.fingerprint} />
     </div>
+  );
+}
+
+/*
+ * The other half of the relationship, said on the card.
+ *
+ * Their libraries render in the rail (ADR 0071 §5) and nowhere else, which is
+ * the non-merging rule and stays. But the rail is where you *use* them, and
+ * this card is where you ask whether the pairing is working at all — and it
+ * answered that question with everything except the half that had.
+ *
+ * So: a sentence, not a list. Naming the libraries here would be the rail's
+ * job done twice, and a second place to keep in step with a machine that may
+ * be off. A count is enough to tell "they share with me" from "they do not",
+ * which is the only thing this screen is being asked.
+ */
+function PeerSharedWithUs({
+  fingerprint,
+  name,
+}: {
+  fingerprint: string;
+  name: string;
+}) {
+  const { data } = usePeerLibraries(fingerprint);
+  if (!data?.libraries) return null;
+
+  const n = data.libraries.length;
+  return (
+    <p className="people__peer-shared">
+      {n === 0
+        ? `${name} has not shared a library with this server.`
+        : n === 1
+          ? `Sharing 1 library with this server — it is in the sidebar under ${name}.`
+          : `Sharing ${n} libraries with this server — they are in the sidebar under ${name}.`}
+    </p>
   );
 }
 
@@ -288,14 +326,20 @@ function PeerPersonRow({
  * markup because there are four cases and three of them are easy to collapse by
  * accident.
  *
- * "Not sharing" is a *choice* and must never be rendered as an absence or as
- * being offline — the rule the local list already holds itself to. And somebody
- * can only be known to be offline if they share; otherwise there is nothing to
- * know, and "Offline" would be inventing a fact about a person who has told us
- * nothing.
+ * Withholding presence is a *choice* and must never be rendered as an absence
+ * or as being offline — the rule the local list already holds itself to. And
+ * somebody can only be known to be offline if they share; otherwise there is
+ * nothing to know, and "Offline" would be inventing a fact about a person who
+ * has told us nothing.
+ *
+ * It said "Not sharing with you", three lines above a control about sharing
+ * *libraries*, on a card that by then carried both halves of that word. It was
+ * read — correctly, for the sentence it appeared to be — as "they have shared
+ * no libraries", while four of them were sitting in the rail. Presence says
+ * what it is about now, and nothing on this card says "sharing" unqualified.
  */
 function statusOf(person: PeerPerson, reachable: boolean): string {
-  if (!person.shares) return "Not sharing with you";
+  if (!person.shares) return "Not showing you what they watch";
   if (!reachable) return "Server not answering";
   if (!person.online) return "Offline";
   if (person.watching) return `Watching ${person.watching}`;

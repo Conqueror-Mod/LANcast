@@ -220,6 +220,15 @@
   color: var(--text-dim);
 }
 
+/* What they share with us. Quiet, and directly under the server's name rather
+   than beside the sharing control, so the two halves of the relationship read
+   as two facts about them and us instead of one setting with a status. */
+.people__peer-shared {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
 /* Wraps, and that is load-bearing rather than tidy. The button and the switch
    are both flex-shrink: 0, so on a narrow screen they take the row between them
    and leave the name and what somebody is watching squeezed to nothing — 17px
