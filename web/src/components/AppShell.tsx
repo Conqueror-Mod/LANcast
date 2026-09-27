@@ -1,4 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
 import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";
 import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
@@ -212,6 +213,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </NavLink>
             ))}
+
+            {/*
+              Other servers' libraries, under their own heading and below our
+              own — never mixed in (ADR 0071 §5). A person needs to know at a
+              glance whose disk a film is on: it is gone when that machine is
+              off, it counts against that host's streaming cap, and deleting it
+              is not theirs to do. A merged list makes all of that invisible at
+              exactly the moment it matters.
+            */}
+            <PeerLibraryLinks onNavigate={releaseRail} />
 
             {/* Add-ons sits at the foot of the library list rather than buried
                 three levels into Settings, because it is a *place* — a thing

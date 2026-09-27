@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom";
+import { PeerLibrary } from "@/screens/PeerLibrary";
 import { AppShell } from "@/components/AppShell";
 import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
@@ -65,6 +66,17 @@ export function App() {
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<Search />} />
           <Route path="/library/:id" element={<Browse />} />
+          {/*
+            Somebody else's library, on its own path rather than /library/:id
+            with a flag. The ids are not in the same namespace — item 42 on
+            their server is a different film from item 42 here — so a shared
+            route would be one mistyped parameter away from showing the wrong
+            thing (ADR 0071 §5).
+          */}
+          <Route
+            path="/peers/:fingerprint/library/:library"
+            element={<PeerLibrary />}
+          />
           {/* A page *of* a library, not a global one: a playlist belongs to the
               library its tracks and its .m3u live in (ADR 0030). */}
           <Route path="/library/:id/playlists" element={<Playlists />} />

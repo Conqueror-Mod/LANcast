@@ -58,6 +58,7 @@ import type {
   PeerInvite,
   PeerPresence,
   SharedLibrary,
+  PeerLibrary,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -3689,6 +3690,62 @@ export function useUnsetPeerShare(fingerprint: string) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["peer-shares", fingerprint] });
+    },
+  });
+}
+
+/*
+ * What a paired server shared with us
+ * ([ADR 0071](../../../docs/adr/0071-a-shared-library-is-a-standing-grant.md)
+ * §5, and its amendment).
+ *
+ * Asked of our own server, which asks theirs. This client cannot reach theirs
+ * at all — a window pins one server's key — so what looks like a remote read
+ * is an ordinary same-origin one.
+ *
+ * Keyed `["peer-libraries", fingerprint]`, not a sibling of `["libraries"]`.
+ * **That separation is the feature, not a cache detail**: §5 says a peer's
+ * libraries are never mixed into ours, and a key that swept both would be the
+ * first place they merged.
+ */
+export function usePeerLibraries(fingerprint: string, enabled = true) {
+  return useQuery({
+    queryKey: ["peer-libraries", fingerprint],
+    enabled: enabled && fingerprint !== "",
+    // A peer that is not answering is a 502, and retrying it three times just
+    // makes the page take longer to say so.
+    retry: false,
+    queryFn: ({ signal }) =>
+      apiGet<{ libraries: PeerLibrary[] }>(
+        `/api/peers/${encodeURIComponent(fingerprint)}/libraries`,
+        signal,
+      ),
+  });
+}
+
+/*
+ * A page of somebody else's library.
+ *
+ * Separate from `useItems` for the same reason as above, and because the
+ * shapes differ in what they can offer: no infinite scroll yet, and no
+ * facets — the far server's browse endpoint takes one library at a time.
+ */
+export function usePeerItems(
+  fingerprint: string,
+  library: number,
+  query: string,
+) {
+  return useQuery({
+    queryKey: ["peer-items", fingerprint, library, query],
+    enabled: fingerprint !== "" && library > 0,
+    retry: false,
+    queryFn: ({ signal }) => {
+      const p = new URLSearchParams({ library: String(library) });
+      if (query !== "") p.set("q", query);
+      return apiGet<{ items: Item[]; total: number }>(
+        `/api/peers/${encodeURIComponent(fingerprint)}/items?${p}`,
+        signal,
+      );
     },
   });
 }
