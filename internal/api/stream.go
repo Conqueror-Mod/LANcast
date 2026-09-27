@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"lancast/internal/store"
 )
 
 // Audio types are registered explicitly because ServeContent resolves the
@@ -52,6 +54,24 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
+	s.serveItemFile(w, r, it)
+}
+
+/*
+ * serveItemFile is the half that turns a row into bytes, and it is shared by
+ * every caller that has already decided the caller may have them.
+ *
+ * Shared deliberately. The containment re-check below is the rule CLAUDE.md
+ * calls "the boundary where a bad row becomes arbitrary file access", and a
+ * second copy of it is a second place for somebody to leave it out — which
+ * would not fail any test, because the path would still resolve for every
+ * ordinary row.
+ *
+ * It decides nothing about permission. Whoever calls it has answered that
+ * already: an account through GetItem's ceiling, a friend through
+ * store.MayPlay with a Friend principal.
+ */
+func (s *Server) serveItemFile(w http.ResponseWriter, r *http.Request, it *store.Item) {
 	if it.Path == "" {
 		writeError(w, http.StatusNotFound, "not_found", "item has no playable file")
 		return
@@ -63,7 +83,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Not a client error to explain in detail — log it and treat the item
 		// as unavailable.
-		s.log.Error("stream containment check failed", "item", id, "path", it.Path, "error", err)
+		s.log.Error("stream containment check failed", "item", it.ID, "path", it.Path, "error", err)
 		writeError(w, http.StatusNotFound, "not_found", "no such item")
 		return
 	}

@@ -289,6 +289,7 @@ are, and every later capability is granted separately.
 | `GET /api/federation/roster` | **Peer-to-peer.** The accounts here that have opted into being listed |
 | `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
 | `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&limit=&offset=` → browse or search one shared library, under that share's limit |
+| `GET /api/federation/stream` | **Peer-to-peer.** `?item=` → the file itself, with Range support, if that item is in a shared library and under its limit |
 
 Presence is a **third disclosure category** and no existing opt-in widens into
 it ([ADR 0045](adr/0045-live-presence-between-paired-servers.md) §1): agreeing
@@ -336,6 +337,12 @@ their own server, which asks this one here
 two name no person: a share is granted to a *server*, so the answer is the same
 for everybody on it, and a parameter that cannot change anything is one
 somebody will later assume does.
+
+Streaming goes the same way. The friend's server fetches the file and passes
+it to their client, and Range requests pass straight through — their server is
+a pipe rather than a buffer, so a viewer dragging the scrubber produces the
+same partial requests here that a local one would. That hop costs the friend's
+local network, not the link between the two houses.
 
 They are the same implementation the guest routes use. The two ways in
 authenticate differently and authorise identically, and a second copy of the

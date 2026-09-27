@@ -3603,6 +3603,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream a shared item to a paired server
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin. The friend's server fetches the file and passes it to their client, which cannot reach this one (ADR 0071, amended).
+         *
+         *     Permission is `store.MayPlay` with a **Friend** principal, which resolves the share and its limit and **fails closed**: a library that is not shared, an item above the limit, or a question that could not be answered are all refusals. That is the opposite of what the account path does with an unknown id, and the reason the two were split (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so this cannot be used to learn what the host holds.
+         *
+         *     Range requests pass through, which is what makes seeking work at the far end.
+         */
+        get: operations["federationStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -11694,6 +11720,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GuestItems"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationStream: {
+        parameters: {
+            query: {
+                /** @description The item to stream. */
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A requested byte range */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

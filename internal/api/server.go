@@ -444,6 +444,7 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("GET /api/federation/libraries", s.federationLibraries)
 	mux.HandleFunc("GET /api/federation/items", s.federationItems)
+	mux.HandleFunc("GET /api/federation/stream", s.federationStream)
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)
