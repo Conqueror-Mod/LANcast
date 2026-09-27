@@ -2,8 +2,10 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"lancast/internal/peer"
+	"lancast/internal/store"
 )
 
 /*
@@ -77,4 +79,64 @@ func (s *Server) federationItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeSharedItems(w, r, fingerprint)
+}
+
+/*
+ * federationStream serves one item's file to a paired server.
+ *
+ * The friend's server fetches it and passes it to their client, which cannot
+ * reach this one (ADR 0071's amendment). That hop costs the friend's local
+ * network and not the link between the two houses — the correction the
+ * amendment records.
+ *
+ * Range requests pass straight through, which is what makes seeking work at
+ * the far end: their server is a pipe, not a buffer, and a viewer dragging the
+ * scrubber produces the same partial requests here that a local one would.
+ */
+func (s *Server) federationStream(w http.ResponseWriter, r *http.Request) {
+	fingerprint, ok := s.federationPeer(w, r)
+	if !ok {
+		return
+	}
+	s.writeSharedStream(w, r, fingerprint)
+}
+
+/*
+ * writeSharedStream is the one place a peer's request becomes a file, and it
+ * answers the permission question with the same call the browse path uses.
+ *
+ * store.MayPlay with a Friend principal resolves the share and its ceiling and
+ * **fails closed** — a library that is not shared, an item above the limit, or
+ * a question that could not be answered are all refusals. That is the opposite
+ * of what the account path does with an unknown id, and the whole reason the
+ * two were split (ADR 0071 §6).
+ *
+ * A refusal is 404, indistinguishable from an item that does not exist, so
+ * this cannot be used to learn what the host holds.
+ */
+func (s *Server) writeSharedStream(w http.ResponseWriter, r *http.Request, peerFP string) {
+	itemID, err := strconv.ParseInt(r.URL.Query().Get("item"), 10, 64)
+	if err != nil || itemID <= 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "which item")
+		return
+	}
+
+	allowed, err := s.st.MayPlay(r.Context(), store.Friend(peerFP), itemID)
+	if err != nil || !allowed {
+		writeError(w, http.StatusNotFound, "not_found", "no such item")
+		return
+	}
+
+	/*
+	 * Read with no account. The ceiling that matters was applied above by the
+	 * Friend principal; passing an account id here would ask this server to
+	 * apply *its own* household's limit to somebody else's, which is the
+	 * confusion Principal exists to make impossible.
+	 */
+	it, err := s.st.GetItem(r.Context(), itemID, "")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such item")
+		return
+	}
+	s.serveItemFile(w, r, it)
 }

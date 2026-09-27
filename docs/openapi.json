@@ -7856,6 +7856,48 @@
           }
         }
       }
+    },
+    "/federation/stream": {
+      "get": {
+        "operationId": "federationStream",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Stream a shared item to a paired server",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin. The friend's server fetches the file and passes it to their client, which cannot reach this one (ADR 0071, amended).\n\nPermission is `store.MayPlay` with a **Friend** principal, which resolves the share and its limit and **fails closed**: a library that is not shared, an item above the limit, or a question that could not be answered are all refusals. That is the opposite of what the account path does with an unknown id, and the reason the two were split (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so this cannot be used to learn what the host holds.\n\nRange requests pass through, which is what makes seeking work at the far end.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item to stream."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file"
+          },
+          "206": {
+            "description": "A requested byte range"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
