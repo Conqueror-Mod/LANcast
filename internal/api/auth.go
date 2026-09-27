@@ -36,7 +36,8 @@ func isPublicPath(p string) bool {
 	switch p {
 	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup":
 		return true
-	case "/api/federation/presence", "/api/federation/roster":
+	case "/api/federation/presence", "/api/federation/roster",
+		"/api/federation/libraries", "/api/federation/items":
 		// Not public: authenticated by the mutual-TLS pin instead of a session
 		// (ADR 0044 §4). It is listed here because the *session* gate is the
 		// wrong gate for a caller that is a server, and the handler refuses

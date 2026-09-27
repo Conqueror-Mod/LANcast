@@ -3557,6 +3557,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Libraries shared with the calling server
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin rather than a session (ADR 0044 §4): the connection must present the identity key recorded for that peer. No person is named — a share is granted to a *server* (ADR 0071 §1), so the answer is the same for everybody on it.
+         *
+         *     Browsing goes this way rather than direct because a friend's client cannot reach this server: a window pins one server's key (ADR 0070) and a self-signed certificate from anybody else is refused.
+         */
+        get: operations["federationLibraries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse or search one shared library, for a paired server
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin rather than a session (ADR 0044 §4): the connection must present the identity key recorded for that peer. No person is named — a share is granted to a *server* (ADR 0071 §1), so the answer is the same for everybody on it.
+         *
+         *     Browsing goes this way rather than direct because a friend's client cannot reach this server: a window pins one server's key (ADR 0070) and a self-signed certificate from anybody else is refused.
+         *
+         *     The same implementation the guest routes use: the two ways in authenticate differently and authorise identically, and a second copy of the scoping would be a second chance to get it wrong. A library that is not shared answers 404.
+         */
+        get: operations["federationItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -11560,6 +11606,65 @@ export interface operations {
         };
     };
     guestItems: {
+        parameters: {
+            query: {
+                /** @description The shared library to browse. Required. */
+                library: number;
+                /** @description Restrict to one item kind. */
+                kind?: string;
+                /** @description Search text, matched within this library only. */
+                q?: string;
+                /** @description title | year | added | rating | track */
+                sort?: string;
+                /** @description Page size, capped at 200. */
+                limit?: number;
+                /** @description Page offset. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of items, and the total inside the scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestItems"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shared libraries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuestLibraries"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    federationItems: {
         parameters: {
             query: {
                 /** @description The shared library to browse. Required. */
