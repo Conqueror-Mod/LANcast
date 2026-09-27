@@ -320,6 +320,17 @@ export type PeerInvite = components["schemas"]["PeerInvite"];
 export type SharedLibrary = components["schemas"]["SharedLibrary"];
 
 /*
+ * One library another server shared with us (ADR 0071 §5).
+ *
+ * A distinct type from Library, deliberately. They are not interchangeable and
+ * must never be concatenated: a peer's library is gone when that server is
+ * off, counts against that host's streaming cap, and is not ours to delete.
+ * §5 makes that a rule about presentation; a separate type makes it one the
+ * compiler helps keep.
+ */
+export type PeerLibrary = components["schemas"]["GuestLibrary"];
+
+/*
  * A work claimed by more than one file (ADR 0042).
  *
  * LANcast reports these and resolves none of them. A shared provider id is

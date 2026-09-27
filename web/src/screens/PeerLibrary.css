@@ -1,0 +1,86 @@
+/*
+ * Somebody else's library (ADR 0071 §5).
+ *
+ * Styled close to the local library screen but not identically: the header
+ * says whose machine this is before it says which library, because that is
+ * the fact §5 exists to keep visible.
+ */
+.peer-lib {
+  padding: 24px 32px 48px;
+}
+
+.peer-lib__head {
+  margin-bottom: 20px;
+}
+
+.peer-lib__server {
+  display: inline-block;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.peer-lib__server:hover,
+.peer-lib__server:focus-visible {
+  color: var(--text-primary);
+}
+
+.peer-lib__title {
+  margin: 4px 0 6px;
+}
+
+.peer-lib__sub {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-dim);
+  font-size: 0.9em;
+}
+
+.peer-lib__tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+/* Matches .set-input: dormant gold hairline at rest, full gold on focus. */
+.peer-lib__search {
+  flex: 1;
+  max-width: 320px;
+  padding: 7px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(5, 7, 15, 0.6);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.peer-lib__search:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.peer-lib__count,
+.peer-lib__note,
+.peer-lib__away {
+  color: var(--text-dim);
+  font-size: 0.9em;
+}
+
+.peer-lib__away {
+  max-width: 62ch;
+}
+
+/*
+ * flex-shrink: 0 is not needed here because this is a grid, but the columns
+ * are fixed rather than auto-fit so a short list does not stretch three films
+ * across a wide window.
+ */
+.peer-lib__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
+  gap: 18px;
+}
