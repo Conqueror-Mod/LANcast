@@ -403,6 +403,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/peers/{fingerprint}/ticket", s.mintGuestTicket)
 
 	/*
+	 * Looking at what a paired server shared with us. Not adminOnly: pairing
+	 * is administrative and looking at what a pairing produced is not, the
+	 * same split the presence grants draw.
+	 */
+	mux.HandleFunc("GET /api/peers/{fingerprint}/libraries", s.peerLibraries)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/items", s.peerItems)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/stream", s.peerStream)
+
+	/*
 	 * What a paired server may see. Administrative for the reason in
 	 * libraryshare.go: it is a decision about this server's content, not an
 	 * exercise of anybody's personal consent -- which is exactly why the

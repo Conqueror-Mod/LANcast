@@ -218,12 +218,23 @@ ADR 0044 declines to build.
 | `GET /api/peers/{fingerprint}/shares` | `{libraries: [...]}` — every library, whether this peer may see it, its limit, and what a limit would cost. **Admin** |
 | `PUT /api/peers/{fingerprint}/shares/{library}` | `{ceiling}` — shares a library, or changes its limit. **Admin** |
 | `DELETE /api/peers/{fingerprint}/shares/{library}` | Stops sharing, from the peer's next request. **Admin** |
+| `GET /api/peers/{fingerprint}/libraries` | What that server shared with us. Asked of them and passed through |
+| `GET /api/peers/{fingerprint}/items` | `?library=&…` → browse or search one of their shared libraries |
+| `GET /api/peers/{fingerprint}/stream` | `?item=` → the file, fetched from them and passed through, Range and all |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
 | `GET /api/guest/libraries` | `{libraries: [...]}` — the libraries shared with this guest's server, and nothing else |
 | `GET /api/guest/items` | `?library=&kind=&q=&sort=&limit=&offset=` → `{items, total}` — browse or search **one** shared library, under that share's limit |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
+
+The three browse routes are **not** administrative. Pairing is; looking at
+what a pairing produced is not — the same split the presence grants draw. This
+server decides only that the caller is signed in and that the fingerprint names
+a peer; what may be *seen* is the far server's decision, and a check here would
+be this household deciding what the other one meant to share. A peer that is
+not answering is **502**, never 500: this server is fine and somebody should
+not go looking in the wrong logs.
 
 Sharing is administrative for the same reason pairing is: it is a decision
 about this server's *content*, not an exercise of anybody's personal consent —

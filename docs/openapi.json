@@ -7898,6 +7898,204 @@
           }
         }
       }
+    },
+    "/peers/{fingerprint}/libraries": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "get": {
+        "operationId": "peerLibraries",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What a paired server shared with us",
+        "description": "Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).\n\nThis server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.\n\nA peer that is not answering is **502**, never 500.",
+        "responses": {
+          "200": {
+            "description": "Their shared libraries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLibraries"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/items": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "get": {
+        "operationId": "peerItems",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Browse or search one of their shared libraries",
+        "description": "Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).\n\nThis server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.\n\nA peer that is not answering is **502**, never 500.\n\nThe query is forwarded whole, so a filter added to the far server's browse endpoint works the day it ships.",
+        "parameters": [
+          {
+            "name": "library",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The shared library."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict to one item kind."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search text."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "title | year | added | rating | track"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page offset."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of their items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestItems"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/stream": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PeerFingerprint"
+        }
+      ],
+      "get": {
+        "operationId": "peerStream",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Play something from a paired server",
+        "description": "Asked of the paired server and passed through. This household's client cannot reach theirs — a window pins one server's key (ADR 0070) — so it asks here and this server asks them over the peer channel (ADR 0071, amended).\n\nThis server decides only that the caller is signed in and that the fingerprint names a peer. What may be seen is the far server's decision; a check here would be this household deciding what the other one meant to share, and a second answer that could disagree.\n\nA peer that is not answering is **502**, never 500.\n\nThe bytes are copied rather than buffered and the Range header goes both ways, so a viewer dragging the scrubber here produces the same partial request there. Holding the file first would turn a seek into a wait for a whole film.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The item on their server."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file"
+          },
+          "206": {
+            "description": "A requested byte range"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
