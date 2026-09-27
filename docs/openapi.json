@@ -7738,6 +7738,124 @@
           }
         }
       }
+    },
+    "/federation/libraries": {
+      "get": {
+        "operationId": "federationLibraries",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Libraries shared with the calling server",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin rather than a session (ADR 0044 §4): the connection must present the identity key recorded for that peer. No person is named — a share is granted to a *server* (ADR 0071 §1), so the answer is the same for everybody on it.\n\nBrowsing goes this way rather than direct because a friend's client cannot reach this server: a window pins one server's key (ADR 0070) and a self-signed certificate from anybody else is refused.",
+        "responses": {
+          "200": {
+            "description": "The shared libraries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestLibraries"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/federation/items": {
+      "get": {
+        "operationId": "federationItems",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Browse or search one shared library, for a paired server",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin rather than a session (ADR 0044 §4): the connection must present the identity key recorded for that peer. No person is named — a share is granted to a *server* (ADR 0071 §1), so the answer is the same for everybody on it.\n\nBrowsing goes this way rather than direct because a friend's client cannot reach this server: a window pins one server's key (ADR 0070) and a self-signed certificate from anybody else is refused.\n\nThe same implementation the guest routes use: the two ways in authenticate differently and authorise identically, and a second copy of the scoping would be a second chance to get it wrong. A library that is not shared answers 404.",
+        "parameters": [
+          {
+            "name": "library",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The shared library to browse. Required."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict to one item kind."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search text, matched within this library only."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "title | year | added | rating | track"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page size, capped at 200."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Page offset."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of items, and the total inside the scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestItems"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {

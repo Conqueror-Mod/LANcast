@@ -59,8 +59,21 @@ func (s *Server) guestLibraries(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "not a guest session")
 		return
 	}
+	s.writeSharedLibraries(w, r, g.Peer)
+}
 
-	ids, err := s.st.SharedLibraries(r.Context(), g.Peer)
+/*
+ * writeSharedLibraries and writeSharedItems are the *only* implementation of
+ * what a peer may see, and both ways in call them.
+ *
+ * A guest session (ADR 0046's ticket) and the mutual-TLS peer channel
+ * (ADR 0071's amendment) authenticate differently and authorise identically —
+ * both resolve to a peer fingerprint, and everything after that is the same
+ * question. Two copies of this would be two chances to narrow one and not the
+ * other, and the one that was missed would be a hole nobody was looking at.
+ */
+func (s *Server) writeSharedLibraries(w http.ResponseWriter, r *http.Request, peerFP string) {
+	ids, err := s.st.SharedLibraries(r.Context(), peerFP)
 	if err != nil {
 		s.writeInternal(w, err, "shared libraries")
 		return
@@ -93,14 +106,19 @@ func (s *Server) guestItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "not a guest session")
 		return
 	}
+	s.writeSharedItems(w, r, g.Peer)
+}
 
+// writeSharedItems is the scoped listing, shared by both ways in. See
+// writeSharedLibraries for why there is only one of it.
+func (s *Server) writeSharedItems(w http.ResponseWriter, r *http.Request, peerFP string) {
 	libraryID, err := strconv.ParseInt(r.URL.Query().Get("library"), 10, 64)
 	if err != nil || libraryID <= 0 {
 		writeError(w, http.StatusBadRequest, "bad_request", "which library")
 		return
 	}
 
-	ceiling, err := s.st.CeilingFor(r.Context(), g.Peer, libraryID)
+	ceiling, err := s.st.CeilingFor(r.Context(), peerFP, libraryID)
 	if errors.Is(err, store.ErrNotShared) {
 		writeError(w, http.StatusNotFound, "not_found", "no such library")
 		return

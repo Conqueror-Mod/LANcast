@@ -436,6 +436,14 @@ func (s *Server) Handler() http.Handler {
 	// caller is a server, not a browser. See federationPresence.
 	mux.HandleFunc("GET /api/federation/presence", s.federationPresence)
 	mux.HandleFunc("GET /api/federation/roster", s.federationRoster)
+
+	/*
+	 * Browsing a share, asked for by the friend's own server rather than by
+	 * their client, which cannot reach this one (ADR 0071's amendment).
+	 * Authenticated by the peer pin, like the two above.
+	 */
+	mux.HandleFunc("GET /api/federation/libraries", s.federationLibraries)
+	mux.HandleFunc("GET /api/federation/items", s.federationItems)
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)

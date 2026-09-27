@@ -287,6 +287,8 @@ are, and every later capability is granted separately.
 | `DELETE /api/presence` | Playback stopped; drop the caller's live presence now |
 | `GET /api/federation/presence?person={id}` | **Peer-to-peer.** Answers what that peer's person may see. Not a session route — see below |
 | `GET /api/federation/roster` | **Peer-to-peer.** The accounts here that have opted into being listed |
+| `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
+| `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&limit=&offset=` → browse or search one shared library, under that share's limit |
 
 Presence is a **third disclosure category** and no existing opt-in widens into
 it ([ADR 0045](adr/0045-live-presence-between-paired-servers.md) §1): agreeing
@@ -316,7 +318,7 @@ nothing else. Presence is **never persisted**: there is no history, no "last
 seen watching", and no route that could answer either. Revocation takes effect
 on the next poll, mid-film.
 
-`GET /api/federation/presence` is the only route in this contract not
+The federation routes above are the only ones in this contract not
 authenticated by a session. Its caller is a server, and it is authenticated by
 the **mutual-TLS pin** ([ADR 0044](adr/0044-server-identity-and-peering.md) §4):
 the connection must present the identity key already recorded for that peer, and
@@ -325,6 +327,19 @@ asking is the calling server's word, on the same basis a pairing already rests
 on. Peer connections are told apart from browsers by an ALPN marker in the
 ClientHello, so they share the ordinary port and no browser is ever asked for a
 certificate.
+
+**Browsing goes this way rather than direct**, because a friend's client
+cannot reach this server at all: a window pins one server's key (ADR 0070) and
+a self-signed certificate from anybody else is refused. So their client asks
+their own server, which asks this one here
+([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended). These
+two name no person: a share is granted to a *server*, so the answer is the same
+for everybody on it, and a parameter that cannot change anything is one
+somebody will later assume does.
+
+They are the same implementation the guest routes use. The two ways in
+authenticate differently and authorise identically, and a second copy of the
+scoping would be a second chance to narrow one and not the other.
 
 Fetching a peer's roster is also what establishes that a pairing is **mutual**:
 this server only reaches that handler for a fingerprint the far side already
