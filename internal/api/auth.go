@@ -36,16 +36,61 @@ func isPublicPath(p string) bool {
 	switch p {
 	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup":
 		return true
-	case "/api/federation/presence", "/api/federation/roster",
-		"/api/federation/libraries", "/api/federation/items",
-		"/api/federation/stream":
-		// Not public: authenticated by the mutual-TLS pin instead of a session
-		// (ADR 0044 §4). It is listed here because the *session* gate is the
-		// wrong gate for a caller that is a server, and the handler refuses
-		// anything that did not present a peer certificate.
+	}
+	if isFederationPath(p) {
 		return true
 	}
 	return !strings.HasPrefix(p, "/api/")
+}
+
+/*
+ * peerAuthenticated lists the routes a *server* authenticates for, rather than
+ * a person.
+ *
+ * Not public: authenticated by the mutual-TLS pin instead of a session
+ * (ADR 0044 §4). They are exempted from the session gate because that is the
+ * wrong gate for a caller that is a server, and every one of these handlers
+ * refuses anything that did not present a peer certificate.
+ *
+ * **Patterns, not literal paths, and that is the whole point of this list.**
+ * It used to be a `switch` over exact strings, which worked for as long as
+ * every federation route was a fixed path — and silently stopped covering the
+ * playback routes the day one of them took a path parameter. Nothing failed:
+ * the routes existed, the handlers were right, and a real peer was turned away
+ * at the door by a gate meant for browsers. No test could see it, because
+ * tests call handlers and middleware runs before handlers.
+ */
+var peerAuthenticated = []string{
+	"/api/federation/presence",
+	"/api/federation/roster",
+	"/api/federation/libraries",
+	"/api/federation/items",
+	"/api/federation/stream",
+	"/api/federation/playback",
+	"/api/federation/transcode",
+	"/api/federation/hls/{item}/index.m3u8",
+	"/api/federation/hls/{item}/{session}/{name}",
+	"/api/federation/subtitles",
+	"/api/federation/subtitles/{item}/{key}",
+}
+
+/*
+ * isFederationPath matches a request against that list.
+ *
+ * A list rather than a `/api/federation/` prefix test, because the prefix
+ * would make every route added under it exempt from the session gate by
+ * default — and this project's instinct everywhere else (see guestgate.go) is
+ * that the absence of an entry is a refusal. A test enumerates the router and
+ * fails if a federation route is missing from here, so the list cannot fall
+ * behind the way the switch did.
+ */
+func isFederationPath(p string) bool {
+	for _, pattern := range peerAuthenticated {
+		if segmentsMatch(pattern, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // secured reports whether any account exists. Zero users is the unconfigured
