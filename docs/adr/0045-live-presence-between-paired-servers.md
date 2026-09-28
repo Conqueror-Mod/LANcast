@@ -1,6 +1,6 @@
 # ADR 0045 — Live presence between paired servers
 
-Date: 2026-08-19 · Status: accepted
+Date: 2026-08-19 · Status: accepted (amended 2026-09-27 — see *Amendment*)
 
 Amends [ADR 0035](0035-who-may-see-whose-viewing.md).
 
@@ -282,3 +282,122 @@ Presence proves to be something people turn off, somebody asks to see a friend's
 history rather than their evening, or a third household makes "a named person"
 an unreasonable amount of clicking. The honest response to the last one is a
 better way to express a grant — not a switch that means everybody.
+
+## Amendment — presence needs a route in both directions, and says so nowhere
+
+**Added 2026-09-27, after two real servers were paired for the first time.**
+
+Everything in this ADR is written about *consent*: who has opted in, who has
+granted whom, and what an administrator cannot do on somebody's behalf. None of
+it is written about *reach*. The first pairing between two households found an
+unstated dependency underneath all of it.
+
+### What happened
+
+Chris's server and Georgia's server were paired. Georgia's server could reach
+Chris's; Chris's could not reach Georgia's, because every address it held for
+her server was an address on *his own* network — the pairing had been made while
+her machine was there, and [ADR 0044](0044-server-identity-and-peering.md)
+records addresses once and never re-learns them.
+
+Chris had opted into the roster and was watching a film. Georgia's People page
+said he was not sharing. Both accounts were configured correctly and had been
+all along.
+
+### Why one-way reach breaks presence in *both* directions
+
+§2 requires that a grant name a person, and that the person exist locally:
+
+> Granting requires the remote person to exist locally, which is why pairing
+> exchanges a roster.
+
+The roster arrives through `refreshPeer`, and `refreshPeer` is an **outbound**
+call. So:
+
+- Chris's server never fetched Utopia's roster, so `remote_person` held nobody
+  from it, so **Georgia had no row on Chris's People page to grant**.
+- With no grant, Chris's server answered Georgia's presence request with
+  `ReadersOf(...) = nobody`.
+- Georgia's server rendered that, correctly, as *he is not sharing with you* —
+  **although her server reached his perfectly well.**
+
+**A pairing that is reachable in only one direction discloses nothing in either
+direction.** The half of the relationship that works cannot be used, because
+what it is missing is on the other side. The same call is also what promotes a
+peer from `added` to `paired`, so the state field reports the failure and
+nothing reads it as an explanation.
+
+This was invisible for three reasons, all of them ours. The roster was specified
+as a *consent* mechanism — being in it is an opt-in — and its second role as a
+*routing* precondition was never named. Every test stubs a peer that answers,
+because a stub that does not answer looks like a test of the timeout. And the
+whole failure presents as a person's choice, which is the last place anybody
+looks for a network fault.
+
+### The screen made it worse, in this ADR's own terms
+
+The People page printed *"Nobody on this server has chosen to appear in its
+roster yet"* directly beneath *"Not answering"*.
+
+This ADR already argued the principle that forbids that, under **Cost — "not
+sharing" is visible**:
+
+> The alternative — making withholding indistinguishable from being offline —
+> hides the choice by lying about the state.
+
+The implementation committed the same error one level up, and in the opposite
+direction: it made *unreachable* indistinguishable from *withheld*, and then
+resolved the ambiguity in favour of the reading that blames a household for a
+decision it never made. Fixed in
+[#688](https://github.com/Conqueror-Mod/LANcast/pull/688).
+
+## Decision
+
+### 9. Reach is a precondition of presence, and the UI must say which is missing
+
+**A presence grant requires that this server has successfully fetched the
+peer's roster.** That is a fact about the network, not about anybody's consent,
+and it is now stated rather than implied by §2.
+
+Three causes of an empty roster must be distinguishable wherever a roster is
+shown, because they call for three different actions and two of them are not
+actions by the person reading:
+
+| what is true | what it means |
+|---|---|
+| the peer answered, and nobody opted in | a choice, over there |
+| the peer has never answered | this server cannot reach it |
+| the peer answered, and the person withheld a grant | a choice, by a person |
+
+Collapsing any of these into any other is the failure this ADR spent a section
+on. In particular, **an unreachable peer must never be reported as an absence of
+consent.**
+
+## Alternatives considered
+
+**Learn the roster from inbound calls.** When Georgia's server asks
+`federationPresence?person=…`, it is telling us that person exists, over a
+connection whose identity we have already pinned — and this file already accepts
+that trust in as many words: *"Georgia's server vouches for Georgia."* Recording
+her from that call would make presence work over a one-way route, which is
+attractive, and it is the obvious first thing to try.
+
+It is not adopted here because it **routes around `visible_to_peers`**. §2 makes
+being in a roster its own opt-in, defaulting off, precisely so that an account
+can be un-nameable from the far side; a person learned from an inbound request
+has been named to us without their server ever deciding to include them. The
+asking server chooses who to ask on behalf of, and that is not the same
+decision. Adopting this needs the far server to state the opt-in on the inbound
+call, and that is a protocol change, not a handler change.
+
+**Re-learn addresses.** The real fault in the incident was that the addresses
+were frozen and wrong, and no amount of presence design fixes that. It belongs
+to ADR 0044, which owns addresses, and is noted here only so the next person
+does not solve it in the wrong file.
+
+## What this does not decide
+
+**How a peer's addresses are discovered, re-learned, or aged out.** ADR 0044.
+
+**Whether an unreachable pairing should be repairable in the client**, rather
+than by unpairing and starting again. It should be, and nothing here says how.
