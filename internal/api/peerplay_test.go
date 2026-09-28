@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -261,5 +263,130 @@ func TestARubbishItemIsNotForwarded(t *testing.T) {
 				t.Errorf("status = %d, want 400", resp.StatusCode)
 			}
 		})
+	}
+}
+
+// --- presence for a peer's film (ADR 0045 §10) -----------------------------
+
+/*
+ * The beat needs a peer this server knows and a caller who is signed in, and
+ * nothing else it could be talked into.
+ */
+func TestTheWatchingBeatIsRefusedLikeEveryOtherPeerRoute(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+	stranger := anotherServer(t)
+
+	for _, c := range []struct {
+		name   string
+		target string
+		signed bool
+		want   int
+	}{
+		{"a peer we never met", "/api/peers/" + stranger.Fingerprint() + "/watching?item=1", true, http.StatusNotFound},
+		{"no item named", "/api/peers/" + georgia.Fingerprint() + "/watching", true, http.StatusBadRequest},
+		{"signed out", "/api/peers/" + georgia.Fingerprint() + "/watching?item=1", false, http.StatusUnauthorized},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var resp *http.Response
+			if c.signed {
+				resp = h.authed(t, "PUT", c.target, nil)
+			} else {
+				resp = h.do(t, "PUT", c.target, nil)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != c.want {
+				t.Errorf("status = %d, want %d", resp.StatusCode, c.want)
+			}
+		})
+	}
+}
+
+/*
+ * A peer that will not answer discloses nothing, and does not leave the last
+ * thing standing either.
+ *
+ * Presence lingering after the truth changed is the single false statement
+ * about the present that ADR 0045 exists not to make — so a beat that could
+ * not be resolved is `Stopped`, not "keep whatever was there".
+ */
+func TestAnUnreachablePeerLeavesNoPresenceBehind(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+
+	// Something is being watched locally first, so the assertion is that the
+	// beat *cleared* it rather than that it was never set.
+	h.srvAPI.tracker().Watching(store.LocalUserID, "A Local Film")
+	if st, _ := h.srvAPI.tracker().Snapshot(store.LocalUserID); st.Watching == "" {
+		t.Fatal("fixture: nothing was being watched to begin with")
+	}
+
+	resp := h.authed(t, "PUT",
+		"/api/peers/"+georgia.Fingerprint()+"/watching?item=1", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+
+	st, _ := h.srvAPI.tracker().Snapshot(store.LocalUserID)
+	if st.Watching != "" {
+		t.Errorf("still watching %q after the peer failed to answer", st.Watching)
+	}
+}
+
+/*
+ * **No title crosses from the client.**
+ *
+ * This is the rule §10 turns on. §3's reductions — video only, the work and
+ * never the episode — are `presenceTitle` on the server that owns the item, and
+ * a client able to name its own presence could name an episode, which §3
+ * forbids by name.
+ *
+ * Asserted on the path this server builds rather than on the presence that
+ * results. The first version of this test set a title in the query and checked
+ * that presence stayed empty — which it did, because the peer was unreachable
+ * in the harness and presence would have been cleared either way. It passed
+ * while proving nothing, which is the failure this file's own comments warn
+ * about twice.
+ *
+ * What is actually load-bearing is that the request carries the item and
+ * nothing else, so a title parameter added later fails here rather than being
+ * found in somebody's People screen.
+ */
+func TestTheClientCannotNameWhatItIsWatching(t *testing.T) {
+	for _, c := range []struct{ item, want string }{
+		{"42", "/api/federation/presence-title/42"},
+		// A client trying to smuggle one through the only field it controls.
+		{"42?title=Cowboy+Bebop+S01E02", "/api/federation/presence-title/42%3Ftitle=Cowboy+Bebop+S01E02"},
+	} {
+		got := peerPresenceTitlePath(c.item)
+		if got != c.want {
+			t.Errorf("peerPresenceTitlePath(%q) = %q, want %q", c.item, got, c.want)
+		}
+		if strings.Contains(got, "Bebop") && !strings.Contains(got, "%3F") {
+			t.Errorf("a client-supplied value reached the peer unescaped: %q", got)
+		}
+	}
+
+	// And the handler reads no title of its own: the only thing it takes from
+	// the caller is which item.
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+	h.srvAPI.tracker().Watching(store.LocalUserID, "A Local Film")
+
+	resp := h.authed(t, "PUT",
+		"/api/peers/"+georgia.Fingerprint()+
+			"/watching?item=1&title=Cowboy%20Bebop%20S01E02", nil)
+	defer resp.Body.Close()
+
+	st, _ := h.srvAPI.tracker().Snapshot(store.LocalUserID)
+	if st.Watching == "Cowboy Bebop S01E02" {
+		t.Error("the client named its own disclosure")
 	}
 }

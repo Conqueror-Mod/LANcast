@@ -3787,6 +3787,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/presence-title/{item}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What may be said that somebody is watching
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, authorised per item with a **Friend** principal exactly as the playback routes are.
+         *
+         *     The title is computed **here**, by the server that owns the item, because [ADR 0045](adr/0045-live-presence-between-paired-servers.md) §3's reductions — video only, the work and never the episode — are one function and must stay one implementation. The asking server records what comes back and derives nothing of its own.
+         *
+         *     An **empty title is a complete answer** and the common one: music, a photograph, an episode whose series is unknown. The caller records nothing for it.
+         */
+        get: operations["federationPresenceTitle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers/{fingerprint}/libraries": {
         parameters: {
             query?: never;
@@ -4033,6 +4057,32 @@ export interface paths {
          */
         get: operations["peerSubtitleFile"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/watching": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Still watching a film on a paired server
+         * @description A **beat**, not a record. Locally, presence is a side effect of the progress write; a peer item writes no progress ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) §4 is deliberately open), so without this the People screen says *idle* while a film is on screen.
+         *
+         *     **No title is accepted.** This server asks the peer what may be said and records that — a client able to name its own presence could name an episode, which ADR 0045 §3 forbids by name.
+         *
+         *     Sent every five seconds while the picture is moving, against a twenty-second expiry. Stopping the beat is how presence ends: a client that paused and one that closed are the same fact, and both mean nobody is watching now.
+         *
+         *     A peer that will not answer clears presence rather than leaving the last thing standing.
+         */
+        put: operations["peerWatching"];
         post?: never;
         delete?: never;
         options?: never;
@@ -12356,6 +12406,35 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    federationPresenceTitle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item being played. */
+                item: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The title, or an empty string */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Empty when nothing may be said. */
+                        title: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     peerLibraries: {
         parameters: {
             query?: never;
@@ -12688,6 +12767,33 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    peerWatching: {
+        parameters: {
+            query: {
+                /** @description The item on **their** server. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The paired server. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded, or deliberately not */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

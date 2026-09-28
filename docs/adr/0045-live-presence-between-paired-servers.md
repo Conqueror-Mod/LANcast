@@ -1,6 +1,6 @@
 # ADR 0045 — Live presence between paired servers
 
-Date: 2026-08-19 · Status: accepted (amended 2026-09-27 — see *Amendment*)
+Date: 2026-08-19 · Status: accepted (amended 2026-09-27 and 2026-09-28 — see *Amendments*)
 
 Amends [ADR 0035](0035-who-may-see-whose-viewing.md).
 
@@ -401,3 +401,85 @@ does not solve it in the wrong file.
 
 **Whether an unreachable pairing should be repairable in the client**, rather
 than by unpairing and starting again. It should be, and nothing here says how.
+
+## Amendment — presence covers a film on somebody else's server
+
+**Added 2026-09-28, the day two LANcasts first played each other's films.**
+
+A friend's library can now be browsed and played ([ADR 0071](0071-a-shared-library-is-a-standing-grant.md)
+§5). Watching one of their films disclosed **nothing**: the People screen went
+on saying *idle* while a film was on screen.
+
+Nobody decided that. It fell out of an implementation detail.
+
+### How it happened
+
+`recordWatching` is called from the **progress write**. A peer item
+deliberately writes no progress — §4 of ADR 0071 leaves "where does a friend's
+progress live" genuinely open, and storing it locally would have answered that
+question by accident — so the moment presence rides on never arrives.
+
+The irony is that this ADR already warned about the coupling. Under
+*Alternatives considered*:
+
+> **Deriving presence from `playback_state` rather than tracking it live.** …
+> rejected because that is *the record*: reading presence out of it means
+> presence and history are the same data, one query apart, and the separation
+> this ADR rests on would exist only in the handler that happened to be written
+> today.
+
+The alternative was rejected and then half-built anyway. Presence is not *read*
+from the record, but it is *triggered* by writing one — which is the same
+coupling wearing a different hat, and it produced exactly the failure the
+warning predicts: a kind of playback that keeps no record became a kind of
+playback that has no presence.
+
+### Decision
+
+### 10. A work is a work, wherever its file is
+
+**Presence covers a film played from a paired server exactly as it covers one
+played from here.** §3's disclosure is unchanged and is not widened: online,
+watching-or-idle, and the work by title. Nothing says whose disk it is on, and
+nothing should — that is a fact about *storage*, and §3 is a list about
+*viewing*.
+
+Three things follow, and they are the whole of the rule:
+
+**The title is computed by the server that owns the item.** §3's reductions —
+video only, the work and never the episode — are a function, `presenceTitle`,
+and it must stay one implementation. The host applies it to its own item and
+answers with the result; the viewer's server records what comes back. A title
+supplied by a *client* would move a rule this ADR spent a paragraph on into
+software the rule cannot reach.
+
+**A peer's refusal is silence, not a fallback.** If the far server will not say
+— unshared, above its limit, switched off — presence says nothing. There is no
+guessing from an id and no borrowing the client's own idea of the name.
+
+**Presence is triggered by a heartbeat, not by a record.** The local path keeps
+its progress write as a convenient moment, but the rule is now stated plainly:
+what makes somebody visible as watching is a beat that says *still watching*,
+and nothing about whether anything was written down. That is what the rejected
+alternative above was protecting, and stating it is the repair.
+
+### What is still not disclosed
+
+Unchanged and worth restating, because a peer's film is a new chance to get
+each of them wrong:
+
+- **Not whose server it is on.** "Chris is watching Allegiant", never "Chris is
+  watching Allegiant on Georgia's server". Whose copy it is is nobody's
+  business and it is not in §3's list.
+- **Not the episode**, on either server's content.
+- **Not music or photographs**, on either server's content.
+- **Nothing is persisted**, on either side. §4 stands: a peer's film leaves no
+  more behind than one of ours, which is nothing.
+
+### A note on what this does *not* settle
+
+A host can now see that a friend is watching one of their films, which reads
+like the beginning of "who is watching my library". **It is not**, and §4 is
+what stops it: there is no record, so there is nothing to total up, and
+"how often is my library watched" remains unanswerable by construction. The
+request will arrive. The answer is still no.
