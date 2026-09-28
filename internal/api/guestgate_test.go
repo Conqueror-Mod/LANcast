@@ -587,3 +587,58 @@ func TestBrowsingAShareDoesNotReachOtherLibraries(t *testing.T) {
 			got.Total, len(got.Items))
 	}
 }
+
+/*
+ * Every federation route reaches its own gate, not the browser's.
+ *
+ * This is the test that was missing, and the gap it left shipped: the session
+ * exemption was a `switch` over exact paths, so the moment a federation route
+ * took a path parameter it stopped matching. The route existed, the handler
+ * was correct, its own tests passed — and a real peer was refused at the door
+ * with "sign in to continue", which no unit test could see because middleware
+ * runs before the handlers those tests call.
+ *
+ * It was found by curling the running service and noticing that the one route
+ * built earlier answered differently from the six built later.
+ */
+func TestEveryFederationRouteIsPeerAuthenticated(t *testing.T) {
+	var missed []string
+	for _, r := range allRoutes(t) {
+		pattern := r[1]
+		if !strings.HasPrefix(pattern, "/api/federation/") {
+			continue
+		}
+		if !isFederationPath(concrete(pattern)) {
+			missed = append(missed, pattern)
+		}
+	}
+	if len(missed) > 0 {
+		t.Errorf("%d federation route(s) are gated by the session middleware "+
+			"and unreachable by a peer: %v\n\n"+
+			"Add them to peerAuthenticated. A peer presents a certificate, not "+
+			"a cookie, so the session gate refuses it before the handler runs.",
+			len(missed), missed)
+	}
+}
+
+/*
+ * And nothing else is exempted by accident.
+ *
+ * The list is matched by segment, so a careless pattern could exempt more than
+ * it names. Asserted from the other direction: everything it lets through must
+ * be a federation route the router actually registers.
+ */
+func TestTheFederationExemptionCoversNothingElse(t *testing.T) {
+	registered := map[string]bool{}
+	for _, r := range allRoutes(t) {
+		registered[r[1]] = true
+	}
+	for _, pattern := range peerAuthenticated {
+		if !strings.HasPrefix(pattern, "/api/federation/") {
+			t.Errorf("%q is exempted from the session gate and is not a federation route", pattern)
+		}
+		if !registered[pattern] {
+			t.Errorf("%q is exempted from the session gate and no longer exists", pattern)
+		}
+	}
+}
