@@ -3872,6 +3872,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How a peer would deliver one of their items
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         *
+         *     The decision is made on their server, which holds the file and probed it. This one has neither and does not guess.
+         */
+        get: operations["peerPlayback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A converted stream of a peer's item
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         *
+         *     The encode runs on **their** CPU, because the file is on their disk. Everything on the query except `item` is forwarded whole: `t`, `audio` and the quality ceiling all participate in their delivery decision, so one dropped here would be answered about a different stream than the one asked for.
+         */
+        get: operations["peerTranscode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/hls/{item}/index.m3u8": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * HLS playlist for a peer's item
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         *
+         *     **The segment URLs are rewritten here**, from the federation routes their server names to the proxy routes this one serves. It is the only response on this path read into memory rather than piped, because it has to be changed.
+         *
+         *     Getting it wrong would not produce an error: the player would ask this server for its own stream path, where that id names a **different item**, and it would most likely succeed and play the wrong film.
+         */
+        get: operations["peerHLSPlaylist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/hls/{item}/{session}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One HLS segment of a peer's item
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         *
+         *     Named by the rewritten playlist above.
+         */
+        get: operations["peerHLSSegment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/subtitles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subtitle tracks available for a peer's item
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         *
+         *     Discovery only. Searching a provider is not offered by the far server on this path, because that spends the host's quota.
+         */
+        get: operations["peerSubtitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/subtitles/{item}/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One subtitle track of a peer's item, as WebVTT
+         * @description Asked of **this** server by its own client, and answered by asking the paired server. A client here cannot reach another household's server at all — a window pins one server's key (ADR 0070) — so this server is the way through ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md), amended).
+         *
+         *     **This server decides nothing about the film.** Whether it may be played, under what rating limit, and how it should be delivered are the far server's answers, made against its own shares and its own probe. What is decided here is that the caller is signed in and that the fingerprint names a paired server.
+         *
+         *     Any account, not only administrators: pairing is administrative, and watching what a pairing produced is not.
+         *
+         *     A peer that is not answering is **502** `peer_unreachable`. A refusal from the far server passes through with its own status.
+         */
+        get: operations["peerSubtitleFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12310,6 +12478,215 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    peerPlayback: {
+        parameters: {
+            query: {
+                /** @description The item on **their** server. Ids are theirs, not ours. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Their delivery decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackDecision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerTranscode: {
+        parameters: {
+            query: {
+                /** @description The item on **their** server. Ids are theirs, not ours. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fragmented MP4 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerHLSPlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The item on **their** server. */
+                item: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An HLS playlist naming this server's proxy routes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerHLSSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The item on **their** server. */
+                item: number;
+                /** @description Their transcode session, from the playlist. */
+                session: string;
+                /** @description The segment file, from the playlist. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A media segment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerSubtitles: {
+        parameters: {
+            query: {
+                /** @description The item on **their** server. Ids are theirs, not ours. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The available tracks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerSubtitleFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The item on **their** server. */
+                item: number;
+                /** @description The track, from the listing above. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebVTT */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -221,6 +221,12 @@ ADR 0044 declines to build.
 | `GET /api/peers/{fingerprint}/libraries` | What that server shared with us. Asked of them and passed through |
 | `GET /api/peers/{fingerprint}/items` | `?library=&…` → browse or search one of their shared libraries |
 | `GET /api/peers/{fingerprint}/stream` | `?item=` → the file, fetched from them and passed through, Range and all |
+| `GET /api/peers/{fingerprint}/playback` | `?item=` → how **they** would deliver it. Their decision; this server holds neither the file nor the probe |
+| `GET /api/peers/{fingerprint}/transcode` | `?item=` → a converted stream, encoded on their CPU |
+| `GET /api/peers/{fingerprint}/hls/{item}/index.m3u8` | Their playlist, with its segment URLs rewritten to point back here |
+| `GET /api/peers/{fingerprint}/hls/{item}/{session}/{name}` | One segment, named by that playlist |
+| `GET /api/peers/{fingerprint}/subtitles` | `?item=` → the tracks their item already has |
+| `GET /api/peers/{fingerprint}/subtitles/{item}/{key}` | One track, as WebVTT |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
@@ -360,6 +366,12 @@ it to their client, and Range requests pass straight through — their server is
 a pipe rather than a buffer, so a viewer dragging the scrubber produces the
 same partial requests here that a local one would. That hop costs the friend's
 local network, not the link between the two houses.
+
+Nothing is held on the way through, with one exception: **the playlist is read
+whole, because it has to be rewritten.** The proxy also uses a client with no
+overall timeout — the ordinary peer client's short budget covers reading the
+body, which is right for "is this peer up" and would cut a film off eight
+seconds in. Connecting and answering stay bounded; the film does not.
 
 They are the same implementation the guest routes use. The two ways in
 authenticate differently and authorise identically, and a second copy of the

@@ -412,6 +412,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/peers/{fingerprint}/stream", s.peerStream)
 
 	/*
+	 * Playing what they shared (ADR 0071 §5). This server asks theirs and
+	 * copies the answer through; it decides nothing about the film.
+	 *
+	 * The HLS and subtitle routes carry the item in the path, matching the
+	 * federation routes they proxy — a playlist names its segments with a
+	 * prefix and cannot carry a query string, so the shape has to survive the
+	 * hop.
+	 */
+	mux.HandleFunc("GET /api/peers/{fingerprint}/playback", s.peerPlayback)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/transcode", s.peerTranscode)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/hls/{item}/index.m3u8", s.peerHLSPlaylist)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/hls/{item}/{session}/{name}", s.peerHLSSegment)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/subtitles", s.peerSubtitles)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/subtitles/{item}/{key}", s.peerSubtitleFile)
+
+	/*
 	 * What a paired server may see. Administrative for the reason in
 	 * libraryshare.go: it is a decision about this server's content, not an
 	 * exercise of anybody's personal consent -- which is exactly why the

@@ -35,7 +35,7 @@ func (f redeemFixture) withOrigin(t *testing.T, method, path, origin string, pre
 }
 
 // peerOrigin is an origin built from the address the fixture's invite carries.
-const peerOrigin = "https://10.121.240.21:8080"
+const peerOrigin = "https://127.0.0.1:1"
 
 func TestAPairedOriginGetsCORSOnAGuestRoute(t *testing.T) {
 	f := newRedeemFixture(t)
@@ -100,8 +100,8 @@ func TestAnUnpairedOriginGetsNoCORS(t *testing.T) {
 
 	for _, origin := range []string{
 		"https://evil.example",
-		"https://10.121.240.21",      // right host, no port
-		"https://10.121.240.21:9999", // right host, wrong port
+		"https://127.0.0.1",      // right host, no port
+		"https://127.0.0.1:9999", // right host, wrong port
 		"null",
 	} {
 		t.Run(origin, func(t *testing.T) {
@@ -175,18 +175,18 @@ func TestAPreflightDoesNotAdmitTheRealRequest(t *testing.T) {
 // would mean matching on a string the page can partly choose.
 func TestAMalformedOriginIsRefused(t *testing.T) {
 	for _, bad := range []string{
-		"https://10.121.240.21:8080/path",
-		"https://10.121.240.21:8080?q=1",
-		"https://10.121.240.21:8080#f",
-		"https://user@10.121.240.21:8080",
-		"10.121.240.21:8080",
+		"https://127.0.0.1:1/path",
+		"https://127.0.0.1:1?q=1",
+		"https://127.0.0.1:1#f",
+		"https://user@127.0.0.1:1",
+		"127.0.0.1:1",
 		"",
 	} {
 		if got := originHost(bad); got != "" && strings.ContainsAny(got, "/?#@") {
 			t.Errorf("originHost(%q) = %q, which is not a bare host", bad, got)
 		}
 	}
-	if originHost("https://10.121.240.21:8080/path") != "" {
+	if originHost("https://127.0.0.1:1/path") != "" {
 		t.Error("an origin with a path was accepted")
 	}
 }

@@ -137,11 +137,7 @@ func (s *Server) peerStream(w http.ResponseWriter, r *http.Request) {
 	 * a Set-Cookie or a cache directive from another household's server is a
 	 * way to be surprised later.
 	 */
-	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified"} {
-		if v := resp.Header.Get(h); v != "" {
-			w.Header().Set(h, v)
-		}
-	}
+	copyStreamHeaders(w, resp)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // A copy that stops early is a viewer who navigated away.
 	io.Copy(w, resp.Body)
@@ -156,7 +152,9 @@ func (s *Server) peerStream(w http.ResponseWriter, r *http.Request) {
  * wrong for a film, which is supposed to take an hour and a half.
  */
 func (s *Server) openPeerStream(r *http.Request, p store.Peer, path string) (*http.Response, error) {
-	client, err := peer.Client(s.ident, p.Fingerprint)
+	// Not peer.Client: its eight-second budget covers reading the body, which
+	// for a film means the stream is cut off eight seconds in. See StreamClient.
+	client, err := peer.StreamClient(s.ident, p.Fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -227,10 +225,44 @@ func (e *peerRefusal) Error() string { return http.StatusText(e.status) }
 func (s *Server) peerUnreachable(w http.ResponseWriter, p store.Peer, err error) {
 	var refusal *peerRefusal
 	if errors.As(err, &refusal) {
-		writeError(w, refusal.status, "peer_refused",
-			"that server did not share this with you")
+		/*
+		 * The sentence follows the status, because they are not all the same
+		 * sentence.
+		 *
+		 * This said "that server did not share this with you" for everything,
+		 * which was true of the only status the browse routes could produce.
+		 * The playback routes can also answer 409 — *this file plays directly,
+		 * converting it would be wasted CPU* — and 503 while an encode starts,
+		 * and telling somebody they lack permission when the film is merely
+		 * warming up sends them to ask a favour they already have.
+		 */
+		writeError(w, refusal.status, "peer_refused", peerRefusalText(refusal.status))
 		return
 	}
 	s.log.Info("peer not answering", "peer", p.Fingerprint, "error", err)
 	writeError(w, http.StatusBadGateway, "peer_unreachable", p.Name+" is not answering")
+}
+
+/*
+ * peerRefusalText says what the far server's status means, in this household's
+ * words.
+ *
+ * Their own error body is deliberately not passed through. It is written for
+ * somebody on that server, it may name their items or their paths, and a
+ * message this server repeats is a message this server is vouching for.
+ */
+func peerRefusalText(status int) string {
+	switch status {
+	case http.StatusNotFound:
+		return "that server did not share this with you"
+	case http.StatusConflict:
+		return "that server says this file can be played as it is"
+	case http.StatusServiceUnavailable:
+		return "that server could not start converting this"
+	case http.StatusUnauthorized, http.StatusForbidden:
+		// Their side refused *us*, the server, not the person reading this.
+		return "that server refused this pairing"
+	default:
+		return "that server refused this"
+	}
 }

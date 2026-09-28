@@ -14,7 +14,7 @@ func samplePeer(fp string) Peer {
 	return Peer{
 		Fingerprint: fp,
 		Name:        "Utopia",
-		Addrs:       []string{"10.121.240.21:8080", "192.168.1.9:8080"},
+		Addrs:       []string{"192.0.2.10:8080", "198.51.100.9:8080"},
 	}
 }
 
@@ -42,7 +42,7 @@ func TestAddAndReadPeer(t *testing.T) {
 		t.Errorf("last_seen = %d, want 0 for a peer never reached", got.LastSeen)
 	}
 	// Order is information: the sender listed the one they expect to work first.
-	if len(got.Addrs) != 2 || got.Addrs[0] != "10.121.240.21:8080" {
+	if len(got.Addrs) != 2 || got.Addrs[0] != "192.0.2.10:8080" {
 		t.Errorf("addrs = %v, want them in the order given", got.Addrs)
 	}
 }
