@@ -301,6 +301,12 @@ are, and every later capability is granted separately.
 | `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
 | `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&limit=&offset=` → browse or search one shared library, under that share's limit |
 | `GET /api/federation/stream` | **Peer-to-peer.** `?item=` → the file itself, with Range support, if that item is in a shared library and under its limit |
+| `GET /api/federation/playback` | **Peer-to-peer.** `?item=` → how that item would be delivered. Decided here, by the server that holds the file and probed it |
+| `GET /api/federation/transcode` | **Peer-to-peer.** `?item=` → a progressive fragmented MP4. The encode runs on the host's CPU, because the file is there |
+| `GET /api/federation/hls/{item}/index.m3u8` | **Peer-to-peer.** An HLS playlist whose segment URLs name the federation routes, not this server's own — see below |
+| `GET /api/federation/hls/{item}/{session}/{name}` | **Peer-to-peer.** One segment, named by that playlist |
+| `GET /api/federation/subtitles` | **Peer-to-peer.** `?item=` → the tracks that item already has. Searching a provider is not reachable this way |
+| `GET /api/federation/subtitles/{item}/{key}` | **Peer-to-peer.** One track, as WebVTT |
 
 Presence is a **third disclosure category** and no existing opt-in widens into
 it ([ADR 0045](adr/0045-live-presence-between-paired-servers.md) §1): agreeing
@@ -358,6 +364,36 @@ local network, not the link between the two houses.
 They are the same implementation the guest routes use. The two ways in
 authenticate differently and authorise identically, and a second copy of the
 scoping would be a second chance to narrow one and not the other.
+
+**So does the rest of playback.** A file this household can play directly is
+the minority case, so a friend limited to those cannot really watch anything —
+the decision, the progressive transcode, HLS and subtitles are all reachable
+this way. Each authorises and then runs *the handler that already serves the
+household*, so the codec rules, the ffmpeg arguments and the session
+bookkeeping are one implementation. That matters most here, because the
+transcode path is where the hard-won behaviour lives and a second copy is a
+second thing to get wrong in session 0.
+
+Two things differ from the local path, and both are corrections rather than
+special cases:
+
+- **A running encode belongs to the asking server.** A transcode session is
+  keyed by item and owner so a seek replaces your own stream rather than
+  starting a second one beside it. A federated request carries no session, so
+  the owner would otherwise resolve to this household's own account — meaning a
+  friend seeking would tear down the household's stream of the same film, and
+  the household's seek would tear down theirs. Neither would error; the film
+  would simply stop.
+- **The HLS playlist names the federation routes.** Segment URLs are
+  server-absolute, and the player reading them is talking to the friend's
+  server, where the same stream path names a **different item**. Left alone
+  that request would very likely succeed and play the wrong film rather than
+  fail. The friend's server rewrites the prefix to its own proxy path.
+
+**Searching a subtitle provider is deliberately not reachable this way.** It
+spends the host's OpenSubtitles quota, and a route a friend can spend the
+host's credit on is a different kind of permission from one that reads a file
+already on the disk.
 
 Fetching a peer's roster is also what establishes that a pairing is **mutual**:
 this server only reaches that handler for a fingerprint the far side already

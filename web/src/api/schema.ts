@@ -3629,6 +3629,164 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How a shared item would be delivered
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         *
+         *     The decision is made **here**, by the server that holds the file and probed it. The friend's server has neither, so it cannot decide and does not try — it asks and passes the answer on.
+         */
+        get: operations["federationPlayback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/transcode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Convert a shared item for a paired server
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         *
+         *     A progressive fragmented MP4, as the household's own `/api/stream/{id}/transcode` serves. The encode runs **here**, on the host's CPU, because the file is here.
+         *
+         *     The running session is keyed by the asking server, so a friend seeking does not tear down the household's stream of the same film, or another friend's.
+         */
+        get: operations["federationTranscode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/hls/{item}/index.m3u8": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * HLS playlist for a shared item
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         *
+         *     **The item is in the path, not the query, and that is load-bearing.** A playlist names its segments with a prefix and cannot carry a query string.
+         *
+         *     The segment URLs point at `/api/federation/hls/{item}/{session}/{name}` rather than at this server's own stream routes, because the player receiving them is talking to the friend's server, where `/api/stream/{id}/...` names a **different item**. The friend's server rewrites this prefix to its own proxy path before passing the playlist on.
+         */
+        get: operations["federationHLSPlaylist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/hls/{item}/{session}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One HLS segment of a shared item
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         *
+         *     Named by the playlist above. The session is checked for existence and the segment name is validated before it becomes a path.
+         */
+        get: operations["federationHLSSegment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/subtitles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subtitle tracks available for a shared item
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         *
+         *     Discovery only. Searching an external provider is **not** reachable this way: that spends the host's OpenSubtitles quota, and a route a friend can spend the host's credit on is not the same kind of permission as one that reads a file already on the disk.
+         */
+        get: operations["federationSubtitles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/subtitles/{item}/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One subtitle track of a shared item, as WebVTT
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.
+         *
+         *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
+         */
+        get: operations["federationSubtitleFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers/{fingerprint}/libraries": {
         parameters: {
             query?: never;
@@ -11833,6 +11991,192 @@ export interface operations {
             };
             /** @description A requested byte range */
             206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationPlayback: {
+        parameters: {
+            query: {
+                /** @description The item to ask about. */
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery decision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackDecision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationTranscode: {
+        parameters: {
+            query: {
+                /** @description The item to convert. */
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fragmented MP4 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This file can be played directly; converting it would be wasted CPU */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The conversion could not be started */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    federationHLSPlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item to play. */
+                item: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An HLS playlist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This file can be played directly; converting it would be wasted CPU */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The conversion could not be started */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    federationHLSSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item being played. */
+                item: number;
+                /** @description The transcode session, from the playlist. */
+                session: string;
+                /** @description The segment file, from the playlist. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A media segment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationSubtitles: {
+        parameters: {
+            query: {
+                /** @description The item to list subtitles for. */
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The available tracks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationSubtitleFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item the track belongs to. */
+                item: number;
+                /** @description The track, from the listing above. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebVTT */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
