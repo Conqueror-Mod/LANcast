@@ -7899,6 +7899,286 @@
         }
       }
     },
+    "/federation/playback": {
+      "get": {
+        "operationId": "federationPlayback",
+        "tags": [
+          "peers"
+        ],
+        "summary": "How a shared item would be delivered",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nThe decision is made **here**, by the server that holds the file and probed it. The friend's server has neither, so it cannot decide and does not try — it asks and passes the answer on.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item to ask about."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The delivery decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/transcode": {
+      "get": {
+        "operationId": "federationTranscode",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Convert a shared item for a paired server",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nA progressive fragmented MP4, as the household's own `/api/stream/{id}/transcode` serves. The encode runs **here**, on the host's CPU, because the file is here.\n\nThe running session is keyed by the asking server, so a friend seeking does not tear down the household's stream of the same film, or another friend's.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item to convert."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fragmented MP4"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "This file can be played directly; converting it would be wasted CPU"
+          },
+          "503": {
+            "description": "The conversion could not be started"
+          }
+        }
+      }
+    },
+    "/federation/hls/{item}/index.m3u8": {
+      "get": {
+        "operationId": "federationHLSPlaylist",
+        "tags": [
+          "peers"
+        ],
+        "summary": "HLS playlist for a shared item",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\n**The item is in the path, not the query, and that is load-bearing.** A playlist names its segments with a prefix and cannot carry a query string.\n\nThe segment URLs point at `/api/federation/hls/{item}/{session}/{name}` rather than at this server's own stream routes, because the player receiving them is talking to the friend's server, where `/api/stream/{id}/...` names a **different item**. The friend's server rewrites this prefix to its own proxy path before passing the playlist on.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item to play."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An HLS playlist"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "This file can be played directly; converting it would be wasted CPU"
+          },
+          "503": {
+            "description": "The conversion could not be started"
+          }
+        }
+      }
+    },
+    "/federation/hls/{item}/{session}/{name}": {
+      "get": {
+        "operationId": "federationHLSSegment",
+        "tags": [
+          "peers"
+        ],
+        "summary": "One HLS segment of a shared item",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nNamed by the playlist above. The session is checked for existence and the segment name is validated before it becomes a path.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item being played."
+          },
+          {
+            "name": "session",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The transcode session, from the playlist."
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The segment file, from the playlist."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A media segment"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/subtitles": {
+      "get": {
+        "operationId": "federationSubtitles",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Subtitle tracks available for a shared item",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nDiscovery only. Searching an external provider is **not** reachable this way: that spends the host's OpenSubtitles quota, and a route a friend can spend the host's credit on is not the same kind of permission as one that reads a file already on the disk.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item to list subtitles for."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The available tracks"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/subtitles/{item}/{key}": {
+      "get": {
+        "operationId": "federationSubtitleFile",
+        "tags": [
+          "peers"
+        ],
+        "summary": "One subtitle track of a shared item, as WebVTT",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item the track belongs to."
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The track, from the listing above."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WebVTT"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/peers/{fingerprint}/libraries": {
       "parameters": [
         {

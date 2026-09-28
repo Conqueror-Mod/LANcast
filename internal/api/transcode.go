@@ -44,7 +44,7 @@ func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request) {
 	// The caller's account, so a seek replaces this viewer's own stream for
 	// this film rather than starting a second one beside it (and rather than
 	// disturbing anyone else watching the same film).
-	stream, err := s.trans.Progressive(r.Context(), it.ID, s.userID(r), opts)
+	stream, err := s.trans.Progressive(r.Context(), it.ID, s.streamOwner(r), opts)
 	if err != nil {
 		s.writeTranscodeError(w, err)
 		return
@@ -85,7 +85,7 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		duration = float64(*it.DurationMS) / 1000
 	}
 	startAt := s.startAt(r, it)
-	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.userID(r), transcode.Options{
+	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.streamOwner(r), transcode.Options{
 		Input:    it.Path,
 		Decision: t.decision,
 		StartAt:  startAt,
@@ -109,7 +109,7 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefix := "/api/stream/" + itoa64(it.ID) + "/hls/" + sess.ID + "/"
+	prefix := playlistPrefix(r, it.ID, sess.ID)
 	var body string
 	complete := sess.Complete()
 	if complete {

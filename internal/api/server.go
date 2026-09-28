@@ -454,6 +454,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/federation/libraries", s.federationLibraries)
 	mux.HandleFunc("GET /api/federation/items", s.federationItems)
 	mux.HandleFunc("GET /api/federation/stream", s.federationStream)
+
+	/*
+	 * The rest of playback, for a friend's server (ADR 0071 §5).
+	 *
+	 * Each authorises through federationPlay and then runs the handler that
+	 * already serves it locally, so there is one transcode path rather than a
+	 * household one and a federated one. The HLS routes carry the item in the
+	 * path because the playlist names its segments with a prefix and cannot
+	 * carry a query string; see federationHLSPlaylist for why the prefix is
+	 * not the local one.
+	 */
+	mux.HandleFunc("GET /api/federation/playback", s.federationPlay(s.playback))
+	mux.HandleFunc("GET /api/federation/transcode", s.federationPlay(s.transcodeStream))
+	mux.HandleFunc("GET /api/federation/hls/{item}/index.m3u8",
+		s.federationPlay(s.federationHLSPlaylist))
+	mux.HandleFunc("GET /api/federation/hls/{item}/{session}/{name}",
+		s.federationPlay(s.hlsSegment))
+	mux.HandleFunc("GET /api/federation/subtitles", s.federationPlay(s.listSubtitles))
+	mux.HandleFunc("GET /api/federation/subtitles/{item}/{key}",
+		s.federationPlay(s.serveSubtitle))
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)
