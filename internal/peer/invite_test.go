@@ -22,7 +22,7 @@ func testIdentity(t *testing.T) identity.Identity {
 func TestRoundTrip(t *testing.T) {
 	id := testIdentity(t)
 
-	s, err := Encode(id, "Georgia's LANcast", []string{"10.121.240.21:8080", "192.168.1.9:8080"})
+	s, err := Encode(id, "Georgia's LANcast", []string{"192.0.2.10:8080", "198.51.100.9:8080"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestRoundTrip(t *testing.T) {
 	if got.Name != "Georgia's LANcast" {
 		t.Errorf("name = %q", got.Name)
 	}
-	if len(got.Addrs) != 2 || got.Addrs[0] != "10.121.240.21:8080" {
+	if len(got.Addrs) != 2 || got.Addrs[0] != "192.0.2.10:8080" {
 		t.Errorf("addrs = %v, want both in the order given", got.Addrs)
 	}
 }
@@ -55,7 +55,7 @@ func TestRoundTrip(t *testing.T) {
  */
 func TestParseToleratesPasting(t *testing.T) {
 	id := testIdentity(t)
-	s, err := Encode(id, "Aither", []string{"10.121.240.235:8080"})
+	s, err := Encode(id, "Aither", []string{"192.0.2.235:8080"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,6 +52,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"time"
 
@@ -296,6 +297,49 @@ func Client(ident identity.Identity, fingerprint string) (*http.Client, error) {
 			ForceAttemptHTTP2:   false,
 			MaxIdleConnsPerHost: 2,
 			IdleConnTimeout:     30 * time.Second,
+		},
+	}, nil
+}
+
+/*
+ * StreamClient is Client for a response that is supposed to take a long time.
+ *
+ * `http.Client.Timeout` covers **reading the body**, not merely connecting, so
+ * the eight seconds above is exactly right for "what is somebody watching" and
+ * fatal for the film itself: a proxied stream would be cut off eight seconds
+ * in, every time, and look like the other household's server dropping out.
+ *
+ * What replaces it is not "no limit" but limits on the parts that should still
+ * be quick. Establishing a connection and producing a response header are both
+ * questions about *now* and are bounded; the body is a film and is not.
+ *
+ * The connect bound matters twice over. A peer records several addresses and
+ * they are tried in order (ADR 0044 §5), so an address that hangs is paid for
+ * once per address before the one that works is reached — and somebody
+ * pressing play on a peer that is switched off should be told so, not left
+ * watching a spinner for as long as the operating system feels like waiting.
+ */
+func StreamClient(ident identity.Identity, fingerprint string) (*http.Client, error) {
+	cfg, err := ClientConfig(ident, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Client{
+		// No Timeout: see above. A film is supposed to take an hour and a half.
+		Transport: &http.Transport{
+			TLSClientConfig:     cfg,
+			ForceAttemptHTTP2:   false,
+			MaxIdleConnsPerHost: 2,
+			IdleConnTimeout:     30 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout: 5 * time.Second,
+			// The far server has to start ffmpeg before it can answer, which
+			// is why this is not five seconds. It bounds the wait for the
+			// *header* only; the bytes after it are unbounded.
+			ResponseHeaderTimeout: 30 * time.Second,
 		},
 	}, nil
 }

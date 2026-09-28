@@ -228,3 +228,54 @@ func TestCertificateCarriesTheIdentityKey(t *testing.T) {
 		t.Errorf("certificate key fingerprints to %s, want the identity's %s", got, ident.Fingerprint())
 	}
 }
+
+/*
+ * A film is not a question about now.
+ *
+ * `http.Client.Timeout` covers reading the body, so the short budget that is
+ * right for "is this peer up" cuts a proxied film off part-way through — and
+ * it does it identically every time, which reads as the other household's
+ * server dropping out rather than as a setting here.
+ *
+ * Asserted structurally rather than by streaming for longer than the timeout,
+ * because a test that proves an eight-second limit is gone has to take more
+ * than eight seconds to do it, and this suite runs constantly. What the
+ * structure cannot show — that the bounded parts stay bounded — is in the
+ * fields checked below.
+ */
+func TestAStreamIsNotBoundedLikeAQuestion(t *testing.T) {
+	id := testIdentity(t)
+
+	asking, err := Client(id, id.Fingerprint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asking.Timeout == 0 {
+		t.Error("the asking client has no overall timeout; a peer that hangs would hang the page")
+	}
+
+	streaming, err := StreamClient(id, id.Fingerprint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streaming.Timeout != 0 {
+		t.Errorf("the streaming client cuts the body off after %v", streaming.Timeout)
+	}
+
+	tr, ok := streaming.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport is %T", streaming.Transport)
+	}
+	// Connecting and answering are still questions about now, and an address
+	// that hangs is paid for once per recorded address before a working one is
+	// reached.
+	if tr.DialContext == nil {
+		t.Error("no dial timeout: an unreachable peer waits as long as the OS likes")
+	}
+	if tr.TLSHandshakeTimeout == 0 {
+		t.Error("no handshake timeout")
+	}
+	if tr.ResponseHeaderTimeout == 0 {
+		t.Error("no response-header timeout: a peer that accepts and says nothing hangs the player")
+	}
+}

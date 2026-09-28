@@ -71,7 +71,17 @@ func anotherServer(t *testing.T) identity.Identity {
 
 func inviteFrom(t *testing.T, id identity.Identity, name string) string {
 	t.Helper()
-	s, err := peer.Encode(id, name, []string{"10.121.240.21:8080"})
+	/*
+	 * A documentation address, and a port nothing listens on.
+	 *
+	 * This was a real machine's address on a real private network, which made
+	 * the suite's speed depend on whether somebody else's computer was
+	 * switched on — and put a person's address in a repository. 127.0.0.1:1
+	 * refuses immediately, so "this peer cannot be reached" is tested as a
+	 * fast, deterministic refusal rather than as a timeout nobody is waiting
+	 * for on purpose.
+	 */
+	s, err := peer.Encode(id, name, []string{"127.0.0.1:1"})
 	if err != nil {
 		t.Fatal(err)
 	}
