@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { PeerLibrary } from "@/screens/PeerLibrary";
+import { PeerPlayer } from "@/screens/PeerPlayer";
 import { AppShell } from "@/components/AppShell";
 import { Home } from "@/screens/Home";
 import { Browse } from "@/screens/Browse";
@@ -76,6 +77,14 @@ export function App() {
           <Route
             path="/peers/:fingerprint/library/:library"
             element={<PeerLibrary />}
+          />
+          {/* Watching one of theirs. Its own player for the same reason as the
+              line above: the household's player carries a queue, a resume
+              position and progress writes, none of which a peer item may
+              touch (ADR 0071 §5). */}
+          <Route
+            path="/peers/:fingerprint/item/:item"
+            element={<PeerPlayer />}
           />
           {/* A page *of* a library, not a global one: a playlist belongs to the
               library its tracks and its .m3u live in (ADR 0030). */}

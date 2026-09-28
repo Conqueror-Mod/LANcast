@@ -1,0 +1,67 @@
+/*
+ * Watching something on somebody else's server (ADR 0071 §5).
+ *
+ * Deliberately plainer than the household's player. That screen is chrome
+ * around a clock, a queue and a resume position; none of those exist here, and
+ * furniture that implied they did would be the merging §5 forbids, done with
+ * CSS.
+ */
+.peer-player {
+  padding: 24px 32px 48px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.peer-player__head {
+  margin-bottom: 16px;
+  /* flex-shrink: 0 up front. In a flex column the header will otherwise give
+     up its height to the video below it rather than keeping its own. */
+  flex-shrink: 0;
+}
+
+.peer-player__back {
+  display: inline-block;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.peer-player__back:hover,
+.peer-player__back:focus-visible {
+  color: var(--text-primary);
+}
+
+.peer-player__title {
+  margin: 4px 0 0;
+  font-size: 1.6rem;
+}
+
+.peer-player__video {
+  width: 100%;
+  /* Capped rather than free, so a tall window does not stretch the element
+     past the point where the controls sit off the bottom of the screen. */
+  max-height: calc(100vh - 220px);
+  background: #000;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.peer-player__note {
+  margin-top: 16px;
+  max-width: 60ch;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .peer-player {
+    padding: 16px;
+  }
+  .peer-player__video {
+    max-height: calc(100vh - 260px);
+  }
+}

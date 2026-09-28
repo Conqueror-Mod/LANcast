@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import "./PeerLibrary.css";
@@ -22,6 +22,7 @@ import "./PeerLibrary.css";
 export function PeerLibrary() {
   const { fingerprint = "", library = "" } = useParams();
   const libraryID = Number(library);
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   const libs = usePeerLibraries(fingerprint);
@@ -82,21 +83,30 @@ export function PeerLibrary() {
       <div className="peer-lib__grid">
         {list.map((item) => (
           /*
-           * onOpen is passed and does nothing, which is deliberate and is the
-           * most important line on this screen.
+           * onOpen is passed, and it is still the most important line on this
+           * screen — it is now what *stops* the default rather than what does
+           * nothing.
            *
-           * Left off, PosterTile navigates to `/item/{id}` — and an id from
+           * Left off, PosterTile navigates to `/item/{id}`, and an id from
            * another server names a **different item here**. Pressing a tile
-           * would quietly open somebody else's film from our own library,
-           * which is the merging §5 forbids arriving through the one door
-           * nobody was watching.
+           * would quietly open somebody else's film from our own library, with
+           * nothing to fail: the id it lands on is real.
            *
-           * Playing from a peer needs the playback path to know it is
-           * streaming through the proxy, which is the next piece of work. Until
-           * then a tile that went nowhere is honest and a tile that went
-           * somewhere wrong is not.
+           * So the route carries the server as well as the item, and the title
+           * rides along because the far server browses a library at a time and
+           * has no route for one item — the alternative is fetching a whole
+           * page to find a heading.
            */
-          <PosterTile key={item.id} item={item} onOpen={() => {}} />
+          <PosterTile
+            key={item.id}
+            item={item}
+            onOpen={() =>
+              navigate(
+                `/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`,
+                { state: { title: item.title } },
+              )
+            }
+          />
         ))}
       </div>
     </div>
