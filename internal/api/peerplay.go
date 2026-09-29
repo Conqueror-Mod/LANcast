@@ -358,9 +358,12 @@ func (s *Server) peerTitle(r *http.Request, p store.Peer, item string) (string, 
 	s.peerTitleMu.Unlock()
 
 	var body struct {
-		Title string `json:"title"`
+		// The *reduced* title, not the display one. What may be said about
+		// somebody to a third party is ADR 0045 §3's answer, computed by the
+		// server that owns the item.
+		PresenceTitle string `json:"presence_title"`
 	}
-	if err := s.callPeer(r.Context(), p, peerPresenceTitlePath(item), &body); err != nil {
+	if err := s.callPeer(r.Context(), p, peerItemPath(item), &body); err != nil {
 		return "", false
 	}
 
@@ -380,11 +383,11 @@ func (s *Server) peerTitle(r *http.Request, p store.Peer, item string) (string, 
 		s.peerTitles = map[string]peerTitleEntry{}
 	}
 	s.peerTitles[key] = peerTitleEntry{
-		title: body.Title,
+		title: body.PresenceTitle,
 		until: time.Now().Add(peerTitleTTL),
 	}
 	s.peerTitleMu.Unlock()
-	return body.Title, true
+	return body.PresenceTitle, true
 }
 
 // peerTitleTTL is how long a peer's answer about one item is reused. Long
@@ -398,9 +401,9 @@ type peerTitleEntry struct {
 }
 
 /*
- * peerPresenceTitlePath is what this server asks a peer in order to learn what
- * somebody is watching, and it is a function so that it can be asserted without
- * a peer.
+ * peerItemPath is what this server asks a peer about one of their items — its
+ * title, how long it is, and what may be said somebody is watching. A function
+ * so it can be asserted without a peer.
  *
  * **It carries the item and nothing else**, which is the whole of ADR 0045 §10's
  * rule about who may name a disclosure. The client's request is not forwarded
@@ -409,6 +412,42 @@ type peerTitleEntry struct {
  * move §3's reductions into software the ADR cannot reach, and an episode title
  * is exactly what §3 forbids by name.
  */
-func peerPresenceTitlePath(item string) string {
-	return "/api/federation/presence-title/" + url.PathEscape(item)
+func peerItemPath(item string) string {
+	return "/api/federation/item/" + url.PathEscape(item)
+}
+
+/*
+ * peerItem passes through what a peer says about one of their items.
+ *
+ * The client needs two things it cannot work out for itself: the film's name,
+ * for the heading, and **how long it is**, without which a converted stream has
+ * a scrubber with no scale — a transcode is a sequence of sessions each
+ * starting at zero, so the element's own clock is not the film's.
+ *
+ * This replaced carrying the title in router state, which was lost the moment
+ * somebody arrived at the address directly or reloaded the page.
+ */
+func (s *Server) peerItem(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.peerForBrowse(w, r)
+	if !ok {
+		return
+	}
+	item, ok := peerItemSegment(w, r)
+	if !ok {
+		return
+	}
+	var body map[string]any
+	if err := s.callPeer(r.Context(), p, peerItemPath(item), &body); err != nil {
+		s.peerUnreachable(w, p, err)
+		return
+	}
+	/*
+	 * `presence_title` is dropped rather than forwarded. It is the far server's
+	 * answer to *what may be said about this person to somebody else*, and it
+	 * is consumed by this server when it records presence. A client has no use
+	 * for it and no business holding it — and a field a client holds is a field
+	 * that eventually gets rendered.
+	 */
+	delete(body, "presence_title")
+	writeJSON(w, http.StatusOK, body)
 }

@@ -8179,14 +8179,14 @@
         }
       }
     },
-    "/federation/presence-title/{item}": {
+    "/federation/item/{item}": {
       "get": {
-        "operationId": "federationPresenceTitle",
+        "operationId": "federationItem",
         "tags": [
           "peers"
         ],
-        "summary": "What may be said that somebody is watching",
-        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, authorised per item with a **Friend** principal exactly as the playback routes are.\n\nThe title is computed **here**, by the server that owns the item, because [ADR 0045](adr/0045-live-presence-between-paired-servers.md) §3's reductions — video only, the work and never the episode — are one function and must stay one implementation. The asking server records what comes back and derives nothing of its own.\n\nAn **empty title is a complete answer** and the common one: music, a photograph, an episode whose series is unknown. The caller records nothing for it.",
+        "summary": "What a friend may know about one item",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, authorised per item with a **Friend** principal exactly as the playback routes are.\n\nReplaces `presence-title`, which answered one field. Two were needed within a day, and both are the same question — *what may be said about this item* — so they are one answer rather than a route per field.\n\n`title` and `presence_title` are different on purpose: one is for the person browsing the library, the other is what may be said about them to a third party.",
         "parameters": [
           {
             "name": "item",
@@ -8196,23 +8196,36 @@
               "type": "integer",
               "format": "int64"
             },
-            "description": "The item being played."
+            "description": "The item."
           }
         ],
         "responses": {
           "200": {
-            "description": "The title, or an empty string",
+            "description": "What may be known",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "title"
+                    "title",
+                    "kind"
                   ],
                   "properties": {
                     "title": {
                       "type": "string",
-                      "description": "Empty when nothing may be said."
+                      "description": "For the person looking at it."
+                    },
+                    "presence_title": {
+                      "type": "string",
+                      "description": "What may be disclosed to **somebody else** — reduced by ADR 0045 §3: the series and never the episode, empty for music and photographs. Present only on the federation route; the proxy drops it, because a client has no use for it and a field a client holds is a field that eventually gets rendered."
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "duration_ms": {
+                      "type": "integer",
+                      "format": "int64",
+                      "description": "Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element."
                     }
                   }
                 }
@@ -8792,6 +8805,79 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/item/{item}": {
+      "get": {
+        "operationId": "peerItem",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What a paired server says about one of their items",
+        "description": "Asked of **this** server by its own client, and answered by asking the peer. The client needs two things it cannot work out for itself: the film's name for the heading, and **how long it is** — without which a converted stream has a scrubber with no scale.\n\nThis replaced carrying the title in router state from the tile that was pressed, which was lost on a reload or a direct visit.\n\n`presence_title` is **not** forwarded: it is the far server's answer about what may be disclosed to others, consumed by this server when it records presence.",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The paired server."
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item on **their** server."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What they said",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "kind"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "For the person looking at it."
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "duration_ms": {
+                      "type": "integer",
+                      "format": "int64",
+                      "description": "Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering (`peer_unreachable`)"
           }
         }
       }

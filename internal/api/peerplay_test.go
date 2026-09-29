@@ -359,13 +359,13 @@ func TestAnUnreachablePeerLeavesNoPresenceBehind(t *testing.T) {
  */
 func TestTheClientCannotNameWhatItIsWatching(t *testing.T) {
 	for _, c := range []struct{ item, want string }{
-		{"42", "/api/federation/presence-title/42"},
+		{"42", "/api/federation/item/42"},
 		// A client trying to smuggle one through the only field it controls.
-		{"42?title=Cowboy+Bebop+S01E02", "/api/federation/presence-title/42%3Ftitle=Cowboy+Bebop+S01E02"},
+		{"42?title=Cowboy+Bebop+S01E02", "/api/federation/item/42%3Ftitle=Cowboy+Bebop+S01E02"},
 	} {
-		got := peerPresenceTitlePath(c.item)
+		got := peerItemPath(c.item)
 		if got != c.want {
-			t.Errorf("peerPresenceTitlePath(%q) = %q, want %q", c.item, got, c.want)
+			t.Errorf("peerItemPath(%q) = %q, want %q", c.item, got, c.want)
 		}
 		if strings.Contains(got, "Bebop") && !strings.Contains(got, "%3F") {
 			t.Errorf("a client-supplied value reached the peer unescaped: %q", got)

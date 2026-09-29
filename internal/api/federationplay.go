@@ -190,34 +190,50 @@ func playlistPrefix(r *http.Request, itemID int64, session string) string {
 }
 
 /*
- * federationPresenceTitle answers what a friend's server may say somebody is
- * watching (ADR 0045's second amendment, §10).
+ * federationItem answers what a friend's client may know about one item it is
+ * about to play.
  *
- * The title is computed **here**, by `presenceTitle`, because §3's reductions —
- * video only, the work and never the episode — are that function and must stay
- * one implementation. The viewer's server records what comes back; it does not
- * derive a title of its own, and neither does their client.
+ * This replaces `presence-title`, which shipped in v0.9.37 answering one field.
+ * Two things were needed within a day of it, and both are the same question —
+ * *what may be said about this item* — so they belong in one answer rather than
+ * a route per field.
  *
- * An empty title is a complete answer and the common one: music, a photograph,
- * an episode whose series is unknown. The caller records nothing for it, which
- * is silence rather than a guess.
+ * **`title` and `presence_title` are different fields on purpose.** `title` is
+ * for the person looking at it, who is already browsing the library it is in.
+ * `presence_title` is what may be disclosed to *somebody else*, and it is
+ * reduced by ADR 0045 §3 — the series and never the episode, empty for music
+ * and photographs. Collapsing them would put an episode title in front of a
+ * friend three seasons behind, which is the exact disclosure §3 forbids.
+ *
+ * **`duration_ms` is what makes a transcode seekable.** A converted stream is a
+ * sequence of sessions each starting at zero, so the film's own length cannot
+ * come from the media element — it has to come from whoever probed the file.
+ * Without it a peer's film has a scrubber with no scale, which is what it had.
  *
  * It rides `federationPlay`, so it discloses nothing about an item the caller
- * could not already play — a refusal is the same 404 every other route gives.
+ * could not already play: a refusal is the same 404 as everywhere else.
  */
-func (s *Server) federationPresenceTitle(w http.ResponseWriter, r *http.Request) {
+func (s *Server) federationItem(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "which item")
 		return
 	}
 	// No account: the ceiling that matters was applied by federationPlay with a
-	// Friend principal, and passing one here would apply this household's limit
-	// to somebody else's.
+	// Friend principal, and passing one would apply this household's limit to
+	// somebody else's.
 	it, err := s.st.GetItem(r.Context(), id, "")
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no such item")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"title": presenceTitle(it)})
+	out := map[string]any{
+		"title":          it.Title,
+		"presence_title": presenceTitle(it),
+		"kind":           it.Kind,
+	}
+	if it.DurationMS != nil {
+		out["duration_ms"] = *it.DurationMS
+	}
+	writeJSON(w, http.StatusOK, out)
 }
