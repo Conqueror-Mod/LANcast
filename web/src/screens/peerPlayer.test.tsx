@@ -31,7 +31,7 @@ let host: HTMLDivElement;
 let root: Root;
 
 function mockServer(opts: {
-  items?: { id: number; title: string }[];
+  items?: { id: number; title: string; artwork?: { poster?: string } }[];
   total?: number;
   durationMs?: number;
   method?: string;
@@ -559,5 +559,48 @@ describe("what a peer said, a minute ago", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+/*
+ * A peer's library had no pictures.
+ *
+ * `artworkURL` builds `/api/artwork/{hash}` — **this** server's route — and a
+ * hash on a peer's item names bytes on *their* disk. So every tile asked the
+ * wrong machine and got nothing, and a friend's library rendered as lettered
+ * placeholders. It was visible in a screenshot for two releases before anybody
+ * said the word artwork.
+ *
+ * Content addressing made it harmless rather than wrong: identical bytes give
+ * an identical hash, so a coincidental hit would have been the right image. Two
+ * households fetch their own artwork, so it was a miss every time.
+ */
+describe("a peer library's artwork", () => {
+  it("asks their server, never ours", async () => {
+    mockServer({
+      items: [{ id: 42, title: "Their Film", artwork: { poster: "abc123" } }],
+    });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    // The image is a child of .poster-tile__art, not that element itself.
+    const img = host.querySelector<HTMLImageElement>(".poster-tile__art img");
+    expect(img, "no artwork image rendered").toBeTruthy();
+
+    const src = img!.getAttribute("src") ?? "";
+    expect(src).toContain(`/api/peers/${FP}/artwork/42/abc123`);
+    // The local route holds a different household's image at that hash, or
+    // nothing at all. Either way it is the wrong machine to ask.
+    expect(src).not.toContain("/api/artwork/abc123");
+  });
+
+  // No hash, no request. A tile falls back to its lettered placeholder rather
+  // than asking for an image that cannot exist.
+  it("asks for nothing when there is no image", async () => {
+    mockServer({ items: [{ id: 42, title: "Their Film" }] });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    const asked = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .filter(([url]) => String(url).includes("/artwork/"));
+    expect(asked).toHaveLength(0);
   });
 });

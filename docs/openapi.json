@@ -8244,6 +8244,75 @@
         }
       }
     },
+    "/federation/artwork/{item}/{hash}": {
+      "get": {
+        "operationId": "federationArtwork",
+        "tags": [
+          "peers"
+        ],
+        "summary": "One image belonging to one shared item",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin and authorised per item with a **Friend** principal.\n\n**The item is in the route because a hash is not an item.** `/api/artwork/{hash}` takes a hash alone, which is right for a household where anyone signed in may see any of its artwork and wrong for a friend: a peer able to ask for arbitrary hashes could fetch images belonging to libraries nobody shared with them, with only their not knowing the hash in the way.\n\nSo the gate decides whether they may see *that item*, and the hash is then checked to belong to it. Both halves are needed — the gate alone would make one shared item a key to every image on the disk. ADR 0046 §4 makes the same argument about `/api/stream/{id}`.\n\nA hash that does not belong to the item is **404**, identical to one that does not exist.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item the image belongs to."
+          },
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The content hash, from that item's `artwork`."
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "thumb",
+                "poster",
+                "poster2x",
+                "fanart",
+                "original"
+              ]
+            },
+            "description": "Defaults to `poster`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/peers/{fingerprint}/libraries": {
       "parameters": [
         {
@@ -8866,6 +8935,79 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering (`peer_unreachable`)"
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/artwork/{item}/{hash}": {
+      "get": {
+        "operationId": "peerArtwork",
+        "tags": [
+          "peers"
+        ],
+        "summary": "One image from a paired server's library",
+        "description": "Asked of **this** server by its own client, and answered by asking the peer.\n\nA client cannot fetch this for itself: artwork is content-addressed and `/api/artwork/{hash}` is **this** server's route, so a hash from another household names bytes this server does not hold. Before this existed a peer's library rendered as lettered placeholders.\n\nContent addressing made that harmless rather than wrong — identical bytes give an identical hash, so a coincidental hit is the correct image — but two households fetch their own artwork, so it missed every time.\n\nTheir caching headers are forwarded, which is safe **because** the content is addressed by its own bytes: an immutable answer cannot become a stale one. It is the one place a peer's cache directive is kept rather than dropped.",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The paired server."
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item the image belongs to."
+          },
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The content hash, from that item's `artwork`."
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "thumb",
+                "poster",
+                "poster2x",
+                "fanart",
+                "original"
+              ]
+            },
+            "description": "Defaults to `poster`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"

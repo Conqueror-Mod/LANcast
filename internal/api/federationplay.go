@@ -237,3 +237,66 @@ func (s *Server) federationItem(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+/*
+ * federationArtwork serves one image belonging to one shared item.
+ *
+ * # Why the item is in the route and not just the hash
+ *
+ * Artwork is content-addressed, and a hash is **not an item**. The local route
+ * takes a hash alone, which is right for this household — anyone with a session
+ * may see any of its artwork. It is wrong for a friend, because a peer allowed
+ * to ask for arbitrary hashes could fetch images belonging to libraries this
+ * household never shared with them, and the only thing standing in the way
+ * would be their not knowing the hash.
+ *
+ * So the route names the item, `federationPlay` decides whether they may see
+ * *that*, and then the hash is checked to actually belong to it. Both halves
+ * are needed: the gate without the check would let any authorised item be used
+ * as a key to every image on the disk.
+ *
+ * ADR 0046 §4 makes exactly this argument about `/api/stream/{id}`, where a
+ * route-level permission would be the library handed over. This is the same
+ * shape with a hash in place of an id.
+ */
+func (s *Server) federationArtwork(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "which item")
+		return
+	}
+	// No account, as everywhere on this path: the ceiling that matters was
+	// applied by federationPlay with a Friend principal.
+	it, err := s.st.GetItem(r.Context(), id, "")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such artwork")
+		return
+	}
+	if !itemHasArtwork(it, r.PathValue("hash")) {
+		/*
+		 * 404, and identical to a hash that does not exist. A refusal that
+		 * announced itself would confirm the image is real and merely
+		 * elsewhere, which is the thing being withheld.
+		 */
+		writeError(w, http.StatusNotFound, "not_found", "no such artwork")
+		return
+	}
+	s.serveArtwork(w, r)
+}
+
+/*
+ * itemHasArtwork is the check that stops one shared item being a key to every
+ * image on the disk.
+ *
+ * A function over the item and the hash so it can be asserted without a server,
+ * and deliberately exhaustive over the fields rather than clever: a field added
+ * to Artwork later is a field this does not cover, and a test enumerates them
+ * so that failure is loud rather than a picture that silently stops loading.
+ */
+func itemHasArtwork(it *store.Item, hash string) bool {
+	if hash == "" || it == nil || it.Artwork == nil {
+		return false
+	}
+	a := it.Artwork
+	return hash == a.Poster || hash == a.Fanart || hash == a.Thumb
+}

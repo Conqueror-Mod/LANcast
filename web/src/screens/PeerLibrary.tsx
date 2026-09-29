@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { ApiFailure } from "@/api/client";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
+import { peerArtworkURL } from "@/playback/peerSource";
 import "./PeerLibrary.css";
 
 /*
@@ -128,6 +129,14 @@ export function PeerLibrary() {
           <PosterTile
             key={item.id}
             item={item}
+            /*
+             * Their image, from their server. The hash names bytes on their
+             * disk, and `/api/artwork` is ours — which is why this library
+             * rendered as placeholders until now.
+             */
+            posterURL={(it) =>
+              peerArtworkURL(fingerprint, it.id, it.artwork?.poster)
+            }
             onOpen={() =>
               navigate(
                 `/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`,

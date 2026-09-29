@@ -451,3 +451,54 @@ func (s *Server) peerItem(w http.ResponseWriter, r *http.Request) {
 	delete(body, "presence_title")
 	writeJSON(w, http.StatusOK, body)
 }
+
+/*
+ * peerArtwork pulls one of their images through.
+ *
+ * Without it a peer's library renders as placeholders, which is what it did:
+ * `artworkURL` builds `/api/artwork/{hash}`, a **local** route, so a client
+ * holding a hash from another server asked *this* one for it and got nothing.
+ *
+ * Content addressing made that harmless rather than wrong — identical bytes
+ * give an identical hash, so a coincidental hit would have been the correct
+ * image — but two households download their own artwork, so in practice it was
+ * a miss every time.
+ *
+ * The item travels in the route because the far server needs it: a hash is not
+ * an item, and asking for one without saying which item it belongs to is asking
+ * to be allowed every image on their disk.
+ */
+func (s *Server) peerArtwork(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.peerForBrowse(w, r)
+	if !ok {
+		return
+	}
+	item, ok := peerItemSegment(w, r)
+	if !ok {
+		return
+	}
+	hash := r.PathValue("hash")
+	if hash == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "which image")
+		return
+	}
+
+	resp, err := s.openPeerStream(r, p, "/api/federation/artwork/"+item+"/"+
+		url.PathEscape(hash)+forwardedQuery(r))
+	if err != nil {
+		s.peerUnreachable(w, p, err)
+		return
+	}
+	defer resp.Body.Close()
+	copyStreamHeaders(w, resp)
+	/*
+	 * Their caching headers are forwarded and are safe to trust *because* the
+	 * content is addressed by its own bytes: an immutable answer cannot become
+	 * a stale one. This is the one place a peer's cache directive is kept
+	 * rather than dropped, and the reason is a property of the data rather than
+	 * trust in the server.
+	 */
+	w.WriteHeader(resp.StatusCode)
+	//nolint:errcheck // A copy that stops early is a viewer who navigated away.
+	io.Copy(w, resp.Body)
+}

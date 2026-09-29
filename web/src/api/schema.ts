@@ -3813,6 +3813,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/artwork/{item}/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One image belonging to one shared item
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin and authorised per item with a **Friend** principal.
+         *
+         *     **The item is in the route because a hash is not an item.** `/api/artwork/{hash}` takes a hash alone, which is right for a household where anyone signed in may see any of its artwork and wrong for a friend: a peer able to ask for arbitrary hashes could fetch images belonging to libraries nobody shared with them, with only their not knowing the hash in the way.
+         *
+         *     So the gate decides whether they may see *that item*, and the hash is then checked to belong to it. Both halves are needed — the gate alone would make one shared item a key to every image on the disk. ADR 0046 §4 makes the same argument about `/api/stream/{id}`.
+         *
+         *     A hash that does not belong to the item is **404**, identical to one that does not exist.
+         */
+        get: operations["federationArtwork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers/{fingerprint}/libraries": {
         parameters: {
             query?: never;
@@ -4108,6 +4134,32 @@ export interface paths {
          *     `presence_title` is **not** forwarded: it is the far server's answer about what may be disclosed to others, consumed by this server when it records presence.
          */
         get: operations["peerItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/artwork/{item}/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One image from a paired server's library
+         * @description Asked of **this** server by its own client, and answered by asking the peer.
+         *
+         *     A client cannot fetch this for itself: artwork is content-addressed and `/api/artwork/{hash}` is **this** server's route, so a hash from another household names bytes this server does not hold. Before this existed a peer's library rendered as lettered placeholders.
+         *
+         *     Content addressing made that harmless rather than wrong — identical bytes give an identical hash, so a coincidental hit is the correct image — but two households fetch their own artwork, so it missed every time.
+         *
+         *     Their caching headers are forwarded, which is safe **because** the content is addressed by its own bytes: an immutable answer cannot become a stale one. It is the one place a peer's cache directive is kept rather than dropped.
+         */
+        get: operations["peerArtwork"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12469,6 +12521,37 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    federationArtwork: {
+        parameters: {
+            query?: {
+                /** @description Defaults to `poster`. */
+                size?: "thumb" | "poster" | "poster2x" | "fanart" | "original";
+            };
+            header?: never;
+            path: {
+                /** @description The item the image belongs to. */
+                item: number;
+                /** @description The content hash, from that item's `artwork`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     peerLibraries: {
         parameters: {
             query?: never;
@@ -12861,6 +12944,44 @@ export interface operations {
                         duration_ms?: number;
                     };
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peerArtwork: {
+        parameters: {
+            query?: {
+                /** @description Defaults to `poster`. */
+                size?: "thumb" | "poster" | "poster2x" | "fanart" | "original";
+            };
+            header?: never;
+            path: {
+                /** @description The paired server. */
+                fingerprint: string;
+                /** @description The item the image belongs to. */
+                item: number;
+                /** @description The content hash, from that item's `artwork`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
