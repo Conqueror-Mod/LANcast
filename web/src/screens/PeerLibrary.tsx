@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { ApiFailure } from "@/api/client";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import "./PeerLibrary.css";
@@ -36,13 +37,27 @@ export function PeerLibrary() {
    * error in this one — so it reads as information rather than as a fault
    * somebody here should fix.
    */
+  /*
+   * Two different failures, and they were one sentence.
+   *
+   * "Not answering" is a fact about their *machine*. A withdrawn share is a
+   * *decision* — their server answered perfectly well and said no. Telling
+   * somebody a computer is switched off when its owner has just stopped sharing
+   * sends them to ask whether it is on, and the answer is yes.
+   *
+   * This is the rule the People card already had to learn twice: never render a
+   * choice as an absence, and never render an absence as a choice.
+   */
   if (libs.isError || items.isError) {
+    const err = (items.error ?? libs.error) as ApiFailure | undefined;
+    const refused = err?.code === "peer_refused";
     return (
       <div className="peer-lib">
         <PeerLibraryHeader name={here?.name} />
         <p className="peer-lib__away">
-          That server is not answering. Their library is only here while their
-          machine is on.
+          {refused
+            ? "This is not shared with you any more. Their server answered; it is what they chose."
+            : "That server is not answering. Their library is only here while their machine is on."}
         </p>
       </div>
     );

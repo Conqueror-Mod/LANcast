@@ -3715,6 +3715,31 @@ export function usePeerLibraries(fingerprint: string, enabled = true) {
     // A peer that is not answering is a 502, and retrying it three times just
     // makes the page take longer to say so.
     retry: false,
+    /*
+     * Polled, because this answer belongs to a machine we cannot be told about.
+     *
+     * "A write that changes what a list holds must invalidate that list" is the
+     * most-repeated bug in this project, and across a pairing there is nothing
+     * to invalidate *with*: the host revokes a share on their server and this
+     * one is not informed. A host unshared a library while somebody was looking
+     * at it and their sidebar kept it — correctly, by the rules this client was
+     * playing by, and wrongly by any other measure.
+     *
+     * The rail mounts once when the app starts and never again, so a stale time
+     * alone changes nothing: without an interval this query is fetched exactly
+     * once per launch.
+     *
+     * A minute rather than the ten seconds presence uses. Presence is a claim
+     * about *now* and is wrong the moment it is late; a share is a decision
+     * somebody makes rarely, and each poll costs a call to another household's
+     * server — which pays for it on every peer, whether or not anyone is
+     * looking.
+     */
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    // Coming back to the window is the moment somebody is about to trust what
+    // is on it, and it costs one request.
+    refetchOnWindowFocus: true,
     queryFn: ({ signal }) =>
       apiGet<{ libraries: PeerLibrary[] }>(
         `/api/peers/${encodeURIComponent(fingerprint)}/libraries`,
@@ -3751,6 +3776,17 @@ export function usePeerItems(
     queryKey: ["peer-items-infinite", fingerprint, library, query],
     enabled: fingerprint !== "" && library > 0,
     retry: false,
+    /*
+     * Stale after half a minute, and deliberately **not** polled.
+     *
+     * Refetching an infinite query refetches every page it has loaded, so a
+     * timer here would re-ask another household's server for everything
+     * somebody had scrolled through, on a loop, for as long as the screen was
+     * open. The libraries query above is the cheap one and is the one that
+     * matters: an unshared library leaves the rail, and this screen is reached
+     * through it.
+     */
+    staleTime: 30_000,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
       const p = new URLSearchParams({

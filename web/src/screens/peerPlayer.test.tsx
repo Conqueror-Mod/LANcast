@@ -37,6 +37,8 @@ function mockServer(opts: {
   method?: string;
   subtitles?: unknown[];
   playbackFails?: boolean;
+  /** How the peer refuses the items listing, when it does. */
+  itemsFail?: { status: number; code: string };
 }) {
   vi.stubGlobal(
     "fetch",
@@ -60,6 +62,12 @@ function mockServer(opts: {
       if (/\/item\/\d+$/.test(url.split("?")[0]))
         return json({ title: "Their Film", duration_ms: opts.durationMs ?? 7_200_000 });
       if (url.includes("/items")) {
+        if (opts.itemsFail) {
+          return json(
+            { error: { code: opts.itemsFail.code, message: "no" } },
+            opts.itemsFail.status,
+          );
+        }
         // Pages, because the client asks for one. A stub that ignored limit
         // and offset would make a paging bug invisible to every test here.
         const all = opts.items ?? [];
@@ -484,5 +492,72 @@ describe("seeking a peer's film", () => {
     // and it is the browser's job anyway, which is the whole point.
     expect(el.getAttribute("src")).toBe(before);
     expect(before).not.toContain("t=");
+  });
+});
+
+/*
+ * A withdrawn share and a switched-off machine are different sentences.
+ *
+ * Found when a host unshared a library while somebody was looking at it: the
+ * screen eventually caught up and then told them the server was not answering.
+ * It was answering — it had said no. Somebody reading that goes and asks
+ * whether a computer is switched on, and the answer is yes.
+ *
+ * It is the rule the People card had to learn twice, in its third costume:
+ * never render a choice as an absence, and never render an absence as a choice.
+ */
+describe("a peer library that is no longer shared", () => {
+  it("says it was a decision, not a machine being off", async () => {
+    mockServer({ itemsFail: { status: 404, code: "peer_refused" } });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    expect(host.textContent).toContain("not shared with you any more");
+    expect(host.textContent).not.toContain("not answering");
+  });
+
+  it("still says not answering when that is what happened", async () => {
+    mockServer({ itemsFail: { status: 502, code: "peer_unreachable" } });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    expect(host.textContent).toContain("not answering");
+    expect(host.textContent).not.toContain("not shared with you any more");
+  });
+});
+
+/*
+ * A peer's answer goes stale on its own.
+ *
+ * This is the project's most-repeated bug in the one shape where its usual fix
+ * is unavailable: **a write that changes what a list holds must invalidate that
+ * list**, and across a pairing there is nothing to invalidate with. The host
+ * revokes a share on their machine; this one is never told.
+ *
+ * Reported exactly that way — a library was unshared while somebody was looking
+ * at it and their sidebar kept it. The rail mounts once when the app starts and
+ * never again, so a stale time alone changes nothing: without an interval the
+ * query is fetched once per launch and then never.
+ */
+describe("what a peer said, a minute ago", () => {
+  it("asks again without being told to", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockServer({ items: [{ id: 1, title: "A Film" }] });
+      await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+      const asks = () =>
+        (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(
+          ([url]) => String(url).includes("/libraries"),
+        ).length;
+      const before = asks();
+      expect(before).toBeGreaterThan(0);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+
+      expect(asks()).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
