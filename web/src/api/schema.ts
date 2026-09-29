@@ -1211,6 +1211,8 @@ export interface paths {
         /**
          * This server's own invite, to hand out
          * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
+         *
+         *     **`addrs` carries only addresses that will still exist.** Windows keeps temporary IPv6 addresses that are replaced regularly and gone within a week, and an invite is recorded once at pairing and never re-learned (ADR 0044 §5) — so one written into an invite becomes an entry that no longer exists and is still tried. They cannot be told apart by inspection, so the operating system is asked; anything it cannot classify is kept, because a stale entry costs a timeout and a missing one can cost the pairing.
          */
         get: operations["getPeerInvite"];
         put?: never;
