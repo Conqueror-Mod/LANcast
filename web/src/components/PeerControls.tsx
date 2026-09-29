@@ -1,0 +1,101 @@
+import "./PeerControls.css";
+
+/*
+ * Controls for a film on somebody else's server (ADR 0071 §5).
+ *
+ * # Why this exists rather than the element's own
+ *
+ * Native controls show the **element's** timeline. On a converted stream that
+ * is not the film's: each session starts at zero and reports only what has been
+ * produced so far, so after seeking to forty minutes the scrubber reads nought
+ * against a duration of a few seconds. It looked like seeking had broken the
+ * film, which is how it was reported.
+ *
+ * # Why not the household player's chrome
+ *
+ * That is built around the playback provider — a queue, a resume position,
+ * progress writes, an up-next lane — and a peer item may touch none of it
+ * (ADR 0071 §5, §4). Borrowing it would mean drawing furniture over state
+ * nothing is keeping, which is the merging §5 forbids done with CSS.
+ *
+ * So: the four things that are true here and nothing else.
+ */
+export function PeerControls({
+  paused,
+  at,
+  total,
+  converting,
+  onPlayPause,
+  onSeek,
+}: {
+  paused: boolean;
+  at: number;
+  total: number;
+  converting: boolean;
+  onPlayPause: () => void;
+  onSeek: (to: number) => void;
+}) {
+  const seekable = total > 0;
+
+  return (
+    <div className="peer-controls">
+      <button
+        type="button"
+        className="peer-controls__play"
+        onClick={onPlayPause}
+        aria-label={paused ? "Play" : "Pause"}
+      >
+        {paused ? "▶" : "❚❚"}
+      </button>
+
+      <span className="peer-controls__time">{clock(at)}</span>
+
+      {/*
+        A range input rather than a drawn bar: it is keyboard-operable, it is
+        draggable, and a screen reader knows what it is — none of which a div
+        with a background gradient gets for free.
+
+        Committed on change rather than on input, because a converted seek asks
+        the far server to start encoding somewhere else. Firing that for every
+        pixel of a drag would start a session per pixel.
+      */}
+      <input
+        className="peer-controls__bar"
+        type="range"
+        min={0}
+        max={seekable ? Math.floor(total) : 0}
+        value={Math.floor(Math.min(at, seekable ? total : at))}
+        disabled={!seekable}
+        onChange={(e) => onSeek(Number(e.currentTarget.value))}
+        aria-label="Position"
+      />
+
+      <span className="peer-controls__time">
+        {seekable ? clock(total) : "--:--"}
+      </span>
+
+      {/*
+        Said once, quietly, and only where it is true.
+
+        A converted seek is a request to another household's machine to start
+        again somewhere else, so it takes a moment in a way a normal scrubber
+        does not. Somebody who knows that reads a pause as the thing working.
+      */}
+      {converting && (
+        <span className="peer-controls__note" title="Converted on their machine">
+          converting
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** h:mm:ss, dropping the hours on anything under one. */
+function clock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const s = Math.floor(seconds % 60);
+  const m = Math.floor((seconds / 60) % 60);
+  const h = Math.floor(seconds / 3600);
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  return `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
+}

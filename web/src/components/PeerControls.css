@@ -1,0 +1,70 @@
+/*
+ * Controls for somebody else's film.
+ *
+ * Deliberately quieter than the household player's chrome: this screen keeps no
+ * queue, no resume position and no progress, so furniture implying otherwise
+ * would be the merging ADR 0071 §5 forbids, done with CSS.
+ */
+.peer-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  /* flex-shrink: 0 up front: in a flex column these would otherwise give up
+     their height to the video above and collapse to nothing. */
+  flex-shrink: 0;
+}
+
+.peer-controls__play {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.peer-controls__play:hover,
+.peer-controls__play:focus-visible {
+  background: var(--surface-3, rgba(255, 255, 255, 0.1));
+}
+
+.peer-controls__time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  min-width: 5ch;
+  text-align: center;
+}
+
+.peer-controls__bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--gold, #c9a227);
+}
+
+.peer-controls__bar:disabled {
+  opacity: 0.4;
+}
+
+.peer-controls__note {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+@media (max-width: 767px) {
+  .peer-controls {
+    flex-wrap: wrap;
+  }
+  .peer-controls__bar {
+    order: 10;
+    flex-basis: 100%;
+  }
+}

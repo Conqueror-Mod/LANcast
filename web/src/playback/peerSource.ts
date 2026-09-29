@@ -43,8 +43,23 @@ export function peerSourceURL(
   fingerprint: string,
   item: number,
   path: FilePath,
+  offset = 0,
 ): string {
   const b = base(fingerprint);
+  /*
+   * `t` is where the far server starts converting, and it is the whole of how
+   * a transcode seeks.
+   *
+   * A converted stream has no length and cannot be range-served — the bytes do
+   * not exist until ffmpeg makes them — so moving the scrubber is not a seek
+   * within a response, it is **a new session starting somewhere else**. Every
+   * such session begins at zero, which is why the screen has to keep the offset
+   * and add it back.
+   *
+   * Direct play takes none of this: those are the file's own bytes over a range
+   * server, and the element seeks them itself.
+   */
+  const t = offset > 0 ? `t=${Math.floor(offset)}` : "";
   switch (path) {
     case "direct":
       return `${b}/stream?item=${item}`;
@@ -56,9 +71,9 @@ export function peerSourceURL(
        * rewrites the segment URLs in the playlist that comes back so they
        * point here rather than at a federation route this client cannot use.
        */
-      return `${b}/hls/${item}/index.m3u8`;
+      return t === "" ? `${b}/hls/${item}/index.m3u8` : `${b}/hls/${item}/index.m3u8?${t}`;
     default:
-      return `${b}/transcode?item=${item}`;
+      return `${b}/transcode?item=${item}` + (t === "" ? "" : `&${t}`);
   }
 }
 
@@ -101,4 +116,9 @@ export function peerPlaybackURL(fingerprint: string, item: number): string {
  */
 export function peerWatchingURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/watching?item=${item}`;
+}
+
+/** What a peer says about one of their items: its name, and how long it is. */
+export function peerItemURL(fingerprint: string, item: number): string {
+  return `${base(fingerprint)}/item/${item}`;
 }

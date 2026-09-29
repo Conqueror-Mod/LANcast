@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import { useParams, useLocation, Link } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
 import type { SubtitleTrack } from "@/api/types";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
 import {
+  peerItemURL,
   peerPlaybackURL,
   peerSourceURL,
   peerSubtitlesURL,
   peerSubtitleURL,
   peerWatchingURL,
 } from "@/playback/peerSource";
+import { PeerControls } from "@/components/PeerControls";
 import "./PeerPlayer.css";
 
 /*
@@ -44,15 +46,34 @@ export function PeerPlayer() {
   const { fingerprint = "", item = "" } = useParams();
   const itemID = Number(item);
   /*
-   * The title comes with the navigation when there is one.
+   * Asked for, not carried.
    *
-   * The alternative is asking the far server for one item, which it has no
-   * route for — it browses a library at a time — so this would mean fetching
-   * a whole page and searching it for a name. A heading is not worth another
-   * household's disk spinning, and arriving without one is survivable: the
-   * screen simply says it is playing something of theirs.
+   * The title used to ride in router state from the tile that was pressed,
+   * which was lost the moment somebody reloaded or opened the address
+   * directly. It is now asked of the server that owns the item — and it had to
+   * be, because the same answer carries **how long the film is**, without which
+   * a converted stream has a scrubber with no scale.
    */
-  const title = (useLocation().state as { title?: string } | null)?.title;
+  const info = useQuery({
+    queryKey: ["peer-item", fingerprint, itemID],
+    enabled: fingerprint !== "" && itemID > 0,
+    retry: false,
+    queryFn: ({ signal }) =>
+      apiGet<{ title?: string; duration_ms?: number }>(
+        peerItemURL(fingerprint, itemID),
+        signal,
+      ),
+  });
+  const title = info.data?.title;
+  /*
+   * The film's own length, from whoever probed the file.
+   *
+   * It cannot come from the media element on a converted stream: each session
+   * starts at zero and reports only what it has produced so far, which is a few
+   * seconds. Direct play is the opposite — those are the file's real bytes, so
+   * the element is authoritative and this is the fallback.
+   */
+  const probed = (info.data?.duration_ms ?? 0) / 1000;
 
   /*
    * A callback ref, not useRef, and that is the whole of a shipped bug.
@@ -80,6 +101,16 @@ export function PeerPlayer() {
   const [hlsUsable, setHLSUsable] = useState(() =>
     mediaCapability().canPlayType(HLS_MIME) !== "",
   );
+  /*
+   * Where the current session starts within the film.
+   *
+   * Zero for direct play, always: the element owns that timeline. For a
+   * converted stream this is the only record of where we are, because the
+   * element's clock restarts from zero at every seek.
+   */
+  const [offset, setOffset] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [paused, setPaused] = useState(true);
 
   const playback = useQuery({
     queryKey: ["peer-playback", fingerprint, itemID],
@@ -159,6 +190,29 @@ export function PeerPlayer() {
   }, [fingerprint, itemID, video]);
 
   /*
+   * The clock, and it is not the element's on a converted stream.
+   *
+   * Each session starts at zero, so what the film is at is the offset this
+   * session began at plus however far into it we are. Direct play keeps an
+   * offset of zero and this is the element's own time, unchanged.
+   */
+  useEffect(() => {
+    const el = video;
+    if (!el) return;
+    const tick = () => setElapsed(el.currentTime);
+    const onPlay = () => setPaused(false);
+    const onPause = () => setPaused(true);
+    el.addEventListener("timeupdate", tick);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    return () => {
+      el.removeEventListener("timeupdate", tick);
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+    };
+  }, [video]);
+
+  /*
    * One retirement of the playlist route, on the element's own evidence.
    *
    * `MEDIA_ERR_SRC_NOT_SUPPORTED` is what an engine without HLS does with a
@@ -202,8 +256,40 @@ export function PeerPlayer() {
   }
 
   const path = filePath(playback.data.decision.method, hlsUsable);
-  const src = peerSourceURL(fingerprint, itemID, path);
+  const converting = path !== "direct";
+  const src = peerSourceURL(fingerprint, itemID, path, offset);
   const tracks = (subtitles.data?.subtitles ?? []).filter((t) => t.available);
+
+  // What the film is at, and how long it is. See the offset and probed
+  // comments above for why neither is simply the element's own value.
+  const at = converting ? offset + elapsed : elapsed;
+  const total = converting ? probed : video?.duration || probed;
+
+  /*
+   * Seeking a converted stream is not a seek.
+   *
+   * There is nothing to seek within: the bytes do not exist until the far
+   * server makes them. So it asks them to start again somewhere else, and the
+   * offset is how the screen goes on telling the truth about a clock that just
+   * went back to zero.
+   *
+   * Direct play is left entirely alone — those are the file's own bytes and the
+   * element does this better than we would.
+   */
+  const seek = (to: number) => {
+    const el = video;
+    if (!el) return;
+    const target = Math.max(0, total > 0 ? Math.min(to, total) : to);
+    if (!converting) {
+      el.currentTime = target;
+      return;
+    }
+    setOffset(target);
+    setElapsed(0);
+    el.src = peerSourceURL(fingerprint, itemID, path, target);
+    el.load();
+    resume(el);
+  };
 
   return (
     <div className="peer-player">
@@ -222,16 +308,17 @@ export function PeerPlayer() {
         from here — a playlist plays natively or the progressive transcode is
         taken instead.
 
-        `controls` rather than this project's own chrome, and only for now: the
-        chrome is built around the provider's clock, its resume and its queue,
-        none of which exist here. Borrowing it would mean drawing a scrubber
-        over state nothing is keeping.
+        Its own controls rather than the element's, because the element's
+        would lie. Native controls draw the *element's* timeline, and on a
+        converted stream that restarts at zero at every seek — so after moving
+        to forty minutes the scrubber would read nought against a duration of a
+        few seconds. That is how "it will not seek" was reported. PeerControls
+        draws the film's clock: this session's offset plus the element's own.
       */}
       <video
         ref={setVideo}
         className="peer-player__video"
         src={src}
-        controls
         autoPlay
         // Never `metadata` — a peer item has no poster to hold the frame, and
         // preloading a film on somebody else's connection to draw one is their
@@ -250,6 +337,20 @@ export function PeerPlayer() {
           />
         ))}
       </video>
+
+      <PeerControls
+        paused={paused}
+        at={at}
+        total={total}
+        converting={converting}
+        onPlayPause={() => {
+          const el = video;
+          if (!el) return;
+          if (el.paused) resume(el);
+          else el.pause();
+        }}
+        onSeek={seek}
+      />
 
       <p className="peer-player__note">
         Playing from their machine. Nothing about this is recorded here or
@@ -277,4 +378,19 @@ function PeerPlayerNote({
       <p className="peer-player__note">{children}</p>
     </div>
   );
+}
+
+/*
+ * play() does not always return a promise.
+ *
+ * It returns one in every engine this app ships against, and **nothing** in
+ * older ones — and in jsdom, which is how this was found: `play().catch(…)`
+ * threw `Cannot read properties of undefined`, inside an event handler, where
+ * a throw is not the caller's to catch.
+ *
+ * Wrapping is two characters wider than asserting the promise exists, and it
+ * turns a class of environment into a non-event rather than a crash.
+ */
+function resume(el: HTMLMediaElement) {
+  void Promise.resolve(el.play()).catch(() => {});
 }

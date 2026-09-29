@@ -446,6 +446,9 @@ func (s *Server) Handler() http.Handler {
 	 * never arrives.
 	 */
 	mux.HandleFunc("PUT /api/peers/{fingerprint}/watching", s.peerWatching)
+	// What a peer says about one of their items: its name, and how long it is.
+	// Without the length a converted stream has a scrubber with no scale.
+	mux.HandleFunc("GET /api/peers/{fingerprint}/item/{item}", s.peerItem)
 
 	/*
 	 * What a paired server may see. Administrative for the reason in
@@ -515,8 +518,8 @@ func (s *Server) Handler() http.Handler {
 	 * The title is computed here, by presenceTitle, because §3's reductions
 	 * are that function and must stay one implementation.
 	 */
-	mux.HandleFunc("GET /api/federation/presence-title/{item}",
-		s.federationPlay(s.federationPresenceTitle))
+	mux.HandleFunc("GET /api/federation/item/{item}",
+		s.federationPlay(s.federationItem))
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)

@@ -33,6 +33,7 @@ let root: Root;
 function mockServer(opts: {
   items?: { id: number; title: string }[];
   total?: number;
+  durationMs?: number;
   method?: string;
   subtitles?: unknown[];
   playbackFails?: boolean;
@@ -55,6 +56,9 @@ function mockServer(opts: {
       }
       if (url.includes("/subtitles"))
         return json({ subtitles: opts.subtitles ?? [] });
+      // What the far server says about one item: its name and its length.
+      if (/\/item\/\d+$/.test(url.split("?")[0]))
+        return json({ title: "Their Film", duration_ms: opts.durationMs ?? 7_200_000 });
       if (url.includes("/items")) {
         // Pages, because the client asks for one. A stub that ignored limit
         // and offset would make a paging bug invisible to every test here.
@@ -73,6 +77,29 @@ function mockServer(opts: {
       return json({});
     }),
   );
+}
+
+
+/*
+ * Move a range input the way a person does.
+ *
+ * Setting `.value` directly is not enough: React keeps a tracker of the last
+ * value it saw on the node, and assigning to the property updates that tracker
+ * too — so React concludes nothing changed and never calls onChange. Going
+ * through the prototype's setter changes the DOM value while leaving the
+ * tracker stale, which is what makes the dispatched event look like a real one.
+ *
+ * Two attempts here dispatched "change" and then set `.value` first; both
+ * produced a test that reported the seek had not happened when in fact it had
+ * never been asked for.
+ */
+function drag(bar: HTMLInputElement, to: number) {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )!.set!;
+  setter.call(bar, String(to));
+  bar.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 // Where the router ended up, so a navigation can be asserted as a destination
@@ -371,5 +398,91 @@ describe("a peer library with more than one page", () => {
 
     expect(host.textContent).not.toContain("Show more");
     expect(host.textContent).not.toContain(" of ");
+  });
+});
+
+/*
+ * Seeking a converted film (reported: "plays on initial load but not after
+ * seeking", on a 4K MKV, while MP4s were fine).
+ *
+ * The two paths are genuinely different and the difference is the bug. Direct
+ * play is the file's own bytes over a range server and the element seeks them
+ * itself. A converted stream has no bytes until the far server makes them, so
+ * moving the scrubber is **a new session starting somewhere else** — and every
+ * such session begins at zero, which is why the screen has to keep the offset.
+ */
+describe("seeking a peer's film", () => {
+  async function playing(method: string) {
+    mockServer({ method, durationMs: 7_200_000 });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+    const el = host.querySelector("video")!;
+    await act(async () => {
+      el.dispatchEvent(new Event("playing"));
+    });
+    const bar = host.querySelector<HTMLInputElement>("input[type='range']")!;
+    return { el, bar };
+  }
+
+  // The scale comes from whoever probed the file. Without it the bar has no
+  // maximum and cannot be dragged anywhere.
+  it("scales the bar by the length the far server reported", async () => {
+    const { bar } = await playing("transcode");
+    expect(bar.disabled).toBe(false);
+    expect(bar.max).toBe("7200");
+  });
+
+  /*
+   * The load-bearing one. A converted seek must re-request at an offset; if it
+   * merely set currentTime the element would look for bytes that do not exist,
+   * which is the reported failure.
+   */
+  it("asks the far server to start again somewhere else", async () => {
+    const { el, bar } = await playing("transcode");
+
+    await act(async () => {
+      drag(bar, 2400);
+    });
+
+    const after = el.getAttribute("src")!;
+    expect(after).toContain("t=2400");
+    // jsdom reports no HLS support, so this is the progressive form. Which
+    // route is taken is filePath's decision and is tested there; what matters
+    // here is that the offset reached the far server at all.
+    expect(after).toContain(`/api/peers/${FP}/transcode?item=42`);
+  });
+
+  /*
+   * And the clock keeps telling the truth afterwards.
+   *
+   * The new session's own time is zero, so a screen reading the element would
+   * say the film had jumped back to the start — which is exactly what native
+   * controls did, and why this was reported as seeking being broken.
+   */
+  it("goes on showing where the film is, not where the session is", async () => {
+    const { bar } = await playing("transcode");
+
+    await act(async () => {
+      drag(bar, 2400);
+    });
+
+    // 2400s = 40:00. The element's own clock is 0.
+    expect(host.textContent).toContain("40:00");
+    expect(host.textContent).toContain("2:00:00");
+  });
+
+  // Direct play is left alone: the element does this better than we would.
+  it("leaves a direct file's seeking to the element", async () => {
+    const { el, bar } = await playing("direct");
+    const before = el.getAttribute("src");
+
+    await act(async () => {
+      drag(bar, 600);
+    });
+
+    // The claim is that nothing was re-requested. jsdom implements no media
+    // clock, so what the element did with currentTime is not observable here —
+    // and it is the browser's job anyway, which is the whole point.
+    expect(el.getAttribute("src")).toBe(before);
+    expect(before).not.toContain("t=");
   });
 });

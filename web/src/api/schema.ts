@@ -3787,7 +3787,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/federation/presence-title/{item}": {
+    "/federation/item/{item}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3795,14 +3795,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What may be said that somebody is watching
+         * What a friend may know about one item
          * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin, authorised per item with a **Friend** principal exactly as the playback routes are.
          *
-         *     The title is computed **here**, by the server that owns the item, because [ADR 0045](adr/0045-live-presence-between-paired-servers.md) §3's reductions — video only, the work and never the episode — are one function and must stay one implementation. The asking server records what comes back and derives nothing of its own.
+         *     Replaces `presence-title`, which answered one field. Two were needed within a day, and both are the same question — *what may be said about this item* — so they are one answer rather than a route per field.
          *
-         *     An **empty title is a complete answer** and the common one: music, a photograph, an episode whose series is unknown. The caller records nothing for it.
+         *     `title` and `presence_title` are different on purpose: one is for the person browsing the library, the other is what may be said about them to a third party.
          */
-        get: operations["federationPresenceTitle"];
+        get: operations["federationItem"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4083,6 +4083,30 @@ export interface paths {
          *     A peer that will not answer clears presence rather than leaving the last thing standing.
          */
         put: operations["peerWatching"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/item/{item}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a paired server says about one of their items
+         * @description Asked of **this** server by its own client, and answered by asking the peer. The client needs two things it cannot work out for itself: the film's name for the heading, and **how long it is** — without which a converted stream has a scrubber with no scale.
+         *
+         *     This replaced carrying the title in router state from the tile that was pressed, which was lost on a reload or a direct visit.
+         *
+         *     `presence_title` is **not** forwarded: it is the far server's answer about what may be disclosed to others, consumed by this server when it records presence.
+         */
+        get: operations["peerItem"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -12406,27 +12430,35 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    federationPresenceTitle: {
+    federationItem: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description The item being played. */
+                /** @description The item. */
                 item: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The title, or an empty string */
+            /** @description What may be known */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** @description Empty when nothing may be said. */
+                        /** @description For the person looking at it. */
                         title: string;
+                        /** @description What may be disclosed to **somebody else** — reduced by ADR 0045 §3: the series and never the episode, empty for music and photographs. Present only on the federation route; the proxy drops it, because a client has no use for it and a field a client holds is a field that eventually gets rendered. */
+                        presence_title?: string;
+                        kind: string;
+                        /**
+                         * Format: int64
+                         * @description Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element.
+                         */
+                        duration_ms?: number;
                     };
                 };
             };
@@ -12794,6 +12826,50 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    peerItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server. */
+                fingerprint: string;
+                /** @description The item on **their** server. */
+                item: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What they said */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description For the person looking at it. */
+                        title: string;
+                        kind: string;
+                        /**
+                         * Format: int64
+                         * @description Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element.
+                         */
+                        duration_ms?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering (`peer_unreachable`) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }
