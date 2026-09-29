@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 
 	"lancast/internal/identity"
@@ -288,5 +290,76 @@ func TestTheArtworkCheckCoversEveryField(t *testing.T) {
 	if strings != 3 {
 		t.Errorf("store.Artwork has %d hash fields and itemHasArtwork checks 3; "+
 			"a field added here is artwork a friend silently cannot load", strings)
+	}
+}
+
+/*
+ * The gate actually records where a peer connected from (ADR 0044 §5).
+ *
+ * **This test exists because removing the call compiled and nothing failed.**
+ * The decision — which host, which port, what to ignore — is covered next door
+ * by `learnedAddress`, and covering only that leaves the wiring untested: a
+ * pure function nobody calls passes every assertion about itself.
+ *
+ * So this goes through a handler, with a request shaped like one arriving on
+ * the peer channel, and asks the store what it now believes.
+ */
+func TestAPeerWhoMovedIsFoundAgain(t *testing.T) {
+	f := newFedFixture(t)
+	ctx := context.Background()
+
+	before, err := f.h.st.PeerByFingerprint(ctx, f.peerFP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Addrs) == 0 {
+		t.Fatal("fixture: the peer has no address to serve on")
+	}
+	_, port, err := net.SplitHostPort(before.Addrs[0])
+	if err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	// A request from an address nobody has recorded, carrying the identity key
+	// this server pinned at pairing. The key is what makes the source address
+	// evidence rather than a claim.
+	r := peerRequest(t, f.georgia, "/api/federation/libraries")
+	r.RemoteAddr = "192.0.2.77:51234"
+	f.call(f.h.srvAPI.federationLibraries, r)
+
+	after, err := f.h.st.PeerByFingerprint(ctx, f.peerFP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := net.JoinHostPort("192.0.2.77", port)
+	if len(after.Addrs) == 0 || after.Addrs[0] != want {
+		t.Errorf("addresses are %v, want %q first — a peer that moved was not "+
+			"found again, which is the fault ADR 0044 §5 describes and never fixed",
+			after.Addrs, want)
+	}
+	// The address it was introduced on survives behind the new one: a peer
+	// reachable two ways must not lose one because it called from the other.
+	if !slices.Contains(after.Addrs, before.Addrs[0]) {
+		t.Errorf("addresses are %v; the original %q was lost",
+			after.Addrs, before.Addrs[0])
+	}
+}
+
+// A stranger teaches nothing. The refusal happens before any address is
+// recorded, so an unpaired server cannot write into another peer's list.
+func TestAStrangerCannotMoveAPeer(t *testing.T) {
+	f := newFedFixture(t)
+	ctx := context.Background()
+
+	before, _ := f.h.st.PeerByFingerprint(ctx, f.peerFP)
+
+	r := peerRequest(t, f.stranger, "/api/federation/libraries")
+	r.RemoteAddr = "192.0.2.99:51234"
+	f.call(f.h.srvAPI.federationLibraries, r)
+
+	after, _ := f.h.st.PeerByFingerprint(ctx, f.peerFP)
+	if !slices.Equal(after.Addrs, before.Addrs) {
+		t.Errorf("addresses changed from %v to %v because a stranger called",
+			before.Addrs, after.Addrs)
 	}
 }

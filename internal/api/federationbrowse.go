@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"strconv"
 
@@ -49,11 +50,104 @@ func (s *Server) federationPeer(w http.ResponseWriter, r *http.Request) (string,
 			"peer connections must present their identity")
 		return "", false
 	}
-	if _, err := s.st.PeerByFingerprint(r.Context(), fingerprint); err != nil {
+	known, err := s.st.PeerByFingerprint(r.Context(), fingerprint)
+	if err != nil {
 		writeError(w, http.StatusForbidden, "forbidden", "not a paired server")
 		return "", false
 	}
+	s.notePeerAddress(r, known)
 	return fingerprint, true
+}
+
+/*
+ * notePeerAddress remembers where a peer just connected from
+ * ([ADR 0044](../../docs/adr/0044-server-identity-and-peering.md) §5).
+ *
+ * §5 says the address is a hint and the fingerprint is the identity — *"a peer
+ * that moves gets a new address and is still the same peer"* — and then says
+ * nothing about how the hint is corrected. It never was: addresses were written
+ * once from an invite and never revisited, so a peer that moved became
+ * unreachable with no way back except pasting a fresh invite. That is what
+ * happened, and it was misdiagnosed for a day as a routing problem.
+ *
+ * **The connection is the evidence.** It arrived over mutual TLS carrying the
+ * identity key recorded at pairing, so this is not somebody claiming an address
+ * — it is where an authenticated peer actually is. Nothing weaker would do:
+ * an address a caller *asserts* is an address anybody can assert.
+ *
+ * It only corrects the direction that is already working, and that is the
+ * common shape of the fault rather than a limitation: when two servers lose
+ * each other it is usually one-way, and the half that still connects is exactly
+ * the half that can say where it went.
+ *
+ * Failures are ignored. Not learning an address costs a pairing nothing it did
+ * not already have, and refusing a peer's request because a hint could not be
+ * written would be the tail wagging the dog.
+ */
+func (s *Server) notePeerAddress(r *http.Request, known store.Peer) {
+	addr, ok := learnedAddress(r.RemoteAddr, known.Addrs)
+	if !ok {
+		return
+	}
+	if err := s.st.LearnPeerAddress(r.Context(), known.Fingerprint, addr); err != nil {
+		s.log.Debug("could not record where a peer connected from",
+			"peer", known.Fingerprint, "addr", addr, "error", err)
+	}
+}
+
+/*
+ * learnedAddress turns a connection's source into an address worth keeping.
+ *
+ * Pure, and takes what it needs, because the interesting cases are all about
+ * *which* port and they are tedious to arrange over a real socket.
+ *
+ * # The port is not the one we can see
+ *
+ * `RemoteAddr` carries the peer's **ephemeral source port**, which is different
+ * on every connection and listens for nothing. What is wanted is the port they
+ * serve on — so the host comes from the connection and the port comes from what
+ * is already recorded for that peer. A peer that changed address but not port,
+ * which is every peer that moved network, is then reachable again.
+ *
+ * With no recorded port there is nothing to guess with, and nothing is learned.
+ * Inventing a default would write an address nobody has ever answered on.
+ *
+ * # Loopback is never learned
+ *
+ * A connection from this machine says nothing about where another household
+ * is, and recording it would have every peer eventually pointing at ourselves.
+ */
+func learnedAddress(remoteAddr string, known []string) (string, bool) {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil || host == "" {
+		return "", false
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.IsLoopback() || ip.IsUnspecified() {
+		return "", false
+	}
+	port := servingPort(known)
+	if port == "" {
+		return "", false
+	}
+	addr := net.JoinHostPort(host, port)
+	if len(known) > 0 && known[0] == addr {
+		// Already the best guess; the store would decline this anyway, and not
+		// asking it is one fewer thing happening several times a minute.
+		return "", false
+	}
+	return addr, true
+}
+
+// servingPort is the port this peer is believed to serve on, taken from the
+// first address recorded for it. They are ordered best-guess first, so this is
+// the port most recently known to work.
+func servingPort(known []string) string {
+	for _, a := range known {
+		if _, port, err := net.SplitHostPort(a); err == nil && port != "" {
+			return port
+		}
+	}
+	return ""
 }
 
 // federationLibraries answers which of this server's libraries the calling

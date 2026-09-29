@@ -453,6 +453,18 @@ positions as well as listings: a peer's film cannot reach Continue Watching,
 Recently Added, a count or a search, because the query has nowhere to join
 from.
 
+**A peer's address is corrected by the connection that proves it**
+([ADR 0044](adr/0044-server-identity-and-peering.md) §5a). Where a peer connects
+from is recorded as a hint, because the connection carries the identity key
+pinned at pairing — it is where an authenticated peer *is*, not an address
+anybody claimed. The port comes from what is already recorded rather than from
+the connection, whose source port is ephemeral and listens for nothing; with no
+recorded port nothing is learned. The newest goes first and the list is bounded,
+so the oldest falls off — every address is a connection attempt to pay for
+before a working one is reached. It corrects only the direction that already
+works, which is the common shape of the fault: when two servers lose each other
+it is usually one-way.
+
 Fetching a peer's roster is also what establishes that a pairing is **mutual**:
 this server only reaches that handler for a fingerprint the far side already
 holds, so a successful call proves both sides hold each other, and it is what

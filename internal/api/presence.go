@@ -72,17 +72,20 @@ type visible struct {
  * instead of loosening that defence to let a peer through.
  */
 func (s *Server) federationPresence(w http.ResponseWriter, r *http.Request) {
-	fingerprint, err := peer.FingerprintFromState(r.TLS)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "peer connections must present their identity")
-		return
-	}
-
-	// Known peers only. An unknown key reaches a lookup and a refusal, never a
-	// disclosure — and unpairing therefore stops answering immediately, which
-	// is what ADR 0045 §5 means by revocation being complete.
-	if _, err := s.st.PeerByFingerprint(r.Context(), fingerprint); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "not a paired server")
+	/*
+	 * Known peers only. An unknown key reaches a lookup and a refusal, never a
+	 * disclosure — and unpairing therefore stops answering immediately, which
+	 * is what ADR 0045 §5 means by revocation being complete.
+	 *
+	 * Shared with the browse and playback routes rather than repeated here, and
+	 * the repetition was not harmless: it is also where a peer's current
+	 * address is learned (ADR 0044 §5), so a second copy of this was a door a
+	 * peer could come through without being noticed to have moved. Presence and
+	 * the roster are the two calls a peer makes most often, which made them the
+	 * two most worth learning from.
+	 */
+	fingerprint, ok := s.federationPeer(w, r)
+	if !ok {
 		return
 	}
 
@@ -137,13 +140,9 @@ func (s *Server) federationPresence(w http.ResponseWriter, r *http.Request) {
  * from `added` to `paired`.
  */
 func (s *Server) federationRoster(w http.ResponseWriter, r *http.Request) {
-	fingerprint, err := peer.FingerprintFromState(r.TLS)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "peer connections must present their identity")
-		return
-	}
-	if _, err := s.st.PeerByFingerprint(r.Context(), fingerprint); err != nil {
-		writeError(w, http.StatusForbidden, "forbidden", "not a paired server")
+	// Same gate as everywhere else, and the same place a peer's current address
+	// is learned. See federationPresence above.
+	if _, ok := s.federationPeer(w, r); !ok {
 		return
 	}
 
