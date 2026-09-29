@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -436,6 +437,7 @@ func (s *Server) peerItem(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	itemID, _ := strconv.ParseInt(item, 10, 64)
 	var body map[string]any
 	if err := s.callPeer(r.Context(), p, peerItemPath(item), &body); err != nil {
 		s.peerUnreachable(w, p, err)
@@ -449,7 +451,79 @@ func (s *Server) peerItem(w http.ResponseWriter, r *http.Request) {
 	 * that eventually gets rendered.
 	 */
 	delete(body, "presence_title")
+	/*
+	 * Where we got to, added from *this* server's own rows (ADR 0071 §4).
+	 *
+	 * The rest of this answer is theirs and is passed through; this one field
+	 * is ours, and it has to be, because §4 puts a friend's progress on the
+	 * friend's own server — the host writes nothing and knows nothing about
+	 * where anybody is in a film.
+	 *
+	 * Carried on the same answer the player already fetches rather than a
+	 * second route: the screen needs the title, the length and the position in
+	 * the same breath, and three requests to start a film is two too many.
+	 *
+	 * A failure here is silence rather than an error. Not knowing where
+	 * somebody got to costs them a resume; refusing to play the film over it
+	 * would cost them the film.
+	 */
+	if pos, err := s.st.PeerProgressFor(r.Context(), p.Fingerprint, itemID); err == nil && pos > 0 {
+		body["position_ms"] = pos
+	}
 	writeJSON(w, http.StatusOK, body)
+}
+
+/*
+ * peerProgress records where we are in one of their films.
+ *
+ * **Written here, never sent to them.** ADR 0071 §4 is explicit that the host
+ * is the wrong place for this: a row there keyed to a remote principal is an
+ * account by another name, it outlives the evening, and unpairing would no
+ * longer be complete. So it is kept by whoever is watching, keyed by the peer's
+ * fingerprint and their item id, and it cascades away when the pairing does.
+ *
+ * Separate from the presence beat next door, which looks similar and is the
+ * opposite kind of thing: presence says *now* and is never written down (ADR
+ * 0045 §4), while this is a record and is the only one a peer's film produces.
+ * Two routes because they are two decisions — and because collapsing them would
+ * make "nothing is persisted" and "this is persisted" the same code path.
+ */
+func (s *Server) peerProgress(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.peerForBrowse(w, r)
+	if !ok {
+		return
+	}
+	itemID, ok := peerItemID(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		PositionMS int64 `json:"position_ms"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "where in it")
+		return
+	}
+	if err := s.st.SetPeerProgress(r.Context(), p.Fingerprint, itemID, body.PositionMS, time.Now()); err != nil {
+		s.writeInternal(w, err, "set peer progress")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// peerItemID is peerItemSegment's answer as a number, for the routes that need
+// to store it rather than pass it on.
+func peerItemID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	raw, ok := peerItemSegment(w, r)
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "which item")
+		return 0, false
+	}
+	return id, true
 }
 
 /*

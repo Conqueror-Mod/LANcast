@@ -34,6 +34,8 @@ function mockServer(opts: {
   items?: { id: number; title: string; artwork?: { poster?: string } }[];
   total?: number;
   durationMs?: number;
+  /** Where this household got to, as the item route reports it. */
+  positionMs?: number;
   method?: string;
   subtitles?: unknown[];
   playbackFails?: boolean;
@@ -59,8 +61,14 @@ function mockServer(opts: {
       if (url.includes("/subtitles"))
         return json({ subtitles: opts.subtitles ?? [] });
       // What the far server says about one item: its name and its length.
-      if (/\/item\/\d+$/.test(url.split("?")[0]))
-        return json({ title: "Their Film", duration_ms: opts.durationMs ?? 7_200_000 });
+      if (/\/item\/\d+$/.test(url.split("?")[0])) {
+        const info: Record<string, unknown> = {
+          title: "Their Film",
+          duration_ms: opts.durationMs ?? 7_200_000,
+        };
+        if (opts.positionMs) info.position_ms = opts.positionMs;
+        return json(info);
+      }
       if (url.includes("/items")) {
         if (opts.itemsFail) {
           return json(
@@ -602,5 +610,64 @@ describe("a peer library's artwork", () => {
     const asked = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .filter(([url]) => String(url).includes("/artwork/"));
     expect(asked).toHaveLength(0);
+  });
+});
+
+/*
+ * Picking up where this household left off (ADR 0071 §4).
+ *
+ * The decision §4 makes is about *where the row lives*: the friend's own
+ * server, because a row on the host keyed to a remote principal is an account
+ * by another name — it outlives the evening, has to be listed and deleted, and
+ * unpairing would no longer be complete.
+ *
+ * So the assertions worth making from the client are that it resumes at all,
+ * and that what it writes goes to **our** server and never to theirs.
+ */
+describe("where we got to in a friend's film", () => {
+  it("starts where this household left it", async () => {
+    mockServer({ method: "transcode", positionMs: 2_400_000, durationMs: 7_200_000 });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    const el = host.querySelector("video")!;
+    // A converted stream cannot be moved by setting a clock: resuming it means
+    // asking the far server to begin at the new position.
+    expect(el.getAttribute("src")).toContain("t=2400");
+    expect(host.textContent).toContain("40:00");
+  });
+
+  // And a film nobody has started is not dragged anywhere.
+  it("starts at the beginning when there is nothing to resume", async () => {
+    mockServer({ method: "transcode", durationMs: 7_200_000 });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    expect(host.querySelector("video")!.getAttribute("src")).not.toContain("t=");
+  });
+
+  /*
+   * The write goes to our own server. §4's whole point is that the host writes
+   * nothing and knows nothing about where anybody is in a film, so a progress
+   * request reaching a federation route would be the decision undone.
+   */
+  it("writes where we are to this server, never to theirs", async () => {
+    mockServer({ method: "direct", durationMs: 7_200_000 });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    const el = host.querySelector("video")!;
+    await act(async () => {
+      el.dispatchEvent(new Event("playing"));
+    });
+    // Pausing is a save point, and the most likely moment somebody walks away.
+    await act(async () => {
+      el.dispatchEvent(new Event("pause"));
+    });
+
+    const writes = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+
+    for (const [url] of writes) {
+      expect(String(url)).toContain(`/api/peers/${FP}/`);
+      expect(String(url)).not.toContain("/federation/");
+    }
   });
 });

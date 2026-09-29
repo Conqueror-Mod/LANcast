@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"lancast/internal/identity"
 	"lancast/internal/store"
 )
 
@@ -388,5 +390,102 @@ func TestTheClientCannotNameWhatItIsWatching(t *testing.T) {
 	st, _ := h.srvAPI.tracker().Snapshot(store.LocalUserID)
 	if st.Watching == "Cowboy Bebop S01E02" {
 		t.Error("the client named its own disclosure")
+	}
+}
+
+/*
+ * Where we are in one of their films (ADR 0071 §4).
+ *
+ * §4 is the one place ADR 0071 departs from ADR 0046's "a guest writes
+ * nothing", and the decision is about *where the row lives*: here, on the
+ * watcher's server, because a row on the host keyed to a remote principal is an
+ * account by another name.
+ *
+ * So what these assert is the boundary — it is written locally, it comes back
+ * on the answer the player already fetches, and nothing about it is sent to the
+ * server that holds the film.
+ */
+func TestWhereWeGotToIsKeptHereAndReadBack(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+	fp := georgia.Fingerprint()
+
+	resp := h.authed(t, "PUT", "/api/peers/"+fp+"/progress/42",
+		map[string]any{"position_ms": 600_000})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+
+	// Read back from the store rather than the item route: the item route has
+	// to reach the peer, which is unreachable in a harness, and what is under
+	// test is that this server kept it.
+	got, err := h.st.PeerProgressFor(context.Background(),
+		identity.Normalize(fp), 42)
+	if err != nil || got != 600_000 {
+		t.Errorf("stored %d, %v; want 600000", got, err)
+	}
+}
+
+// The same refusals as every other peer route, and one of its own.
+func TestProgressIsRefusedLikeEveryOtherPeerRoute(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+	stranger := anotherServer(t)
+
+	for _, c := range []struct {
+		name   string
+		target string
+		body   any
+		signed bool
+		want   int
+	}{
+		{"a peer we never met", "/api/peers/" + stranger.Fingerprint() + "/progress/1",
+			map[string]any{"position_ms": 1}, true, http.StatusNotFound},
+		{"not an item", "/api/peers/" + georgia.Fingerprint() + "/progress/nonsense",
+			map[string]any{"position_ms": 1}, true, http.StatusBadRequest},
+		{"signed out", "/api/peers/" + georgia.Fingerprint() + "/progress/1",
+			map[string]any{"position_ms": 1}, false, http.StatusUnauthorized},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var resp *http.Response
+			if c.signed {
+				resp = h.authed(t, "PUT", c.target, c.body)
+			} else {
+				resp = h.do(t, "PUT", c.target, c.body)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != c.want {
+				t.Errorf("status = %d, want %d", resp.StatusCode, c.want)
+			}
+		})
+	}
+}
+
+/*
+ * Unpairing forgets it, which is what makes §4's argument hold.
+ *
+ * The reason the host is the wrong place for this is that a row there would
+ * outlive the relationship. That reasoning only works if the row *here* does
+ * not — so this asserts the cascade at the surface a person actually touches.
+ */
+func TestUnpairingForgetsWhereWeWereInTheirFilms(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	georgia := anotherServer(t)
+	pairedPeer(t, h, georgia, "Utopia")
+	fp := georgia.Fingerprint()
+
+	h.authed(t, "PUT", "/api/peers/"+fp+"/progress/42",
+		map[string]any{"position_ms": 600_000}).Body.Close()
+	h.authed(t, "DELETE", "/api/peers/"+fp, nil).Body.Close()
+
+	got, err := h.st.PeerProgressFor(context.Background(), identity.Normalize(fp), 42)
+	if err != nil || got != 0 {
+		t.Errorf("after unpairing got %d, %v; want it forgotten", got, err)
 	}
 }

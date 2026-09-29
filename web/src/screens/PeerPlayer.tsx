@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
@@ -11,6 +11,7 @@ import {
   peerSourceURL,
   peerSubtitlesURL,
   peerSubtitleURL,
+  peerProgressURL,
   peerWatchingURL,
 } from "@/playback/peerSource";
 import { PeerControls } from "@/components/PeerControls";
@@ -59,7 +60,7 @@ export function PeerPlayer() {
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
     queryFn: ({ signal }) =>
-      apiGet<{ title?: string; duration_ms?: number }>(
+      apiGet<{ title?: string; duration_ms?: number; position_ms?: number }>(
         peerItemURL(fingerprint, itemID),
         signal,
       ),
@@ -111,6 +112,27 @@ export function PeerPlayer() {
   const [offset, setOffset] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(true);
+  /*
+   * Resumed once, and only once.
+   *
+   * The position arrives with the item information, after the first render, so
+   * it has to be applied when it lands — and then never again, because every
+   * later render would otherwise drag the film back to where it started. A ref
+   * rather than state: nothing draws it, and a re-render to record that a
+   * decision was already made is a render for nothing.
+   */
+  const resumed = useRef(false);
+  /*
+   * The latest `seek` and the latest position, reachable from the effects.
+   *
+   * Both are computed *after* the early returns below — they depend on the far
+   * server's decision, which is still in flight on the first render — so an
+   * effect declared up here cannot close over them. Refs hold the current value
+   * without making every effect re-subscribe each time the clock ticks, which
+   * for a fifteen-second timer would mean tearing it down four times a minute.
+   */
+  const seekRef = useRef<((to: number) => void) | null>(null);
+  const atRef = useRef(0);
 
   const playback = useQuery({
     queryKey: ["peer-playback", fingerprint, itemID],
@@ -188,6 +210,61 @@ export function PeerPlayer() {
       el.removeEventListener("emptied", stop);
     };
   }, [fingerprint, itemID, video]);
+
+  /*
+   * Picking up where this household left off (ADR 0071 §4).
+   *
+   * Their server holds the film; **ours** holds where we are in it, because §4
+   * puts a friend's progress on the friend's own server — a row on the host
+   * keyed to a remote principal is an account by another name. So the host
+   * neither writes nor knows this.
+   *
+   * Applied through `seek`, which already knows the difference between the two
+   * delivery paths: a converted stream cannot be moved by setting a clock, it
+   * has to be asked for again from the new position.
+   */
+  useEffect(() => {
+    const at = (info.data?.position_ms ?? 0) / 1000;
+    if (!video || resumed.current || at <= 0) return;
+    resumed.current = true;
+    seekRef.current?.(at);
+  }, [video, info.data?.position_ms]);
+
+  /*
+   * Writing it down, which is the one record a peer's film produces.
+   *
+   * Every fifteen seconds rather than the beat's five: presence is a claim
+   * about *now* and is wrong the moment it is late, while a resume position is
+   * allowed to be a few seconds behind — and this one crosses no network
+   * beyond our own server, but it is a *write*, and a write every five seconds
+   * for a two-hour film is 1,440 of them.
+   *
+   * On pause as well, because pausing is the most likely moment somebody walks
+   * away, and the interval would otherwise lose up to fifteen seconds of it.
+   */
+  useEffect(() => {
+    const el = video;
+    if (!el || fingerprint === "" || itemID <= 0) return;
+
+    const save = () => {
+      const at = atRef.current;
+      if (at <= 0) return;
+      void apiSend(peerProgressURL(fingerprint, itemID), "PUT", {
+        position_ms: Math.floor(at * 1000),
+      }).catch(() => {});
+    };
+    const timer = setInterval(() => {
+      if (!el.paused) save();
+    }, 15_000);
+    el.addEventListener("pause", save);
+    return () => {
+      clearInterval(timer);
+      el.removeEventListener("pause", save);
+      // Not saved on the way out. Leaving the screen is indistinguishable from
+      // the tab closing, and the interval and the pause between them have
+      // already recorded anything worth keeping.
+    };
+  }, [video, fingerprint, itemID]);
 
   /*
    * The clock, and it is not the element's on a converted stream.
@@ -291,6 +368,10 @@ export function PeerPlayer() {
     resume(el);
   };
 
+  // Kept current for the effects above, which run before either exists.
+  seekRef.current = seek;
+  atRef.current = at;
+
   return (
     <div className="peer-player">
       <header className="peer-player__head">
@@ -352,9 +433,21 @@ export function PeerPlayer() {
         onSeek={seek}
       />
 
+      {/*
+        Two facts, and the second is the interesting one.
+
+        ADR 0071 §4 puts a friend's progress on the *friend's* server, because a
+        row on the host keyed to a remote principal is an account by another
+        name — it outlives the evening, it has to be listed and deleted, and
+        unpairing would no longer be complete.
+
+        So where somebody is in a film is a thing this household knows and the
+        host does not, and saying so is worth a line: it is the difference
+        between a position being private and a person assuming it is.
+      */}
       <p className="peer-player__note">
-        Playing from their machine. Nothing about this is recorded here or
-        there, so it starts from the beginning each time.
+        Playing from their machine. Where you are in it is kept here, not there
+        — they cannot see it, and unpairing forgets it.
       </p>
     </div>
   );
