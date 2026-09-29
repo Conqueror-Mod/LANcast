@@ -4132,6 +4132,8 @@ export interface paths {
          *     This replaced carrying the title in router state from the tile that was pressed, which was lost on a reload or a direct visit.
          *
          *     `presence_title` is **not** forwarded: it is the far server's answer about what may be disclosed to others, consumed by this server when it records presence.
+         *
+         *     `position_ms` is added from **this** server's rows rather than proxied. It rides this answer because the player needs the title, the length and the position in the same breath, and three requests to start a film is two too many.
          */
         get: operations["peerItem"];
         put?: never;
@@ -4161,6 +4163,34 @@ export interface paths {
          */
         get: operations["peerArtwork"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/progress/{item}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Where we are in one of their films
+         * @description **Written here and never sent to them.** [ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) §4 is the one place that ADR departs from ADR 0046's "a guest writes nothing", and it puts a friend's progress on the **friend's own server**: a row on the host keyed to a remote principal is an account by another name — it outlives the evening, it has to be listed and deleted, and unpairing would no longer be complete.
+         *
+         *     So it is stored by whoever is watching, keyed by the peer's fingerprint and *their* item id, and it **cascades away when the pairing does**. The host writes nothing and knows nothing about where anybody is in a film, which is the answer ADR 0035 would give if asked — arrived at by where the row lives rather than by a rule somebody has to enforce.
+         *
+         *     A position of **0 forgets the film**: back at the start and never started are the same fact.
+         *
+         *     Not to be confused with `PUT /api/peers/{fingerprint}/watching`, which looks similar and is the opposite kind of thing — presence says *now* and is never written down at all (ADR 0045 §4). Two routes because they are two decisions.
+         *
+         *     Read back on `GET /api/peers/{fingerprint}/item/{item}`.
+         */
+        put: operations["peerProgress"];
         post?: never;
         delete?: never;
         options?: never;
@@ -12942,6 +12972,11 @@ export interface operations {
                          * @description Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element.
                          */
                         duration_ms?: number;
+                        /**
+                         * Format: int64
+                         * @description Where **this** household got to, in milliseconds, from this server's own rows. Absent when nothing was watched. It is the one field on this answer that is not the peer's — ADR 0071 §4 puts a friend's progress on the friend's own server, so the host neither writes nor knows it.
+                         */
+                        position_ms?: number;
                     };
                 };
             };
@@ -12993,6 +13028,42 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    peerProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server. */
+                fingerprint: string;
+                /** @description The item on **their** server. */
+                item: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: int64
+                     * @description Milliseconds into the film. `0` forgets it.
+                     */
+                    position_ms: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Recorded, or forgotten */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

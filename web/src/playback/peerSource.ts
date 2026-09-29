@@ -143,3 +143,21 @@ export function peerArtworkURL(
   if (!hash) return undefined;
   return `${base(fingerprint)}/artwork/${item}/${encodeURIComponent(hash)}?size=${size}`;
 }
+
+/*
+ * Where we are in one of their films
+ * ([ADR 0071](../../../docs/adr/0071-a-shared-library-is-a-standing-grant.md)
+ * §4).
+ *
+ * Written to **our own** server and never to theirs. §4 puts a friend's
+ * progress on the friend's own server: a row on the host keyed to a remote
+ * principal is an account by another name, it outlives the evening, and
+ * unpairing would no longer be complete. It is read back on the item route,
+ * which the player already fetches.
+ *
+ * Not to be confused with the presence beat beside it, which is the opposite
+ * kind of thing — that one says *now* and is never written down at all.
+ */
+export function peerProgressURL(fingerprint: string, item: number): string {
+  return `${base(fingerprint)}/progress/${item}`;
+}

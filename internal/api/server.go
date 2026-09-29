@@ -452,6 +452,12 @@ func (s *Server) Handler() http.Handler {
 	// Their artwork, which a client cannot fetch for itself: the hash names
 	// bytes on *their* disk, and /api/artwork is this server's own.
 	mux.HandleFunc("GET /api/peers/{fingerprint}/artwork/{item}/{hash}", s.peerArtwork)
+	/*
+	 * Where we are in one of their films (ADR 0071 §4). Written HERE and never
+	 * sent to them: the host writes nothing and knows nothing about where
+	 * anybody is in a film. It is read back on the item route above.
+	 */
+	mux.HandleFunc("PUT /api/peers/{fingerprint}/progress/{item}", s.peerProgress)
 
 	/*
 	 * What a paired server may see. Administrative for the reason in

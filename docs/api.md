@@ -230,6 +230,7 @@ ADR 0044 declines to build.
 | `PUT /api/peers/{fingerprint}/watching` | `?item=` → still watching one of theirs. A beat, not a record; **no title is accepted** |
 | `GET /api/peers/{fingerprint}/item/{item}` | Their item's name and length. The length is what makes a converted stream seekable |
 | `GET /api/peers/{fingerprint}/artwork/{item}/{hash}` | One of their images. A client cannot fetch it directly: the hash names bytes on **their** disk |
+| `PUT /api/peers/{fingerprint}/progress/{item}` | `{position_ms}` → where we are in one of their films. **Written here, never sent to them**; read back on the item route |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
@@ -435,6 +436,22 @@ The gate alone would make one shared item a key to every image on the disk.
 A peer's caching headers are forwarded here and nowhere else, which is safe
 **because** the content is addressed by its own bytes: an immutable answer
 cannot become a stale one.
+
+**A friend's progress lives on the friend's own server**
+([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) §4), which is the
+one place that ADR departs from ADR 0046's *a guest writes nothing*. A row on
+the host keyed to a remote principal is an account by another name: it outlives
+the evening, it has to be listed and deleted, and unpairing would no longer be
+complete. So the position is stored by whoever is watching, keyed by the peer's
+fingerprint and *their* item id, and it cascades away with the pairing. **The
+host writes nothing and knows nothing about where anybody is in a film** — the
+answer ADR 0035 would give if asked, reached by where the row lives rather than
+by a rule somebody has to enforce.
+
+Nothing joins that table to `media_item`, which is how §5 stays true of
+positions as well as listings: a peer's film cannot reach Continue Watching,
+Recently Added, a count or a search, because the query has nowhere to join
+from.
 
 Fetching a peer's roster is also what establishes that a pairing is **mutual**:
 this server only reaches that handler for a fingerprint the far side already

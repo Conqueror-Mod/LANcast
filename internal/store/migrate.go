@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 49
+const CurrentSchemaVersion = 50
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -88,6 +88,7 @@ var migrations = []migration{
 	{version: 47, sql: schemaRevision47},
 	{version: 48, sql: schemaRevision48},
 	{version: 49, sql: schemaRevision49},
+	{version: 50, sql: schemaRevision50},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1695,4 +1696,43 @@ CREATE TABLE IF NOT EXISTS library_share (
 
 CREATE INDEX IF NOT EXISTS idx_library_share_library
     ON library_share(library_id);
+`
+
+/*
+ * Revision 50 — a friend's progress lives on the friend's own server
+ * ([ADR 0071](../../docs/adr/0071-a-shared-library-is-a-standing-grant.md) §4).
+ *
+ * This table is on the *watcher's* server and holds where **we** are in
+ * **their** films. It is the one place ADR 0071 departs from ADR 0046's "a
+ * guest writes nothing", and §4 explains why the host is the wrong place: a row
+ * on the host keyed to a remote principal is an account by another name. It
+ * outlives the evening, it has to be listed and deleted, and unpairing would no
+ * longer be complete.
+ *
+ * So the key is (peer fingerprint, *their* item id). The fingerprint is stable
+ * across address changes and survives a restore
+ * ([ADR 0044](../../docs/adr/0044-server-identity-and-peering.md) §5, §6),
+ * which is what makes it a durable key — an address would not be.
+ *
+ * **`item_id` is deliberately not a foreign key.** It names a row in somebody
+ * else's database. There is nothing here to reference, and a constraint would
+ * be a claim about a table this server does not have.
+ *
+ * **It cascades from `peer` only**, which is the whole revocation story:
+ * unpairing forgets where we were in their films, with nothing per-item to
+ * clean up. That is the same property `library_share` relies on.
+ *
+ * **Nothing joins this to `media_item`.** A peer's film must never reach
+ * Continue Watching, Recently Added, a count or a search (§5), and the surest
+ * version of that is a table those queries cannot reach rather than a filter
+ * they must remember.
+ */
+const schemaRevision50 = `
+CREATE TABLE IF NOT EXISTS peer_progress (
+    fingerprint TEXT    NOT NULL REFERENCES peer(fingerprint) ON DELETE CASCADE,
+    item_id     INTEGER NOT NULL,
+    position_ms INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (fingerprint, item_id)
+);
 `
