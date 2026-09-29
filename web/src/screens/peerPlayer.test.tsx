@@ -32,6 +32,7 @@ let root: Root;
 
 function mockServer(opts: {
   items?: { id: number; title: string }[];
+  total?: number;
   method?: string;
   subtitles?: unknown[];
   playbackFails?: boolean;
@@ -55,9 +56,15 @@ function mockServer(opts: {
       if (url.includes("/subtitles"))
         return json({ subtitles: opts.subtitles ?? [] });
       if (url.includes("/items")) {
+        // Pages, because the client asks for one. A stub that ignored limit
+        // and offset would make a paging bug invisible to every test here.
+        const all = opts.items ?? [];
+        const q = new URL(url, "https://x").searchParams;
+        const offset = Number(q.get("offset") ?? 0);
+        const limit = Number(q.get("limit") ?? 200);
         return json({
-          items: opts.items ?? [],
-          total: (opts.items ?? []).length,
+          items: all.slice(offset, offset + limit),
+          total: opts.total ?? all.length,
         });
       }
       if (url.includes("/libraries")) {
@@ -226,19 +233,143 @@ describe("the peer player", () => {
   });
 
   /*
-   * Nothing is recorded, which is ADR 0071 §4 left genuinely open rather than
-   * answered by accident. A peer item must never reach this household's watch
-   * history or Continue Watching.
+   * The beat that makes this visible as watching (ADR 0045 §10).
+   *
+   * **This test replaces one that certified the bug.** The old version asserted
+   * that every request on this screen was a GET — true of progress, which a
+   * peer item deliberately never writes, and it went on passing after a PUT
+   * heartbeat was added in the release that was supposed to fix presence. It
+   * passed *because* the beat never fired: the listeners were attached to a
+   * ref that was null while the decision was loading, and the effect never ran
+   * again. A green test reported the absence of the thing it was meant to allow.
+   *
+   * So the assertion is now the positive one. A beat that stops happening fails
+   * here rather than being read as good news.
+   */
+  it("tells this server it is watching one of theirs", async () => {
+    mockServer({ method: "direct" });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    const el = host.querySelector("video")!;
+    // jsdom fires no media events by itself: nothing decodes, so nothing ever
+    // reaches `playing`. Dispatching it is standing in for the browser, and it
+    // is exactly the moment the real element emits.
+    await act(async () => {
+      el.dispatchEvent(new Event("playing"));
+    });
+
+    const beats = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .filter(([url, init]) =>
+        String(url).includes("/watching") &&
+        (init as RequestInit | undefined)?.method === "PUT");
+
+    expect(beats.length).toBeGreaterThan(0);
+    expect(String(beats[0][0])).toBe(`/api/peers/${FP}/watching?item=42`);
+  });
+
+  // And it stops when the picture does. A beat that continued through a pause
+  // would leave a false statement about the present standing, which is the one
+  // thing ADR 0045 exists not to make.
+  it("stops telling it once the picture stops", async () => {
+    mockServer({ method: "direct" });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    const el = host.querySelector("video")!;
+    await act(async () => {
+      el.dispatchEvent(new Event("playing"));
+    });
+    const calls = () =>
+      (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(
+        ([url]) => String(url).includes("/watching"),
+      ).length;
+
+    const afterPlaying = calls();
+    await act(async () => {
+      el.dispatchEvent(new Event("pause"));
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(calls()).toBe(afterPlaying);
+  });
+
+  /*
+   * No progress is written, which is the §4 decision and separate from the beat
+   * above: presence says *now* and leaves nothing behind, and where a friend's
+   * progress should live is genuinely undecided.
    */
   it("writes no progress anywhere", async () => {
     mockServer({ method: "direct" });
     await render(<PeerLibrary />, `/peers/${FP}/item/42`);
 
-    const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock
-      .calls;
-    for (const [, init] of calls) {
+    const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    for (const [url, init] of calls) {
       const method = (init as RequestInit | undefined)?.method ?? "GET";
-      expect(method).toBe("GET");
+      if (method !== "GET") {
+        // The only write this screen may make is the presence beat.
+        expect(String(url)).toContain("/watching");
+      }
     }
+  });
+});
+
+/*
+ * A peer's library is bigger than one page (ADR 0071 §5).
+ *
+ * Shipped showing the first sixty items with the *total* printed beside them,
+ * so a library of 1,395 films rendered sixty tiles ending in the A's under the
+ * number 1,395. Reported by the person looking at it, who reasonably read it
+ * as the list being broken rather than as one page of it.
+ *
+ * The count is the part worth asserting: truncating silently is a bug, and
+ * truncating while displaying a number that contradicts the truncation is a
+ * different and worse one.
+ */
+describe("a peer library with more than one page", () => {
+  const many = Array.from({ length: 200 }, (_, i) => ({
+    id: i + 1,
+    title: `Film ${String(i + 1).padStart(4, "0")}`,
+  }));
+
+  it("says how many are here as well as how many there are", async () => {
+    mockServer({ items: many, total: 1395 });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    expect(host.textContent).toContain("200 of 1,395");
+    expect(host.querySelectorAll("button.poster-tile")).toHaveLength(200);
+  });
+
+  it("fetches the next page when asked, and keeps what it had", async () => {
+    mockServer({ items: many, total: 1395 });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    const more = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Show more",
+    );
+    expect(more, "no Show more button").toBeTruthy();
+
+    await act(async () => {
+      more!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    for (let i = 0; i < 15; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+
+    // The stub holds 200, so the second page is empty and the grid is unchanged
+    // — what is asserted is that asking did not *replace* the first page, which
+    // is the way an accumulating list is usually got wrong.
+    expect(host.querySelectorAll("button.poster-tile").length).toBeGreaterThanOrEqual(200);
+  });
+
+  // Nothing to ask for when the page is the whole library.
+  it("offers nothing more when everything is already here", async () => {
+    mockServer({ items: many.slice(0, 5), total: 5 });
+    await render(<PeerLibrary />, `/peers/${FP}/library/3`);
+
+    expect(host.textContent).not.toContain("Show more");
+    expect(host.textContent).not.toContain(" of ");
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
@@ -54,7 +54,22 @@ export function PeerPlayer() {
    */
   const title = (useLocation().state as { title?: string } | null)?.title;
 
-  const video = useRef<HTMLVideoElement>(null);
+  /*
+   * A callback ref, not useRef, and that is the whole of a shipped bug.
+   *
+   * The element does not exist on mount: this screen returns a note while the
+   * far server's decision is still in flight, so there is no <video> to hang a
+   * listener on. With `useRef` the effects ran once, found `current` null,
+   * returned, and never ran again — their dependencies had not changed when the
+   * element finally appeared. **No listener was ever attached**, so nothing
+   * reported that a film was playing and presence stayed idle in both
+   * directions.
+   *
+   * State holds the element instead, so it becomes a dependency: the effects
+   * run when there is something to wire, which is the only moment they could
+   * ever have worked.
+   */
+  const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   /*
    * Whether this engine can be given a playlist.
    *
@@ -107,7 +122,7 @@ export function PeerPlayer() {
    * nobody is watching this now.
    */
   useEffect(() => {
-    const el = video.current;
+    const el = video;
     if (!el || fingerprint === "" || itemID <= 0) return;
 
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -141,7 +156,7 @@ export function PeerPlayer() {
       el.removeEventListener("ended", stop);
       el.removeEventListener("emptied", stop);
     };
-  }, [fingerprint, itemID]);
+  }, [fingerprint, itemID, video]);
 
   /*
    * One retirement of the playlist route, on the element's own evidence.
@@ -153,14 +168,14 @@ export function PeerPlayer() {
    * path for ever over one slow transcode.
    */
   useEffect(() => {
-    const el = video.current;
+    const el = video;
     if (!el) return;
     const onError = () => {
       if (hlsUsable && isUnsupportedSource(el.error)) setHLSUsable(false);
     };
     el.addEventListener("error", onError);
     return () => el.removeEventListener("error", onError);
-  }, [hlsUsable]);
+  }, [hlsUsable, video]);
 
   if (!fingerprint || itemID <= 0) {
     return <PeerPlayerNote>That is not something on another server.</PeerPlayerNote>;
@@ -213,7 +228,7 @@ export function PeerPlayer() {
         over state nothing is keeping.
       */}
       <video
-        ref={video}
+        ref={setVideo}
         className="peer-player__video"
         src={src}
         controls
