@@ -294,6 +294,18 @@ damaged one with `bad_invite` and a message written for the person holding the
 paste. `GET /api/peers/invite` answers `409 not_reachable` on a server with no
 address another machine could reach — it cannot introduce itself.
 
+**An invite carries only addresses that will still exist.** Windows keeps
+temporary IPv6 addresses (RFC 4941) that are replaced regularly and gone within
+a week, and an invite is recorded once at pairing and never re-learned
+([ADR 0044](adr/0044-server-identity-and-peering.md) §5) — so one written into
+an invite becomes an entry that no longer exists and is still tried, costing a
+connect timeout on every peer operation. They cannot be told apart by
+inspection, because RFC 7217 stable-privacy addresses look identical and must
+be kept, so the operating system is asked. Anything it cannot classify is kept:
+a stale entry costs a timeout, a missing one can cost the pairing. **The TLS
+certificate still covers everything**, because it has to cover whatever
+somebody might type.
+
 **A pairing permits nothing.** It records that two servers know who each other
 are, and every later capability is granted separately.
 

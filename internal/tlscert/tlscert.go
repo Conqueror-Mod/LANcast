@@ -151,10 +151,17 @@ func dedupeHosts(hosts []string) []string {
 	return out
 }
 
-// LocalIPs returns the machine's non-loopback IP addresses, so a generated cert
-// covers the address a browser on the LAN actually connects to. A failure to
-// enumerate is not fatal: the cert still covers loopback, and the operator can
-// supply their own cert with the right names.
+/*
+ * LocalIPs returns the machine's non-loopback IP addresses, so a generated cert
+ * covers the address a browser on the LAN actually connects to. A failure to
+ * enumerate is not fatal: the cert still covers loopback, and the operator can
+ * supply their own cert with the right names.
+ *
+ * **Everything, including temporary IPv6 addresses.** A certificate covers
+ * whatever somebody might type, and an address that is real today is an address
+ * somebody can be looking at today. For a list that is written down and kept —
+ * an invite — see StableIPs.
+ */
 func LocalIPs() []string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -189,4 +196,57 @@ func writeFileSync(path string, data []byte) error {
 		return fmt.Errorf("replace %s: %w", filepath.Base(path), err)
 	}
 	return nil
+}
+
+/*
+ * StableIPs is LocalIPs without the addresses that are going to disappear.
+ *
+ * For anything **recorded** rather than served: an invite is written once at
+ * pairing and never re-learned (ADR 0044 §5), so a temporary IPv6 address in it
+ * becomes an entry that no longer exists and is still tried — costing a connect
+ * timeout on every peer operation before a working address is reached.
+ *
+ * Windows generates a fresh temporary address regularly and deprecates the old
+ * one within about a day. One household's peer record was found holding several
+ * of them.
+ *
+ * There is no way to tell a temporary address from a stable one by inspection:
+ * RFC 7217 stable-privacy addresses are equally random-looking and must be
+ * kept. Only the stack that generated them knows, so it is asked — and anything
+ * it cannot answer for is kept, because a stale entry costs a timeout while a
+ * missing one can cost the pairing.
+ */
+func StableIPs() []string {
+	return withoutTemporary(LocalIPs(), temporaryAddresses())
+}
+
+/*
+ * withoutTemporary is the decision, separated from the machine it is about.
+ *
+ * A function over two lists, so the rules can be asserted without depending on
+ * whatever addresses the computer running the tests happens to hold — which is
+ * both unknowable and different on CI.
+ */
+func withoutTemporary(all []string, skip map[string]bool) []string {
+	if len(skip) == 0 {
+		return all
+	}
+	out := make([]string, 0, len(all))
+	for _, ip := range all {
+		if !skip[ip] {
+			out = append(out, ip)
+		}
+	}
+	/*
+	 * Never nothing.
+	 *
+	 * If every address this machine has is one the stack means to replace, a
+	 * server with no address at all cannot introduce itself — and ErrNoAddress
+	 * is a much worse answer than an address that expires. Keeping the lot is
+	 * the honest fallback for a machine whose whole answer is temporary.
+	 */
+	if len(out) == 0 {
+		return all
+	}
+	return out
 }

@@ -92,7 +92,13 @@ func (s *Server) ourInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ips := tlscert.LocalIPs()
+	/*
+	 * Stable addresses only. An invite is recorded once at pairing and never
+	 * re-learned (ADR 0044 §5), so a temporary IPv6 address written into one
+	 * becomes an entry that stops existing and is still tried — a connect
+	 * timeout on every peer operation, for ever.
+	 */
+	ips := tlscert.StableIPs()
 	addrs := make([]string, 0, len(ips))
 	for _, ip := range ips {
 		addrs = append(addrs, net.JoinHostPort(ip, port))
