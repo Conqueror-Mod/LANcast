@@ -48,7 +48,9 @@ export function PeerLibrary() {
     );
   }
 
-  const list = items.data?.items ?? [];
+  const pages = items.data?.pages ?? [];
+  const list = pages.flatMap((p) => p.items);
+  const total = pages[0]?.total ?? 0;
 
   return (
     <div className="peer-lib">
@@ -64,8 +66,19 @@ export function PeerLibrary() {
           aria-label="Search this library"
         />
         {items.data && (
+          /*
+           * How many are *here*, beside how many there are.
+           *
+           * This printed the total alone while the screen rendered the first
+           * page, so a library of 1,395 films showed sixty tiles ending in the
+           * A's under the number 1,395. The count did not merely fail to
+           * explain the truncation — it contradicted it, which is worse than
+           * saying nothing.
+           */
           <span className="peer-lib__count">
-            {items.data.total.toLocaleString()}
+            {list.length < total
+              ? `${list.length.toLocaleString()} of ${total.toLocaleString()}`
+              : total.toLocaleString()}
           </span>
         )}
       </div>
@@ -109,6 +122,27 @@ export function PeerLibrary() {
           />
         ))}
       </div>
+
+      {/*
+        Asked for rather than scrolled into.
+        
+        An observer that fetched on scroll would spend somebody else's
+        connection on a guess about what this person is about to do. A button
+        is a person saying they want more of another household's library, which
+        is the honest unit for a request that costs them.
+      */}
+      {items.hasNextPage && (
+        <div className="peer-lib__more">
+          <button
+            type="button"
+            className="peer-lib__more-button"
+            disabled={items.isFetchingNextPage}
+            onClick={() => void items.fetchNextPage()}
+          >
+            {items.isFetchingNextPage ? "Loading…" : "Show more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

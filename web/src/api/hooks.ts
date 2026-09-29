@@ -3730,22 +3730,44 @@ export function usePeerLibraries(fingerprint: string, enabled = true) {
  * shapes differ in what they can offer: no infinite scroll yet, and no
  * facets — the far server's browse endpoint takes one library at a time.
  */
+/** How many of a peer's items to ask for at once. The far server caps a page
+ *  at 200 — a limit it pays for, not us — so this asks for exactly that. */
+const PEER_PAGE_SIZE = 200;
+
 export function usePeerItems(
   fingerprint: string,
   library: number,
   query: string,
 ) {
-  return useQuery({
-    queryKey: ["peer-items", fingerprint, library, query],
+  return useInfiniteQuery({
+    /*
+     * `peer-items-infinite`, and deliberately **not** `["peer-items", …]`.
+     *
+     * This project's most-repeated bug is a query key that is a sibling of the
+     * thing callers invalidate: `["items", "infinite"]` is reached by
+     * `["items"]` and `["items-infinite"]` is not, and the difference is
+     * invisible at every call site.
+     */
+    queryKey: ["peer-items-infinite", fingerprint, library, query],
     enabled: fingerprint !== "" && library > 0,
     retry: false,
-    queryFn: ({ signal }) => {
-      const p = new URLSearchParams({ library: String(library) });
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => {
+      const p = new URLSearchParams({
+        library: String(library),
+        limit: String(PEER_PAGE_SIZE),
+        offset: String(pageParam as number),
+      });
       if (query !== "") p.set("q", query);
       return apiGet<{ items: Item[]; total: number }>(
         `/api/peers/${encodeURIComponent(fingerprint)}/items?${p}`,
         signal,
       );
+    },
+    // Stop when the pages so far account for everything they reported.
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, pg) => n + pg.items.length, 0);
+      return loaded < last.total ? loaded : undefined;
     },
   });
 }

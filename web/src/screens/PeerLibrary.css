@@ -84,3 +84,33 @@
   grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
   gap: 18px;
 }
+
+/* Asking for more of somebody else's library. Centred under the grid rather
+   than pinned to it, because it is a request to another machine rather than a
+   control on this one. */
+.peer-lib__more {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  flex-shrink: 0;
+}
+
+.peer-lib__more-button {
+  padding: 10px 24px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.peer-lib__more-button:hover:not(:disabled),
+.peer-lib__more-button:focus-visible {
+  background: var(--surface-3, rgba(255, 255, 255, 0.1));
+}
+
+.peer-lib__more-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
