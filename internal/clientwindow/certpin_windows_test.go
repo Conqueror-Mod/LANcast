@@ -112,23 +112,42 @@ func TestDevToolsKeepsTheCertificatePin(t *testing.T) {
 	}
 }
 
-// Each switch alone, because the two orders through the function are different
-// code and only one of them appends.
+/*
+ * Each optional switch on its own, because the paths through the function are
+ * different code and only some of them append.
+ *
+ * This asserted equality — that developer tools alone set *only* developer
+ * tools — which was true while every switch was optional. The switches that
+ * keep a minimised window awake are not optional: they are what makes presence
+ * tell the truth about somebody who is still there, so they ride every window.
+ * The rule this test protects is therefore no longer "alone" but "present, and
+ * not at the cost of the others".
+ */
 func TestBrowserArgsForEachSwitchAlone(t *testing.T) {
 	t.Setenv(browserArgsEnv, "")
 	if err := applyBrowserArgs("", true); err != nil {
-		t.Fatalf("devtools alone: %v", err)
+		t.Fatalf("devtools with no pin: %v", err)
 	}
-	if got := os.Getenv(browserArgsEnv); got != "--auto-open-devtools-for-tabs" {
-		t.Errorf("devtools alone set %q", got)
+	got := os.Getenv(browserArgsEnv)
+	if !strings.Contains(got, "--auto-open-devtools-for-tabs") {
+		t.Errorf("devtools with no pin set %q", got)
+	}
+	// No pin means no pinning switch — a window that trusts everybody is the
+	// one thing worse than one that falls asleep.
+	if strings.Contains(got, "--ignore-certificate-errors") {
+		t.Errorf("a certificate switch appeared with no pin: %q", got)
 	}
 
 	t.Setenv(browserArgsEnv, "")
 	if err := applyBrowserArgs(goodPin(), false); err != nil {
-		t.Fatalf("pin alone: %v", err)
+		t.Fatalf("pin with no devtools: %v", err)
 	}
-	if got := os.Getenv(browserArgsEnv); !strings.HasPrefix(got, "--ignore-certificate-errors-spki-list=") {
-		t.Errorf("pin alone set %q", got)
+	got = os.Getenv(browserArgsEnv)
+	if !strings.HasPrefix(got, "--ignore-certificate-errors-spki-list=") {
+		t.Errorf("pin with no devtools set %q", got)
+	}
+	if strings.Contains(got, "devtools") {
+		t.Errorf("developer tools appeared unasked: %q", got)
 	}
 }
 
@@ -149,5 +168,83 @@ func TestBrowserArgsRefusesWhenSomethingElseIsSteering(t *testing.T) {
 	t.Setenv(browserArgsEnv, "--some-other-switch")
 	if err := applyBrowserArgs("", true); err == nil {
 		t.Error("developer tools were added on top of somebody else's switches")
+	}
+}
+
+/*
+ * A minimised window is still somebody being there.
+ *
+ * Chromium throttles and then freezes timers in a backgrounded page, and this
+ * window's polling is what refreshes presence — there is no heartbeat of its
+ * own. Measured before the fix: minimise, and a friend on a paired server sees
+ * you offline after exactly ninety seconds, which is onlineTimeout expiring
+ * with nothing arriving. Back within a few seconds on restore.
+ *
+ * Asserted on the switches rather than on the behaviour, and the limit is worth
+ * being plain about: this proves the window is *asked* for them. Whether
+ * Chromium honours them is a fact about Chromium, and the only instrument for
+ * it is two machines and a stopwatch — which is how the fault was found.
+ */
+func TestAMinimisedWindowKeepsItsTimers(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		pin  string
+	}{
+		{"with a pin", goodPin()},
+		{"without one", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(browserArgsEnv, "")
+			if err := applyBrowserArgs(c.pin, false); err != nil {
+				t.Fatalf("applyBrowserArgs: %v", err)
+			}
+			got := os.Getenv(browserArgsEnv)
+
+			for _, want := range liveWhileMinimised {
+				if !strings.Contains(got, want) {
+					t.Errorf("browser args = %q, missing %s", got, want)
+				}
+			}
+			// The pin still has to be there and still has to be the pinning
+			// switch: a window that stays awake and trusts everybody is worse
+			// than one that falls asleep.
+			if c.pin != "" && !strings.Contains(got, "--ignore-certificate-errors-spki-list="+c.pin) {
+				t.Errorf("browser args = %q, the certificate pin did not survive", got)
+			}
+			if strings.HasPrefix(got, " ") || strings.Contains(got, "  ") {
+				t.Errorf("browser args = %q has an empty argument in it", got)
+			}
+		})
+	}
+}
+
+// Developer tools still arrive, and alongside the rest rather than instead of
+// them. This is the composition applyBrowserArgs exists to keep in one place.
+func TestDevToolsJoinTheOtherSwitchesRatherThanReplacingThem(t *testing.T) {
+	t.Setenv(browserArgsEnv, "")
+	if err := applyBrowserArgs(goodPin(), true); err != nil {
+		t.Fatalf("applyBrowserArgs: %v", err)
+	}
+	got := os.Getenv(browserArgsEnv)
+
+	wanted := append([]string{
+		"--auto-open-devtools-for-tabs",
+		"--ignore-certificate-errors-spki-list=" + goodPin(),
+	}, liveWhileMinimised...)
+	for _, want := range wanted {
+		if !strings.Contains(got, want) {
+			t.Errorf("browser args = %q, missing %s", got, want)
+		}
+	}
+}
+
+// Somebody else steering the browser is still refused, with or without a pin.
+// Adding to a value we did not write is a surprise in both directions.
+func TestAnExistingBrowserArgsValueIsStillRefused(t *testing.T) {
+	for _, pin := range []string{goodPin(), ""} {
+		t.Setenv(browserArgsEnv, "--something-somebody-else-wanted")
+		if err := applyBrowserArgs(pin, false); err == nil {
+			t.Errorf("pin %q: no error when %s was already set", pin, browserArgsEnv)
+		}
 	}
 }
