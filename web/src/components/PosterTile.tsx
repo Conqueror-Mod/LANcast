@@ -61,10 +61,27 @@ export function PosterTile({
   item,
   onOpen,
   actions,
+  posterURL,
 }: {
   item: Item;
   onOpen?: () => void;
   actions?: (item: Item) => MenuAction[];
+  /*
+   * Where this tile's image comes from, when it is not from here.
+   *
+   * An override rather than a flag, and symmetric with `onOpen` above: a tile
+   * showing somebody else's item takes both its destination and its picture
+   * from the surface that knows about that server, and this component stays
+   * ignorant of peers. ADR 0071 §5 is a rule about the two never sharing a
+   * code path that could be taught to merge them, and a `peer` prop here would
+   * be the start of one.
+   *
+   * It exists because artwork is addressed by content hash and served from
+   * `/api/artwork/{hash}` — **this** server's own route. A hash belonging to
+   * another household means nothing here, so a peer's library rendered as
+   * placeholders until somebody supplied the right address.
+   */
+  posterURL?: (item: Item) => string | undefined;
 }) {
   const navigate = useNavigate();
   /*
@@ -138,7 +155,11 @@ export function PosterTile({
    * is addressed by content hash and served `immutable`, so a placeholder
    * returned under the real hash would be cached under it for a year.
    */
-  const poster = obscured ? "" : artworkURL(item.artwork?.poster, "poster");
+  const poster = obscured
+    ? ""
+    : posterURL
+      ? posterURL(item)
+      : artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
   const count = containerCountLabel(item);

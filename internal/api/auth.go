@@ -73,6 +73,7 @@ var peerAuthenticated = []string{
 	"/api/federation/subtitles",
 	"/api/federation/subtitles/{item}/{key}",
 	"/api/federation/item/{item}",
+	"/api/federation/artwork/{item}/{hash}",
 }
 
 /*

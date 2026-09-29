@@ -449,6 +449,9 @@ func (s *Server) Handler() http.Handler {
 	// What a peer says about one of their items: its name, and how long it is.
 	// Without the length a converted stream has a scrubber with no scale.
 	mux.HandleFunc("GET /api/peers/{fingerprint}/item/{item}", s.peerItem)
+	// Their artwork, which a client cannot fetch for itself: the hash names
+	// bytes on *their* disk, and /api/artwork is this server's own.
+	mux.HandleFunc("GET /api/peers/{fingerprint}/artwork/{item}/{hash}", s.peerArtwork)
 
 	/*
 	 * What a paired server may see. Administrative for the reason in
@@ -520,6 +523,13 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("GET /api/federation/item/{item}",
 		s.federationPlay(s.federationItem))
+	/*
+	 * One image belonging to one shared item. The item is in the route because
+	 * a hash is not an item: a peer allowed to ask for arbitrary hashes could
+	 * fetch images from libraries nobody shared with them.
+	 */
+	mux.HandleFunc("GET /api/federation/artwork/{item}/{hash}",
+		s.federationPlay(s.federationArtwork))
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)

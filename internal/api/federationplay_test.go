@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"lancast/internal/identity"
@@ -202,5 +203,90 @@ func TestAPeersPlaylistNamesTheFederationRoutes(t *testing.T) {
 	peer := local.Clone(withPlaylistPrefix(local.Context(), "/api/federation/hls/7/"))
 	if got, want := playlistPrefix(peer, 7, "abc"), "/api/federation/hls/7/abc/"; got != want {
 		t.Errorf("peer prefix = %q, want %q", got, want)
+	}
+}
+
+/*
+ * One shared item must not be a key to every image on the disk.
+ *
+ * Artwork is content-addressed, so a hash is **not an item**: the local route
+ * takes a hash alone, which is right for a household where anyone with a
+ * session may see any of its artwork, and wrong for a friend. A peer able to
+ * ask for arbitrary hashes could fetch images belonging to libraries nobody
+ * shared with them, and the only obstacle would be not knowing the hash.
+ *
+ * Both halves are needed and this asserts the second: the gate says whether
+ * they may see the *item*, and this says whether the hash belongs to it.
+ */
+func TestAnItemIsNotAKeyToEveryImage(t *testing.T) {
+	poster, fanart, thumb := "aaa", "bbb", "ccc"
+	mine := &store.Item{
+		Artwork: &store.Artwork{Poster: poster, Fanart: fanart, Thumb: thumb},
+	}
+
+	for _, hash := range []string{poster, fanart, thumb} {
+		if !itemHasArtwork(mine, hash) {
+			t.Errorf("%q belongs to this item and was refused", hash)
+		}
+	}
+	for _, hash := range []string{
+		"ddd",  // somebody else's image
+		"",     // nothing at all
+		"aaa ", // not a hash, and not equal to one
+		"AAA",  // hashes are not case-folded here
+	} {
+		if itemHasArtwork(mine, hash) {
+			t.Errorf("%q does not belong to this item and was allowed", hash)
+		}
+	}
+
+	// An item with no artwork grants nothing, rather than granting everything
+	// by having nothing to compare against.
+	if itemHasArtwork(&store.Item{}, poster) {
+		t.Error("an item with no artwork allowed a hash")
+	}
+	if itemHasArtwork(nil, poster) {
+		t.Error("no item at all allowed a hash")
+	}
+}
+
+/*
+ * Every field of Artwork is covered.
+ *
+ * The check is a list of comparisons, so a field added later is a field it
+ * silently does not cover — and the symptom would be a picture that stops
+ * loading for a friend, with nothing failing anywhere. This counts the string
+ * fields by reflection so that omission fails here instead.
+ */
+func TestTheArtworkCheckCoversEveryField(t *testing.T) {
+	var covered []string
+	for _, h := range []string{"p", "f", "t"} {
+		a := &store.Artwork{}
+		switch h {
+		case "p":
+			a.Poster = h
+		case "f":
+			a.Fanart = h
+		case "t":
+			a.Thumb = h
+		}
+		if itemHasArtwork(&store.Item{Artwork: a}, h) {
+			covered = append(covered, h)
+		}
+	}
+	if len(covered) != 3 {
+		t.Fatalf("covered %v, want all three", covered)
+	}
+
+	rt := reflect.TypeOf(store.Artwork{})
+	var strings int
+	for i := range rt.NumField() {
+		if rt.Field(i).Type.Kind() == reflect.String {
+			strings++
+		}
+	}
+	if strings != 3 {
+		t.Errorf("store.Artwork has %d hash fields and itemHasArtwork checks 3; "+
+			"a field added here is artwork a friend silently cannot load", strings)
 	}
 }

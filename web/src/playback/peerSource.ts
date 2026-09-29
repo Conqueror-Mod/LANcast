@@ -122,3 +122,24 @@ export function peerWatchingURL(fingerprint: string, item: number): string {
 export function peerItemURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/item/${item}`;
 }
+
+/*
+ * One of their images, through this server.
+ *
+ * The item is named as well as the hash, and that is the permission model
+ * rather than a convenience: a hash is not an item, so a peer able to ask for
+ * arbitrary hashes could fetch artwork belonging to libraries nobody shared
+ * with them. The far server checks that this hash really belongs to that item.
+ *
+ * Returns nothing when there is no hash, so a tile falls back to its lettered
+ * placeholder rather than asking for an image that cannot exist.
+ */
+export function peerArtworkURL(
+  fingerprint: string,
+  item: number,
+  hash: string | undefined,
+  size: "thumb" | "poster" | "poster2x" | "fanart" = "poster",
+): string | undefined {
+  if (!hash) return undefined;
+  return `${base(fingerprint)}/artwork/${item}/${encodeURIComponent(hash)}?size=${size}`;
+}
