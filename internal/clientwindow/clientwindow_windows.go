@@ -390,9 +390,43 @@ func viewOptions(o Options) webview2.WebViewOptions {
 	}
 }
 
+/*
+ * liveWhileMinimised keeps the page's timers running when the window is not on
+ * screen.
+ *
+ * Chromium throttles timers in a backgrounded page and eventually freezes them.
+ * That is right for a browser holding forty tabs and wrong for this window,
+ * which is one application a person minimised — because the page's polling is
+ * what tells the server somebody is here, and presence is refreshed by whatever
+ * requests happen to arrive rather than by a heartbeat of its own.
+ *
+ * Measured before it was changed: minimise the window and a friend on a paired
+ * server sees you go offline after **exactly ninety seconds**, which is
+ * `onlineTimeout` in internal/presence expiring with nothing arriving to
+ * refresh it. Restoring the window brings you back within a few seconds, on the
+ * next poll. Ninety seconds to the second is what makes this the cause rather
+ * than a theory about one.
+ *
+ * So "online" meant *a foreground page made a request recently*, and was
+ * rendered as *this person is at their computer*. Minimising an application is
+ * not leaving.
+ *
+ * All three are needed and they are different mechanisms: timers are throttled,
+ * the renderer process is deprioritised, and an occluded window is backgrounded
+ * whether or not it is minimised.
+ */
+var liveWhileMinimised = []string{
+	"--disable-background-timer-throttling",
+	"--disable-renderer-backgrounding",
+	"--disable-backgrounding-occluded-windows",
+}
+
 func applyBrowserArgs(pin string, devTools bool) error {
+	if err := applyBaseArgs(pin); err != nil {
+		return err
+	}
 	if !devTools {
-		return applyCertPin(pin)
+		return nil
 	}
 	/*
 	 * Opens the inspector with the window rather than merely permitting it.
@@ -403,18 +437,43 @@ func applyBrowserArgs(pin string, devTools bool) error {
 	 * it up front is the honest version of a switch labelled "developer tools".
 	 */
 	const devToolsArg = "--auto-open-devtools-for-tabs"
-	if pin == "" {
-		if existing := os.Getenv(browserArgsEnv); existing != "" {
-			return fmt.Errorf("client window: %s is already set (%q); not adding developer tools",
-				browserArgsEnv, existing)
+	// Appending to a value applyBaseArgs just wrote, rather than to somebody
+	// else's — that guard lives there and has already run.
+	return os.Setenv(browserArgsEnv, joinArgs(os.Getenv(browserArgsEnv), devToolsArg))
+}
+
+/*
+ * applyBaseArgs sets what every window gets: the certificate pin, when there is
+ * one, and the switches that keep a minimised window alive.
+ *
+ * applyCertPin keeps its own guard and its own tests — a malformed pin must
+ * fail loudly whether or not anything else wanted a switch — so it runs first
+ * and everything else is appended to what it wrote. With no pin there is
+ * nothing to append to, and the guard against overwriting somebody else's value
+ * is repeated here rather than skipped.
+ */
+func applyBaseArgs(pin string) error {
+	if pin != "" {
+		if err := applyCertPin(pin); err != nil {
+			return err
 		}
-		return os.Setenv(browserArgsEnv, devToolsArg)
+	} else if existing := os.Getenv(browserArgsEnv); existing != "" {
+		return fmt.Errorf("client window: %s is already set (%q); not adding browser arguments",
+			browserArgsEnv, existing)
 	}
-	if err := applyCertPin(pin); err != nil {
-		return err
+	args := os.Getenv(browserArgsEnv)
+	for _, a := range liveWhileMinimised {
+		args = joinArgs(args, a)
 	}
-	// The pin has been validated and set by the line above, so appending here
-	// is appending to a value this function just wrote rather than to somebody
-	// else's.
-	return os.Setenv(browserArgsEnv, os.Getenv(browserArgsEnv)+" "+devToolsArg)
+	return os.Setenv(browserArgsEnv, args)
+}
+
+// joinArgs appends a switch, without leaving a leading space when there was
+// nothing before it — a stray empty argument is the kind of thing Chromium
+// ignores until the day it does not.
+func joinArgs(existing, add string) string {
+	if existing == "" {
+		return add
+	}
+	return existing + " " + add
 }
