@@ -86,3 +86,19 @@ export function peerSubtitleURL(
 export function peerPlaybackURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/playback?item=${item}`;
 }
+
+/*
+ * peerWatchingURL is the beat that says "still watching one of theirs"
+ * ([ADR 0045](../../../docs/adr/0045-live-presence-between-paired-servers.md)
+ * §10).
+ *
+ * **No title is sent, and that is the rule rather than an economy.** §3's
+ * reductions — video only, the work and never the episode — are a function on
+ * the server that owns the item, and it must stay one implementation. A client
+ * that could name its own presence could name an episode, which §3 forbids by
+ * name. So this says only *which item*, and the servers work out what may be
+ * said about it.
+ */
+export function peerWatchingURL(fingerprint: string, item: number): string {
+  return `${base(fingerprint)}/watching?item=${item}`;
+}

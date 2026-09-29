@@ -190,6 +190,19 @@ type Server struct {
 	// it describes this process, not the pairing.
 	rosterMu sync.Mutex
 	rosterAt map[string]time.Time
+
+	/*
+	 * peerTitles memoises what a peer said somebody is watching, per peer and
+	 * item (ADR 0045 §10). The client beats every few seconds and a film's name
+	 * cannot change, so without this every beat would cross the network to
+	 * re-learn it.
+	 *
+	 * In memory, like presence itself, and for the same reason: ADR 0045 §4
+	 * makes "nothing about this is written down" a property of the feature
+	 * rather than of one table.
+	 */
+	peerTitleMu sync.Mutex
+	peerTitles  map[string]peerTitleEntry
 	// goodAddr is the address that last answered for each peer, so a host with
 	// several advertised interfaces is not re-discovered on every call.
 	goodAddr map[string]string
@@ -231,6 +244,7 @@ func New(d Deps) *Server {
 		nonces:     guestticket.NewNonceStore(0),
 		guests:     newGuestBook(),
 		rosterAt:   map[string]time.Time{},
+		peerTitles: map[string]peerTitleEntry{},
 		goodAddr:   map[string]string{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
@@ -426,6 +440,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/peers/{fingerprint}/hls/{item}/{session}/{name}", s.peerHLSSegment)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/subtitles", s.peerSubtitles)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/subtitles/{item}/{key}", s.peerSubtitleFile)
+	/*
+	 * Still watching one of theirs (ADR 0045 §10). A beat rather than a record
+	 * — a peer item writes no progress, so the moment local presence rides on
+	 * never arrives.
+	 */
+	mux.HandleFunc("PUT /api/peers/{fingerprint}/watching", s.peerWatching)
 
 	/*
 	 * What a paired server may see. Administrative for the reason in
@@ -490,6 +510,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/federation/subtitles", s.federationPlay(s.listSubtitles))
 	mux.HandleFunc("GET /api/federation/subtitles/{item}/{key}",
 		s.federationPlay(s.serveSubtitle))
+	/*
+	 * What a friend's server may say somebody is watching (ADR 0045 §10).
+	 * The title is computed here, by presenceTitle, because §3's reductions
+	 * are that function and must stay one implementation.
+	 */
+	mux.HandleFunc("GET /api/federation/presence-title/{item}",
+		s.federationPlay(s.federationPresenceTitle))
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
 	mux.HandleFunc("GET /api/channels", s.listChannels)

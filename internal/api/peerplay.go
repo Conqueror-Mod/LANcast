@@ -6,6 +6,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -269,4 +272,143 @@ func copyStreamHeaders(w http.ResponseWriter, resp *http.Response) {
 			w.Header().Set(h, v)
 		}
 	}
+}
+
+/*
+ * peerWatching records that the caller is watching a film on a paired server
+ * (ADR 0045's second amendment, §10).
+ *
+ * # Why this route exists at all
+ *
+ * Locally, presence is recorded as a side effect of the progress write. A peer
+ * item writes no progress — ADR 0071 §4 leaves a friend's progress genuinely
+ * undecided — so the moment presence rode on never arrived, and watching a
+ * friend's film disclosed nothing while the People screen said *idle*.
+ *
+ * ADR 0045 had already rejected coupling presence to the record, in as many
+ * words, and this is the other half of that rejection: what makes somebody
+ * visible as watching is a **beat that says so**, not a row being written.
+ *
+ * # The title is theirs, not ours and not the client's
+ *
+ * §3's reductions are `presenceTitle`, and it must stay one implementation. We
+ * hold neither the item nor its kind, so we ask the server that does and record
+ * what it says. A title taken from the client would put a rule this ADR argues
+ * for into software the rule cannot reach — and a client that could name its
+ * own presence could name an episode, which §3 forbids by name.
+ *
+ * A peer that will not answer produces silence, not a guess: `Stopped` rather
+ * than a fallback to anything we happen to know.
+ */
+func (s *Server) peerWatching(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.peerForBrowse(w, r)
+	if !ok {
+		return
+	}
+	item := r.URL.Query().Get("item")
+	if item == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "which item")
+		return
+	}
+	user := s.userID(r)
+
+	title, ok := s.peerTitle(r, p, item)
+	if !ok {
+		/*
+		 * Their server did not say. Nothing is recorded and nothing is
+		 * guessed — but the *previous* beat is not left standing either,
+		 * because presence lingering after the truth changed is the one false
+		 * statement about the present this whole ADR exists not to make.
+		 */
+		s.presence.Stopped(user)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if title == "" {
+		// A complete answer, and the common one: music, a photograph, an
+		// episode whose series is unknown.
+		s.presence.Stopped(user)
+	} else {
+		s.presence.Watching(user, title)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+/*
+ * peerTitle asks a peer what somebody is watching, and remembers the answer for
+ * a little while.
+ *
+ * The client beats every few seconds, exactly as local playback does, and a
+ * federated round trip per beat would spend somebody else's connection to
+ * re-learn a film's name that cannot change. The memo is small, per peer and
+ * item, and short — a title is not worth holding once the film is over.
+ *
+ * Not persisted, and deliberately: it is derived from presence, and ADR 0045 §4
+ * makes "nothing about this is written down" a property of the whole feature
+ * rather than of one table.
+ */
+func (s *Server) peerTitle(r *http.Request, p store.Peer, item string) (string, bool) {
+	key := p.Fingerprint + "\x00" + item
+
+	s.peerTitleMu.Lock()
+	if e, ok := s.peerTitles[key]; ok && time.Now().Before(e.until) {
+		s.peerTitleMu.Unlock()
+		return e.title, true
+	}
+	s.peerTitleMu.Unlock()
+
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := s.callPeer(r.Context(), p, peerPresenceTitlePath(item), &body); err != nil {
+		return "", false
+	}
+
+	s.peerTitleMu.Lock()
+	if s.peerTitles == nil {
+		s.peerTitles = map[string]peerTitleEntry{}
+	}
+	/*
+	 * Bounded by forgetting everything rather than by evicting one thing.
+	 *
+	 * The map is keyed by peer and item, so it only grows as fast as somebody
+	 * starts films, and a household will not reach this. Clearing beats an
+	 * eviction policy nobody will ever watch run: the cost of being wrong is
+	 * one extra request to a server that is already answering.
+	 */
+	if len(s.peerTitles) > 512 {
+		s.peerTitles = map[string]peerTitleEntry{}
+	}
+	s.peerTitles[key] = peerTitleEntry{
+		title: body.Title,
+		until: time.Now().Add(peerTitleTTL),
+	}
+	s.peerTitleMu.Unlock()
+	return body.Title, true
+}
+
+// peerTitleTTL is how long a peer's answer about one item is reused. Long
+// enough that a five-second beat does not cross the network, short enough that
+// nothing is held after a film ends.
+const peerTitleTTL = 5 * time.Minute
+
+type peerTitleEntry struct {
+	title string
+	until time.Time
+}
+
+/*
+ * peerPresenceTitlePath is what this server asks a peer in order to learn what
+ * somebody is watching, and it is a function so that it can be asserted without
+ * a peer.
+ *
+ * **It carries the item and nothing else**, which is the whole of ADR 0045 §10's
+ * rule about who may name a disclosure. The client's request is not forwarded
+ * and its query is not merged — unlike the browse and stream paths, which
+ * deliberately pass everything through. A title arriving from a client would
+ * move §3's reductions into software the ADR cannot reach, and an episode title
+ * is exactly what §3 forbids by name.
+ */
+func peerPresenceTitlePath(item string) string {
+	return "/api/federation/presence-title/" + url.PathEscape(item)
 }

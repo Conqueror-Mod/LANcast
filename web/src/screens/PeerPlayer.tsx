@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/api/client";
+import { apiGet, apiSend } from "@/api/client";
 import type { SubtitleTrack } from "@/api/types";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
@@ -10,6 +10,7 @@ import {
   peerSourceURL,
   peerSubtitlesURL,
   peerSubtitleURL,
+  peerWatchingURL,
 } from "@/playback/peerSource";
 import "./PeerPlayer.css";
 
@@ -86,6 +87,61 @@ export function PeerPlayer() {
         signal,
       ),
   });
+
+  /*
+   * The beat that makes this visible as watching (ADR 0045 §10).
+   *
+   * Locally, presence is a side effect of the progress write. A peer item
+   * writes no progress — ADR 0071 §4 leaves a friend's progress genuinely
+   * undecided — so without this the People screen says *idle* while a film is
+   * on screen, which is a false statement about the present and the one thing
+   * ADR 0045 exists not to make.
+   *
+   * Five seconds, matching the local progress beat, against a twenty-second
+   * expiry: three missed beats is a network hiccup, not somebody who stopped.
+   *
+   * Only while the picture is moving. Pausing stops the beat and presence
+   * expires on its own, which is the same thing pausing does locally — and it
+   * is why nothing needs to be sent on the way out. A beat that stops is
+   * indistinguishable from a client that closed, which is correct: both mean
+   * nobody is watching this now.
+   */
+  useEffect(() => {
+    const el = video.current;
+    if (!el || fingerprint === "" || itemID <= 0) return;
+
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const beat = () => {
+      // Errors are swallowed on purpose. A failed beat means presence expires,
+      // which is the truthful outcome, and a viewer must never be told their
+      // film is in trouble because a *disclosure* did not go through.
+      void apiSend(peerWatchingURL(fingerprint, itemID), "PUT").catch(() => {});
+    };
+    const start = () => {
+      if (timer !== undefined) return;
+      beat();
+      timer = setInterval(beat, 5000);
+    };
+    const stop = () => {
+      if (timer === undefined) return;
+      clearInterval(timer);
+      timer = undefined;
+    };
+
+    el.addEventListener("playing", start);
+    el.addEventListener("pause", stop);
+    el.addEventListener("ended", stop);
+    el.addEventListener("emptied", stop);
+    if (!el.paused) start();
+
+    return () => {
+      stop();
+      el.removeEventListener("playing", start);
+      el.removeEventListener("pause", stop);
+      el.removeEventListener("ended", stop);
+      el.removeEventListener("emptied", stop);
+    };
+  }, [fingerprint, itemID]);
 
   /*
    * One retirement of the playlist route, on the element's own evidence.

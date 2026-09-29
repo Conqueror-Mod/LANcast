@@ -227,6 +227,7 @@ ADR 0044 declines to build.
 | `GET /api/peers/{fingerprint}/hls/{item}/{session}/{name}` | One segment, named by that playlist |
 | `GET /api/peers/{fingerprint}/subtitles` | `?item=` → the tracks their item already has |
 | `GET /api/peers/{fingerprint}/subtitles/{item}/{key}` | One track, as WebVTT |
+| `PUT /api/peers/{fingerprint}/watching` | `?item=` → still watching one of theirs. A beat, not a record; **no title is accepted** |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
@@ -313,6 +314,7 @@ are, and every later capability is granted separately.
 | `GET /api/federation/hls/{item}/{session}/{name}` | **Peer-to-peer.** One segment, named by that playlist |
 | `GET /api/federation/subtitles` | **Peer-to-peer.** `?item=` → the tracks that item already has. Searching a provider is not reachable this way |
 | `GET /api/federation/subtitles/{item}/{key}` | **Peer-to-peer.** One track, as WebVTT |
+| `GET /api/federation/presence-title/{item}` | **Peer-to-peer.** What may be said somebody is watching. Computed here, by the server that owns the item |
 
 Presence is a **third disclosure category** and no existing opt-in widens into
 it ([ADR 0045](adr/0045-live-presence-between-paired-servers.md) §1): agreeing

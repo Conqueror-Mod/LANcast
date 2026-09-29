@@ -8179,6 +8179,58 @@
         }
       }
     },
+    "/federation/presence-title/{item}": {
+      "get": {
+        "operationId": "federationPresenceTitle",
+        "tags": [
+          "peers"
+        ],
+        "summary": "What may be said that somebody is watching",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, authorised per item with a **Friend** principal exactly as the playback routes are.\n\nThe title is computed **here**, by the server that owns the item, because [ADR 0045](adr/0045-live-presence-between-paired-servers.md) §3's reductions — video only, the work and never the episode — are one function and must stay one implementation. The asking server records what comes back and derives nothing of its own.\n\nAn **empty title is a complete answer** and the common one: music, a photograph, an episode whose series is unknown. The caller records nothing for it.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item being played."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The title, or an empty string",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "title"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "Empty when nothing may be said."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/peers/{fingerprint}/libraries": {
       "parameters": [
         {
@@ -8695,6 +8747,51 @@
           },
           "502": {
             "description": "That server is not answering (`peer_unreachable`)"
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/watching": {
+      "put": {
+        "operationId": "peerWatching",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Still watching a film on a paired server",
+        "description": "A **beat**, not a record. Locally, presence is a side effect of the progress write; a peer item writes no progress ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) §4 is deliberately open), so without this the People screen says *idle* while a film is on screen.\n\n**No title is accepted.** This server asks the peer what may be said and records that — a client able to name its own presence could name an episode, which ADR 0045 §3 forbids by name.\n\nSent every five seconds while the picture is moving, against a twenty-second expiry. Stopping the beat is how presence ends: a client that paused and one that closed are the same fact, and both mean nobody is watching now.\n\nA peer that will not answer clears presence rather than leaving the last thing standing.",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The paired server."
+          },
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The item on **their** server."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recorded, or deliberately not"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
