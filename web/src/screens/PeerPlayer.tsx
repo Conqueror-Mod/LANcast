@@ -288,7 +288,7 @@ export function PeerPlayer() {
     setElapsed(0);
     el.src = peerSourceURL(fingerprint, itemID, path, target);
     el.load();
-    void el.play().catch(() => {});
+    resume(el);
   };
 
   return (
@@ -346,7 +346,7 @@ export function PeerPlayer() {
         onPlayPause={() => {
           const el = video;
           if (!el) return;
-          if (el.paused) void el.play().catch(() => {});
+          if (el.paused) resume(el);
           else el.pause();
         }}
         onSeek={seek}
@@ -378,4 +378,19 @@ function PeerPlayerNote({
       <p className="peer-player__note">{children}</p>
     </div>
   );
+}
+
+/*
+ * play() does not always return a promise.
+ *
+ * It returns one in every engine this app ships against, and **nothing** in
+ * older ones — and in jsdom, which is how this was found: `play().catch(…)`
+ * threw `Cannot read properties of undefined`, inside an event handler, where
+ * a throw is not the caller's to catch.
+ *
+ * Wrapping is two characters wider than asserting the promise exists, and it
+ * turns a class of environment into a non-event rather than a crash.
+ */
+function resume(el: HTMLMediaElement) {
+  void Promise.resolve(el.play()).catch(() => {});
 }
