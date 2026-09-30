@@ -644,10 +644,35 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const ro = new ResizeObserver(send);
     ro.observe(el);
     window.addEventListener("resize", send);
+    /*
+     * And when the window crosses onto a monitor with a different scale.
+     *
+     * The docked box is sent in device pixels, so the same CSS box is a
+     * different rectangle at 150% than at 100% — and nothing else here fires
+     * on that move: the page's CSS size can come out unchanged, so neither
+     * the observer nor `resize` is guaranteed to. The picture then docked at
+     * the old monitor's scale, off to the side of the window. A resolution
+     * query matches only the current ratio, so it is re-armed each time.
+     */
+    let ratio: MediaQueryList | null = null;
+    const onRatio = () => {
+      send();
+      watchRatio();
+    };
+    const watchRatio = () => {
+      ratio?.removeEventListener("change", onRatio);
+      ratio =
+        typeof window.matchMedia === "function"
+          ? window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+          : null;
+      ratio?.addEventListener("change", onRatio);
+    };
+    watchRatio();
     return () => {
       backend.removeEventListener("loadedmetadata", resend);
       ro.disconnect();
       window.removeEventListener("resize", send);
+      ratio?.removeEventListener("change", onRatio);
     };
   }, [surface, nativeOn]);
 

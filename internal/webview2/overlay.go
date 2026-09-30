@@ -113,6 +113,7 @@ const (
 	wmShowWindow            = 0x0018
 	wmMouseActivate         = 0x0021
 	wmNCActivate            = 0x0086
+	wmDPIChanged            = 0x02E0
 	wmTimer                 = 0x0113
 	waClickActive           = 2
 	maNoActivate            = 3

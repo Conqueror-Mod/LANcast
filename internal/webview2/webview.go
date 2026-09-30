@@ -251,6 +251,19 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			_, _, _ = w32.User32SetFocus.Call(w.hwnd)
 			r, _, _ := w32.User32DefWindowProcW.Call(hwnd, msg, wp, lp)
 			return r
+		case wmDPIChanged:
+			// Moved onto a monitor with a different scale (the process is
+			// per-monitor DPI aware; clientwindow/dpi_windows.go). Windows
+			// suggests a rectangle that keeps the window the same physical
+			// size; take it. The WM_SIZE that follows resizes the browser and
+			// lays out native video again.
+			if lp != 0 {
+				rc := (*w32.Rect)(unsafe.Pointer(lp))
+				_, _, _ = w32.User32SetWindowPos.Call(hwnd, 0,
+					uintptr(rc.Left), uintptr(rc.Top),
+					uintptr(rc.Right-rc.Left), uintptr(rc.Bottom-rc.Top),
+					swpNoZOrder|swpNoActivate)
+			}
 		case w32.WMSize:
 			w.browser.Resize()
 		case w32.WMActivate:

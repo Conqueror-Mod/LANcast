@@ -103,6 +103,11 @@ func open(o Options) error {
 		_, _, _ = procShowWindow.Call(hwnd, swHide)
 		applyPlacement(hwnd, o.Placement)
 		_, _, _ = procShowWindow.Call(hwnd, swShow)
+	} else {
+		// No remembered place: the default size is in 96-DPI units, and a
+		// DPI-aware window is created at exactly the pixels asked for
+		// (dpi_windows.go).
+		scaleForMonitor(uintptr(w.Window()), o.Width, o.Height)
 	}
 
 	// Fullscreen is the host's job, not the page's.
