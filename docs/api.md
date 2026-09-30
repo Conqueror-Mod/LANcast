@@ -219,7 +219,7 @@ ADR 0044 declines to build.
 | `PUT /api/peers/{fingerprint}/shares/{library}` | `{ceiling}` — shares a library, or changes its limit. **Admin** |
 | `DELETE /api/peers/{fingerprint}/shares/{library}` | Stops sharing, from the peer's next request. **Admin** |
 | `GET /api/peers/{fingerprint}/libraries` | What that server shared with us. Asked of them and passed through |
-| `GET /api/peers/{fingerprint}/items` | `?library=&…` → browse or search one of their shared libraries |
+| `GET /api/peers/{fingerprint}/items` | `?library=&…` → browse or search one of their shared libraries; `parent=` opens one of their shows, seasons, artists or albums |
 | `GET /api/peers/{fingerprint}/stream` | `?item=` → the file, fetched from them and passed through, Range and all |
 | `GET /api/peers/{fingerprint}/playback` | `?item=` → how **they** would deliver it. Their decision; this server holds neither the file nor the probe |
 | `GET /api/peers/{fingerprint}/transcode` | `?item=` → a converted stream, encoded on their CPU |
@@ -235,7 +235,7 @@ ADR 0044 declines to build.
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
 | `GET /api/guest/libraries` | `{libraries: [...]}` — the libraries shared with this guest's server, and nothing else |
-| `GET /api/guest/items` | `?library=&kind=&q=&sort=&limit=&offset=` → `{items, total}` — browse or search **one** shared library, under that share's limit |
+| `GET /api/guest/items` | `?library=&kind=&q=&sort=&parent=&limit=&offset=` → `{items, total}` — browse or search **one** shared library, under that share's limit. `parent` lists what is inside one container — a show's seasons, a season's episodes, an artist's albums — and the container itself must be one this peer may see: in a shared library and within the share's ceiling, or `404`, the answer for anything else it may not see. The top level leaves out collections and playlists: they group through tables of their own, so there is nothing `parent` could open inside one, and their members are listed anyway |
 | `PUT /api/profile/peer-visibility` | `{visible}` — whether **your** account appears in the roster handed to peers |
 
 The three browse routes are **not** administrative. Pairing is; looking at
@@ -321,7 +321,7 @@ are, and every later capability is granted separately.
 | `GET /api/federation/presence?person={id}` | **Peer-to-peer.** Answers what that peer's person may see. Not a session route — see below |
 | `GET /api/federation/roster` | **Peer-to-peer.** The accounts here that have opted into being listed |
 | `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
-| `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&limit=&offset=` → browse or search one shared library, under that share's limit |
+| `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&parent=&limit=&offset=` → browse or search one shared library, under that share's limit; `parent` opens one container, as on `/api/guest/items` |
 | `GET /api/federation/stream` | **Peer-to-peer.** `?item=` → the file itself, with Range support, if that item is in a shared library and under its limit |
 | `GET /api/federation/playback` | **Peer-to-peer.** `?item=` → how that item would be delivered. Decided here, by the server that holds the file and probed it |
 | `GET /api/federation/transcode` | **Peer-to-peer.** `?item=` → a progressive fragmented MP4. The encode runs on the host's CPU, because the file is there |

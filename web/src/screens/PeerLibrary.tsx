@@ -1,10 +1,34 @@
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { ApiFailure } from "@/api/client";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { peerArtworkURL } from "@/playback/peerSource";
+import type { Item } from "@/api/types";
 import "./PeerLibrary.css";
+
+/*
+ * Kinds that hold other items under them, and so open as a list rather than
+ * as a player: a show's seasons, a season's episodes, an artist's albums, an
+ * album's tracks, a folder of photographs. A friend's TV and music libraries
+ * were walls of these that could only be "played", and a show has nothing to
+ * play.
+ */
+const CONTAINER_KINDS = new Set([
+  "show",
+  "season",
+  "artist",
+  "album",
+  "gallery",
+  "serial",
+]);
+
+export function isPeerContainer(item: Pick<Item, "kind">): boolean {
+  return CONTAINER_KINDS.has(item.kind);
+}
+
+/** What the tile that opened a container knew about it, carried in route state. */
+type Opened = { title?: string; kind?: string };
 
 /*
  * Somebody else's library
@@ -22,15 +46,29 @@ import "./PeerLibrary.css";
  * concatenate.
  */
 export function PeerLibrary() {
-  const { fingerprint = "", library = "" } = useParams();
+  const { fingerprint = "", library = "", parent = "" } = useParams();
   const libraryID = Number(library);
+  // Inside one of their containers, or at the top of the library.
+  const parentID = Number(parent) || 0;
+  const opened = (useLocation().state ?? {}) as Opened;
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   const libs = usePeerLibraries(fingerprint);
-  const items = usePeerItems(fingerprint, libraryID, query);
+  const items = usePeerItems(
+    fingerprint,
+    libraryID,
+    // A search is of the whole library; inside a container there is none.
+    parentID ? "" : query,
+    parentID,
+    // An album in the order the record plays; everything else as the server
+    // orders it, which puts seasons and episodes in number order.
+    opened.kind === "album" ? "track" : "",
+  );
 
   const here = libs.data?.libraries.find((l) => l.id === libraryID);
+  // The heading: the container when inside one, else the library.
+  const heading = parentID ? (opened.title ?? "Shared library") : here?.name;
 
   /*
    * A server that is not answering is said plainly, and said as a fact about
@@ -54,7 +92,7 @@ export function PeerLibrary() {
     const refused = err?.code === "peer_refused";
     return (
       <div className="peer-lib">
-        <PeerLibraryHeader name={here?.name} />
+        <PeerLibraryHeader name={heading} inside={parentID > 0} />
         <p className="peer-lib__away">
           {refused
             ? "This is not shared with you any more. Their server answered; it is what they chose."
@@ -70,17 +108,19 @@ export function PeerLibrary() {
 
   return (
     <div className="peer-lib">
-      <PeerLibraryHeader name={here?.name} />
+      <PeerLibraryHeader name={heading} inside={parentID > 0} />
 
       <div className="peer-lib__tools">
-        <input
-          className="peer-lib__search"
-          type="search"
-          placeholder="Search this library"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search this library"
-        />
+        {!parentID && (
+          <input
+            className="peer-lib__search"
+            type="search"
+            placeholder="Search this library"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search this library"
+          />
+        )}
         {items.data && (
           /*
            * How many are *here*, beside how many there are.
@@ -138,10 +178,20 @@ export function PeerLibrary() {
               peerArtworkURL(fingerprint, it.id, it.artwork?.poster)
             }
             onOpen={() =>
-              navigate(
-                `/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`,
-                { state: { title: item.title } },
-              )
+              isPeerContainer(item)
+                ? navigate(
+                    `/peers/${encodeURIComponent(fingerprint)}/library/${libraryID}/in/${item.id}`,
+                    {
+                      state: {
+                        title: item.title,
+                        kind: item.kind,
+                      } satisfies Opened,
+                    },
+                  )
+                : navigate(
+                    `/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`,
+                    { state: { title: item.title } },
+                  )
             }
           />
         ))}
@@ -177,13 +227,31 @@ export function PeerLibrary() {
  * because it is gone when that machine is off, it counts against that host's
  * streaming cap, and deleting it is not theirs to do.
  */
-function PeerLibraryHeader({ name }: { name?: string }) {
+function PeerLibraryHeader({
+  name,
+  inside = false,
+}: {
+  name?: string;
+  inside?: boolean;
+}) {
   const { fingerprint = "" } = useParams();
+  const navigate = useNavigate();
   return (
     <header className="peer-lib__head">
-      <Link to="/people" className="peer-lib__server">
-        Another server
-      </Link>
+      {inside ? (
+        // Back the way they came: up a level, which is where the tile was.
+        <button
+          type="button"
+          className="peer-lib__server"
+          onClick={() => navigate(-1)}
+        >
+          ← Back
+        </button>
+      ) : (
+        <Link to="/people" className="peer-lib__server">
+          Another server
+        </Link>
+      )}
       <h1 className="peer-lib__title">{name ?? "Shared library"}</h1>
       <p className="peer-lib__sub">
         On their machine, not yours. It is here while they are online, and what

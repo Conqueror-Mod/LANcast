@@ -3761,6 +3761,9 @@ export function usePeerItems(
   fingerprint: string,
   library: number,
   query: string,
+  /** List inside one of their containers — a show, season, artist or album. */
+  parent = 0,
+  sort = "",
 ) {
   return useInfiniteQuery({
     /*
@@ -3771,7 +3774,7 @@ export function usePeerItems(
      * `["items"]` and `["items-infinite"]` is not, and the difference is
      * invisible at every call site.
      */
-    queryKey: ["peer-items-infinite", fingerprint, library, query],
+    queryKey: ["peer-items-infinite", fingerprint, library, query, parent, sort],
     enabled: fingerprint !== "" && library > 0,
     retry: false,
     /*
@@ -3793,6 +3796,8 @@ export function usePeerItems(
         offset: String(pageParam as number),
       });
       if (query !== "") p.set("q", query);
+      if (parent > 0) p.set("parent", String(parent));
+      if (sort !== "") p.set("sort", sort);
       return apiGet<{ items: Item[]; total: number }>(
         `/api/peers/${encodeURIComponent(fingerprint)}/items?${p}`,
         signal,

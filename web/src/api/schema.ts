@@ -12212,6 +12212,8 @@ export interface operations {
                 q?: string;
                 /** @description title | year | added | rating | track */
                 sort?: string;
+                /** @description Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404. */
+                parent?: number;
                 /** @description Page size, capped at 200. */
                 limit?: number;
                 /** @description Page offset. */
@@ -12271,6 +12273,8 @@ export interface operations {
                 q?: string;
                 /** @description title | year | added | rating | track */
                 sort?: string;
+                /** @description Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404. */
+                parent?: number;
                 /** @description Page size, capped at 200. */
                 limit?: number;
                 /** @description Page offset. */
@@ -12628,6 +12632,8 @@ export interface operations {
                 q?: string;
                 /** @description title | year | added | rating | track */
                 sort?: string;
+                /** @description Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404. */
+                parent?: number;
                 /** @description Page size. */
                 limit?: number;
                 /** @description Page offset. */
