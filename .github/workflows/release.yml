@@ -46,7 +46,8 @@ jobs:
       # step fails at the *end* of a release, after everything else has built —
       # which is the most expensive moment to discover a missing package.
       - name: install the mingw cross-compiler for lancast-faces
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh gcc-mingw-w64-x86-64
 
       # libmpv, the desktop client's player (ADR 0067/0069). Built out of band
       # by third_party/libmpv/build.sh and published as a release asset, because
@@ -75,10 +76,11 @@ jobs:
       # Linux runner (no Windows toolchain needed); the setup.exe is uploaded to
       # the same draft. First validated on the initial real tag.
       - name: build and upload the Windows installer
+        timeout-minutes: 30
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sudo apt-get update && sudo apt-get install -y nsis
+          .github/scripts/apt-install.sh nsis
           cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
           cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
           # The face worker ships with the installer (ADR 0052). Failing loudly
