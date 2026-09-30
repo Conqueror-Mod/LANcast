@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 51
+const CurrentSchemaVersion = 52
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -90,6 +90,7 @@ var migrations = []migration{
 	{version: 49, sql: schemaRevision49},
 	{version: 50, sql: schemaRevision50},
 	{version: 51, sql: schemaRevision51},
+	{version: 52, sql: schemaRevision52},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1778,4 +1779,23 @@ WHERE kind IN ('movie', 'episode')
   AND size_bytes > 0
   AND video_bitrate > 0
   AND size_bytes * 8000 * 3 < video_bitrate * duration_ms * 2;
+`
+
+/*
+ * Revision 52 -- the picture an account chose for itself.
+ *
+ * One column on the account row, for the reason share_activity is one: it is
+ * a fact about one person, and the row is where facts about a person live. The
+ * value is a key naming one of the client's drawn icons (store.Avatars), not
+ * an image -- nothing to upload, store or serve, and nothing a member could use
+ * to put arbitrary bytes in front of everybody else.
+ *
+ * Empty means not chosen, which every existing account gets; the client draws
+ * its ordinary person glyph for that. Set by the account and by nobody else,
+ * like the sharing switch.
+ *
+ * A column added with a default, not a change to the shape of anything.
+ */
+const schemaRevision52 = `
+ALTER TABLE user ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
 `

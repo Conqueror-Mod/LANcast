@@ -1,5 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
+import { AvatarGlyph } from "@/components/Avatar";
 import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";
 import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
@@ -32,7 +33,6 @@ import {
   GamesIcon,
   LiveIcon,
   PeopleIcon,
-  AccountIcon,
   SignOutIcon,
 } from "./LibraryIcon";
 import "./AppShell.css";
@@ -364,7 +364,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                     (isActive ? " is-active" : "")
                   }
                 >
-                  <AccountIcon />
+                  {/* The picture the account chose on its profile, if any. */}
+                  <AvatarGlyph avatar={user.avatar} />
                   <span className="app-shell__lib-name app-shell__label">
                     {user.name}
                   </span>

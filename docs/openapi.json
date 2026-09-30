@@ -2045,6 +2045,54 @@
         }
       }
     },
+    "/profile/avatar": {
+      "put": {
+        "operationId": "putAvatar",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Choose the picture drawn beside your name",
+        "description": "The caller's own choice; there is no administrator variant. A key from a closed set rather than an image: the client draws it, so there is nothing to upload and no way to put arbitrary bytes in front of other accounts. An unknown key is `400`. Read it back from `user.avatar` on `GET /api/auth/status`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The key now stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "This server has no accounts yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/profile/peer-visibility": {
       "put": {
         "operationId": "putPeerVisibility",
@@ -9480,6 +9528,13 @@
           "max_content_rating": {
             "type": "string",
             "description": "The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it."
+          },
+          "avatar": {
+            "type": "string",
+            "description": "The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `\"\"` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.",
+            "examples": [
+              "owl"
+            ]
           }
         }
       },
@@ -14700,6 +14755,21 @@
           "total": {
             "type": "integer",
             "description": "Matches inside the scope, describing the same set as the page."
+          }
+        }
+      },
+      "AvatarRequest": {
+        "type": "object",
+        "required": [
+          "avatar"
+        ],
+        "properties": {
+          "avatar": {
+            "type": "string",
+            "description": "One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or `\"\"` to clear it.",
+            "examples": [
+              "owl"
+            ]
           }
         }
       }

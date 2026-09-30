@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useProfile } from "@/api/hooks";
+import { useCurrentUser, useProfile, useSetAvatar } from "@/api/hooks";
+import { AVATARS, AvatarGlyph } from "@/components/Avatar";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
@@ -52,6 +53,8 @@ export function Profile() {
         )}
         {data?.user.admin && <span className="profile__badge">admin</span>}
       </div>
+
+      {data?.user.secured && <AvatarPicker />}
 
       <div className="profile__stats">
         <Stat label="Started" value={stats ? String(stats.started) : "—"} />
@@ -206,5 +209,49 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
         </span>
       </div>
     </Link>
+  );
+}
+
+/*
+ * Which picture sits beside your name in the rail.
+ *
+ * Six drawn animals and nothing else — the server stores a key, not an image
+ * (PUT /api/profile/avatar). Pressing the chosen one again clears it, back to
+ * the plain person glyph, so there is no separate "none" to find.
+ *
+ * Gold marks the chosen one, and that is the design rule working rather than
+ * bending: it is *where you are* in this set, the same thing a selected rail
+ * row says.
+ */
+function AvatarPicker() {
+  const user = useCurrentUser();
+  const setAvatar = useSetAvatar();
+  const current = setAvatar.isPending ? setAvatar.variables : (user?.avatar ?? "");
+  return (
+    <section className="profile__avatars" aria-label="Your picture">
+      <span className="section-label">Your picture</span>
+      <div className="profile__avatarrow" role="group" aria-label="Choose a picture">
+        {AVATARS.map((a) => {
+          const on = current === a.key;
+          return (
+            <button
+              key={a.key}
+              type="button"
+              className={"profile__avatar" + (on ? " is-on" : "")}
+              aria-pressed={on}
+              aria-label={a.label}
+              title={on ? `${a.label} — press again to remove` : a.label}
+              disabled={setAvatar.isPending}
+              onClick={() => setAvatar.mutate(on ? "" : a.key)}
+            >
+              <AvatarGlyph avatar={a.key} size={34} />
+            </button>
+          );
+        })}
+      </div>
+      {setAvatar.isError && (
+        <p className="profile__avatarerr">That picture could not be saved.</p>
+      )}
+    </section>
   );
 }

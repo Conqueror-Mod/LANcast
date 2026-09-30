@@ -1473,6 +1473,21 @@ because it changes who can see something about a person.
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
 
+### `PUT /api/profile/avatar`
+
+`{ "avatar": "owl" }` — the caller's own picture, drawn beside their name in
+the client's rail. One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or
+`""` to clear it; anything else is `400`. Answers `{ "avatar": "owl" }`.
+
+**A key, not an image.** The client draws each one and the server only
+remembers which, so there is nothing to upload or serve and no way for one
+account to put arbitrary bytes in front of everybody else. The set is closed on
+the server today; a client should still draw its ordinary person glyph for a
+key it does not recognise, since a later server may add to it (ADR 0018).
+
+The caller's own choice — there is no administrator variant. Read it back from
+`user.avatar` on `GET /api/auth/status`, where `""` means none chosen.
+
 ### `GET /api/profile/year`
 
 `?year=2025`, defaulting to the **server's** current year — the calendar the

@@ -78,6 +78,22 @@ export function useCurrentUser(): AuthUser | undefined {
   return useAuthStatus().data?.user;
 }
 
+/*
+ * Choose the picture drawn beside your name.
+ *
+ * What changes on screen is the rail, which reads the account from auth
+ * status, so that is what is invalidated — invalidating the profile would
+ * leave the rail showing the old picture until the next navigation.
+ */
+export function useSetAvatar() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (avatar: string) =>
+      apiSend("/api/profile/avatar", "PUT", { avatar }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
+  });
+}
+
 export function useIsAdmin(): boolean {
   return useCurrentUser()?.role === "admin";
 }

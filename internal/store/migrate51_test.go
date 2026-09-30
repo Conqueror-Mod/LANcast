@@ -81,9 +81,7 @@ func TestRevision51RequeuesAFilmLongerThanItsOwnPicture(t *testing.T) {
 	unknown := seedProbed(t, st, lib, "Unknown.mkv",
 		probedFile{kind: "movie", sizeBytes: size, durationMS: 20_073_000})
 
-	if _, err := st.db.Exec(`UPDATE meta SET value = '50' WHERE key = 'schema_version'`); err != nil {
-		t.Fatal(err)
-	}
+	rewindTo50(t, st)
 	if err := migrate(st.db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -111,13 +109,23 @@ func TestRevision51LeavesMusicAlone(t *testing.T) {
 	id := seedProbed(t, st, lib, "track.m4a",
 		probedFile{kind: "track", sizeBytes: 5_000_000, durationMS: 240_000, videoBPS: 900_000_000})
 
-	if _, err := st.db.Exec(`UPDATE meta SET value = '50' WHERE key = 'schema_version'`); err != nil {
-		t.Fatal(err)
-	}
+	rewindTo50(t, st)
 	if err := migrate(st.db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	if pendingProbeIDs(t, st)[id] {
 		t.Error("a music track was re-queued by a migration about films")
+	}
+}
+
+// rewindTo50 winds the number back and undoes what later revisions added, so
+// replaying from 50 does not re-add a column that is already there.
+func rewindTo50(t *testing.T, st *Store) {
+	t.Helper()
+	if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN avatar`); err != nil { // revision 52
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE meta SET value = '50' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
 	}
 }

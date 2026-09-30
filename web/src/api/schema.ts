@@ -703,6 +703,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose the picture drawn beside your name
+         * @description The caller's own choice; there is no administrator variant. A key from a closed set rather than an image: the client draws it, so there is nothing to upload and no way to put arbitrary bytes in front of other accounts. An unknown key is `400`. Read it back from `user.avatar` on `GET /api/auth/status`.
+         */
+        put: operations["putAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/peer-visibility": {
         parameters: {
             query?: never;
@@ -4262,6 +4282,11 @@ export interface components {
             visible_to_peers?: boolean;
             /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
             max_content_rating?: string;
+            /**
+             * @description The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `""` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.
+             * @example owl
+             */
+            avatar?: string;
         };
         AuthStatus: {
             /** @description Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on. */
@@ -6431,6 +6456,13 @@ export interface components {
             /** @description Matches inside the scope, describing the same set as the page. */
             total: number;
         };
+        AvatarRequest: {
+            /**
+             * @description One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or `""` to clear it.
+             * @example owl
+             */
+            avatar: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -8035,6 +8067,41 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    putAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description The key now stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     putPeerVisibility: {

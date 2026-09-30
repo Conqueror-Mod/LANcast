@@ -468,6 +468,13 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		} else {
 			u["visible_to_peers"] = visible
 		}
+		// The picture the account chose (schema 52), so the rail can draw it
+		// on every screen without a second request. Empty is "none chosen".
+		if avatar, err := s.st.Avatar(r.Context(), sess.UserID); err != nil {
+			s.log.Error("read avatar", "error", err)
+		} else {
+			u["avatar"] = avatar
+		}
 		resp["user"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)

@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -93,4 +96,35 @@ func (s *Server) putSharing(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "profile.sharing", "user", sess.UserID,
 		verb+" their watch activity with others on this server", nil)
 	writeJSON(w, http.StatusOK, map[string]any{"share": req.Share})
+}
+
+/*
+ * putAvatar sets the caller's own picture: one of store.Avatars, or "" for
+ * none. The account's own choice and nobody else's, like the sharing switch --
+ * there is no administrator route to it.
+ */
+func (s *Server) putAvatar(w http.ResponseWriter, r *http.Request) {
+	sess, ok := sessionFromContext(r)
+	if !ok {
+		writeError(w, http.StatusConflict, "no_account",
+			"this server has no accounts yet; create one first")
+		return
+	}
+	var req struct {
+		Avatar string `json:"avatar"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
+		return
+	}
+	if !store.ValidAvatar(req.Avatar) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"avatar must be one of "+strings.Join(store.Avatars, ", ")+", or empty")
+		return
+	}
+	if err := s.st.SetAvatar(r.Context(), sess.UserID, req.Avatar); err != nil {
+		s.writeInternal(w, err, "set avatar")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"avatar": req.Avatar})
 }
