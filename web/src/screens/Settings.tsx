@@ -2179,7 +2179,10 @@ function HistoryReset() {
         {confirming ? (
           <>
             <span className="set-confirm">
-              Forgets {n} {n === 1 ? "record" : "records"}, permanently.
+              Forgets {n} {n === 1 ? "record" : "records"}, permanently
+              {/* The log of finished viewings goes with what was finished
+                  (ADR 0074); forgetting unfinished positions leaves it. */}
+              {scope === "unfinished" ? "." : ", and their entries in your watch history."}
             </span>
             <button
               className="set-btn"

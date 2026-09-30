@@ -7359,6 +7359,119 @@
         }
       }
     },
+    "/profile/viewings": {
+      "get": {
+        "operationId": "listViewings",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Your watch history: every finished viewing",
+        "description": "One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.\n\nOnly finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewingList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/profile/viewings/export": {
+      "get": {
+        "operationId": "exportViewings",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "The whole watch history as a file",
+        "description": "Sent as an attachment with `Cache-Control: no-store`. CSV columns: `watched_at` (ISO 8601 UTC), `kind`, `title`, `year`, `series`, `season`, `episode`, `imdb_id`, `show_imdb_id`, `estimated`. The Trakt format is JSON shaped like the body of Trakt's history sync; an episode without season and episode numbers is left out of it and counted in `skipped`.\n\nLANcast sends the file nowhere; importing it elsewhere is something a person does.",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "trakt"
+              ],
+              "default": "csv"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The history file.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "movies": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "shows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/items/{id}/lyrics": {
       "get": {
         "operationId": "itemLyrics",
@@ -14816,6 +14929,118 @@
             "items": {
               "$ref": "#/components/schemas/Channel"
             }
+          }
+        }
+      },
+      "Viewing": {
+        "type": "object",
+        "description": "One finished viewing of a film or an episode (ADR 0074). What was watched is copied onto the row, so it still reads after the item is deleted.",
+        "required": [
+          "id",
+          "finished_at",
+          "estimated",
+          "item_id",
+          "kind",
+          "title",
+          "year",
+          "series",
+          "season",
+          "episode",
+          "imdb_id",
+          "show_year",
+          "show_imdb_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When it was finished, Unix seconds."
+          },
+          "estimated": {
+            "type": "boolean",
+            "description": "Seeded when the log began (revision 53): dated from the last time the title's state was written, the best the old table could give."
+          },
+          "item_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Null once the item has been deleted from the library."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`movie` or `episode` today. An open set."
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "season": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "episode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "imdb_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "show_year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "An episode's show's year, for identifying it elsewhere."
+          },
+          "show_imdb_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An episode's show's imdb id."
+          }
+        }
+      },
+      "ViewingList": {
+        "type": "object",
+        "required": [
+          "viewings",
+          "total"
+        ],
+        "properties": {
+          "viewings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Viewing"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Rows in the whole history, for paging."
           }
         }
       }

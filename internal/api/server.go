@@ -392,6 +392,10 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("GET /api/profile/year", s.yearInReview)
 	mux.HandleFunc("GET /api/profile/history", s.historyPreview)
+	// The watch history: every finished viewing, and the whole of it as a file
+	// (ADR 0074). The caller's own, like everything on this prefix.
+	mux.HandleFunc("GET /api/profile/viewings", s.listViewings)
+	mux.HandleFunc("GET /api/profile/viewings/export", s.exportViewings)
 	mux.HandleFunc("DELETE /api/profile/history", s.resetHistory)
 
 	// Who this server is (ADR 0044). Reports an identity; grants nothing.

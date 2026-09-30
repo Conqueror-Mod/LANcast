@@ -39,6 +39,7 @@ import type {
   Profile,
   RatedItem,
   Rating,
+  Viewing,
   Role,
   ProbeStatus,
   ReprobeResult,
@@ -3338,6 +3339,28 @@ export function useHistoryCount(scope: HistoryScope, enabled = true) {
  * own totals. The rule this project keeps relearning is to ask what a person
  * could be *looking at* that a write changes, rather than what it writes.
  */
+/*
+ * The watch history: one row per finished viewing (ADR 0074).
+ *
+ * Under ["profile"], which a history reset invalidates, so clearing finished
+ * history empties this list without a second key to remember.
+ */
+export function useViewings(pageSize = 100) {
+  return useInfiniteQuery({
+    queryKey: ["profile", "viewings", pageSize],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      apiGet<{ viewings: Viewing[]; total: number }>(
+        `/api/profile/viewings?limit=${pageSize}&offset=${pageParam as number}`,
+        signal,
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.viewings.length, 0);
+      return loaded < last.total ? loaded : undefined;
+    },
+  });
+}
+
 export function useResetHistory() {
   const qc = useQueryClient();
   return useMutation({

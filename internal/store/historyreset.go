@@ -166,6 +166,31 @@ func (s *Store) ResetHistory(ctx context.Context, userID string, scope HistorySc
 	if err != nil {
 		return 0, fmt.Errorf("reset history: %w", err)
 	}
+
+	/*
+	 * The watch history goes with the finished records (ADR 0074).
+	 *
+	 * Every log row is a finished viewing, so forgetting what was finished —
+	 * "all" or "finished" — forgets those rows too, narrowed to the same item
+	 * and everything beneath it. "unfinished" forgets positions only and
+	 * leaves the log alone: a film that autoplayed at 3am was never finished,
+	 * so it was never logged. A reset that left the log behind would not be a
+	 * reset; the reasons people ask for one are all "make the record gone".
+	 *
+	 * The count reported is still the state rows removed, which is what the
+	 * confirmation priced.
+	 */
+	if scope == HistoryAll || scope == HistoryFinished {
+		vwhere, vargs := "", []any{userID}
+		if under > 0 {
+			vwhere = underClause
+			vargs = append(vargs, under)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM viewing WHERE user_id = ?`+vwhere, vargs...); err != nil {
+			return 0, fmt.Errorf("reset history: viewings: %w", err)
+		}
+	}
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("reset history: %w", err)

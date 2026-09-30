@@ -2824,7 +2824,24 @@ func (s *Store) SaveProgress(ctx context.Context, itemID int64, userID string, p
 	 * A row born watched counts as one: marking something finished that was
 	 * never played is a viewing nobody recorded at the time.
 	 */
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("save progress: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Whether this write is the edge from not-finished to finished: the same
+	// test the tally below uses, read first so the log can follow it. No row
+	// yet counts as not finished, matching "a row born watched counts as one".
+	var was int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT watched FROM playback_state WHERE item_id = ? AND user_id = ?`,
+		itemID, userID).Scan(&was); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("save progress: %w", err)
+	}
+	now := time.Now().Unix()
+
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO playback_state (item_id, user_id, position_ms, watched, watch_count, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(item_id, user_id) DO UPDATE SET
@@ -2833,11 +2850,16 @@ func (s *Store) SaveProgress(ctx context.Context, itemID int64, userID string, p
 				(CASE WHEN excluded.watched = 1 AND watched = 0 THEN 1 ELSE 0 END),
 			watched = excluded.watched,
 			updated_at = excluded.updated_at`,
-		itemID, userID, positionMS, w, w, time.Now().Unix())
+		itemID, userID, positionMS, w, w, now)
 	if err != nil {
 		return fmt.Errorf("save progress: %w", err)
 	}
-	return nil
+	if watched && was == 0 {
+		if err := logViewing(ctx, tx, userID, itemID, now); err != nil {
+			return fmt.Errorf("save progress: %w", err)
+		}
+	}
+	return tx.Commit()
 }
 
 // LibraryTracks returns a music library's track rows.

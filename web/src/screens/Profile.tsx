@@ -121,7 +121,16 @@ export function Profile() {
         </>
       )}
 
-      <span className="section-label profile__label">Recently played</span>
+      <div className="profile__labelrow">
+        <span className="section-label profile__label">Recently played</span>
+        {/* The log beside this list: this one shows each title once, dated
+            from its last play; the history has every time it was finished. */}
+        {data?.user.secured && (
+          <Link className="profile__loglink" to="/profile/viewings">
+            Full watch history →
+          </Link>
+        )}
+      </div>
 
       {isLoading && <p className="browse__message">Loading…</p>}
 

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 52
+const CurrentSchemaVersion = 53
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -91,6 +91,7 @@ var migrations = []migration{
 	{version: 50, sql: schemaRevision50},
 	{version: 51, sql: schemaRevision51},
 	{version: 52, sql: schemaRevision52},
+	{version: 53, sql: schemaRevision53},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1799,3 +1800,65 @@ WHERE kind IN ('movie', 'episode')
 const schemaRevision52 = `
 ALTER TABLE user ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
 `
+
+/*
+ * Revision 53 -- a watch history: one row per finished viewing (ADR 0074).
+ *
+ * playback_state is a state table: one row per item per user, overwritten on
+ * every play. It answers "where was I" and can never answer "when did I watch
+ * this" for any viewing but the last, because the earlier answer is gone the
+ * moment the film is started again. This is the append-only log beside it.
+ *
+ * A row is written when a film or an episode *becomes* finished -- the same
+ * edge that moves watch_count, so the log and the tally cannot disagree about
+ * what a viewing is. Abandoned sittings are not logged, and neither is music
+ * (ADR 0074 records both as decisions, not omissions).
+ *
+ * What was watched is copied onto the row, not only referenced. item_id is
+ * SET NULL when an item is deleted, and a history that forgot the film the
+ * moment its file was removed would fail the question it exists to answer.
+ * The show's year and imdb id are copied for an episode because an export to
+ * another service identifies an episode by its show.
+ *
+ * Seeded with one row per video item already finished, dated from the last
+ * time its state was written and marked `estimated`. That is the best date
+ * the old table can give, and it says so; earlier rewatches were never
+ * recorded and are not invented.
+ *
+ * No foreign key on user_id, like playback_state: an unsecured loopback server
+ * keeps its history under the 'local' id, which has no account row.
+ */
+const schemaRevision53 = `
+CREATE TABLE IF NOT EXISTS viewing (
+    id           INTEGER PRIMARY KEY,
+    user_id      TEXT    NOT NULL,
+    item_id      INTEGER REFERENCES media_item(id) ON DELETE SET NULL,
+    finished_at  INTEGER NOT NULL,
+    estimated    INTEGER NOT NULL DEFAULT 0,
+    kind         TEXT    NOT NULL,
+    title        TEXT    NOT NULL,
+    year         INTEGER,
+    series       TEXT,
+    season       INTEGER,
+    episode      INTEGER,
+    imdb_id      TEXT,
+    show_year    INTEGER,
+    show_imdb_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_viewing_user_time ON viewing(user_id, finished_at DESC);
+CREATE INDEX IF NOT EXISTS idx_viewing_item ON viewing(item_id);
+INSERT INTO viewing (user_id, item_id, finished_at, estimated, kind, title, year,
+                     series, season, episode, imdb_id, show_year, show_imdb_id)
+SELECT ps.user_id, mi.id, ps.updated_at, 1, mi.kind, mi.title, mi.year,
+       mi.series, mi.season, mi.episode, mi.imdb_id, sh.year, sh.imdb_id
+FROM playback_state ps
+JOIN media_item mi ON mi.id = ps.item_id
+LEFT JOIN media_item sh ON sh.id = (` + showOf + `)
+WHERE ps.watched = 1 AND mi.kind IN ('movie', 'episode');
+`
+
+// showOf finds an episode's show, whether the episode hangs from a season or
+// straight from the show. It reads `mi` as the episode.
+const showOf = `SELECT id FROM media_item WHERE kind = 'show' AND (
+        id = mi.parent_id OR
+        id = (SELECT parent_id FROM media_item WHERE id = mi.parent_id))`
