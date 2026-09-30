@@ -1121,6 +1121,21 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			` OR (kind IN ('album', 'track', 'episode') AND title LIKE ?)) AND missing = 0`
 		q := "%" + f.Query + "%"
 		args = append(args, q, q, q)
+	case f.TopLevel && f.LibraryID == 0 && (f.Favourite || len(f.TagIDs) > 0):
+		/*
+		 * Your marks, across every library, at any level.
+		 *
+		 * A favourite or a tag is something a person put on one item, and they
+		 * put it on the album, the episode or the song as often as on the show
+		 * or the artist. Held to the top level, the profile's Favourites shelf
+		 * answered "nothing" for a favourited episode that is plainly
+		 * favourited. Only across libraries: inside one library a tag is a grid
+		 * filter, and the grid shows the top level whatever it is filtered by.
+		 */
+		where += ` AND ` + collectionIsReal
+		if f.ExcludeMissing {
+			where += ` AND missing = 0`
+		}
 	case f.TopLevel:
 		where += ` AND ` + topLevelPredicate
 	default:

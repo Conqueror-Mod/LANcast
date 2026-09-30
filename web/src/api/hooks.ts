@@ -2187,6 +2187,35 @@ export function useInfiniteItems(query: Omit<ItemQuery, "limit" | "offset">) {
   });
 }
 
+/*
+ * Your favourites, or everything carrying one of your tags, across every
+ * library and at any level (a favourited song is listed as well as a
+ * favourited artist).
+ *
+ * The key is a child of ["items"], like the browse grid's. Favouriting and
+ * tagging invalidate ["items"] by prefix, so this list follows them without a
+ * second invalidation to remember at each call site.
+ */
+export type ItemMark = { favourite: true } | { tag: number };
+
+export function useMarkedItems(mark: ItemMark, pageSize = BROWSE_PAGE_SIZE) {
+  const which = "tag" in mark ? `tag=${mark.tag}` : "favourite=1";
+  return useInfiniteQuery({
+    queryKey: ["items", "marked", which, pageSize],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      apiGet<ItemsPage>(
+        `/api/items?${which}&limit=${pageSize}&offset=${pageParam as number}`,
+        signal,
+      ),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, p) => n + p.items.length, 0);
+      return loaded < last.total ? loaded : undefined;
+    },
+    enabled: !("tag" in mark) || mark.tag > 0,
+  });
+}
+
 // ------------------------------------------------------------------ activity
 
 // What the server is doing right now, in one request. The pieces already

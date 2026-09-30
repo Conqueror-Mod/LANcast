@@ -1,11 +1,19 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useCurrentUser, useProfile, useSetAvatar } from "@/api/hooks";
+import {
+  useCurrentUser,
+  useMarkedItems,
+  useMyRatings,
+  useProfile,
+  useSetAvatar,
+  useTags,
+} from "@/api/hooks";
+import { Shelf } from "@/components/Shelf";
 import { AVATARS, AvatarGlyph } from "@/components/Avatar";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
-import type { HistoryEntry } from "@/api/types";
+import type { HistoryEntry, RatedItem } from "@/api/types";
 import "./Profile.css";
 
 /*
@@ -16,12 +24,11 @@ import "./Profile.css";
  * it is deliberately the small half of the backlog item: history, honest
  * totals, and who you are.
  *
- * What it does not have is as considered as what it does. No Find Friends, no
- * Trending, no reviews — those need data the server does not collect and, in
- * two of the three cases, a decision about who may see whose viewing that
- * nobody has made. A page of empty scaffolding promising four features is worse
- * than a page of three true numbers, because the scaffolding is what people
- * plan around.
+ * What it does not have is as considered as what it does. Other people's
+ * viewing lives on the People page, behind the opt-in ADR 0035 settled, and
+ * nothing here is visible to anybody else: your favourites, your ratings and
+ * your tags are private to this account (ADR 0062), so the page is a mirror
+ * rather than a profile anyone else visits.
  */
 
 const PAGE = 50;
@@ -105,6 +112,14 @@ export function Profile() {
         occasional read.
       */}
       <YearInReview />
+
+      {data?.user.secured && (
+        <>
+          <FavouritesShelf />
+          <YourRatings />
+          <YourTags />
+        </>
+      )}
 
       <span className="section-label profile__label">Recently played</span>
 
@@ -251,6 +266,142 @@ function AvatarPicker() {
       </div>
       {setAvatar.isError && (
         <p className="profile__avatarerr">That picture could not be saved.</p>
+      )}
+    </section>
+  );
+}
+
+/*
+ * Everything favourited, from every library and at any level.
+ *
+ * The first shelf's worth, and the whole list a click away. A shelf with
+ * nothing on it is a line saying how to start one, because an absent section
+ * is also how a broken one looks.
+ */
+const SHELF = 20;
+
+function FavouritesShelf() {
+  const { data, isLoading } = useMarkedItems({ favourite: true }, SHELF);
+  const items = data?.pages[0]?.items ?? [];
+  if (isLoading) return null;
+  if (items.length === 0) {
+    return (
+      <section className="profile__section" aria-label="Favourites">
+        <span className="section-label profile__label">Favourites</span>
+        <p className="profile__hint">
+          Nothing favourited yet. Press the heart on any title's page and it
+          shows up here.
+        </p>
+      </section>
+    );
+  }
+  return <Shelf title="Favourites" items={items} seeAllTo="/profile/favourites" />;
+}
+
+/*
+ * Your ratings, newest first.
+ *
+ * Yours alone: the route carries no user id, so there is no way for this list
+ * to show anybody else's (ADR 0035). Out of ten, printed as such — the page
+ * shows the number you chose rather than converting it into stars you did not.
+ */
+const RATINGS_FIRST = 10;
+const RATINGS_MAX = 200;
+
+function YourRatings() {
+  const [limit, setLimit] = useState(RATINGS_FIRST);
+  const { data, isLoading } = useMyRatings(limit);
+  const ratings = data?.ratings ?? [];
+  if (isLoading && ratings.length === 0) return null;
+  return (
+    <section className="profile__section" aria-label="Your ratings">
+      <span className="section-label profile__label">Your ratings</span>
+      {ratings.length === 0 ? (
+        <p className="profile__hint">
+          Nothing rated yet. A score you give a title on its page is kept here,
+          and only you can see it.
+        </p>
+      ) : (
+        <div className="profile__history">
+          {ratings.map((r) => (
+            <RatingRow key={r.item.id} rated={r} />
+          ))}
+        </div>
+      )}
+      {/* A full page means there may be more. The server caps a page at 200,
+          which is the most this offers. */}
+      {ratings.length === limit && limit < RATINGS_MAX && (
+        <div className="profile__pager">
+          <button className="profile__page" onClick={() => setLimit(RATINGS_MAX)}>
+            Show all ratings
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RatingRow({ rated }: { rated: RatedItem }) {
+  const { item, rating } = rated;
+  const poster = artworkURL(item.artwork?.poster, "thumb");
+  const detail = [item.series, episodeCode(item), item.year]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Link className="profile__row" to={`/item/${item.id}`}>
+      <div className="profile__art">
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" />
+        ) : (
+          <span aria-hidden="true">{item.title.slice(0, 1).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="profile__what">
+        <span className="profile__titleline">
+          {item.title}
+          {item.missing && <span className="profile__missing">missing</span>}
+        </span>
+        {detail && <span className="profile__detail">{detail}</span>}
+        {rating.review && <span className="profile__review">{rating.review}</span>}
+      </div>
+      <div className="profile__when">
+        <span className="profile__score" aria-label={`${rating.score} out of 10`}>
+          {rating.score}
+          <span className="profile__scoreof">/10</span>
+        </span>
+        <span>{new Date(rating.updated_at * 1000).toLocaleDateString()}</span>
+      </div>
+    </Link>
+  );
+}
+
+/*
+ * Your tags, each opening everything that carries it, across libraries.
+ *
+ * Inside a library a tag is one of the grid's filters. This is the question
+ * that does not stop at a library's edge: everything you called "Christmas".
+ */
+function YourTags() {
+  const { data, isLoading } = useTags();
+  const tags = data?.tags ?? [];
+  if (isLoading) return null;
+  return (
+    <section className="profile__section" aria-label="Your tags">
+      <span className="section-label profile__label">Your tags</span>
+      {tags.length === 0 ? (
+        <p className="profile__hint">
+          No tags yet. Add one from any title's page to group things your own
+          way. Nobody else on this server sees them.
+        </p>
+      ) : (
+        <div className="profile__tags">
+          {tags.map((t) => (
+            <Link key={t.id} className="profile__tag" to={`/profile/tags/${t.id}`}>
+              {t.name}
+              <span className="profile__tagcount">{t.count}</span>
+            </Link>
+          ))}
+        </div>
       )}
     </section>
   );

@@ -15,6 +15,7 @@ import { Player } from "@/screens/Player";
 import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Profile } from "@/screens/Profile";
+import { Favourites, TagItems } from "@/screens/Marked";
 import { Downloads } from "@/screens/Downloads";
 import { Games } from "@/screens/Games";
 import { GameDetail } from "@/screens/GameDetail";
@@ -105,6 +106,8 @@ export function App() {
           <Route path="/watch/:id" element={<Player />} />
           <Route path="/review" element={<Review />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/favourites" element={<Favourites />} />
+          <Route path="/profile/tags/:id" element={<TagItems />} />
           <Route path="/downloads" element={<Downloads />} />
           {/* The games on *this* machine (ADR 0066). Routed for everyone and
               useful to almost nobody: without the desktop bindings the page

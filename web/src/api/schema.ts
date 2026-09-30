@@ -7139,9 +7139,9 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset. */
                 offset?: number;
-                /** @description Repeatable. Restrict to items carrying these tags. **Ids rather than names**, because a name is unique only within one account. An id belonging to another account matches nothing rather than erroring — the account is part of the query, so there is no id anybody can pass to reach somebody else's selection. */
+                /** @description Repeatable. Restrict to items carrying these tags. **Ids rather than names**, because a name is unique only within one account. An id belonging to another account matches nothing rather than erroring — the account is part of the query, so there is no id anybody can pass to reach somebody else's selection. Without `library_id` it reaches every level, not only the top: a tag is put on an episode or a song as often as on a show. */
                 tag?: number[];
-                /** @description `1` restricts to the calling account's favourites. */
+                /** @description `1` restricts to the calling account's favourites. Without `library_id` it reaches every level of every library, so a favourited album, episode or song is listed too; inside one library it filters the top-level grid like any other facet. */
                 favourite?: "1";
             };
             header?: never;

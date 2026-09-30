@@ -562,7 +562,7 @@ group is not priority.
   transfer is a guess that reads as fact. Per device, because the phone that
   downloaded something is the phone that has the file. What is still open: an
   add-on's content, which has no route to serve until add-ons do.
-- **Profile page** (details under Social and profiles below).
+- ~~**Profile page**~~ — **built** (details under Social and profiles below).
 - ~~**Bigscreen (10-foot) mode** — with a settings option to enable it at
   startup.~~ — **built**, as one attribute on the document root and a `zoom` on
   `body`. Not a second client: a separate television UI is a second set of
@@ -959,8 +959,17 @@ group is not priority.
   "and lose my place in the one I am half way through".
 
 
-- **Profile page** — **the history half is built**, and the rest is deliberately
-  not. `GET /api/profile` answers identity, history and totals in one request,
+- ~~**Profile page**~~ — **built.** The last part landed after v0.9.42: the
+  profile now shows **your favourites** (a shelf, then a full list at
+  `/profile/favourites`), **your ratings** with score and review (the first use
+  of `GET /api/profile/ratings`, which had been specified and never called), and
+  **your tags**, each opening everything that carries it across libraries at
+  `/profile/tags/{id}`. Favourites and tags reach any level when asked without
+  `library_id`, because a song or an episode is favourited as often as an artist
+  or a show. All three are private to the account (ADR 0062). Public reviews stay
+  unbuilt, which is a product decision and not a gap. What follows is the entry
+  as it stood when **the history half was built** and the rest deliberately
+  was not. `GET /api/profile` answers identity, history and totals in one request,
   derived from `playback_state`, which has held those answers since v0.4 and had
   never been asked. The stated cost of no new table: one row per item per user
   means the *last* time each thing was played, not every time — a history, not a

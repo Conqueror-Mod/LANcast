@@ -4354,6 +4354,12 @@ An id belonging to another account matches nothing rather than erroring — the
 account is part of the query, so there is no id anybody can pass to reach
 somebody else's selection.
 
+**Without `library_id`, these two reach every level.** A favourite or a tag is
+put on the album, the episode or the song as often as on the artist or the show,
+so `GET /api/items?favourite=1` answers with everything you favourited in every
+library, of any kind. Inside one library they stay grid filters over the top
+level, like every other facet. Missing items are left out either way.
+
 ## API keys
 
 How something that is not a browser signs in: a script, a CLI, a third-party
