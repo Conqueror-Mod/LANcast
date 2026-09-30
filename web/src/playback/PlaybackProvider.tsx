@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useInRouterContext, useNavigate, type NavigateFunction } from "react-router-dom";
 import { useAuthStatus, useItem, useSubtitles } from "@/api/hooks";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
@@ -343,6 +344,31 @@ export function useFullSurface() {
   }, [claimFullSurface]);
 }
 
+declare global {
+  interface Window {
+    /** Called by the desktop client when the docked native picture is clicked. */
+    __lancastNativeClick?: () => void;
+  }
+}
+
+/*
+ * Hands the router's navigate to the provider, when there is a router.
+ *
+ * The provider sits above the routes, and in the app inside the router — but
+ * not everywhere it is rendered, and useNavigate throws outside one. A child
+ * that exists only inside a router keeps that a rendering decision rather than
+ * a conditional hook.
+ */
+function NavigateBridge({
+  target,
+}: {
+  target: React.MutableRefObject<NavigateFunction | null>;
+}) {
+  const navigate = useNavigate();
+  target.current = navigate;
+  return null;
+}
+
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [itemID, setItemID] = useState(0);
   const [queue, setQueue] = useState<number[]>([]);
@@ -435,6 +461,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   prefsRef.current = prefs;
 
   const { data: item } = useItem(itemID);
+  // Filled by NavigateBridge below when there is a router to navigate with.
+  const navigateRef = useRef<NavigateFunction | null>(null);
+  const inRouter = useInRouterContext();
 
   // A track has nothing to show, so its surface becomes the album's cover.
   // Cover art lives on the album row, not the track: the extraction worker
@@ -2521,6 +2550,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!advanceQueue()) setPlaying(false);
     },
   };
+  /*
+   * A click on the docked picture opens the player.
+   *
+   * The title in the strip below was the only way back, and the picture —
+   * the biggest thing there, and the thing being watched — did nothing.
+   * Reported as exactly that. The strip's title stays as the keyboard route.
+   *
+   * Native video needs the client's help: there the picture is a window of
+   * its own above the page, so the page never sees the click. The client
+   * lays a click-catching window over it and calls this
+   * (webview2/overlay.go), which is why it hangs off `window`.
+   */
+  const openFromDock = useCallback(() => {
+    if (surface !== "mini" || !itemID) return;
+    navigateRef.current?.(`/watch/${itemID}`);
+  }, [surface, itemID]);
+  useEffect(() => {
+    window.__lancastNativeClick = openFromDock;
+    return () => {
+      if (window.__lancastNativeClick === openFromDock) delete window.__lancastNativeClick;
+    };
+  }, [openFromDock]);
+
   const mediaHandlersRef = useRef(mediaHandlers);
   mediaHandlersRef.current = mediaHandlers;
   useEffect(() => {
@@ -2540,6 +2592,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={value}>
+      {inRouter && <NavigateBridge target={navigateRef} />}
       {children}
       {/* Our controls, in the other document. A portal keeps React context —
           the playback state, the router, the query client — so these are the
@@ -2553,6 +2606,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       <div
         ref={containerRef}
         className={`playback playback--${surface}${isAudio ? " playback--audio" : ""}`}
+        onClick={surface === "mini" ? openFromDock : undefined}
+        title={surface === "mini" ? "Open the player" : undefined}
       >
         {isAudio && (
           <div className="playback__cover" aria-hidden="true">

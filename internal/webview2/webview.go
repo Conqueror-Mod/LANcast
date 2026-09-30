@@ -62,6 +62,8 @@ type webview struct {
 	video   uintptr
 	layout  VideoLayout
 	mini    videoRect
+	// shield catches clicks on the docked native picture (overlay.go).
+	shield uintptr
 	// handingOff is set while this package moves activation to the overlay,
 	// so the frame is not drawn inactive for the instant between (overlay.go).
 	handingOff bool
@@ -297,6 +299,11 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			return r
 		}
 		return 0
+	}
+	if s, ok := getWindowContext(hwnd).(shieldOf); ok {
+		if r, done := s.w.shieldMessage(msg); done {
+			return r
+		}
 	}
 	if _, ok := getWindowContext(hwnd).(videoOf); ok && msg == wmMouseActivate {
 		// Clicking the picture must not take focus from the page.

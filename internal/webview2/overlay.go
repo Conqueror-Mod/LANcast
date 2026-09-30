@@ -52,6 +52,8 @@ var (
 	procGetActiveWindow = user32overlay.NewProc("GetActiveWindow")
 	procSetTimer        = user32overlay.NewProc("SetTimer")
 	procKillTimer       = user32overlay.NewProc("KillTimer")
+	procLoadCursorW     = user32overlay.NewProc("LoadCursorW")
+	procSetLayeredAttrs = user32overlay.NewProc("SetLayeredWindowAttributes")
 
 	gdi32overlay       = windows.NewLazySystemDLL("gdi32.dll")
 	procGetStockObject = gdi32overlay.NewProc("GetStockObject")
@@ -114,6 +116,10 @@ const (
 	wmMouseActivate         = 0x0021
 	wmNCActivate            = 0x0086
 	wmDPIChanged            = 0x02E0
+	wmLButtonUp             = 0x0202
+	wsExLayered             = 0x00080000
+	lwaAlpha                = 0x00000002
+	idcHand                 = 32649
 	wmTimer                 = 0x0113
 	waClickActive           = 2
 	maNoActivate            = 3
@@ -148,6 +154,81 @@ type videoRect struct{ x, y, w, h int32 }
 // the shared window procedure can tell them from the main window.
 type overlayOf struct{ w *webview }
 type videoOf struct{ w *webview }
+type shieldOf struct{ w *webview }
+
+/*
+ * The shield: a click on the docked picture opens the player.
+ *
+ * In the docked layout the picture is a window of its own above the page, and
+ * inside it is mpv's window, which takes every click on the picture and does
+ * nothing with it -- mpv is told to handle no input (mpv/options.go). The
+ * page, which knows how to open the player, never heard a thing. Reported as
+ * "the only way to maximize a film is to click the title".
+ *
+ * So a third window lies over the picture while it is docked: layered at an
+ * alpha of 1 in 255, which Windows still hit-tests and nobody can see, never
+ * activated, with a hand cursor. A click on it calls the page's own handler
+ * (window.__lancastNativeClick in PlaybackProvider), the same thing a click
+ * on the browser player's picture does. It exists only in the docked layout;
+ * full size, the page itself is on top and needs no help.
+ */
+var shieldClass = sync.OnceValue(func() *uint16 {
+	name, err := windows.UTF16PtrFromString("webview-shield")
+	if err != nil {
+		return nil
+	}
+	var hinstance windows.Handle
+	_ = windows.GetModuleHandleEx(0, nil, &hinstance)
+	cursor, _, _ := procLoadCursorW.Call(0, idcHand)
+	wc := w32.WndClassExW{
+		CbSize:        uint32(unsafe.Sizeof(w32.WndClassExW{})),
+		HInstance:     hinstance,
+		LpszClassName: name,
+		LpfnWndProc:   windows.NewCallback(wndproc),
+		HCursor:       windows.Handle(cursor),
+	}
+	if ret, _, _ := w32.User32RegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))); ret == 0 {
+		return nil
+	}
+	return name
+})
+
+// ensureShield creates the click-catching window over the docked picture on
+// first use. A failure leaves the picture unclickable, as it was, rather than
+// failing the layout.
+func (w *webview) ensureShield() {
+	if w.shield != 0 {
+		return
+	}
+	class := shieldClass()
+	if class == nil {
+		return
+	}
+	h := w.createOwnedOf(wsExNoActivate|wsExLayered, class)
+	if h == 0 {
+		return
+	}
+	_, _, _ = procSetLayeredAttrs.Call(h, 0, 1, lwaAlpha)
+	setWindowContext(h, shieldOf{w})
+	w.shield = h
+}
+
+// shieldMessage handles the shield's own messages and reports whether it
+// consumed one.
+func (w *webview) shieldMessage(msg uintptr) (uintptr, bool) {
+	switch msg {
+	case wmMouseActivate:
+		// The keyboard stays with the page.
+		return maNoActivate, true
+	case wmLButtonUp:
+		// Out of the window procedure before touching the browser.
+		w.Dispatch(func() {
+			w.Eval("window.__lancastNativeClick && window.__lancastNativeClick()")
+		})
+		return 0, true
+	}
+	return 0, false
+}
 
 /*
  * The backdrop the web view paints when it is not the transparent overlay.
@@ -227,6 +308,7 @@ func (w *webview) SetVideoLayout(layout VideoLayout, x, y, width, height int) er
 			return err
 		}
 		w.leaveOverlay()
+		w.ensureShield()
 	default:
 		w.leaveOverlay()
 	}
@@ -325,10 +407,25 @@ func (w *webview) syncVideo() {
 			uintptr(full.x), uintptr(full.y), uintptr(full.w), uintptr(full.h),
 			swpNoActivate|swpShowWindow)
 	case w.layout == VideoMini:
-		// Owned windows already stack above their owner; no z-order needed.
-		_, _, _ = w32.User32SetWindowPos.Call(w.video, 0,
-			uintptr(origin.X+w.mini.x), uintptr(origin.Y+w.mini.y), uintptr(w.mini.w), uintptr(w.mini.h),
-			swpNoZOrder|swpNoActivate|swpShowWindow)
+		x, y := uintptr(origin.X+w.mini.x), uintptr(origin.Y+w.mini.y)
+		cw, ch := uintptr(w.mini.w), uintptr(w.mini.h)
+		if w.shield != 0 {
+			// The shield on top of the owned windows, the picture directly
+			// beneath it: SetWindowPos places a window after the one named.
+			_, _, _ = w32.User32SetWindowPos.Call(w.shield, 0, x, y, cw, ch,
+				swpNoActivate|swpShowWindow)
+			_, _, _ = w32.User32SetWindowPos.Call(w.video, w.shield, x, y, cw, ch,
+				swpNoActivate|swpShowWindow)
+		} else {
+			// Owned windows already stack above their owner; no z-order needed.
+			_, _, _ = w32.User32SetWindowPos.Call(w.video, 0, x, y, cw, ch,
+				swpNoZOrder|swpNoActivate|swpShowWindow)
+		}
+	}
+	// The shield is for the docked picture only.
+	if w.shield != 0 && (visible == 0 || w.layout != VideoMini) {
+		_, _, _ = w32.User32SetWindowPos.Call(w.shield, 0, 0, 0, 0, 0,
+			swpNoMove|swpNoSize|swpNoZOrder|swpNoActivate|swpHideWindow)
 	}
 }
 
@@ -459,6 +556,9 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 			}
 			if w.video != 0 {
 				_, _, _ = w32.User32ShowWindow.Call(w.video, swHide)
+			}
+			if w.shield != 0 {
+				_, _, _ = w32.User32ShowWindow.Call(w.shield, swHide)
 			}
 			return 0, false
 		}
