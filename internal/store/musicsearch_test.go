@@ -225,3 +225,62 @@ func TestAListingByKindLeavesOutMissingRows(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * Your favourites and tags, across every library, reach any level.
+ *
+ * A favourite is put on the song or the album as often as on the artist. Held
+ * to the top level, the profile's Favourites shelf answered "nothing" for a
+ * favourited track. Inside one library a tag stays a grid filter over the top
+ * level.
+ */
+func TestFavouritesAndTagsAcrossLibrariesReachAnyLevel(t *testing.T) {
+	ctx := context.Background()
+	st := queueStore(t)
+	lib, _, album, track := seedBand(t, st)
+	mine, err := st.CreateUser(ctx, "", "mine", "hash", RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yours, err := st.CreateUser(ctx, "", "yours", "hash", RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	me := mine.ID
+	if err := st.SetFavourite(ctx, me, track, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetFavourite(ctx, me, album, true); err != nil {
+		t.Fatal(err)
+	}
+	tag, err := st.AddTag(ctx, me, track, "Late night")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := searchIDs(t, st, ItemFilter{TopLevel: true, Favourite: true, UserID: me})
+	if len(got) != 2 || !containsID(got, track) || !containsID(got, album) {
+		t.Errorf("favourites across libraries = %v, want the album %d and the track %d", got, album, track)
+	}
+	got = searchIDs(t, st, ItemFilter{TopLevel: true, TagIDs: []int64{tag.ID}, UserID: me})
+	if len(got) != 1 || got[0] != track {
+		t.Errorf("a tag across libraries = %v, want the track %d", got, track)
+	}
+	// Somebody else's favourites are not mine.
+	if got := searchIDs(t, st, ItemFilter{TopLevel: true, Favourite: true, UserID: yours.ID}); len(got) != 0 {
+		t.Errorf("another account's favourites listed %v", got)
+	}
+	// Inside the library, the grid filtered by the tag stays at the top level.
+	if got := searchIDs(t, st, ItemFilter{LibraryID: lib.ID, TopLevel: true, TagIDs: []int64{tag.ID}, UserID: me}); len(got) != 0 {
+		t.Errorf("the library grid filtered by a track's tag listed %v, want the top level only", got)
+	}
+}
+
+func containsID(ids []int64, id int64) bool {
+	for _, x := range ids {
+		if x == id {
+			return true
+		}
+	}
+	return false
+}
