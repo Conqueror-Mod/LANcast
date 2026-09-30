@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 )
@@ -392,5 +394,103 @@ func TestAPeerThatMovesIsStillOnePeer(t *testing.T) {
 	}
 	if len(peers) != 1 {
 		t.Errorf("a peer that moved became %d rows; the address is a hint, the fingerprint is the identity", len(peers))
+	}
+}
+
+/*
+ * A peer that moves is re-learned (ADR 0044 §5).
+ *
+ * The list decision is separated from the database because what matters is the
+ * ordering and the cap, and neither needs a transaction to reason about.
+ */
+func TestTheNewestAddressIsTheBestGuess(t *testing.T) {
+	known := []string{"198.51.100.4:8080", "192.0.2.10:8080"}
+
+	got, changed := withLearnedAddress(known, "192.0.2.77:8080")
+	if !changed {
+		t.Fatal("a new address changed nothing")
+	}
+	if got[0] != "192.0.2.77:8080" {
+		t.Errorf("first address is %q, want the one just seen", got[0])
+	}
+	// The old ones survive behind it: a peer reachable two ways must not lose
+	// the other one because it called from the first.
+	if len(got) != 3 {
+		t.Errorf("kept %d addresses, want the old ones behind the new one", len(got))
+	}
+}
+
+// A peer that has not moved is not rewritten. It calls several times a minute,
+// and a transaction each time would be a write per request for ever.
+func TestAnUnchangedAddressIsNotRewritten(t *testing.T) {
+	known := []string{"192.0.2.77:8080", "198.51.100.4:8080"}
+	if _, changed := withLearnedAddress(known, "192.0.2.77:8080"); changed {
+		t.Error("an address that was already first caused a write")
+	}
+}
+
+/*
+ * A known address moves up rather than appearing twice.
+ *
+ * Duplicates would be paid for on every outbound call — each one is a
+ * connection attempt before a working address is reached.
+ */
+func TestAKnownAddressIsPromotedNotDuplicated(t *testing.T) {
+	known := []string{"198.51.100.4:8080", "192.0.2.77:8080"}
+
+	got, changed := withLearnedAddress(known, "192.0.2.77:8080")
+	if !changed {
+		t.Fatal("promoting a known address changed nothing")
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %v, want the same two addresses reordered", got)
+	}
+	if got[0] != "192.0.2.77:8080" || got[1] != "198.51.100.4:8080" {
+		t.Errorf("got %v, want the seen one first", got)
+	}
+}
+
+/*
+ * The list is bounded, and the oldest falls off.
+ *
+ * Every address is a connection attempt to pay for before a working one is
+ * reached, so this is a budget on how slow an unreachable peer may be to give
+ * up on. An address nobody has connected from in a long time is exactly the
+ * one worth forgetting — which is what makes this re-learning rather than
+ * accumulating.
+ */
+func TestTheAddressListIsBounded(t *testing.T) {
+	var known []string
+	for i := range MaxPeerAddresses {
+		known = append(known, fmt.Sprintf("192.0.2.%d:8080", i+1))
+	}
+	oldest := known[len(known)-1]
+
+	got, changed := withLearnedAddress(known, "198.51.100.9:8080")
+	if !changed {
+		t.Fatal("a new address changed nothing")
+	}
+	if len(got) != MaxPeerAddresses {
+		t.Errorf("kept %d addresses, want at most %d", len(got), MaxPeerAddresses)
+	}
+	if slices.Contains(got, oldest) {
+		t.Errorf("%s survived; the oldest should fall off the end", oldest)
+	}
+}
+
+// And it round-trips through the database, cascading away with the peer.
+func TestALearnedAddressIsKept(t *testing.T) {
+	s, fp := peerProgressStore(t)
+	ctx := context.Background()
+
+	if err := s.LearnPeerAddress(ctx, fp, "192.0.2.77:8080"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.PeerByFingerprint(ctx, fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Addrs) == 0 || p.Addrs[0] != "192.0.2.77:8080" {
+		t.Errorf("addresses are %v, want the learned one first", p.Addrs)
 	}
 }

@@ -1,6 +1,6 @@
 # ADR 0044 — Server identity and peering
 
-Date: 2026-08-19 · Status: accepted
+Date: 2026-08-19 · Status: accepted (amended 2026-09-30 — see §5a)
 
 Closes the half of [ADR 0014](0014-transport-security.md) that ADR 0014 named
 and deliberately left open: *"It encrypts the wire; it does not authenticate the
@@ -128,6 +128,44 @@ practice and guaranteed by nothing.
 
 This is why the invite carries addresses **plural**, and why a failed connection
 to a known address is a reachability problem rather than an identity problem.
+
+### 5a. A hint is corrected by the connection that proves it
+
+**Added 2026-09-30.** §5 says a peer that moves is still the same peer, and then
+says nothing about how its address is ever updated. It was not: addresses were
+written once from an invite and never revisited, so a peer that moved became
+unreachable with no way back except pasting a fresh invite.
+
+That is not hypothetical. Two servers lost each other for a day, and the
+investigation reached for routing, firewalls and address families before anyone
+asked where the other machine actually was.
+
+**Where a peer connects from is recorded as a hint.** The connection arrives
+over mutual TLS carrying the identity key recorded at pairing, so it is not
+somebody claiming an address — it is where an authenticated peer is. An address
+a caller merely *asserts* would be worthless, which is why this rides the pin
+and not a field in a request body.
+
+Three things fall out of it, and each is a rule rather than an implementation
+detail:
+
+- **The port is not the one on the connection.** A source port is ephemeral and
+  listens for nothing. The host comes from the connection and the port comes
+  from what is already recorded, so a peer that changed network but not port —
+  which is every peer that moved — is reachable again. With no recorded port,
+  nothing is learned rather than a default being invented.
+- **The newest goes first and the list is bounded.** Every address is a
+  connection attempt to pay for before a working one is reached, so the cap is a
+  budget on how slow an unreachable peer may be to give up on. The oldest falls
+  off, which is what makes this *re*-learning rather than accumulating.
+- **It only corrects the direction that already works.** That is the common
+  shape of the fault rather than a limitation: when two servers lose each other
+  it is usually one-way, and the half that still connects is exactly the half
+  that can say where it went. When neither can reach the other, a fresh invite
+  is still the answer.
+
+This does not weaken §5 — it is what §5 assumed. The fingerprint remains the
+identity and no address has ever been permitted to change it.
 
 ### 6. Identity belongs to the data directory
 

@@ -393,3 +393,109 @@ func (s *Store) RosterForPeers(ctx context.Context) ([]RemotePerson, error) {
 	}
 	return out, rows.Err()
 }
+
+/*
+ * LearnPeerAddress records where a peer just connected from.
+ *
+ * [ADR 0044](../../docs/adr/0044-server-identity-and-peering.md) §5 says the
+ * address is a hint and the fingerprint is the identity — *"a peer that moves
+ * gets a new address and is still the same peer"* — and then says nothing about
+ * how the hint is ever corrected. It was not: addresses were written once from
+ * an invite and never revisited, so a peer that moved became permanently
+ * unreachable with no way back except pasting a fresh invite.
+ *
+ * The new address goes **first**, because the most recent observation is the
+ * best guess about where somebody is, and the list is capped so that a peer
+ * with a changing address cannot grow it without bound. Older entries fall off
+ * the end, which is the re-learning: an address nobody has connected from in a
+ * long time is exactly the one worth forgetting.
+ *
+ * A duplicate is not an error and not a write. The common case is a peer that
+ * has not moved at all, calling several times a minute.
+ */
+func (s *Store) LearnPeerAddress(ctx context.Context, fingerprint, addr string) error {
+	if fingerprint == "" || addr == "" {
+		return errors.New("store: learning an address needs a peer and an address")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("learn peer address: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT addr FROM peer_address WHERE fingerprint = ? ORDER BY ord`, fingerprint)
+	if err != nil {
+		return fmt.Errorf("learn peer address: read: %w", err)
+	}
+	var known []string
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			rows.Close()
+			return fmt.Errorf("learn peer address: scan: %w", err)
+		}
+		known = append(known, a)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("learn peer address: read: %w", err)
+	}
+
+	next, changed := withLearnedAddress(known, addr)
+	if !changed {
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM peer_address WHERE fingerprint = ?`, fingerprint); err != nil {
+		return fmt.Errorf("learn peer address: clear: %w", err)
+	}
+	for i, a := range next {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO peer_address (fingerprint, ord, addr) VALUES (?, ?, ?)`,
+			fingerprint, i, a); err != nil {
+			return fmt.Errorf("learn peer address: write: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("learn peer address: commit: %w", err)
+	}
+	return nil
+}
+
+// MaxPeerAddresses bounds what one peer's list may grow to.
+//
+// An invite carries a handful; the rest is room for a peer that moves. Every
+// address is one more connection attempt to pay for before a working one is
+// reached, so the cap is a budget on how slow an unreachable peer may be to
+// give up on rather than a storage concern.
+const MaxPeerAddresses = 8
+
+/*
+ * withLearnedAddress is the list decision, separated from the database.
+ *
+ * Returns false when there is nothing to write, which is the ordinary case: a
+ * peer that has not moved calls several times a minute and must not cause a
+ * transaction each time.
+ */
+func withLearnedAddress(known []string, addr string) ([]string, bool) {
+	if len(known) > 0 && known[0] == addr {
+		// Already the best guess. Nothing to do, and no write.
+		return nil, false
+	}
+	out := make([]string, 0, len(known)+1)
+	out = append(out, addr)
+	for _, a := range known {
+		if a == addr {
+			// Seen before, but not first. Moving it up is the whole point.
+			continue
+		}
+		if len(out) == MaxPeerAddresses {
+			break
+		}
+		out = append(out, a)
+	}
+	return out, true
+}
