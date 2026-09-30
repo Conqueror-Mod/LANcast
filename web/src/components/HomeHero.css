@@ -79,6 +79,42 @@
   );
 }
 
+/*
+ * Beneath the masthead, the hero has no top edge.
+ *
+ * It had a hard one: the backdrop began at a straight line under the library
+ * buttons, and the top scrim -- written for a hero that opens the page, with
+ * the nav floating on it -- darkened exactly that line. Pale field above, dark
+ * band below, and a seam across the full width of the page. Reported as "a
+ * defining cutoff" that left an ugly separation point.
+ *
+ * So the hero rises behind the masthead and its backdrop fades in from
+ * nothing, art and scrims together, and the greeting sits on the start of the
+ * picture rather than on a shelf above it. A mask rather than another
+ * gradient on top: the field behind the page is not one colour, so no colour
+ * laid over the art could match it at every point. Only the top scrim goes;
+ * the others carry legibility for the text at the bottom and are untouched.
+ *
+ * The padding is the overlap plus a gap, and it is what keeps the two apart.
+ * With border-box it comes out of --hero-height rather than adding to it, so
+ * the page still moves up; and when a long overview makes the hero taller than
+ * its minimum, the body grows downward from under the buttons instead of
+ * climbing into them.
+ */
+.masthead + .hero {
+  margin-top: -56px;
+  padding-top: 76px;
+}
+
+.masthead + .hero .hero__backdrop {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 170px);
+  mask-image: linear-gradient(to bottom, transparent, #000 170px);
+}
+
+.masthead + .hero .hero__scrim--top {
+  display: none;
+}
+
 /* The nav floats over the hero, so the hero owes it a dark bed. */
 .hero__scrim--top {
   background: linear-gradient(
