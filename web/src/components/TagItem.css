@@ -108,6 +108,53 @@
   box-shadow: 0 0 0 2px var(--gold-ring);
 }
 
+/* The box and the tags you already use, offered underneath it. */
+.tagitem__adder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tagitem__suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* A suggestion is a tag you have not put here yet: dashed, where a tag on the
+   item is solid, so the two cannot be mistaken for each other. */
+.tagitem__suggestion {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.tagitem__suggestion:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--gold-dormant);
+}
+
+.tagitem__suggestion:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+}
+
+.tagitem__suggestcount {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Said once, quietly, and not repeated. Somebody deciding whether to write
    "needs a better copy" on something is entitled to know who reads it. */
 .tagitem__note {
