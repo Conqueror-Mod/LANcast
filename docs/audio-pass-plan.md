@@ -130,6 +130,43 @@ count is a fact about one stream, and this needs the one playing.
 - **Listen.** No test can say whether dialogue is clearer. The stereo
   `dialoguenhance` decision is made by ear, and recorded.
 
+### Measured (2026-09-30, offline)
+
+No test library was on disk, so the chains were run on a **synthetic 5.1
+scene** instead. It has quiet pink noise as "dialogue" in FC throughout, and
+loud brown-noise "explosions" on the other five channels for 2 s in every 10,
+with an independent noise per channel so the effects are uncorrelated. The
+graphs are exactly what `AudioFilter` emits, run through ffmpeg 8.1.2 (libmpv
+carries 9.0.2; these filters are long-stable, but the difference is noted).
+
+| graph | true peak | layout | FC vs rest, in a burst | burst − quiet |
+|---|---|---|---|---|
+| none | −1.0 dBTP | 5.1 | −27.2 dB | 34.2 dB |
+| night | −0.4 | 5.1 | −27.1 | 25.9 (quiet dialogue +12 dB) |
+| dialogue high | −10.1 | 5.1 | −18.1 (+9.1, exactly ×0.35) | 25.2 |
+| both | −0.8 | 5.1 | −18.1 | 24.3 |
+| stereo, dialogue high | +1.2 (as its input) | 3.0 | FC derived at −7.8 vs sides | — |
+
+What it changed:
+
+- **alimiter normalises by default.** The first night graph measured
+  **+1.1 dBTP**, from a limiter set to hold 0.9. alimiter's `level` option
+  scales the output back up to full scale after limiting. The graph now sets
+  `level=0`. Nobody would have heard the difference, and it would have clipped
+  every loud scene.
+- **Night mode makes things louder, not quieter.** Its makeup gain lifts quiet
+  speech 12 dB and the loud parts only 3.7. So the settings note about turning
+  the volume up belongs to dialogue boost alone.
+- **Loudness range (LRA) is the wrong instrument for gated noise.** It
+  reported night mode *widening* the range (9.0 → 21.6), because the gating
+  and percentiles are built for programme material. So range is measured
+  directly, as burst-window level minus quiet-window level.
+- **Stereo needs uncorrelated effects to mean anything.** With identical noise
+  on every channel, `dialoguenhance` read the whole mix as centre and peaked at
+  +7.1 dBTP. With independent noise it adds no peak.
+
+None of this says anything sounds better. That is still the listening test.
+
 ## Phase 2: the element engine (music and browser tabs)
 
 The roadmap's Web Audio design, plus three traps it did not list.
