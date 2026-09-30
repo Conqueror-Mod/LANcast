@@ -19,13 +19,16 @@
 .livetv__nowrow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
+  flex-wrap: wrap;
   padding: 8px 12px;
   background: var(--space-raised);
 }
 
+/* Takes the spare width, so the buttons sit together on the right. */
 .livetv__now {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 14px;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -120,7 +123,7 @@
 .livetv__sections {
   display: flex;
   flex-direction: column;
-  padding-bottom: 40px;
+  padding-bottom: 20px;
 }
 
 .livetv__section {
@@ -182,6 +185,54 @@
   .livetv__chevron {
     transition: transform var(--dur-fast);
   }
+}
+
+/* The hidden list's heading is a label, not a control. */
+.livetv__sectionhead--static {
+  margin: 0;
+  cursor: default;
+}
+
+.livetv__sectionhead--static:hover {
+  color: var(--text-secondary);
+  border-left-color: transparent;
+}
+
+/* A favourite's mark. Deliberately muted and not gold: gold means where you
+   are, and a second meaning would kill the focus signal (CLAUDE.md). */
+.livetv__fav {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* A hidden channel, listed so it can be brought back. */
+.livetv__channel.is-hidden {
+  opacity: 0.55;
+}
+
+.livetv__hiddenline {
+  margin: 0 0 40px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.livetv__linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.livetv__linkbtn:hover,
+.livetv__linkbtn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  text-decoration-color: var(--gold);
 }
 
 .livetv__sectionname {

@@ -14,7 +14,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { LiveTV } from "./LiveTV";
+import { FocusProvider } from "@/focus/FocusController";
+import { writeDevice } from "@/lib/device";
+import { LiveTV, HIDDEN_CHANNELS_KEY, FAVOURITE_CHANNELS_KEY } from "./LiveTV";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -45,6 +47,10 @@ beforeEach(() => {
     ch(4, 2, "Tuner", "Local News", "News"),
     ch(5, 2, "Tuner", "Tuner Sports", "Sports"),
   ];
+  // Through the device store, which caches: clearing localStorage alone would
+  // leave the last test's choices in memory.
+  writeDevice(HIDDEN_CHANNELS_KEY, []);
+  writeDevice(FAVOURITE_CHANNELS_KEY, []);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -74,7 +80,9 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <LiveTV />
+        <FocusProvider>
+          <LiveTV />
+        </FocusProvider>
       </QueryClientProvider>,
     );
   });
@@ -84,7 +92,8 @@ async function render() {
 }
 
 const names = () =>
-  [...host.querySelectorAll(".livetv__channel .livetv__name")].map((e) => e.textContent);
+  // The name alone, without a favourite's star.
+  [...host.querySelectorAll(".livetv__channel .livetv__name")].map((e) => e.firstChild?.textContent);
 const heads = () => [...host.querySelectorAll<HTMLButtonElement>(".livetv__sectionhead")];
 const headNamed = (group: string, source?: string) =>
   heads().find(
@@ -176,5 +185,87 @@ describe("search", () => {
     });
     expect(heads()).toHaveLength(0);
     expect(names()).toEqual(["Sky Sports", "Tuner Sports"]);
+  });
+});
+
+/*
+ * Hidden and favourite channels, per device (ADR 0039, step 3).
+ *
+ * Two providers overlap heavily, plus hundreds of countries nobody in the house
+ * watches. Hiding takes a channel out of browsing without deleting anything,
+ * and favouriting pins it to the top.
+ */
+describe("hidden and favourite channels", () => {
+  const tileNamed = (name: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>(".livetv__channel")].find(
+      (t) => t.querySelector(".livetv__name")?.firstChild?.textContent === name,
+    );
+  const menuItem = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (b) => b.textContent === label,
+    );
+  const rightClick = async (el: HTMLElement | undefined) => {
+    expect(el, "no such tile").toBeTruthy();
+    await act(async () => {
+      el!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+    });
+  };
+
+  it("hides a channel from its group and says how many are hidden", async () => {
+    await render();
+    await rightClick(tileNamed("ITV"));
+    await click(menuItem("Hide on this device"));
+    expect(names()).toEqual(["BBC One"]);
+    expect(headNamed("UK")?.querySelector(".livetv__sectioncount")?.textContent).toBe("1");
+    expect(host.querySelector(".livetv__hiddenline")?.textContent).toContain(
+      "1 channel is hidden on this device.",
+    );
+  });
+
+  // A filter that cannot be seen or undone is indistinguishable from a bug.
+  it("lists hidden channels on request and brings one back", async () => {
+    await render();
+    await rightClick(tileNamed("ITV"));
+    await click(menuItem("Hide on this device"));
+    await click(host.querySelector<HTMLButtonElement>(".livetv__linkbtn")!);
+    expect(host.textContent).toContain("Hidden on this device");
+    await rightClick(tileNamed("ITV"));
+    await click(menuItem("Show again"));
+    expect(host.querySelector(".livetv__hiddenline")).toBeNull();
+    expect(names()).toEqual(["BBC One", "ITV"]);
+  });
+
+  it("pins a favourite to its own section at the top, and keeps it in its group", async () => {
+    await render();
+    await click(headNamed("Sports", "Provider"));
+    await rightClick(tileNamed("Sky Sports"));
+    await click(menuItem("Add to favourites"));
+    expect(heads()[0].querySelector(".livetv__sectionname")?.textContent).toBe("Favourites");
+    // The favourites section is the one open by default now.
+    expect(heads()[0].getAttribute("aria-expanded")).toBe("true");
+    expect(names()).toContain("Sky Sports");
+    expect(headNamed("Sports", "Provider")?.querySelector(".livetv__sectioncount")?.textContent).toBe("1");
+  });
+
+  // Refreshing a playlist replaces its channels, so every id changes. A choice
+  // keyed on the id would undo itself the next time the list was updated.
+  it("survives a refresh that gives every channel a new id", async () => {
+    await render();
+    await rightClick(tileNamed("ITV"));
+    await click(menuItem("Hide on this device"));
+    act(() => root.unmount());
+    root = createRoot(host);
+    channels = channels.map((c) => ({ ...c, id: c.id + 100 }));
+    await render();
+    expect(names()).toEqual(["BBC One"]);
+  });
+
+  it("opens the menu from the keyboard, anchored to the tile", async () => {
+    await render();
+    const t = tileNamed("BBC One")!;
+    await act(async () => {
+      t.dispatchEvent(new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true }));
+    });
+    expect(menuItem("Add to favourites")).toBeTruthy();
   });
 });
