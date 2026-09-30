@@ -63,9 +63,21 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The win32 variant alone, not the gcc-mingw-w64-x86-64 metapackage. The
+      # metapackage pulls in the posix variant too — 115 MB instead of 65 —
+      # and then update-alternatives points x86_64-w64-mingw32-gcc at win32
+      # anyway, so every artefact ever shipped was built by this compiler and
+      # the other 50 MB was downloaded to sit unused.
+      #
+      # Kept on every pull request rather than moved to the release, where it
+      # is also required: finding a broken cross-compile at PR time instead of
+      # mid-release is this job's reason to exist. The .debs come from the
+      # Actions cache, so this is seconds, not a fetch.
       - name: install the mingw cross-compiler
-        timeout-minutes: 20
-        run: .github/scripts/apt-install.sh gcc-mingw-w64-x86-64
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-mingw-w64-x86-64-win32
 
       # Native, and it must say so. A build that silently lost its cgo would
       # still compile and still run — it would just never detect a face — so
@@ -91,8 +103,29 @@ jobs:
       # And the server stays free of it. This is the whole placement decision,
       # asserted rather than trusted: if a future change imports the worker's
       # cgo into lancastd, this fails here rather than in a release.
-      - name: lancastd still builds with cgo off
-        run: CGO_ENABLED=0 go build ./cmd/lancastd ./cmd/lancast
+      #
+      # Two checks, because the first alone is weaker than it looks. Building
+      # with cgo off catches a cgo package that has no fallback — onnxruntime_go
+      # is one, and importing it fails with "build constraints exclude all Go
+      # files". But this repository's own pattern is a cgo file paired with a
+      # !cgo stub (native_cgo.go / native_nocgo.go), and a package built that
+      # way compiles with cgo off by quietly using the stub: the release would
+      # ship a server without the feature and nothing would go red. So the
+      # dependency graph is also read with cgo on, for both shipped targets,
+      # and any non-standard package with cgo files in it fails the job.
+      - name: lancastd and the client stay free of cgo
+        run: |
+          CGO_ENABLED=0 go build ./cmd/lancastd ./cmd/lancast
+          for goos in linux windows; do
+            leaked="$(CGO_ENABLED=1 GOOS=$goos GOARCH=amd64 go list -deps \
+              -f '{{if and (not .Standard) .CgoFiles}}{{.ImportPath}}{{end}}' \
+              ./cmd/lancastd ./cmd/lancast)" || exit 1
+            if [ -n "$leaked" ]; then
+              echo "cgo reached lancastd or the client on $goos through:"
+              echo "$leaked"
+              exit 1
+            fi
+          done
 
   client:
     name: Client
@@ -163,7 +196,9 @@ jobs:
 
       - name: install nsis
         timeout-minutes: 20
-        run: .github/scripts/apt-install.sh nsis
+        uses: ./.github/actions/apt-install
+        with:
+          packages: nsis
 
       # makensis needs the two executables and the WebView2 loader to exist; the
       # real ones come from goreleaser at release time, so stand in placeholders.

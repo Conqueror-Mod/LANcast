@@ -45,9 +45,14 @@ jobs:
       # is cross-compiled from this Linux runner. Without mingw the goreleaser
       # step fails at the *end* of a release, after everything else has built —
       # which is the most expensive moment to discover a missing package.
+      #
+      # The win32 variant alone, as in ci.yml — the compiler every release has
+      # actually used — and from the Actions cache when main has saved one.
       - name: install the mingw cross-compiler for lancast-faces
-        timeout-minutes: 20
-        run: .github/scripts/apt-install.sh gcc-mingw-w64-x86-64
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-mingw-w64-x86-64-win32
 
       # libmpv, the desktop client's player (ADR 0067/0069). Built out of band
       # by third_party/libmpv/build.sh and published as a release asset, because
@@ -75,12 +80,20 @@ jobs:
       # leaves a draft release with the archives + checksums. makensis runs on the
       # Linux runner (no Windows toolchain needed); the setup.exe is uploaded to
       # the same draft. First validated on the initial real tag.
+      #
+      # nsis is installed here, after goreleaser rather than with mingw above,
+      # so a failed install still leaves that draft behind.
+      - name: install nsis
+        timeout-minutes: 20
+        uses: ./.github/actions/apt-install
+        with:
+          packages: nsis
+
       - name: build and upload the Windows installer
         timeout-minutes: 30
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/apt-install.sh nsis
           cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
           cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
           # The face worker ships with the installer (ADR 0052). Failing loudly
