@@ -1087,6 +1087,23 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	case f.ParentID != nil:
 		where += ` AND parent_id = ?`
 		args = append(args, *f.ParentID)
+	case f.TopLevel && f.Query != "":
+		/*
+		 * A search reaches into music, which a grid does not.
+		 *
+		 * A music library's top level is its artists, so a search held to the
+		 * top level could find an artist and nothing else: an album or a song
+		 * typed by name answered "nothing matches", in the library's own box
+		 * and in Search everything alike. Reported as "only an artist can be
+		 * searched".
+		 *
+		 * Albums and tracks are what someone looking for music types, and
+		 * both open on a page of their own, so they join the answer. Other
+		 * children do not: an episode's title is a season's business, and a
+		 * season or a photo loose in a result is noise. The top-level answers
+		 * still come first — see the ordering below.
+		 */
+		where += ` AND ((` + topLevelPredicate + `) OR (kind IN ('album', 'track') AND missing = 0))`
 	case f.TopLevel:
 		where += ` AND ` + topLevelPredicate
 	default:
@@ -1414,6 +1431,13 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// fix music by interleaving every show's season 1 ahead of any
 		// season 2 in a cross-show listing, so it stays a separate sort.
 		order = ` ORDER BY season, episode, sort_title`
+	}
+
+	if f.TopLevel && f.Query != "" {
+		// Artists, films and shows ahead of albums, and albums ahead of songs:
+		// typing a band's name should show the band before forty of its tracks.
+		order = strings.Replace(order, ` ORDER BY `,
+			` ORDER BY kind IN ('album', 'track'), kind = 'track', `, 1)
 	}
 
 	limit := f.Limit

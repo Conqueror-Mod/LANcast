@@ -7020,7 +7020,7 @@ export interface operations {
             query?: {
                 /** @description Restrict to one library. */
                 library_id?: number;
-                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. */
+                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. Without `parent_id` or `kind`, a search also reaches **albums and tracks** (a music library's top level is its artists), ranked after the top-level answers, then albums, then tracks. */
                 q?: string;
                 /**
                  * @description The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on the item's sort title, case-insensitively.

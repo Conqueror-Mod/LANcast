@@ -1094,14 +1094,14 @@ rather than matching everybody.
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
-| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it |
+| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. In a search the listing reaches past the top level to **albums and tracks** — a music library's top level is its artists, so otherwise an album or song typed by name was never found — ranked after the top-level answers (artists, films, shows), then albums, then tracks. Other children (episodes, seasons, photos) are not searched |
 | `initial` | The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on `sort_title`, case-insensitively. A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns `initials`, the letters actually present, so a client never offers one that finds nothing |
 | `exclude_kind` | Drops kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page (`kind=collection`, `kind=playlist`). A single value still means what it always did — the parameter grew a list without changing the old contract. It was one kind for a while, and the second had nowhere to go: every `.m3u` a scene release ships stood in the *artist* grid beside the artists whose tracks were on it |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `playlist_id` | Return a playlist's entries **in playing order** ([ADR 0030](adr/0030-playlists-and-m3u.md)). The only listing that may repeat an item id — see below |
-| `q` | Case-insensitive substring match on title and series |
+| `q` | Case-insensitive substring match on title and series. Without `parent_id` or `kind`, also matches albums and tracks — see above |
 | `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
