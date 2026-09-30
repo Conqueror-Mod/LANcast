@@ -81,6 +81,81 @@ async function queueFor(qc: QueryClient, item: Item): Promise<number[]> {
   return fetchDescendantIDs(qc, item.id);
 }
 
+/*
+ * Mark every leaf under a container, as one gesture.
+ *
+ * Its own hook because two surfaces need it: a grid tile's menu, and the home
+ * page's Next up shelf, whose rows are shows. A show has no play state of its
+ * own — its place on that shelf is decided by its episodes — so a write to the
+ * show row was a menu item that reported success and changed nothing.
+ */
+export function useMarkAll(): {
+  markAll: (item: Item, watched: boolean) => Promise<void>;
+  marking: boolean;
+} {
+  const setWatched = useSetWatchedByID();
+  const qc = useQueryClient();
+  const [marking, setMarking] = useState(false);
+
+  /*
+   * Mark every leaf under a container.
+   *
+   * There is no bulk progress endpoint — `PUT /api/items/{id}/progress` is
+   * per-item — and adding one is an API contract change, which is not something
+   * a menu item gets to drag in behind it. So this is N writes over a LAN. A
+   * season is twenty; the longest show in a real library is a few hundred, and
+   * it is a thing somebody does once, deliberately.
+   *
+   * Batched rather than fired at once, because Promise.all over three hundred
+   * fetches is three hundred sockets and the browser's own queueing turns that
+   * into a page that stops answering anything else. `mutateAsync` rather than
+   * `mutate` for the same reason: the point of a batch is to wait for it, and
+   * `mutate` returns immediately, which would make the batching decorative.
+   *
+   * A failed write is swallowed rather than abandoning the run. Stopping at the
+   * first error leaves the show half-marked *and* says nothing about where it
+   * stopped, which is the worst of both.
+   */
+  const markAll = useCallback(
+    async (item: Item, watched: boolean) => {
+      if (marking) return;
+      setMarking(true);
+      try {
+        // The same route Play all uses, so "mark all as watched" and "play
+        // all" cannot come to disagree about what a show contains.
+        const ids = await queueFor(qc, item);
+        for (let i = 0; i < ids.length; i += 8) {
+          await Promise.all(
+            ids
+              .slice(i, i + 8)
+              .map((id) =>
+                setWatched.mutateAsync({ itemID: id, watched }).catch(() => {}),
+              ),
+          );
+        }
+        /*
+         * And then the container's own view of itself.
+         *
+         * useSetWatchedByID invalidates the item it wrote and the lists a tile
+         * lives in. That is right for one write and not enough for this one:
+         * the show whose episodes just changed was never written to, so nothing
+         * invalidated its children list or its own row. The symptom is this
+         * project's most-repeated bug — the request succeeds, the server is
+         * right, and the season page you are looking at still draws every
+         * episode unwatched.
+         */
+        qc.invalidateQueries({ queryKey: ["children"] });
+        qc.invalidateQueries({ queryKey: ["item", item.id] });
+      } finally {
+        setMarking(false);
+      }
+    },
+    [marking, qc, setWatched],
+  );
+
+  return { markAll, marking };
+}
+
 export function useItemActions(): ItemActions {
   const navigate = useNavigate();
   const setWatched = useSetWatchedByID();
@@ -129,61 +204,7 @@ export function useItemActions(): ItemActions {
     [gathering, navigate, qc],
   );
 
-  /*
-   * Mark every leaf under a container.
-   *
-   * There is no bulk progress endpoint — `PUT /api/items/{id}/progress` is
-   * per-item — and adding one is an API contract change, which is not something
-   * a menu item gets to drag in behind it. So this is N writes over a LAN. A
-   * season is twenty; the longest show in a real library is a few hundred, and
-   * it is a thing somebody does once, deliberately.
-   *
-   * Batched rather than fired at once, because Promise.all over three hundred
-   * fetches is three hundred sockets and the browser's own queueing turns that
-   * into a page that stops answering anything else. `mutateAsync` rather than
-   * `mutate` for the same reason: the point of a batch is to wait for it, and
-   * `mutate` returns immediately, which would make the batching decorative.
-   *
-   * A failed write is swallowed rather than abandoning the run. Stopping at the
-   * first error leaves the show half-marked *and* says nothing about where it
-   * stopped, which is the worst of both.
-   */
-  const markAll = useCallback(
-    async (item: Item, watched: boolean) => {
-      if (gathering) return;
-      setGathering(true);
-      try {
-        // The same route Play all uses, so "mark all as watched" and "play
-        // all" cannot come to disagree about what a show contains.
-        const ids = await queueFor(qc, item);
-        for (let i = 0; i < ids.length; i += 8) {
-          await Promise.all(
-            ids
-              .slice(i, i + 8)
-              .map((id) =>
-                setWatched.mutateAsync({ itemID: id, watched }).catch(() => {}),
-              ),
-          );
-        }
-        /*
-         * And then the container's own view of itself.
-         *
-         * useSetWatchedByID invalidates the item it wrote and the lists a tile
-         * lives in. That is right for one write and not enough for this one:
-         * the show whose episodes just changed was never written to, so nothing
-         * invalidated its children list or its own row. The symptom is this
-         * project's most-repeated bug — the request succeeds, the server is
-         * right, and the season page you are looking at still draws every
-         * episode unwatched.
-         */
-        qc.invalidateQueries({ queryKey: ["children"] });
-        qc.invalidateQueries({ queryKey: ["item", item.id] });
-      } finally {
-        setGathering(false);
-      }
-    },
-    [gathering, qc, setWatched],
-  );
+  const { markAll, marking } = useMarkAll();
 
   /*
    * The sensitive gesture (ADR 0051).
@@ -298,12 +319,12 @@ export function useItemActions(): ItemActions {
                 },
                 {
                   label: `Mark all as ${verb.past}`,
-                  disabled: gathering,
+                  disabled: gathering || marking,
                   onSelect: () => void markAll(item, true),
                 },
                 {
                   label: `Mark all as ${verb.negated}`,
-                  disabled: gathering,
+                  disabled: gathering || marking,
                   onSelect: () => void markAll(item, false),
                 },
               ]
@@ -392,6 +413,7 @@ export function useItemActions(): ItemActions {
       gathering,
       playContainer,
       markAll,
+      marking,
       sensitiveActions,
     ],
   );

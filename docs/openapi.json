@@ -723,7 +723,7 @@
             "name": "kind",
             "in": "query",
             "required": false,
-            "description": "Restrict to one kind. Passing this also **lifts the top-level-only default**, for a deliberate cross-cutting query such as every episode.\n\n**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give.",
+            "description": "Restrict to one kind. Passing this also **lifts the top-level-only default**, for a deliberate cross-cutting query such as every episode.\n\n**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. A listing by kind leaves out rows whose file is missing, as the browse grid does.",
             "schema": {
               "type": "string"
             }
@@ -1148,7 +1148,7 @@
           "items"
         ],
         "summary": "Save a play position",
-        "description": "Clients should throttle to roughly one call per five seconds during playback.\n\nProgress is per account (ADR 0006).",
+        "description": "Clients should throttle to roughly one call per five seconds during playback.\n\nProgress is per account (ADR 0006).\n\n**Only an item with a file has a play state.** A show, season, artist, album, collection or playlist is `400 not_playable`: nothing reads progress written against one — Continue Watching and Next up judge a show by its episodes. Mark its episodes (`GET /api/items/{id}/episodes`) or tracks instead.",
         "requestBody": {
           "required": true,
           "content": {

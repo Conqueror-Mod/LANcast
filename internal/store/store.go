@@ -941,6 +941,11 @@ type ItemFilter struct {
 	// "half watched" are both true of it.
 	InProgress bool
 
+	// ExcludeMissing leaves out rows whose file is gone, on listings that are
+	// neither the top level (which always does) nor a container's children
+	// (which deliberately show what they are missing). Set by the API.
+	ExcludeMissing bool
+
 	// Unstarted restricts to items this user has not begun: nothing played in
 	// the item itself or in anything it holds. Keyed by UserID. See ListItems.
 	Unstarted bool
@@ -1125,6 +1130,19 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// without this it is the one listing in the system that shows the
 		// one-film collections the grid and the count both refuse.
 		where += ` AND ` + collectionIsReal
+		/*
+		 * And, when asked, only what is there. The top-level branch carries
+		 * `missing = 0` and this one did not, so a listing by kind -- New
+		 * Music's kind=artist, a photo month, the playlists and collections
+		 * pages -- handed back rows whose files were gone. An artist whose
+		 * every track had been renamed away stayed on New Music as a dead
+		 * tile. Asked for rather than always applied, because the scanner's
+		 * own checks list by kind precisely to see that a missing row
+		 * survived; the API handler asks on behalf of every client.
+		 */
+		if f.ExcludeMissing {
+			where += ` AND missing = 0`
+		}
 	}
 	// The wide search above has already matched; this is every other listing.
 	if f.Query != "" && (f.ParentID != nil || !f.TopLevel) {

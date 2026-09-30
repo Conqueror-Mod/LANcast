@@ -15,6 +15,7 @@ import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeMasthead } from "@/components/HomeMasthead";
+import { useMarkAll } from "@/components/itemActions";
 import { isMusic, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import { showContinueTarget } from "@/lib/continueShow";
@@ -139,7 +140,43 @@ export function Home() {
    * the interface reading from the wrong half of itself — small, and exactly
    * the kind of small that makes a feature feel bolted on.
    */
+  const { markAll, marking } = useMarkAll();
+
   const continueActions = (item: Item): MenuAction[] => {
+    /*
+     * A show on Next up is marked through its episodes.
+     *
+     * The show row has no play state of its own: the shelf decides a show's
+     * place from what its episodes say. These menu items used to write to the
+     * show row, which the server accepted and the shelf ignored — "Mark as
+     * watched" and "Remove" both reported success and left the show where it
+     * was. The grid's container menu already marks every episode; this is the
+     * same code.
+     *
+     * There is no "Remove" here, deliberately. A show is on the shelf because
+     * of any episode activity, finished episodes included, and the only way to
+     * take it off without claiming it was all watched is to forget those
+     * episodes too. That is what "Mark all as unwatched" says out loud, where
+     * a "Remove" would have done it quietly.
+     */
+    if (item.kind === "show") {
+      return [
+        {
+          label: "Mark all as watched",
+          disabled: marking,
+          onSelect: () => void markAll(item, true),
+        },
+        {
+          label: "Mark all as unwatched",
+          disabled: marking,
+          onSelect: () => void markAll(item, false),
+        },
+        {
+          label: "Go to details",
+          onSelect: () => navigate(`/item/${item.id}`),
+        },
+      ];
+    }
     const audio = isMusic(item);
     return [
       {
@@ -149,9 +186,7 @@ export function Home() {
       {
         label: audio
           ? "Remove from Continue Listening"
-          : item.kind === "show"
-            ? "Remove from Next up"
-            : "Remove from Continue Watching",
+          : "Remove from Continue Watching",
         onSelect: () => setWatched.mutate({ itemID: item.id, watched: false }),
       },
       {

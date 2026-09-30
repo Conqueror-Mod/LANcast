@@ -660,8 +660,13 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", "invalid parent_id")
 			return
 		}
-	} else if f.Kind == "" {
-		f.TopLevel = true
+	} else {
+		if f.Kind == "" {
+			f.TopLevel = true
+		}
+		// A listing by kind offers only what can be played, like the grid; a
+		// container's children still show the ones that are missing.
+		f.ExcludeMissing = true
 	}
 
 	items, total, err := s.st.ListItems(r.Context(), f)
@@ -820,6 +825,24 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 
 	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
 	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	/*
+	 * Only something that plays has a play state.
+	 *
+	 * A show, season, artist, album, collection or playlist has no file, and
+	 * nothing reads a progress row written against one: Continue Watching and
+	 * Next up judge a show by its episodes. Accepting the write is how the home
+	 * page's "Mark as watched" on a show reported success and changed nothing.
+	 * Refused, so the next client to make that mistake hears about it; the
+	 * episodes or tracks are where the write belongs.
+	 */
+	// No container format means no file: the same test the store uses to
+	// tell a folder-shaped row from a playable one (ReconcileMissingContainers).
+	// Not an empty path -- a show's path is its folder, an artist's a key.
+	if it.Container == nil || *it.Container == "" {
+		writeError(w, http.StatusBadRequest, "not_playable",
+			"this item has no file and no play state of its own; mark its episodes or tracks instead")
 		return
 	}
 

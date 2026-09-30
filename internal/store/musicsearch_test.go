@@ -197,3 +197,31 @@ func TestSearchFindsAnEpisodeByTitleButNotEveryEpisodeByShow(t *testing.T) {
 		t.Errorf("searching the show's name returned %v, want the show alone", got)
 	}
 }
+
+/*
+ * A listing by kind offers only what is there.
+ *
+ * New Music asks for kind=artist, which skipped the missing rule the top-level
+ * grid carries. An artist whose every track had been renamed away stayed on
+ * the shelf as a dead tile.
+ */
+func TestAListingByKindLeavesOutMissingRows(t *testing.T) {
+	ctx := context.Background()
+	st := queueStore(t)
+	_, artist, _, track := seedBand(t, st)
+	if err := st.MarkMissing(ctx, []int64{track}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `UPDATE media_item SET missing = 1 WHERE id = ?`, artist); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"artist", "track"} {
+		if got := searchIDs(t, st, ItemFilter{Kind: kind, ExcludeMissing: true}); len(got) != 0 {
+			t.Errorf("kind=%s listed %v, all of them missing", kind, got)
+		}
+		// Unasked, the rows are still there: kept, never deleted.
+		if got := searchIDs(t, st, ItemFilter{Kind: kind}); len(got) != 1 {
+			t.Errorf("kind=%s without the flag listed %v, want the missing row", kind, got)
+		}
+	}
+}
