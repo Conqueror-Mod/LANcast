@@ -1,6 +1,6 @@
 # Retro games — build plan
 
-**Status: planned, not started.** The direction and stage order were approved on
+**Status: back burner — planned, not started, no work scheduled.** The direction and stage order were approved on
 2026-09-30. The decisions are in
 [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), which stays
 *proposed* until stage 1 begins and its open questions are answered. This

@@ -442,7 +442,7 @@ Status: **planned** · **next** · *unplanned*
 | Stage 1 — own the window | **built, default** | `LANcast-Client.exe` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
 | Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
 | Flip `-window` to default | **built** | Done after living with it, not after arguing about it. The browser lost on three things a tab cannot fix: LANcast cannot say what its close button means, cannot pin the server's certificate, and gets a warning against a LAN-bound self-signed server that the window does not need. `-browser` is the opt-out, `-window` is kept as a no-op alias so existing shortcuts and the autostart run key keep working, a machine with no WebView2 runtime falls back on its own, and the installer's finish page offers both |
-| Stage 2 — own playback (libmpv) | *unplanned* | Deliberately not started. Its case is narrower than the ADR first made it — see the 2026-08-08 amendment: HEVC left the list |
+| Stage 2 — own playback (libmpv) | **built** | Shipped in v0.9.28: the window decodes with libmpv ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), built by LANcast itself as LGPL ([ADR 0069](adr/0069-lancast-builds-its-own-lgpl-libmpv.md)), and streams with a ticket ([ADR 0068](adr/0068-a-native-player-streams-with-a-ticket.md)). Since v0.9.29 the server no longer converts anything for the desktop client |
 
 ### Cross-cutting
 
@@ -783,8 +783,8 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
-- **Retro games (emulated ROMs)** — **planned, not started**; stages approved
-  2026-09-30. [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
+- **Retro games (emulated ROMs)** — **back burner**: planned and parked, with no
+  work scheduled. Stages approved 2026-09-30. [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
   (proposed) and [the build plan](retro-games-plan.md). The request: play old
   console games, N64 first, inside LANcast without keeping a separate emulator
   front end up to date. **A ROM is not an installed game.** ADR 0066 kept PC
@@ -1502,9 +1502,10 @@ group is not priority.
   that happens. An automatic skip that is a few seconds wrong is indistinguishable
   from a broken file, and the first thing it will eat is a cold open.
 
-- **The desktop client connects to a server on another machine**
-  ([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md),
-  proposed). A second person in the household has an account on the server and
+- ~~**The desktop client connects to a server on another machine**~~ — **built**
+  in v0.9.29 ([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md),
+  accepted as amended; the pin is over the server's identity key, kept per
+  server in `internal/knownserver`). What follows is the original capture. A second person in the household has an account on the server and
   no way to reach it from their own PC: their copy of the client opens their
   own empty server, and the shared library is simply not in the app.
 
