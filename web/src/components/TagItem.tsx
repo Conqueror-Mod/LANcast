@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  useTags,
   useItemTags,
   useAddTag,
   useRemoveTag,
@@ -36,8 +37,27 @@ export function TagItem({ itemID }: { itemID: number }) {
   const remove = useRemoveTag(itemID);
   const favourite = useSetFavourite(itemID);
   const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
+  const all = useTags(open).data?.tags ?? [];
 
   const tags = data?.tags ?? [];
+  /*
+   * Your other tags, offered while you are adding one.
+   *
+   * A tag is only useful if it is spelled the same way each time: "Bangers" on
+   * one film and "bangers!" on the next are two lists. So the ones you already
+   * use are offered as you type — filtered by what is typed, most-used first,
+   * and never one this item already carries. Fetched only once the box is
+   * focused, so a detail page opened to press Play does not ask for them.
+   */
+  const onItem = new Set(tags.map((t) => t.id));
+  const needle = draft.trim().toLowerCase();
+  const suggestions = all
+    .filter((t) => !onItem.has(t.id) && t.name.toLowerCase().includes(needle))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 8);
+  const addTag = (name: string) =>
+    add.mutate(name, { onSuccess: () => setDraft("") });
   const isFavourite = data?.favourite ?? false;
 
   return (
@@ -87,25 +107,52 @@ export function TagItem({ itemID }: { itemID: number }) {
           </span>
         ))}
 
-        <form
-          className="tagitem__add"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const name = draft.trim();
-            if (!name) return;
-            add.mutate(name, { onSuccess: () => setDraft("") });
+        {/* Open while focus is anywhere inside, so tabbing or clicking from
+            the box to a suggestion does not close the list under it. */}
+        <div
+          className="tagitem__adder"
+          onFocus={() => setOpen(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
           }}
         >
-          <input
-            className="tagitem__input"
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add a tag"
-            aria-label="Add a tag"
-            maxLength={64}
-          />
-        </form>
+          <form
+            className="tagitem__add"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const name = draft.trim();
+              if (!name) return;
+              addTag(name);
+            }}
+          >
+            <input
+              className="tagitem__input"
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add a tag"
+              aria-label="Add a tag"
+              maxLength={64}
+            />
+          </form>
+          {open && suggestions.length > 0 && (
+            <div className="tagitem__suggest" role="group" aria-label="Your other tags">
+              {suggestions.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="tagitem__suggestion"
+                  onClick={() => addTag(t.name)}
+                  disabled={add.isPending}
+                  title={`Add the tag ${t.name}`}
+                >
+                  {t.name}
+                  <span className="tagitem__suggestcount">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="tagitem__note">

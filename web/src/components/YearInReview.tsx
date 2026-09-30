@@ -141,8 +141,8 @@ export function YearInReview() {
           <p className="year__note">
             Worked out on this machine, from what you have played. Nothing is
             sent anywhere. A title counts in the year you <em>last</em> played
-            it: the server keeps where you are in something, not a diary of
-            every sitting.
+            it. Every film and episode you finished, each time, is in your{" "}
+            <Link to="/profile/viewings">watch history</Link>.
           </p>
         </>
       )}

@@ -33,6 +33,8 @@ let host: HTMLDivElement;
 let root: Root;
 let sent: { url: string; method: string; body: string }[];
 let state: { tags: Tag[]; favourite: boolean };
+// Every tag the account has, which GET /api/tags answers with.
+let allTags: Tag[] = [];
 
 function mount(initial: { tags: Tag[]; favourite: boolean }) {
   state = initial;
@@ -61,6 +63,7 @@ function mount(initial: { tags: Tag[]; favourite: boolean }) {
         state = { ...state, tags: [] };
         return json({ removed: true });
       }
+      if (url.startsWith("/api/tags")) return json({ tags: allTags });
       if (url.includes("/tags")) return json(state);
       return json({});
     }),
@@ -74,6 +77,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  allTags = [];
   act(() => root.unmount());
   host.remove();
   vi.unstubAllGlobals();
@@ -194,5 +198,64 @@ describe("tags and the heart", () => {
     mount({ tags: [], favourite: false });
     await render();
     expect(host.textContent).toContain("Only you can see");
+  });
+});
+
+/*
+ * Your other tags are offered while you add one.
+ *
+ * "Bangers" on one film and "bangers!" on the next are two lists, so the
+ * spelling you already use is a click away, filtered by what you type.
+ */
+describe("tag suggestions", () => {
+  const input = () => host.querySelector<HTMLInputElement>(".tagitem__input")!;
+  const offered = () =>
+    [...host.querySelectorAll(".tagitem__suggestion")].map((b) => b.firstChild?.textContent);
+  const type = async (text: string) => {
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(input(), text);
+      input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle();
+  };
+
+  it("offers the tags you already use, most-used first, once the box is focused", async () => {
+    allTags = [
+      { id: 1, name: "Christmas", count: 2 },
+      { id: 2, name: "Bangers", count: 9 },
+    ];
+    mount({ tags: [], favourite: false });
+    await render();
+    expect(offered()).toEqual([]);
+    await act(async () => input().focus());
+    await settle();
+    expect(offered()).toEqual(["Bangers", "Christmas"]);
+  });
+
+  it("filters by what is typed and leaves out what this item already has", async () => {
+    allTags = [
+      { id: 1, name: "Bangers", count: 9 },
+      { id: 2, name: "Bad sequels", count: 3 },
+      { id: 3, name: "Christmas", count: 2 },
+    ];
+    mount({ tags: [{ id: 2, name: "Bad sequels", count: 0 }], favourite: false });
+    await render();
+    await act(async () => input().focus());
+    await type("ba");
+    expect(offered()).toEqual(["Bangers"]);
+  });
+
+  it("adds a suggestion when it is pressed", async () => {
+    allTags = [{ id: 1, name: "Bangers", count: 9 }];
+    mount({ tags: [], favourite: false });
+    await render();
+    await act(async () => input().focus());
+    await settle();
+    const b = host.querySelector<HTMLButtonElement>(".tagitem__suggestion")!;
+    await act(async () => b.click());
+    await settle();
+    const post = sent.find((x) => x.method === "POST");
+    expect(post && JSON.parse(post.body).name).toBe("Bangers");
   });
 });
