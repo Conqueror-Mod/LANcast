@@ -16,8 +16,20 @@
 
 /* With a hero below, this is an introduction rather than a statement — two
    full-height openings stacked is one too many, and the hero is the better. */
+/*
+ * And tucked up under the top bar. The shell's own top padding plus 18px of
+ * this block's left a band of nothing between the bar and the greeting —
+ * reported, with a red box drawn round it. The bar is already the page's top
+ * margin; this does not need a second one.
+ *
+ * Positioned so it paints above the hero, which is pulled up behind it
+ * (HomeHero.css) and comes later in the document.
+ */
 .masthead--compact {
-  padding: 18px 0 14px;
+  position: relative;
+  z-index: 1;
+  margin-top: -8px;
+  padding: 0 0 14px;
   gap: 12px;
 }
 

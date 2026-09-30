@@ -1,5 +1,5 @@
-import type { MouseEventHandler } from "react";
-import { NavLink } from "react-router-dom";
+import { useState, type MouseEventHandler } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { usePeers, usePeerLibraries } from "@/api/hooks";
 import { LibraryIcon } from "@/components/LibraryIcon";
 
@@ -53,6 +53,17 @@ function PeerSection({
 }) {
   const { data } = usePeerLibraries(fingerprint);
   const libraries = data?.libraries ?? [];
+  const location = useLocation();
+  const [open, setOpen] = useState(() => readOpen(fingerprint));
+  /*
+   * Where you are is never folded away. Browsing one of this server's
+   * libraries keeps its list open whatever was last chosen, so the gold edge
+   * that says "you are here" always has a row to sit on.
+   */
+  const here = location.pathname.startsWith(
+    `/peers/${encodeURIComponent(fingerprint)}/`,
+  );
+  const shown = open || here;
 
   /*
    * Silent when there is nothing, including when that server is not
@@ -62,10 +73,45 @@ function PeerSection({
    */
   if (libraries.length === 0) return null;
 
+  /*
+   * A server is a heading that folds, not a list that is always spelled out.
+   *
+   * Every paired server used to add its whole library list to the rail. With
+   * one friend that is four more rows; with four it is the rail. Reported as
+   * "it would not take much to overpopulate the navbar". The heading is a
+   * button, the choice is remembered on this device, and a new server starts
+   * folded: the rail is for your own places first.
+   */
   return (
     <>
-      <span className="section-label app-shell__rail-label">{name}</span>
-      {libraries.map((lib) => (
+      <button
+        type="button"
+        className="section-label app-shell__rail-label app-shell__server"
+        aria-expanded={shown}
+        title={shown ? `Hide ${name}'s libraries` : `Show ${name}'s libraries`}
+        onClick={() => {
+          const next = !shown;
+          setOpen(next);
+          writeOpen(fingerprint, next);
+        }}
+      >
+        <span className="app-shell__server-name">{name}</span>
+        <svg
+          className={"app-shell__chevron" + (shown ? " is-open" : "")}
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {shown && libraries.map((lib) => (
         <NavLink
           key={lib.id}
           to={`/peers/${encodeURIComponent(fingerprint)}/library/${lib.id}`}
@@ -90,4 +136,29 @@ function PeerSection({
       ))}
     </>
   );
+}
+
+/*
+ * Whether a server's list is open, per device. Browser storage is right for
+ * this and nothing more: it is how one person likes their rail on one screen,
+ * and it can come back empty -- a private window, cleared site data -- in which
+ * case the server is simply folded.
+ */
+const openKey = (fingerprint: string) => `lancast.rail.server.${fingerprint}`;
+
+function readOpen(fingerprint: string): boolean {
+  try {
+    return localStorage.getItem(openKey(fingerprint)) === "open";
+  } catch {
+    return false;
+  }
+}
+
+function writeOpen(fingerprint: string, open: boolean) {
+  try {
+    if (open) localStorage.setItem(openKey(fingerprint), "open");
+    else localStorage.removeItem(openKey(fingerprint));
+  } catch {
+    // Not remembered; the rail still works.
+  }
 }

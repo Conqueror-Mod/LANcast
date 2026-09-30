@@ -26,6 +26,8 @@ interface Props {
    * that tile with the ordinary behaviour, so one shelf can mix the two.
    */
   itemOpen?: (item: Item) => (() => void) | undefined;
+  /** 16:9 episode tiles rather than posters — the Next up shelf. */
+  wide?: boolean;
 }
 
 // A horizontally scrolling hub row. The header pairs a wide-tracked label with a
@@ -38,6 +40,7 @@ export function Shelf({
   seeAllTo,
   itemActions,
   itemOpen,
+  wide = false,
 }: Props) {
   const track = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState<Edges>({ left: false, right: false });
@@ -119,11 +122,15 @@ export function Shelf({
         </button>
         <div className="shelf__track" ref={track} onScroll={measure}>
           {items.map((item) => (
-            <div className="shelf__item" key={item.id}>
+            <div
+              className={"shelf__item" + (wide ? " shelf__item--wide" : "")}
+              key={item.id}
+            >
               <PosterTile
                 item={item}
                 actions={itemActions}
                 onOpen={itemOpen?.(item)}
+                wide={wide}
               />
             </div>
           ))}

@@ -703,6 +703,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose the picture drawn beside your name
+         * @description The caller's own choice; there is no administrator variant. A key from a closed set rather than an image: the client draws it, so there is nothing to upload and no way to put arbitrary bytes in front of other accounts. An unknown key is `400`. Read it back from `user.avatar` on `GET /api/auth/status`.
+         */
+        put: operations["putAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/peer-visibility": {
         parameters: {
             query?: never;
@@ -4262,6 +4282,11 @@ export interface components {
             visible_to_peers?: boolean;
             /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
             max_content_rating?: string;
+            /**
+             * @description The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `""` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.
+             * @example owl
+             */
+            avatar?: string;
         };
         AuthStatus: {
             /** @description Whether any account exists. While false the API is open — but the server is forced onto `127.0.0.1`, so it is reachable only from the machine it runs on. */
@@ -4625,7 +4650,7 @@ export interface components {
             /**
              * @description The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.
              *
-             *     Its own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.
+             *     Its own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did. Its `artwork` is the episode's as well (a `thumb` still, where there is one), so a client can draw the episode rather than the show's poster.
              *
              *     **For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished.
              */
@@ -6431,6 +6456,13 @@ export interface components {
             /** @description Matches inside the scope, describing the same set as the page. */
             total: number;
         };
+        AvatarRequest: {
+            /**
+             * @description One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or `""` to clear it.
+             * @example owl
+             */
+            avatar: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -7020,7 +7052,7 @@ export interface operations {
             query?: {
                 /** @description Restrict to one library. */
                 library_id?: number;
-                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. */
+                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. Without `parent_id` or `kind`, a search also reaches **albums and tracks** (a music library's top level is its artists), ranked after the top-level answers, then albums, then tracks. */
                 q?: string;
                 /**
                  * @description The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on the item's sort title, case-insensitively.
@@ -7087,13 +7119,15 @@ export interface operations {
                 /** @description `watched=false` restricts to items the calling user has not finished; any other value is ignored. Keys off the leaf's own play state, so it filters movies and episodes — a container carries no watched flag and is unaffected. */
                 watched?: boolean;
                 /**
-                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), or `track` (disc then track number).
+                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.
                  *
                  *     `longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.
                  *
                  *     **A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.
                  */
                 sort?: string;
+                /** @description With `sort=random`: any integer. **The same seed gives the same order**, so a shuffled shelf holds still when it refetches, and a caller picks a new seed for a new shuffle. Omitted means 0, a fixed shuffle like any other. */
+                seed?: number;
                 /** @description Page size. Defaults to 100, maximum 500. */
                 limit?: number;
                 /** @description Page offset. */
@@ -8033,6 +8067,41 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    putAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description The key now stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     putPeerVisibility: {

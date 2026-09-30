@@ -157,6 +157,7 @@ func dropPost45Additions(t *testing.T, st *Store) {
 		"preferred_audio_lang",
 		"preferred_subtitle_lang",
 		"subtitle_mode",
+		"avatar", // revision 52
 	} {
 		if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN ` + col); err != nil {
 			t.Fatalf("drop %s: %v", col, err)

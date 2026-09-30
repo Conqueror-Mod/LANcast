@@ -13,6 +13,14 @@ import {
 } from "@/lib/browseFilters";
 import { RATING_THRESHOLDS } from "@/lib/browseFilters";
 import "./FilterBar.css";
+/*
+ * The chip styles live with the old FilterChips component, which nothing
+ * imports any more. A stylesheet ships only when something imports it, so
+ * every chip in these panels rendered as a bare grey browser button — visible
+ * in the report of the Status panel being cut off, and never noticed because
+ * jsdom has no styles to miss.
+ */
+import "./FilterChips.css";
 
 /*
  * The browse filter bar.

@@ -28,6 +28,9 @@
 /** The events the provider listens for, by their media-element names. */
 export const MEDIA_EVENTS = [
   "loadedmetadata",
+  // A length learned after the file opened: mpv can report the open before it
+  // knows the duration (PlaybackProvider's durationchange handler).
+  "durationchange",
   "loadeddata",
   "playing",
   "waiting",

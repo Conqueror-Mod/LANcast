@@ -47,6 +47,11 @@ var (
 	procClientToScreen  = user32overlay.NewProc("ClientToScreen")
 	procSetActiveWindow = user32overlay.NewProc("SetActiveWindow")
 	procIsWindowVisible = user32overlay.NewProc("IsWindowVisible")
+	procIsIconic        = user32overlay.NewProc("IsIconic")
+	procGetCapture      = user32overlay.NewProc("GetCapture")
+	procGetActiveWindow = user32overlay.NewProc("GetActiveWindow")
+	procSetTimer        = user32overlay.NewProc("SetTimer")
+	procKillTimer       = user32overlay.NewProc("KillTimer")
 
 	gdi32overlay       = windows.NewLazySystemDLL("gdi32.dll")
 	procGetStockObject = gdi32overlay.NewProc("GetStockObject")
@@ -107,6 +112,9 @@ var videoClass = sync.OnceValue(func() *uint16 {
 const (
 	wmShowWindow            = 0x0018
 	wmMouseActivate         = 0x0021
+	wmNCActivate            = 0x0086
+	wmTimer                 = 0x0113
+	waClickActive           = 2
 	maNoActivate            = 3
 	wsPopup                 = 0x80000000
 	wsExToolWindow          = 0x00000080
@@ -259,8 +267,7 @@ func (w *webview) enterOverlay() error {
 		_, _, _ = w32.User32DestroyWindow.Call(popup)
 		return err
 	}
-	_, _, _ = procSetActiveWindow.Call(popup)
-	ch.Focus()
+	w.activateOverlay()
 	return nil
 }
 
@@ -275,6 +282,7 @@ func (w *webview) leaveOverlay() {
 	}
 	popup := w.overlay
 	w.overlay = 0
+	_, _, _ = procKillTimer.Call(w.hwnd, refocusTimer)
 	_, _, _ = w32.User32DestroyWindow.Call(popup)
 	setWindowContext(popup, nil)
 	_, _, _ = procSetActiveWindow.Call(w.hwnd)
@@ -323,18 +331,126 @@ func (w *webview) syncVideo() {
 	}
 }
 
-// overlayMessage handles the main window's messages the extra windows follow.
-// It reports whether it consumed the message.
-func (w *webview) overlayMessage(msg, wp uintptr) bool {
-	if w.overlay == 0 && w.video == 0 {
+/*
+ * The main window's caption while the page is in the overlay.
+ *
+ * With a film playing full, the window that is *active* is the overlay — it
+ * has to be, the keyboard belongs to the page — and the main window, which is
+ * the only one with a frame, is by Windows' reckoning inactive. It drew its
+ * title bar that way: white instead of the accent colour, for as long as
+ * anything played. Reported as "the title bar goes white".
+ *
+ * Worse, its caption buttons stopped working. Pressing minimise activates the
+ * main window before the press is handled, and WM_ACTIVATE below handed
+ * activation straight back to the overlay — in the middle of the click, so the
+ * button never saw its own press. Minimise, maximise and close all did
+ * nothing until playback stopped and the overlay went away.
+ *
+ * So two things, both here:
+ *
+ *   - The caption is drawn by who is *really* active. The overlay is part of
+ *     this window as far as a person can tell, so while it holds activation
+ *     the frame is drawn active, and when activation leaves the application
+ *     altogether it is drawn inactive. WM_ACTIVATE's lParam names the window
+ *     on the other side of the change, which is what makes that decidable.
+ *   - A click on the frame keeps activation where the click put it until the
+ *     click is over. Only then does the keyboard go back to the page — on a
+ *     timer that waits while the mouse is captured, since a caption button,
+ *     a drag and a resize all hold capture for exactly as long as they last.
+ *
+ * With the overlay covering the whole client area, a click that activates the
+ * main window can only have landed on its frame, so WA_CLICKACTIVE is that
+ * case precisely.
+ */
+
+// refocusTimer is the id of the timer that returns the keyboard to the page
+// after a click on the frame. Any value works; timers are per window.
+const refocusTimer = 0x4c43
+
+// refocusInterval is short enough that typing straight after a click on the
+// title bar reaches the page, long enough to cost nothing while a drag lasts.
+const refocusInterval = 50
+
+// ours reports whether h is one of the extra windows this file owns.
+func (w *webview) ours(h uintptr) bool {
+	return h != 0 && (h == w.overlay || h == w.video)
+}
+
+// drawCaption repaints the main window's frame as active or not, without
+// changing which window is active.
+func (w *webview) drawCaption(active bool) {
+	var a uintptr
+	if active {
+		a = 1
+	}
+	_, _, _ = w32.User32DefWindowProcW.Call(w.hwnd, wmNCActivate, a, 0)
+}
+
+// refocusPage returns activation and the keyboard to the page in the overlay,
+// once no click on the frame is in progress. It reports whether it is finished,
+// either because it did so or because there is no longer anything to do.
+func (w *webview) refocusPage() bool {
+	if w.overlay == 0 {
+		return true
+	}
+	if iconic, _, _ := procIsIconic.Call(w.hwnd); iconic != 0 {
+		// Minimised by the click. Restoring activates the window again, and
+		// that path hands focus over by itself.
+		return true
+	}
+	if active, _, _ := procGetActiveWindow.Call(); active != w.hwnd {
+		// Somebody clicked into the picture or another window first.
+		return true
+	}
+	if capture, _, _ := procGetCapture.Call(); capture != 0 {
 		return false
+	}
+	w.activateOverlay()
+	return true
+}
+
+// overlayWindowMessage handles the messages the overlay itself must act on. It
+// runs before the default procedure and never consumes the message.
+func (w *webview) overlayWindowMessage(msg, wp, lp uintptr) {
+	if msg != w32.WMActivate {
+		return
+	}
+	if wp&0xffff != w32.WAInactive {
+		w.drawCaption(true)
+		return
+	}
+	// Leaving for the main window keeps the frame active; leaving for
+	// anything else, including another application (lParam zero), does not.
+	if lp != w.hwnd && !w.ours(lp) {
+		w.drawCaption(false)
+	}
+}
+
+// overlayMessage handles the main window's messages the extra windows follow.
+// It reports whether it consumed the message and, if so, what to return.
+func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
+	if msg == wmTimer && wp == refocusTimer {
+		if w.refocusPage() {
+			_, _, _ = procKillTimer.Call(w.hwnd, refocusTimer)
+		}
+		return 0, true
+	}
+	if w.overlay == 0 && w.video == 0 {
+		return 0, false
 	}
 	switch msg {
 	case w32.WMMove, w32.WMSize:
 		w.syncVideo()
 		// With the page in the overlay there is no browser in this window to
 		// resize; otherwise the ordinary handling still has to run.
-		return msg == w32.WMSize && w.overlay != 0
+		return 0, msg == w32.WMSize && w.overlay != 0
+	case wmNCActivate:
+		// Deactivating in favour of the overlay: stay drawn active. The
+		// return value must be TRUE or the deactivation is refused.
+		if wp == 0 && w.overlay != 0 && w.handingOff {
+			r, _, _ := w32.User32DefWindowProcW.Call(w.hwnd, msg, 1, lp)
+			return r, true
+		}
 	case wmShowWindow:
 		if wp == 0 {
 			if w.overlay != 0 {
@@ -343,21 +459,44 @@ func (w *webview) overlayMessage(msg, wp uintptr) bool {
 			if w.video != 0 {
 				_, _, _ = w32.User32ShowWindow.Call(w.video, swHide)
 			}
-			return false
+			return 0, false
 		}
 		if w.overlay != 0 {
 			_, _, _ = w32.User32ShowWindow.Call(w.overlay, swShowNA)
 		}
 		w.syncVideo()
 	case w32.WMActivate:
+		if w.overlay == 0 {
+			break
+		}
 		// The low word is the state; the high word says whether it is minimised.
-		if w.overlay != 0 && wp&0xffff != w32.WAInactive {
+		switch wp & 0xffff {
+		case w32.WAInactive:
+			// The overlay taking over is not this window going to the
+			// background; any other window taking over is.
+			if w.ours(lp) {
+				w.drawCaption(true)
+			}
+		case waClickActive:
+			// A click on the frame. Handing activation away now is what
+			// swallowed the caption buttons; hand it over once the click ends.
+			_, _, _ = procSetTimer.Call(w.hwnd, refocusTimer, refocusInterval, 0)
+			return 0, true
+		default:
 			// Alt-Tab and taskbar clicks land here, on the main window; the
 			// keyboard belongs to the page in the overlay.
-			_, _, _ = procSetActiveWindow.Call(w.overlay)
-			w.browser.Focus()
-			return true
+			w.activateOverlay()
+			return 0, true
 		}
 	}
-	return false
+	return 0, false
+}
+
+// activateOverlay gives the overlay activation and the page the keyboard,
+// keeping the frame drawn active across the change.
+func (w *webview) activateOverlay() {
+	w.handingOff = true
+	_, _, _ = procSetActiveWindow.Call(w.overlay)
+	w.handingOff = false
+	w.browser.Focus()
 }

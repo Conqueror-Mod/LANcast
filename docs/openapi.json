@@ -705,7 +705,7 @@
             "name": "q",
             "in": "query",
             "required": false,
-            "description": "Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it.",
+            "description": "Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. Without `parent_id` or `kind`, a search also reaches **albums and tracks** (a music library's top level is its artists), ranked after the top-level answers, then albums, then tracks.",
             "schema": {
               "type": "string"
             }
@@ -916,11 +916,21 @@
             "name": "sort",
             "in": "query",
             "required": false,
-            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), or `track` (disc then track number).\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
+            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
             "schema": {
               "type": "string",
               "default": "title"
             }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "With `sort=random`: any integer. **The same seed gives the same order**, so a shuffled shelf holds still when it refetches, and a caller picks a new seed for a new shuffle. Omitted means 0, a fixed shuffle like any other."
           },
           {
             "name": "limit",
@@ -2031,6 +2041,54 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/profile/avatar": {
+      "put": {
+        "operationId": "putAvatar",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Choose the picture drawn beside your name",
+        "description": "The caller's own choice; there is no administrator variant. A key from a closed set rather than an image: the client draws it, so there is nothing to upload and no way to put arbitrary bytes in front of other accounts. An unknown key is `400`. Read it back from `user.avatar` on `GET /api/auth/status`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The key now stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "This server has no accounts yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9470,6 +9528,13 @@
           "max_content_rating": {
             "type": "string",
             "description": "The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it."
+          },
+          "avatar": {
+            "type": "string",
+            "description": "The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `\"\"` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.",
+            "examples": [
+              "owl"
+            ]
           }
         }
       },
@@ -10304,7 +10369,7 @@
           },
           "next_episode": {
             "$ref": "#/components/schemas/Item",
-            "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
+            "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did. Its `artwork` is the episode's as well (a `thumb` still, where there is one), so a client can draw the episode rather than the show's poster.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
           },
           "markers": {
             "type": "array",
@@ -14690,6 +14755,21 @@
           "total": {
             "type": "integer",
             "description": "Matches inside the scope, describing the same set as the page."
+          }
+        }
+      },
+      "AvatarRequest": {
+        "type": "object",
+        "required": [
+          "avatar"
+        ],
+        "properties": {
+          "avatar": {
+            "type": "string",
+            "description": "One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or `\"\"` to clear it.",
+            "examples": [
+              "owl"
+            ]
           }
         }
       }

@@ -601,6 +601,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Initial: q.Get("initial"),
 		Query:   q.Get("q"),
 		Sort:    q.Get("sort"),
+		Seed:    int64(queryInt(r, "seed")),
 		Genres:  nonEmpty(q["genre"]),
 		// Tag ids rather than names (ADR 0062): a name is unique only within one
 		// account, so filtering by the word would need the account anyway and
@@ -751,6 +752,34 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
 		s.writeInternal(w, err, "attach artwork")
 		return
+	}
+	/*
+	 * And the episode a show would play next.
+	 *
+	 * The client's Next up shelf draws that episode -- its still, not the
+	 * show's poster -- and without this the still was never in the response:
+	 * artwork was attached to the rows and next_episode is not a row. Copied
+	 * into a slice and back because AttachArtwork works on a slice of values.
+	 */
+	var next []store.Item
+	for i := range items {
+		if items[i].NextEpisode != nil {
+			next = append(next, *items[i].NextEpisode)
+		}
+	}
+	if len(next) > 0 {
+		if err := s.st.AttachArtwork(r.Context(), next); err != nil {
+			s.writeInternal(w, err, "attach artwork")
+			return
+		}
+		j := 0
+		for i := range items {
+			if items[i].NextEpisode != nil {
+				ep := next[j]
+				items[i].NextEpisode = &ep
+				j++
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

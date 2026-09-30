@@ -62,6 +62,9 @@ type webview struct {
 	video   uintptr
 	layout  VideoLayout
 	mini    videoRect
+	// handingOff is set while this package moves activation to the overlay,
+	// so the frame is not drawn inactive for the instant between (overlay.go).
+	handingOff bool
 }
 
 type WindowOptions struct {
@@ -238,8 +241,8 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 
 func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 	if w, ok := getWindowContext(hwnd).(*webview); ok {
-		if w.overlayMessage(msg, wp) {
-			return 0
+		if r, done := w.overlayMessage(msg, wp, lp); done {
+			return r
 		}
 		switch msg {
 		case w32.WMMove, w32.WMMoving:
@@ -285,6 +288,9 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 	if _, ok := getWindowContext(hwnd).(videoOf); ok && msg == wmMouseActivate {
 		// Clicking the picture must not take focus from the page.
 		return maNoActivate
+	}
+	if o, ok := getWindowContext(hwnd).(overlayOf); ok {
+		o.w.overlayWindowMessage(msg, wp, lp)
 	}
 	if o, ok := getWindowContext(hwnd).(overlayOf); ok && msg == w32.WMClose {
 		// Alt+F4 with the page focused lands on the overlay. Closing it would

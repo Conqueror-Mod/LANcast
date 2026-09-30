@@ -1094,14 +1094,14 @@ rather than matching everybody.
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
-| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it |
+| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. In a search the listing reaches past the top level to **albums and tracks** — a music library's top level is its artists, so otherwise an album or song typed by name was never found — ranked after the top-level answers (artists, films, shows), then albums, then tracks. Other children (episodes, seasons, photos) are not searched |
 | `initial` | The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on `sort_title`, case-insensitively. A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns `initials`, the letters actually present, so a client never offers one that finds nothing |
 | `exclude_kind` | Drops kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page (`kind=collection`, `kind=playlist`). A single value still means what it always did — the parameter grew a list without changing the old contract. It was one kind for a while, and the second had nowhere to go: every `.m3u` a scene release ships stood in the *artist* grid beside the artists whose tracks were on it |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `playlist_id` | Return a playlist's entries **in playing order** ([ADR 0030](adr/0030-playlists-and-m3u.md)). The only listing that may repeat an item id — see below |
-| `q` | Case-insensitive substring match on title and series |
+| `q` | Case-insensitive substring match on title and series. Without `parent_id` or `kind`, also matches albums and tracks — see above |
 | `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
@@ -1114,7 +1114,8 @@ rather than matching everybody.
 | `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | `min_rating` | Rated at least this highly, out of ten. **Unrated items are excluded, not sunk**: a film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |
-| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `longest` / `shortest` (by running time; anything unmeasured sinks to the bottom of **both**, since zero is what a probe writes when it could not read a length and a film of no minutes is not the shortest film — offered on film libraries, because a show, an artist and a gallery carry no duration and would all tie), `track` (disc then track number — see Music items) |
+| `sort` | `title` (default), `year`, `added`, `rating` (highest first; unrated last), `longest` / `shortest` (by running time; anything unmeasured sinks to the bottom of **both**, since zero is what a probe writes when it could not read a length and a film of no minutes is not the shortest film — offered on film libraries, because a show, an artist and a gallery carry no duration and would all tie), `track` (disc then track number — see Music items), `random` (a shuffle fixed by `seed` — see below) |
+| `seed` | With `sort=random`: any integer. **The same seed gives the same order**, so a shuffled shelf holds still when it refetches (after marking one watched, say) and a caller picks a new seed when it wants a new shuffle. Omitted means 0, which is a fixed shuffle like any other. Paging a shuffle with one seed is consistent |
 | `limit` / `offset` | Pagination; `limit` defaults to 100, max 500 |
 
 Repeatable filters are **OR within a facet and AND across facets**: two genres
@@ -1244,7 +1245,11 @@ rather than "what am I watching". A show with every episode watched has nothing
 to continue and is absent.
 
 `next_episode` carries its own `progress` and `duration_ms`, which is what a
-resume bar is drawn from: a show has no position of its own.
+resume bar is drawn from: a show has no position of its own. It carries its own
+`artwork` too — the episode's `thumb` still in particular — so a client can draw
+the episode rather than the show's poster. It had none until the client's Next
+up shelf needed it: artwork was attached to the rows, and `next_episode` is not
+a row.
 
 For everything else — films, tracks — "in progress" is unchanged: a saved
 position past zero with `watched` unset, so an item played to the end drops off
@@ -1467,6 +1472,21 @@ because it changes who can see something about a person.
 
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
+
+### `PUT /api/profile/avatar`
+
+`{ "avatar": "owl" }` — the caller's own picture, drawn beside their name in
+the client's rail. One of `fox`, `owl`, `cat`, `wolf`, `bear`, `rabbit`, or
+`""` to clear it; anything else is `400`. Answers `{ "avatar": "owl" }`.
+
+**A key, not an image.** The client draws each one and the server only
+remembers which, so there is nothing to upload or serve and no way for one
+account to put arbitrary bytes in front of everybody else. The set is closed on
+the server today; a client should still draw its ordinary person glyph for a
+key it does not recognise, since a later server may add to it (ADR 0018).
+
+The caller's own choice — there is no administrator variant. Read it back from
+`user.avatar` on `GET /api/auth/status`, where `""` means none chosen.
 
 ### `GET /api/profile/year`
 

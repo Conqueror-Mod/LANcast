@@ -62,10 +62,24 @@ export function PosterTile({
   onOpen,
   actions,
   posterURL,
+  wide = false,
 }: {
   item: Item;
   onOpen?: () => void;
   actions?: (item: Item) => MenuAction[];
+  /*
+   * A 16:9 tile that shows the episode rather than the show.
+   *
+   * For the Next up shelf, whose rows are shows carrying `next_episode`: the
+   * picture is that episode's still, the name is the episode's, and the line
+   * under it says which show and which episode. A poster there would be the
+   * same show's cover repeated down the row for every series in progress,
+   * which says nothing about where you are in any of them.
+   *
+   * The item is still the show, so pressing it continues the show and its
+   * progress bar is still the episode's — only the drawing changes.
+   */
+  wide?: boolean;
   /*
    * Where this tile's image comes from, when it is not from here.
    *
@@ -155,11 +169,16 @@ export function PosterTile({
    * is addressed by content hash and served `immutable`, so a placeholder
    * returned under the real hash would be cached under it for a year.
    */
+  const shown = wide ? (item.next_episode ?? item) : item;
   const poster = obscured
     ? ""
     : posterURL
       ? posterURL(item)
-      : artworkURL(item.artwork?.poster, "poster");
+      : wide
+        ? // The still, else the show's backdrop: both are landscape. 342px
+          // wide is the "poster" variant, and plenty for a shelf tile.
+          artworkURL(shown.artwork?.thumb ?? item.artwork?.fanart, "poster")
+        : artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
   const count = containerCountLabel(item);
@@ -176,7 +195,12 @@ export function PosterTile({
    * it directly returns empty and the tile loses the one line that says where
    * you are in the series.
    */
-  const episode = episodeLabel(item.next_episode ?? item);
+  const episode = episodeLabel(
+    wide && item.next_episode
+      ? // The episode's own line names its show, which the title no longer does.
+        { ...item.next_episode, series: item.next_episode.series ?? item.title }
+      : (item.next_episode ?? item),
+  );
   const score = rating(item.rating);
   // Bottom-left, opposite the rating and under the certificate. Not gold:
   // gold means where-you-are and the design rules name `unwatched` as one of
@@ -254,7 +278,11 @@ export function PosterTile({
       <div
         className={
           "poster-tile__art" +
-          (isSquareArt(item) ? " poster-tile__art--square" : "")
+          (wide
+            ? " poster-tile__art--wide"
+            : isSquareArt(item)
+              ? " poster-tile__art--square"
+              : "")
         }
       >
         {obscured ? (
@@ -320,7 +348,7 @@ export function PosterTile({
       */}
       {item.kind !== "photo" && (
         <div className="poster-tile__meta">
-          <span className="poster-tile__title">{item.title}</span>
+          <span className="poster-tile__title">{shown.title}</span>
           {count ? (
             <span className="poster-tile__year">{count}</span>
           ) : episode ? (
