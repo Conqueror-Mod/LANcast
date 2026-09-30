@@ -783,6 +783,32 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
+- **Retro games (emulated ROMs)** — **planned, not started**; stages approved
+  2026-09-30. [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
+  (proposed) and [the build plan](retro-games-plan.md). The request: play old
+  console games, N64 first, inside LANcast without keeping a separate emulator
+  front end up to date. **A ROM is not an installed game.** ADR 0066 kept PC
+  games off the server because they live on one PC and cannot be served. A ROM
+  is a file the server can hash, identify and hand to a client, which is what
+  every kind already is. So it is `kind = 'rom'` on `media_item`, in a `retro`
+  library, with a nullable `platform` column, and ADR 0002's claim holds again.
+  Identity comes from the **file's hash** checked against libretro-database's
+  DAT files, which works offline, and the N64 byte-order normalisation is a
+  pure function. The player is a **libretro host inside the desktop client**,
+  loaded through `syscall` the way libmpv is. **Cores are fetched, never
+  bundled**, because the N64 cores are GPL and several popular others are
+  non-commercial, and neither fits a commercial build. Saves and save states
+  live **on the server, per user**, so a game continues on another PC. Three
+  stages: **(1)** the ROM library, **(2)** the player on framebuffer systems
+  (GBA first, then NES, SNES and Genesis), **(3)** N64. N64 has a stage of its
+  own because its cores need an **OpenGL context owned by the host**, which is
+  most of the risk and can only be proven on real hardware. Rough size: two to
+  three months on a traditional estimate. ROM libraries are **not shared with
+  paired servers** by default. **Five questions are open** (where people play,
+  which systems, which controller, whether saves sync across machines, and
+  whether a RetroArch launcher is wanted as a stop-gap). They are listed in the
+  ADR and must be answered before stage 1.
+
 - **Lyrics** — **built**; the rest of music below is not.
   [internal/lyrics](../internal/lyrics/lyrics.go) parses LRC,
   `GET /api/items/{id}/lyrics` resolves **sidecar first then the embedded tag**,
