@@ -89,7 +89,8 @@ is more code in a worse place.
 
 ## Local addition — the video overlay (2026-09-16)
 
-`overlay.go`, the `overlay` field and one early branch in `wndproc`, two
+`overlay.go`, the `overlay` and `handingOff` fields, one early branch in
+`wndproc` for the main window and one for the overlay, two
 interface methods on `WebView` (`EnterVideoOverlay`, `LeaveVideoOverlay`), and
 `SetBackground` / `Reparent` on `edge.Chromium`.
 
