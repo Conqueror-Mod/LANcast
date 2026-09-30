@@ -934,6 +934,55 @@ Everything you have rated, most recent first. `?limit=` defaults to 50 (max
 200). Same privacy rule as above - it is your list, and there is no route to
 anybody else's.
 
+### `GET /api/profile/viewings`
+
+Your watch history: one row per **finished** viewing of a film or an episode,
+newest first ([ADR 0074](adr/0074-a-viewing-is-a-row.md)). `?limit=` defaults
+to 100 (max 500), `?offset=` pages.
+
+```json
+{ "viewings": [ { "id": 41, "finished_at": 1727700000, "estimated": false,
+                  "item_id": 812, "kind": "episode", "title": "Space Pilot 3000",
+                  "year": null, "series": "Futurama", "season": 1, "episode": 1,
+                  "imdb_id": null, "show_year": 1999,
+                  "show_imdb_id": "tt0149460" } ],
+  "total": 212 }
+```
+
+This is not `GET /api/profile`'s `history`, which reads the state table and so
+has one row per item, dated from its *last* play. Here a film watched three
+times is three rows.
+
+- **Only finished viewings, only video.** A row is written on the same edge
+  that moves `watch_count`: the moment something becomes finished. Abandoned
+  sittings and music are not logged; both are decisions recorded in the ADR.
+- **What was watched is copied onto the row.** `item_id` becomes `null` if the
+  item is deleted, and the row still says what it was.
+- **`estimated`** marks a row seeded when the log began (schema revision 53):
+  one per title already finished, dated from the last time its state was
+  written. Earlier rewatches were never recorded and are not invented.
+- **Resetting history clears it.** `DELETE /api/profile/history` with scope
+  `all` or `finished` removes these rows too, narrowed by `under` the same way;
+  `unfinished` leaves them, since nothing unfinished was ever logged.
+
+Private to the caller; there is no route to anybody else's.
+
+### `GET /api/profile/viewings/export`
+
+The whole history as a file to save. `?format=csv` (the default) or
+`?format=trakt`. Sent with `Content-Disposition: attachment` and
+`Cache-Control: no-store`.
+
+- **CSV** columns: `watched_at` (ISO 8601, UTC), `kind`, `title`, `year`,
+  `series`, `season`, `episode`, `imdb_id`, `show_imdb_id`, `estimated`.
+- **Trakt**: JSON shaped like the body of Trakt's history sync — `movies` by
+  title, year and imdb id, and `shows` with their episodes grouped under seasons.
+  An episode without a season or episode number cannot be placed under a show,
+  so it is left out and counted in `skipped`; the CSV keeps it.
+
+LANcast sends the file nowhere. Importing it into another service is something a
+person does with the download, which is how *no phone-home* survives an export.
+
 ### `GET /api/items/{id}/photo`
 
 The picture itself, at full resolution. Photos only; anything else is `404`.

@@ -1203,7 +1203,16 @@ group is not priority.
   seven times" is not answerable and must not be implied. What *is* honest is
   time spent, breadth, what you finished versus abandoned, and the shape of a
   year. This is also the exact constraint the history question below turns on.
-- **Open question — a real history, Trakt- or Sonarr-shaped.** Captured as a
+- ~~**Open question — a real history, Trakt- or Sonarr-shaped.**~~ — **decided
+  and built** ([ADR 0074](adr/0074-a-viewing-is-a-row.md), schema revision 53):
+  both a log and an export. A `viewing` row is written each time a film or an
+  episode is *finished*, on the same edge that moves `watch_count`. Music is not
+  logged, and rows are kept until the account's history reset clears them. What
+  was watched is copied onto the row so it survives the item being deleted.
+  Existing finished titles were seeded with one row each, marked `estimated`,
+  and earlier rewatches were not invented. The profile links to a Watch history
+  page with CSV and Trakt-shaped downloads, which LANcast sends nowhere. The
+  question as it was first captured follows. It was a
   *question*, not a feature, because the interesting part is a cost decision
   nobody has made. Everything above reads `playback_state`, which is a **state**
   table: one row per item per user, overwritten on every play. It can answer

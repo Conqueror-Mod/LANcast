@@ -3302,6 +3302,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/viewings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your watch history: every finished viewing
+         * @description One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.
+         *
+         *     Only finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.
+         */
+        get: operations["listViewings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/viewings/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The whole watch history as a file
+         * @description Sent as an attachment with `Cache-Control: no-store`. CSV columns: `watched_at` (ISO 8601 UTC), `kind`, `title`, `year`, `series`, `season`, `episode`, `imdb_id`, `show_imdb_id`, `estimated`. The Trakt format is JSON shaped like the body of Trakt's history sync; an episode without season and episode numbers is left out of it and counted in `skipped`.
+         *
+         *     LANcast sends the file nowhere; importing it elsewhere is something a person does.
+         */
+        get: operations["exportViewings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/lyrics": {
         parameters: {
             query?: never;
@@ -6469,6 +6513,40 @@ export interface components {
         };
         ChannelList: {
             channels: components["schemas"]["Channel"][];
+        };
+        /** @description One finished viewing of a film or an episode (ADR 0074). What was watched is copied onto the row, so it still reads after the item is deleted. */
+        Viewing: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description When it was finished, Unix seconds.
+             */
+            finished_at: number;
+            /** @description Seeded when the log began (revision 53): dated from the last time the title's state was written, the best the old table could give. */
+            estimated: boolean;
+            /**
+             * Format: int64
+             * @description Null once the item has been deleted from the library.
+             */
+            item_id: number | null;
+            /** @description `movie` or `episode` today. An open set. */
+            kind: string;
+            title: string;
+            year: number | null;
+            series: string | null;
+            season: number | null;
+            episode: number | null;
+            imdb_id: string | null;
+            /** @description An episode's show's year, for identifying it elsewhere. */
+            show_year: number | null;
+            /** @description An episode's show's imdb id. */
+            show_imdb_id: string | null;
+        };
+        ViewingList: {
+            viewings: components["schemas"]["Viewing"][];
+            /** @description Rows in the whole history, for paging. */
+            total: number;
         };
     };
     responses: {
@@ -12048,6 +12126,59 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listViewings: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewingList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    exportViewings: {
+        parameters: {
+            query?: {
+                format?: "csv" | "trakt";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The history file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/json": {
+                        movies?: Record<string, never>[];
+                        shows?: Record<string, never>[];
+                        skipped?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     itemLyrics: {

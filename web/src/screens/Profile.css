@@ -335,3 +335,51 @@
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* Recently played's heading, with the way to the full log beside it. */
+.profile__labelrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.profile__loglink {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.profile__loglink:hover,
+.profile__loglink:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--gold);
+  text-underline-offset: 3px;
+}
+
+/* A log row has no artwork: it is a line in a diary, not a tile. */
+.profile__row--log {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.profile__exports {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 20px;
+}
+
+.profile__exportlinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+a.profile__page {
+  text-decoration: none;
+}

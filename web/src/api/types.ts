@@ -202,6 +202,10 @@ export type Rating = components["schemas"]["Rating"];
 
 export type RatedItem = components["schemas"]["RatedItem"];
 
+// GET /api/profile/viewings — one finished viewing (ADR 0074). What was
+// watched is copied onto it, so `item_id` can be null and the row still reads.
+export type Viewing = components["schemas"]["Viewing"];
+
 // GET /api/together — a watch-together room. The server owns position and
 // paused; clients converge on them rather than each broadcasting their own.
 export type TogetherMember = components["schemas"]["TogetherMember"];

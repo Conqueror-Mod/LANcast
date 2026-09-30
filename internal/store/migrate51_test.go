@@ -125,6 +125,9 @@ func rewindTo50(t *testing.T, st *Store) {
 	if _, err := st.db.Exec(`ALTER TABLE user DROP COLUMN avatar`); err != nil { // revision 52
 		t.Fatal(err)
 	}
+	if _, err := st.db.Exec(`DROP TABLE viewing`); err != nil { // revision 53
+		t.Fatal(err)
+	}
 	if _, err := st.db.Exec(`UPDATE meta SET value = '50' WHERE key = 'schema_version'`); err != nil {
 		t.Fatal(err)
 	}
