@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 50
+const CurrentSchemaVersion = 51
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -89,6 +89,7 @@ var migrations = []migration{
 	{version: 48, sql: schemaRevision48},
 	{version: 49, sql: schemaRevision49},
 	{version: 50, sql: schemaRevision50},
+	{version: 51, sql: schemaRevision51},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1735,4 +1736,46 @@ CREATE TABLE IF NOT EXISTS peer_progress (
     updated_at  INTEGER NOT NULL,
     PRIMARY KEY (fingerprint, item_id)
 );
+`
+
+/*
+ * Revision 51 -- films probed before the stretched-audio fix are probed again.
+ *
+ * resolveDuration (internal/probe) stopped believing a container that claims
+ * to be half again as long as its own picture: Public Enemies (2009).mp4, a
+ * 2h20 film with a 20,073s audio track, had shown as 5h35. But the rule runs
+ * when a file is probed, and nothing re-probes a file whose bytes have not
+ * changed. So every file that was probed before the fix kept the length it
+ * had been given, and the title went on reading 5h35 in a build that knew
+ * better. Reported as "we corrected this once".
+ *
+ * The files that need it can be found without ffprobe, from what the probe
+ * already stored. A file's average bitrate over its whole length can never be
+ * much below its own video stream's bitrate, because the video is inside it.
+ * Divide the size by a length three times too long and the average falls well
+ * under the picture's rate -- so the test is the same two-thirds ratio
+ * resolveDuration uses, stated in integers:
+ *
+ *     size * 8 bits / duration  <  video_bitrate * 2/3
+ *
+ * Only these are re-queued, not the library: re-probing everything is hours
+ * of ffprobe on a big one, and almost none of it would learn anything.
+ *
+ * Films and episodes only. A song has no video stream to compare against, and
+ * music is left alone. A file with no stated video bitrate is not touched --
+ * that is typically Matroska, which also carries no per-stream duration, so
+ * resolveDuration could not correct it anyway.
+ *
+ * A data fix like revision 46, not a change to the shape of anything.
+ */
+const schemaRevision51 = `
+UPDATE media_item SET probed_at = NULL
+WHERE kind IN ('movie', 'episode')
+  AND probed_at IS NOT NULL
+  AND missing = 0
+  AND path IS NOT NULL
+  AND duration_ms > 0
+  AND size_bytes > 0
+  AND video_bitrate > 0
+  AND size_bytes * 8000 * 3 < video_bitrate * duration_ms * 2;
 `
