@@ -3402,13 +3402,21 @@ and never catch up.
 ### `GET /api/channels`
 
 Live TV channels, in the order their source listed them. `?source_id=` filters
-to one source.
+to one source; a value that is not a non-negative integer answers
+`400 bad_request`, and `0` means every source.
 
 ```json
-{ "channels": [ { "id": 12, "source_id": 1, "name": "Channel One",
+{ "channels": [ { "id": 12, "source_id": 1, "source_name": "Provider",
+                  "name": "Channel One",
                   "logo_url": "https://logos.example/one.png",
-                  "group": "UK", "position": 0 } ] }
+                  "group": "UK", "position": 0, "tvg_id": "one.uk" } ] }
 ```
+
+**Each channel carries its source's name** ([ADR 0039](adr/0039-organising-a-large-channel-list.md),
+step 1). `GET /api/channel-sources` is administrator-only because it returns the
+provider URL, so a member choosing between two playlists would otherwise have
+ids and nothing to call them. The name is the only part of the source that
+travels.
 
 **A channel is not a `media_item`**, and that is a modelling decision rather
 than a convenience. Every column on that table describes a *work* — a title a

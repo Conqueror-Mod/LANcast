@@ -63,7 +63,6 @@ const specBase = "/api"
 var pendingSpec = []string{
 	"DELETE /api/channel-sources/{id}",
 	"GET /api/channel-sources",
-	"GET /api/channels",
 	"GET /api/channels/{id}/guide",
 	"GET /api/channels/{id}/hls/index.m3u8",
 	"GET /api/channels/{id}/hls/{session}/{name}",

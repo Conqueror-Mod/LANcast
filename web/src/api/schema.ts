@@ -3225,6 +3225,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live TV channels, in source order
+         * @description Channels in the order their source listed them, which is the order somebody curated. A channel is deliberately not an item: it has no duration, no file and no identity a provider could match.
+         *
+         *     **The upstream URL is never serialised.** Channel lists are routinely credentialed, so publishing the URL would publish the subscription.
+         *
+         *     **Each channel carries its source's name** (ADR 0039, step 1). `GET /channel-sources` is administrator-only because it returns the provider URL, so this is how a member tells two playlists apart.
+         */
+        get: operations["listChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/channels/{id}/stop": {
         parameters: {
             query?: never;
@@ -6422,6 +6446,29 @@ export interface components {
              * @example owl
              */
             avatar: string;
+        };
+        Channel: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description The channel list this channel was imported from.
+             */
+            source_id: number;
+            /** @description That list's name, as the administrator entered it. The only part of a source a member can see. */
+            source_name: string;
+            name: string;
+            /** @description On the provider's CDN. Fetch it with the referrer withheld, or the provider learns which server is watching. */
+            logo_url: string | null;
+            /** @description The playlist's `group-title`. Null when the list gave none. */
+            group: string | null;
+            /** @description Where the channel sits in its source's list. */
+            position: number;
+            /** @description The XMLTV id listings arrive under. Null means this channel can never have a guide. */
+            tvg_id: string | null;
+        };
+        ChannelList: {
+            channels: components["schemas"]["Channel"][];
         };
     };
     responses: {
@@ -11921,6 +11968,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listChannels: {
+        parameters: {
+            query?: {
+                /** @description Only this source's channels. `0` or absent means every source; anything that is not a non-negative integer answers `400`. */
+                source_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channels. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     stopChannel: {

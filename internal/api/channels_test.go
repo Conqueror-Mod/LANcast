@@ -222,3 +222,55 @@ func TestStreamUnknownChannel(t *testing.T) {
 	wantError(t, h.do(t, "GET", "/api/channels/9999/stream", nil),
 		http.StatusNotFound, "not_found")
 }
+
+/*
+ * Two playlists can be told apart, by a member as well as an administrator.
+ *
+ * The source listing is admin-only because it carries the provider URL, so the
+ * name a member chooses a playlist by travels on each channel instead. The
+ * filter returns one list and nothing from the other (ADR 0039, step 1).
+ */
+func TestChannelsCarryTheirPlaylistAndFilterByIt(t *testing.T) {
+	h := newHarness(t)
+	first := upstream(t, sampleList, "application/x-mpegurl")
+	second := upstream(t, "#EXTM3U\n#EXTINF:-1 group-title=\"News\",Channel Three\nhttps://other.example/three.m3u8\n", "application/x-mpegurl")
+
+	var a, b struct {
+		Source store.ChannelSource `json:"source"`
+	}
+	decode(t, h.do(t, "POST", "/api/channel-sources",
+		map[string]any{"name": "Provider", "url": first.URL}), &a)
+	decode(t, h.do(t, "POST", "/api/channel-sources",
+		map[string]any{"name": "Tuner", "url": second.URL}), &b)
+
+	var all struct {
+		Channels []store.Channel `json:"channels"`
+	}
+	decode(t, h.do(t, "GET", "/api/channels", nil), &all)
+	if len(all.Channels) != 3 {
+		t.Fatalf("listed %d channels, want 3", len(all.Channels))
+	}
+	for _, c := range all.Channels {
+		want := "Provider"
+		if c.SourceID == b.Source.ID {
+			want = "Tuner"
+		}
+		if c.SourceName != want {
+			t.Errorf("%s: source_name = %q, want %q", c.Name, c.SourceName, want)
+		}
+	}
+
+	var only struct {
+		Channels []store.Channel `json:"channels"`
+	}
+	decode(t, h.do(t, "GET", "/api/channels?source_id="+itoa(b.Source.ID), nil), &only)
+	if len(only.Channels) != 1 || only.Channels[0].Name != "Channel Three" {
+		t.Errorf("filtering to the tuner returned %+v, want only Channel Three", only.Channels)
+	}
+
+	resp := h.do(t, "GET", "/api/channels?source_id=nope", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a malformed source_id answered %d, want 400", resp.StatusCode)
+	}
+}
