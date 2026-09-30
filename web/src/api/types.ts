@@ -195,13 +195,6 @@ export type TranscodeList = components["schemas"]["TranscodeList"];
 export type YearInReview = components["schemas"]["YearInReview"];
 export type Lyrics = components["schemas"]["Lyrics"];
 
-// GET /api/libraries/{id}/trending. `viewers` counts *accounts*, not plays:
-// playback_state holds one row per item per user, so this is how many people
-// played something recently rather than how often it was played.
-export type TrendingItem = components["schemas"]["TrendingItem"];
-
-export type Trending = components["schemas"]["Trending"];
-
 // GET /api/items/{id}/rating — *your* rating. There is no route to anybody
 // else's: a rating is private to the account that wrote it, and the paths carry
 // no user id so a filter cannot be forgotten.

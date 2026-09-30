@@ -367,7 +367,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/media-tools", s.adminOnly(s.mediaToolsStatus))
 	mux.HandleFunc("POST /api/media-tools/install", s.adminOnly(s.installMediaTools))
 	mux.HandleFunc("POST /api/media-tools/install/cancel", s.adminOnly(s.cancelMediaToolsInstall))
-	mux.HandleFunc("GET /api/libraries/{id}/trending", s.libraryTrending)
 	mux.HandleFunc("GET /api/libraries/{id}/refresh", s.adminOnly(s.refreshPreview))
 	mux.HandleFunc("POST /api/libraries/{id}/refresh", s.adminOnly(s.refreshLibrary))
 	mux.HandleFunc("POST /api/libraries/{id}/reparse", s.adminOnly(s.reparseLibrary))

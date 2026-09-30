@@ -223,60 +223,6 @@ func TestACeilingThisServerCannotPlaceIsRefused(t *testing.T) {
  * is keeping from them.
  */
 
-func TestAShelfDoesNotNameWhatCannotBeOpened(t *testing.T) {
-	h := newHarness(t)
-	h.secure(t, "a good long password")
-	blocked := ratedFile(t, h, "grown-up.mkv", "R")
-	allowed := ratedFile(t, h, "cartoon.mkv", "G")
-	child := limitedMember(t, h, "kiddo", "PG")
-
-	// Trending is built from what has been played, so both need a viewing.
-	for _, id := range []int64{blocked, allowed} {
-		resp := h.authed(t, "PUT", fmtPath("/api/items/%d/progress", id),
-			map[string]any{"position_ms": 60000, "watched": true})
-		resp.Body.Close()
-	}
-
-	var got struct {
-		Items []struct {
-			Item struct {
-				Title string `json:"title"`
-			} `json:"item"`
-		} `json:"items"`
-	}
-	decode(t, h.doAs(t, child, "GET", "/api/libraries/1/trending", nil), &got)
-
-	for _, e := range got.Items {
-		if e.Item.Title == "grown-up.mkv" {
-			t.Error("the trending shelf offered an R film to a PG account")
-		}
-	}
-
-	/*
-	 * The positive control, without which this passes on an empty shelf.
-	 *
-	 * The same request as an administrator has to show both films — otherwise
-	 * the assertion above is satisfied by a shelf that was never populated,
-	 * and a regression in the filter would look exactly like a regression in
-	 * the fixture.
-	 */
-	var asAdmin struct {
-		Items []struct {
-			Item struct {
-				Title string `json:"title"`
-			} `json:"item"`
-		} `json:"items"`
-	}
-	decode(t, h.authed(t, "GET", "/api/libraries/1/trending", nil), &asAdmin)
-	titles := map[string]bool{}
-	for _, e := range asAdmin.Items {
-		titles[e.Item.Title] = true
-	}
-	if !titles["grown-up.mkv"] || !titles["cartoon.mkv"] {
-		t.Fatalf("the shelf itself is empty for an unlimited account (%v); this test proves nothing", titles)
-	}
-}
-
 func TestAContainersChildrenAreFilteredToo(t *testing.T) {
 	/*
 	 * A show under the ceiling can hold an episode above it — a late season

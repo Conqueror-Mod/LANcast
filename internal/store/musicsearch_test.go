@@ -153,3 +153,47 @@ func TestRandomSortIsStableForOneSeed(t *testing.T) {
 		t.Error("the shuffle came back in title order")
 	}
 }
+
+/*
+ * An episode is found by its own title, and a show's name finds the show
+ * alone. An episode carries its show's name as its series, so matching series
+ * for children too would answer "Futurama" with the show and every episode.
+ */
+func TestSearchFindsAnEpisodeByTitleButNotEveryEpisodeByShow(t *testing.T) {
+	ctx := context.Background()
+	st := queueStore(t)
+	lib, err := st.CreateLibrary(ctx, "TV", "show", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	show, _, err := st.EnsureShow(ctx, lib.ID, filepath.Join(lib.Path, "Futurama"), "Futurama", "futurama")
+	if err != nil {
+		t.Fatal(err)
+	}
+	series := "Futurama"
+	var eps []int64
+	for i, title := range []string{"Space Pilot 3000", "The Series Has Landed"} {
+		s, e := 1, i+1
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: filepath.Join(lib.Path, "Futurama", title+".mkv"), Kind: "episode",
+			Title: title, SortTitle: "futurama", Series: &series, Season: &s, Episode: &e,
+			Container: "mkv", SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetParent(ctx, id, &show); err != nil {
+			t.Fatal(err)
+		}
+		eps = append(eps, id)
+	}
+
+	got := searchIDs(t, st, ItemFilter{TopLevel: true, Query: "space pilot"})
+	if len(got) != 1 || got[0] != eps[0] {
+		t.Errorf("searching an episode's title returned %v, want just that episode %d", got, eps[0])
+	}
+	got = searchIDs(t, st, ItemFilter{TopLevel: true, Query: "futurama"})
+	if len(got) != 1 || got[0] != show {
+		t.Errorf("searching the show's name returned %v, want the show alone", got)
+	}
+}

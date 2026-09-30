@@ -931,26 +931,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/libraries/{id}/trending": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The library's id. */
-                id: components["parameters"]["LibraryId"];
-            };
-            cookie?: never;
-        };
-        /** What this library's people have been playing lately */
-        get: operations["getLibraryTrending"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/libraries/{id}/timeline": {
         parameters: {
             query?: never;
@@ -5187,28 +5167,6 @@ export interface components {
         CastList: {
             people: components["schemas"]["CastMember"][];
         };
-        TrendingItem: {
-            item: components["schemas"]["Item"];
-            /** @description **Accounts, not plays.** Playback state holds one row per item per user, so this is how many people have played something recently rather than how many times it has been played. */
-            viewers: number;
-            /** @description Reported beside `viewers` because a title many people start and nobody finishes is a different fact from one everybody finished, and a single popularity number destroys the difference. */
-            finishers: number;
-            /** Format: int64 */
-            last_at: number;
-        };
-        /**
-         * @description What this library's people have been playing recently. Ranked by `viewers` descending, then by most recent activity — **the tie-break is not decoration**: without it a page of items that all have one viewer returns in whatever order SQLite chooses, and the shelf reshuffles itself on every refresh.
-         *
-         *     Containers — shows, seasons, artists, albums, galleries, playlists — are excluded. A season is not a thing anybody played; it is where the episodes live.
-         *
-         *     **Not admin-gated, and it names no accounts.** Which titles are popular is a fact about a shared library; who watched them is a fact about a person, and this endpoint deliberately cannot answer the second.
-         */
-        Trending: {
-            items: components["schemas"]["TrendingItem"][];
-            /** @description How many accounts contributed. **This is why exposing the counts is safe**: with one account every count is 1 and the list is honestly "recently played", not a trend — so the client is given what it needs to say the true thing instead of being handed a list that calls itself trending regardless. A number meaning different things at different scales carries its scale with it. */
-            contributors: number;
-            window_days: number;
-        };
         TimelineBucket: {
             year?: number;
             month?: number;
@@ -7052,7 +7010,7 @@ export interface operations {
             query?: {
                 /** @description Restrict to one library. */
                 library_id?: number;
-                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. Without `parent_id` or `kind`, a search also reaches **albums and tracks** (a music library's top level is its artists), ranked after the top-level answers, then albums, then tracks. */
+                /** @description Free text over title and series, case-insensitive substring. **`library_id` is optional alongside this** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. Without `parent_id` or `kind`, a search also reaches **albums, tracks and episodes** (a music library's top level is its artists, a show library's its shows), matched on their own title only — an episode's `series` is its show's name — and ranked after the top-level answers, then albums, episodes, tracks. */
                 q?: string;
                 /**
                  * @description The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on the item's sort title, case-insensitively.
@@ -7108,7 +7066,7 @@ export interface operations {
                 face_cluster?: number[];
                 /** @description Restrict to members of a collection. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it (ADR 0017). **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 collection?: number[];
-                /** @description `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined. */
+                /** @description `in_progress` (started, not finished), `unstarted` (nothing begun: no play on the item or on anything it holds, so a show qualifies only when none of its episodes has been started — `watched=false` cannot say that, because a show has no play state of its own), or `unmatched` (no provider claimed it). **Single-valued**, because they cannot usefully be combined. */
                 status?: string;
                 /**
                  * @description Rated at least this highly, out of ten.
@@ -8467,34 +8425,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CastList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    getLibraryTrending: {
-        parameters: {
-            query?: {
-                /** @description Defaults to 12, maximum 50. */
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                /** @description The library's id. */
-                id: components["parameters"]["LibraryId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Ranked titles, with the scale to read them at. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Trending"];
                 };
             };
             401: components["responses"]["Unauthorized"];

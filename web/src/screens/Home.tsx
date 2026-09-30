@@ -22,7 +22,7 @@ import { useHeroSpotlight } from "@/lib/useHero";
 import "./Home.css";
 
 /*
- * Films you have not started, shuffled.
+ * Films you have not started, shuffled — and shows you have not started.
  *
  * This replaced two kinds of shelf that only repeated what was already on the
  * page: each library's first twenty titles in alphabetical order, which the
@@ -30,15 +30,15 @@ import "./Home.css";
  * "Recently Played in …", which on a one-person server was Continue Watching
  * again with the finished things left in. Reported as redundancies.
  *
- * What neither could do is suggest something. So: unwatched films, a different
- * handful each time the page is opened. The shuffle is seeded once per visit
- * (`sort=random&seed=`), so marking one watched refetches the row without
- * reshuffling it under the pointer.
+ * What neither could do is suggest something. So: a different handful of
+ * things you have not begun, each time the page is opened. The shuffle is
+ * seeded once per visit (`sort=random&seed=`), so marking one watched
+ * refetches the row without reshuffling it under the pointer.
  *
- * Started films are left out as well as finished ones — they are on Continue
- * Watching, and the server's `watched=false` counts a half-watched film as
- * unwatched. The server is asked for a few more than the row shows so that
- * dropping them does not leave it short.
+ * `status=unstarted` rather than `watched=false`, because a show has no play
+ * state of its own — every show passes watched=false — and "unstarted" asks
+ * about its episodes. It also leaves out a half-watched film, which is on
+ * Continue Watching already.
  */
 function UnwatchedShelf({
   library,
@@ -50,27 +50,30 @@ function UnwatchedShelf({
   seed: number;
   /** Say which library, when there is more than one to tell apart. */
   named: boolean;
-  /** The film the hero is already showing. */
+  /** The item the hero is already showing. */
   hide?: number;
 }) {
   const { data } = useItems({
     libraryID: library.id,
     sort: "random",
     seed,
-    unwatched: true,
+    status: "unstarted",
     excludeKind: "collection,playlist",
-    limit: 30,
+    limit: 21,
   });
-  const items = (data?.items ?? [])
-    .filter((i) => !(i.progress && i.progress.position_ms > 0))
-    .filter((i) => i.id !== hide)
-    .slice(0, 20);
+  const items = (data?.items ?? []).filter((i) => i.id !== hide).slice(0, 20);
   return (
     <Shelf
       title={named ? `Unwatched in ${library.name}` : "Unwatched"}
       items={items}
-      // The library grid, with its own Unwatched filter already on.
-      seeAllTo={`/library/${library.id}?watched=false`}
+      // A film library's grid, with its own Unwatched filter already on. A
+      // show library's grid has no filter that means "not begun", so it opens
+      // as it is.
+      seeAllTo={
+        library.kind === "movie"
+          ? `/library/${library.id}?watched=false`
+          : `/library/${library.id}`
+      }
     />
   );
 }
@@ -103,7 +106,10 @@ export function Home() {
 
   // One shuffle per visit to the page; see UnwatchedShelf.
   const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
-  const filmLibraries = (libraries ?? []).filter((l) => l.kind === "movie");
+  // Film and show libraries: music and pictures have nothing to leave unwatched.
+  const unwatchedLibraries = (libraries ?? []).filter(
+    (l) => l.kind === "movie" || l.kind === "show",
+  );
 
   const setWatched = useSetWatchedByID();
   const navigate = useNavigate();
@@ -302,12 +308,12 @@ export function Home() {
             question somebody opened the page with, and "what happened on this
             date years ago" is the one worth finding once they are here. */}
         <Shelf title="On this day" items={onThisDay} />
-        {filmLibraries.map((lib) => (
+        {unwatchedLibraries.map((lib) => (
           <UnwatchedShelf
             key={lib.id}
             library={lib}
             seed={seed}
-            named={filmLibraries.length > 1}
+            named={unwatchedLibraries.length > 1}
             hide={hero?.item.id}
           />
         ))}
