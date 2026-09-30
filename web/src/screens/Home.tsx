@@ -143,7 +143,9 @@ export function Home() {
       {
         label: audio
           ? "Remove from Continue Listening"
-          : "Remove from Continue Watching",
+          : item.kind === "show"
+            ? "Remove from Next up"
+            : "Remove from Continue Watching",
         onSelect: () => setWatched.mutate({ itemID: item.id, watched: false }),
       },
       {
@@ -189,7 +191,24 @@ export function Home() {
   // tiles stop sharing a baseline and the shelf reads as broken alignment
   // rather than as two kinds of thing.
   const resumable = withoutHero(continueWatching);
-  const continueVideo = resumable.filter((i) => !isMusic(i));
+  /*
+   * Films on one shelf, television on another.
+   *
+   * The server's Continue Watching answers with a show, not an episode, for
+   * a series in progress — the tile carries `next_episode` and pressing it
+   * continues the show. Mixed in with half-watched films that was a row of
+   * posters in which a show you finished an episode of looked exactly like a
+   * film you abandoned. Next up takes the shows and draws the episode itself:
+   * its still, its title, which show and which episode.
+   *
+   * A show with no next episode is not offered — there is nothing to play —
+   * and it is not dropped back into Continue Watching either, where it would
+   * be the same tile the split exists to remove.
+   */
+  const continueVideo = resumable.filter(
+    (i) => !isMusic(i) && i.kind !== "show",
+  );
+  const nextUp = resumable.filter((i) => i.kind === "show" && i.next_episode);
   const continueAudio = resumable.filter(isMusic);
 
   // Already the right kinds, so only the hero has to be taken out of the video
@@ -263,6 +282,13 @@ export function Home() {
           items={continueVideo}
           itemActions={continueActions}
           itemOpen={continueOpen}
+        />
+        <Shelf
+          title="Next up"
+          items={nextUp}
+          itemActions={continueActions}
+          itemOpen={continueOpen}
+          wide
         />
         <Shelf
           title="Continue Listening"

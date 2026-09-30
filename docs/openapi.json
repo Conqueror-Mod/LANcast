@@ -10314,7 +10314,7 @@
           },
           "next_episode": {
             "$ref": "#/components/schemas/Item",
-            "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
+            "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did. Its `artwork` is the episode's as well (a `thumb` still, where there is one), so a client can draw the episode rather than the show's poster.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
           },
           "markers": {
             "type": "array",

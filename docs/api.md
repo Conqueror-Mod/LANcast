@@ -1245,7 +1245,11 @@ rather than "what am I watching". A show with every episode watched has nothing
 to continue and is absent.
 
 `next_episode` carries its own `progress` and `duration_ms`, which is what a
-resume bar is drawn from: a show has no position of its own.
+resume bar is drawn from: a show has no position of its own. It carries its own
+`artwork` too — the episode's `thumb` still in particular — so a client can draw
+the episode rather than the show's poster. It had none until the client's Next
+up shelf needed it: artwork was attached to the rows, and `next_episode` is not
+a row.
 
 For everything else — films, tracks — "in progress" is unchanged: a saved
 position past zero with `watched` unset, so an item played to the end drops off

@@ -43,6 +43,9 @@ const film = (id: number, title: string, progress?: number) => ({
   ...(progress ? { progress: { position_ms: progress, watched: false } } : {}),
 });
 
+/** What /api/continue answers with; empty unless a test says otherwise. */
+let continuing: unknown[] = [];
+
 let host: HTMLDivElement;
 let root: Root;
 let gets: string[];
@@ -67,7 +70,7 @@ function mount(libs: unknown[]) {
         });
       }
       if (url.includes("/api/libraries") && !url.includes("/trending")) return json(libs);
-      if (url.includes("/api/continue")) return json({ items: [] });
+      if (url.includes("/api/continue")) return json({ items: continuing });
       if (url.includes("/api/items") && url.includes("sort=random")) {
         return json({
           items: [film(1, "Never Seen"), film(2, "Half Watched", 600_000)],
@@ -80,6 +83,7 @@ function mount(libs: unknown[]) {
 }
 
 beforeEach(() => {
+  continuing = [];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -157,5 +161,66 @@ describe("home shelves", () => {
     mount([library(2, "Music", "music")]);
     await render();
     expect(gets.some((u) => u.includes("sort=random"))).toBe(false);
+  });
+});
+
+/*
+ * Next up: the shows move off Continue Watching and are drawn as the episode.
+ *
+ * The server answers Continue Watching with a show for a series in progress,
+ * carrying `next_episode`. Mixed with half-watched films that was a poster
+ * indistinguishable from a film you abandoned.
+ */
+describe("Next up", () => {
+  const show = {
+    id: 50,
+    title: "A Show",
+    kind: "show",
+    library_id: 3,
+    artwork: { poster: "show-poster" },
+    next_episode: {
+      id: 51,
+      title: "The Second One",
+      kind: "episode",
+      library_id: 3,
+      series: "A Show",
+      season: 1,
+      episode: 2,
+      artwork: { thumb: "episode-still" },
+    },
+  };
+
+  const shelf = (label: string) =>
+    [...host.querySelectorAll(".shelf")].find(
+      (s) => s.querySelector(".section-label")?.textContent?.trim() === label,
+    );
+
+  it("takes shows off Continue Watching and draws their next episode", async () => {
+    continuing = [film(9, "Abandoned Film", 60_000), show];
+    mount([]);
+    await render();
+
+    const cw = shelf("Continue Watching");
+    expect(cw?.textContent).toContain("Abandoned Film");
+    expect(cw?.textContent).not.toContain("A Show");
+
+    const next = shelf("Next up");
+    expect(next, "no Next up shelf").toBeTruthy();
+    expect(next?.textContent).toContain("The Second One");
+    expect(next?.textContent).toContain("A Show · S01E02");
+    // The episode's still, not the show's poster.
+    const img = next?.querySelector("img");
+    expect(img?.getAttribute("src")).toContain("episode-still");
+    expect(next?.querySelector(".poster-tile__art--wide")).toBeTruthy();
+  });
+
+  // Nothing to play means nothing to offer, and it does not fall back into
+  // Continue Watching as the poster the split removed.
+  it("offers no show that has no next episode", async () => {
+    continuing = [{ ...show, next_episode: undefined }];
+    mount([]);
+    await render();
+    expect(shelf("Next up")).toBeUndefined();
+    expect(shelf("Continue Watching")).toBeUndefined();
   });
 });

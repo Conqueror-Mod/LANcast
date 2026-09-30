@@ -141,3 +141,10 @@
   width: var(--tile-shelf);
   flex: none;
 }
+
+/* A row of 16:9 stills. Derived from the poster width so it scales with it;
+   1.8 makes a still a little shorter than a poster, so the row sits lower
+   than its neighbours rather than taller. */
+.shelf__item--wide {
+  width: calc(var(--tile-shelf) * 1.8);
+}

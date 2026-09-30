@@ -753,6 +753,34 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "attach artwork")
 		return
 	}
+	/*
+	 * And the episode a show would play next.
+	 *
+	 * The client's Next up shelf draws that episode -- its still, not the
+	 * show's poster -- and without this the still was never in the response:
+	 * artwork was attached to the rows and next_episode is not a row. Copied
+	 * into a slice and back because AttachArtwork works on a slice of values.
+	 */
+	var next []store.Item
+	for i := range items {
+		if items[i].NextEpisode != nil {
+			next = append(next, *items[i].NextEpisode)
+		}
+	}
+	if len(next) > 0 {
+		if err := s.st.AttachArtwork(r.Context(), next); err != nil {
+			s.writeInternal(w, err, "attach artwork")
+			return
+		}
+		j := 0
+		for i := range items {
+			if items[i].NextEpisode != nil {
+				ep := next[j]
+				items[i].NextEpisode = &ep
+				j++
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
