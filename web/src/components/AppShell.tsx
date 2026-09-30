@@ -223,9 +223,62 @@ export function AppShell({ children }: { children: ReactNode }) {
               exactly the moment it matters.
             */}
             <PeerLibraryLinks onNavigate={releaseRail} />
+          </nav>
 
-            {/* Add-ons sits at the foot of the library list rather than buried
-                three levels into Settings, because it is a *place* — a thing
+          {/*
+            Places that are not libraries, in two groups with a break above
+            each, rather than trailing the last library in the list.
+
+            They used to follow straight on from whatever came last -- which,
+            with a paired server, was that server's films -- so Add-ons, Live
+            TV, Downloads and Games read as four more things on Utopia.
+            Reported as exactly that. The first group is what you watch or
+            play; the second is what you manage, and who is here.
+          */}
+          <div className="app-shell__group">
+            {/* Live TV is a place with contents, like a library — and unlike a
+                library it is the same list for everybody, so it sits below them
+                rather than among them. Shown to everyone: adding a channel
+                source is an admin act, watching is not. */}
+            <NavLink
+              to="/live"
+              title="Live TV"
+              onClick={releaseRail}
+              className={({ isActive }) =>
+                "app-shell__lib" + (isActive ? " is-active" : "")
+              }
+            >
+              <LiveIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                Live TV
+              </span>
+            </NavLink>
+
+            {/* Games is the only entry in this rail that is not about the
+                server. It appears in the desktop window, when the person using
+                it has asked for it, and nowhere else: the games are installed
+                on this machine, and a rail entry on a phone would lead to a
+                grid of things that phone can never start (ADR 0066). */}
+            {gamesTab && (
+              <NavLink
+                to="/games"
+                title="Games"
+                onClick={releaseRail}
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
+                }
+              >
+                <GamesIcon />
+                <span className="app-shell__lib-name app-shell__label">
+                  Games
+                </span>
+              </NavLink>
+            )}
+          </div>
+
+          <div className="app-shell__group">
+            {/* Add-ons is in the rail rather than buried three levels into
+                Settings, because it is a *place* — a thing
                 with contents you go and look at — and the rail is where places
                 live. It is here whether or not there are libraries: on a fresh
                 install the rail is otherwise empty, which is exactly when
@@ -254,24 +307,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </span>
               </NavLink>
             )}
-            {/* Live TV is a place with contents, like a library — and unlike a
-                library it is the same list for everybody, so it sits below them
-                rather than among them. Shown to everyone: adding a channel
-                source is an admin act, watching is not. */}
-            <NavLink
-              to="/live"
-              title="Live TV"
-              onClick={releaseRail}
-              className={({ isActive }) =>
-                "app-shell__lib" + (isActive ? " is-active" : "")
-              }
-            >
-              <LiveIcon />
-              <span className="app-shell__lib-name app-shell__label">
-                Live TV
-              </span>
-            </NavLink>
-
             {/* Downloads is a place too, and unlike Add-ons it is one every
                 account has: the receipts are per device, so there is nothing
                 here to gate on a role. It sits after the libraries because it
@@ -290,31 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </NavLink>
 
-            {/* Games is the only entry in this rail that is not about the
-                server. It appears in the desktop window, when the person using
-                it has asked for it, and nowhere else: the games are installed
-                on this machine, and a rail entry on a phone would lead to a
-                grid of things that phone can never start (ADR 0066). */}
-            {gamesTab && (
-              <NavLink
-                to="/games"
-                title="Games"
-                onClick={releaseRail}
-                className={({ isActive }) =>
-                  "app-shell__lib" + (isActive ? " is-active" : "")
-                }
-              >
-                <GamesIcon />
-                <span className="app-shell__lib-name app-shell__label">
-                  Games
-                </span>
-              </NavLink>
-            )}
-          </nav>
-
-          {/* People sits at the foot rather than among the libraries: it is
-              about who is here, not about what there is to watch. */}
-          <div className="app-shell__foot">
+            {/* People: about who is here, not about what there is to watch. */}
             <NavLink
               to="/people"
               title="People"

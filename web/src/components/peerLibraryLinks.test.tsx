@@ -42,6 +42,7 @@ beforeEach(() => {
     { id: 9, name: "Their Music", kind: "music" },
   ];
   peerStatus = 200;
+  localStorage.clear();
 
   vi.stubGlobal(
     "fetch",
@@ -72,14 +73,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+async function render(path = "/") {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
           <PeerLibraryLinks onNavigate={() => {}} />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -101,9 +102,52 @@ function links() {
   return [...host.querySelectorAll("a")];
 }
 
+/** Press the server's heading, which folds and unfolds its list. */
+async function toggle() {
+  const heading = host.querySelector<HTMLButtonElement>(".app-shell__server");
+  if (!heading) throw new Error("no server heading");
+  await act(async () => heading.click());
+}
+
 describe("other servers in the rail", () => {
+  /*
+   * A server folds. Every paired server used to spell out its whole library
+   * list in the rail, which with a few friends is the rail. A new one starts
+   * folded, the heading unfolds it, and the choice is remembered here.
+   */
+  it("starts folded, and its heading unfolds and folds it", async () => {
+    await render();
+    expect(text()).toContain("Utopia");
+    expect(links().length).toBe(0);
+    const heading = host.querySelector(".app-shell__server")!;
+    expect(heading.getAttribute("aria-expanded")).toBe("false");
+
+    await toggle();
+    expect(links().length).toBe(2);
+    expect(heading.getAttribute("aria-expanded")).toBe("true");
+
+    await toggle();
+    expect(links().length).toBe(0);
+  });
+
+  it("remembers an unfolded server on this device", async () => {
+    await render();
+    await toggle();
+    act(() => root.unmount());
+    root = createRoot(host);
+    await render();
+    expect(links().length).toBe(2);
+  });
+
+  // Where you are is never folded away: the gold edge needs a row to sit on.
+  it("stays open while you are in one of its libraries", async () => {
+    await render(`/peers/${FP}/library/4`);
+    expect(links().length).toBe(2);
+  });
+
   it("lists their libraries under their server's name", async () => {
     await render();
+    await toggle();
 
     expect(text()).toContain("Utopia");
     expect(text()).toContain("Their Films");
@@ -118,6 +162,7 @@ describe("other servers in the rail", () => {
    */
   it("links to a path that names the peer, never to a local library", async () => {
     await render();
+    await toggle();
 
     const hrefs = links().map((a) => a.getAttribute("href") ?? "");
     expect(hrefs.length).toBe(2);

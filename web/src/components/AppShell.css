@@ -148,6 +148,46 @@
   transition: opacity var(--dur-fast) ease;
 }
 
+/* A paired server's heading is a button that folds its list. It keeps the
+   label's look and gains a chevron; no gold, because opening a list is not
+   where you are. */
+.app-shell__server {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.app-shell__server:hover,
+.app-shell__server:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.app-shell__server-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-shell__chevron {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) ease;
+}
+
+.app-shell__chevron.is-open {
+  transform: none;
+}
+
 .app-shell__rail-inner:hover .app-shell__rail-label,
 .app-shell__rail-inner:focus-within .app-shell__rail-label {
   opacity: 1;
@@ -258,6 +298,20 @@
 .app-shell__main {
   flex: 1;
   padding: 8px 28px 48px;
+}
+
+/*
+ * A group of places that are not libraries, with the same hairline break the
+ * foot uses. Unlike the foot it stays where it is in the list rather than
+ * dropping to the bottom: it follows the libraries, so the break sits just
+ * under the last of them instead of halfway down an empty rail.
+ */
+.app-shell__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(242, 245, 251, 0.06);
 }
 
 /*
