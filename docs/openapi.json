@@ -7708,6 +7708,16 @@
             "description": "title | year | added | rating | track"
           },
           {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404."
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -7824,6 +7834,16 @@
               "type": "string"
             },
             "description": "title | year | added | rating | track"
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404."
           },
           {
             "name": "limit",
@@ -8418,6 +8438,16 @@
               "type": "string"
             },
             "description": "title | year | added | rating | track"
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Lists what is inside one container — a show's seasons, a season's episodes, an artist's albums, an album's tracks. The container must be one this peer may see (in a shared library, within the share's ceiling), or the answer is 404."
           },
           {
             "name": "limit",

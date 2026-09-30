@@ -154,6 +154,46 @@ func (s *Server) writeSharedItems(w http.ResponseWriter, r *http.Request, peerFP
 		Offset:           offset,
 	}
 
+	/*
+	 * Inside a container: a show's seasons, a season's episodes, an artist's
+	 * albums, an album's tracks.
+	 *
+	 * Without this a friend's TV or music library was a wall of shows and
+	 * artists that could not be opened -- the only thing a tile could do was
+	 * play, and a show has nothing to play. Scope and the ceiling above still
+	 * narrow the listing, and the parent itself is checked first with the
+	 * same MayPlay the stream routes use: a container in a library not shared
+	 * with this peer, or above its ceiling, is a 404 like anything else it may
+	 * not see, so not even the names of its seasons leave the house.
+	 */
+	if v := r.URL.Query().Get("parent"); v != "" {
+		parentID, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || parentID <= 0 {
+			writeError(w, http.StatusBadRequest, "bad_request", "which parent")
+			return
+		}
+		allowed, err := s.st.MayPlay(r.Context(), store.Friend(peerFP), parentID)
+		if err != nil {
+			s.writeInternal(w, err, "may see parent")
+			return
+		}
+		if !allowed {
+			writeError(w, http.StatusNotFound, "not_found", "no such item")
+			return
+		}
+		f.ParentID = &parentID
+		f.TopLevel = false
+	} else if f.TopLevel {
+		/*
+		 * No collections or playlists among a friend's top level. Both group
+		 * through tables of their own rather than parent_id, so there is
+		 * nothing `parent` could open inside one, and the tile would be a dead
+		 * end; their members are all listed on their own anyway. The browse
+		 * grid here leaves them out for the same reason.
+		 */
+		f.ExcludeKinds = []string{"collection", "playlist"}
+	}
+
 	items, total, err := s.st.ListItems(r.Context(), f)
 	if err != nil {
 		s.writeInternal(w, err, "guest items")

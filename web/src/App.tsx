@@ -82,6 +82,12 @@ export function App() {
               line above: the household's player carries a queue, a resume
               position and progress writes, none of which a peer item may
               touch (ADR 0071 §5). */}
+          {/* Inside one of their shows, seasons, artists or albums. The same
+              screen, listing one container's contents rather than the top. */}
+          <Route
+            path="/peers/:fingerprint/library/:library/in/:parent"
+            element={<PeerLibrary />}
+          />
           <Route
             path="/peers/:fingerprint/item/:item"
             element={<PeerPlayer />}
