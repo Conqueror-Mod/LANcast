@@ -63,9 +63,21 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The win32 variant alone, not the gcc-mingw-w64-x86-64 metapackage. The
+      # metapackage pulls in the posix variant too — 115 MB instead of 65 —
+      # and then update-alternatives points x86_64-w64-mingw32-gcc at win32
+      # anyway, so every artefact ever shipped was built by this compiler and
+      # the other 50 MB was downloaded to sit unused.
+      #
+      # Kept on every pull request rather than moved to the release, where it
+      # is also required: finding a broken cross-compile at PR time instead of
+      # mid-release is this job's reason to exist. The .debs come from the
+      # Actions cache, so this is seconds, not a fetch.
       - name: install the mingw cross-compiler
-        timeout-minutes: 20
-        run: .github/scripts/apt-install.sh gcc-mingw-w64-x86-64
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-mingw-w64-x86-64-win32
 
       # Native, and it must say so. A build that silently lost its cgo would
       # still compile and still run — it would just never detect a face — so
@@ -163,7 +175,9 @@ jobs:
 
       - name: install nsis
         timeout-minutes: 20
-        run: .github/scripts/apt-install.sh nsis
+        uses: ./.github/actions/apt-install
+        with:
+          packages: nsis
 
       # makensis needs the two executables and the WebView2 loader to exist; the
       # real ones come from goreleaser at release time, so stand in placeholders.
