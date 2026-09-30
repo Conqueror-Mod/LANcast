@@ -15,6 +15,8 @@ import {
 } from "@/lib/liveTransport";
 import { attachLiveHls, OLD_SERVER } from "@/playback/attachLiveHls";
 import { conversionHelp } from "@/playback/conversionAvailable";
+import { useDevice } from "@/lib/device";
+import { PointMenu, type MenuPoint } from "@/components/Menu";
 import type { Channel, Program } from "@/api/types";
 import "./LiveTV.css";
 
@@ -48,6 +50,34 @@ function episodeLabel(p: Program): string | null {
   }
   return p.episode ? `Episode ${p.episode}` : `Series ${p.season}`;
 }
+
+/*
+ * Hidden and favourite channels, kept on this device (ADR 0039, step 3).
+ *
+ * Per device because which channels matter is a fact about the room the screen
+ * is in: the television in the lounge and the phone in a pocket do not want the
+ * same twenty, and syncing them would make one wrong to fix the other.
+ *
+ * Keyed on playlist and name, never on the channel id. Refreshing a playlist
+ * replaces its channels rather than merging them — a list carries no id worth
+ * trusting across versions — so every id changes on refresh, and a choice keyed
+ * on one would silently undo itself the next time the list was updated. The
+ * cost is that two channels with the same name in one playlist are chosen
+ * together, which is almost always the same channel listed twice.
+ */
+export const HIDDEN_CHANNELS_KEY = "lancast:livetv-hidden";
+export const FAVOURITE_CHANNELS_KEY = "lancast:livetv-favourites";
+const NO_CHANNELS: string[] = [];
+
+export function channelKey(c: Channel): string {
+  return `${c.source_id}:${c.name}`;
+}
+
+function toggled(list: string[], key: string): string[] {
+  return list.includes(key) ? list.filter((k) => k !== key) : [...list, key];
+}
+
+const FAVOURITES = "favourites";
 
 /** One group of one playlist, as a section of the page. */
 interface Section {
@@ -189,6 +219,19 @@ export function LiveTV() {
   // channels arrive, so the first section can open by default.
   const [openSections, setOpenSections] = useState<Set<string> | null>(null);
   const [query, setQuery] = useState("");
+  const [hiddenKeys, setHiddenKeys] = useDevice(HIDDEN_CHANNELS_KEY, NO_CHANNELS);
+  const [favouriteKeys, setFavouriteKeys] = useDevice(FAVOURITE_CHANNELS_KEY, NO_CHANNELS);
+  // Whether this device's hidden channels are listed, so they can be brought
+  // back. A filter that cannot be seen or undone is indistinguishable from a
+  // bug (ADR 0039).
+  const [showHidden, setShowHidden] = useState(false);
+  const [favouritesClosed, setFavouritesClosed] = useState(false);
+  const [menu, setMenu] = useState<{
+    at: MenuPoint;
+    channel: Channel;
+    byKey: boolean;
+    from: HTMLElement | null;
+  } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [transport] = useLiveTransport();
   /*
@@ -620,9 +663,36 @@ export function LiveTV() {
    * different lists of channels, and merging them would put a channel under a
    * heading its own playlist never gave it.
    */
+  const hidden = useMemo(() => new Set(hiddenKeys), [hiddenKeys]);
+  const favourite = useMemo(() => new Set(favouriteKeys), [favouriteKeys]);
+  const visible = useMemo(
+    () => inSource.filter((c) => !hidden.has(channelKey(c))),
+    [inSource, hidden],
+  );
+  const hiddenHere = useMemo(
+    () => inSource.filter((c) => hidden.has(channelKey(c))),
+    [inSource, hidden],
+  );
+
   const sections = useMemo(() => {
     const byKey = new Map<string, Section>();
-    for (const c of inSource) {
+    /*
+     * Favourites first, as a section of their own.
+     *
+     * Pinned to the top rather than moved there: a favourite still appears in
+     * its own group too, so a group's count stays the number of channels in
+     * it rather than the number nobody has starred.
+     */
+    const favs = visible.filter((c) => favourite.has(channelKey(c)));
+    if (favs.length > 0) {
+      byKey.set(FAVOURITES, {
+        key: FAVOURITES,
+        group: "Favourites",
+        sourceName: "",
+        channels: favs,
+      });
+    }
+    for (const c of visible) {
       const key = sectionKey(c);
       let sec = byKey.get(key);
       if (!sec) {
@@ -632,13 +702,28 @@ export function LiveTV() {
       sec.channels.push(c);
     }
     return [...byKey.values()];
-  }, [inSource]);
+  }, [visible, favourite]);
 
   // The first section opens by default, so the page is never a wall of closed
   // headings with no channel in sight.
-  const open = openSections ?? new Set(sections[0] ? [sections[0].key] : []);
+  const firstGroup = sections.find((sec) => sec.key !== FAVOURITES);
+  const hasFavourites = sections[0]?.key === FAVOURITES;
+  const groupsOpen =
+    openSections ?? new Set(!hasFavourites && firstGroup ? [firstGroup.key] : []);
+  /*
+   * Favourites are open unless somebody closed them. Tracked apart from the
+   * groups because the section can appear after a group was opened by hand —
+   * starring the first channel — and a favourite that lands in a closed section
+   * looks like the star did nothing.
+   */
+  const open = new Set(groupsOpen);
+  if (hasFavourites && !favouritesClosed) open.add(FAVOURITES);
   const toggleSection = (key: string) => {
-    const next = new Set(open);
+    if (key === FAVOURITES) {
+      setFavouritesClosed(!favouritesClosed);
+      return;
+    }
+    const next = new Set(groupsOpen);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     setOpenSections(next);
@@ -659,7 +744,7 @@ export function LiveTV() {
   const q = query.trim().toLowerCase();
   const found = useMemo(() => {
     if (!q) return [];
-    return inSource.filter((c) => {
+    return (showHidden ? inSource : visible).filter((c) => {
       if (c.name.toLowerCase().includes(q)) return true;
       const entry = nowNext[String(c.id)];
       return (
@@ -668,14 +753,41 @@ export function LiveTV() {
           !!entry.next?.title.toLowerCase().includes(q))
       );
     });
-  }, [inSource, q, nowNext]);
+  }, [inSource, visible, showHidden, q, nowNext]);
+
+  /*
+   * A channel's menu: right-click, or the context-menu key / Shift+F10 on a
+   * focused tile, anchored under it. The same two items are on the player bar
+   * for the channel being watched, which is the route that needs no pointer
+   * and no knowledge of either key.
+   */
+  const openMenu = (c: Channel, at: MenuPoint, byKey: boolean, from: HTMLElement | null) =>
+    setMenu({ at, channel: c, byKey, from });
+
+  const toggleFavourite = (c: Channel) =>
+    setFavouriteKeys(toggled(favouriteKeys, channelKey(c)));
+  const toggleHidden = (c: Channel) =>
+    setHiddenKeys(toggled(hiddenKeys, channelKey(c)));
 
   const tile = (c: Channel, showGroup: boolean) => (
     <button
       key={c.id}
       className={
-        "livetv__channel" + (playing?.id === c.id ? " is-playing" : "")
+        "livetv__channel" +
+        (playing?.id === c.id ? " is-playing" : "") +
+        (hidden.has(channelKey(c)) ? " is-hidden" : "")
       }
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openMenu(c, { x: e.clientX, y: e.clientY }, false, e.currentTarget);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+          e.preventDefault();
+          const r = e.currentTarget.getBoundingClientRect();
+          openMenu(c, { x: r.left, y: r.bottom }, true, e.currentTarget);
+        }
+      }}
       onClick={() => {
         setPlayError(null);
         // The previous channel first, so two are not pulled at once while
@@ -700,7 +812,20 @@ export function LiveTV() {
         )}
       </span>
       <span className="livetv__body">
-        <span className="livetv__name">{c.name}</span>
+        <span className="livetv__name">
+          {c.name}
+          {/* Not gold: gold means where you are, and nothing else. */}
+          {favourite.has(channelKey(c)) && (
+            <span
+              className="livetv__fav"
+              role="img"
+              aria-label="favourite"
+              title="A favourite on this device"
+            >
+              ★
+            </span>
+          )}
+        </span>
         {(() => {
           const entry = nowNext[String(c.id)];
           // No listings: nothing, rather than "no information". A tile that
@@ -865,6 +990,13 @@ export function LiveTV() {
             )}
             <button
               className="livetv__stop"
+              aria-pressed={favourite.has(channelKey(playing))}
+              onClick={() => toggleFavourite(playing)}
+            >
+              {favourite.has(channelKey(playing)) ? "Unfavourite" : "Favourite"}
+            </button>
+            <button
+              className="livetv__stop"
               onClick={() => {
                 // Paused and cleared, in that order: dropping the element while
                 // it is still pulling a live stream leaves the connection open
@@ -950,7 +1082,7 @@ export function LiveTV() {
                     {sec.group ?? "Ungrouped"}
                   </span>
                   {/* Which playlist, when two are shown together. */}
-                  {activeSource === null && sources.length > 1 && (
+                  {activeSource === null && sources.length > 1 && sec.key !== FAVOURITES && (
                     <span className="livetv__sectionsource">{sec.sourceName}</span>
                   )}
                   <span className="livetv__sectioncount">{sec.channels.length}</span>
@@ -963,7 +1095,55 @@ export function LiveTV() {
               </section>
             );
           })}
+          {showHidden && hiddenHere.length > 0 && (
+            <section className="livetv__section">
+              <h2 className="livetv__sectionhead livetv__sectionhead--static">
+                <span className="livetv__sectionname">Hidden on this device</span>
+                <span className="livetv__sectioncount">{hiddenHere.length}</span>
+              </h2>
+              <div className="livetv__grid">{hiddenHere.map((c) => tile(c, true))}</div>
+            </section>
+          )}
         </div>
+      )}
+
+      {hiddenHere.length > 0 && (
+        <p className="livetv__hiddenline">
+          {hiddenHere.length === 1
+            ? "1 channel is hidden on this device."
+            : `${hiddenHere.length} channels are hidden on this device.`}{" "}
+          <button className="livetv__linkbtn" onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? "Stop showing them" : "Show them"}
+          </button>
+        </p>
+      )}
+
+      {menu && (
+        <PointMenu
+          at={menu.at}
+          autoFocus={menu.byKey}
+          actions={[
+            {
+              label: favourite.has(channelKey(menu.channel))
+                ? "Remove from favourites"
+                : "Add to favourites",
+              onSelect: () => toggleFavourite(menu.channel),
+            },
+            {
+              label: hidden.has(channelKey(menu.channel))
+                ? "Show again"
+                : "Hide on this device",
+              onSelect: () => toggleHidden(menu.channel),
+            },
+          ]}
+          onClose={() => {
+            const from = menu.from;
+            const byKey = menu.byKey;
+            setMenu(null);
+            // Back to the tile, or a keyboard is left with nothing focused.
+            if (byKey && from?.isConnected) from.focus();
+          }}
+        />
       )}
     </div>
   );

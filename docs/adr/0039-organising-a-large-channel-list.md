@@ -1,6 +1,8 @@
 # ADR 0039 — Organising a large channel list
 
-Date: 2026-08-17 · Status: **accepted 2026-09-30; steps 1 and 2 built.** Step 3 (hidden and favourite channels) is not built, and step 4 stays deferred.
+Date: 2026-08-17 · Status: **accepted 2026-09-30; steps 1–3 built.** Step 4 stays deferred.
+
+Step 3 keys a hidden or favourite channel on its playlist and name, not its id. Refreshing a playlist replaces its channels, so every id changes, and a choice keyed on the id would undo itself at the next refresh.
 
 One detail differs from the text below: step 1's filter is applied on the page, not by refetching with `?source_id=`. The page already holds every channel, so switching playlists is instant. The server filter exists and is documented for other clients.
 
