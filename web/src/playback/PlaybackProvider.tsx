@@ -651,14 +651,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, [surface, nativeOn]);
 
-  // Total runtime. A transcode or remux streams a fragmented MP4 whose element
-  // duration is whatever has been produced so far — a few seconds — so for those
-  // the probed runtime is authoritative and the element's value is ignored.
-  // Direct play trusts the element, which is exact for the actual file.
+  /*
+   * Total runtime: the server's measured one whenever there is one.
+   *
+   * A transcode or remux streams a fragmented MP4 whose element duration is
+   * whatever has been produced so far — a few minutes — so for those the probed
+   * runtime was always authoritative. Direct and native play used to trust the
+   * player instead, and that is how Randomize all came to show a film of 1:30:00
+   * as 6:00 and carry the wrong length from film to film.
+   *
+   * The chain: a converted film leaves the few minutes it had produced in
+   * `duration`; the next film plays natively, mpv reports the file open before
+   * it knows the length, loadedmetadata carries NaN and is skipped — and the
+   * previous film's partial length stays, winning over the probe because the
+   * element's value came first. Every film after it inherited the same number
+   * for as long as the run went on. Hard to reproduce because it needs that
+   * exact order: a converted film, then a native one whose duration is late.
+   *
+   * Three changes close it, any one of which would have hidden it: the probe
+   * leads everywhere (it is the same file, and the server's is the one that
+   * already survived resolveDuration's stretched-audio check); `duration` is
+   * cleared at every new source; and a late length arrives as durationchange.
+   * The player's own value now only fills in for an item never probed.
+   */
   const probedDuration = item?.duration_ms ? item.duration_ms / 1000 : 0;
-  const totalDuration = transcoding.current
-    ? probedDuration || duration
-    : duration || probedDuration;
+  const totalDuration = probedDuration || duration;
 
   const displayTime = transcoding.current ? offset.current + current : current;
 
@@ -1099,6 +1116,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!item) return;
     if (!videoRef.current) return;
+    // A new source says nothing yet about how long it is, and the last one's
+    // length must not stand in for it (see totalDuration).
+    setDuration(0);
     let cancelled = false;
     // Settled inside the async block below, once native playback has answered;
     // the cleanup reads whichever backend this run actually used.
@@ -2339,6 +2359,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // server saying no, and only one of them is worth retrying.
       if (transcoding.current) transcodeFailed();
       else retryWithoutClaims();
+    },
+    durationchange: (media: MediaBackend) => {
+      if (clockItem.current !== sourceItem.current) return;
+      // A converted stream's length is only what has been produced so far,
+      // growing as it plays; that is not a runtime to show.
+      if (transcoding.current) return;
+      if (isFinite(media.duration) && media.duration > 0) {
+        setDuration(media.duration);
+      }
     },
     timeupdate: (media: MediaBackend) => {
       // Between asking for a source and it reporting, these disagree and the

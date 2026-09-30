@@ -60,12 +60,25 @@ func Apply(s State, c Change) (State, []string) {
 			s.Duration = math.NaN()
 			return s, nil
 		}
+		changed := s.Duration != c.Double // NaN compares unequal: first value counts
 		s.Duration = c.Double
 		if !s.Loaded {
 			// Duration arriving is one way to learn a file is open, and it is
 			// not dependable on its own — see Opened, which is the other.
 			s.Loaded = true
 			ev = append(ev, "loadedmetadata", "loadeddata")
+		} else if changed {
+			/*
+			 * A length learned after the file was reported open.
+			 *
+			 * Opened often wins the race: mpv's file-loaded event can arrive
+			 * before the duration property does, so loadedmetadata goes out
+			 * with no length at all and the page reads NaN. With nothing after
+			 * it, the page never heard the real length -- which is half of how
+			 * Randomize all came to show a film's total as a few minutes. The
+			 * element raises durationchange for exactly this.
+			 */
+			ev = append(ev, "durationchange")
 		}
 	case "time-pos":
 		if c.Unavailable {

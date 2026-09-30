@@ -50,11 +50,40 @@ func TestOpeningAFileRaisesMetadataOnce(t *testing.T) {
 		Change{Name: "duration", Double: 5400},
 		Change{Name: "duration", Double: 5400.2}, // refined as the demuxer reads on
 	)
-	if !reflect.DeepEqual(ev, []string{"loadedmetadata", "loadeddata"}) {
+	// Metadata once; the refinement is a durationchange, as the element
+	// raises for a length that moves.
+	if !reflect.DeepEqual(ev, []string{"loadedmetadata", "loadeddata", "durationchange"}) {
 		t.Fatalf("events = %v", ev)
 	}
 	if s.Duration != 5400.2 {
 		t.Errorf("duration = %v", s.Duration)
+	}
+}
+
+/*
+ * mpv's file-loaded event can beat the duration property. The page is then
+ * told the file is open with no length, and before durationchange it never
+ * heard the real one -- half of how Randomize all showed a 1:30:00 film as a
+ * few minutes long.
+ */
+func TestADurationAfterTheFileOpenedIsADurationChange(t *testing.T) {
+	s, opened := Opened(Reset(NewState()))
+	if !reflect.DeepEqual(opened, []string{"loadedmetadata", "loadeddata"}) {
+		t.Fatalf("opened = %v", opened)
+	}
+	if !math.IsNaN(s.Duration) {
+		t.Fatalf("duration at open = %v, want NaN", s.Duration)
+	}
+	s, ev := Apply(s, Change{Name: "duration", Double: 5400})
+	if !reflect.DeepEqual(ev, []string{"durationchange"}) {
+		t.Errorf("events = %v, want durationchange", ev)
+	}
+	if s.Duration != 5400 {
+		t.Errorf("duration = %v", s.Duration)
+	}
+	// The same value again is not a change.
+	if _, ev := Apply(s, Change{Name: "duration", Double: 5400}); ev != nil {
+		t.Errorf("an unchanged duration raised %v", ev)
 	}
 }
 
@@ -183,7 +212,9 @@ func TestReopeningTheSameFileStillSaysItOpened(t *testing.T) {
 	if again != nil {
 		t.Errorf("a second announcement for the same file: %v", again)
 	}
-	if _, dup := Apply(s, Change{Name: "duration", Double: 7741}); dup != nil {
-		t.Errorf("duration announced an open file again: %v", dup)
+	// The length arriving afterwards is news about the length, not a second
+	// open: durationchange, never loadedmetadata again.
+	if _, dup := Apply(s, Change{Name: "duration", Double: 7741}); !reflect.DeepEqual(dup, []string{"durationchange"}) {
+		t.Errorf("duration after the open raised %v, want only durationchange", dup)
 	}
 }
