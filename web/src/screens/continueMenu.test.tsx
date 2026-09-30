@@ -52,6 +52,24 @@ const track = {
   artwork: {},
 };
 
+/** A show on Next up, carrying the episode it would play. */
+const show = {
+  id: 50,
+  title: "A Show",
+  kind: "show",
+  library_id: 3,
+  artwork: {},
+  next_episode: {
+    id: 502,
+    title: "Second",
+    kind: "episode",
+    series: "A Show",
+    season: 1,
+    episode: 2,
+    artwork: {},
+  },
+};
+
 let host: HTMLDivElement;
 let root: Root;
 let writes: { url: string; body: Record<string, unknown> }[];
@@ -81,7 +99,15 @@ function mount() {
           user: { id: "u1", name: "chris", role: "admin" },
         });
       }
-      if (url.includes("/api/continue")) return json({ items: [film, track] });
+      if (url.includes("/api/continue")) return json({ items: [film, track, show] });
+      if (url.includes("/api/items/50/episodes")) {
+        return json({
+          episodes: [
+            { id: 501, title: "First", kind: "episode" },
+            { id: 502, title: "Second", kind: "episode" },
+          ],
+        });
+      }
       if (url.includes("/api/libraries")) return json([]);
       return json({ items: [], total: 0 });
     }),
@@ -244,5 +270,45 @@ describe("the Continue shelf menu", () => {
       await new Promise((r) => setTimeout(r, 5));
     });
     expect(host.textContent).not.toContain("Loading item");
+  });
+});
+
+/*
+ * A show on Next up is marked through its episodes.
+ *
+ * Its place on the shelf is decided by what its episodes say; the show row
+ * has no play state of its own. The menu used to write to the show row, which
+ * the server accepted and the shelf ignored: both items reported success and
+ * the show stayed exactly where it was.
+ */
+describe("the Next up menu", () => {
+  it("marks every episode, never the show row", async () => {
+    mount();
+    await render();
+    rightClick(tile("A Show"));
+    clickItem("Mark all as watched");
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+      });
+    }
+    const urls = writes.map((w) => w.url);
+    expect(urls).toContain("/api/items/501/progress");
+    expect(urls).toContain("/api/items/502/progress");
+    expect(urls, "wrote to the show row, which the shelf ignores").not.toContain(
+      "/api/items/50/progress",
+    );
+    expect(writes.every((w) => w.body.watched === true)).toBe(true);
+  });
+
+  // No quiet "Remove": taking a show off means forgetting its episodes, and
+  // the menu says so.
+  it("offers no Remove that could not do what it says", async () => {
+    mount();
+    await render();
+    rightClick(tile("A Show"));
+    const labels = menuItems().map((i) => i.textContent?.trim());
+    expect(labels).toContain("Mark all as unwatched");
+    expect(labels.some((l) => l?.startsWith("Remove"))).toBe(false);
   });
 });

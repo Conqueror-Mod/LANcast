@@ -326,6 +326,8 @@ export interface paths {
          * @description Clients should throttle to roughly one call per five seconds during playback.
          *
          *     Progress is per account (ADR 0006).
+         *
+         *     **Only an item with a file has a play state.** A show, season, artist, album, collection or playlist is `400 not_playable`: nothing reads progress written against one — Continue Watching and Next up judge a show by its episodes. Mark its episodes (`GET /api/items/{id}/episodes`) or tracks instead.
          */
         put: operations["putItemProgress"];
         post?: never;
@@ -7021,7 +7023,7 @@ export interface operations {
                 /**
                  * @description Restrict to one kind. Passing this also **lifts the top-level-only default**, for a deliberate cross-cutting query such as every episode.
                  *
-                 *     **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give.
+                 *     **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. A listing by kind leaves out rows whose file is missing, as the browse grid does.
                  */
                 kind?: string;
                 /** @description Drop kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page. A single value still means what it always did. */
