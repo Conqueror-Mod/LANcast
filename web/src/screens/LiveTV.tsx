@@ -49,6 +49,19 @@ function episodeLabel(p: Program): string | null {
   return p.episode ? `Episode ${p.episode}` : `Series ${p.season}`;
 }
 
+/** One group of one playlist, as a section of the page. */
+interface Section {
+  key: string;
+  group: string | null;
+  sourceName: string;
+  channels: Channel[];
+}
+
+// A group is only a group within its playlist, so the key carries both.
+function sectionKey(c: Channel): string {
+  return `${c.source_id}:${c.group ?? ""}`;
+}
+
 /*
  * Live TV.
  *
@@ -60,7 +73,9 @@ function episodeLabel(p: Program): string | null {
  * What it does have is **groups**, which is the one attribute in an IPTV
  * playlist that makes six hundred channels navigable. They are the organising
  * idea of the page for that reason and not because the data happened to carry
- * them.
+ * them. At 1,862 channels a row of group *filters* wrapped to five lines before
+ * a single channel showed, so groups are sections you open instead, under a
+ * playlist selector that appears once there are two playlists (ADR 0039).
  *
  * The player is a plain <video> rather than the app's PlaybackProvider. That is
  * deliberate: the provider exists to keep one element alive across navigation
@@ -168,7 +183,11 @@ export function LiveTV() {
   // Whether the player is running fast to close a gap. Shown, because a speed
   // change a viewer can hear should not be a secret.
   const [catchingUp, setCatchingUp] = useState(false);
-  const [group, setGroup] = useState<string | null>(null);
+  // The playlist being browsed; null is every playlist.
+  const [source, setSource] = useState<number | null>(null);
+  // Which group sections are open, by sectionKey. Null until the first
+  // channels arrive, so the first section can open by default.
+  const [openSections, setOpenSections] = useState<Set<string> | null>(null);
   const [query, setQuery] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [transport] = useLiveTransport();
@@ -562,13 +581,68 @@ export function LiveTV() {
   // server is the one that decided which programme is current.
   const at = guide.data?.at ?? Math.floor(Date.now() / 1000);
 
-  const groups = useMemo(() => {
-    const seen = new Set<string>();
-    for (const c of channels) if (c.group) seen.add(c.group);
-    // Source order decides the group order too — an IPTV list puts its
-    // interesting groups first, and alphabetising them buries them.
-    return [...seen];
+  /*
+   * The playlists, in the order the server lists them.
+   *
+   * Read off the channels rather than from /api/channel-sources, which is
+   * administrator-only because it carries the provider URL. A member browsing
+   * two playlists still has to see what they are called.
+   */
+  const sources = useMemo(() => {
+    const seen = new Map<number, { id: number; name: string; count: number }>();
+    for (const c of channels) {
+      const s = seen.get(c.source_id);
+      if (s) s.count++;
+      else seen.set(c.source_id, { id: c.source_id, name: c.source_name, count: 1 });
+    }
+    return [...seen.values()];
   }, [channels]);
+
+  // A chosen playlist that has since been removed falls back to every playlist
+  // rather than to an empty page.
+  const activeSource =
+    source !== null && sources.some((s) => s.id === source) ? source : null;
+
+  const inSource = useMemo(
+    () =>
+      activeSource === null
+        ? channels
+        : channels.filter((c) => c.source_id === activeSource),
+    [channels, activeSource],
+  );
+
+  /*
+   * Groups as sections, in source order.
+   *
+   * Source order decides the group order too — an IPTV list puts its
+   * interesting groups first, and alphabetising them buries them. A section is
+   * one group *within one playlist*: two providers both carrying "News" are two
+   * different lists of channels, and merging them would put a channel under a
+   * heading its own playlist never gave it.
+   */
+  const sections = useMemo(() => {
+    const byKey = new Map<string, Section>();
+    for (const c of inSource) {
+      const key = sectionKey(c);
+      let sec = byKey.get(key);
+      if (!sec) {
+        sec = { key, group: c.group, sourceName: c.source_name, channels: [] };
+        byKey.set(key, sec);
+      }
+      sec.channels.push(c);
+    }
+    return [...byKey.values()];
+  }, [inSource]);
+
+  // The first section opens by default, so the page is never a wall of closed
+  // headings with no channel in sight.
+  const open = openSections ?? new Set(sections[0] ? [sections[0].key] : []);
+  const toggleSection = (key: string) => {
+    const next = new Set(open);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setOpenSections(next);
+  };
 
   /*
    * Search covers what is on as well as what the channel is called.
@@ -577,12 +651,15 @@ export function LiveTV() {
    * a search that only reads channel names cannot answer it. Limited to the
    * current and next programme because that is what the client holds — a search
    * across the whole fortnight is a server query, and a different feature.
+   *
+   * A search answers flat, across every group of the chosen playlist: somebody
+   * typing a name wants the channel, not to be told which closed section it is
+   * in.
    */
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return channels.filter((c) => {
-      if (group && c.group !== group) return false;
-      if (!q) return true;
+  const q = query.trim().toLowerCase();
+  const found = useMemo(() => {
+    if (!q) return [];
+    return inSource.filter((c) => {
       if (c.name.toLowerCase().includes(q)) return true;
       const entry = nowNext[String(c.id)];
       return (
@@ -591,13 +668,75 @@ export function LiveTV() {
           !!entry.next?.title.toLowerCase().includes(q))
       );
     });
-  }, [channels, group, query, nowNext]);
+  }, [inSource, q, nowNext]);
+
+  const tile = (c: Channel, showGroup: boolean) => (
+    <button
+      key={c.id}
+      className={
+        "livetv__channel" + (playing?.id === c.id ? " is-playing" : "")
+      }
+      onClick={() => {
+        setPlayError(null);
+        // The previous channel first, so two are not pulled at once while
+        // the new one starts.
+        if (watching.current !== c.id) stopWatching(watching.current);
+        watching.current = c.id;
+        setPlaying(c);
+      }}
+    >
+      <span className="livetv__logo">
+        {c.logo_url ? (
+          // Referrer withheld: a logo lives on the provider's CDN, and
+          // sending the page URL tells them which server is watching.
+          <img
+            src={c.logo_url}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <span aria-hidden="true">{c.name.slice(0, 2).toUpperCase()}</span>
+        )}
+      </span>
+      <span className="livetv__body">
+        <span className="livetv__name">{c.name}</span>
+        {(() => {
+          const entry = nowNext[String(c.id)];
+          // No listings: nothing, rather than "no information". A tile that
+          // says "unknown" six hundred times is noise, and the absence of a
+          // strapline already reads as absence. The group is named only
+          // where the tile is not already under its group's heading.
+          if (!entry) {
+            return showGroup && c.group ? (
+              <span className="livetv__grouptag">{c.group}</span>
+            ) : null;
+          }
+          return (
+            <>
+              <span className="livetv__on">{entry.now.title}</span>
+              <span className="livetv__bar" aria-hidden="true">
+                <span
+                  className="livetv__barfill"
+                  style={{ width: `${progressOf(entry.now, at) * 100}%` }}
+                />
+              </span>
+              <span className="livetv__times">
+                {clock(entry.now.start_at)}–{clock(entry.now.stop_at)}
+                {entry.next && ` · then ${entry.next.title}`}
+              </span>
+            </>
+          );
+        })()}
+      </span>
+    </button>
+  );
 
   return (
     <div className="browse livetv">
       <div className="browse__head browse__head--sticky">
         <h1 className="browse__title">Live TV</h1>
-        <span className="browse__count">{channels.length || ""}</span>
+        <span className="browse__count">{inSource.length || ""}</span>
       </div>
 
       {/* Said above the list rather than when a channel fails, because every
@@ -744,6 +883,38 @@ export function LiveTV() {
 
       {channels.length > 0 && (
         <div className="livetv__filters">
+          {/* Only with a second playlist: a selector offering one choice
+              implies others exist, which is a small lie (ADR 0039). */}
+          {sources.length > 1 && (
+            <div className="livetv__sources" role="group" aria-label="Playlist">
+              <button
+                className={"livetv__group" + (activeSource === null ? " is-on" : "")}
+                aria-pressed={activeSource === null}
+                onClick={() => {
+                  setSource(null);
+                  setOpenSections(null);
+                }}
+              >
+                All playlists
+              </button>
+              {sources.map((s) => (
+                <button
+                  key={s.id}
+                  className={"livetv__group" + (activeSource === s.id ? " is-on" : "")}
+                  aria-pressed={activeSource === s.id}
+                  onClick={() => {
+                    setSource(s.id);
+                    // A different playlist has different sections; its first
+                    // one opens, as the page's first one did.
+                    setOpenSections(null);
+                  }}
+                >
+                  {s.name}
+                  <span className="livetv__sourcecount">{s.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <input
             className="livetv__search"
             placeholder="Find a channel or programme"
@@ -751,93 +922,48 @@ export function LiveTV() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Find a channel or programme"
           />
-          <div className="livetv__groups">
-            <button
-              className={"livetv__group" + (group === null ? " is-on" : "")}
-              onClick={() => setGroup(null)}
-            >
-              All
-            </button>
-            {groups.map((g) => (
-              <button
-                key={g}
-                className={"livetv__group" + (group === g ? " is-on" : "")}
-                onClick={() => setGroup(group === g ? null : g)}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
-      <div className="livetv__grid">
-        {shown.map((c) => (
-          <button
-            key={c.id}
-            className={
-              "livetv__channel" + (playing?.id === c.id ? " is-playing" : "")
-            }
-            onClick={() => {
-              setPlayError(null);
-              // The previous channel first, so two are not pulled at once while
-              // the new one starts.
-              if (watching.current !== c.id) stopWatching(watching.current);
-              watching.current = c.id;
-              setPlaying(c);
-            }}
-          >
-            <span className="livetv__logo">
-              {c.logo_url ? (
-                // Referrer withheld: a logo lives on the provider's CDN, and
-                // sending the page URL tells them which server is watching.
-                <img
-                  src={c.logo_url}
-                  alt=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <span aria-hidden="true">
-                  {c.name.slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </span>
-            <span className="livetv__body">
-              <span className="livetv__name">{c.name}</span>
-              {(() => {
-                const entry = nowNext[String(c.id)];
-                // No listings: nothing, rather than "no information". A tile that
-                // says "unknown" six hundred times is noise, and the absence of a
-                // strapline already reads as absence.
-                if (!entry) {
-                  return c.group ? (
-                    <span className="livetv__grouptag">{c.group}</span>
-                  ) : null;
-                }
-                return (
-                  <>
-                    <span className="livetv__on">{entry.now.title}</span>
-                    <span className="livetv__bar" aria-hidden="true">
-                      <span
-                        className="livetv__barfill"
-                        style={{ width: `${progressOf(entry.now, at) * 100}%` }}
-                      />
-                    </span>
-                    <span className="livetv__times">
-                      {clock(entry.now.start_at)}–{clock(entry.now.stop_at)}
-                      {entry.next && ` · then ${entry.next.title}`}
-                    </span>
-                  </>
-                );
-              })()}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {channels.length > 0 && shown.length === 0 && (
-        <p className="browse__message">No channels match that.</p>
+      {q ? (
+        <>
+          <div className="livetv__grid">{found.map((c) => tile(c, true))}</div>
+          {found.length === 0 && (
+            <p className="browse__message">No channels match that.</p>
+          )}
+        </>
+      ) : (
+        <div className="livetv__sections">
+          {sections.map((sec) => {
+            const isOpen = open.has(sec.key);
+            const panel = `livetv-sec-${sec.key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+            return (
+              <section key={sec.key} className="livetv__section">
+                <button
+                  className={"livetv__sectionhead" + (isOpen ? " is-open" : "")}
+                  aria-expanded={isOpen}
+                  aria-controls={panel}
+                  onClick={() => toggleSection(sec.key)}
+                >
+                  <span className="livetv__chevron" aria-hidden="true" />
+                  <span className="livetv__sectionname">
+                    {sec.group ?? "Ungrouped"}
+                  </span>
+                  {/* Which playlist, when two are shown together. */}
+                  {activeSource === null && sources.length > 1 && (
+                    <span className="livetv__sectionsource">{sec.sourceName}</span>
+                  )}
+                  <span className="livetv__sectioncount">{sec.channels.length}</span>
+                </button>
+                {isOpen && (
+                  <div className="livetv__grid" id={panel}>
+                    {sec.channels.map((c) => tile(c, false))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );

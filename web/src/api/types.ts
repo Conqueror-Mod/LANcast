@@ -215,18 +215,9 @@ export type ManagedUser = components["schemas"]["ManagedUser"];
 // GET /api/channels — Live TV. A channel is deliberately not an Item: it has no
 // duration, no file and no identity a provider could match. The upstream URL is
 // never sent to clients, because channel lists are routinely credentialed.
-export interface Channel {
-  id: number;
-  source_id: number;
-  name: string;
-  logo_url: string | null;
-  group: string | null;
-  position: number;
-  // The XMLTV id listings arrive under. Null means this channel can never have
-  // a guide — the playlist did not say which channel it is, and matching by
-  // name would attach "BBC One" listings to "BBC One HD".
-  tvg_id: string | null;
-}
+// `source_name` is the list's name, carried on every channel because the source
+// listing itself is admin-only (ADR 0039).
+export type Channel = components["schemas"]["Channel"];
 
 export interface ChannelSource {
   id: number;

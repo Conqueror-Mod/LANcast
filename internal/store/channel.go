@@ -43,12 +43,17 @@ type ChannelSource struct {
 
 // Channel is one entry.
 type Channel struct {
-	ID       int64   `json:"id"`
-	SourceID int64   `json:"source_id"`
-	Name     string  `json:"name"`
-	LogoURL  *string `json:"logo_url"`
-	Group    *string `json:"group"`
-	Position int     `json:"position"`
+	ID       int64 `json:"id"`
+	SourceID int64 `json:"source_id"`
+	// SourceName is the name of the list this channel came from. It is carried
+	// on every channel because the source listing is admin-only (it holds the
+	// credentialed URL), and a member choosing between two playlists still has
+	// to see what they are called.
+	SourceName string  `json:"source_name"`
+	Name       string  `json:"name"`
+	LogoURL    *string `json:"logo_url"`
+	Group      *string `json:"group"`
+	Position   int     `json:"position"`
 	// TvgID is the XMLTV id this channel's listings arrive under. Sent to
 	// clients — unlike URL it carries no credential, and a client that wants to
 	// say "this channel has no guide" needs to know it is absent.
@@ -200,14 +205,17 @@ func (s *Store) ReplaceChannels(ctx context.Context, sourceID int64, chans []Cha
 // or every channel when sourceID is zero. Source order is preserved because it
 // is meaningful to whoever curated the list, and alphabetical is not an
 // improvement on "the order the channels are on the remote control".
+// channelCols reads a channel joined to its source, for the source's name.
+const channelCols = `c.id, c.source_id, s.name, c.name, c.url, c.logo_url, c.group_name, c.position, c.tvg_id`
+
 func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, error) {
-	q := `SELECT id, source_id, name, url, logo_url, group_name, position, tvg_id FROM channel`
+	q := `SELECT ` + channelCols + ` FROM channel c JOIN channel_source s ON s.id = c.source_id`
 	args := []any{}
 	if sourceID != 0 {
-		q += ` WHERE source_id = ?`
+		q += ` WHERE c.source_id = ?`
 		args = append(args, sourceID)
 	}
-	q += ` ORDER BY source_id, position, id`
+	q += ` ORDER BY c.source_id, c.position, c.id`
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -218,7 +226,7 @@ func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, er
 	out := []Channel{}
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID); err != nil {
+		if err := rows.Scan(&c.ID, &c.SourceID, &c.SourceName, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID); err != nil {
 			return nil, fmt.Errorf("list channels: %w", err)
 		}
 		out = append(out, c)
@@ -229,9 +237,9 @@ func (s *Store) ListChannels(ctx context.Context, sourceID int64) ([]Channel, er
 func (s *Store) GetChannel(ctx context.Context, id int64) (*Channel, error) {
 	var c Channel
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, source_id, name, url, logo_url, group_name, position, tvg_id
-		 FROM channel WHERE id = ?`, id).
-		Scan(&c.ID, &c.SourceID, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID)
+		`SELECT `+channelCols+` FROM channel c JOIN channel_source s ON s.id = c.source_id
+		 WHERE c.id = ?`, id).
+		Scan(&c.ID, &c.SourceID, &c.SourceName, &c.Name, &c.URL, &c.LogoURL, &c.Group, &c.Position, &c.TvgID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

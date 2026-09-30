@@ -1,6 +1,8 @@
 # ADR 0039 — Organising a large channel list
 
-Date: 2026-08-17 · Status: proposed
+Date: 2026-08-17 · Status: **accepted 2026-09-30; steps 1 and 2 built.** Step 3 (hidden and favourite channels) is not built, and step 4 stays deferred.
+
+One detail differs from the text below: step 1's filter is applied on the page, not by refetching with `?source_id=`. The page already holds every channel, so switching playlists is instant. The server filter exists and is documented for other clients.
 
 ## Context
 
