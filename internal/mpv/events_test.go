@@ -218,3 +218,36 @@ func TestReopeningTheSameFileStillSaysItOpened(t *testing.T) {
 		t.Errorf("duration after the open raised %v, want only durationchange", dup)
 	}
 }
+
+func TestAChannelCountChangeIsRaisedOnce(t *testing.T) {
+	s, ev := run(NewState(),
+		Change{Name: "audio-params/channel-count", Double: 6},
+		Change{Name: "audio-params/channel-count", Double: 6}, // re-reported on observe
+	)
+	if !reflect.DeepEqual(ev, []string{AudioChannelsEvent}) || s.Channels != 6 {
+		t.Fatalf("channels = %d, events = %v", s.Channels, ev)
+	}
+}
+
+func TestSwitchingToAStereoTrackMidFilmRebuildsForTwo(t *testing.T) {
+	// A commentary track after the 5.1 main one: the filter was built for six
+	// channels and must hear that it now has two.
+	s, ev := run(NewState(),
+		Change{Name: "audio-params/channel-count", Double: 6},
+		Change{Name: "audio-params/channel-count", Unavailable: true}, // aid switch reinitialises audio
+		Change{Name: "audio-params/channel-count", Double: 2},
+	)
+	if s.Channels != 2 || len(ev) != 3 {
+		t.Fatalf("channels = %d, events = %v; want 2 and three rebuilds", s.Channels, ev)
+	}
+}
+
+func TestResetKeepsTheChannelCount(t *testing.T) {
+	// mpv does not re-report an unchanged count, so a 5.1 film after a 5.1
+	// film says nothing. The state has to remember it or dialogue boost turns
+	// itself off for the second film.
+	s, _ := run(NewState(), Change{Name: "audio-params/channel-count", Double: 6})
+	if got := Reset(s).Channels; got != 6 {
+		t.Fatalf("Reset forgot the channel count: %d", got)
+	}
+}

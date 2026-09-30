@@ -5,7 +5,8 @@
  * a seek asked for early applied once there is something to seek.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MpvBackend, NATIVE_VIDEO_CLASS, streamItem } from "./mpvBackend";
+import { MpvBackend, NATIVE_VIDEO_CLASS, mpvBackend, streamItem } from "./mpvBackend";
+import { getPrefs, resetPrefs, setPrefs } from "./prefs";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -210,5 +211,78 @@ describe("MpvBackend", () => {
     expect(window.lancastMpvStop).toHaveBeenCalled();
     expect(document.documentElement.classList.contains(NATIVE_VIDEO_CLASS)).toBe(false);
     expect(b.error).toBeNull();
+  });
+});
+
+/*
+ * The audio pass (docs/audio-pass-plan.md). Two numbers go to the client and
+ * the client builds the filter; what matters here is that they are sent when
+ * a file opens — mpv has no memory of what the page wants — and when the
+ * setting changes mid-film, and not before there is anything to filter.
+ */
+describe("MpvBackend audio settings", () => {
+  let commands: [string, number][];
+  const opened = (b: MpvBackend) =>
+    b.receive({ events: ["loadedmetadata"], current_time: 0, duration: 5400, paused: true, ended: false });
+  const audio = () => commands.filter(([n]) => n === "night" || n === "dialogue");
+
+  beforeEach(() => {
+    commands = [];
+    window.lancastMpvCommand = vi.fn(async (n: string, v: number) => {
+      commands.push([n, v]);
+    });
+  });
+
+  afterEach(() => {
+    resetPrefs();
+    delete window.lancastMpvCommand;
+  });
+
+  it("sends night mode and dialogue boost when a file opens", () => {
+    setPrefs({ nightVideo: true, dialogueVideo: 2 });
+    const b = new MpvBackend();
+    opened(b);
+    expect(audio()).toEqual([
+      ["night", 1],
+      ["dialogue", 2],
+    ]);
+  });
+
+  it("sends them off, not nothing, when they are off", () => {
+    // A previous film's boost is still in the client until it hears otherwise.
+    const b = new MpvBackend();
+    opened(b);
+    expect(audio()).toEqual([
+      ["night", 0],
+      ["dialogue", 0],
+    ]);
+  });
+
+  it("applies a change mid-film", () => {
+    const b = new MpvBackend();
+    opened(b);
+    commands = [];
+    b.prefsChanged({ ...getPrefs(), nightVideo: true });
+    expect(audio()).toEqual([
+      ["night", 1],
+      ["dialogue", 0],
+    ]);
+  });
+
+  it("tells mpv nothing before a file is open", () => {
+    const b = new MpvBackend();
+    b.prefsChanged({ ...getPrefs(), nightVideo: true });
+    expect(audio()).toEqual([]);
+  });
+
+  it("the window's backend hears a setting change without being asked", () => {
+    const b = mpvBackend();
+    opened(b);
+    commands = [];
+    setPrefs({ dialogueVideo: 1 });
+    expect(audio()).toEqual([
+      ["night", 0],
+      ["dialogue", 1],
+    ]);
   });
 });

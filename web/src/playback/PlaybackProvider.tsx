@@ -223,6 +223,8 @@ interface PlaybackState {
   itemID: number;
   item: Item | undefined;
   isAudio: boolean;
+  /** Playing through the desktop client's libmpv rather than the element. */
+  native: boolean;
   cover: string | undefined;
   surface: Surface;
 
@@ -2145,6 +2147,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     itemID,
     item,
     isAudio: !!isAudio,
+    native: nativeOn,
     cover,
     surface,
     playing,

@@ -13,6 +13,7 @@
  */
 import { apiPost } from "@/api/client";
 import type { MediaBackend } from "./backend";
+import { getPrefs, subscribePrefs, type Prefs } from "./prefs";
 
 interface MpvEvent {
   events: string[];
@@ -125,6 +126,27 @@ export class MpvBackend extends EventTarget implements MediaBackend {
   constructor() {
     super();
     window.__lancastMpvEvent = (e) => this.receive(e);
+  }
+
+  /**
+   * A preference changed. Night mode and dialogue boost take effect as they
+   * are switched, with a film playing: waiting for the next load would make
+   * the control look broken. Before a file is open there is nothing to tell,
+   * and loadedmetadata sends the current values anyway.
+   */
+  prefsChanged(p: Prefs): void {
+    if (this.loaded) this.sendAudioFX(p);
+  }
+
+  /*
+   * The audio pass, as two numbers. The client turns them into a filter graph
+   * from its own fixed vocabulary (internal/mpv/audiofx.go) and skips an
+   * unchanged one, so sending both every time costs nothing and cannot leave
+   * the two sides disagreeing.
+   */
+  private sendAudioFX(p: Prefs): void {
+    void this.command("night", p.nightVideo ? 1 : 0);
+    void this.command("dialogue", p.dialogueVideo);
   }
 
   get currentTime(): number {
@@ -280,6 +302,7 @@ export class MpvBackend extends EventTarget implements MediaBackend {
         void this.command("volume", this.vol);
         void this.command("mute", this.isMuted ? 1 : 0);
         void this.command("speed", this.rate);
+        this.sendAudioFX(getPrefs());
       }
       this.dispatchEvent(new Event(name));
       if (name === "loadedmetadata" && this.pendingSeek !== null) {
@@ -295,6 +318,13 @@ let shared: MpvBackend | null = null;
 
 /** The one native backend for this page; there is one mpv per window. */
 export function mpvBackend(): MpvBackend {
-  if (!shared) shared = new MpvBackend();
+  if (!shared) {
+    const b = new MpvBackend();
+    // Subscribed here rather than in the constructor so that only the one
+    // real backend listens — never unsubscribed, because it lives as long as
+    // the window does.
+    subscribePrefs((p) => b.prefsChanged(p));
+    shared = b;
+  }
   return shared;
 }

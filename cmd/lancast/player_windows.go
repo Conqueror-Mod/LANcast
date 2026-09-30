@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -42,6 +43,31 @@ type nativePlayer struct {
 	// element raises it about four times a second and the page is written for
 	// that rate, not for an Eval per frame.
 	lastTick time.Time
+
+	// The audio pass (docs/audio-pass-plan.md). fx is what the page asked
+	// for, channels what mpv is decoding, and af the graph last handed to mpv,
+	// so an unchanged graph is not re-set — setting af reinitialises the audio
+	// chain, which is audible.
+	fx       mpv.AudioFX
+	channels int
+	af       string
+}
+
+// applyAF hands mpv the graph for the current settings and channel count, if
+// it differs from the one it has. n.mu must be held.
+func (n *nativePlayer) applyAF() error {
+	if n.player == nil {
+		return nil
+	}
+	g := mpv.AudioFilter(n.fx, n.channels)
+	if g == n.af {
+		return nil
+	}
+	if err := n.player.Set("af", g); err != nil {
+		return err
+	}
+	n.af = g
+	return nil
 }
 
 // mpvDLL is the one place libmpv may be loaded from.
@@ -106,6 +132,19 @@ func (n *nativePlayer) ensure() error {
 // emit forwards mpv's translated events to the page's backend (mpvBackend.ts).
 func (n *nativePlayer) emit(s mpv.State, events []string) {
 	n.mu.Lock()
+	// The channel count is ours, not the page's: rebuild the audio filter for
+	// it and forward whatever else arrived alongside.
+	if i := slices.Index(events, mpv.AudioChannelsEvent); i >= 0 {
+		events = slices.Delete(slices.Clone(events), i, i+1)
+		n.channels = s.Channels
+		if err := n.applyAF(); err != nil {
+			slog.Warn("audio filter", "channels", s.Channels, "error", err)
+		}
+		if len(events) == 0 {
+			n.mu.Unlock()
+			return
+		}
+	}
 	w := n.window
 	if len(events) == 1 && events[0] == "timeupdate" {
 		if time.Since(n.lastTick) < 250*time.Millisecond {
@@ -185,6 +224,12 @@ func (n *nativePlayer) command(name string, value float64) error {
 		return n.player.Set("aid", trackID(value))
 	case "subtitle":
 		return n.player.Set("sid", trackID(value))
+	case "night", "dialogue":
+		// A number in, a graph out, built by mpv.AudioFilter from its own
+		// fixed vocabulary. The page never names a filter (audiofx.go says
+		// why: `amovie` reads files).
+		n.fx, _ = n.fx.With(name, value)
+		return n.applyAF()
 	}
 	return fmt.Errorf("unknown player command %q", name)
 }
