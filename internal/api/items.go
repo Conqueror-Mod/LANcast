@@ -601,6 +601,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Initial: q.Get("initial"),
 		Query:   q.Get("q"),
 		Sort:    q.Get("sort"),
+		Seed:    int64(queryInt(r, "seed")),
 		Genres:  nonEmpty(q["genre"]),
 		// Tag ids rather than names (ADR 0062): a name is unique only within one
 		// account, so filtering by the word would need the account anyway and

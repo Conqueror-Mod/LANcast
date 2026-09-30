@@ -797,7 +797,10 @@ type ItemFilter struct {
 	LibraryID int64
 	Kind      string
 	Query     string
-	Sort      string // title | year | added | rating | track
+	Sort      string // title | year | added | rating | track | random
+	// Seed fixes the order of Sort "random", so one page of a shuffled
+	// listing asked for twice comes back the same way.
+	Seed int64
 
 	// Facet filters. Each is OR within itself and AND across facets — the Plex
 	// semantics: pick two genres to widen, add a decade to narrow. Empty slices
@@ -1431,6 +1434,26 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// fix music by interleaving every show's season 1 ahead of any
 		// season 2 in a cross-show listing, so it stays a separate sort.
 		order = ` ORDER BY season, episode, sort_title`
+	case "random":
+		/*
+		 * A shuffle that holds still.
+		 *
+		 * The home page's Unwatched shelf offers a different handful of films
+		 * each time it is opened. RANDOM() would do that and would also reshuffle
+		 * the row under the pointer every time the query refetched -- after
+		 * marking one watched, say -- so the order is a hash of the id and a
+		 * seed the caller chooses once. Same seed, same order; a new visit, a
+		 * new seed.
+		 *
+		 * The seed picks the *multiplier*. Adding a seed shifts every value by
+		 * the same amount, and modular arithmetic is linear, so any number of
+		 * further steps leaves the order exactly where it was -- which is what
+		 * the first version did. Multiplying the id by a seed-chosen odd number
+		 * modulo a prime is a different permutation for each one. Kept well
+		 * inside 64 bits so SQLite never falls back to floating point.
+		 */
+		order = ` ORDER BY ((id * ?) % 2147483629), id`
+		args = append(args, shuffleMultiplier(f.Seed))
 	}
 
 	if f.TopLevel && f.Query != "" {
@@ -3064,4 +3087,19 @@ func (s *Store) repoint(ctx context.Context, id int64, oldRoot, newRoot string) 
 		return fmt.Errorf("repoint library: commit: %w", err)
 	}
 	return nil
+}
+
+// shuffleMultiplier turns a caller's seed into the odd multiplier behind the
+// "random" sort. Hashed first, because neighbouring multipliers barely move
+// small ids -- seeds 7 and 8 gave the same order -- so the multipliers have to
+// land far apart. At most 2^31, so an id times it cannot overflow int64.
+func shuffleMultiplier(seed int64) int64 {
+	// Offset first, so seed 0 -- a caller that sent none -- is shuffled too
+	// rather than multiplied by one.
+	h := (uint64(seed) + 0x632BE59BD9B4E019) * 0x9E3779B97F4A7C15
+	k := int64(h>>34)*2 + 1 // odd, below 2^31
+	if k%2147483629 == 0 {
+		k += 2
+	}
+	return k
 }

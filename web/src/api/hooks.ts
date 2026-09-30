@@ -53,7 +53,6 @@ import type {
   SubtitleSearchResult,
   SubtitleTrack,
   Trailer,
-  Trending,
   Peer,
   PeerInvite,
   PeerPresence,
@@ -1161,7 +1160,9 @@ export interface ItemQuery {
   /** Restrict to one kind — the collections page asks for exactly those. */
   kind?: string;
   q?: string;
-  sort?: string; // title | year | added
+  sort?: string; // title | year | added | random
+  /** Fixes the order of `sort: "random"` — same seed, same shuffle. */
+  seed?: number;
   genres?: string[];
   decades?: number[];
   contentRatings?: string[];
@@ -1206,6 +1207,7 @@ function itemsParams({
   kind,
   q,
   sort,
+  seed,
   genres = [],
   decades = [],
   contentRatings = [],
@@ -1232,6 +1234,7 @@ function itemsParams({
   if (kind) params.set("kind", kind);
   if (q) params.set("q", q);
   if (sort) params.set("sort", sort);
+  if (seed !== undefined) params.set("seed", String(seed));
   if (excludeKind) params.set("exclude_kind", excludeKind);
   if (initial) params.set("initial", initial);
   // Repeatable facet filters — one param per chosen value (OR within a facet).
@@ -1259,9 +1262,10 @@ function itemsParams({
  * per-library, which means knowing which library a thing is in before you can
  * look for it, which is the opposite of what search is for.
  *
- * Top-level rows only, the same as a browse grid: a search that returns
- * episodes loose among films answers a question nobody asked, and the episode's
- * show is the thing you wanted.
+ * Top-level rows, the same as a browse grid, plus albums and tracks: a music
+ * library's top level is its artists, so held to that a search could never find
+ * a record or a song by name. Episodes stay out — loose among films they answer
+ * a question nobody asked, and the show is the thing you wanted.
  */
 export function useGlobalSearch(q: string) {
   const query = q.trim();
@@ -3004,28 +3008,6 @@ export function useStopTranscode() {
       qc.invalidateQueries({ queryKey: ["transcodes"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
     },
-  });
-}
-
-// ------------------------------------------------------------ trending
-
-/*
- * A library's recent activity.
- *
- * `staleTime` is generous: this changes when somebody finishes something, which
- * is minutes-to-hours scale, and a shelf that refetches on every navigation
- * would be a query per page view for a list that had not moved.
- */
-export function useTrending(libraryID: number | undefined, limit = 12) {
-  return useQuery({
-    queryKey: ["trending", libraryID, limit],
-    queryFn: ({ signal }) =>
-      apiGet<Trending>(
-        `/api/libraries/${libraryID}/trending?limit=${limit}`,
-        signal,
-      ),
-    enabled: !!libraryID,
-    staleTime: 5 * 60_000,
   });
 }
 

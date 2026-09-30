@@ -111,3 +111,45 @@ func TestBrowsingMusicStillListsArtistsOnly(t *testing.T) {
 		t.Errorf("browsing the music grid returned %v, want only the artist %d", got, artist)
 	}
 }
+
+/*
+ * The shuffle behind the home page's Unwatched shelf holds still for one seed
+ * and moves for another. A shelf that reshuffled on every refetch would move
+ * tiles out from under the pointer.
+ */
+func TestRandomSortIsStableForOneSeed(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	for i := 0; i < 30; i++ {
+		name := string(rune('a'+i%26)) + string(rune('a'+i/26))
+		if _, err := st.UpsertItem(ctx, file(lib.ID, `C:\m\`+name+`.mkv`, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	order := func(seed int64) []int64 {
+		return searchIDs(t, st, ItemFilter{LibraryID: lib.ID, TopLevel: true, Sort: "random", Seed: seed})
+	}
+	a, again, other := order(7), order(7), order(8)
+	if len(a) != 30 {
+		t.Fatalf("a shuffled listing returned %d of 30 items", len(a))
+	}
+	same := func(x, y []int64) bool {
+		for i := range x {
+			if x[i] != y[i] {
+				return false
+			}
+		}
+		return true
+	}
+	if !same(a, again) {
+		t.Error("the same seed gave two different orders")
+	}
+	if same(a, other) {
+		t.Error("a different seed gave the same order; the shelf would never change")
+	}
+	title := searchIDs(t, st, ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if same(a, title) {
+		t.Error("the shuffle came back in title order")
+	}
+}

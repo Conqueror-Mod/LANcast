@@ -7087,13 +7087,15 @@ export interface operations {
                 /** @description `watched=false` restricts to items the calling user has not finished; any other value is ignored. Keys off the leaf's own play state, so it filters movies and episodes — a container carries no watched flag and is unaffected. */
                 watched?: boolean;
                 /**
-                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), or `track` (disc then track number).
+                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.
                  *
                  *     `longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.
                  *
                  *     **A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.
                  */
                 sort?: string;
+                /** @description With `sort=random`: any integer. **The same seed gives the same order**, so a shuffled shelf holds still when it refetches, and a caller picks a new seed for a new shuffle. Omitted means 0, a fixed shuffle like any other. */
+                seed?: number;
                 /** @description Page size. Defaults to 100, maximum 500. */
                 limit?: number;
                 /** @description Page offset. */

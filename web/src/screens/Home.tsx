@@ -8,34 +8,75 @@ import {
   useItems,
   useSetWatchedByID,
 } from "@/api/hooks";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { HomeMasthead } from "@/components/HomeMasthead";
-import { TrendingShelf } from "@/components/TrendingShelf";
 import { isMusic, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
 import { showContinueTarget } from "@/lib/continueShow";
 import { useHeroSpotlight } from "@/lib/useHero";
 import "./Home.css";
 
-// One library's own shelf. A component per library so each owns its query
-// without calling hooks in a loop.
-function LibraryShelf({ library }: { library: Library }) {
-  const { data } = useItems({ libraryID: library.id, limit: 20 });
+/*
+ * Films you have not started, shuffled.
+ *
+ * This replaced two kinds of shelf that only repeated what was already on the
+ * page: each library's first twenty titles in alphabetical order, which the
+ * library buttons in the masthead and the library pages already offer, and
+ * "Recently Played in …", which on a one-person server was Continue Watching
+ * again with the finished things left in. Reported as redundancies.
+ *
+ * What neither could do is suggest something. So: unwatched films, a different
+ * handful each time the page is opened. The shuffle is seeded once per visit
+ * (`sort=random&seed=`), so marking one watched refetches the row without
+ * reshuffling it under the pointer.
+ *
+ * Started films are left out as well as finished ones — they are on Continue
+ * Watching, and the server's `watched=false` counts a half-watched film as
+ * unwatched. The server is asked for a few more than the row shows so that
+ * dropping them does not leave it short.
+ */
+function UnwatchedShelf({
+  library,
+  seed,
+  named,
+  hide,
+}: {
+  library: Library;
+  seed: number;
+  /** Say which library, when there is more than one to tell apart. */
+  named: boolean;
+  /** The film the hero is already showing. */
+  hide?: number;
+}) {
+  const { data } = useItems({
+    libraryID: library.id,
+    sort: "random",
+    seed,
+    unwatched: true,
+    excludeKind: "collection,playlist",
+    limit: 30,
+  });
+  const items = (data?.items ?? [])
+    .filter((i) => !(i.progress && i.progress.position_ms > 0))
+    .filter((i) => i.id !== hide)
+    .slice(0, 20);
   return (
     <Shelf
-      title={library.name}
-      items={data?.items ?? []}
-      seeAllTo={`/library/${library.id}`}
+      title={named ? `Unwatched in ${library.name}` : "Unwatched"}
+      items={items}
+      // The library grid, with its own Unwatched filter already on.
+      seeAllTo={`/library/${library.id}?watched=false`}
     />
   );
 }
 
 // Home is the hub: a spotlight, then continue watching → recently added →
-// per-library shelves. Library names in the nav still jump straight to the full
+// something unwatched. Library names in the nav still jump straight to the full
 // grid — the hubs are a convenience, never a gate.
 export function Home() {
   const { data: libraries } = useLibraries();
@@ -59,6 +100,10 @@ export function Home() {
   // are looking at photographs.
   const { data: recentPhotos } = useRecentPhotos(20);
   const { data: memories } = useMemories(20);
+
+  // One shuffle per visit to the page; see UnwatchedShelf.
+  const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
+  const filmLibraries = (libraries ?? []).filter((l) => l.kind === "movie");
 
   const setWatched = useSetWatchedByID();
   const navigate = useNavigate();
@@ -231,14 +276,14 @@ export function Home() {
             question somebody opened the page with, and "what happened on this
             date years ago" is the one worth finding once they are here. */}
         <Shelf title="On this day" items={onThisDay} />
-        {/* Activity before catalogue: what people have been playing is a
-            livelier answer to "what now" than the same alphabetical grid the
-            library page already gives. */}
-        {libraries?.map((lib) => (
-          <TrendingShelf key={`trend-${lib.id}`} library={lib} />
-        ))}
-        {libraries?.map((lib) => (
-          <LibraryShelf key={lib.id} library={lib} />
+        {filmLibraries.map((lib) => (
+          <UnwatchedShelf
+            key={lib.id}
+            library={lib}
+            seed={seed}
+            named={filmLibraries.length > 1}
+            hide={hero?.item.id}
+          />
         ))}
       </div>
       {!hasAnything && (
