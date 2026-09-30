@@ -89,8 +89,10 @@ is more code in a worse place.
 
 ## Local addition — the video overlay (2026-09-16)
 
-`overlay.go`, the `overlay` and `handingOff` fields, one early branch in
-`wndproc` for the main window and one for the overlay, two
+`overlay.go`, the `overlay`, `shield` and `handingOff` fields, a branch in
+`wndproc` for the click-catching shield over the docked picture, one early branch in
+`wndproc` for the main window and one for the overlay, a `WM_DPICHANGED` case
+that takes the rectangle Windows suggests (the client is per-monitor DPI aware), two
 interface methods on `WebView` (`EnterVideoOverlay`, `LeaveVideoOverlay`), and
 `SetBackground` / `Reparent` on `edge.Chromium`.
 

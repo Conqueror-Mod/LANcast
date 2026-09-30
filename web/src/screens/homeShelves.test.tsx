@@ -73,7 +73,7 @@ function mount(libs: unknown[]) {
       if (url.includes("/api/continue")) return json({ items: continuing });
       if (url.includes("/api/items") && url.includes("sort=random")) {
         return json({
-          items: [film(1, "Never Seen"), film(2, "Half Watched", 600_000)],
+          items: [film(1, "Never Seen")],
           total: 2,
         });
       }
@@ -121,16 +121,27 @@ const labels = () =>
   [...host.querySelectorAll(".section-label")].map((e) => e.textContent ?? "");
 
 describe("home shelves", () => {
-  it("offers unwatched films, shuffled, without the half-watched ones", async () => {
+  it("offers films not yet begun, shuffled", async () => {
     mount([library(1, "Movies", "movie")]);
     await render();
     const ask = gets.find((u) => u.includes("sort=random"));
     expect(ask, "no shuffled request for the Unwatched shelf").toBeTruthy();
-    expect(ask).toContain("watched=false");
+    // Not begun, which leaves out a half-watched film (it is on Continue
+    // Watching) and is the only question that means anything for a show.
+    expect(ask).toContain("status=unstarted");
     expect(ask).toMatch(/seed=\d+/);
     expect(host.textContent).toContain("Never Seen");
-    // It is on Continue Watching; the server counts it as unwatched.
-    expect(host.textContent).not.toContain("Half Watched");
+  });
+
+  // A show has no play state of its own, so watched=false would pass every
+  // show; unstarted asks about its episodes.
+  it("offers shows not yet begun from a TV library too", async () => {
+    mount([library(1, "Movies", "movie"), library(3, "TV Shows", "show")]);
+    await render();
+    const asks = gets.filter((u) => u.includes("sort=random"));
+    expect(asks.some((u) => u.includes("library_id=3") && u.includes("status=unstarted"))).toBe(true);
+    expect(labels().some((l) => /Unwatched in TV Shows/i.test(l))).toBe(true);
+    expect(labels().some((l) => /Unwatched in Movies/i.test(l))).toBe(true);
   });
 
   it("no longer repeats each library's alphabetical shelf or its play history", async () => {
@@ -156,7 +167,7 @@ describe("home shelves", () => {
     expect(labels().some((l) => /Unwatched in Kids/i.test(l))).toBe(true);
   });
 
-  // Only film libraries: music and photographs have no unwatched to offer.
+  // Film and show libraries only: music and photographs have no unwatched.
   it("asks nothing of a music library", async () => {
     mount([library(2, "Music", "music")]);
     await render();

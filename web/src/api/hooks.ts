@@ -1278,10 +1278,10 @@ function itemsParams({
  * per-library, which means knowing which library a thing is in before you can
  * look for it, which is the opposite of what search is for.
  *
- * Top-level rows, the same as a browse grid, plus albums and tracks: a music
- * library's top level is its artists, so held to that a search could never find
- * a record or a song by name. Episodes stay out — loose among films they answer
- * a question nobody asked, and the show is the thing you wanted.
+ * Top-level rows, the same as a browse grid, plus albums, tracks and episodes
+ * matched by their own title: held to the top level a search could never find
+ * a record, a song or an episode by name. A show's name still finds the show,
+ * not every episode in it.
  */
 export function useGlobalSearch(q: string) {
   const query = q.trim();

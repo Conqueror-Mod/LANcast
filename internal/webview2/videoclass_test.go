@@ -38,3 +38,13 @@ func TestTheVideoClassIsRegisteredOnce(t *testing.T) {
 			"registering twice would fail and lose the brush")
 	}
 }
+
+// The shield over the docked picture has a class of its own too, for its hand
+// cursor. A failed registration would leave the docked picture unclickable --
+// the reported bug, back again, with nothing said.
+func TestTheShieldClassRegisters(t *testing.T) {
+	if shieldClass() == nil {
+		t.Error("the shield window class did not register, so a click on the " +
+			"docked picture reaches mpv and nothing opens the player")
+	}
+}

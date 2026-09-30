@@ -32,6 +32,8 @@
   border: 1px solid var(--gold-dormant);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   z-index: var(--z-dock-picture);
+  /* A click on the picture opens the player (PlaybackProvider). */
+  cursor: pointer;
 }
 
 /* A record is square, so the docked surface is too — a 16:9 box around a square

@@ -941,6 +941,10 @@ type ItemFilter struct {
 	// "half watched" are both true of it.
 	InProgress bool
 
+	// Unstarted restricts to items this user has not begun: nothing played in
+	// the item itself or in anything it holds. Keyed by UserID. See ListItems.
+	Unstarted bool
+
 	// Unmatched restricts to items no provider claimed with confidence. A
 	// library-tidying filter rather than a browsing one, which is why it sits
 	// with the status filters and not with the facets.
@@ -1092,21 +1096,26 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		args = append(args, *f.ParentID)
 	case f.TopLevel && f.Query != "":
 		/*
-		 * A search reaches into music, which a grid does not.
+		 * A search reaches past the top level, which a grid does not.
 		 *
-		 * A music library's top level is its artists, so a search held to the
-		 * top level could find an artist and nothing else: an album or a song
-		 * typed by name answered "nothing matches", in the library's own box
-		 * and in Search everything alike. Reported as "only an artist can be
-		 * searched".
+		 * A music library's top level is its artists, so a search held to it
+		 * found an artist and nothing else: an album or a song typed by name
+		 * answered "nothing matches". A show library's top level is its shows,
+		 * so an episode typed by name did the same. Albums, tracks and
+		 * episodes are what someone types, and each opens on a page of its
+		 * own, so they join the answer. Seasons and photos do not: loose in a
+		 * result they are noise.
 		 *
-		 * Albums and tracks are what someone looking for music types, and
-		 * both open on a page of their own, so they join the answer. Other
-		 * children do not: an episode's title is a season's business, and a
-		 * season or a photo loose in a result is noise. The top-level answers
-		 * still come first — see the ordering below.
+		 * The children match on their **own title only**. An episode's series
+		 * is its show's name, so matching it too would answer "Futurama" with
+		 * the show and every one of its episodes. The show is the answer to
+		 * that; an episode is the answer to its own name. The top-level
+		 * answers still come first -- see the ordering below.
 		 */
-		where += ` AND ((` + topLevelPredicate + `) OR (kind IN ('album', 'track') AND missing = 0))`
+		where += ` AND (((` + topLevelPredicate + `) AND (title LIKE ? OR series LIKE ?))` +
+			` OR (kind IN ('album', 'track', 'episode') AND title LIKE ?)) AND missing = 0`
+		q := "%" + f.Query + "%"
+		args = append(args, q, q, q)
 	case f.TopLevel:
 		where += ` AND ` + topLevelPredicate
 	default:
@@ -1117,7 +1126,8 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		// one-film collections the grid and the count both refuse.
 		where += ` AND ` + collectionIsReal
 	}
-	if f.Query != "" {
+	// The wide search above has already matched; this is every other listing.
+	if f.Query != "" && (f.ParentID != nil || !f.TopLevel) {
 		/*
 		 * A search offers only what can be played.
 		 *
@@ -1343,6 +1353,30 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 				AND ps.watched = 0 AND ps.position_ms > 0)`
 		args = append(args, f.UserID)
 	}
+	if f.Unstarted {
+		/*
+		 * Not begun: no play recorded on the item or on anything within it.
+		 *
+		 * `watched=false` keys off an item's own row, which is right for a film
+		 * and says nothing about a show -- a show has no play state of its own,
+		 * so every show passes it. The home page's Unwatched shelf for a show
+		 * library needs "you have not started this", which is a question about
+		 * its episodes. Two levels down covers both shapes a show comes in,
+		 * episodes under seasons and episodes directly under the show, and is
+		 * the same shape as an artist's tracks under albums.
+		 *
+		 * A position past zero or a watched flag counts as started; a row with
+		 * neither is a film opened and closed at once, which did not begin it.
+		 */
+		where += ` AND NOT EXISTS (
+			SELECT 1 FROM playback_state ps
+			WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)
+			  AND (ps.item_id = media_item.id OR ps.item_id IN (
+			      SELECT c.id FROM media_item c
+			      LEFT JOIN media_item p ON p.id = c.parent_id
+			      WHERE c.parent_id = media_item.id OR p.parent_id = media_item.id)))`
+		args = append(args, f.UserID)
+	}
 	if f.Unmatched {
 		// 'unmatched' is meta.StateUnmatched; spelled literally because store
 		// owns its SQL and does not import the matcher.
@@ -1457,10 +1491,10 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	}
 
 	if f.TopLevel && f.Query != "" {
-		// Artists, films and shows ahead of albums, and albums ahead of songs:
+		// Artists, films and shows first, then albums, episodes and songs:
 		// typing a band's name should show the band before forty of its tracks.
 		order = strings.Replace(order, ` ORDER BY `,
-			` ORDER BY kind IN ('album', 'track'), kind = 'track', `, 1)
+			` ORDER BY kind IN ('album', 'track', 'episode'), kind = 'track', kind = 'episode', `, 1)
 	}
 
 	limit := f.Limit

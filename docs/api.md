@@ -893,42 +893,6 @@ doing its job, a film library with three episode-shaped names is a box set, and
 a library under five items is not judged at all. A check that cries wolf is a
 check that gets ignored, which is worse than no check.
 
-### `GET /api/libraries/{id}/trending`
-
-What this library's people have been playing in the last thirty days.
-
-```json
-{ "items": [ { "item": { "id": 87, "title": "Arrival", ... },
-               "viewers": 3, "finishers": 1, "last_at": 1755200000 } ],
-  "contributors": 3, "window_days": 30 }
-```
-
-`?limit=` defaults to 12 (max 50). Ranked by `viewers` descending, then by most
-recent activity — the tie-break is not decoration: without it a page of items
-that all have one viewer returns in whatever order SQLite chooses, and the shelf
-reshuffles itself on every refresh.
-
-`viewers` counts **accounts, not plays.** `playback_state` holds one row per
-item per user, so this is how many people have played something recently rather
-than how many times it has been played.
-
-`contributors` is why that is safe to expose. With one account every count is 1
-and the list is honestly "recently played", not a trend — so the client is given
-what it needs to say the true thing instead of being handed a list that calls
-itself trending regardless. A number meaning different things at different
-scales carries its scale with it.
-
-`finishers` is reported beside `viewers` because a title many people start and
-nobody finishes is a different fact from one everybody finished, and a single
-popularity number destroys the difference.
-
-Containers — shows, seasons, artists, albums, galleries, playlists — are
-excluded. A season is not a thing anybody played; it is where the episodes live.
-
-**Not admin-gated, and it names no accounts.** Which titles are popular is a
-fact about a shared library; who watched them is a fact about a person, and this
-endpoint deliberately cannot answer the second.
-
 ### `GET` / `PUT` / `DELETE /api/items/{id}/rating`
 
 **Your** rating of an item, and an optional note about why.
@@ -1094,14 +1058,14 @@ rather than matching everybody.
 | Parameter | Meaning |
 |---|---|
 | `library_id` | Restrict to one library |
-| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. In a search the listing reaches past the top level to **albums and tracks** — a music library's top level is its artists, so otherwise an album or song typed by name was never found — ranked after the top-level answers (artists, films, shows), then albums, then tracks. Other children (episodes, seasons, photos) are not searched |
+| `q` | Free text over title and series. **`library_id` is optional here** — omitting it searches every library, which is what the client's global search does. A search that made you name the library first would ask you to know where a thing is before looking for it. In a search the listing reaches past the top level to **albums, tracks and episodes** — a music library's top level is its artists and a show library's its shows, so otherwise an album, a song or an episode typed by name was never found. Those children match on **their own title only**: an episode's `series` is its show's name, and matching it would answer a show's name with every one of its episodes. Ranked top-level answers first (artists, films, shows), then albums, episodes, tracks. Seasons and photos are not searched |
 | `initial` | The A–Z rail: one letter, or `#` for titles starting with anything that is not a Latin letter. Matches on `sort_title`, case-insensitively. A **filter, not a scroll offset** — the grid pages in as you scroll, so "jump to S" cannot mean "scroll to a row that has not loaded". `GET /api/libraries/{id}/facets` returns `initials`, the letters actually present, so a client never offers one that finds nothing |
 | `exclude_kind` | Drops kinds from the listing, **comma-separated**. The browse grid passes `collection,playlist`: both group items rather than being them, and a tile beside its own members made a curated shelf read as an unsorted one. Each has its own page (`kind=collection`, `kind=playlist`). A single value still means what it always did — the parameter grew a list without changing the old contract. It was one kind for a while, and the second had nowhere to go: every `.m3u` a scene release ships stood in the *artist* grid beside the artists whose tracks were on it |
 | `kind` | `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `other`. **An open set** ([ADR 0018](adr/0018-api-contract-and-versioning.md)) — new kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee it does not have |
 | `parent_id` | Return the children of one item — a show's episodes, a work's parts |
 | `collection_id` | Return a collection's members (many-to-many; not `parent_id`) |
 | `playlist_id` | Return a playlist's entries **in playing order** ([ADR 0030](adr/0030-playlists-and-m3u.md)). The only listing that may repeat an item id — see below |
-| `q` | Case-insensitive substring match on title and series. Without `parent_id` or `kind`, also matches albums and tracks — see above |
+| `q` | Case-insensitive substring match on title and series. Without `parent_id` or `kind`, also matches albums, tracks and episodes by their own title — see above |
 | `genre` | Restrict to items carrying this exact genre name. **Repeatable** — `genre=A&genre=B` matches either |
 | `decade` | Restrict to a decade — `1990` means 1990–1999. **Repeatable**; a non-numeric value is `400` |
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
@@ -1110,7 +1074,7 @@ rather than matching everybody.
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
 | `face_cluster` | Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page. **Not `person`**, which is a film credit: a credit is what a provider said about a film, a face group is a cluster of embeddings this server computed from photographs, and nothing joins them. **Repeatable**, OR within the facet like every other — see below, because the reason is not consistency. A non-numeric value is `400`. **Marked folders are excluded and the caller cannot opt in**: being able to ask who is in a folder you cannot open is the disclosure [ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md) covers, by another route |
-| `status` | `in_progress` (started, not finished) or `unmatched` (no provider claimed it). **Single-valued**, because the two cannot usefully be combined |
+| `status` | `in_progress` (started, not finished), `unstarted` (nothing begun — no play on the item **or on anything it holds**, so a show qualifies only when none of its episodes has been started; `watched=false` cannot say that, because a show has no play state of its own), or `unmatched` (no provider claimed it). **Single-valued**, because they cannot usefully be combined |
 | `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | `min_rating` | Rated at least this highly, out of ten. **Unrated items are excluded, not sunk**: a film with no rating is not a film rated zero, and sweeping them to the bottom would quietly hide the unmatched half of a library behind a control that says nothing about matching. An unparseable value widens rather than `400`s |
 | `watched` | `watched=false` restricts to items the calling user has not finished; any other value is ignored |

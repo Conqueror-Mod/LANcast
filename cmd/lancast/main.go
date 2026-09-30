@@ -69,6 +69,7 @@ func main() {
 	_ = *window // accepted and ignored; the window is the default now
 	browserMode = *browser
 	startLogging()
+	logDPIAwareness()
 
 	/*
 	 * One client at a time. Launching again — a second press of the shortcut —

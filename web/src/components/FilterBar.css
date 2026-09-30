@@ -233,3 +233,34 @@
   box-shadow: 0 0 0 4px var(--gold-ring);
   border-radius: 4px;
 }
+
+/* A filter option: a pill that toggles. Selection is the nebula-blue fill,
+   deliberately NOT gold — gold means "where you are" and nothing else, so a
+   multi-select filter state must read in a different colour. */
+.chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dormant);
+  background: rgba(10, 15, 34, 0.6);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    background var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+}
+
+.chip:hover {
+  color: var(--text-primary);
+}
+
+.chip:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.chip.is-on {
+  background: var(--nebula-blue);
+  border-color: var(--nebula-blue);
+  color: var(--text-primary);
+}

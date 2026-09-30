@@ -632,8 +632,11 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// that always yields nothing is worse than not offering it.
 		InProgress: q.Get("status") == "in_progress",
 		Unmatched:  q.Get("status") == "unmatched",
-		Limit:      queryInt(r, "limit"),
-		Offset:     queryInt(r, "offset"),
+		// Nothing in it begun -- a film not started, a show with no episode
+		// started. The home page's Unwatched shelves.
+		Unstarted: q.Get("status") == "unstarted",
+		Limit:     queryInt(r, "limit"),
+		Offset:    queryInt(r, "offset"),
 	}
 	/*
 	 * Derived, never accepted from the caller. See TakenMonth above.
