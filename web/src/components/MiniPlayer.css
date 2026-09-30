@@ -126,10 +126,22 @@
   display: inline-flex;
 }
 
+/*
+ * Opens sideways, along the strip's own row, never upward.
+ *
+ * Upward put it about thirty pixels into the space the docked picture fills.
+ * For the browser player that only overlapped; for native video the picture is
+ * a window above the page, so the slider was drawn *behind* it — invisible —
+ * and a click where it should have been landed on the picture and opened the
+ * full player instead. Beside the button, on the strip's row, it is over the
+ * strip's own controls while open and never over the picture.
+ */
 .mini__volume-pop {
   position: absolute;
-  bottom: calc(100% + 8px);
-  right: -6px;
+  top: 50%;
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
