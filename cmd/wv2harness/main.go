@@ -39,12 +39,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "need -url and -data")
 		os.Exit(2)
 	}
-	// A test page cannot press play. Only set when nothing else has, so a caller
-	// adding its own switches is not silently overwritten.
-	const argsEnv = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
-	if os.Getenv(argsEnv) == "" {
-		_ = os.Setenv(argsEnv, "--autoplay-policy=no-user-gesture-required")
-	}
+	/*
+	 * No browser switches of our own: a test page plays MUTED.
+	 *
+	 * This used to set WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS to
+	 * --autoplay-policy=no-user-gesture-required, because a test page cannot
+	 * press play. Since 2cfc6b2 the window adds its own switches and refuses
+	 * to start if that variable is already set, so the harness closed at once
+	 * with "not adding browser arguments" and went unnoticed for two days
+	 * because nobody ran it. Chromium autoplays muted media without a gesture,
+	 * which is all a probe needs; a page that must hear audio needs the window
+	 * code to grow an option for it rather than this reaching around it.
+	 */
 
 	err := clientwindow.Open(clientwindow.Options{
 		URL:     *url,
