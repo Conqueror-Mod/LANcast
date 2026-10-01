@@ -63,6 +63,21 @@ const PROBES: Record<string, string> = {
    */
   flacmp4: 'audio/mp4; codecs="flac"',
   opusmp4: 'audio/mp4; codecs="opus"',
+  /*
+   * The Matroska container, asked about on its own.
+   *
+   * It used to ride on `hevc`, server-side, as "the container it usually
+   * arrives in", so an engine that answered for HEVC was sent every MKV whose
+   * codecs it could decode, without anybody asking whether it could open an
+   * MKV. And a failed MKV could not be recovered, because the claim that let
+   * the container through was not one capabilitiesNeededBy knew about.
+   *
+   * With H.264 named, so the answer is about the box and not the codec.
+   * Measured in WebView2 (Edge 154): "probably" for this string, "maybe" with
+   * no codecs, and real playback of H.264 MKVs with AAC, Opus, AC-3 and FLAC
+   * audio, plus HEVC. So this client loses nothing by being asked.
+   */
+  matroska: 'video/x-matroska; codecs="avc1.64001f"',
 };
 
 /*
@@ -372,12 +387,22 @@ export function withCapabilities(url: string): string {
  * `pix_fmt` is the one signal the server has and this does not, so ten-bit is
  * read from the profile alone — which is why an unrecognised profile falls back
  * to the plain claim rather than guessing.
+ *
+ * The container counts too. `container` is the item's own field, which is the
+ * file's extension (`mkv`), not ffprobe's name for it. An MKV that would not
+ * play puts `matroska` at risk, which is the claim that let it through: before
+ * it had its own claim, the permission came from `hevc`, which an H.264 MKV
+ * never put at risk, so the retry was handed the same file again.
  */
+const MATROSKA_EXTENSIONS = new Set(["mkv", "mk3d", "mka", "matroska"]);
+
 export function capabilitiesNeededBy(
   streams: { kind: string; codec?: string; profile?: string }[] | undefined,
+  container?: string | null,
 ): string[] {
-  if (!streams) return [];
   const need = new Set<string>();
+  if (MATROSKA_EXTENSIONS.has((container ?? "").toLowerCase())) need.add("matroska");
+  if (!streams) return [...need].sort();
   const tenBit = (p: string | undefined) =>
     /(^|\s)(main\s*10|high\s*10|10\s*bit)/i.test(p ?? "");
 

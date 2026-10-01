@@ -6611,10 +6611,10 @@ export interface components {
         /**
          * @description Comma-separated extra capabilities, applied **on top of** the named profile.
          *
-         *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+         *     - `hevc` — HEVC video **at 8 bits**. A codec claim only: before v0.9.46 it also granted `matroska`, and a client that can open MKV now says so with that claim
          *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
          *     - `ac3`, `eac3`, `dts` — that audio codec
-         *     - `matroska` — the container alone, for a client with a real demuxer
+         *     - `matroska` — the Matroska container. Probe `video/x-matroska; codecs="avc1.64001f"` (H.264 named, so the answer is about the box); WebView2 answers `probably` and plays MKV
          *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
          *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
          *
@@ -7436,10 +7436,10 @@ export interface operations {
                 /**
                  * @description Comma-separated extra capabilities, applied **on top of** the named profile.
                  *
-                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc` — HEVC video **at 8 bits**. A codec claim only: before v0.9.46 it also granted `matroska`, and a client that can open MKV now says so with that claim
                  *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
                  *     - `ac3`, `eac3`, `dts` — that audio codec
-                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `matroska` — the Matroska container. Probe `video/x-matroska; codecs="avc1.64001f"` (H.264 named, so the answer is about the box); WebView2 answers `probably` and plays MKV
                  *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
                  *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
                  *
@@ -7654,10 +7654,10 @@ export interface operations {
                 /**
                  * @description Comma-separated extra capabilities, applied **on top of** the named profile.
                  *
-                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc` — HEVC video **at 8 bits**. A codec claim only: before v0.9.46 it also granted `matroska`, and a client that can open MKV now says so with that claim
                  *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
                  *     - `ac3`, `eac3`, `dts` — that audio codec
-                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `matroska` — the Matroska container. Probe `video/x-matroska; codecs="avc1.64001f"` (H.264 named, so the answer is about the box); WebView2 answers `probably` and plays MKV
                  *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
                  *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
                  *
@@ -7779,10 +7779,10 @@ export interface operations {
                 /**
                  * @description Comma-separated extra capabilities, applied **on top of** the named profile.
                  *
-                 *     - `hevc` — HEVC video **at 8 bits**, and the `matroska` container it usually arrives in
+                 *     - `hevc` — HEVC video **at 8 bits**. A codec claim only: before v0.9.46 it also granted `matroska`, and a client that can open MKV now says so with that claim
                  *     - `hevc10` — permission for **10-bit** HEVC (Main 10). Adds no codec of its own
                  *     - `ac3`, `eac3`, `dts` — that audio codec
-                 *     - `matroska` — the container alone, for a client with a real demuxer
+                 *     - `matroska` — the Matroska container. Probe `video/x-matroska; codecs="avc1.64001f"` (H.264 named, so the answer is about the box); WebView2 answers `probably` and plays MKV
                  *     - `high10` — permission for **10-bit H.264** (High 10). Adds no codec of its own
                  *     - `flacmp4` / `opusmp4` — permission to carry FLAC / Opus **inside MP4**. Adds no codec of its own
                  *

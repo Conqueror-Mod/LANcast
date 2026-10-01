@@ -94,4 +94,29 @@ describe("what a file could have been ruined by", () => {
       capabilitiesNeededBy([{ kind: "subtitle", codec: "subrip" }]),
     ).toEqual([]);
   });
+  /*
+   * The container is at risk too. Dreamcatcher is H.264 + Opus in an MKV: by
+   * its streams it needs only `opusmp4`, but what let it direct-play was the
+   * container. Before `matroska` was a claim of its own, that permission came
+   * from `hevc`, which this file never put at risk, so a failure here would
+   * have been retried as the same direct play for ever.
+   */
+  it("puts matroska at risk for an MKV, from the item's extension", () => {
+    expect(capabilitiesNeededBy([v("h264", "High"), a("opus")], "mkv")).toEqual([
+      "matroska",
+      "opusmp4",
+    ]);
+    expect(capabilitiesNeededBy([v("h264", "High")], "MKV")).toEqual(["matroska"]);
+  });
+
+  it("does not blame matroska for a file that is not one", () => {
+    expect(capabilitiesNeededBy([v("h264", "High"), a("opus")], "mp4")).toEqual(["opusmp4"]);
+    expect(capabilitiesNeededBy([v("h264", "High")], undefined)).toEqual([]);
+  });
+
+  it("blames the container even when the streams are unknown", () => {
+    // The container is known from the item before any probe; withholding it
+    // is no guess, and it is the one claim that file certainly used.
+    expect(capabilitiesNeededBy(undefined, "mkv")).toEqual(["matroska"]);
+  });
 });
