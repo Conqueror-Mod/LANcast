@@ -5,7 +5,14 @@
  * a seek asked for early applied once there is something to seek.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MpvBackend, NATIVE_VIDEO_CLASS, mpvBackend, streamItem } from "./mpvBackend";
+import {
+  MpvBackend,
+  NATIVE_VIDEO_CLASS,
+  mpvBackend,
+  nativeFeatures,
+  resetNativePlaybackAvailability,
+  streamItem,
+} from "./mpvBackend";
 import { getPrefs, resetPrefs, setPrefs } from "./prefs";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -284,5 +291,39 @@ describe("MpvBackend audio settings", () => {
       ["night", 0],
       ["dialogue", 1],
     ]);
+  });
+});
+
+/*
+ * Which features the client's player has. The page and the player are
+ * different versions often enough that the page must ask: a client without
+ * the binding is older than every feature it names.
+ */
+describe("nativeFeatures", () => {
+  afterEach(() => {
+    delete window.lancastMpvFeatures;
+    resetNativePlaybackAvailability();
+  });
+
+  it("is empty for a client that predates the question", async () => {
+    resetNativePlaybackAvailability();
+    expect(await nativeFeatures()).toEqual([]);
+  });
+
+  it("is what the client says", async () => {
+    resetNativePlaybackAvailability();
+    window.lancastMpvFeatures = vi.fn(async () => ["audiofx"]);
+    expect(await nativeFeatures()).toEqual(["audiofx"]);
+  });
+
+  it("is empty when the answer fails or is not a list", async () => {
+    resetNativePlaybackAvailability();
+    window.lancastMpvFeatures = vi.fn(async () => {
+      throw new Error("binding gone");
+    });
+    expect(await nativeFeatures()).toEqual([]);
+    resetNativePlaybackAvailability();
+    window.lancastMpvFeatures = vi.fn(async () => "audiofx" as unknown as string[]);
+    expect(await nativeFeatures()).toEqual([]);
   });
 });

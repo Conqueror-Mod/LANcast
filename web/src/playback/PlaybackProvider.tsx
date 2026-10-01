@@ -60,7 +60,7 @@ import {
 } from "./fileTransport";
 import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
-import { mpvBackend, nativePlaybackAvailable } from "./mpvBackend";
+import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
@@ -225,6 +225,9 @@ interface PlaybackState {
   isAudio: boolean;
   /** Playing through the desktop client's libmpv rather than the element. */
   native: boolean;
+  /** Night mode and dialogue boost can be applied: native, and a client new
+   *  enough to have them (mpvBackend.ts, nativeFeatures). */
+  audioFX: boolean;
   cover: string | undefined;
   surface: Surface;
 
@@ -491,6 +494,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const nativeRef = useRef(false);
   // The same fact as state, for the layout effect to react to.
   const [nativeOn, setNativeOn] = useState(false);
+  // Whether this client's player has the audio filters at all. A fact about
+  // the client, asked once, not about the file.
+  const [fxSupported, setFxSupported] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void nativeFeatures().then((f) => {
+      if (live) setFxSupported(f.includes("audiofx"));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const media = useCallback(
     (): MediaBackend | null => (nativeRef.current ? mpvBackend() : videoRef.current),
     [],
@@ -2148,6 +2163,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     item,
     isAudio: !!isAudio,
     native: nativeOn,
+    audioFX: nativeOn && fxSupported,
     cover,
     surface,
     playing,

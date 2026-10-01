@@ -11,7 +11,7 @@ import (
 // changed constant should have to change a line here too.
 func TestAudioFilter(t *testing.T) {
 	const (
-		night  = "acompressor=threshold=0.063:ratio=4:attack=10:release=250:makeup=4,alimiter=limit=0.9:level=0"
+		night  = "acompressor=threshold=0.01:ratio=8:attack=50:release=2000:makeup=5,alimiter=limit=0.7:level=0"
 		low51  = "aeval=exprs=val(0)*0.5|val(1)*0.5|val(2)|val(3)*0.5|val(4)*0.5|val(5)*0.5:c=same"
 		high51 = "aeval=exprs=val(0)*0.35|val(1)*0.35|val(2)|val(3)*0.35|val(4)*0.35|val(5)*0.35:c=same"
 		high71 = "aeval=exprs=val(0)*0.35|val(1)*0.35|val(2)|val(3)*0.35|val(4)*0.35|val(5)*0.35|val(6)*0.35|val(7)*0.35:c=same"
