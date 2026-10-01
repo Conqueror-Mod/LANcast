@@ -25,7 +25,16 @@ var Observed = []struct {
 	{"paused-for-cache", false},
 	{"eof-reached", false},
 	{"core-idle", false},
+	// What the audio filter is built for (audiofx.go). Read from the decoder
+	// rather than the probe, because the track can change mid-film and a
+	// stereo commentary after a 5.1 main track is ordinary.
+	{"audio-params/channel-count", true},
 }
+
+// AudioChannelsEvent is raised when the decoded channel count changes. It is
+// for the native player's own use — the audio filter is rebuilt on it — and
+// is not a media-element event, so it never reaches the page.
+const AudioChannelsEvent = "audiochannels"
 
 // State is the backend's view of the player, as the page will read it.
 type State struct {
@@ -35,6 +44,8 @@ type State struct {
 	Waiting     bool
 	Ended       bool
 	Loaded      bool // loadedmetadata has been raised for this source
+	// Channels is the decoded audio's channel count, 0 while there is none.
+	Channels int
 }
 
 // NewState is the state of a backend with nothing loaded.
@@ -110,6 +121,18 @@ func Apply(s State, c Change) (State, []string) {
 		} else if !s.Paused {
 			ev = append(ev, "playing")
 		}
+	case "audio-params/channel-count":
+		// Unavailable counts too: it is the gap between one file's audio and
+		// the next, and a graph built for six channels must not be left on
+		// whatever opens after it until that file reports its own count.
+		n := 0
+		if !c.Unavailable && c.Double > 0 {
+			n = int(c.Double)
+		}
+		if n != s.Channels {
+			s.Channels = n
+			ev = append(ev, AudioChannelsEvent)
+		}
 	case "eof-reached":
 		// keep-open holds the last frame and sets this; the element's `ended`
 		// also leaves `paused` true, which the provider relies on when it
@@ -156,8 +179,14 @@ func Opened(s State) (State, []string) {
 // Reset is the state after a new source is loaded: position and duration
 // forgotten, pause kept, because the element keeps `paused` across a `load()`
 // until `play()` is called.
+//
+// The channel count is kept, for the reason Opened exists: mpv reports a
+// property only when its value changes, so a 5.1 film after a 5.1 film reports
+// no count at all. Forgetting it here would leave the state saying 0 for the
+// whole second film, and dialogue boost would switch itself off.
 func Reset(s State) State {
 	n := NewState()
 	n.Paused = s.Paused
+	n.Channels = s.Channels
 	return n
 }

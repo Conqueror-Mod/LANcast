@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { QUALITIES, DEFAULTS, type SubFont } from "@/playback/prefs";
+import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, type SubFont } from "@/playback/prefs";
 import { FONTS } from "@/playback/cueVars";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
@@ -144,6 +144,15 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
   // against "Off" it is four controls that visibly do nothing.
   const subsOn = !!pb.activeSub;
 
+  // The audio pass (docs/audio-pass-plan.md), Phase 1: only the desktop's own
+  // player has the filters, so the rows are absent everywhere else rather
+  // than present and inert. Dialogue boost is absent on a mono track, which
+  // has no dialogue to separate from anything. The client makes the same call
+  // from what mpv is actually decoding; this is the probe's view of the track,
+  // good enough to decide whether to offer the control.
+  const channels = pb.audioTracks.find((t) => t.index === currentAudio)?.channels;
+  const canBoost = channels !== 1;
+
   if (showSubs) {
     return (
       <div className="pbset" role="dialog" aria-label="Subtitles">
@@ -272,6 +281,50 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
             ))}
           </select>
         </Row>
+
+        {/* Selects rather than a checkbox for night mode: the panel's
+            checkbox draws its checked state in gold, and gold is the focus
+            signal (design.md), not "on". */}
+        {pb.native && !pb.isAudio && (
+          <>
+            <Row label="Night mode">
+              <select
+                className="pbset__select"
+                value={prefs.nightVideo ? "on" : "off"}
+                onChange={(e) => setPrefs({ nightVideo: e.target.value === "on" })}
+              >
+                <option value="off">Off</option>
+                <option value="on">On</option>
+              </select>
+            </Row>
+            {canBoost && (
+              <Row label="Dialogue boost">
+                <select
+                  className="pbset__select"
+                  value={String(prefs.dialogueVideo)}
+                  onChange={(e) => setPrefs({ dialogueVideo: Number(e.target.value) })}
+                >
+                  {DIALOGUE_LEVELS.map((label, level) => (
+                    <option key={level} value={level}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+            )}
+            {/* Said once, and only while it applies. Dialogue boost lowers every
+                channel except the one dialogue is in, so it cannot clip — and
+                the first thing anybody notices is that the film got quieter.
+                Night mode is the opposite (it lifts quiet speech), so it gets
+                no note. */}
+            {canBoost && prefs.dialogueVideo > 0 && (
+              <p className="pbset__note">
+                Dialogue boost turns everything else down rather than the voices
+                up, so you may want the volume a little higher.
+              </p>
+            )}
+          </>
+        )}
 
         {!pb.isAudio && (
           <>

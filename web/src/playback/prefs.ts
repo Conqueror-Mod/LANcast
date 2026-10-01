@@ -81,7 +81,21 @@ export interface Prefs {
   subPosition: SubPosition;
   /** Seconds to shift the cues by. Positive shows them later. */
   subOffset: number;
+
+  /*
+   * The audio pass (docs/audio-pass-plan.md). Per device, because a curve is
+   * about the room and the speakers, and per content type, because what a war
+   * film needs at eleven at night is not what an album needs. Only the video
+   * pair exists so far; music gets its own when its engine does (Phase 2).
+   */
+  /** Compress the dynamic range: explosions down, speech up. */
+  nightVideo: boolean;
+  /** 0 off, 1 low, 2 high. See DIALOGUE_LEVELS. */
+  dialogueVideo: number;
 }
+
+/** The dialogue-boost levels, in order. The index is what the player is sent. */
+export const DIALOGUE_LEVELS = ["Off", "Low", "High"] as const;
 
 export const DEFAULTS: Prefs = {
   quality: "original",
@@ -92,6 +106,8 @@ export const DEFAULTS: Prefs = {
   subSize: 1,
   subPosition: 8,
   subOffset: 0,
+  nightVideo: false,
+  dialogueVideo: 0,
 };
 
 const KEY = "lancast:playback-prefs";
@@ -145,6 +161,18 @@ export function resetPrefs() {
   current = { ...DEFAULTS };
   write(current);
   for (const fn of listeners) fn(current);
+}
+
+/**
+ * Hear every change, outside React. For the native backend, which is a class
+ * and one per window, and has to pass a setting to mpv the moment it changes
+ * rather than at the next render of something. Returns the unsubscribe.
+ */
+export function subscribePrefs(fn: (p: Prefs) => void): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 export function usePrefs(): [Prefs, (patch: Partial<Prefs>) => void] {
