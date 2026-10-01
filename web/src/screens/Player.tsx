@@ -26,6 +26,8 @@ import {
   SettingsGlyph,
   QueueGlyph,
   TogetherGlyph,
+  NightGlyph,
+  DialogueGlyph,
   PipGlyph,
   FullscreenGlyph,
   PrevGlyph,
@@ -34,7 +36,8 @@ import {
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { skipTarget } from "@/lib/skip";
-import { DEFAULTS } from "@/playback/prefs";
+import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
+import { canBoostDialogue, nextDialogueLevel } from "@/playback/soundControls";
 import "./Player.css";
 
 // The player screen is chrome. The media element and everything that drives it
@@ -772,6 +775,54 @@ export function Player() {
                   </button>
                 </div>
               )}
+
+              {/*
+                  Night mode and dialogue boost, one press away. They live in
+                  the settings panel too, but you reach for them mid-film, when
+                  an explosion has just made you grab the remote, and two
+                  clicks into a panel is the wrong distance for that.
+
+                  Offered only where the panel offers them (pb.audioFX: the
+                  desktop's own player, from a client that can apply them), and
+                  dialogue only off a mono track. Engaged reads through the
+                  bar's neutral is-on, never gold (design.md). Dialogue steps
+                  Off, Low, High, Off, and carries its level as a letter, since
+                  "on" alone cannot tell Low from High.
+              */}
+              {pb.audioFX && !pb.isAudio && (
+                <button
+                  className={"player__icon" + (pb.prefs.nightVideo ? " is-on" : "")}
+                  onClick={() => pb.setPrefs({ nightVideo: !pb.prefs.nightVideo })}
+                  aria-label="Night mode"
+                  aria-pressed={pb.prefs.nightVideo}
+                  title={pb.prefs.nightVideo ? "Night mode: on" : "Night mode: off"}
+                >
+                  <NightGlyph />
+                </button>
+              )}
+              {pb.audioFX &&
+                !pb.isAudio &&
+                canBoostDialogue(pb.audioTracks, pb.audioIndex) && (
+                  <button
+                    className={
+                      "player__icon player__icon--level" +
+                      (pb.prefs.dialogueVideo > 0 ? " is-on" : "")
+                    }
+                    onClick={() =>
+                      pb.setPrefs({ dialogueVideo: nextDialogueLevel(pb.prefs.dialogueVideo) })
+                    }
+                    aria-label={`Dialogue boost: ${DIALOGUE_LEVELS[pb.prefs.dialogueVideo] ?? "Off"}`}
+                    aria-pressed={pb.prefs.dialogueVideo > 0}
+                    title={`Dialogue boost: ${DIALOGUE_LEVELS[pb.prefs.dialogueVideo] ?? "Off"}`}
+                  >
+                    <DialogueGlyph />
+                    {pb.prefs.dialogueVideo > 0 && (
+                      <span className="player__level" aria-hidden="true">
+                        {DIALOGUE_LEVELS[pb.prefs.dialogueVideo]?.[0]}
+                      </span>
+                    )}
+                  </button>
+                )}
 
               {/* Everything about *how* this plays, in one place. Engaged when
                   any of it is away from its default, so the strip still says at

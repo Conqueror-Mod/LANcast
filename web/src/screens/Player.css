@@ -119,6 +119,23 @@
   box-shadow: 0 0 0 3px var(--gold-ring);
 }
 
+/* Dialogue boost's level, as a letter tucked into the icon's corner: "on"
+   alone cannot tell Low from High. In the text colour, never gold. */
+.player__icon--level {
+  position: relative;
+}
+
+.player__level {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: currentColor;
+  pointer-events: none;
+}
+
 .player__icon--play {
   font-size: 18px;
 }
