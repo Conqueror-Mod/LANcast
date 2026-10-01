@@ -190,6 +190,53 @@ Not seen: the picture (computer-use cannot capture mpv's video layer) and,
 again, the sound. Whether stereo `dialoguenhance` earns its place is still a
 decision to make by ear.
 
+### The first listening test tested nothing
+
+The evening's listening ran on the **installed v0.9.44 client**, started from
+the Start menu, against the test server. The panel comes from the server, so
+both rows appeared. The client predates the `night` and `dialogue` commands,
+so it refused every one, and the page swallows a refused command so that
+playback never stops over it. `mpv.log` for both films has no `af` set at all.
+The reports were "dialogue boost gives some additional clarity on Capote" and
+"night mode makes no noticeable difference on Fast & Furious". Both describe
+unfiltered audio.
+
+Two things came of it:
+
+- **The rows now need the client to say it can apply them.** The client
+  exposes `lancastMpvFeatures()` → `["audiofx"]`. An older client has no such
+  binding, and the page reads absence as "none" and shows no rows. This is the
+  panel's own rule (absent, not present and inert), broken by a version gap
+  that the server-newer-than-client banner exists to describe.
+- **Night mode was too weak anyway**, which the next section measures. The
+  listening result was wrong for the reason above and right by coincidence.
+
+### Night mode, retuned
+
+Measured on **real programme material** this time: ten minutes of *Shrek
+Forever After* (60:00–70:00, AC-3 5.1, action), and the same span of *A
+Beautiful Day in the Neighborhood* (DTS 5.1, quiet and dialogue-led), with
+`ebur128`. LRA is the right instrument here, where it was not on gated noise.
+
+| graph | action LRA | quiet LRA | level vs off | true peak |
+|---|---|---|---|---|
+| off | 18.4 LU | 21.8 LU | — | −3.8 / −2.0 dBTP |
+| first version (−24 dB, 4:1, 10/250 ms) | 16.9 | — | +11 dB | **+0.4** |
+| slow compressor (−35 dB, 6:1, 50/1500 ms) | 11.3 | 11.9 | +7 / +2 | −1.9 / −2.8 |
+| `dynaudnorm` | 12.0 | — | +2 | −5.3 |
+| `loudnorm` LRA=7 | 11.7 | — | −1 | −3.8 |
+| **chosen: −40 dB, 8:1, 50/2000 ms, +14 dB, limit 0.7** | **8.3** | **8.5** | **+5 / −0.6** | **−1.8 / −2.8** |
+
+The first version reacted to bangs and let go between them, so it was a +11 dB
+volume change with a 1.5 LU narrowing. The difference that matters, an
+explosion and then the next line of dialogue, is a difference between scenes,
+so the release went from 250 ms to 2 s. `dynaudnorm` and `loudnorm` measured
+nearly as well, and both are ruled out because they look ahead by seconds and
+nothing tells mpv to delay the picture to match. On the quiet film the chosen
+graph leaves the overall level within 0.6 dB of off, so switching it on is not
+a volume jump. Whether it sounds right is, again, the listening test, and this
+time it has to run on a client that can apply it.
+
 ## Phase 2: the element engine (music and browser tabs)
 
 The roadmap's Web Audio design, plus three traps it did not list.
