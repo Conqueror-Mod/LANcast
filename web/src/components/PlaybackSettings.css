@@ -174,10 +174,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Blue, not gold. A ticked box means "on", and gold means "where you are"
+   (design.md, the gold discipline rule): drawn gold, every checked box on the
+   panel looked focused. Blue is what the other settings checkboxes already
+   use (DesktopSettings.css). Sliders stay gold — a filled level is the
+   scrubber's precedent, not a state. */
 .pbset__check {
   width: 16px;
   height: 16px;
-  accent-color: var(--gold);
+  accent-color: var(--nebula-blue);
   cursor: pointer;
 }
 
