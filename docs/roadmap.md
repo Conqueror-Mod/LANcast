@@ -11,78 +11,41 @@ commercial licence available (ADR 0053), releases are
 **check for, download, verify and stage an update** that swaps itself in on the
 way down. Details in the areas below; what the pass taught is at the end.
 
-**Nothing sits unreleased.** v0.8.20 was the first release in this run where
-every feature was **tested by a person before it shipped** — the cast filter,
-the history reset and the developer tools were all exercised in the app, and
-the faults that came back were real ones nobody's tests had found.
+## Where it stands
 
-**v0.8.22 partly restores it.** The codec-withholding fix was found by watching
-a real film misbehave, diagnosed by measurement, and confirmed by playing the
-same file both ways — that is a fault a person met and an answer a person
-checked. What has *not* been looked at is the statistics panel itself: jsdom
-performs no layout, so its tests prove the arithmetic and the wiring and cannot
-prove the panel is on screen or unobscured, which in this project is exactly how
-a context menu spent four releases being painted underneath the docked player.
-The client half of the refusal fix is untested too — nothing here mounts
-`PlaybackProvider`.
+*Rewritten 2026-09-30. The opening of this file had become a running commentary
+on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
+deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
+v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
-**v0.8.21 does not hold that line, and says so.** Three things in it were
-verified by measurement and tests and *not* by anybody watching them work: the
-MSE live path (jsdom performs no media, so 447 client tests prove the wiring and
-cannot prove playback), schema revision 31 against a real database rather than a
-synthetic one, and the live HLS endpoint as the installed service — which the
-session-0 rule in CLAUDE.md exists to insist on. The scan work is the exception:
-its claims are read counts and file opens, which are exactly what tests can see.
-None of this is a reason to hold the release, since the new live path ships off
-by default and the rest is measured. It is a reason not to describe it as
-verified.
+**Merged, not released:** audio pass Phase 1, night mode and dialogue boost on
+the desktop player (#720), and settings checkboxes that stop using gold for
+"on". Phase 1 waits on a listening test before it ships.
 
-That is the change worth recording. v0.8.18 shipped three features unreachable
-because each layer was correct about the half it owned and nothing asked
-whether the halves were joined; v0.8.19 repaired them; and the two faults fixed
-here — a cast face too small to recognise, and a history reset that erased the
-profile statistics — were both found by using the software.
+**Shipped but never watched working.** Each one is something the suites
+cannot see: jsdom performs no layout and no media, and nothing in Go runs as
+session 0.
 
-**Three things in that release were never looked at**, and each is the kind the
-suite cannot see. The **denial reset row** on Settings → Display has tests for
-its wiring and none for its appearance, jsdom performing no layout. A **High 10
-file** has not been played with the claim active. And an **MKV + Opus** file has
-not been watched remuxing with `audio=copy` — there is exactly one in the
-measured library. They are recorded here rather than quietly shipped, because
-the alternative is finding out from somebody else.
+- The **denial reset row** on Settings → Display: its wiring is tested, its
+  appearance has never been looked at.
+- **High 10** H.264 with the `high10` claim active, on the element path.
+- **MKV + Opus** remuxing with `audio=copy`. There is exactly one in the live
+  library, *Dreamcatcher* (2003).
+- The **HLS file fallback** (#589/#590), as the installed service.
+- The **MSE live path**, which is moot while Chromium plays HLS natively, and
+  parked with the rest of live TV.
 
-**Three decisions are open and none is waiting on code** — they are listed
-under [Open decisions](#open-decisions), which exists because a proposed ADR is
-a different kind of queue from an unbuilt feature and nothing was indexing it.
-[ADR 0042](adr/0042-two-files-one-work.md) was the third and was **accepted and
-built** on 2026-08-25, which unblocks the ADR 0041 parser fix.
+**Open decisions** are indexed under [Open decisions](#open-decisions). A
+proposed ADR is a different queue from an unbuilt feature.
 
-**No known defects — and that claim has now been wrong twice in a week, both
-times about something invisible.** Six releases on 2026-08-25 (v0.8.6–v0.8.11)
-closed the container menus, three ordering and resume faults, the menu edge
-case, and database growth. Then 2026-08-26 found two more that nothing was
-going to report, because in neither case did anything fail:
-
-- **A muxer flag was corrupting the timestamps of every live channel**
-  (`231043c`). Presents as audio drift, and as one channel in twenty freezing
-  outright while ffmpeg stays healthy.
-- **A codec denial lasted for ever** (`845610f`). This machine had written off
-  `hevc`, `hevc10`, `ac3` and `eac3` — every claim the client can make — and
-  was serving a full 4K re-encode *and* an audio re-encode of every such film,
-  a core per viewer, for an unknown length of time. Clearing it made the same
-  file direct-play with no ffmpeg at all, so all four were false.
-
-The second is the more instructive: falling back to a transcode is *correct
-behaviour*, so a permanently downgraded machine is indistinguishable from a
-working one. The only symptom is that the server seems to work hard. It
-surfaced by accident while answering a question about codec support.
-
-Every one of the interesting ones was found by using the app or by measuring
-the live database, and not one by the test suite — which is the finding, not an
-aside. The suite is at 409 client tests and cannot see paint, cannot see
-layout, had nothing to say about a scheduled job that never ran, and could not
-have seen either of the two above: one lives in an ffmpeg command line and the
-other in `localStorage`.
+**The finding that keeps recurring:** the interesting faults are found by using
+the app or measuring the live database, not by the test suites. Examples are a
+codec denial that silently re-encoded every film for weeks, a muxer flag
+corrupting every live channel's timestamps, and a context menu painted under
+the docked player for four releases. Falling back to a transcode is correct
+behaviour, so a permanently downgraded machine looks like a working one. The
+suites prove wiring and arithmetic. Watching it is still the only way to know
+it works.
 
 **Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
 which is the first media type past video and therefore the first real test of
@@ -743,16 +706,19 @@ group is not priority.
   *is* once it lands in a library, which is a bigger question than the feature
   looks.
 
-- **The rest of the launchers — Epic, then GOG, Xbox and EA.** Steam **shipped in
+- **The rest of the launchers — GOG, Xbox and EA.** Steam **shipped in
   v0.9.19** under
   [ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md), which
   settled the model for all of them: a local read in the desktop client, no
   sign-in, no server table, off by default, and the launcher's own files as the
-  only source of truth. Epic is the obvious next reader — a folder of JSON
-  manifests under `ProgramData`, no key and no network — and is deferred for one
-  reason: it keeps **no artwork on disk**, so the honest version of it is a grid
-  of lettered placeholders, and the artwork question is the one this feature has
-  not answered for any reader. What follows is the original capture, kept because
+  only source of truth. **Epic and Battle.net followed in v0.9.27**
+  ([internal/games](../internal/games/)). This entry said Epic was deferred
+  until the artwork question was answered, and that went stale on the day it
+  shipped. The answer was the one the entry had already named as honest:
+  **lettered placeholders**, the same ones a Steam game without artwork uses,
+  because Epic keeps nothing on disk that can be tied to a game, and a guessed
+  image is worse than a letter. GOG, Xbox and EA are what remain, unscheduled.
+  What follows is the original capture, kept because
   it is the reasoning that produced the ADR. It was the first
   backlog item that **broke the model rather than extending it**, which is why it
   needed an ADR before it needed a design.
@@ -1556,6 +1522,22 @@ group is not priority.
   watching anything at home, and **no commercial service offers the control at
   all**.
 
+  **Phase 1 is built and merged (#720), unreleased:** night mode and dialogue
+  boost for films and episodes in the desktop client. The design below did not
+  survive contact with [ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md):
+  it was written for a Web Audio graph on the media element, and the desktop
+  plays films through libmpv, which is not an element. So there are now two
+  engines behind one preference ([plan](audio-pass-plan.md)). On the desktop,
+  mpv's own `af` chain is built in Go from numbers, and surround stays surround
+  by construction. Music and browser tabs keep the element, and the design below
+  still applies to them as Phase 2. Phase 2 also has two traps this entry did
+  not list: `setSinkId` stops routing once audio goes through an
+  `AudioContext`, and `createMediaElementSource` works once per element.
+  Every transition was read from `mpv.log` in the installed service. **Nobody
+  has listened yet**, and whether Phase 2 is worth building waits on that.
+
+  The original entry follows.
+
   The obvious implementation is the wrong one. ffmpeg has `loudnorm`, `compand`
   and `equalizer`, and reaching for them costs twice: a filter **forces a
   transcode on a file that would have direct-played**, and it bakes one person's
@@ -1665,7 +1647,7 @@ unblocked is worth more than a tidy list.*
 | ADR | Proposed | The question | What it holds up |
 |---|---|---|---|
 | [0013 amendment](adr/0013-transcode-pipeline.md) | 2026-08-23 | Adopt **MSE for live TV and only live TV**, vendoring hls.js as pinned, reviewable source | **The question changed on 2026-08-29 and now needs deciding again.** Steps 4 and 5 are built, but the gate on step 6 cannot be run as written: the MSE path is unreachable on this client, because **Chromium plays HLS natively** and takes step 5's branch every time. Measured — a bare element handed Apple's fMP4 playlist with no library reached `readyState 4`, `480x270`, 12.0s buffered, frames decoded. That contradicts the premise the amendment rests on, and the reason is narrow and real: Chromium cannot demux **MPEG-TS**, which most IPTV *sources* are, and this server does not serve those — `Args` sets `-hls_segment_type fmp4`, which is exactly what Chromium plays. The rule was true about the sources and got generalised to the output, and the output is ours to choose. So the comparison worth making is now **native HLS against MSE**, not either against progressive, and it wants a Firefox — the likely real audience for MSE is a browser with `MediaSource` and no native HLS, which is reasoning rather than a reading |
-| ~~[0048](adr/0048-media-tools-install-themselves-on-first-run.md)~~ | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | **Accepted 2026-08-28, narrower than proposed, and the principle survives.** The tools are a ticked option on the setup form rather than an automatic fetch: pressing *Create account* fetches them, unticking is one click. That serves the inattentive user — the one the ADR was written for — exactly as well, and the traffic follows a button somebody pressed, so no-phone-home keeps its third job and **README is unchanged**. The exception the ADR argued should be written into the principle turned out not to be needed. Not yet built |
+| ~~[0048](adr/0048-media-tools-install-themselves-on-first-run.md)~~ | 2026-08-27 | Should the server **fetch ffmpeg on first run**, having said so, instead of waiting to be asked | **Accepted 2026-08-28, narrower than proposed, and the principle survives.** The tools are a ticked option on the setup form rather than an automatic fetch: pressing *Create account* fetches them, unticking is one click. That serves the inattentive user — the one the ADR was written for — exactly as well, and the traffic follows a button somebody pressed, so no-phone-home keeps its third job and **README is unchanged**. The exception the ADR argued should be written into the principle turned out not to be needed. **Built in v0.8.24** (#408, with #409 saying where the missing tools bite). This row said "not yet built" for a month after it shipped |
 | ~~[0060]~~(adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md) | 2026-09-04 | ~~Should **semantic photo search** be built, and as a second model in the existing native sidecar rather than as a plugin~~ | The one library that cannot be searched. A photograph's title is `DSC_0042`, so `?q=` answers nothing there, and the timeline, folders and people are the only ways in. **It corrects an answer this project had half-adopted**: the Immich study said semantic search should prove a plugin SDK, and the sandbox exports three host functions — log, http, secret — so the only plugin-shaped version is the one that uploads photographs to somebody else's server. Waiting on a decision, and on a model whose *weights* permit commercial use — the trap ADR 0052's first draft fell into. **Accepted 2026-09-04.** OpenAI's own CLIP weights declare no licence at all and are out; LAION's are MIT with an inherited out-of-scope *caveat* rather than a licence term; SigLIP is Apache-2.0 and is the documented fallback. **OpenCLIP ViT-B/32** chosen, because the cleaner licence has the harder tokenizer — SentencePiece against a BPE this project can write itself |
 | ~~[0061]~~(adr/0061-an-api-key-is-not-a-session.md) | 2026-09-06 | ~~Should a **long-lived API key** authenticate a third-party client, and should it be **refused admin** even when its owner is an administrator | The spec shipped in v0.9.0 describes 141 operations a third party can now read, and leaves them nothing to authenticate with but a session cookie obtained by storing somebody's password. The part that needs deciding is not the table — it is whether a credential that lives unattended in a config file may add a library, which is arbitrary filesystem read at a path the request chooses. This says no, and says a CLI that needs otherwise should arrive as its own decision rather than as a quiet flag. Also decides that changing a password does **not** revoke keys, which is a documented exception to the rule that it logs everything out.~~ **Accepted 2026-09-06**, admin restriction as drawn |
 | ~~[0062]~~(adr/0062-a-tag-is-a-note-to-yourself.md) | 2026-09-07 | ~~Should **tags be private to each account**, should they stay out of NFO sidecars, and what carries a favourite now that gold cannot | The Immich study's #5. Genres are somebody else's vocabulary and a refresh overwrites them; there is no TMDB genre for *needs a better copy*. **Two of the study's claims did not survive.** It called tags a locked-field problem — true only while a tag can arrive from something other than a person, and with sidecars off the table nothing competes, so a lock would be guarding a writer that does not exist. And the first draft of this ADR made tags **shared**, reasoning from the model's shape: genres and playlists are shared, so organisation is shared. That reasoning is about a library, and a tag is about the person writing it — *needs a better copy*, *watch before the sequel*, *do not delete* are a picture of what somebody is thinking, and all of it would have been visible to the house because a table happened to be shaped that way. Corrected before any rows existed. The consequence worth the ADR is that the **vocabulary** is per-account too: a shared name table leaks the names, and privacy that depends on every query remembering to filter is a habit rather than a boundary.~~ **Accepted 2026-09-07**, private per account |
