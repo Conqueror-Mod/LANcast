@@ -55,17 +55,33 @@ func (fx AudioFX) With(name string, value float64) (_ AudioFX, ok bool) {
 	return fx, true
 }
 
-// nightGraph compresses peaks and then limits them.
+// nightGraph narrows the gap between the loud scenes and the quiet ones.
 //
-// Threshold -24 dBFS (0.063) at 4:1, with +12 dB of makeup (4.0), puts quiet
-// speech back near where the peaks were. The limiter after it exists because
-// makeup gain on a loud passage that the compressor's attack let through is a
-// clip; 0.9 leaves headroom for a downmix mpv may still do after this.
+// It works on **scenes, not bangs**. The first version (-24 dBFS, 4:1, 10 ms
+// attack, 250 ms release) reacted to individual transients and let go between
+// them. On ten minutes of a real action film it cut the loudness range from
+// 18.4 to only 16.9 LU, while raising the whole film 11 dB. Nobody could hear
+// it as anything but a volume change, and the person who listened said so.
+// The difference between an explosion and the line after it is seconds long,
+// so the release is 2 s. The threshold is low enough (-40 dBFS) that ordinary
+// speech is inside the compressor rather than under it.
 //
-// level=0 is not optional. alimiter's default is to *normalise* its output
-// back up to full scale after limiting, which measured +1.1 dBTP on a synthetic
-// 5.1 scene: a limiter configured to hold 0.9 that ended up louder than 0 dB.
-const nightGraph = "acompressor=threshold=0.063:ratio=4:attack=10:release=250:makeup=4,alimiter=limit=0.9:level=0"
+// Measured on the same ten minutes, and on a quiet, dialogue-led film
+// (docs/audio-pass-plan.md, "Night mode, retuned"):
+//
+//	action: LRA 18.4 -> 8.3 LU, true peak -1.8 dBTP
+//	quiet:  LRA 21.8 -> 8.5 LU, overall level within 0.6 dB of off
+//
+// No look-ahead filter: dynaudnorm and loudnorm measured about as well, but
+// both buffer seconds of audio, and nothing tells mpv to delay the picture to
+// match. A compressor and a 5 ms limiter cost no sync.
+//
+// The limiter's level=0 is not optional. alimiter's default is to normalise
+// its output back up to full scale after limiting, which measured +1.1 dBTP:
+// a limiter set to hold a ceiling, ending up louder than 0 dB. 0.7 (-3 dB)
+// rather than 0.9 because a sample-peak limiter lets inter-sample peaks
+// through, and 0.9 measured +0.4 dBTP on real material.
+const nightGraph = "acompressor=threshold=0.01:ratio=8:attack=50:release=2000:makeup=5,alimiter=limit=0.7:level=0"
 
 // surroundGain is what every channel except the centre is multiplied by, per
 // Dialogue level. Lowering the rest instead of raising the centre is the whole
