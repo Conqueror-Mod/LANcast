@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, type SubFont } from "@/playback/prefs";
+import { canBoostDialogue } from "@/playback/soundControls";
 import { FONTS } from "@/playback/cueVars";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
@@ -146,12 +147,11 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
 
   // The audio pass (docs/audio-pass-plan.md), Phase 1: only the desktop's own
   // player has the filters, and only from the client version that added them,
-  // so the rows are absent everywhere else rather than present and inert. Dialogue boost is absent on a mono track, which
-  // has no dialogue to separate from anything. The client makes the same call
-  // from what mpv is actually decoding; this is the probe's view of the track,
-  // good enough to decide whether to offer the control.
-  const channels = pb.audioTracks.find((t) => t.index === currentAudio)?.channels;
-  const canBoost = channels !== 1;
+  // so the rows are absent everywhere else rather than present and inert.
+  // Dialogue boost is absent on a mono track, which has no dialogue to
+  // separate from anything. Shared with the control bar's
+  // quick toggle (soundControls.ts), so the two cannot disagree.
+  const canBoost = canBoostDialogue(pb.audioTracks, pb.audioIndex);
 
   if (showSubs) {
     return (

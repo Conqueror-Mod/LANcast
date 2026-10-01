@@ -218,3 +218,24 @@ export function TogetherGlyph(p: Props) {
     </Svg>
   );
 }
+
+// A crescent: night mode, which is what the setting is called and when it is
+// for. Drawn as one arc so it reads at 20px the way the rest of the bar does.
+export function NightGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1Z" />
+    </Svg>
+  );
+}
+
+// A speech bubble with two lines in it: dialogue, made clearer. Not a speaker
+// or a waveform, which would read as volume.
+export function DialogueGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 16h-7l-4.5 3.5V16H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 5Z" />
+      <path d="M7.5 9h9M7.5 12h6" />
+    </Svg>
+  );
+}
