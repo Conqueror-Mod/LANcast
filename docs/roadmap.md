@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-09-30 · **v0.9.45 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-01 · **v0.9.46 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,7 +20,8 @@ v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
 **Nothing sits unreleased.** v0.9.45 shipped audio pass Phase 1, night mode and
 dialogue boost on the desktop player, after a listening test on a client that
-could apply them. Phase 2 (music and browser tabs) is unscheduled.
+could apply them. v0.9.46 put both one press away in the control bar, and made
+Matroska a claim of its own. Phase 2 (music and browser tabs) is unscheduled.
 
 **Shipped but never watched working.** Each one is something the suites
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
@@ -45,12 +46,16 @@ about. They ran against the installed service.
   running against the true 2:13:47. The reason is that the **`hevc` claim also
   grants the `matroska` container** (decide.go: "the matroska container it
   usually arrives in"). This client claims `hevc`, so every MKV whose codecs it
-  can play is sent as-is, and WebView2 demuxes it. That held here. Two things
-  follow, and neither is verified. A client *without* the `hevc` claim still
-  takes the remux path this entry described, and nobody has watched that. And
-  the container grant rides on a codec probe: a client could decode HEVC and
-  still choke on some Matroska feature, and nothing asks it separately.
-  Picture and clock were checked; the sound was not heard.
+  can play is sent as-is, and WebView2 demuxes it. That held here. Picture and
+  clock were checked; the sound was not heard.
+
+  **The container grant was split off in v0.9.46 (#724).** Riding on a codec
+  probe, it also made a failed MKV unrecoverable: the client withdraws the
+  claims a file's codecs needed, and `hevc` was never one of them for an H.264
+  file. `matroska` is now its own claim, probed as
+  `video/x-matroska; codecs="avc1.64001f"`, which WebView2 answers "probably"
+  (measured with `cmd/wv2harness`, which had itself been broken since 2cfc6b2).
+  Still unwatched: the remux path on a client that claims no Matroska.
 
 **Open decisions** are indexed under [Open decisions](#open-decisions). A
 proposed ADR is a different queue from an unbuilt feature.
@@ -117,6 +122,7 @@ rather than foundational milestones.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.46** | 2026-10-01 | **Night mode and dialogue boost one press away, and MKV asked about rather than assumed.** The player's control bar gains two toggles beside the settings button: a crescent for night mode, and a speech bubble for dialogue boost that steps Off, Low, High, with its level as a letter in the corner. You reach for these mid-film, and two clicks into a panel was the wrong distance. They appear exactly where the panel's rows do, on the desktop's own player with a client that can apply them, and dialogue never on a mono track; that rule now lives once so the two cannot disagree. Engaged reads as the bar's neutral state, never gold. **MKV**: the `hevc` capability also granted the Matroska container, so a client that answered for HEVC was sent every MKV whose codecs it could decode, and a failed one could never recover, because the claim that let it through was not one the client knew to withdraw. Matroska is now its own claim, probed with H.264 named so the answer is about the box; WebView2 answers it and plays MKV with every codec tried, so nothing that direct-played before is converted now. **Also**: the WebView2 test harness, unable to start since 2026-09-28, works again. **Rides the in-app update.** No schema change |
 | **v0.9.45** | 2026-09-30 | **Night mode and dialogue boost, for the film that is too quiet to follow and too loud to watch after dark.** Two settings in the player's playback panel, per device, on the desktop client ([plan](audio-pass-plan.md)). **Night mode** levels the gap between loud scenes and quiet ones: on ten minutes of a real action film the loudness range went from 18.4 to 8.3 LU, and on a quiet drama it leaves the overall level within 0.6 dB of off. **Dialogue boost** lowers every channel except the one dialogue lives in (on 5.1 and 7.1), so voices come forward without anything clipping; on stereo it derives a centre with `dialoguenhance`. Both run in the desktop client's own player and cost the server nothing, and a 5.1 film stays 5.1. **The first night mode was too weak, and the first listening test proved nothing**: it ran on the installed client, which showed the controls and silently refused them. So the controls now appear only on a client that says it can apply them, and night mode was retuned against real programme material rather than a synthetic one. Listened to on *Fast & Furious*, *Thor* and *Capote* with every filter confirmed in `mpv.log`. **Also**: settings checkboxes show "on" in blue rather than gold, which means focus and nothing else; a High 10 episode and the one MKV + Opus film were finally watched playing in WebView2 (both direct-play); the roadmap's opening was rewritten to say what is true today; and CI no longer fails on a slow apt mirror (the packages are cached, and the time limit is sized from the download). **Rides the in-app update**, which brings the new client as well as the server: the controls need both. No schema change |
 | **v0.9.44** | 2026-09-30 | **The tags you already use are offered while you add one, reported in the first hour of testing v0.9.43.** A tag only works as a list if it is spelled the same way every time: "Bangers" on one film and "bangers!" on the next are two lists, and nothing on the tag box said which spellings already existed. While the box has focus, your existing tags appear beneath it, most-used first, narrowed by what is typed, never one the title already carries; pressing one adds it. They are **dashed where a tag on the title is solid**, so an offer cannot be mistaken for a choice, and neither uses gold. `GET /api/tags` is fetched only once the box is focused, so a detail page opened to press Play does not ask for it. The list stays open while focus is anywhere in it, so tabbing from the box to a suggestion does not close it underneath. **Also**: the Year in Review note still said the server keeps "not a diary of every sitting", which v0.9.43 made false; it now points at the watch history. A sentence describing an older version of the thing it sits under is worse than none. **Rides the in-app update.** No schema change |
 | **v0.9.43** | 2026-09-30 | **The profile finally shows what the server was already keeping, and LANcast remembers every time you finish something, not just the last.** **A real watch history** ([ADR 0074](adr/0074-a-viewing-is-a-row.md), **schema revision 53**). `playback_state` holds one row per item, so it could say when a film was last played and never when it was watched before that. The new `viewing` table gets a row each time a film or an episode is *finished*, written inside `SaveProgress`'s transaction on the same edge that moves `watch_count`, so the tally and the log cannot disagree. Heartbeats add nothing and a rewatch adds a row. Four choices, each with a real alternative: a log *and* an export; finished viewings only, not every abandoned sitting; films and episodes only, because 9,800 songs would bury them; kept forever, cleared by the existing history reset. **What was watched is copied onto the row**, and `item_id` goes null rather than taking the row with it, so a deleted film stays in the history. **The seed does not invent**: one row per title already finished, dated from the last state write and marked *approximate*; a title rewatched before this release gets one row, because the earlier dates were never kept. A Watch history page groups it by month with **CSV and Trakt-shaped downloads**. LANcast sends neither anywhere, which keeps *no phone-home* intact without an argument. **The Trakt shape has not been imported into Trakt yet**; the CSV is the one to trust until it has. **The rest of the profile page**: your favourites (a shelf, and a full list), your ratings with score and review (`GET /api/profile/ratings` was specified and documented and had never been called), and your tags, each opening everything carrying it across libraries. For that, `favourite=1` and `tag=` without a library now reach **every level**: a favourited song or episode had been invisible to any listing that spanned libraries, because the listing stopped at artists and shows. Inside one library they are still grid filters over the top level. **Checked in the running app** after release, which the client tests cannot do — they see wiring and never layout. **Rides the in-app update**; nothing in the desktop client changed. **Schema revision 53: a new table; no downgrade past it** |
