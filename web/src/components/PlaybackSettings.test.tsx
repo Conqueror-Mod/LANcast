@@ -21,6 +21,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const pb = {
   native: true,
+  audioFX: true,
   isAudio: false,
   itemID: 1,
   item: undefined,
@@ -63,6 +64,7 @@ beforeEach(() => {
   root = createRoot(host);
   Object.assign(pb, {
     native: true,
+    audioFX: true,
     isAudio: false,
     audioTracks: [track(6)],
     prefs: { ...DEFAULTS },
@@ -84,6 +86,18 @@ describe("PlaybackSettings sound rows", () => {
 
   it("offers neither where the element plays, which has no filters yet", () => {
     pb.native = false;
+    pb.audioFX = false;
+    render();
+    expect(labels()).not.toContain("Night mode");
+    expect(labels()).not.toContain("Dialogue boost");
+  });
+
+  it("offers neither on a native client too old to apply them", () => {
+    // v0.9.44's client against a newer server: mpv plays, but the commands
+    // are refused. The rows showed, did nothing, and an evening of listening
+    // tested nothing.
+    pb.native = true;
+    pb.audioFX = false;
     render();
     expect(labels()).not.toContain("Night mode");
     expect(labels()).not.toContain("Dialogue boost");

@@ -145,8 +145,8 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
   const subsOn = !!pb.activeSub;
 
   // The audio pass (docs/audio-pass-plan.md), Phase 1: only the desktop's own
-  // player has the filters, so the rows are absent everywhere else rather
-  // than present and inert. Dialogue boost is absent on a mono track, which
+  // player has the filters, and only from the client version that added them,
+  // so the rows are absent everywhere else rather than present and inert. Dialogue boost is absent on a mono track, which
   // has no dialogue to separate from anything. The client makes the same call
   // from what mpv is actually decoding; this is the probe's view of the track,
   // good enough to decide whether to offer the control.
@@ -285,7 +285,7 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
         {/* Selects rather than a checkbox for night mode: the panel's
             checkbox draws its checked state in gold, and gold is the focus
             signal (design.md), not "on". */}
-        {pb.native && !pb.isAudio && (
+        {pb.audioFX && !pb.isAudio && (
           <>
             <Row label="Night mode">
               <select

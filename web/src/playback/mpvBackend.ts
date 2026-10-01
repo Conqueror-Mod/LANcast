@@ -26,6 +26,8 @@ interface MpvEvent {
 declare global {
   interface Window {
     lancastMpvAvailable?: () => Promise<boolean>;
+    /** What this client's player can do beyond play a file. Absent before v0.9.45. */
+    lancastMpvFeatures?: () => Promise<string[]>;
     lancastMpvOpen?: (itemID: number, ticket: string) => Promise<void>;
     lancastMpvCommand?: (name: string, value: number) => Promise<void>;
     lancastMpvStop?: () => Promise<void>;
@@ -62,9 +64,34 @@ export function nativePlaybackAvailable(): Promise<boolean> {
   return availability;
 }
 
-/** Test seam: forget the cached answer. */
+let features: Promise<string[]> | null = null;
+
+/**
+ * What this window's native player supports, by name ("audiofx" for night
+ * mode and dialogue boost). Asked once per page load.
+ *
+ * The page comes from the server and the player from the client, and they
+ * are often different versions. A client older than a feature has no binding
+ * to answer with, so absence is "none". That is the point: v0.9.44's client
+ * showed these controls, refused every command they sent, and an evening of
+ * listening tested nothing (cmd/lancast/player_windows.go, mpvFeatures).
+ */
+export function nativeFeatures(): Promise<string[]> {
+  if (!features) {
+    features = window.lancastMpvFeatures
+      ? window
+          .lancastMpvFeatures()
+          .then((f) => (Array.isArray(f) ? f : []))
+          .catch(() => [])
+      : Promise.resolve([]);
+  }
+  return features;
+}
+
+/** Test seam: forget the cached answers. */
 export function resetNativePlaybackAvailability(): void {
   availability = null;
+  features = null;
 }
 
 /** The item a direct-play source names, or null for anything else. */

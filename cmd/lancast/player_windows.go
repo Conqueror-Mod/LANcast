@@ -284,9 +284,25 @@ func trackID(v float64) string {
 	return strconv.Itoa(int(v))
 }
 
+/*
+ * mpvFeatures is what this build's player can do beyond play a file, for the
+ * page to ask before it offers a control.
+ *
+ * The settings panel comes from the server and the player from this client,
+ * and the two are routinely different versions: the server updates itself,
+ * and the window it is drawn in may be older. v0.9.44's client met a server
+ * with night mode and dialogue boost, showed both, and refused every command
+ * they sent — silently, because a refused command is caught so playback never
+ * stops over it. Somebody tested the feature for an evening against a client
+ * that could not run it. An old client has no such binding at all, which the
+ * page reads as "none", so the rows only appear where they work.
+ */
+var mpvFeatures = []string{"audiofx"}
+
 func (n *nativePlayer) bindings() map[string]any {
 	return map[string]any{
 		"lancastMpvAvailable": n.available,
+		"lancastMpvFeatures":  func() []string { return mpvFeatures },
 		"lancastMpvOpen": func(itemID float64, ticket string) error {
 			return n.open(int64(itemID), ticket)
 		},
