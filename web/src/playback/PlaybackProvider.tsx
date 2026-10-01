@@ -1427,7 +1427,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     const claimed = capabilities();
     if (claimed) {
-      const atRisk = capabilitiesNeededBy(item?.streams);
+      const atRisk = capabilitiesNeededBy(item?.streams, item?.container);
       const claims = claimed.split(",");
       const suspects = atRisk.filter((c) => claims.includes(c));
       let news = false;
@@ -1548,7 +1548,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     const claimed = capabilities();
     if (claimed) {
-      const atRisk = capabilitiesNeededBy(item?.streams);
+      const atRisk = capabilitiesNeededBy(item?.streams, item?.container);
       const claims = claimed.split(",");
       let news = false;
       for (const c of atRisk.filter((c) => claims.includes(c))) {

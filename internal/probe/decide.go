@@ -297,7 +297,14 @@ var knownCapabilities = map[string]struct {
 	// and Safari always has. Left out of the browser floor because it is
 	// conditional (docs/api.md), which is exactly the sort of thing the client
 	// can check and the server cannot.
-	"hevc": {video: []string{"hevc"}, containers: []string{"matroska"}},
+	//
+	// A codec claim only. It used to grant `matroska` as well, "the container
+	// it usually arrives in", which sent every MKV a client could decode to it
+	// on the strength of a question about HEVC — and left a failed MKV
+	// unrecoverable, since the claim that let the container through was not
+	// one the client knew to withdraw. Matroska is asked for on its own
+	// (TestHEVCClaimIsNotAContainerClaim).
+	"hevc": {video: []string{"hevc"}},
 	/*
 	 * 10-bit HEVC is a separate claim from HEVC, because it is a separate
 	 * question and the answers differ.

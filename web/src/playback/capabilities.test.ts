@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   DENIAL_TTL_MS,
+  capabilities,
   clearDenials,
+  resetCapabilities,
   deniedCapabilities,
   deny,
 } from "./capabilities";
@@ -218,5 +220,43 @@ describe("withholding a codec by hand", () => {
 
     expect(deniedCapabilities()).toEqual([]);
     expect(withheldCapabilities()).toEqual(["hevc10"]);
+  });
+});
+
+/*
+ * Matroska is asked about on its own, with H.264 named so the answer is about
+ * the box. WebView2 answers "probably" for exactly this string (measured in
+ * Edge 154) and plays MKVs; an engine that cannot open one should not be sent
+ * them because it answered a question about HEVC.
+ */
+describe("the matroska claim", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetCapabilities();
+  });
+
+  const answering = (yes: string[]) =>
+    vi
+      .spyOn(HTMLMediaElement.prototype, "canPlayType")
+      .mockImplementation((t: string) => (yes.includes(t) ? "probably" : ""));
+
+  it("is claimed when the engine answers for an H.264 MKV", () => {
+    answering(['video/x-matroska; codecs="avc1.64001f"']);
+    resetCapabilities();
+    expect(capabilities().split(",")).toContain("matroska");
+  });
+
+  it("is not implied by HEVC", () => {
+    answering(['video/mp4; codecs="hvc1.1.6.L93.B0"']);
+    resetCapabilities();
+    expect(capabilities()).toBe("hevc");
+  });
+
+  it("is not claimed on a 'maybe'", () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockImplementation((t: string) =>
+      t.startsWith("video/x-matroska") ? "maybe" : "",
+    );
+    resetCapabilities();
+    expect(capabilities()).not.toContain("matroska");
   });
 });

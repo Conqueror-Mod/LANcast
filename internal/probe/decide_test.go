@@ -1198,3 +1198,48 @@ func TestNativeProfileIsNamedAndReachable(t *testing.T) {
 		t.Error("a typo must not buy the everything profile")
 	}
 }
+
+/*
+ * The hevc claim is a codec claim, and nothing else.
+ *
+ * It used to grant the matroska container too, "the container it usually
+ * arrives in". So a client that answered for HEVC was sent every MKV it could
+ * decode the codecs of, H.264 and Opus included, on the strength of a question
+ * about HEVC. Found by watching Dreamcatcher, an H.264 + Opus MKV, direct-play
+ * when the roadmap expected a remux. It also meant a failed MKV could never be
+ * recovered: the client withdraws the claims the file needed, worked out from
+ * its codecs, and the claim that actually let the container through was never
+ * among them, so the retry was handed the same file.
+ *
+ * WebView2 answers canPlayType('video/x-matroska; codecs="avc1.64001f"') with
+ * "probably" and plays MKV with every codec tried (H.264 with AAC, Opus, AC-3,
+ * FLAC; HEVC with AAC), so asking separately costs that client nothing.
+ */
+func TestHEVCClaimIsNotAContainerClaim(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"hevc"})
+	d := Decide(result("matroska", video("h264", 1080), audio("aac", 2)), p)
+	if d.Method == DirectPlay {
+		t.Fatalf("an HEVC claim direct-played an H.264 MKV (%s); the container needs its own claim", d.Reason)
+	}
+	if d.VideoAction != "copy" || d.AudioAction != "copy" {
+		t.Errorf("actions = %s/%s, want a copy-copy remux: only the container is in question", d.VideoAction, d.AudioAction)
+	}
+}
+
+func TestMatroskaClaimDirectPlaysAnMKV(t *testing.T) {
+	p := WithCapabilities(BrowserProfile(), []string{"matroska"})
+	d := Decide(result("matroska", video("h264", 1080), audio("opus", 6)), p)
+	if d.Method != DirectPlay {
+		t.Fatalf("Method = %q (%s), want direct play: H.264 and Opus are in the floor and the container was claimed", d.Method, d.Reason)
+	}
+}
+
+func TestHEVCInMatroskaNeedsBothClaims(t *testing.T) {
+	r := result("matroska", video("hevc", 1080), audio("aac", 2))
+	if d := Decide(r, WithCapabilities(BrowserProfile(), []string{"hevc"})); d.Method == DirectPlay || d.VideoAction != "copy" {
+		t.Errorf("hevc alone: Method=%q video=%q (%s); want a remux that copies the HEVC", d.Method, d.VideoAction, d.Reason)
+	}
+	if d := Decide(r, WithCapabilities(BrowserProfile(), []string{"hevc", "matroska"})); d.Method != DirectPlay {
+		t.Errorf("hevc+matroska: Method=%q (%s); want direct play", d.Method, d.Reason)
+	}
+}

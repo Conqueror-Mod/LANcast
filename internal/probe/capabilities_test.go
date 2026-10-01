@@ -96,13 +96,22 @@ func TestClaimingSomethingAlreadySupportedIsANoOp(t *testing.T) {
 	}
 }
 
-// The codec claim brings its container with it. Allowing HEVC while still
-// failing the container check would swap a full re-encode for a remux rather
-// than for direct play — most of the win, quietly lost.
-func TestHevcClaimAllowsItsUsualContainer(t *testing.T) {
+// A codec claim brings no container with it.
+//
+// This test used to assert the opposite, so that allowing HEVC would not
+// swap a full re-encode for a remux rather than for direct play. That win is
+// kept, but by the client asking the container question too: the shipped
+// client claims `matroska` from its own probe (capabilities.ts), and WebView2
+// answers it truthfully. Bundled here, an HEVC answer sent every MKV the
+// client could decode the codecs of, and a failed one could not be withdrawn
+// (decide_test.go, TestHEVCClaimIsNotAContainerClaim).
+func TestHevcClaimAddsNoContainer(t *testing.T) {
 	got := WithCapabilities(BrowserProfile(), []string{"hevc"})
-	if !slices.Contains(got.Containers, "matroska") {
-		t.Error("claiming hevc did not allow matroska; an .mkv would still remux")
+	if slices.Contains(got.Containers, "matroska") {
+		t.Error("claiming hevc allowed matroska; the container must be claimed on its own")
+	}
+	if !slices.Contains(WithCapabilities(BrowserProfile(), []string{"matroska"}).Containers, "matroska") {
+		t.Error("claiming matroska did not allow it")
 	}
 }
 
