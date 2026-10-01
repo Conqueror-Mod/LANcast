@@ -167,6 +167,29 @@ What it changed:
 
 None of this says anything sounds better. That is still the listening test.
 
+### Driven in the running app (2026-09-30)
+
+The server was swapped for the test build as the installed service, and the
+test client was run beside it with the certificate pin pre-set. The film was
+*A Good Day to Die Hard* from the live library (AC-3 5.1(side) plus AAC
+stereo, so the track switch could be tested). Everything below is read from
+`mpv.log`, in order:
+
+| at | did | mpv |
+|---|---|---|
+| 0.6 s | open, both off | `[af] (empty)`; 5.1(side) in, remixed to the 7.1 device |
+| 59.0 s | dialogue → High | 6-channel `aeval` set, `-> 1`; 5.1(side) through it |
+| 72.3 s | night → On | `aeval,acompressor,alimiter`; 5.1(side) end to end |
+| 87.4 s | switch to the stereo track | count unknown, so night only. The 6-channel expression never meets 2 channels. |
+| 88.3 s | stereo decoded | `dialoguenhance,acompressor,alimiter`, `-> 1`; 3.0 out, remixed to 7.1 |
+| 110.0–111.0 s | back to the 5.1 track | night only, then the 6-channel `aeval` again once 6 is reported |
+| 116.9 s | night → Off | `aeval` alone |
+| 118.8 s | dialogue → Off | `af=""`, `[af] (empty)` |
+
+Not seen: the picture (computer-use cannot capture mpv's video layer) and,
+again, the sound. Whether stereo `dialoguenhance` earns its place is still a
+decision to make by ear.
+
 ## Phase 2: the element engine (music and browser tabs)
 
 The roadmap's Web Audio design, plus three traps it did not list.
