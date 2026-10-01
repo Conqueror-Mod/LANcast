@@ -28,12 +28,29 @@ session 0.
 
 - The **denial reset row** on Settings → Display: its wiring is tested, its
   appearance has never been looked at.
-- **High 10** H.264 with the `high10` claim active, on the element path.
-- **MKV + Opus** remuxing with `audio=copy`. There is exactly one in the live
-  library, *Dreamcatcher* (2003).
 - The **HLS file fallback** (#589/#590), as the installed service.
 - The **MSE live path**, which is moot while Chromium plays HLS natively, and
   parked with the rest of live TV.
+
+**Watched on 2026-09-30.** Both ran in the desktop client with libmpv removed,
+so that playback took WebView2's `<video>` path, the one these claims are
+about. They ran against the installed service.
+
+- **High 10 direct-plays.** *Deep Space Nine*, "The Nagus" (H.264 High 10,
+  `yuv420p10le`): a clean picture, the clock running against the true 45:18,
+  no conversion started, and no decode-health fallback after 40 seconds.
+- **MKV + Opus does not remux, it direct-plays.** That is better than the
+  entry expected, and it means the entry asked the wrong question. *Dreamcatcher*
+  (H.264 + Opus 5.1 in Matroska) played with no ffmpeg at all, the clock
+  running against the true 2:13:47. The reason is that the **`hevc` claim also
+  grants the `matroska` container** (decide.go: "the matroska container it
+  usually arrives in"). This client claims `hevc`, so every MKV whose codecs it
+  can play is sent as-is, and WebView2 demuxes it. That held here. Two things
+  follow, and neither is verified. A client *without* the `hevc` claim still
+  takes the remux path this entry described, and nobody has watched that. And
+  the container grant rides on a codec probe: a client could decode HEVC and
+  still choke on some Matroska feature, and nothing asks it separately.
+  Picture and clock were checked; the sound was not heard.
 
 **Open decisions** are indexed under [Open decisions](#open-decisions). A
 proposed ADR is a different queue from an unbuilt feature.
@@ -1926,9 +1943,10 @@ that prompted it is one afternoon old.
     manage High profile perfectly.
 
     Safe to add only because a denial now expires; before `845610f` it would
-    have become the fifth claim written off for ever. **Not yet watched
-    end to end**: the decision is tested and the engine was probed, but no
-    High 10 file has been played through the app with the claim active.
+    have become the fifth claim written off for ever. **Watched end to end on
+    2026-09-30**: a *Deep Space Nine* episode in High 10 direct-played in
+    WebView2 with no conversion and no decode-health fallback (see
+    [Where it stands](#where-it-stands)).
 
     **Not reachable, and the reason is the client rather than the server.**
     MPEG-2, MPEG-4 part 2, VC-1, TrueHD and DTS all answer empty in Chromium,
