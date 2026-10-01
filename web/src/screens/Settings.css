@@ -267,8 +267,9 @@
   padding: 0 4px;
 }
 
+/* Blue for "on", as .pbset__check explains: gold is the focus signal only. */
 .set-toggle input {
-  accent-color: var(--gold);
+  accent-color: var(--nebula-blue);
   width: 16px;
   height: 16px;
 }
