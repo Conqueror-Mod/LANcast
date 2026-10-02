@@ -355,6 +355,7 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 		s.rosterMu.Lock()
 		s.goodAddr[p.Fingerprint] = addr
 		s.rosterMu.Unlock()
+		s.peerAnswered(p)
 
 		// Best effort: reaching a peer must not fail over bookkeeping.
 		_ = s.st.MarkPeerSeen(context.WithoutCancel(ctx), p.Fingerprint, time.Now())

@@ -182,6 +182,7 @@ func (s *Server) openPeerStream(r *http.Request, p store.Peer, path string) (*ht
 			// as "their server is down".
 			return nil, &peerRefusal{status: resp.StatusCode}
 		}
+		s.peerAnswered(p)
 		return resp, nil
 	}
 	if lastErr == nil {
@@ -239,7 +240,7 @@ func (s *Server) peerUnreachable(w http.ResponseWriter, p store.Peer, err error)
 		writeError(w, refusal.status, "peer_refused", peerRefusalText(refusal.status))
 		return
 	}
-	s.log.Info("peer not answering", "peer", p.Fingerprint, "error", err)
+	s.peerSilent(p, err)
 	writeError(w, http.StatusBadGateway, "peer_unreachable", p.Name+" is not answering")
 }
 
