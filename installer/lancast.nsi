@@ -162,24 +162,40 @@ FunctionEnd
 
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\LANcast"
 
+; Quietly runs a command whose failure is expected and ignored, without
+; showing its output.
+;
+; These are the "stop it if it is there" steps: sc.exe and taskkill both report
+; an error when there is nothing to stop, and run through ExecToLog that report
+; went into the details pane of every install. A clean install of a machine
+; with nothing running showed three lines of "ERROR: The process ... not
+; found", which reads as a failure that is not one. nsExec::Exec runs hidden and
+; pushes the exit code; it is popped and discarded, because a failure here is
+; the expected case. ExecToLog pushed one too, and nothing popped it.
+!macro Quietly cmd
+  nsExec::Exec `${cmd}`
+  Pop $0
+!macroend
+
 Section "LANcast"
   ; Upgrade path. An earlier install registered the service from differently
   ; named executables (lancastd.exe / lancast.exe); leaving that registration
   ; behind would orphan a service pointing at a file this install removes. Stop
   ; and delete any existing service by name first — sc reports an error when the
-  ; service is absent, which is fine and ignored.
-  nsExec::ExecToLog 'sc.exe stop lancastd'
-  nsExec::ExecToLog 'sc.exe delete lancastd'
+  ; service is absent, which is fine and ignored, and is not shown.
+  !insertmacro Quietly 'sc.exe stop lancastd'
+  !insertmacro Quietly 'sc.exe delete lancastd'
 
   ; Stop anything still running, under either the old or the current names.
   ; Deleting the files is not enough: a tray client from the previous version
   ; keeps running, holds the single-instance lock so the new one will not start,
   ; and leaves the user with an old build they cannot see they are using.
-  ; taskkill reports an error when nothing matches, which is fine and ignored.
-  nsExec::ExecToLog 'taskkill /F /IM lancast.exe'
-  nsExec::ExecToLog 'taskkill /F /IM lancastd.exe'
-  nsExec::ExecToLog 'taskkill /F /IM LANcast-Client.exe'
-  nsExec::ExecToLog 'taskkill /F /IM LANcast-Server.exe'
+  ; taskkill reports an error when nothing matches, which is fine and ignored,
+  ; and is not shown (Quietly).
+  !insertmacro Quietly 'taskkill /F /IM lancast.exe'
+  !insertmacro Quietly 'taskkill /F /IM lancastd.exe'
+  !insertmacro Quietly 'taskkill /F /IM LANcast-Client.exe'
+  !insertmacro Quietly 'taskkill /F /IM LANcast-Server.exe'
 
   Delete "$INSTDIR\lancastd.exe"
   Delete "$INSTDIR\lancast.exe"
@@ -287,8 +303,8 @@ Section "Uninstall"
   ; Delete silently fails on a file in use.
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service stop'
   nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service uninstall'
-  nsExec::ExecToLog 'taskkill /F /IM LANcast-Client.exe'
-  nsExec::ExecToLog 'taskkill /F /IM LANcast-Server.exe'
+  !insertmacro Quietly 'taskkill /F /IM LANcast-Client.exe'
+  !insertmacro Quietly 'taskkill /F /IM LANcast-Server.exe'
 
   Delete "$INSTDIR\LANcast-Server.exe"
   Delete "$INSTDIR\LANcast-Client.exe"
