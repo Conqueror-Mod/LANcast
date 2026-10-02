@@ -595,6 +595,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 
 	key := auth.ClientKey(r)
 	if !s.throttle.Allow(key) {
+		s.log.Warn("login refused", "reason", "throttled", "client", key)
 		writeError(w, http.StatusTooManyRequests, "too_many_requests",
 			"too many attempts; wait a few minutes")
 		return
@@ -617,6 +618,20 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	// An unknown user and a wrong password are never distinguished in the
 	// response. err != nil short-circuits before the nil-user compare.
 	if err != nil || !auth.CheckPassword(u.PasswordHash, req.Password) {
+		/*
+		 * Logged, because a refusal nobody can see is a refusal nobody can
+		 * explain: somebody was turned away with the right password in mind
+		 * for twenty minutes, and the server had recorded nothing. The reply
+		 * stays one sentence for both cases; only the log tells them apart.
+		 * The account is named when it exists. A name that matched no account
+		 * is not, since it is as likely to be a password typed in the wrong
+		 * box. The password is never logged.
+		 */
+		if err != nil {
+			s.log.Warn("login refused", "reason", "no such account", "client", key)
+		} else {
+			s.log.Warn("login refused", "reason", "wrong password", "account", u.Name, "client", key)
+		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "incorrect username or password")
 		return
 	}
