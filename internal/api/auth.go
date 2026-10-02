@@ -280,6 +280,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		// makes "online" a fact rather than an assumption, and it costs
 		// nothing: the request was going to happen anyway.
 		s.presence.Seen(sess.UserID)
+		s.keepCookie(w, r)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
 	})
 }
@@ -431,6 +432,7 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		"can_convert": s.trans.Available(),
 	}
 	if sess, ok := s.session(r); ok {
+		s.keepCookie(w, r)
 		resp["authenticated"] = true
 		u := userJSON(sess.UserID, sess.Name, sess.Role)
 		/*
@@ -738,5 +740,6 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 	// Secure follows the connection (from the TLS work): a LAN-bound server
 	// serves HTTPS, and marking the cookie Secure there stops it downgrading.
 	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
+	s.cookieIssued(token)
 	return nil
 }
