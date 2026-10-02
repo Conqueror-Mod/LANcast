@@ -70,10 +70,14 @@ the easy path (Phase 3).
 **One line answers one question.** It carries the reason in words (`reason=`),
 not just a code, and the IDs needed to follow it (`item=`, `user=`, `peer=`).
 
-**People's activity is private, even in a local file.** Log *that* a session
-started or a room opened, and the item ID needed to debug playback. Don't
-build a second watch history in the log. Titles stay out of the server log;
-IDs go in.
+**Titles and IDs both.** A line about playing a film names it (`title=`) and
+carries its `item=`, so the log reads at a glance and still points at the exact
+row. Decided 2026-10-02: the log is a local file on the owner's machine, and
+being able to read "Dreamcatcher fell back to a conversion" without a database
+lookup is worth more than keeping titles out of it. It is still not a second
+watch history: playback is logged when it *starts* or *fails*, not as progress.
+What stays out is anything a person typed that the server did not accept (see
+the first rule).
 
 ## Phase 1: the server says what it refused and decided
 
