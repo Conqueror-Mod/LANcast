@@ -206,6 +206,10 @@ type Server struct {
 	// goodAddr is the address that last answered for each peer, so a host with
 	// several advertised interfaces is not re-discovered on every call.
 	goodAddr map[string]string
+	// peerDown is when each peer that stopped answering stopped, so a peer
+	// that stays off is logged once and not once a minute (peerhealth.go).
+	// Guarded by rosterMu, like goodAddr.
+	peerDown map[string]time.Time
 	// crashes records recovered panics as reports beside the database. Created
 	// here rather than injected: it needs only the data directory, and a
 	// dependency the caller may forget to wire is a crash reporter that is
@@ -246,6 +250,7 @@ func New(d Deps) *Server {
 		rosterAt:   map[string]time.Time{},
 		peerTitles: map[string]peerTitleEntry{},
 		goodAddr:   map[string]string{},
+		peerDown:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,

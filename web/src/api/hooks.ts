@@ -3758,8 +3758,26 @@ export function useUnsetPeerShare(fingerprint: string) {
  * libraries are never mixed into ours, and a key that swept both would be the
  * first place they merged.
  */
+/**
+ * How often to ask a peer what it shares: every minute while it answers, every
+ * five while it does not.
+ *
+ * A switched-off peer was asked every minute, per open window, for as long as
+ * it stayed off, and each ask cost this server a three-second outbound call
+ * and a log line (internal/api/peerhealth.go has the server's half). A server
+ * that has been off for an hour is not going to be back in the next sixty
+ * seconds often enough to be worth that. Coming back to the window still asks
+ * at once (refetchOnWindowFocus), so somebody looking is never kept waiting by
+ * the backoff; only the unattended polling slows down.
+ */
+export function peerLibrariesInterval(failing: boolean): number {
+  return failing ? 300_000 : 60_000;
+}
+
 export function usePeerLibraries(fingerprint: string, enabled = true) {
-  return useQuery({
+  // The data type is stated rather than inferred: with refetchInterval as a
+  // function of the query, inference goes circular and callers saw `{}`.
+  return useQuery<{ libraries: PeerLibrary[] }>({
     queryKey: ["peer-libraries", fingerprint],
     enabled: enabled && fingerprint !== "",
     // A peer that is not answering is a 502, and retrying it three times just
@@ -3785,7 +3803,7 @@ export function usePeerLibraries(fingerprint: string, enabled = true) {
      * server — which pays for it on every peer, whether or not anyone is
      * looking.
      */
-    refetchInterval: 60_000,
+    refetchInterval: (q) => peerLibrariesInterval(q.state.status === "error"),
     staleTime: 30_000,
     // Coming back to the window is the moment somebody is about to trust what
     // is on it, and it costs one request.
