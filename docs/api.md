@@ -2256,7 +2256,7 @@ without a field a newer one needs.
 The boundaries detected on one item — where its credits begin (ADR 0054).
 
 ```json
-{ "markers": [ { "kind": "credits", "start_ms": 5634000, "source": "blackdetect",
+{ "markers": [ { "kind": "credits", "start_ms": 5634000, "source": "blackdetect-gated",
   "confidence": 0.9, "created_at": 1788300000 } ] }
 ```
 
@@ -2264,6 +2264,12 @@ The boundaries detected on one item — where its credits begin (ADR 0054).
 stretch in the file's tail, `intro` from audio fingerprints compared across a
 season, which is what makes an intro findable at all — it is the passage every
 episode has in common.
+
+`source` names the rule that wrote the marker. A credits marker from
+`blackdetect-gated` was accepted only after the frames following it looked like
+credits; one from plain `blackdetect` predates that check, was wrong about one
+time in five, and is being replaced as the server re-examines its library (ADR
+0054, 2026-10-03 amendment). **Offer a skip only from `blackdetect-gated`.**
 
 **Markers also ride on `GET /api/items/{id}`**, in a `markers` array of exactly
 this shape. That is the one a player should read: asking a second question

@@ -52,7 +52,7 @@ func TestCreditsTakeTheEarliestQualifyingRun(t *testing.T) {
 		{Start: 4235.0, End: 4253.7}, // 93.0%, 18.7s
 		{Start: 4282.0, End: 4313.0}, // 94.1%, 31.0s — longer, and later
 	}
-	got := CreditsFrom(runs, dur)
+	got := CreditsFrom(runs, dur, nil)
 	if !got.Found {
 		t.Fatal("Found = false, want the 93.0% run")
 	}
@@ -72,7 +72,7 @@ func TestCreditsIgnoreAThirdActFadeToBlack(t *testing.T) {
 		{Start: 4656.0, End: 4670.0}, // 77.6% — a scene fade, and 14s long
 		{Start: 5634.0, End: 5650.0}, // 93.9%
 	}
-	got := CreditsFrom(runs, dur)
+	got := CreditsFrom(runs, dur, nil)
 	if !got.Found || got.StartMS != 5_634_000 {
 		t.Errorf("got %+v, want the 93.9%% run — below 88%% is a scene fade", got)
 	}
@@ -82,7 +82,7 @@ func TestCreditsIgnoreAThirdActFadeToBlack(t *testing.T) {
 func TestCreditsRefuseTheFileEnding(t *testing.T) {
 	dur := 6000.0
 	runs := []Run{{Start: 5994.0, End: 6000.0}} // 99.9%
-	if got := CreditsFrom(runs, dur); got.Found {
+	if got := CreditsFrom(runs, dur, nil); got.Found {
 		t.Errorf("got %+v, want no answer — that is the file running out", got)
 	}
 }
@@ -92,7 +92,7 @@ func TestCreditsRefuseTheFileEnding(t *testing.T) {
 func TestCreditsAbstainWhenTheCreditsBeginOnACut(t *testing.T) {
 	dur := 9540.0
 	runs := []Run{{Start: 9530.0, End: 9540.0}}
-	if got := CreditsFrom(runs, dur); got.Found {
+	if got := CreditsFrom(runs, dur, nil); got.Found {
 		t.Errorf("got %+v, want no answer", got)
 	}
 }
@@ -104,7 +104,7 @@ func TestCreditsAbstainWhenNoRunIsLongEnough(t *testing.T) {
 		{Start: 3585.0, End: 3586.8}, // 92.8%, 1.8s — under the 2s fallback
 		{Start: 3662.0, End: 3663.1}, // 94.8%, 1.1s
 	}
-	if got := CreditsFrom(runs, dur); got.Found {
+	if got := CreditsFrom(runs, dur, nil); got.Found {
 		t.Errorf("got %+v, want no answer — 1.8s is under the fallback", got)
 	}
 }
@@ -114,7 +114,7 @@ func TestCreditsAbstainWhenNoRunIsLongEnough(t *testing.T) {
 func TestCreditsFallBackToAShorterRunAndSayItIsWeaker(t *testing.T) {
 	dur := 6000.0
 	runs := []Run{{Start: 5640.0, End: 5643.0}} // 94.0%, 3.0s
-	got := CreditsFrom(runs, dur)
+	got := CreditsFrom(runs, dur, nil)
 	if !got.Found || got.StartMS != 5_640_000 {
 		t.Fatalf("got %+v, want the 94.0%% run", got)
 	}
@@ -131,7 +131,7 @@ func TestCreditsPreferALongRunOverAnEarlierShortOne(t *testing.T) {
 		{Start: 5300.0, End: 5302.5}, // 88.3%, 2.5s
 		{Start: 5640.0, End: 5652.0}, // 94.0%, 12.0s
 	}
-	got := CreditsFrom(runs, dur)
+	got := CreditsFrom(runs, dur, nil)
 	if got.StartMS != 5_640_000 {
 		t.Errorf("StartMS = %d, want the confident 94.0%% run", got.StartMS)
 	}
@@ -141,7 +141,7 @@ func TestCreditsPreferALongRunOverAnEarlierShortOne(t *testing.T) {
 // "its" length. A duration that is not the file's is not a fact about it.
 func TestCreditsRefuseAnUnknownDuration(t *testing.T) {
 	runs := []Run{{Start: 5000.0, End: 5020.0}}
-	if got := CreditsFrom(runs, 0); got.Found {
+	if got := CreditsFrom(runs, 0, nil); got.Found {
 		t.Errorf("got %+v, want no answer without a real duration", got)
 	}
 }
