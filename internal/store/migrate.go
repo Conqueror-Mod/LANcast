@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 53
+const CurrentSchemaVersion = 54
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -92,6 +92,7 @@ var migrations = []migration{
 	{version: 51, sql: schemaRevision51},
 	{version: 52, sql: schemaRevision52},
 	{version: 53, sql: schemaRevision53},
+	{version: 54, sql: schemaRevision54},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1855,6 +1856,35 @@ FROM playback_state ps
 JOIN media_item mi ON mi.id = ps.item_id
 LEFT JOIN media_item sh ON sh.id = (` + showOf + `)
 WHERE ps.watched = 1 AND mi.kind IN ('movie', 'episode');
+`
+
+/*
+ * Revision 54 -- every credits marker the ungated rule wrote is decided again
+ * (ADR 0054, 2026-10-03 amendment).
+ *
+ * No shape changes. The credits rule gained a gate that reads frames after each
+ * black run, because the rule without one put the marker on a fade inside the
+ * film one time in five. A marker it wrote is still in the table, and the
+ * stamp beside it says the file was examined, so without this nothing would
+ * look at it again.
+ *
+ * Only items with a marker from the old source. The gate filters candidates and
+ * never adds one, so a file the old rule abstained on abstains again, and
+ * decoding it again would buy nothing. The marker itself is left in place
+ * until the new pass replaces it: the player offers only the new source, so an
+ * old marker waiting for its turn is inert rather than wrong.
+ *
+ * This also catches the four markers found outside the window of their own
+ * file -- Alien 3 at 73.2% among them -- because every one of them came from
+ * the old source.
+ */
+const schemaRevision54 = `
+UPDATE media_item SET markers_at = NULL
+WHERE markers_at IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM item_marker m
+    WHERE m.item_id = media_item.id AND m.kind = 'credits' AND m.source = 'blackdetect'
+  );
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or
