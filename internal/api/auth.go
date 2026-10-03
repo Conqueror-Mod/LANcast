@@ -280,6 +280,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		// makes "online" a fact rather than an assumption, and it costs
 		// nothing: the request was going to happen anyway.
 		s.presence.Seen(sess.UserID)
+		s.keepCookie(w, r)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionCtxKey, sess)))
 	})
 }
@@ -431,6 +432,7 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		"can_convert": s.trans.Available(),
 	}
 	if sess, ok := s.session(r); ok {
+		s.keepCookie(w, r)
 		resp["authenticated"] = true
 		u := userJSON(sess.UserID, sess.Name, sess.Role)
 		/*
@@ -593,6 +595,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 
 	key := auth.ClientKey(r)
 	if !s.throttle.Allow(key) {
+		s.log.Warn("login refused", "reason", "throttled", "client", key)
 		writeError(w, http.StatusTooManyRequests, "too_many_requests",
 			"too many attempts; wait a few minutes")
 		return
@@ -615,6 +618,20 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	// An unknown user and a wrong password are never distinguished in the
 	// response. err != nil short-circuits before the nil-user compare.
 	if err != nil || !auth.CheckPassword(u.PasswordHash, req.Password) {
+		/*
+		 * Logged, because a refusal nobody can see is a refusal nobody can
+		 * explain: somebody was turned away with the right password in mind
+		 * for twenty minutes, and the server had recorded nothing. The reply
+		 * stays one sentence for both cases; only the log tells them apart.
+		 * The account is named when it exists. A name that matched no account
+		 * is not, since it is as likely to be a password typed in the wrong
+		 * box. The password is never logged.
+		 */
+		if err != nil {
+			s.log.Warn("login refused", "reason", "no such account", "client", key)
+		} else {
+			s.log.Warn("login refused", "reason", "wrong password", "account", u.Name, "client", key)
+		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "incorrect username or password")
 		return
 	}
@@ -738,5 +755,6 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 	// Secure follows the connection (from the TLS work): a LAN-bound server
 	// serves HTTPS, and marking the cookie Secure there stops it downgrading.
 	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
+	s.cookieIssued(token)
 	return nil
 }
