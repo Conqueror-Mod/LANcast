@@ -206,6 +206,11 @@ type Server struct {
 	// goodAddr is the address that last answered for each peer, so a host with
 	// several advertised interfaces is not re-discovered on every call.
 	goodAddr map[string]string
+	// cookieSent is when each session's cookie was last sent, so it can be
+	// re-sent as the session is used rather than only at login
+	// (sessioncookie.go).
+	cookieMu   sync.Mutex
+	cookieSent map[string]time.Time
 	// peerDown is when each peer that stopped answering stopped, so a peer
 	// that stays off is logged once and not once a minute (peerhealth.go).
 	// Guarded by rosterMu, like goodAddr.
@@ -250,6 +255,7 @@ func New(d Deps) *Server {
 		rosterAt:   map[string]time.Time{},
 		peerTitles: map[string]peerTitleEntry{},
 		goodAddr:   map[string]string{},
+		cookieSent: map[string]time.Time{},
 		peerDown:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,

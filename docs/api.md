@@ -90,6 +90,13 @@ only, so it is reachable solely from the machine it runs on.
 call returns `403 forbidden`. A request with neither header is allowed, so
 non-browser clients work normally.
 
+**A session lasts 30 days from its last use, and its cookie is re-sent to
+match.** Any authenticated response may carry a fresh `Set-Cookie` for the
+*same* token with a renewed `Max-Age`, at most every few hours per session.
+Keep the newest one. Before v0.9.48 the cookie was set only at login, so a
+client in daily use was signed out exactly 30 days after its last login, while
+the server still held its session.
+
 | Route | Purpose |
 |---|---|
 | `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, user?}`; `user` carries `sharing` |
