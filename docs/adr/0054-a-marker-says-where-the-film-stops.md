@@ -246,3 +246,93 @@ would otherwise never carry a credits marker on an episode at all.
 The lesson is the one ADR 0055 records about `intros_at` from the other side: a
 shared write path needs to know whose flag it is setting, and a flag that two
 passes can set is a flag neither of them owns.
+
+## Amendment — 2026-10-03: somebody looked, and the rule needed a gate
+
+Decision 3 said the rule was consistent and not known to be right, and that
+nothing would act on it until somebody checked. This is the check.
+
+**Method.** For every film in both samples, frames were pulled at −60, −30, 0,
++30, +60 and +120 seconds around the stored marker, and each was judged by eye:
+*early* (the film is still running after the marker), *right*, or *late* (the
+credits were already rolling before it).
+
+**The first sample, 40 films, today's rule:** 28 right, 3 late, and **9 early**
+— *Green Street Hooligans*, *Space Jam: A New Legacy*, *Captain America: The
+Winter Soldier*, *Twister*, *Star Trek V*, *Resident Evil: Degeneration*,
+*Pollyanna*, *Fantasia* and *Alien³*. Every early one is a fade to black inside
+the film with a scene after it, and every one but *Alien³* sits at or below 92%.
+One time in five, a **Skip credits** button would have dropped somebody out of
+the third act. That is worse than no button, and it is why `web/src/lib/skip.ts`
+offered intros only.
+
+**What a black run cannot say, the frames after it can.** Credits are mostly
+black *and* sharp: lines of text on a dark ground. Two numbers per frame
+separate them — the share of near-black pixels (`blackframe`, luma under 32 of
+255) and the mean of an edge map (`edgedetect`, at 480 pixels wide). A scene
+after a fade is rarely more than 60% black; credits are 80–100%. *Fantasia* is
+the reason for the second number: its fade goes to a dark, empty concert stage,
+black enough to pass and with nothing written on it.
+
+**The gate.** Candidates are tried in the old order, and one is accepted only if,
+of the frames at +15/+30/+45/+60/+90 s, at least **4** are **≥80%** near-black
+and at least **2** have edge density **≥2.0**. Fewer frames fit near the end of
+the file, and the bar scales with them. A frame that cannot be read counts
+against. If no candidate passes, the film has no marker — falling back to the
+earliest run would return exactly the answer the gate exists to doubt.
+
+**Tuned on sample 1, then frozen** — the simulation script was hashed before it
+was first run on the second sample — **and run on sample 2**, 40 films neither
+rule had been fitted to. Every answer it gave, and today's answer wherever the
+two differed, was judged by eye:
+
+| | sample 1, today | sample 1, gated | **sample 2, today** | **sample 2, gated** |
+|---|---|---|---|---|
+| early | 9 | 1 | **5** | **0** |
+| abstained | 0 | 7 | 0 | **9** |
+| answered | 40 | 33 | 40 | **31** |
+
+Across all 80: **early answers fall from 14 to 1.** The one left is *Resident
+Evil: Degeneration*, a dark computer-animated film whose final scene is, to
+these two numbers, text on black.
+
+**What it costs**, from the held-out sample, because that is the honest count.
+Four films the old rule had right now get no answer: credits drawn as comic
+panels (*Batman: Year One*), credits too dim to register (*Terminator: Dark
+Fate*), a crawl that follows a mid-credits scene (*Thor: Ragnarok*), and a short whose end card is
+mostly logo. *The Dark Knight Rises* gets worse rather than silent: its credits
+open with a long run of almost empty black frames, the gate turns them away, and
+the answer lands on the copyright card at 99.5%. Late, so harmless, and useless.
+
+Abstaining is the cheap failure — a film with no marker shows no button — and
+the asymmetry between that and an early skip is what the thresholds are set by.
+
+**About ten films are late under both rules**, and it is one pattern: credits
+that open with styled titles over the final scenes, after which the black run
+arrives. The skip lands inside the credits rather than at their start; nobody
+misses any of the film. Moving those earlier is a different problem and is not
+attempted here.
+
+**The source changes, and that is the safety catch.** Gated markers are written
+as `blackdetect-gated`. A marker from the old rule stays in the table until the
+re-run reaches it, and the player offers a skip only from the new source — so a
+library part-way through re-detection never offers an ungated answer.
+
+**Revision 54 re-queues every item carrying a `blackdetect` credits marker.**
+Abstentions are left alone: the gate only removes candidates, so a file with
+none abstains again. The re-run costs one tail decode per film plus five
+single-frame reads per candidate — 80 films' frame reads took 50 seconds.
+
+**A new length un-stamps the credits pass.** Four markers in a real library sat
+outside the window of their own file — *Alien³* at 73.2%, *1408* at 81.5%,
+*AVP* at 85.7%, *13 Ghosts* at 99.9% — each chosen against a length the file did
+not have, and never revisited when a probe recorded the real one. `SaveProbe`
+now clears `markers_at` when the duration moves by more than a second. All four
+carry the old source, so revision 54 reaches them too.
+
+**Decision 3 is lifted for credits, narrowly.** A **Skip credits** button may be
+drawn from a gated marker: a visible button the viewer presses, never an
+automatic jump, offered from the marker to the end and not in the final 1% of the
+file, where there is nothing left to skip. Decision 4 — the marker replacing the
+watched threshold — is **not** taken by this amendment. A late marker is
+harmless to a button and would not be harmless to "finished".
