@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"lancast/internal/together"
@@ -72,12 +73,16 @@ func (s *Server) createTogether(w http.ResponseWriter, r *http.Request) {
 	// The item is checked here so a room can never be opened around something
 	// that does not exist — everyone who joined would sit looking at a player
 	// that could not load, with nothing to say why.
-	if _, err := s.st.GetItem(r.Context(), req.ItemID, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
+	it, err := s.st.GetItem(r.Context(), req.ItemID, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
 	id, name := s.whoami(r)
-	writeJSON(w, http.StatusCreated, s.together.Create(req.ItemID, id, name, req.PositionMS))
+	room := s.together.Create(req.ItemID, id, name, req.PositionMS)
+	s.log.Info("watch together: room opened", "room", room.ID, "item", it.ID,
+		"title", displayTitle(it), "host", name)
+	writeJSON(w, http.StatusCreated, room)
 }
 
 func (s *Server) joinTogether(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +92,10 @@ func (s *Server) joinTogether(w http.ResponseWriter, r *http.Request) {
 		s.togetherError(w, err)
 		return
 	}
+	// A refresh, a dropped connection and a second tab all rejoin, so this
+	// is Quiet: one line per person per room per window.
+	s.quiet.Log(s.log, slog.LevelInfo, "together-join|"+sess.ID+"|"+id,
+		"watch together: joined", "room", sess.ID, "item", sess.ItemID, "member", name)
 	writeJSON(w, http.StatusOK, sess)
 }
 
@@ -120,9 +129,17 @@ func (s *Server) reportTogether(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) leaveTogether(w http.ResponseWriter, r *http.Request) {
-	if err := s.together.Leave(r.PathValue("id"), s.userID(r)); err != nil {
+	roomID := r.PathValue("id")
+	ended, err := s.together.LeaveRoom(roomID, s.userID(r))
+	if err != nil {
 		s.togetherError(w, err)
 		return
+	}
+	_, name := s.whoami(r)
+	if ended {
+		s.log.Info("watch together: room closed", "room", roomID, "by", name)
+	} else {
+		s.log.Info("watch together: left", "room", roomID, "member", name)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

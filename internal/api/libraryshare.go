@@ -177,6 +177,8 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "share library")
 		return
 	}
+	s.log.Info("library shared with a peer", "peer", fingerprint, "library", libraryID,
+		"name", l.Name, "ceiling", body.Ceiling)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -195,6 +197,7 @@ func (s *Server) deleteShare(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "unshare library")
 		return
 	}
+	s.log.Info("library unshared from a peer", "peer", fingerprint, "library", libraryID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

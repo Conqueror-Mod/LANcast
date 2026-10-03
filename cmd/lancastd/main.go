@@ -662,6 +662,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 
 	updates := update.New(api.Version)
+	updates.SetLogger(log)
 	if settings.Get().UpdateCheck {
 		workers.Add(1)
 		go func() {

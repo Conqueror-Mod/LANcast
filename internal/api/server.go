@@ -245,7 +245,7 @@ func New(d Deps) *Server {
 	if web == nil {
 		web = http.NotFoundHandler()
 	}
-	return &Server{
+	s := &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, semanticModelJob: &faceJob{}, embedder: d.Embedder, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
@@ -270,6 +270,13 @@ func New(d Deps) *Server {
 		together: together.New(),
 		prober:   probe.New(),
 	}
+	// The sweep drops people who closed the laptop and ends rooms whose host
+	// went quiet, with nobody pressing anything; this is how that reaches the
+	// log. s.log is read at call time, so a test swapping it is heard.
+	s.together.OnSweep = func(e together.Event) {
+		s.log.Info("watch together: "+e.Kind, "room", e.RoomID, "item", e.ItemID, "member", e.Name)
+	}
+	return s
 }
 
 // enrichSoon kicks the background worker, if one is wired up.

@@ -84,11 +84,38 @@ type room struct {
 	members    map[string]*Member
 }
 
+/*
+ * Event is something that happened to a room with nobody pressing anything.
+ *
+ * Create, Join and Leave are requests, and whoever handles the request can
+ * say what happened. The sweep is not: a member who closed the laptop is
+ * dropped, and a room whose host went quiet ends, inside whichever unrelated
+ * call happened to arrive next. That is exactly the event "the room just
+ * vanished" is about, and it was the one nothing could see.
+ */
+type Event struct {
+	Kind   string // EventMemberTimedOut or EventRoomEnded
+	RoomID string
+	ItemID int64
+	UserID string // the member, for EventMemberTimedOut
+	Name   string
+}
+
+const (
+	EventMemberTimedOut = "member timed out"
+	EventRoomEnded      = "room ended: its host went quiet"
+)
+
 // Manager owns every live session.
 type Manager struct {
 	mu    sync.Mutex
 	rooms map[string]*room
 	now   func() time.Time
+
+	// OnSweep, when set, hears what the sweep did. It is called with the
+	// manager's lock held, so it must not call back into the Manager; logging
+	// is what it is for. This package stays free of a logger.
+	OnSweep func(Event)
 }
 
 func New() *Manager {
@@ -209,22 +236,31 @@ func (m *Manager) Report(id, userID string, positionMS int64, paused bool) (Sess
  * one action.
  */
 func (m *Manager) Leave(id, userID string) error {
+	_, err := m.LeaveRoom(id, userID)
+	return err
+}
+
+// LeaveRoom is Leave, also saying whether the room ended because of it (the
+// host left, or the last member did), which is the difference between a
+// person leaving and a room closing.
+func (m *Manager) LeaveRoom(id, userID string) (ended bool, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	r, ok := m.rooms[id]
 	if !ok {
-		return ErrNotFound
+		return false, ErrNotFound
 	}
 	if userID == r.hostID {
 		delete(m.rooms, id)
-		return nil
+		return true, nil
 	}
 	delete(r.members, userID)
 	if len(r.members) == 0 {
 		delete(m.rooms, id)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // List returns open rooms, so somebody arriving can find one to join without
@@ -266,13 +302,21 @@ func (m *Manager) sweepLocked() {
 		for uid, mem := range r.members {
 			if mem.LastSeen < cutoff {
 				delete(r.members, uid)
+				m.emit(Event{Kind: EventMemberTimedOut, RoomID: id, ItemID: r.itemID, UserID: uid, Name: mem.Name})
 			}
 		}
 		// A room whose host has gone quiet is over, for the same reason the
 		// host leaving ends it.
 		if _, ok := r.members[r.hostID]; !ok || len(r.members) == 0 {
 			delete(m.rooms, id)
+			m.emit(Event{Kind: EventRoomEnded, RoomID: id, ItemID: r.itemID})
 		}
+	}
+}
+
+func (m *Manager) emit(e Event) {
+	if m.OnSweep != nil {
+		m.OnSweep(e)
 	}
 }
 
