@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -244,6 +245,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			switch r.Method {
 			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 				if !auth.SameOriginRequest(r) {
+					s.logRefusal(r, slog.LevelWarn, "cross-origin", "origin", r.Header.Get("Origin"))
 					writeError(w, http.StatusForbidden, "forbidden", "cross-origin request refused")
 					return
 				}
@@ -273,6 +275,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 
 		sess, ok := s.session(r)
 		if !ok {
+			s.logUnauthenticated(r)
 			writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 			return
 		}
@@ -543,6 +546,7 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
 	}
+	s.log.Info("first account created", "account", u.Name, "client", auth.ClientKey(r))
 
 	/*
 	 * The media tools, if the box was ticked (ADR 0048).
@@ -640,6 +644,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
 	}
+	s.log.Info("signed in", "account", u.Name, "client", key)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"authenticated": true,
 		"user":          userJSON(u.ID, u.Name, u.Role),
@@ -649,7 +654,11 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 // authLogout ends this session only.
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(auth.CookieName); err == nil && c.Value != "" {
-		_ = s.st.DeleteSession(r.Context(), auth.HashToken(c.Value))
+		hash := auth.HashToken(c.Value)
+		if sess, err := s.st.LookupSession(r.Context(), hash); err == nil {
+			s.log.Info("signed out", "account", sess.Name, "client", auth.ClientKey(r))
+		}
+		_ = s.st.DeleteSession(r.Context(), hash)
 	}
 	http.SetCookie(w, auth.ClearCookie())
 	w.WriteHeader(http.StatusNoContent)
@@ -732,6 +741,7 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.log.Info("password changed; that account's sessions were revoked", "account", u.Name, "client", key)
 	s.audit(r, "auth.password_change", "user", u.ID,
 		fmt.Sprintf("%q changed their own password; all their sessions were revoked", u.Name), nil)
 
