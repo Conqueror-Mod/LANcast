@@ -83,6 +83,9 @@ func (c *Checker) setDownloadError(err error) {
 		c.state.DownloadError = ""
 		return
 	}
+	if c.log != nil {
+		c.log.Warn("update download failed", "error", err)
+	}
 	c.state.DownloadError = err.Error()
 }
 

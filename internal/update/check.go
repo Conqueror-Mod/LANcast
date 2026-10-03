@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,6 +69,10 @@ type State struct {
 type Checker struct {
 	current string
 	client  *http.Client
+	// log, when set, hears changes of state: a check starting to fail or
+	// recovering, an update becoming available, a download failing. Nil is
+	// silent, which is what tests and the zero value get.
+	log *slog.Logger
 
 	mu       sync.Mutex
 	state    State
@@ -136,14 +141,34 @@ func (c *Checker) checkAt(ctx context.Context, url string) State {
 	c.state.Checking = false
 	c.state.CheckedAt = time.Now().Unix()
 	if err != nil {
+		// A background check failing used to be visible only as a line in
+		// Settings, and only while somebody looked. Logged once when it starts
+		// failing, not on every attempt.
+		if c.log != nil && c.state.Error == "" {
+			c.log.Warn("update check failed", "error", err)
+		}
 		c.state.Error = err.Error()
 		return c.state
 	}
+	if c.log != nil && c.state.Error != "" {
+		c.log.Info("update check working again")
+	}
+	wasAvailable, wasLatest := c.state.Available, c.state.Latest
 	c.state.Error = ""
 	c.state.Latest = latest
 	c.state.URL = htmlURL
 	c.state.Available = Newer(c.current, latest)
+	if c.log != nil && c.state.Available && (!wasAvailable || wasLatest != latest) {
+		c.log.Info("update available", "running", c.current, "latest", latest)
+	}
 	return c.state
+}
+
+// SetLogger gives the checker somewhere to say what changed (see log).
+func (c *Checker) SetLogger(l *slog.Logger) {
+	c.mu.Lock()
+	c.log = l
+	c.mu.Unlock()
 }
 
 func (c *Checker) fetch(ctx context.Context, endpoint string) (tag, url string, err error) {
