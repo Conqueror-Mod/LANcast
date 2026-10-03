@@ -42,6 +42,7 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decision := probe.DecideTrack(res, prof, audioIndex)
+	s.logDecision(r, it, prof.Name, audioIndex, decision)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"item_id":  id,

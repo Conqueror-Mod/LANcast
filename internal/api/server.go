@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"lancast/internal/applog"
 	"log/slog"
 	"net/http"
 	"os"
@@ -211,6 +212,9 @@ type Server struct {
 	// (sessioncookie.go).
 	cookieMu   sync.Mutex
 	cookieSent map[string]time.Time
+	// quiet keeps repeatable lines (refusals, playback decisions) to one per
+	// key per window, with a count (applog.Quiet, docs/logging-plan.md).
+	quiet *applog.Quiet
 	// peerDown is when each peer that stopped answering stopped, so a peer
 	// that stays off is logged once and not once a minute (peerhealth.go).
 	// Guarded by rosterMu, like goodAddr.
@@ -256,6 +260,7 @@ func New(d Deps) *Server {
 		peerTitles: map[string]peerTitleEntry{},
 		goodAddr:   map[string]string{},
 		cookieSent: map[string]time.Time{},
+		quiet:      applog.NewQuiet(10 * time.Minute),
 		peerDown:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
