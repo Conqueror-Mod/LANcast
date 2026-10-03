@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { FocusProvider } from "@/focus/FocusController";
 import { ApiFailure } from "@/api/client";
+import { installErrorNotes, noteSignedOut } from "@/lib/errorNotes";
 import { App } from "@/App";
 import { Splash } from "@/components/Splash";
 import "@/styles/global.css";
@@ -17,8 +18,9 @@ import "@/styles/global.css";
 // App, which drops the user back to the login screen instead of leaving them
 // staring at a half-broken library of failed requests.
 const queryCache = new QueryCache({
-  onError: (error) => {
+  onError: (error, query) => {
     if (error instanceof ApiFailure && error.status === 401) {
+      noteSignedOut(query.queryKey[0]);
       queryClient.invalidateQueries({ queryKey: ["auth-status"] });
     }
   },
@@ -30,6 +32,8 @@ const queryClient = new QueryClient({
     queries: { retry: 1, refetchOnWindowFocus: false },
   },
 });
+
+installErrorNotes(window);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -1,3 +1,5 @@
+import { clientNote } from "@/lib/clientNote";
+
 // What this browser can actually decode.
 //
 // The server's default profile is a floor: it assumes only what every browser
@@ -199,6 +201,16 @@ export function deny(capability: string): boolean {
   const current = denials();
   if (capability in current) return false;
   current[capability] = Date.now();
+  /*
+   * Logged, because this is the ratchet that once re-encoded every HEVC film
+   * for weeks with nothing anywhere saying so. Only a *new* denial: a claim
+   * already withheld returns above without a word.
+   */
+  clientNote(
+    "warn",
+    "capabilities",
+    `stopped claiming ${capability} after a failed direct play; it is tried again in ${Math.round(DENIAL_TTL_MS / 86_400_000)} days`,
+  );
   try {
     localStorage.setItem(DENIED_KEY, JSON.stringify(current));
   } catch {

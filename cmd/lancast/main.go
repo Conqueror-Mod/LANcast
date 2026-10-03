@@ -562,6 +562,10 @@ func (l *launcher) desktopBindings(native *nativePlayer) map[string]any {
 	for name, fn := range clientLogBindings(dir) {
 		b[name] = fn
 	}
+	// And the page's way in to that log (clientnote.go).
+	for name, fn := range clientNoteBindings() {
+		b[name] = fn
+	}
 	// Native playback, only where a window exists to play into.
 	if native != nil {
 		for name, fn := range native.bindings() {

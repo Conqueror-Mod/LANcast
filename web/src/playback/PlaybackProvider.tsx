@@ -1,3 +1,4 @@
+import { clientNote } from "@/lib/clientNote";
 import {
   createContext,
   useCallback,
@@ -1438,6 +1439,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
 
     setNote("That file would not play directly — converting instead");
+    if (item) {
+      clientNote(
+        "warn",
+        "playback",
+        `"${item.title}" (item ${item.id}, ${item.container ?? "unknown container"}) would not play directly; converting instead`,
+      );
+    }
     const v = videoRef.current;
     if (!v || !item) return;
     decision.current = {
@@ -1557,6 +1565,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (news) resetCapabilities();
     }
 
+    clientNote(
+      "warn",
+      "playback",
+      `"${item.title}" (item ${item.id}) was dropping frames; switching to a conversion at ${Math.round(v.currentTime)}s`,
+    );
     const at = v.currentTime;
     setNote("That file was dropping frames — converting it instead");
     decision.current = {
