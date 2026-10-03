@@ -41,6 +41,14 @@ func (s *Server) audit(r *http.Request, action, targetKind, targetID, summary st
 	if err := s.st.AppendAudit(context.WithoutCancel(r.Context()), ev); err != nil {
 		s.log.Error("audit write failed", "action", action, "summary", summary, "error", err)
 	}
+	/*
+	 * And the log. The audit table is the durable record of who changed what;
+	 * the log is where somebody reads what happened *around* a problem, and
+	 * an update that restarted the server, a library deleted, a peer added,
+	 * belongs in that timeline next to the failure it explains. Summaries are
+	 * written for people and hold no secrets (they are shown in Settings).
+	 */
+	s.log.Info(summary, "action", action, "actor", ev.ActorName)
 }
 
 // actorName is the display name to freeze into the event. It falls back to the
