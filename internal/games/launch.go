@@ -65,6 +65,22 @@ func LaunchURI(id string) (string, error) {
 		 * install path rather than building a URI at all.
 		 */
 		return "", fmt.Errorf("a Battle.net game is launched from its folder, not a URI")
+
+	case SourceXbox:
+		/*
+		 * A packaged game is started by its application user model id, through
+		 * the shell's apps folder — the same thing the Start menu does. Not a
+		 * URL: there is no protocol for it, and the caller hands this to
+		 * explorer.exe rather than to the URL handler (XboxShellTarget).
+		 *
+		 * The id is validated again here, not trusted because it was valid
+		 * when read: this is the last step before a shell, and the check is
+		 * cheap.
+		 */
+		if !validAUMID.MatchString(own) {
+			return "", fmt.Errorf("not an Xbox app id: %q", own)
+		}
+		return `shell:AppsFolder\` + own, nil
 	}
 	return "", fmt.Errorf("unknown launcher for %q", id)
 }

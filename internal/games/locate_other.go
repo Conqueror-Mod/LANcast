@@ -10,3 +10,6 @@ package games
 // CI, which builds on Linux — the rules are pure and worth testing everywhere,
 // the registry is not.
 func steamRoot() (string, bool) { return "", false }
+
+// xboxFolders finds nothing off Windows either.
+func xboxFolders() []string { return nil }

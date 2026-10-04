@@ -179,7 +179,23 @@ func gamesBindings(dir string) map[string]any {
 			if err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
 			}
-			if err := desktop.OpenBrowser(uri); err != nil {
+			/*
+			 * An Xbox game's target is a shell location, not a URL: the URL
+			 * handler does not resolve `shell:AppsFolder`, Explorer does. Handed
+			 * to explorer.exe as its one argument, built and validated by
+			 * LaunchURI from an id this rescan confirmed.
+			 */
+			open := desktop.OpenBrowser
+			if g.Source == games.SourceXbox {
+				open = func(target string) error {
+					cmd := exec.Command("explorer.exe", target)
+					if err := cmd.Start(); err != nil {
+						return err
+					}
+					return cmd.Process.Release()
+				}
+			}
+			if err := open(uri); err != nil {
 				slog.Info("could not hand a launch to a launcher",
 					"game", g.Name, "source", string(g.Source), "err", err)
 				return map[string]any{"ok": false, "error": err.Error()}
