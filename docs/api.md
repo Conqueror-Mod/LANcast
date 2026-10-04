@@ -2271,8 +2271,11 @@ credits. One from plain `blackdetect` had no such check: on a **film** that rule
 was early about one time in five, and those markers are being replaced as the
 server re-examines its library; on an **episode** it was early about one time in
 thirty-three, and episodes are deliberately left ungated (ADR 0054, 2026-10-03
-amendments). **Offer a skip from `blackdetect-gated` on anything, and from
-`blackdetect` only on an item whose `kind` is `episode`.**
+amendments). A credits marker from `ending-audio` was placed by the closing
+theme an episode shares with the rest of its season, checked against the black
+run; only episodes carry one. **Offer a skip from `blackdetect-gated` on
+anything, and from `blackdetect` or `ending-audio` only on an item whose `kind`
+is `episode`.**
 
 **Markers also ride on `GET /api/items/{id}`**, in a `markers` array of exactly
 this shape. That is the one a player should read: asking a second question

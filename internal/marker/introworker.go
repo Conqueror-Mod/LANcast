@@ -128,10 +128,24 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 		return nil
 	}
 
+	head, tailAudio := w.decodeHead, w.decodeTail
+	if w.headFn != nil {
+		head = w.headFn
+	}
+	if w.tailAudioFn != nil {
+		tailAudio = w.tailAudioFn
+	}
+
 	type fp struct {
 		phases [][]uint32
 		single []uint32
 		ok     bool
+		// The same for the last EndingTailSeconds, and the second of the
+		// episode that tail begins at.
+		endPhases [][]uint32
+		endSingle []uint32
+		endFrom   float64
+		endOK     bool
 	}
 	prints := make([]fp, n)
 	for i, ep := range se.Episodes {
@@ -141,7 +155,7 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 		if !w.stillWanted() {
 			return nil
 		}
-		samples, err := w.decodeHead(ctx, ep.Path, IntroHeadSeconds)
+		samples, err := head(ctx, ep.Path, IntroHeadSeconds)
 		if err != nil {
 			// One unreadable episode does not spoil the season: it simply
 			// takes no part in the comparison, and the others still have each
@@ -154,6 +168,19 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			single: Fingerprint(samples),
 			ok:     true,
 		}
+		if ep.DurationMS == nil || *ep.DurationMS <= 0 {
+			continue
+		}
+		end, err := tailAudio(ctx, ep.Path, EndingTailSeconds)
+		if err != nil {
+			// No ending to compare, and the black run still decides alone.
+			w.log.Warn("ending decode failed", "item", ep.ID, "error", err)
+			continue
+		}
+		prints[i].endPhases = FingerprintPhases(end)
+		prints[i].endSingle = Fingerprint(end)
+		prints[i].endFrom = float64(*ep.DurationMS)/1000 - float64(len(end))/SampleRate
+		prints[i].endOK = true
 	}
 
 	now := time.Now().Unix()
@@ -183,6 +210,38 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 		}
 
 		in := IntroFrom(cands)
+
+		/*
+		 * The closing theme, found the same way: what this episode's last
+		 * minutes share with its siblings'. Times are moved into this
+		 * episode's own timeline, since each tail began at a different second.
+		 */
+		var endCands []Candidate
+		if prints[i].endOK {
+			for _, p := range IntroPeers(n, i, PeersPerEpisode) {
+				if !prints[p].endOK {
+					continue
+				}
+				m := BestCommonRunBridging(prints[i].endPhases, prints[p].endSingle, IntroTolerance, IntroGapFrames)
+				if m.Frames == 0 {
+					endCands = append(endCands, Candidate{})
+					continue
+				}
+				from := prints[i].endFrom
+				endCands = append(endCands, Candidate{
+					StartSec: from + Seconds(m.OffsetA),
+					EndSec:   from + Seconds(m.OffsetA+m.Frames),
+				})
+			}
+		}
+		credits, decided := w.episodeCredits(ctx, ep, IntroFrom(endCands))
+		if ctx.Err() != nil {
+			// Stopped mid-season: a frame read cut short reads as a refusal,
+			// and recording what followed from it would be recording the
+			// shutdown.
+			return ctx.Err()
+		}
+
 		var markers []store.Marker
 		if in.Found {
 			end := int64(in.EndSec * 1000)
@@ -197,7 +256,28 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			w.stats.Found++
 			w.mu.Unlock()
 		}
-		if err := st.SaveMarkers(ctx, ep.ID, []string{store.MarkerIntro}, markers); err != nil {
+		/*
+		 * Credits are written with the intro, in one call, and only when the
+		 * black run could be read; an unreadable file keeps whatever it had.
+		 *
+		 * Writing credits stamps markers_at, which is the point: the per-file
+		 * pass then leaves this episode alone, and cannot replace a decision
+		 * made from two kinds of evidence with one made from one. A one-episode
+		 * season never comes here, so it keeps the per-file pass's answer.
+		 */
+		kinds := []string{store.MarkerIntro}
+		if decided {
+			kinds = append(kinds, store.MarkerCredits)
+			if credits.Found {
+				markers = append(markers, store.Marker{
+					Kind:       store.MarkerCredits,
+					StartMS:    credits.StartMS,
+					Source:     credits.Source,
+					Confidence: credits.Confidence,
+				})
+			}
+		}
+		if err := st.SaveMarkers(ctx, ep.ID, kinds, markers); err != nil {
 			return err
 		}
 		w.mu.Lock()
@@ -208,6 +288,77 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 	// Stamped whether or not anything was found, so a season with no shared
 	// audio is not re-decoded on every pass for ever.
 	return st.MarkIntrosExamined(ctx, examined, now)
+}
+
+/*
+ * episodeCredits decides one episode's credits from its black runs and the
+ * ending it shares with its season (EpisodeCreditsFrom). decided is false when
+ * the black run could not be read, and then nothing should be written.
+ *
+ * The black scan starts just below the window rather than at ScanFrom's 75%:
+ * nothing below 88% is a candidate, and an episode has no use for the margin a
+ * film's long credit roll is given. It is half the decode.
+ */
+func (w *Worker) episodeCredits(ctx context.Context, ep store.Item, ending Intro) (EpisodeCredits, bool) {
+	if ep.DurationMS == nil || *ep.DurationMS <= 0 {
+		return EpisodeCredits{}, false
+	}
+	dur := float64(*ep.DurationMS) / 1000
+	tail, shapeAt := w.scanTail, w.frameShape
+	if w.tailFn != nil {
+		tail = w.tailFn
+	}
+	if w.shapeFn != nil {
+		shapeAt = w.shapeFn
+	}
+	from := dur * EpisodeScanFrom
+	stderr, err := tail(ctx, ep.Path, from)
+	if err != nil {
+		w.log.Warn("episode credits scan failed", "item", ep.ID, "error", err)
+		return EpisodeCredits{}, false
+	}
+	black := CreditsFrom(ParseBlackDetect(stderr, from), dur, nil)
+	gate := func(start float64) bool {
+		var shapes []Shape
+		for _, off := range GateOffsets {
+			if at := start + off; at < dur-1 {
+				shapes = append(shapes, shapeAt(ctx, ep.Path, at))
+			}
+		}
+		return LooksLikeCredits(shapes)
+	}
+	return EpisodeCreditsFrom(black, ending, dur, gate), true
+}
+
+const (
+	// EndingTailSeconds is how much of an episode's end is fingerprinted.
+	// Cowboy Bebop's closing song and preview run two minutes; five is room.
+	EndingTailSeconds = 300
+	// EpisodeScanFrom is where an episode's black-run scan begins.
+	EpisodeScanFrom = 0.87
+)
+
+/*
+ * decodeTail is decodeHead for the last seconds of a file.
+ *
+ * -sseof seeks from the end, so the samples finish where the episode does and
+ * the caller places them by subtracting their length from the duration.
+ */
+func (w *Worker) decodeTail(ctx context.Context, path string, secs int) ([]float64, error) {
+	out, err := exec.CommandContext(ctx, w.bin(),
+		"-hide_banner", "-nostats", "-v", "error",
+		"-threads", strconv.Itoa(w.threads()),
+		"-sseof", "-"+strconv.Itoa(secs),
+		"-i", path,
+		"-vn",
+		"-ac", "1",
+		"-ar", strconv.Itoa(SampleRate),
+		"-f", "s16le", "-",
+	).Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg: %w", err)
+	}
+	return samplesOf(out)
 }
 
 /*
@@ -237,6 +388,11 @@ func (w *Worker) decodeHead(ctx context.Context, path string, secs int) ([]float
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w", err)
 	}
+	return samplesOf(out)
+}
+
+// samplesOf turns ffmpeg's s16le output into samples in [-1, 1).
+func samplesOf(out []byte) ([]float64, error) {
 	n := len(out) / 2
 	if n < FrameSize {
 		return nil, fmt.Errorf("only %d samples decoded", n)
