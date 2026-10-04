@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 55
+const CurrentSchemaVersion = 56
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -94,6 +94,7 @@ var migrations = []migration{
 	{version: 53, sql: schemaRevision53},
 	{version: 54, sql: schemaRevision54},
 	{version: 55, sql: schemaRevision55},
+	{version: 56, sql: schemaRevision56},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1911,6 +1912,26 @@ WHERE kind = 'episode'
     SELECT 1 FROM item_marker m
     WHERE m.item_id = media_item.id AND m.kind = 'credits' AND m.source = 'blackdetect'
   );
+`
+
+/*
+ * Revision 56 -- every season is compared again, for its ending (ADR 0054,
+ * 2026-10-04 amendment).
+ *
+ * No shape changes. The season pass now decides an episode's credits as well
+ * as its intro: from the closing theme the season shares, checked against the
+ * black run. A season it has already examined carries intros_at and would
+ * never be looked at again, so the stamp is cleared on every episode.
+ *
+ * Intros are not at risk. The intro decision is deterministic over the same
+ * audio and arrives where it did before; intro markers are evidence nobody
+ * edits (ADR 0055, decision 4). The cost is the season's audio again plus a
+ * black scan over the last 13% of each episode, in the background, under the
+ * same setting and throttle.
+ */
+const schemaRevision56 = `
+UPDATE media_item SET intros_at = NULL
+WHERE kind = 'episode' AND intros_at IS NOT NULL;
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or

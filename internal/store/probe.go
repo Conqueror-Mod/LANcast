@@ -62,6 +62,10 @@ type ProbeResult struct {
  * expression in a SET reads the row as it was, so duration_ms in the CASE is
  * the old length. A second's slack, because two probes of the same bytes can
  * disagree by a frame.
+ *
+ * intros_at goes with it, because an episode's credits are decided by the
+ * season pass, from where its closing theme sits in its own timeline. A new
+ * cut puts the theme somewhere else, and the season is compared again.
  */
 func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -77,12 +81,15 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 			video_frame_rate = ?,
 			markers_at = CASE
 				WHEN duration_ms IS NULL OR ABS(duration_ms - ?) > 1000 THEN NULL
-				ELSE markers_at END
+				ELSE markers_at END,
+			intros_at = CASE
+				WHEN duration_ms IS NULL OR ABS(duration_ms - ?) > 1000 THEN NULL
+				ELSE intros_at END
 		WHERE id = ?`,
 		time.Now().Unix(), nullZero64(r.DurationMS), nullEmpty(r.VideoCodec), nullEmpty(r.VideoProfile),
 		nullZero(r.Width), nullZero(r.Height), nullZero64(r.VideoBitRate),
 		nullEmpty(r.AudioCodec), nullZero(r.AudioChannels), nullZeroF(r.FrameRate),
-		r.DurationMS, itemID)
+		r.DurationMS, r.DurationMS, itemID)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}
