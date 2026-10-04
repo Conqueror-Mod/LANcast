@@ -52,3 +52,32 @@ func steamRoot() (string, bool) {
 	}
 	return "", false
 }
+
+/*
+ * The folders the Xbox app installs into, one drive at a time.
+ *
+ * Every drive the Xbox app has been pointed at carries a `.GamingRoot` at its
+ * root naming its install folder (usually `XboxGames`). Twenty-four stats on a
+ * machine with three drives is nothing, and reading the files the app itself
+ * keeps is the same kind of fact as Steam's libraryfolders.vdf.
+ *
+ * A: and B: are skipped: on a machine that still has a floppy controller,
+ * touching them is a drive spin-up and, on some, a dialog.
+ */
+func xboxFolders() []string {
+	var out []string
+	for d := 'C'; d <= 'Z'; d++ {
+		drive := string(d) + `:\`
+		raw, err := os.ReadFile(drive + ".GamingRoot")
+		if err != nil {
+			continue
+		}
+		for _, f := range GamingRootFolders(raw) {
+			dir := filepath.Join(drive, f)
+			if st, err := os.Stat(dir); err == nil && st.IsDir() {
+				out = append(out, dir)
+			}
+		}
+	}
+	return out
+}

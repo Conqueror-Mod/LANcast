@@ -732,7 +732,14 @@ group is not priority.
   *is* once it lands in a library, which is a bigger question than the feature
   looks.
 
-- **The rest of the launchers — GOG, Xbox and EA.** Steam **shipped in
+- **The rest of the launchers — GOG and EA.** **Xbox** followed on 2026-10-04,
+  read from the `.GamingRoot` file on each drive and each game's
+  `MicrosoftGame.config` and `appxmanifest.xml`. It is launched by application
+  user model id through `shell:AppsFolder`, the same route the Start menu takes.
+  The package family name is computed from the manifest, and it was checked
+  against the one Windows reports for a real install: Minecraft for Windows in
+  `D:\XboxGames`. GOG and EA are unscheduled, waiting on a game small enough to
+  install for testing. Steam **shipped in
   v0.9.19** under
   [ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md), which
   settled the model for all of them: a local read in the desktop client, no
@@ -743,7 +750,7 @@ group is not priority.
   shipped. The answer was the one the entry had already named as honest:
   **lettered placeholders**, the same ones a Steam game without artwork uses,
   because Epic keeps nothing on disk that can be tied to a game, and a guessed
-  image is worse than a letter. GOG, Xbox and EA are what remain, unscheduled.
+  image is worse than a letter.
   What follows is the original capture, kept because
   it is the reasoning that produced the ADR. It was the first
   backlog item that **broke the model rather than extending it**, which is why it

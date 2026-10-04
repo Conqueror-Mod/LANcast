@@ -1,5 +1,5 @@
-// Package games reads what Steam, Epic and Battle.net have installed on *this*
-// machine.
+// Package games reads what Steam, Epic, Battle.net and the Xbox app have
+// installed on *this* machine.
 //
 // It exists in the desktop client rather than the server, and that is the whole
 // decision (ADR 0066): a game is installed on one PC, cannot be streamed, and
@@ -73,7 +73,12 @@ type Result struct {
 // Locating Steam is the only part that is OS-specific; everything after it is
 // ScanRoot, which is a directory away from being testable.
 func Scan() Result {
-	return merge(scanSteam(), scanEpic(), scanBattleNet())
+	return merge(scanSteam(), scanEpic(), scanBattleNet(), scanXbox())
+}
+
+// scanXbox reads the install folders every drive's `.GamingRoot` names.
+func scanXbox() Result {
+	return ScanXboxFolders(xboxFolders())
 }
 
 // scanSteam is the Steam half of Scan, unchanged by the arrival of the others.

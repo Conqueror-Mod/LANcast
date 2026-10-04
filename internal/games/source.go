@@ -23,6 +23,7 @@ const (
 	SourceSteam     Source = "steam"
 	SourceEpic      Source = "epic"
 	SourceBattleNet Source = "battlenet"
+	SourceXbox      Source = "xbox"
 )
 
 // Label is what a person reads when a tile says where a game came from.
@@ -34,6 +35,8 @@ func (s Source) Label() string {
 		return "Epic Games"
 	case SourceBattleNet:
 		return "Battle.net"
+	case SourceXbox:
+		return "Xbox"
 	}
 	return string(s)
 }
@@ -45,6 +48,9 @@ func (s Source) Label() string {
 func SteamID(appid string) string   { return string(SourceSteam) + ":" + appid }
 func EpicID(appName string) string  { return string(SourceEpic) + ":" + appName }
 func BattleNetID(key string) string { return string(SourceBattleNet) + ":" + key }
+
+// XboxID namespaces an application user model id — `Name_hash!App`.
+func XboxID(aumid string) string { return string(SourceXbox) + ":" + aumid }
 
 /*
  * SplitID returns the source and the launcher's own id.
@@ -64,7 +70,7 @@ func SplitID(id string) (Source, string, bool) {
 		return SourceSteam, id, true
 	}
 	switch Source(source) {
-	case SourceSteam, SourceEpic, SourceBattleNet:
+	case SourceSteam, SourceEpic, SourceBattleNet, SourceXbox:
 		if rest == "" {
 			return "", "", false
 		}
