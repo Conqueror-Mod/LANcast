@@ -127,6 +127,11 @@ type Worker struct {
 	tailFn  func(ctx context.Context, path string, startSec float64) (string, error)
 	shapeFn func(ctx context.Context, path string, atSec float64) Shape
 
+	// headFn and tailAudioFn stand in for decodeHead and decodeTail, so the
+	// season pass is tested on synthetic audio. Nil is the real one.
+	headFn      func(ctx context.Context, path string, secs int) ([]float64, error)
+	tailAudioFn func(ctx context.Context, path string, secs int) ([]float64, error)
+
 	mu      sync.Mutex
 	running bool
 	stats   Stats

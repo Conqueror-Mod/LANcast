@@ -369,3 +369,68 @@ closing music, which is findable even when the credits start on a cut with no
 fade — the seven episodes with no candidate at all. Matching it across a season,
 with the intro detector's fingerprint engine, is the next step.
 
+## Amendment — 2026-10-04: an episode's credits come from what its season shares
+
+The interim rule above left two gaps: an episode whose credits begin on a cut
+has no black run to find (Black Books, Death Parade, a School Days and a League
+episode — 7 of 40), and the black run's one failure, a fade inside the last act,
+was still there for episodes too.
+
+What a season's episodes share at the end is their **closing theme**. The intro
+detector's fingerprint engine (ADR 0055) finds what episodes share at the
+start; pointed at the last five minutes, it finds where the closing music
+begins, and a scene fade cannot fool it, because a scene is not shared across a
+season. Run over every season in the library — 934 of 1,074 episodes found —
+it agreed with the eyeballed credits to within seconds on Star Trek, Futurama,
+The League and Cowboy Bebop.
+
+It fails in two ways of its own. Where the closing music is not shared, what
+the season shares is the channel ident at the very end — HBO's on Silicon
+Valley, the network card on Sunny and Blue Mountain State — always within
+seconds of the end: measured, idents sit 0–19 s from the end and closing themes
+30 s and beyond. And where the theme starts over the final shot it lands a few
+seconds early.
+
+**So the two signals check each other** (`marker.EpisodeCreditsFrom`):
+
+| evidence | answer |
+|---|---|
+| shared audio under 20 s from the end | ignored — an ident |
+| both, within 20 s of each other | the black run, which is exact to the frame |
+| black run more than 20 s before the music | the black run if the frame gate passes it (text on black), else the music (a fade) |
+| music more than 20 s before the black run | the music (a closing song whose end the black run found) |
+| only one | that one |
+
+The frame gate, wrong for television as a rule, is right as a tie-breaker: it
+is asked only whether the one black run that disagrees with the music is text
+on black or a scene.
+
+**Tuned on episodes from every series, frozen (script hashed), then run on 40
+episodes nobody had looked at**, every answer judged by eye from frames around
+it:
+
+| 40 held-out episodes | black run alone | **combined** |
+|---|---|---|
+| answered | 36 | **40** |
+| early | 3 | **0** |
+| late (harmless) | 2 | 2 |
+
+The three early answers were all fades the music overruled — a title card in
+*It's Always Sunny* ("Hour 48"), a dark scene in TNG, a scene before a toast in
+Voyager. The two late ones are TNG's first season, where the credits begin over
+the final shot and neither signal sees them.
+
+**The season pass now decides episode credits**, alongside intros: it decodes
+each episode's last five minutes of audio, scans the last 13% for black, and
+writes credits and intro in one call. Writing credits stamps `markers_at`, so
+the per-file pass leaves the episode alone; a one-episode season never reaches
+the season pass and keeps the per-file answer. Markers placed by the music carry
+the source `ending-audio`, offered on episodes only. **Revision 56** clears
+`intros_at` so every season is compared again, and a new length now clears it
+too, since a new cut moves the closing theme.
+
+Still not detected by the music: *School Days*, 0 of 12 — the longest stretch
+its episodes share at the end is a few seconds, and why has not been looked
+into — and *Storm of the Century*, a three-part miniseries. Both keep whatever
+the black run finds.
+
