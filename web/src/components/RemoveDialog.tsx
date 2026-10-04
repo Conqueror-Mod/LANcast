@@ -10,10 +10,13 @@ import "./RemoveDialog.css";
 // a successful removal so the caller can navigate away from the now-gone item.
 export function RemoveDialog({
   item,
+  note,
   onClose,
   onDone,
 }: {
   item: Item;
+  /** A line of context under the title — what removing this copy means. */
+  note?: string;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -39,6 +42,7 @@ export function RemoveDialog({
         </div>
 
         <p className="removedlg__title">{item.title}</p>
+        {note && <p className="removedlg__note">{note}</p>}
 
         {del.isError && (
           <p className="removedlg__error">

@@ -34,7 +34,7 @@ type Store interface {
 	PendingPhotoCount(ctx context.Context) (int, error)
 	MarkArtworkChecked(ctx context.Context, itemID int64) error
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
-	SetPhotoMeta(ctx context.Context, itemID int64, width, height int, takenAt int64) error
+	SetPhotoMeta(ctx context.Context, itemID int64, width, height int, takenAt int64, sha256 string) error
 }
 
 // Cache is the artwork side of the worker.
@@ -208,7 +208,7 @@ func (w *Worker) one(ctx context.Context, ph store.Item) bool {
 
 	// Dimensions and capture time are recorded even when the thumbnail fails
 	// below: they came from the same pass and they are useful on their own.
-	if err := w.st.SetPhotoMeta(ctx, ph.ID, meta.Width, meta.Height, meta.TakenAt); err != nil {
+	if err := w.st.SetPhotoMeta(ctx, ph.ID, meta.Width, meta.Height, meta.TakenAt, meta.SHA256); err != nil {
 		w.log.Warn("could not record picture metadata", "path", ph.Path, "error", err)
 	}
 

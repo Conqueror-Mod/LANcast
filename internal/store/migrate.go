@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 57
+const CurrentSchemaVersion = 58
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -96,6 +96,7 @@ var migrations = []migration{
 	{version: 55, sql: schemaRevision55},
 	{version: 56, sql: schemaRevision56},
 	{version: 57, sql: schemaRevision57},
+	{version: 58, sql: schemaRevision58},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1948,6 +1949,27 @@ WHERE kind = 'episode' AND intros_at IS NOT NULL;
 const schemaRevision57 = `
 UPDATE media_item SET intros_at = NULL
 WHERE kind = 'episode' AND intros_at IS NOT NULL;
+`
+
+/*
+ * Revision 58 -- a photo's digest, for exact duplicates (ADR 0075).
+ *
+ * Its own table rather than a column on media_item, for the reason markers have
+ * one: it is derived from the file, recomputable, and dropped with the row. The
+ * photo worker writes it from the read it already makes for the thumbnail.
+ *
+ * Every photo is sent back through that worker once, so the photos already
+ * thumbnailed get a digest too. That re-reads the library -- 3,079 photos took
+ * about two minutes in the lab -- and re-derives thumbnails that land on the
+ * same content-addressed cache entries they already had.
+ */
+const schemaRevision58 = `
+CREATE TABLE IF NOT EXISTS photo_hash (
+    item_id INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    sha256  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_photo_hash_sha ON photo_hash(sha256);
+UPDATE media_item SET cover_checked_at = NULL WHERE kind = 'photo' AND missing = 0;
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or

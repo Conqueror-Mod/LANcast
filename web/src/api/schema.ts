@@ -961,6 +961,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{id}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A picture library's groups of identical photos
+         * @description Exact duplicates: two or more photos whose files have the same SHA-256 (ADR 0075). Groups come largest first, copies in path order, each copy with the album (folder) it sits in, or `null` at the library root. Most duplicates on a real library are the same photo filed in two albums, so nothing here says which copy to keep. Remove a copy with `DELETE /api/items/{id}`, under that route's rules. Photos marked sensitive (ADR 0051) and missing photos take no part. A photo is grouped once the photo worker has read it, so a library still being processed reports what has been read so far.
+         */
+        get: operations["getLibraryDuplicates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{id}/refresh": {
         parameters: {
             query?: never;
@@ -6548,6 +6571,23 @@ export interface components {
             /** @description Rows in the whole history, for paging. */
             total: number;
         };
+        DuplicateCopy: {
+            item: components["schemas"]["Item"];
+            /** @description The gallery (folder) this copy sits in, or null for a photo at the library root. */
+            album: string | null;
+        };
+        DuplicateGroup: {
+            /** @description The shared SHA-256 of the files, hex. */
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            copies: components["schemas"]["DuplicateCopy"][];
+        };
+        Duplicates: {
+            groups: components["schemas"]["DuplicateGroup"][];
+            /** @description Copies beyond the first, summed across groups: what removing every duplicate would remove. */
+            extra_copies: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -8580,6 +8620,40 @@ export interface operations {
                 };
             };
             /** @description `wrong_kind` on any library that is not a picture library — a timeline of a film library would be a list of release months, which answers a different question quietly. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryDuplicates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The groups, and how many copies beyond the first exist across them. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Duplicates"];
+                };
+            };
+            /** @description `wrong_kind` on any library that is not a picture library. */
             400: {
                 headers: {
                     [name: string]: unknown;

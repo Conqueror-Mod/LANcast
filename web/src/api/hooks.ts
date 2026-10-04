@@ -7,7 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
-import type { BackupFile, BackupsResponse } from "./types";
+import type { BackupFile, BackupsResponse, Duplicates } from "./types";
 import { isContainer } from "@/lib/kind";
 import { forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type {
@@ -826,6 +826,11 @@ export function useDeleteItem(id: number) {
         // just removed is the stale-view bug this project keeps shipping,
         // arriving in the one place where the person is looking straight at it.
         "collisions",
+        // Removing a copy from the duplicates list is that list's whole
+        // purpose. And the timeline counts photos: one removed went on being
+        // counted there until something else refreshed it.
+        "duplicates",
+        "timeline",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
@@ -1313,6 +1318,22 @@ export type TimelineBucket = {
   undated?: boolean;
   count: number;
 };
+
+/*
+ * A picture library's exact duplicates (ADR 0075).
+ *
+ * Its own key, not a child of ["items"], and named in useDeleteItem: removing
+ * a copy is the action this list exists for, and a group still showing the
+ * copy just removed is the stale-view bug this project keeps meeting.
+ */
+export function usePhotoDuplicates(libraryID: number) {
+  return useQuery({
+    queryKey: ["duplicates", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<Duplicates>(`/api/libraries/${libraryID}/duplicates`, signal),
+    enabled: libraryID > 0,
+  });
+}
 
 export function usePhotoTimeline(libraryID: number, enabled = true) {
   return useQuery({

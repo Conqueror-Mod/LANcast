@@ -1,0 +1,127 @@
+/*
+ * Duplicates. Built from the timeline's parts so the two picture-library views
+ * read as siblings: a quiet bar, small headings, and the photographs doing the
+ * talking. The album under each copy is the fact this page exists to show, so
+ * it is legible rather than muted.
+ */
+.dupes {
+  padding: 24px 32px 80px;
+}
+
+.dupes__bar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.dupes__back {
+  background: transparent;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.dupes__back:hover,
+.dupes__back:focus-visible {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.dupes__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dupes__title span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.dupes__total {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.dupes__lede,
+.dupes__empty {
+  max-width: 46rem;
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.dupes__group {
+  margin-bottom: 28px;
+}
+
+.dupes__group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dupes__group-head span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.dupes__copies {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 18px;
+}
+
+.dupes__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dupes__album {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.dupes__remove {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--gold-dormant);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.dupes__remove:hover,
+.dupes__remove:focus-visible {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+  .dupes {
+    padding: 16px 16px 60px;
+  }
+  .dupes__copies {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+  }
+}

@@ -700,6 +700,27 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 		`SELECT id FROM media_item WHERE path = ?`, f.Path).Scan(&id); err != nil {
 		return 0, fmt.Errorf("upsert item %q: read id: %w", f.Path, err)
 	}
+
+	/*
+	 * A changed photo is read again.
+	 *
+	 * Reaching here means the bytes may differ, as the probed_at reset above
+	 * says, and a photo's digest (ADR 0075) is a fact about bytes: left in
+	 * place, an edited photo would still be listed as a duplicate of the
+	 * original it no longer matches. Its thumbnail was stale for the same
+	 * reason, and had been since photos were added — nothing re-queued an
+	 * edited picture. Clearing cover_checked_at sends it back to the photo
+	 * worker, which records both again from one read.
+	 */
+	if f.Kind == "photo" {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM photo_hash WHERE item_id = ?`, id); err != nil {
+			return 0, fmt.Errorf("upsert item %q: clear hash: %w", f.Path, err)
+		}
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE media_item SET cover_checked_at = NULL WHERE id = ?`, id); err != nil {
+			return 0, fmt.Errorf("upsert item %q: requeue photo: %w", f.Path, err)
+		}
+	}
 	return id, nil
 }
 

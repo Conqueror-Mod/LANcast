@@ -2,6 +2,8 @@ package photo
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"image"
 	"image/color"
@@ -22,6 +24,7 @@ type fakeStore struct {
 	checked map[int64]bool
 	art     map[int64]string
 	meta    map[int64][3]int64
+	sha     map[int64]string
 	putErr  error
 }
 
@@ -31,6 +34,7 @@ func newFakeStore(items ...store.Item) *fakeStore {
 		checked: map[int64]bool{},
 		art:     map[int64]string{},
 		meta:    map[int64][3]int64{},
+		sha:     map[int64]string{},
 	}
 }
 
@@ -71,10 +75,11 @@ func (f *fakeStore) PutArtwork(_ context.Context, id int64, hash, _, _ string, _
 	return nil
 }
 
-func (f *fakeStore) SetPhotoMeta(_ context.Context, id int64, w, h int, taken int64) error {
+func (f *fakeStore) SetPhotoMeta(_ context.Context, id int64, w, h int, taken int64, sha string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.meta[id] = [3]int64{int64(w), int64(h), taken}
+	f.sha[id] = sha
 	return nil
 }
 
@@ -278,5 +283,25 @@ func TestFitPreservesAspect(t *testing.T) {
 	got := Fit(src, 200).Bounds()
 	if got.Dx() != 200 || got.Dy() != 50 {
 		t.Errorf("bounds = %dx%d, want 200x50", got.Dx(), got.Dy())
+	}
+}
+
+// The digest of the file goes to the store with the rest of what the read
+// learned (ADR 0075): it is what groups exact duplicates.
+func TestWorkerRecordsTheFilesDigest(t *testing.T) {
+	dir := t.TempDir()
+	path := bigPNG(t, dir, "a.png", 60, 40)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	st := newFakeStore(store.Item{ID: 1, Kind: "photo", Path: path})
+	w := NewWorker(st, &fakeCache{}, &Decoder{}, quietLog())
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got, want := st.sha[1], hex.EncodeToString(sum[:]); got != want {
+		t.Errorf("digest recorded = %q, want %q — the SHA-256 of the file's bytes", got, want)
 	}
 }
