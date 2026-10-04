@@ -71,3 +71,25 @@ func TestANewLengthComparesTheSeasonAgain(t *testing.T) {
 		t.Error("the episode's length changed and its season was not compared again")
 	}
 }
+
+func TestRevision57RequeuesEverySeasonAgain(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	lib, err := st.CreateLibrary(ctx, "TV", "show", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := seedProbed(t, st, lib, "S01E01.mkv", probedFile{kind: "episode", sizeBytes: 1, durationMS: 1_300_000})
+	if err := st.MarkIntrosExamined(ctx, []int64{ep}, 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE meta SET value = '56' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(st.db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if introsAt(t, st, ep) != nil {
+		t.Error("an examined episode kept its stamp; the wider window and the ident rule never reach it")
+	}
+}

@@ -331,3 +331,41 @@ avoid.
   twelve and twenty-five seconds in. Telling an ident from a title card wants
   evidence the timing cannot give: an ident recurs across *unrelated shows* in
   the same library, which is measurable and not yet measured.
+
+## Amendment — 2026-10-04: ten minutes, and an ident is not the intro
+
+Skip intro was audited the way the credits markers were: 35 intros, chosen to
+include every short outlier, judged by eye from frames eight seconds before the
+start, at it, eight in, at the middle, and four around the end. 23 were right —
+Blue Mountain State, Cowboy Bebop, Death Parade, Futurama's 17-second later
+intro, School Days, Silicon Valley, The League's four-second card, and every
+full-length Trek sequence. Two faults accounted for the rest.
+
+**The window cut Star Trek off.** Seven minutes were fingerprinted, and a cold
+open past five left the theme running at the edge: 47 episodes in the library —
+32 DS9, 8 TNG, 7 Voyager — ended at 419.4 s, so a skip landed mid-theme, before
+"Created by" or the show's logo; six of six in the sample did. DS9's intros
+start as late as 411 s and run 113. **`IntroHeadSeconds` is now 600.**
+
+**A studio ident was marked as the intro.** What all seven Lanterns episodes
+share at 0:00 is the DC Studios and HBO idents — 8.7 to 10.6 seconds. The
+earlier `IntroCardEarliestSec` refused idents of five or six seconds at the
+start, but only on the card path; these are over `IntroMinSeconds` and went
+through the majority rule, which had no such guard. **An intro that starts in
+the first two seconds and runs under fifteen is an ident** (`Intro.IsIdent`).
+Neither half is enough alone: Futurama, Black Books and Cowboy Bebop open on
+their titles and run 17 to 91 seconds, and The League's card is four seconds a
+minute in. An ident is not discarded and left there: the comparison runs again
+from just after it, on the episode's own side, because the show's titles may be
+behind it — tested on a synthetic season whose logos win the alignment vote over
+a shorter title sequence at a different point in each episode.
+
+**Left as they are:** Black Books' theme runs on over the first shot, so its
+skip lands four to eight seconds into the episode; Sunny's button appears a few
+seconds before the card. Fixing either needs a picture rule for intros, which
+is not worth a few seconds. One Sunny file opens on pasted-in FX promos and is
+marked on them; it is one file.
+
+**Revision 57** clears `intros_at` so both changes reach seasons already
+compared.
+

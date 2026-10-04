@@ -23,9 +23,17 @@ const (
 	// something larger than a title sequence — a recap, a clip show, or the
 	// same episode twice on disk.
 	IntroMaxSeconds = 180.0
-	// IntroHeadSeconds is how much of an episode is fingerprinted. An intro
-	// later than this is not one.
-	IntroHeadSeconds = 420
+	/*
+	 * IntroHeadSeconds is how much of an episode is fingerprinted. An intro
+	 * later than this is not one.
+	 *
+	 * Ten minutes, from seven. Seven cut off the title sequence of every Star
+	 * Trek episode whose cold open ran past five minutes: 47 in a real library
+	 * — 32 of them DS9 — ended at 419.4 s, the edge of the window, with the
+	 * theme still playing, so a skip landed before "Created by". DS9's intros
+	 * start as late as 411 s and run 113.
+	 */
+	IntroHeadSeconds = 600
 	// IntroTolerance is how many of the 16 bits may differ frame to frame.
 	IntroTolerance = 3
 	/*
@@ -99,6 +107,30 @@ type Candidate struct {
 
 // Len is how long the candidate runs.
 func (c Candidate) Len() float64 { return c.EndSec - c.StartSec }
+
+const (
+	// IntroIdentStartSeconds and IntroIdentSeconds describe a studio or channel
+	// ident: shared, at the very start, and short. See IsIdent.
+	IntroIdentStartSeconds = 2.0
+	IntroIdentSeconds      = 15.0
+)
+
+/*
+ * IsIdent reports whether a decided intro is really the logos in front of it.
+ *
+ * What every episode of Lanterns shares at the start is the DC Studios and HBO
+ * idents — nine seconds at 0:00 — and that is what was marked, on all seven.
+ * It is the same failure the closing-theme search has at the other end, where
+ * the shared audio is the channel card (EndingIdentSeconds).
+ *
+ * Starting at zero is not enough on its own: Futurama, Black Books and Cowboy
+ * Bebop open on their titles, and run 17 to 91 seconds. Short is not enough on
+ * its own either: The League's title card is four seconds, a minute in. It is
+ * the two together.
+ */
+func (in Intro) IsIdent() bool {
+	return in.Found && in.StartSec < IntroIdentStartSeconds && in.EndSec-in.StartSec < IntroIdentSeconds
+}
 
 // Intro is the decision for one episode.
 type Intro struct {
