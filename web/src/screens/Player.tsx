@@ -36,6 +36,7 @@ import {
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { skipTarget } from "@/lib/skip";
+import { UpNextCard } from "@/components/UpNextCard";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
 import { canBoostDialogue, nextDialogueLevel } from "@/playback/soundControls";
 import "./Player.css";
@@ -420,6 +421,22 @@ export function Player() {
     item?.kind,
   );
 
+  /*
+   * Up Next takes the place of Skip credits on an episode with something after
+   * it. Both appear at the same moment and offer the same way out of the
+   * credits, and two controls doing one job in the corner of a picture is one
+   * too many. Cancelling it hands the corner back to Skip credits, for this
+   * episode only — the next one asks again.
+   */
+  const [upNextCancelled, setUpNextCancelled] = useState<number | null>(null);
+  const showUpNext =
+    skip?.kind === "credits" &&
+    item?.kind === "episode" &&
+    pb.nextItemID != null &&
+    upNextCancelled !== pb.itemID;
+  const { rollOn } = pb;
+  const rollOnUnattended = useCallback(() => rollOn(false), [rollOn]);
+
   return (
     <div
       className={
@@ -547,7 +564,15 @@ export function Player() {
           had to wake the interface up to press, during the one stretch nobody
           is touching the mouse.
         */}
-        {skip && (
+        {showUpNext && pb.nextItemID != null ? (
+          <UpNextCard
+            nextID={pb.nextItemID}
+            counting={pb.prefs.autoPlay && pb.playing}
+            onTimeout={rollOnUnattended}
+            onPlayNow={() => rollOn(true)}
+            onCancel={() => setUpNextCancelled(pb.itemID)}
+          />
+        ) : skip && (
           <button
             className="player__skip"
             onClick={() => pb.seekTo(skip.atSeconds)}
