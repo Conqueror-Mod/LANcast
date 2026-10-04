@@ -3311,6 +3311,39 @@ Either parameter also excludes marked folders, so a listing always agrees with
 the count above it. That exclusion is derived from the parameters and is not
 itself a parameter — whether covered content appears is the server's decision.
 
+
+### `GET /api/libraries/{id}/duplicates`
+
+A picture library's **exact duplicates**: groups of two or more photos whose
+files have the same SHA-256 (ADR 0075). `400 wrong_kind` on any other library
+kind.
+
+```json
+{ "groups": [
+    { "sha256": "9f2c…", "size_bytes": 2271689,
+      "copies": [
+        { "item": { "id": 412, "kind": "photo", "title": "20210227_083356", … }, "album": "Denver Trips" },
+        { "item": { "id": 977, "kind": "photo", "title": "20210227_083356", … }, "album": "Nature" } ] } ],
+  "extra_copies": 1 }
+```
+
+Groups come largest first, copies in path order. `album` is the gallery — the
+folder — the copy sits in, `null` at the library root. It is there because **most
+duplicates on a real library are the same photo filed in two albums**: 38 groups,
+44 extra copies, most of them across folders. That is a person's filing, not a
+mistake, so the response says where each copy is and nothing about which to
+keep.
+
+Removing a copy is `DELETE /api/items/{id}?mode=` under that route's own rules —
+admin only, `delete` refused when media deletion is off, `ignore` to stop
+tracking a copy without touching the file. This endpoint grants nothing.
+
+**Exact only.** The same picture resized or re-saved is not reported: measured on
+that library, a perceptual hash could not tell a resized copy from two different
+screenshots of the same screen, at 64 bits or 256. Marked photos (ADR 0051) and
+missing ones take no part. A photo is grouped once the photo worker has read it,
+so a library still being processed reports what has been read so far.
+
 ### `PUT /api/items/{id}/sensitive`
 
 Mark an item sensitive, or clear the mark (ADR 0051). Admin only.

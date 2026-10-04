@@ -318,6 +318,7 @@ func (s *Server) Handler() http.Handler {
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
+	mux.HandleFunc("GET /api/libraries/{id}/duplicates", s.photoDuplicates)
 
 	// Faces (ADR 0052). Reading who is in a library is available to anyone who
 	// can see the library; starting a pass and naming a group are edits.
