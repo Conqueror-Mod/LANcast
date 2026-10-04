@@ -50,7 +50,10 @@ func (s *Store) PendingPhotoCount(ctx context.Context) (int, error) {
 // Zero taken_at is stored as NULL rather than 1970. Callers fall back to mtime,
 // and a sentinel date that sorts first would put every EXIF-less wallpaper at
 // the top of a date-ordered library.
-func (s *Store) SetPhotoMeta(ctx context.Context, itemID int64, width, height int, takenAt int64) error {
+//
+// sha256 is the file's digest (ADR 0075), recorded in photo_hash; empty leaves
+// the table alone.
+func (s *Store) SetPhotoMeta(ctx context.Context, itemID int64, width, height int, takenAt int64, sha256 string) error {
 	var taken any
 	if takenAt > 0 {
 		taken = takenAt
@@ -67,6 +70,13 @@ func (s *Store) SetPhotoMeta(ctx context.Context, itemID int64, width, height in
 		w, h, taken, time.Now().Unix(), itemID)
 	if err != nil {
 		return fmt.Errorf("set photo meta: %w", err)
+	}
+	if sha256 != "" {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO photo_hash (item_id, sha256) VALUES (?, ?)
+			ON CONFLICT(item_id) DO UPDATE SET sha256 = excluded.sha256`, itemID, sha256); err != nil {
+			return fmt.Errorf("set photo meta: hash: %w", err)
+		}
 	}
 	return nil
 }

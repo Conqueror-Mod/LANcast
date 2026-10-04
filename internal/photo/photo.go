@@ -10,6 +10,8 @@ package photo
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -45,6 +47,10 @@ type Meta struct {
 	// deriving thumbnails; never handed to a client, which would make every
 	// consumer responsible for rotating correctly.
 	Orientation int
+	// SHA256 is the hex digest of the file's bytes, for finding exact
+	// duplicates (ADR 0075). From the read the decode already made, so
+	// knowing it costs a hash and not a second pass over the library.
+	SHA256 string
 }
 
 // Decoder reads pictures, spawning ffmpeg only for the formats that need it.
@@ -71,7 +77,8 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 		return nil, Meta{}, err
 	}
 
-	meta := Meta{}
+	sum := sha256.Sum256(raw)
+	meta := Meta{SHA256: hex.EncodeToString(sum[:])}
 	// EXIF is read from the original bytes, before any conversion: an ffmpeg
 	// re-encode does not carry the capture time or the orientation forward, so
 	// reading it afterwards would silently lose both on exactly the format
