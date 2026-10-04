@@ -59,6 +59,11 @@ export type MediaStream = components["schemas"]["MediaStream"];
 
 export type Item = components["schemas"]["Item"];
 
+/** Exact duplicate photos (ADR 0075). */
+export type Duplicates = components["schemas"]["Duplicates"];
+export type DuplicateGroup = components["schemas"]["DuplicateGroup"];
+export type DuplicateCopy = components["schemas"]["DuplicateCopy"];
+
 // The anatomy of a candidate's score: sub-scores (0..1) that combine by their
 // weights into the total. Nested keys are lowercase (the Go struct tags them).
 export type ScoreBreakdown = components["schemas"]["ScoreBreakdown"];

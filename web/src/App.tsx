@@ -7,6 +7,7 @@ import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
 import { Timeline } from "@/screens/Timeline";
+import { Duplicates } from "@/screens/Duplicates";
 import { FacePeople } from "@/screens/FacePeople";
 import { PhotoSearch } from "@/screens/PhotoSearch";
 import { Search } from "@/screens/Search";
@@ -100,6 +101,7 @@ export function App() {
           <Route path="/library/:id/collections" element={<Collections />} />
           {/* A picture library by capture date, beside its folder grid. */}
           <Route path="/library/:id/timeline" element={<Timeline />} />
+          <Route path="/library/:id/duplicates" element={<Duplicates />} />
           {/* The people in a picture library — face groups, not accounts. */}
           <Route path="/library/:id/people" element={<FacePeople />} />
           <Route path="/library/:id/photos/search" element={<PhotoSearch />} />

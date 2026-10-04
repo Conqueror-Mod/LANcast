@@ -439,6 +439,16 @@ export function LibraryView({
             Timeline
           </button>
         )}
+        {/* Photos that are the same file (ADR 0075). Offered on every picture
+            library: the page says so when there are none, which is an answer. */}
+        {isPictures && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/duplicates`)}
+          >
+            Duplicates
+          </button>
+        )}
         {/* Describing a photograph to find it. Offered whether or not the
             models are installed, for the same reason People is: the page
             explains an absence, and a control that silently is not there
