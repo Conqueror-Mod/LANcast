@@ -811,6 +811,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	probeSoon()
 	enrichSoon()
 	markerSoon()
+	/*
+	 * Photos too. The photo pass used to start only when a scan finished,
+	 * which was enough while a scan was the only thing that queued a photo.
+	 * A migration can queue them as well — revision 58 sends every photo back
+	 * for its digest (ADR 0075) — and on a real upgrade 3,079 photos sat
+	 * queued with no scan coming to start the pass, so the duplicates page
+	 * stayed empty. A pass with nothing pending returns at once.
+	 */
+	photoSoon()
 
 	// Bind before serving so a port clash is a clear startup failure rather
 	// than a background error nobody sees. An older instance still holding the
