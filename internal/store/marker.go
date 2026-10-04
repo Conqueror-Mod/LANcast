@@ -10,10 +10,10 @@ import (
 /*
  * Markers: where a film or an episode stops being itself (ADR 0054).
  *
- * The player draws Skip intro from intro markers, and Skip credits only from
- * credits markers whose source is the gated rule: the ungated one was checked
- * frame by frame and was early one time in five (ADR 0054, 2026-10-03
- * amendment). Nothing else reads a marker to make a decision — in particular
+ * The player draws Skip intro from intro markers, and Skip credits from a
+ * gated credits marker on anything or an ungated one on an episode: checked
+ * frame by frame, the ungated rule was early on one film in five and one
+ * episode in thirty-three (ADR 0054, 2026-10-03 amendments). Nothing else reads a marker to make a decision — in particular
  * it is not the watched threshold, because a late marker is harmless to a
  * button and would not be harmless to "finished".
  */

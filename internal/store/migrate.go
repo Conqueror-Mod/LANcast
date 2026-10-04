@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 54
+const CurrentSchemaVersion = 55
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -93,6 +93,7 @@ var migrations = []migration{
 	{version: 52, sql: schemaRevision52},
 	{version: 53, sql: schemaRevision53},
 	{version: 54, sql: schemaRevision54},
+	{version: 55, sql: schemaRevision55},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1881,6 +1882,31 @@ WHERE ps.watched = 1 AND mi.kind IN ('movie', 'episode');
 const schemaRevision54 = `
 UPDATE media_item SET markers_at = NULL
 WHERE markers_at IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM item_marker m
+    WHERE m.item_id = media_item.id AND m.kind = 'credits' AND m.source = 'blackdetect'
+  );
+`
+
+/*
+ * Revision 55 -- episodes keep the credits marker revision 54 sent back to be
+ * decided again (ADR 0054, 2026-10-03 episode amendment).
+ *
+ * No shape changes. Revision 54 re-queued every ungated credits marker, films
+ * and episodes alike. Episodes are now examined without the frame gate --
+ * which was tuned on films and, checked against 40 episodes, discarded six
+ * right answers to save one -- so re-examining an episode would decode its
+ * tail to arrive at the marker it already has. 952 of them, on a real library.
+ *
+ * So the stamp goes back on any episode still waiting with an ungated marker.
+ * One that the gated pass already reached carries a gated marker or none and
+ * is left as it is; on a real library the queue had not reached a single
+ * episode when this was written, a thousand films ahead of the first.
+ */
+const schemaRevision55 = `
+UPDATE media_item SET markers_at = CAST(strftime('%s', 'now') AS INTEGER)
+WHERE kind = 'episode'
+  AND markers_at IS NULL
   AND EXISTS (
     SELECT 1 FROM item_marker m
     WHERE m.item_id = media_item.id AND m.kind = 'credits' AND m.source = 'blackdetect'

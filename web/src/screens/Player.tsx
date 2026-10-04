@@ -413,7 +413,12 @@ export function Player() {
    * disagree with the first — a button still showing after a seek past the
    * intro, which is the exact bug this shape cannot have.
    */
-  const skip = skipTarget(item?.markers, pb.displayTime, pb.totalDuration);
+  const skip = skipTarget(
+    item?.markers,
+    pb.displayTime,
+    pb.totalDuration,
+    item?.kind,
+  );
 
   return (
     <div

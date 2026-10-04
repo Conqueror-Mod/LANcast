@@ -42,6 +42,24 @@ type Stats struct {
 const Source = "blackdetect-gated"
 
 /*
+ * SourceUngated names a marker the frame gate was not asked about, and from
+ * 2026-10-03 that means an episode.
+ *
+ * The gate was tuned on films and is wrong for television. Checked by eye on
+ * 40 episodes, the ungated rule was right on 31 of 33 and early on one; the
+ * gate threw away six of the right ones — closing credits drawn over artwork
+ * (Cowboy Bebop, School Days), on dark blue (Futurama), or short enough that
+ * most of its five frames fall past the end of the file — to save that one.
+ * Television fades into its credits far more reliably than film does, so for
+ * an episode the black run alone is the better rule until the ending theme can
+ * be matched across a season, which is what episodes really share.
+ *
+ * It is the old rule's source name on purpose: the old rule is exactly what
+ * runs, and the player trusts it on an episode and not on a film.
+ */
+const SourceUngated = "blackdetect"
+
+/*
  * Worker detects credit boundaries in the background.
  *
  * Its own worker rather than part of probing, because it is a second full
@@ -334,11 +352,21 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 		shapeAt = w.shapeFn
 	}
 
+	/*
+	 * Name the file, because otherwise an ffmpeg with no visible purpose is
+	 * the only sign this is running.
+	 *
+	 * A pass is hours long and the batch line comes once at the start, so an
+	 * ffmpeg seen forty minutes later — parented by the server, one at a time,
+	 * a new one every couple of minutes — looked orphaned to the person who
+	 * found it. One line per file answers "what is that" from the log.
+	 */
+	w.log.Info("credits detection examining", "item", it.ID, "title", it.Title)
+
 	stderr, err := tail(ctx, it.Path, ScanFrom(dur))
 	if err != nil {
-		w.mu.Lock()
-		w.stats.Failed++
-		w.mu.Unlock()
+		// Counted only once it is known not to be our own shutdown, below:
+		// a restart mid-pass reported a failure for a file that was fine.
 
 		/*
 		 * Whether to stamp turns on one question: is the file there?
@@ -376,6 +404,9 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 		if ctx.Err() != nil {
 			return
 		}
+		w.mu.Lock()
+		w.stats.Failed++
+		w.mu.Unlock()
 		if _, statErr := os.Stat(it.Path); statErr != nil {
 			w.log.Warn("marker detection failed", "item", it.ID,
 				"error", err, "note", "file unreachable; will try again")
@@ -398,6 +429,10 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 		}
 		return LooksLikeCredits(shapes)
 	}
+	source := Source
+	if it.Kind == "episode" {
+		gate, source = nil, SourceUngated
+	}
 	c := CreditsFrom(ParseBlackDetect(stderr, ScanFrom(dur)), dur, gate)
 
 	/*
@@ -419,7 +454,7 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 			Kind:    store.MarkerCredits,
 			StartMS: c.StartMS,
 			// No end: credits run to the end of the file.
-			Source:     Source,
+			Source:     source,
 			Confidence: c.Confidence,
 		})
 	}
