@@ -65,6 +65,7 @@ import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBacken
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
+import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -260,12 +261,24 @@ interface PlaybackState {
   /** Whether there is anything to move to in each direction. */
   hasNext: boolean;
   hasPrev: boolean;
+  /** What the end of this item will play, or null: the same answer
+   *  advanceQueue reaches, without moving. Null under repeat-one, which
+   *  replays rather than advances. */
+  nextItemID: number | null;
 
   play: (id: number, queue: number[]) => void;
   stop: () => void;
   togglePlay: () => void;
   seekTo: (t: number) => void;
   seekBy: (d: number) => void;
+  /*
+   * Play out the last few seconds, so the item ends the way every item ends:
+   * recorded as watched, then whatever the end of a track does next — auto
+   * play, the still-watching prompt, the queue. `attended` says whether a
+   * person asked for it. Up Next's countdown running out is not a person, and
+   * counting it as one would mean the still-watching prompt never came.
+   */
+  rollOn: (attended: boolean) => void;
   toggleMute: () => void;
   changeVolume: (v: number) => void;
   toggleFullscreen: () => void;
@@ -955,6 +968,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       ? order.length > 1
       : nextPos(order, idxInOrder, repeat) !== null);
   const hasPrev = order.length > 1;
+  /*
+   * advanceQueue's answer, computed without acting on it, for anything that
+   * shows what is coming. It mirrors the function below line for line — the
+   * lane first, then the cursor — because a card naming one episode while the
+   * queue plays another is the stale-picture bug this project keeps meeting.
+   */
+  const nextItemID: number | null = (() => {
+    if (repeat === "one") return null;
+    if (upNext.length > 0) return upNext[0];
+    const to = nextPos(order, offPiste ? pos : idxInOrder, repeat);
+    return to == null ? null : order[to];
+  })();
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
   // the caller, which reseeks rather than reloading the same source.
@@ -1640,12 +1665,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [item]);
 
   // ---- seeking --------------------------------------------------------------
-  const seekTo = useCallback(
-    (target: number) => {
+  const seekWith = useCallback(
+    (target: number, attended: boolean) => {
       const v = media();
       if (!v) return;
-      // Seeking is somebody at the controls, so it ends the run.
-      noteAttention();
+      // Seeking is somebody at the controls, so it ends the run — unless the
+      // player is doing it on its own account (rollOn).
+      if (attended) noteAttention();
       const t = Math.max(0, Math.min(target, totalDuration || target));
       if (transcoding.current) {
         offset.current = t;
@@ -1676,6 +1702,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       saveProgress(true);
     },
     [itemID, totalDuration, saveProgress, audioIndex],
+  );
+  const seekTo = useCallback((target: number) => seekWith(target, true), [seekWith]);
+  const rollOn = useCallback(
+    (attended: boolean) => {
+      if (totalDuration > CREDITS_LEAD_SECONDS) {
+        seekWith(totalDuration - CREDITS_LEAD_SECONDS, attended);
+      }
+    },
+    [seekWith, totalDuration],
   );
 
   const seekBy = useCallback(
@@ -2203,6 +2238,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     togglePlay,
     seekTo,
     seekBy,
+    rollOn,
+    nextItemID,
     toggleMute,
     changeVolume,
     toggleFullscreen,
