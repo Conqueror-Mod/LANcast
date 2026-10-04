@@ -75,6 +75,12 @@ describe("offering a skip", () => {
     expect(skipTarget([credits(5640)], 5700, FILM)).toBeNull();
   });
 
+  it("offers credits from the shared ending on an episode, not on a film", () => {
+    const ending = credits(5640, "ending-audio");
+    expect(skipTarget([ending], 5700, FILM, "episode")?.kind).toBe("credits");
+    expect(skipTarget([ending], 5700, FILM, "movie")).toBeNull();
+  });
+
   // A source nobody vouched for is not offered on either.
   it("offers credits from an unknown source on neither", () => {
     expect(skipTarget([credits(5640, "guess")], 5700, FILM, "episode")).toBeNull();

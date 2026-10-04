@@ -293,6 +293,13 @@ describe("skip credits", () => {
     expect(skipCredits()).toBeDefined();
   });
 
+  it("offers the shared ending's marker on an episode", async () => {
+    creditsSource = "ending-audio";
+    await render();
+    await at(1250);
+    expect(skipCredits()).toBeDefined();
+  });
+
   it("ignores a credits marker from a source nobody vouched for", async () => {
     creditsSource = "guess";
     await render();

@@ -60,6 +60,13 @@ export const GATED_CREDITS = "blackdetect-gated";
 export const UNGATED_CREDITS = "blackdetect";
 
 /*
+ * Credits placed by the closing theme an episode shares with its season,
+ * checked against the black run (ADR 0054, 2026-10-04 amendment). Only an
+ * episode has a season, so only an episode carries one.
+ */
+export const ENDING_CREDITS = "ending-audio";
+
+/*
  * Where a credits skip lands: this far before the end, not on it.
  *
  * Not the end itself, because the end is where the player's own `ended`
@@ -141,7 +148,8 @@ function creditsSkip(
 ): SkipTarget | null {
   const trusted =
     m.source === GATED_CREDITS ||
-    (m.source === UNGATED_CREDITS && itemKind === "episode");
+    (itemKind === "episode" &&
+      (m.source === UNGATED_CREDITS || m.source === ENDING_CREDITS));
   if (!trusted) return null;
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
   const start = m.start_ms / 1000;
