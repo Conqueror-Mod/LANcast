@@ -108,3 +108,59 @@ func TestWorkerRecordsNothingWhenStoppedDuringTheGate(t *testing.T) {
 		t.Errorf("saved %+v for a film whose examination was cut short", got)
 	}
 }
+
+/*
+ * An episode is not put to the gate. On 40 episodes the gate threw away six
+ * right answers to save one early one; television fades into its credits far
+ * more reliably than film does.
+ */
+func TestWorkerDoesNotGateAnEpisode(t *testing.T) {
+	st := &savedMarkers{}
+	asked := 0
+	w := gatedWorker(st, func(context.Context, float64) Shape {
+		asked++
+		return Shape{PBlack: 40, Edge: 9} // a gate would reject everything
+	})
+	ep := film()
+	ep.Kind = "episode"
+	w.examine(context.Background(), ep)
+
+	got := st.saves[7]
+	if len(got) != 1 || got[0].StartMS != 5_496_000 {
+		t.Fatalf("saved %+v, want the earliest run, ungated", got)
+	}
+	if got[0].Source != SourceUngated {
+		t.Errorf("Source = %q, want %q", got[0].Source, SourceUngated)
+	}
+	if asked != 0 {
+		t.Errorf("read %d frames for an episode, want none", asked)
+	}
+}
+
+// A film still is.
+func TestWorkerStillGatesAFilm(t *testing.T) {
+	st := &savedMarkers{}
+	w := gatedWorker(st, func(context.Context, float64) Shape { return Shape{PBlack: 40, Edge: 9} })
+	f := film()
+	f.Kind = "movie"
+	w.examine(context.Background(), f)
+	if got := st.saves[7]; len(got) != 0 {
+		t.Errorf("saved %+v for a film whose every candidate the gate rejected", got)
+	}
+}
+
+// A scan the server kills at shutdown is not a broken file, and counting it
+// as one put a failure in the log every time the service restarted mid-pass.
+func TestWorkerDoesNotCountItsOwnShutdownAsAFailure(t *testing.T) {
+	st := &savedMarkers{}
+	ctx, cancel := context.WithCancel(context.Background())
+	w := gatedWorker(st, func(context.Context, float64) Shape { return Shape{} })
+	w.tailFn = func(context.Context, string, float64) (string, error) {
+		cancel()
+		return "", context.Canceled
+	}
+	w.examine(ctx, film())
+	if n := w.Stats().Failed; n != 0 {
+		t.Errorf("Failed = %d after a cancelled scan, want 0", n)
+	}
+}
