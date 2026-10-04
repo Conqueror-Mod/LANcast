@@ -1462,8 +1462,31 @@ group is not priority.
   acceptance test the ADR asks for, before any feature code: proving the media
   element survives an imperative cross-document move under React re-render.
 
-- **Skip intro and skip credits** — **skip intro is built**; skip credits is
-  deliberately not, and there is now a measurement saying why.
+- ~~**Skip intro and skip credits**~~ — **both built**, and an **Up Next** card
+  on top of them.
+
+  - **Skip credits on films** shipped in v0.9.49 (#736): each black-run
+    candidate is checked against the frames that follow it, and only text on
+    black passes. Early markers fell from 14 of 80 to 1, checked by eye on a
+    held-out sample.
+  - **Skip credits on episodes** shipped in v0.9.50 (#737, #738). The film check
+    was wrong for television, so an episode's credits come from the closing
+    theme its season shares, checked against the black run: 0 early on 40
+    held-out episodes, against 3.
+  - **Intro fixes** shipped in v0.9.51 (#739): ten minutes fingerprinted rather
+    than seven (47 Star Trek intros had been cut off mid-theme), and a studio
+    ident at 0:00 is no longer an intro.
+  - **Up Next** (#740): when an episode's credits begin, a card names what
+    follows and counts down ten seconds, rolling on through the episode's own
+    ending, so watched, auto play and the still-watching prompt all still apply.
+  - **Still open:** using the credits marker as the watched threshold (ADR 0054
+    decision 4). Measured on 2026-10-04: the gentle form, the earlier of the
+    marker and 90%, changes 40 of 1,260 trusted markers, too few to matter. The
+    strong form, where the marker replaces 90%, changes about 1,150, and
+    would turn a late marker into a title that stays on Continue Watching. It
+    needs a measurement of late markers first.
+
+  The rest of this entry is the history that led there, kept for its reasoning.
 
   [ADR 0054](adr/0054-a-marker-says-where-the-film-stops.md) gated the button on
   a check nobody had done: *"the rule is consistent, not right. Nobody has yet
