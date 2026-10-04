@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 56
+const CurrentSchemaVersion = 57
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -95,6 +95,7 @@ var migrations = []migration{
 	{version: 54, sql: schemaRevision54},
 	{version: 55, sql: schemaRevision55},
 	{version: 56, sql: schemaRevision56},
+	{version: 57, sql: schemaRevision57},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -1930,6 +1931,21 @@ WHERE kind = 'episode'
  * same setting and throttle.
  */
 const schemaRevision56 = `
+UPDATE media_item SET intros_at = NULL
+WHERE kind = 'episode' AND intros_at IS NOT NULL;
+`
+
+/*
+ * Revision 57 -- seasons are compared again for their intros (ADR 0055,
+ * 2026-10-04 amendment).
+ *
+ * No shape changes. The intro search now reads ten minutes rather than seven,
+ * which ended 47 Star Trek title sequences at the edge of the window, and no
+ * longer marks a studio ident at 0:00 as an intro. Both reach a season only
+ * when it is compared again, so the stamp is cleared, as revision 56 did --
+ * on a library still working through 56, nothing changes.
+ */
+const schemaRevision57 = `
 UPDATE media_item SET intros_at = NULL
 WHERE kind = 'episode' AND intros_at IS NOT NULL;
 `

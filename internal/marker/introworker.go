@@ -210,6 +210,16 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 		}
 
 		in := IntroFrom(cands)
+		/*
+		 * An ident is not the intro, and may be standing in front of it. The
+		 * search runs again from just after it, on this episode's side only:
+		 * a sibling's ident has nothing left on this side to align with.
+		 */
+		if in.IsIdent() {
+			in = w.introAfter(prints[i].phases, func(p int) ([]uint32, bool) {
+				return prints[p].single, prints[p].ok
+			}, n, i, in.EndSec)
+		}
 
 		/*
 		 * The closing theme, found the same way: what this episode's last
@@ -288,6 +298,43 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 	// Stamped whether or not anything was found, so a season with no shared
 	// audio is not re-decoded on every pass for ever.
 	return st.MarkIntrosExamined(ctx, examined, now)
+}
+
+/*
+ * introAfter decides an intro from the comparisons again, ignoring everything
+ * in this episode before afterSec. Its answer is in this episode's timeline,
+ * and an ident it finds again is refused rather than returned.
+ */
+func (w *Worker) introAfter(phases [][]uint32, peer func(int) ([]uint32, bool), n, i int, afterSec float64) Intro {
+	cut := int(afterSec/Seconds(1)) + 1
+	trimmed := make([][]uint32, 0, len(phases))
+	for _, ph := range phases {
+		if cut >= len(ph) {
+			return Intro{}
+		}
+		trimmed = append(trimmed, ph[cut:])
+	}
+	var cands []Candidate
+	for _, p := range IntroPeers(n, i, PeersPerEpisode) {
+		b, ok := peer(p)
+		if !ok {
+			continue
+		}
+		m := BestCommonRunBridging(trimmed, b, IntroTolerance, IntroGapFrames)
+		if m.Frames == 0 {
+			cands = append(cands, Candidate{})
+			continue
+		}
+		cands = append(cands, Candidate{
+			StartSec: Seconds(m.OffsetA + cut),
+			EndSec:   Seconds(m.OffsetA + cut + m.Frames),
+		})
+	}
+	in := IntroFrom(cands)
+	if in.IsIdent() {
+		return Intro{}
+	}
+	return in
 }
 
 /*
