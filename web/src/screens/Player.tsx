@@ -413,7 +413,7 @@ export function Player() {
    * disagree with the first — a button still showing after a seek past the
    * intro, which is the exact bug this shape cannot have.
    */
-  const skip = skipTarget(item?.markers, pb.displayTime);
+  const skip = skipTarget(item?.markers, pb.displayTime, pb.totalDuration);
 
   return (
     <div
@@ -527,7 +527,8 @@ export function Player() {
         </div>
 
         {/*
-          Skip intro: a button that appears, never a jump that happens.
+          Skip intro, and skip credits: a button that appears, never a jump
+          that happens.
           ADR 0054 and the feature backlog both insist on that, and the reason
           is that an automatic skip a few seconds wrong is indistinguishable
           from a broken file — the first thing it would eat is a cold open.
@@ -546,7 +547,7 @@ export function Player() {
             className="player__skip"
             onClick={() => pb.seekTo(skip.atSeconds)}
           >
-            Skip intro
+            {skip.kind === "credits" ? "Skip credits" : "Skip intro"}
           </button>
         )}
 

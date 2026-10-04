@@ -49,10 +49,12 @@ func TestRevision46RequeuesEpisodesStampedWithoutACreditsMarker(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	// And one episode the credits pass really did examine.
+	// And one episode the credits pass really did examine. The gated source,
+	// because migrate replays every revision after 45, and 54 rightly re-queues
+	// anything the ungated rule wrote — which is not what this test is about.
 	credEnd := int64(1_300_000)
 	if err := st.SaveMarkers(ctx, eps[2], []string{MarkerCredits}, []Marker{{
-		Kind: MarkerCredits, StartMS: 1_200_000, EndMS: &credEnd, Source: "blackdetect",
+		Kind: MarkerCredits, StartMS: 1_200_000, EndMS: &credEnd, Source: "blackdetect-gated",
 	}}); err != nil {
 		t.Fatal(err)
 	}

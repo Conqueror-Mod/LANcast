@@ -11,14 +11,20 @@ type Marker = components["schemas"]["Marker"];
  * so it is worth being able to state it in tests rather than infer it from a
  * JSX condition three levels inside an overlay.
  *
- * # Intros only, deliberately
+ * # Credits only from the gated rule
  *
- * `credits` markers exist and are not offered. They were validated against forty
- * films by looking at a frame thirty seconds past each marker, and about one in
- * five was still in the film — a scene, mid-dialogue, with ten minutes to run.
- * A button that drops somebody out of the third act one time in five is worse
- * than no button, which is exactly what ADR 0054 gated against when it said the
- * rule was "consistent, not right".
+ * The first credits rule was checked against forty films by looking at frames
+ * around each marker, and about one in five was still in the film — a scene,
+ * mid-dialogue, with ten minutes to run. A button that drops somebody out of
+ * the third act one time in five is worse than no button, so for a while there
+ * was none.
+ *
+ * The server now reads frames after each candidate and accepts it only if they
+ * look like text on black (ADR 0054, 2026-10-03 amendment). On forty films it
+ * had never seen, that gave no early answers at all. Its markers carry the
+ * source `blackdetect-gated`, and that is the only source offered: a library
+ * part-way through re-examination still holds markers from the old rule, and
+ * the old rule is the one that was wrong.
  *
  * Intro markers come from a different detector — audio fingerprints compared
  * across a season, which finds the passage every episode shares — and every one
@@ -34,10 +40,37 @@ type Marker = components["schemas"]["Marker"];
 
 /** Where a skip would take you, and what it is skipping. */
 export interface SkipTarget {
-  kind: "intro";
+  kind: "intro" | "credits";
   /** The position to seek to, in seconds. */
   atSeconds: number;
 }
+
+/** The only credits source a skip is offered from. */
+export const GATED_CREDITS = "blackdetect-gated";
+
+/*
+ * Where a credits skip lands: this far before the end, not on it.
+ *
+ * Not the end itself, because the end is where the player's own `ended`
+ * handling takes over — recording the film as watched and rolling on to the
+ * next item — and that wants to be reached by *playing*, the way every other
+ * ending is. A seek to the exact end asks a transcode to start with nothing
+ * left to encode. A few seconds of the last card is the price of the ordinary
+ * path.
+ */
+export const CREDITS_LEAD_SECONDS = 3;
+
+/*
+ * The window a credits marker must sit in to be offered, as shares of the file.
+ *
+ * The server never writes one outside 88–99.5%, and still four were found
+ * outside it — chosen against a length the file did not have. A marker that
+ * says the credits start at 73% is not believed here whatever the server says.
+ * The top is 99% rather than 99.5%: in the last hundredth of a film there is
+ * nothing worth a button.
+ */
+const CREDITS_FROM = 0.88;
+const CREDITS_UNTIL = 0.99;
 
 /**
  * skipTarget returns the skip to offer at this moment, or null.
@@ -49,10 +82,16 @@ export interface SkipTarget {
 export function skipTarget(
   markers: Marker[] | undefined,
   positionSeconds: number,
+  durationSeconds = 0,
 ): SkipTarget | null {
   if (!markers || !Number.isFinite(positionSeconds)) return null;
 
   for (const m of markers) {
+    if (m.kind === "credits") {
+      const credits = creditsSkip(m, positionSeconds, durationSeconds);
+      if (credits) return credits;
+      continue;
+    }
     if (m.kind !== "intro") continue;
     /*
      * An intro with no end is not skippable, and this is not defensive
@@ -70,6 +109,31 @@ export function skipTarget(
     if (positionSeconds >= start && positionSeconds < end) {
       return { kind: "intro", atSeconds: end };
     }
+  }
+  return null;
+}
+
+/*
+ * A credits skip, offered from the marker until a few seconds from the end.
+ *
+ * A visible button for the whole roll, never a jump: a person who stays for
+ * the credits — or for what comes after them — has only to not press it.
+ * Without a known duration there is no end to skip to and no window to check
+ * the marker against, so there is no offer.
+ */
+function creditsSkip(
+  m: Marker,
+  positionSeconds: number,
+  durationSeconds: number,
+): SkipTarget | null {
+  if (m.source !== GATED_CREDITS) return null;
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  const start = m.start_ms / 1000;
+  const share = start / durationSeconds;
+  if (share < CREDITS_FROM || share >= CREDITS_UNTIL) return null;
+  const to = durationSeconds - CREDITS_LEAD_SECONDS;
+  if (positionSeconds >= start && positionSeconds < to) {
+    return { kind: "credits", atSeconds: to };
   }
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { skipTarget } from "./skip";
+import { CREDITS_LEAD_SECONDS, GATED_CREDITS, skipTarget } from "./skip";
 import type { components } from "@/api/schema";
 
 type Marker = components["schemas"]["Marker"];
@@ -14,14 +14,19 @@ const intro = (startS: number, endS: number): Marker => ({
 });
 
 // Credits run to the end of the file, so they carry no end. That is real data,
-// not a malformed row.
-const credits = (startS: number): Marker => ({
+// not a malformed row. The default source is the ungated rule's, the one that
+// was wrong one time in five.
+const credits = (startS: number, source = "blackdetect"): Marker => ({
   kind: "credits",
   start_ms: startS * 1000,
-  source: "blackdetect",
+  source,
   confidence: 0.9,
   created_at: 0,
 });
+const gated = (startS: number) => credits(startS, GATED_CREDITS);
+
+// A 100-minute film whose gated marker is at 94%.
+const FILM = 6000;
 
 describe("offering a skip", () => {
   it("offers nothing before the intro starts", () => {
@@ -49,16 +54,51 @@ describe("offering a skip", () => {
   });
 
   /*
-   * Credits are detected and deliberately not offered.
+   * Markers from the ungated rule are never offered.
    *
-   * Validated against forty films by looking at a frame thirty seconds past
-   * each marker: about one in five was still in the film, mid-scene, with ten
-   * minutes to run. A button that drops somebody out of the third act one time
-   * in five is worse than no button — which is what ADR 0054 gated against.
+   * Checked against forty films by looking at frames around each marker, about
+   * one in five was still in the film, mid-scene, with ten minutes to run. A
+   * library part-way through re-examination still holds them.
    */
-  it("never offers to skip credits", () => {
-    expect(skipTarget([credits(5634)], 5700)).toBeNull();
-    expect(skipTarget([credits(5634), intro(87, 117)], 5700)).toBeNull();
+  it("never offers credits from the ungated rule", () => {
+    expect(skipTarget([credits(5640)], 5700, FILM)).toBeNull();
+    expect(skipTarget([credits(5640), intro(87, 117)], 5700, FILM)).toBeNull();
+  });
+
+  it("offers a gated credits skip from the marker to near the end", () => {
+    expect(skipTarget([gated(5640)], 5639, FILM)).toBeNull();
+    expect(skipTarget([gated(5640)], 5640, FILM)).toEqual({
+      kind: "credits",
+      atSeconds: FILM - CREDITS_LEAD_SECONDS,
+    });
+    expect(skipTarget([gated(5640)], 5900, FILM)?.kind).toBe("credits");
+  });
+
+  // Once there is nothing left to skip the button goes, rather than offering
+  // to seek backwards to where it would land.
+  it("stops offering once the playhead reaches where it would land", () => {
+    const to = FILM - CREDITS_LEAD_SECONDS;
+    expect(skipTarget([gated(5640)], to - 0.1, FILM)).not.toBeNull();
+    expect(skipTarget([gated(5640)], to, FILM)).toBeNull();
+  });
+
+  /*
+   * A marker outside the window is not believed. Alien 3's said 73.2%: chosen
+   * against a length the file did not have, and an hour of film after it.
+   */
+  it("refuses a credits marker outside its own file's window", () => {
+    expect(skipTarget([gated(4392)], 4400, FILM)).toBeNull(); // 73.2%
+    expect(skipTarget([gated(5280)], 5300, FILM)).not.toBeNull(); // 88%
+  });
+
+  // In the last hundredth there is nothing worth a button.
+  it("does not offer a skip from the last one percent", () => {
+    expect(skipTarget([gated(5940)], 5950, FILM)).toBeNull(); // 99%
+  });
+
+  it("offers no credits skip without a known duration", () => {
+    expect(skipTarget([gated(5640)], 5700)).toBeNull();
+    expect(skipTarget([gated(5640)], 5700, NaN)).toBeNull();
   });
 
   /*

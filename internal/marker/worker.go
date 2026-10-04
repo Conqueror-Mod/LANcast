@@ -31,8 +31,15 @@ type Stats struct {
 	UpdatedAt int64 `json:"updated_at"`
 }
 
-// Source names this detector on every marker it writes.
-const Source = "blackdetect"
+/*
+ * Source names this detector on every marker it writes.
+ *
+ * Changed when the gate was added, and not cosmetically. A marker written by
+ * the ungated rule is wrong one time in five, and until revision 54's re-run
+ * reaches it, it is still in the table. The source is how the player tells a
+ * marker it may offer from one it may not (ADR 0054, 2026-10-03 amendment).
+ */
+const Source = "blackdetect-gated"
 
 /*
  * Worker detects credit boundaries in the background.
@@ -96,6 +103,11 @@ type Worker struct {
 	// examineFn does the same for the credits pass, so its queue handling is
 	// tested without decoding any video. Nil is the real one.
 	examineFn func(ctx context.Context, it store.Item)
+
+	// tailFn and shapeFn stand in for scanTail and frameShape, so examine is
+	// tested without ffmpeg. Nil is the real one.
+	tailFn  func(ctx context.Context, path string, startSec float64) (string, error)
+	shapeFn func(ctx context.Context, path string, atSec float64) Shape
 
 	mu      sync.Mutex
 	running bool
@@ -314,7 +326,15 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 	}
 	dur := float64(*it.DurationMS) / 1000
 
-	stderr, err := w.scanTail(ctx, it.Path, ScanFrom(dur))
+	tail, shapeAt := w.scanTail, w.frameShape
+	if w.tailFn != nil {
+		tail = w.tailFn
+	}
+	if w.shapeFn != nil {
+		shapeAt = w.shapeFn
+	}
+
+	stderr, err := tail(ctx, it.Path, ScanFrom(dur))
 	if err != nil {
 		w.mu.Lock()
 		w.stats.Failed++
@@ -369,7 +389,29 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
 		return
 	}
 
-	c := CreditsFrom(ParseBlackDetect(stderr, ScanFrom(dur)), dur)
+	gate := func(start float64) bool {
+		var shapes []Shape
+		for _, off := range GateOffsets {
+			if at := start + off; at < dur-1 {
+				shapes = append(shapes, shapeAt(ctx, it.Path, at))
+			}
+		}
+		return LooksLikeCredits(shapes)
+	}
+	c := CreditsFrom(ParseBlackDetect(stderr, ScanFrom(dur)), dur, gate)
+
+	/*
+	 * Stopped while the gate was reading frames: say nothing.
+	 *
+	 * A cancelled frame read is a zero Shape, the gate counts it against the
+	 * candidate, and every candidate fails — which looks exactly like an
+	 * honest abstention, and would be stamped as one. A restart during a pass
+	 * would retire the film it was looking at. It is the same trap the scan
+	 * failure above fell into, arriving by a different door.
+	 */
+	if ctx.Err() != nil {
+		return
+	}
 
 	var markers []store.Marker
 	if c.Found {
@@ -411,6 +453,37 @@ func (w *Worker) examine(ctx context.Context, it store.Item) {
  * broke every HEVC title in v0.8.0. Nothing here needs the GPU: this is a
  * background pass that no one is waiting on.
  */
+/*
+ * frameShape reads the one frame at atSec and measures it for the gate.
+ *
+ * One decode, both numbers: blackframe measures and passes the frame through
+ * untouched, so the edge map is drawn from the same pixels it counted. Scaled
+ * to 480 wide first, which is what the numbers were tuned at — edge density is
+ * not the same number at 4K.
+ *
+ * A frame that cannot be read is a zero Shape rather than an error. The gate
+ * counts it against the candidate, which is the direction a doubt should go.
+ * No -hwaccel, for the reason scanTail gives.
+ */
+func (w *Worker) frameShape(ctx context.Context, path string, atSec float64) Shape {
+	cmd := exec.CommandContext(ctx, w.bin(),
+		"-hide_banner", "-nostats",
+		"-threads", strconv.Itoa(w.threads()),
+		"-ss", strconv.FormatFloat(atSec, 'f', 3, 64),
+		"-i", path,
+		"-an",
+		"-frames:v", "1",
+		"-vf", "scale=480:-2,format=gray,blackframe=amount=0:threshold=32,"+
+			"edgedetect=low=0.08:high=0.2,signalstats,metadata=print",
+		"-f", "null", "-",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Shape{}
+	}
+	return ParseShape(string(out))
+}
+
 func (w *Worker) scanTail(ctx context.Context, path string, startSec float64) (string, error) {
 	cmd := exec.CommandContext(ctx, w.bin(),
 		"-hide_banner", "-nostats",

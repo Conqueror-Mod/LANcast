@@ -45,11 +45,24 @@ type ProbeResult struct {
 	Streams       []MediaStream
 }
 
-// SaveProbe stores probe output and stamps the item as probed.
-//
-// The summary columns and the stream rows are written in one transaction: a
-// half-applied probe would leave an item claiming a codec its stream list
-// contradicts, which is worse than an unprobed item.
+/*
+ * SaveProbe stores probe output and stamps the item as probed.
+ *
+ * The summary columns and the stream rows are written in one transaction: a
+ * half-applied probe would leave an item claiming a codec its stream list
+ * contradicts, which is worse than an unprobed item.
+ *
+ * **A new length un-stamps the credits pass.** A credits marker is a position
+ * in a particular file, chosen as a share of that file's length, and it is not
+ * a fact about any other cut. Four markers in a real library sat outside the
+ * window of the file they were on -- Alien 3's at 73.2%, half an hour before
+ * its ending. Each was chosen against a length the file did not have, and when
+ * a probe later recorded the real one, nothing told the credits pass. A file
+ * replaced by a longer cut would go the same way. In SQLite every
+ * expression in a SET reads the row as it was, so duration_ms in the CASE is
+ * the old length. A second's slack, because two probes of the same bytes can
+ * disagree by a frame.
+ */
 func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -61,11 +74,15 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 		UPDATE media_item SET
 			probed_at = ?, duration_ms = ?, video_codec = ?, video_profile = ?,
 			width = ?, height = ?, video_bitrate = ?, audio_codec = ?, audio_channels = ?,
-			video_frame_rate = ?
+			video_frame_rate = ?,
+			markers_at = CASE
+				WHEN duration_ms IS NULL OR ABS(duration_ms - ?) > 1000 THEN NULL
+				ELSE markers_at END
 		WHERE id = ?`,
 		time.Now().Unix(), nullZero64(r.DurationMS), nullEmpty(r.VideoCodec), nullEmpty(r.VideoProfile),
 		nullZero(r.Width), nullZero(r.Height), nullZero64(r.VideoBitRate),
-		nullEmpty(r.AudioCodec), nullZero(r.AudioChannels), nullZeroF(r.FrameRate), itemID)
+		nullEmpty(r.AudioCodec), nullZero(r.AudioChannels), nullZeroF(r.FrameRate),
+		r.DurationMS, itemID)
 	if err != nil {
 		return fmt.Errorf("save probe: %w", err)
 	}

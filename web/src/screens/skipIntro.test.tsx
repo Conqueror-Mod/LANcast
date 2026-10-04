@@ -40,7 +40,12 @@ function Probe() {
   return null;
 }
 
-/** An episode with a detected intro from 87s to 117s. */
+let creditsSource = "blackdetect-gated";
+
+/**
+ * An episode with a detected intro from 87s to 117s, and credits from 1,240s
+ * of 1,320 — 93.9%.
+ */
 function episode() {
   return {
     id: 7,
@@ -61,12 +66,20 @@ function episode() {
         confidence: 0.9,
         created_at: 0,
       },
+      {
+        kind: "credits",
+        start_ms: 1_240_000,
+        source: creditsSource,
+        confidence: 0.9,
+        created_at: 0,
+      },
     ],
   };
 }
 
 beforeEach(() => {
   seeked = [];
+  creditsSource = "blackdetect-gated";
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -162,10 +175,12 @@ async function at(seconds: number) {
   await flush();
 }
 
-const skipButton = () =>
+const button = (label: string) => () =>
   [...host.querySelectorAll("button")].find(
-    (b) => b.textContent?.trim() === "Skip intro",
+    (b) => b.textContent?.trim() === label,
   );
+const skipButton = button("Skip intro");
+const skipCredits = button("Skip credits");
 
 describe("skip intro", () => {
   it("offers nothing before the intro", async () => {
@@ -238,5 +253,43 @@ describe("skip intro", () => {
     await render();
     await at(95);
     expect(skipButton()).toBeUndefined();
+  });
+});
+
+describe("skip credits", () => {
+  it("offers nothing before the credits", async () => {
+    await render();
+    await at(1200);
+    expect(skipCredits()).toBeUndefined();
+  });
+
+  it("offers the skip once the credits begin, and does not take it alone", async () => {
+    await render();
+    await at(1250);
+    expect(skipCredits()).toBeDefined();
+    expect(skipButton()).toBeUndefined();
+    expect(seeked).toHaveLength(0);
+  });
+
+  /*
+   * To three seconds before the end, not the end: the last seconds are played,
+   * so the film finishes the way every film does and the player's own ending —
+   * watched, then the next item — takes over.
+   */
+  it("seeks to just before the end when pressed", async () => {
+    await render();
+    await at(1250);
+    await act(async () => skipCredits()!.click());
+    await flush();
+    expect(seeked).toEqual([1317]);
+  });
+
+  // A library part-way through re-examination still holds the old rule's
+  // markers, and the old rule was early one time in five.
+  it("ignores a credits marker from the ungated rule", async () => {
+    creditsSource = "blackdetect";
+    await render();
+    await at(1250);
+    expect(skipCredits()).toBeUndefined();
   });
 });
