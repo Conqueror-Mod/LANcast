@@ -45,8 +45,19 @@ export interface SkipTarget {
   atSeconds: number;
 }
 
-/** The only credits source a skip is offered from. */
+/** The credits source a skip is offered from on a film. */
 export const GATED_CREDITS = "blackdetect-gated";
+
+/*
+ * The ungated rule's source, trusted on an episode and never on a film.
+ *
+ * Checked by eye, the ungated rule was early on one film in five and on one
+ * episode in thirty-three: television fades into its credits, film often fades
+ * inside its last act. The server no longer gates episodes for that reason,
+ * because the film gate threw away more right answers on television than it
+ * saved (ADR 0054, episode amendment).
+ */
+export const UNGATED_CREDITS = "blackdetect";
 
 /*
  * Where a credits skip lands: this far before the end, not on it.
@@ -83,12 +94,13 @@ export function skipTarget(
   markers: Marker[] | undefined,
   positionSeconds: number,
   durationSeconds = 0,
+  itemKind?: string,
 ): SkipTarget | null {
   if (!markers || !Number.isFinite(positionSeconds)) return null;
 
   for (const m of markers) {
     if (m.kind === "credits") {
-      const credits = creditsSkip(m, positionSeconds, durationSeconds);
+      const credits = creditsSkip(m, positionSeconds, durationSeconds, itemKind);
       if (credits) return credits;
       continue;
     }
@@ -125,8 +137,12 @@ function creditsSkip(
   m: Marker,
   positionSeconds: number,
   durationSeconds: number,
+  itemKind: string | undefined,
 ): SkipTarget | null {
-  if (m.source !== GATED_CREDITS) return null;
+  const trusted =
+    m.source === GATED_CREDITS ||
+    (m.source === UNGATED_CREDITS && itemKind === "episode");
+  if (!trusted) return null;
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
   const start = m.start_ms / 1000;
   const share = start / durationSeconds;

@@ -2267,9 +2267,12 @@ episode has in common.
 
 `source` names the rule that wrote the marker. A credits marker from
 `blackdetect-gated` was accepted only after the frames following it looked like
-credits; one from plain `blackdetect` predates that check, was wrong about one
-time in five, and is being replaced as the server re-examines its library (ADR
-0054, 2026-10-03 amendment). **Offer a skip only from `blackdetect-gated`.**
+credits. One from plain `blackdetect` had no such check: on a **film** that rule
+was early about one time in five, and those markers are being replaced as the
+server re-examines its library; on an **episode** it was early about one time in
+thirty-three, and episodes are deliberately left ungated (ADR 0054, 2026-10-03
+amendments). **Offer a skip from `blackdetect-gated` on anything, and from
+`blackdetect` only on an item whose `kind` is `episode`.**
 
 **Markers also ride on `GET /api/items/{id}`**, in a `markers` array of exactly
 this shape. That is the one a player should read: asking a second question

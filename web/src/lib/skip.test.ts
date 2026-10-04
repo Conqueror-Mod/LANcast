@@ -65,6 +65,21 @@ describe("offering a skip", () => {
     expect(skipTarget([credits(5640), intro(87, 117)], 5700, FILM)).toBeNull();
   });
 
+  /*
+   * On an episode the ungated rule is trusted: early on one episode in
+   * thirty-three, against one film in five.
+   */
+  it("offers credits from the ungated rule on an episode, not on a film", () => {
+    expect(skipTarget([credits(5640)], 5700, FILM, "episode")?.kind).toBe("credits");
+    expect(skipTarget([credits(5640)], 5700, FILM, "movie")).toBeNull();
+    expect(skipTarget([credits(5640)], 5700, FILM)).toBeNull();
+  });
+
+  // A source nobody vouched for is not offered on either.
+  it("offers credits from an unknown source on neither", () => {
+    expect(skipTarget([credits(5640, "guess")], 5700, FILM, "episode")).toBeNull();
+  });
+
   it("offers a gated credits skip from the marker to near the end", () => {
     expect(skipTarget([gated(5640)], 5639, FILM)).toBeNull();
     expect(skipTarget([gated(5640)], 5640, FILM)).toEqual({

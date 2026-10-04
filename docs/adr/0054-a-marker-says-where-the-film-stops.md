@@ -336,3 +336,36 @@ automatic jump, offered from the marker to the end and not in the final 1% of th
 file, where there is nothing left to skip. Decision 4 — the marker replacing the
 watched threshold — is **not** taken by this amendment. A late marker is
 harmless to a button and would not be harmless to "finished".
+
+## Amendment — 2026-10-03, later: episodes are not gated
+
+The gate was tuned and tested on films. The same check was then run on 40
+episodes drawn from every series in the library, two per series and the rest at
+random, with every marker judged by eye from frames around it:
+
+| 40 episodes | count |
+|---|---|
+| ungated marker right | 31 of 33 |
+| early | **1** — a Voyager scene ending on a warp-out to black |
+| late | 1 (harmless) |
+| no candidate at all | 7 |
+
+Television fades into its credits far more reliably than film does. The gate
+accepted 26 and **discarded six right answers** to save the one Voyager
+episode: closing credits drawn over artwork (*Cowboy Bebop*, *School Days*),
+credits on dark blue and gone in under thirty seconds (*Futurama*), credits
+running straight into a bright network card (*Blue Mountain State*). On
+television the frame test costs more than it saves.
+
+**So an episode is examined without the gate**, and its marker keeps the
+ungated source, `blackdetect`. The player offers that source on an episode and
+not on a film, where the same rule was early one time in five. Revision 55 puts
+the stamp back on every episode revision 54 had re-queued with an ungated
+marker, since re-examining it would decode its tail to reach the marker it
+already has.
+
+This is an interim rule. What episodes in a season really share is their
+closing music, which is findable even when the credits start on a cut with no
+fade — the seven episodes with no candidate at all. Matching it across a season,
+with the intro detector's fingerprint engine, is the next step.
+

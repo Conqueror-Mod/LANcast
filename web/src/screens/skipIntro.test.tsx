@@ -284,10 +284,17 @@ describe("skip credits", () => {
     expect(seeked).toEqual([1317]);
   });
 
-  // A library part-way through re-examination still holds the old rule's
-  // markers, and the old rule was early one time in five.
-  it("ignores a credits marker from the ungated rule", async () => {
+  // The fixture is an episode, and on an episode the ungated rule is trusted:
+  // early on one in thirty-three. (On a film it is not; lib/skip.test.ts.)
+  it("offers the ungated rule's marker on an episode", async () => {
     creditsSource = "blackdetect";
+    await render();
+    await at(1250);
+    expect(skipCredits()).toBeDefined();
+  });
+
+  it("ignores a credits marker from a source nobody vouched for", async () => {
+    creditsSource = "guess";
     await render();
     await at(1250);
     expect(skipCredits()).toBeUndefined();
