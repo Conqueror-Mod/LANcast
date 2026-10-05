@@ -66,6 +66,8 @@ import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
+import { FX_OFF, fxApplies } from "./elementAudio";
+import { applyElementFX, elementFXSupported, engineFor, resume, setContextSink } from "./elementEngine";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -230,6 +232,9 @@ interface PlaybackState {
   /** Night mode and dialogue boost can be applied: native, and a client new
    *  enough to have them (mpvBackend.ts, nativeFeatures). */
   audioFX: boolean;
+  /** Channels in the music track that is playing, from the probe; 0 when not
+   *  music or not known. Night mode is offered on 1 or 2, vocals on 2. */
+  musicChannels: number;
   cover: string | undefined;
   surface: Surface;
 
@@ -1201,6 +1206,43 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     [item?.streams],
   );
 
+  /*
+   * ---- the audio pass on music (Phase 2) ------------------------------------
+   *
+   * Music plays through the element everywhere, so its night mode and vocal
+   * lift run in Web Audio (elementEngine.ts). Offered only when the probe says
+   * how many channels the track has: a control engaged on a guess is a control
+   * that might do nothing, and nobody can tell that from listening.
+   */
+  const musicChannels =
+    isAudio && elementFXSupported()
+      ? ((audioTracks.find((t) => t.default) ?? audioTracks[0])?.channels ?? 0)
+      : 0;
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    // Anything that is not music gets a straight wire. The element is shared
+    // with films in a browser tab, and they are not this effect's business.
+    const fx = isAudio
+      ? fxApplies({ night: prefs.nightMusic, vocals: prefs.vocalsMusic }, musicChannels)
+      : FX_OFF;
+    applyElementFX(v, fx, prefs.audioDevice);
+  }, [isAudio, musicChannels, prefs.nightMusic, prefs.vocalsMusic, prefs.audioDevice]);
+
+  // A routed element is silent while its context is suspended, and a context
+  // can be suspended by the system as well as at birth. Every play resumes it.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPlay = () => {
+      const engine = engineFor(v);
+      if (engine) void resume(engine);
+    };
+    v.addEventListener("play", onPlay);
+    return () => v.removeEventListener("play", onPlay);
+  }, []);
+
   // Choosing a track reloads the source, because the server decides delivery
   // from the track: a file that direct-plays with its first track may have to be
   // converted to deliver its second. Handled by the source effect, which this
@@ -2049,6 +2091,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           setSinkId?: (id: string) => Promise<void>;
         })
       | null;
+    // Once the element feeds a context the sound leaves through the context,
+    // so its sink is the one that counts (elementEngine.ts).
+    const engine = v ? engineFor(v) : undefined;
+    if (engine) setContextSink(engine, prefs.audioDevice);
     if (!v?.setSinkId) return;
     v.setSinkId(prefs.audioDevice).catch(() => {
       // A device that has been unplugged since it was chosen. Falling back to
@@ -2212,6 +2258,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     isAudio: !!isAudio,
     native: nativeOn,
     audioFX: nativeOn && fxSupported,
+    musicChannels,
     cover,
     surface,
     playing,
