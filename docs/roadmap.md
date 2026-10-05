@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-03 · **v0.9.48 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-04 · **v0.9.54 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -13,15 +13,21 @@ way down. Details in the areas below; what the pass taught is at the end.
 
 ## Where it stands
 
-*Rewritten 2026-09-30. The opening of this file had become a running commentary
+*Rewritten 2026-09-30 and refreshed 2026-10-04, when the release paragraph,
+the schema revision, the photo entry and two ADR statuses had fallen behind. The
+2026-09-30 note: the opening of this file had become a running commentary
 on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
 deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
 v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
-**Nothing sits unreleased.** v0.9.45 shipped audio pass Phase 1, night mode and
-dialogue boost on the desktop player, after a listening test on a client that
-could apply them. v0.9.46 put both one press away in the control bar, and made
-Matroska a claim of its own. Phase 2 (music and browser tabs) is unscheduled.
+**Nothing sits unreleased.** v0.9.54 is current.
+- **v0.9.49–v0.9.51:** Skip credits, on films and then on episodes, plus two intro fixes.
+- **v0.9.53:** Up Next, photo duplicates and Xbox app games.
+- **v0.9.54:** tidied the duplicates page and started the photo pass at boot.
+
+v0.9.52 was built and never published: its one change, Up Next, shipped in v0.9.53
+instead. Audio pass Phase 2 (music and browser tabs) is waiting for the music-metadata
+work to finish, not for a design.
 
 **Shipped but never watched working.** Each one is something the suites
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
@@ -32,6 +38,20 @@ session 0.
 - The **HLS file fallback** (#589/#590), as the installed service.
 - The **MSE live path**, which is moot while Chromium plays HLS natively, and
   parked with the rest of live TV.
+- **Up Next** in the running client (v0.9.53). Its wiring is tested against the
+  real still-watching prompt. Its card has been looked at only in a static page
+  built from its own stylesheet.
+- **Play on an Xbox app game** (v0.9.53). The id it launches matches what
+  Windows' Start menu uses for the same game, but nobody has pressed it.
+- **Skip credits on a film the server converts**, in a browser. Direct play
+  through the desktop client was watched on Skyfall (v0.9.49).
+
+**Watched on 2026-10-04.** The **season pass**, which now decides episode
+credits from the closing theme as well as intros, ran as the installed service.
+Of 1,074 episodes, 794 were done when checked: no decode failures, and the only
+two failures logged were the service being stopped mid-season by an installer.
+The **Duplicates** page was checked on the real library, where it showed 35
+extra copies in two sections.
 
 **Watched on 2026-09-30.** Both ran in the desktop client with libmpv removed,
 so that playback took WebView2's `<video>` path, the one these claims are
@@ -69,59 +89,25 @@ behaviour, so a permanently downgraded machine looks like a working one. The
 suites prove wiring and arithmetic. Watching it is still the only way to know
 it works.
 
-**Music libraries shipped in v0.5.0** ([ADR 0024](adr/0024-music-libraries.md)),
-which is the first media type past video and therefore the first real test of
-the claim ADR 0002 made: that a new kind needs no new tables. It holds — music
-is three new `kind` values on `media_item` related by `parent_id`, exactly as
-show → season → episode already was. Metadata inverts the video rule: for a film
-the filename is a guess and a provider corrects it, but a music file already
-carries the answer in its tags, so tags win and the filename is the fallback.
-The release was **server-side only**. Both gaps closed in v0.6.0: album
-artwork is extracted, and the client has an album view, a track list, an audio
-mode and a docked mini-player. What ADR 0024 scoped is done; **artist images
-from a provider are on the back burner** (see below), not because they are hard
-but because music has had a long run and the rest of the map has waited.
-
-**Plugin architecture (M4) is built** — the last milestone. A WebAssembly runtime
-([ADR 0020](adr/0020-plugin-isolation-boundary.md)) sandboxes third-party code
-behind a deny-by-default capability model, plugins register into the same
-interfaces the native sources use ([ADR 0007](adr/0007-provider-and-localsource-split.md)),
-and a signed-bundle install flow with a two-layer trust model — provenance
-(Ed25519 signing) and authority (an explicit capability grant) — surfaces on a
-Settings → Add-ons page ([ADR 0021](adr/0021-plugin-distribution-and-trust.md),
-[plan](plugin-distribution-plan.md)). The contract is validated by OMDb
-reimplemented as a first-party plugin that produces ratings byte-identical to the
-native source. All four founding principles now hold in shipped code.
-
-The **browse-experience backlog shipped** in three PRs
-([plan](browse-experience-plan.md)): media-type-aware library views, Plex-style
-multi-select filters (genre, decade, content rating) with per-library counts and
-an unwatched toggle, and a ratings display with a rating sort. What remains of it
-was **external ratings** (Rotten Tomatoes / Metacritic / IMDb via OMDb), specced
-in [ADR 0019](adr/0019-external-ratings.md) and now **built** — leaving plugin
-architecture (M4) as the last milestone.
-
-The two early-lock Foundation decisions are now **built, not just decided**: the
-data model past revision 1 ([ADR 0017](adr/0017-collections-and-multi-part-works.md),
-schema at **revision 13**) and the API contract ([ADR 0018](adr/0018-api-contract-and-versioning.md)).
-On top of them, **media organisation shipped end to end** — collections, the
-show → season → episode hierarchy, multi-part works and serials/miniseries, a
-library-kind that drives movie-vs-TV matching, Fix match that reaches TV,
-retroactive re-parse on rescan, Play-all queues, and Remove (ignore or delete,
-with a sidecar sweep). Theme music (blocked on OST identification) is the
-remaining M3 depth. Packaging & distribution is **built** — two branded
-executables, a goreleaser matrix and a Windows installer
-([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) —
-and has been since v0.3.2.
-
-A **feature backlog is captured below.** With M4 built, what remains is breadth
-(finishing music, more plugin kinds, more client surfaces)
-rather than foundational milestones.
+**What exists, in one paragraph.** All four milestones are built, plus the
+native desktop client, which plays through libmpv. The media types are films,
+TV, music, pictures and live TV, with live TV parked. On top of that sit
+federation between servers, Watch Together, installed games, plugins and
+semantic photo search. The schema is at **revision 58**. The [Areas](#areas)
+tables hold the status of each piece, and the [Releases](#releases) table records
+when each one landed. What is left is breadth, and it is listed in the
+[Feature backlog](#feature-backlog).
 
 ## Releases
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.54** | 2026-10-04 | **Duplicates, tidied, and photos read after an update without waiting for a scan.** On the live library, 10 of 37 duplicate groups had every copy in one album, such as four identical photos in one folder, and 27 were the same photo filed in two albums. The page now shows them apart, same-album copies first, because those are the accidents. Groups sit side by side: a 2,000 px window fits the ten same-album groups in three rows instead of ten. **The photo pass now starts at boot (#744).** v0.9.53's revision 58 queued every photo for a fingerprint, but that pass only ran after a library scan, so the Duplicates page stayed empty after the upgrade. No unit test covers the startup wiring. No schema change |
+| **v0.9.53** | 2026-10-04 | **Up Next, photo duplicates and Xbox games.** **Up Next (#740):** when an episode's credits begin and something is queued after it, a card names what follows and counts down ten seconds. Both ways forward play out the last three seconds, so the episode ends the way every episode ends. The countdown counts as unattended, so a season left playing still meets the still-watching prompt. **Photo duplicates (#742, [ADR 0075](adr/0075-a-duplicate-is-the-same-bytes.md)):** exact copies only, by SHA-256, each with its album, and nothing picks which copy to keep. Near copies are deferred on evidence: at both 64 and 256 bits, a perceptual hash put two different screenshots closer together than a real resized copy. **Xbox app games (#743):** read from each drive's `.GamingRoot`, `MicrosoftGame.config` and `appxmanifest.xml`, and launched through `shell:AppsFolder`. The package family name is computed from the files and checked against what Windows reports. Revision 58 |
+| v0.9.52 | 2026-10-04 | **Built, never published.** Its one change, Up Next, shipped in v0.9.53 |
+| **v0.9.51** | 2026-10-04 | **Intro fixes, from an audit of 35 intros judged by eye.** Ten minutes of each episode are fingerprinted, not seven: 47 Star Trek title sequences had been cut off at 419.4 s, so the skip landed mid-theme. A studio ident at 0:00 is no longer an intro. Every Lanterns episode had been "skipping" the DC Studios and HBO logos, and the search now looks past them. Revision 57 |
+| **v0.9.50** | 2026-10-04 | **Skip credits on episodes, from the closing theme a season shares (#737, #738).** The film gate was wrong for television: on 40 episodes it threw away six right answers to save one. Episode credits now come from the intro detector's fingerprint engine pointed at the last five minutes, checked against the black run. Shared audio under 20 s from the end is an ident, and is ignored. When the black run is well before the music, the frame gate breaks the tie. Tested on 40 held-out episodes: **0 early, against 3**, with 40 answered against 36. The credits pass also names each file it examines, so its ffmpeg no longer looks orphaned. Revisions 55 and 56 |
+| **v0.9.49** | 2026-10-03 | **Skip credits, on films.** The credits rule was finally checked by eye, and one marker in five was a fade inside the film. Each black-run candidate is now put to a gate that reads frames after it: at least four of five must be 80% near-black, and two must carry text-like edges. Tuned on 40 films, frozen, then run on 40 held-out films: early answers fell **from 5 to 0** (14 to 1 across all 80). Gated markers carry their own source, and the player offers a skip only from it. A marker computed against a length the file did not have, such as Alien³'s at 73%, is recomputed when the length changes. Revision 54 |
 | **v0.9.48** | 2026-10-03 | **Signed in stays signed in, and the logs say why things happened.** **The sign-out**: a session lasts 30 days from its last use and is extended on every request, but its cookie was set once at login and never again, so the browser dropped it exactly 30 days after the password was last typed. Measured to the minute: a session created 09-02 11:50, used daily, last seen 10-02 11:50, with its server-side expiry already in November. The cookie is now re-sent, same token, fresh Max-Age, at most every six hours. A login refused for twenty minutes that day could not be explained, because refusals were never logged; they are now, with a reason (throttled, no such account, wrong password) and never the password. **The logs** ([plan](logging-plan.md)): one helper, `applog.Quiet`, says a thing once per window and then counts, so nothing new becomes the next 3,263-line peer flood. The server now logs what it refused (cross-origin, an unknown API key, a session it no longer knows, an ordinary visitor), sign-ins and sign-outs, one line per playback decision with title, method and reason (direct play used to leave no trace), Watch Together rooms opened, joined, left, timed out and ended, every audited action, library shares, and update checks failing, recovering or finding a release. The desktop window gains `lancastClientNote`, so the page can write what it noticed (being signed out, a codec claim withdrawn, a fallback to conversion, an uncaught error) to `lancast-client.log`, through a closed set of areas, one capped line each and a per-minute ceiling. Every rule break-checked against the behaviour it prevents. **Rides the in-app update**, which brings the client too; the page's notes need both. No schema change |
 | **v0.9.47** | 2026-10-02 | **A paired server that is switched off is logged once, not once a minute.** Measured on a real install: 3,263 `peer not answering` lines in five and a half days, every 63 seconds, for one peer that was off, most of `lancastd.log`. The rail asks each peer what it shares every minute, deliberately, since an unshare has nobody to tell us; the server forwarded every ask and logged every failure as news. It never ran away (the gap held at exactly 63 s for days and polls never overlap), but it multiplied per open window and per peer for as long as the peer stayed off. Now the log follows the state, one line when a peer stops answering and one, with `down_for`, when it comes back ([internal/api/peerhealth.go](../internal/api/peerhealth.go)), and the client asks a failing peer every five minutes instead of every one, returning to a minute on the first answer; refocusing the window still asks at once. Both halves break-checked against the measured behaviour: 60 lines for an hour, and five calls where there should be one. **Also**: the installer stops printing "ERROR: The process ... not found" for the stop-anything-still-running steps, whose failure is the normal case; installing and starting the service keep their output. **Rides the in-app update.** No schema change |
 | **v0.9.46** | 2026-10-01 | **Night mode and dialogue boost one press away, and MKV asked about rather than assumed.** The player's control bar gains two toggles beside the settings button: a crescent for night mode, and a speech bubble for dialogue boost that steps Off, Low, High, with its level as a letter in the corner. You reach for these mid-film, and two clicks into a panel was the wrong distance. They appear exactly where the panel's rows do, on the desktop's own player with a client that can apply them, and dialogue never on a mono track; that rule now lives once so the two cannot disagree. Engaged reads as the bar's neutral state, never gold. **MKV**: the `hevc` capability also granted the Matroska container, so a client that answered for HEVC was sent every MKV whose codecs it could decode, and a failed one could never recover, because the claim that let it through was not one the client knew to withdraw. Matroska is now its own claim, probed with H.264 named so the answer is about the box; WebView2 answers it and plays MKV with every codec tried, so nothing that direct-played before is converted now. **Also**: the WebView2 test harness, unable to start since 2026-09-28, works again. **Rides the in-app update.** No schema change |
@@ -381,7 +367,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→52); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→58); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
@@ -414,6 +400,7 @@ Status: **planned** · **next** · *unplanned*
 | Hardware acceleration | **built** | NVENC, QSV, AMF, VideoToolbox — verified by test encode |
 | Subtitles | **built** | Sidecar, embedded, WebVTT, OpenSubtitles hash matching |
 | React client build | **built** | React + TS + Vite; Home shelves, Browse, Detail, Player, Settings; subtitles local + online; central spatial focus controller (ADR 0004) |
+| Skip intro, skip credits, Up Next | **built** | Markers in their own table ([ADR 0054](adr/0054-a-marker-says-where-the-film-stops.md), [ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md)). Film credits come from black runs put to a frame gate. Episode credits come from the closing theme a season shares, checked against black runs. Intros come from audio a season shares. Every rule was tested on a held-out sample judged by eye. A visible button, never an automatic jump; Up Next counts down and then rolls on through the episode's own ending |
 | Theme music subsystem | specced · **back burner** | Behavior in design.md; blocked on OST identification, which is unplanned. Deliberately parked rather than waiting: nothing else is queued behind it |
 | Music player UI | **built** | Album view with a numbered track list, square sleeves, an audio mode in the player, and a docked mini-player so leaving the player no longer stops the record ([plan](music-client-plan.md)). Playback moved above the router to make that possible — the media element used to be a child of the `/watch` route, and a route owns its DOM |
 | Branding & splash | **built** | App icons + favicon from the emblem, web manifest, and a once-per-session animated splash. Source art in `/assets` |
@@ -434,6 +421,7 @@ Status: **planned** · **next** · *unplanned*
 | Stage 1 — own the window | **built, default** | `LANcast-Client.exe` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
 | Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
 | Flip `-window` to default | **built** | Done after living with it, not after arguing about it. The browser lost on three things a tab cannot fix: LANcast cannot say what its close button means, cannot pin the server's certificate, and gets a warning against a LAN-bound self-signed server that the window does not need. `-browser` is the opt-out, `-window` is kept as a no-op alias so existing shortcuts and the autostart run key keep working, a machine with no WebView2 runtime falls back on its own, and the installer's finish page offers both |
+| Installed games | **built** | Steam, Epic, Battle.net and the Xbox app, each read from the launcher's own files in the client, with no sign-in ([ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)). GOG and EA wait on a test install |
 | Stage 2 — own playback (libmpv) | **built** | Shipped in v0.9.28: the window decodes with libmpv ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), built by LANcast itself as LGPL ([ADR 0069](adr/0069-lancast-builds-its-own-lgpl-libmpv.md)), and streams with a ticket ([ADR 0068](adr/0068-a-native-player-streams-with-a-ticket.md)). Since v0.9.29 the server no longer converts anything for the desktop client |
 
 ### Cross-cutting
@@ -856,7 +844,12 @@ group is not priority.
   crossfade** — a live album with a gap between tracks is a broken record, and
   that is a decoder-scheduling problem in the client rather than anything the
   server can fix.
-- **Photos need more than a grid — starting with people.** Face grouping is the
+- **Photos need more than a grid.** **Built so far:** people (face grouping and
+  naming, in a native sidecar, [ADR 0052](adr/0052-face-grouping-runs-in-a-native-sidecar.md)),
+  semantic search ([ADR 0060](adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
+  the Timeline, and exact duplicates. **Still open:** places, near-copy
+  duplicates, and RAW. All three are described below. The original entry
+  follows, starting with people. Face grouping is the
   feature Google Photos used to justify reading every family album ever uploaded,
   which makes doing it **entirely on the box** the sharpest available statement
   of the difference. The model and the worker are the large part; the **naming
@@ -871,8 +864,19 @@ group is not priority.
   capture time — by deliberate refusal of a general EXIF dependency. That refusal
   was about scope rather than privacy, so it is revisitable, but it should be
   revisited *consciously*: a places/map view needs GPS parsing, and GPS is the
-  one EXIF field that is a privacy decision rather than a parsing chore. Also
-  unbuilt: duplicate detection and RAW.
+  one EXIF field that is a privacy decision rather than a parsing chore.
+  **Decided 2026-10-04: GPS may be read.** A map still needs map imagery, and
+  fetching it from a public map service would break the no-phone-home
+  principle. So the places view is either a list grouped by place with no map,
+  or a map drawn from imagery the owner hosts. That question is open.
+
+  **Exact duplicate detection is built** (v0.9.53,
+  [ADR 0075](adr/0075-a-duplicate-is-the-same-bytes.md)): the same bytes, each
+  copy shown with its album, and nothing picks which copy to keep. **Near copies**
+  (the same picture resized or re-saved) are a measurement still to make against
+  the semantic-search embeddings, once the library is fully indexed. A perceptual
+  hash could not separate them from similar screenshots. **RAW** is unbuilt, with
+  no RAW files to build against.
 
   **Date-grouped browsing is built** — a Timeline view on a picture library,
   grouped by EXIF capture time rather than by folder, with each month fetched
@@ -881,7 +885,8 @@ group is not priority.
   (94.4%), spanning 2006 to 2026, so the column is real rather than inert — the
   check that `media_item.edition` taught this project to run first. The other
   207 are their own bucket. Marked folders are excluded from it entirely
-  (ADR 0051, amended). Face grouping remains the large piece and is untouched.
+  (ADR 0051, amended). Face grouping, the large piece when this was written,
+  has since been built (ADR 0052).
 
 ### Metadata, ratings and discovery
 
@@ -2002,7 +2007,11 @@ that prompted it is one afternoon old.
     in the shipping client, and the cheapest way to run it is to play a file
     with that codec and read the decision reason out of `lancastd.log`.
 
-15. **ffmpeg on first run is a decision before it is any code.** The intent is
+15. ~~**ffmpeg on first run is a decision before it is any code.**~~ **Decided:**
+    [ADR 0048](adr/0048-media-tools-install-themselves-on-first-run.md) was
+    accepted on 2026-08-28 in a narrower form. The tools are a ticked option at
+    setup rather than an unasked fetch (see [Open decisions](#open-decisions)).
+    The original entry follows. The intent is
     to install it automatically rather than waiting to be asked, which
     [ADR 0043](adr/0043-media-tools-are-fetched-not-bundled.md) deliberately did
     not do. That needs an **amendment written and accepted first**: fetching
@@ -2013,6 +2022,33 @@ that prompted it is one afternoon old.
     part the rule is about.
 
 ## What the last pass taught
+
+*The skip-credits pass, 2026-10-03 and 2026-10-04, from v0.9.49 to v0.9.54. The
+lessons from earlier passes follow below it.*
+
+**A rule that is consistent is not a rule that is right.** The credits rule had
+been tested twice and agreed with itself both times. The first time anybody
+looked at the frames around its answers, one film in five was cut off in the
+last act. Every detector change after that was judged the same way: tuned by
+eye, then frozen (the script hashed), then run on a sample nobody had looked
+at.
+
+**One detector's fix can be another's fault.** The frame gate that rescued films
+threw away six right answers on 40 episodes, because television credits roll
+over artwork, on coloured backgrounds, or for under thirty seconds. Films and
+episodes now use different rules.
+
+**Two weak signals can cover each other's failures.** A black run fails by
+landing minutes early, on a fade. Shared audio fails by landing seconds late, on
+an ident. Each is right exactly where the other is wrong, and combined they gave
+zero early answers on held-out episodes where either alone did not.
+
+**A migration that re-queues work does nothing until the work starts.**
+Revision 58 queued 3,079 photos, and nothing ran them until a scan, because the
+photo pass was started only by a scan. Every unit test passed. A new rule: when
+a revision clears a stamp, check that the owning worker starts at boot.
+
+### The pass before (2026-08-15)
 
 *Three feature passes on 2026-08-15 — fifteen backlog items, PRs #245, #246 and
 #247. The findings below are from those, and the first one is the finding.*
