@@ -818,8 +818,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 * for its digest (ADR 0075) — and on a real upgrade 3,079 photos sat
 	 * queued with no scan coming to start the pass, so the duplicates page
 	 * stayed empty. A pass with nothing pending returns at once.
+	 *
+	 * Cover art for the same reason: it too was started only by a scan, so a
+	 * revision that re-queued albums would sit unread until somebody scanned.
 	 */
 	photoSoon()
+	coverSoon()
 
 	// Bind before serving so a port clash is a clear startup failure rather
 	// than a background error nobody sees. An older instance still holding the
