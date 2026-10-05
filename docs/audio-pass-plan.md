@@ -349,6 +349,40 @@ and 9.2 dB on high, against the mid, on every track. Overall loudness fell
 Neither number says anything sounds better. That is the listening test, in the
 desktop client, on the owner's speakers.
 
+### The listening test (v0.9.57, 2026-10-05)
+
+On the owner's speakers, through the desktop client, on three tracks of his
+choosing: Woodkid, The 69 Eyes' "Devils", and AJR.
+
+**Night mode: clear, and too loud.** Woodkid was "loud but very clear". Devils
+was "quite loud". The measurement explains both. `DynamicsCompressorNode` adds
+make-up gain of its own, about +13 dB at −30 dB and 4:1, and the trim after it
+was 0. So every track came out evened but between −13 and −18 LUFS, which is
+ordinary listening level, not a night one.
+
+The trim is now −5 dB, and every track lands near −20 LUFS:
+- the pop master, −9.0 → −18.3;
+- the symphony, −18.7 → −22.6;
+- the acoustic track, −14.9 → −20.1.
+
+The loudness ranges are unchanged (the trim is a straight gain), and every peak
+is at −2.1 dBTP or below.
+
+**Vocals: removed.** Neither level made a discernible difference, and the track
+sounded better without it. The numbers had already said why, without anyone
+reading them that way. On the pop master the sides were already 9 dB under the
+centre, and in a modern mix the bass, drums and lead instruments share that
+centre with the voice. Lowering the sides by 6 or 9 dB took out very little and
+narrowed the stereo image. The measurement proved the matrix did what it said;
+it could not prove that what it said was worth doing.
+
+Lifting a voice in music needs one of two things:
+- a presence band on an equaliser (Phase 3);
+- real centre extraction in the frequency domain.
+
+Neither is planned on the strength of this. Phase 1's dialogue boost on films is
+a different filter, on a different engine, and is not affected.
+
 ## Phase 3: the equaliser
 
 Bands on both engines (`equalizer` in lavfi, `BiquadFilterNode` in Web Audio),

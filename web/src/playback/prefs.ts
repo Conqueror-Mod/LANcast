@@ -92,10 +92,8 @@ export interface Prefs {
   nightVideo: boolean;
   /** 0 off, 1 low, 2 high. See DIALOGUE_LEVELS. */
   dialogueVideo: number;
-  /** Night mode on music: the quiet passages up, the loud ones down. */
+  /** Night mode on music: evened out, and sitting lower. */
   nightMusic: boolean;
-  /** 0 off, 1 low, 2 high: the stereo sides lowered under the centre voice. */
-  vocalsMusic: number;
 }
 
 /** The dialogue-boost levels, in order. The index is what the player is sent. */
@@ -113,7 +111,6 @@ export const DEFAULTS: Prefs = {
   nightVideo: false,
   dialogueVideo: 0,
   nightMusic: false,
-  vocalsMusic: 0,
 };
 
 const KEY = "lancast:playback-prefs";

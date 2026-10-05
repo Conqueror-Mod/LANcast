@@ -26,8 +26,9 @@ v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 - **v0.9.54:** tidied the duplicates page and started the photo pass at boot.
 
 v0.9.52 was built and never published: its one change, Up Next, shipped in v0.9.53
-instead. Audio pass Phase 2 is built for music (night mode and vocals, measured
-offline; [plan](audio-pass-plan.md)) and waits on a listening test. Browser-tab
+instead. Audio pass Phase 2 is built for music: night mode, re-levelled after the
+listening test, which also removed a vocals control that did nothing audible
+([plan](audio-pass-plan.md)). Browser-tab
 films are the rest of that phase.
 
 **Shipped but never watched working.** Each one is something the suites
@@ -1598,7 +1599,8 @@ group is not priority.
   Every transition was read from `mpv.log` in the installed service, and both
   controls were **listened to** on action, a whisper-quiet scene and a stereo
   track, and judged clearly worth having. **Phase 2 is built for music**
-  (night mode and vocals on Web Audio, measured offline before shipping); the
+  (night mode on Web Audio, measured offline and then listened to; a vocals
+  control was tried and removed); the
   browser-tab film path is what remains of it.
 
   The original entry follows.

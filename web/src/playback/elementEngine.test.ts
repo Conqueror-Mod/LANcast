@@ -51,7 +51,7 @@ class FakeContext {
   });
 }
 
-const NIGHT_ON = { night: true, vocals: 0 };
+const NIGHT_ON = { night: true };
 
 beforeEach(() => {
   made = [];
@@ -74,7 +74,7 @@ describe("applyElementFX", () => {
     const el = document.createElement("video");
     applyElementFX(el, NIGHT_ON, "");
     applyElementFX(el, FX_OFF, "");
-    applyElementFX(el, { night: false, vocals: 2 }, "");
+    applyElementFX(el, NIGHT_ON, "");
     expect(made).toHaveLength(1);
     expect(made[0].sources).toBe(1);
   });

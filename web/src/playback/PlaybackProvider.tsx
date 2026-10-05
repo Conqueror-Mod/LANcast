@@ -233,7 +233,7 @@ interface PlaybackState {
    *  enough to have them (mpvBackend.ts, nativeFeatures). */
   audioFX: boolean;
   /** Channels in the music track that is playing, from the probe; 0 when not
-   *  music or not known. Night mode is offered on 1 or 2, vocals on 2. */
+   *  music or not known. Night mode is offered on 1 or 2. */
   musicChannels: number;
   cover: string | undefined;
   surface: Surface;
@@ -1209,8 +1209,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   /*
    * ---- the audio pass on music (Phase 2) ------------------------------------
    *
-   * Music plays through the element everywhere, so its night mode and vocal
-   * lift run in Web Audio (elementEngine.ts). Offered only when the probe says
+   * Music plays through the element everywhere, so its night mode runs in
+   * Web Audio (elementEngine.ts). Offered only when the probe says
    * how many channels the track has: a control engaged on a guess is a control
    * that might do nothing, and nobody can tell that from listening.
    */
@@ -1225,10 +1225,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Anything that is not music gets a straight wire. The element is shared
     // with films in a browser tab, and they are not this effect's business.
     const fx = isAudio
-      ? fxApplies({ night: prefs.nightMusic, vocals: prefs.vocalsMusic }, musicChannels)
+      ? fxApplies({ night: prefs.nightMusic }, musicChannels)
       : FX_OFF;
     applyElementFX(v, fx, prefs.audioDevice);
-  }, [isAudio, musicChannels, prefs.nightMusic, prefs.vocalsMusic, prefs.audioDevice]);
+  }, [isAudio, musicChannels, prefs.nightMusic, prefs.audioDevice]);
 
   // A routed element is silent while its context is suspended, and a context
   // can be suspended by the system as well as at birth. Every play resumes it.
