@@ -434,3 +434,54 @@ its episodes share at the end is a few seconds, and why has not been looked
 into — and *Storm of the Century*, a three-part miniseries. Both keep whatever
 the black run finds.
 
+## Amendment — 2026-10-05: how late the markers are, and a new kind of early one
+
+Decision 4, the marker as the watched threshold, was held back because some
+markers land late. This is the measurement it was waiting for. Thirty films and
+thirty episodes were drawn at random from the final markers (gated films;
+episodes from the season pass or the black run), and frames from two minutes
+before each marker to thirty seconds after were judged by eye. Every early-looking
+answer was then followed four minutes further.
+
+| 60 random items | on time | late | early |
+|---|---|---|---|
+| episodes | **30** | 0 | 0 |
+| films | 15 | **13** | **2** |
+
+**Episodes are exact.** In every one, the last scene was at −30 s and the
+credits started at the marker.
+
+**Film markers are often late, and by a lot.** Almost all 13 are **90 seconds
+or more** late, and the cause is always the same: the black run that passes the
+gate comes after credits that have already started.
+- Styled titles over the final scenes: Fantastic Beasts 2, Iron Man 3, Tremors:
+  Shrieker Island, National Security, Violent Night.
+- A mid-credits scene: Cruella, Thunderbolts*, Zombieland: Double Tap.
+- Outtakes beside the crawl: Rush Hour.
+- Credits over the final dance or scene: Sister Act 2, Fear and Loathing in Las
+  Vegas.
+- 30–60 seconds late: Blade II, Groundhog Day.
+
+For Skip credits this is harmless, since nobody loses any of the film.
+
+**So decision 4 is taken for episodes and refused for films.** As a watched
+threshold, a late marker would leave someone who stopped at the real credits
+short of "finished". That would be 13 films in 30, each of which today's 90%
+counts as watched. For episodes the marker was exact 30 times out of 30. *(Not
+built yet: recorded as decided, waiting on the owner's go-ahead.)*
+
+**A new kind of early answer.** The held-out test put early film answers at
+0 of 40. This sample has 2 of 30:
+- **The NeverEnding Story** is five minutes early. Its last dialogue, the Empress
+  and Bastian, is filmed as faces against pure black. That is mostly near-black
+  and has edges, so the gate read it as text on black. The ride on Falkor and the
+  chase follow it.
+- **The Pagemaster** is about 45 seconds early, on a dark closing scene.
+
+Across all 70 held-out and fresh films, that is **2 early**. The earlier
+"0 early" was true of its sample but too good a summary of the rule. The weak
+spot is specific: a lit face on black. Telling text from faces needs a better
+edge feature than density, for example the horizontal stroke structure of
+lettering. That is a measurement for a later pass, and nothing is built on it
+here.
+
