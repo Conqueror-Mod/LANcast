@@ -1,6 +1,6 @@
 # ADR 0054 — A marker says where the film stops
 
-Date: 2026-09-01 · Status: **proposed**
+Date: 2026-09-01 · Status: **accepted** 2026-10-04, built and amended (see the amendments below)
 
 Stage 1 of two. This one is about **credits**, which both films and episodes
 have. Intros are the harder half, they exist only on episodes, and they need a

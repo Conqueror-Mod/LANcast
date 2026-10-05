@@ -1,6 +1,6 @@
 # ADR 0055 — An intro is what every episode shares
 
-Date: 2026-09-02 · Status: **proposed**
+Date: 2026-09-02 · Status: **accepted** 2026-10-04, built and amended (see the amendments below)
 
 Stage 2 of [ADR 0054](0054-a-marker-says-where-the-film-stops.md), which
 recorded intros as a second stage and deliberately did not design them. It
