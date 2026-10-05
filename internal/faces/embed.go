@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -55,6 +56,22 @@ type Indexer struct {
 	st   EmbedStore
 	tool *Tool
 	log  *slog.Logger
+
+	/*
+	 * Thumbnail finds the display copy the photo worker cached for a
+	 * photograph, for a second attempt when the original cannot be read.
+	 *
+	 * The embedding worker reads what its decoder reads, and HEIC and BMP are
+	 * not that: on a real library 19 HEIC and 7 BMP photographs failed every
+	 * time. The photo worker already decoded every one of them — through ffmpeg
+	 * for HEIC — into a JPEG for the grid, and a model that looks at 224
+	 * pixels loses nothing by looking at a 1600-pixel copy. Nil means no
+	 * second attempt.
+	 */
+	Thumbnail func(ctx context.Context, it store.Item) (string, bool)
+
+	// embedFn stands in for the worker process in tests. Nil is the process.
+	embedFn func(ctx context.Context, paths []string) ([]embedLine, error)
 
 	mu    sync.Mutex
 	stats EmbedStats
@@ -112,9 +129,30 @@ func (ix *Indexer) Run(ctx context.Context, libraryID int64) error {
 		 */
 		return fmt.Errorf("the worker did not name its model; refusing to store vectors under a guess")
 	}
+	return ix.runModel(ctx, libraryID, model)
+}
 
+// runModel is the pass itself, once the worker is known to be ready and has
+// named its model. Split from Run so the loop is tested without a worker.
+func (ix *Indexer) runModel(ctx context.Context, libraryID int64, model string) error {
 	ix.set(func(s *EmbedStats) { *s = EmbedStats{Running: true} })
 	defer ix.set(func(s *EmbedStats) { s.Running = false })
+
+	/*
+	 * Each photograph is tried once per pass.
+	 *
+	 * A photograph that cannot be embedded keeps no vector, so it stays
+	 * pending, and the pending query hands it straight back. The loop asked
+	 * again until nothing was pending, which for a photograph that will never
+	 * embed is never: on a real library the last 26 — HEIC and BMP — were sent
+	 * round and round, the worker restarted and its model reloaded each time,
+	 * and the failed count passed 5,000 for a library of 3,079. A batch holding
+	 * nothing new ends the pass; what failed is tried again on the next one,
+	 * which is still right for a drive that was asleep.
+	 */
+	tried := map[int64]bool{}
+	var failures []embedFailure
+	defer func() { ix.report(failures) }()
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -124,13 +162,24 @@ func (ix *Indexer) Run(ctx context.Context, libraryID int64) error {
 		if err != nil {
 			return err
 		}
-		if len(items) == 0 {
-			ix.set(func(s *EmbedStats) { s.Remaining = 0 })
+		var fresh []store.Item
+		for _, it := range items {
+			if !tried[it.ID] {
+				tried[it.ID] = true
+				fresh = append(fresh, it)
+			}
+		}
+		if len(fresh) == 0 {
+			if n, err := ix.st.PhotosPendingEmbeddingCount(ctx, libraryID, model); err == nil {
+				ix.set(func(s *EmbedStats) { s.Remaining = n })
+			}
 			return nil
 		}
-		if err := ix.batch(ctx, items, model); err != nil {
+		failed, err := ix.attempt(ctx, fresh, model)
+		if err != nil {
 			return err
 		}
+		failures = append(failures, failed...)
 		/*
 		 * Remaining is re-read rather than decremented.
 		 *
@@ -151,43 +200,158 @@ func (ix *Indexer) Run(ctx context.Context, libraryID int64) error {
 // batches is responsive.
 const embedBatch = 200
 
-func (ix *Indexer) batch(ctx context.Context, items []store.Item, model string) error {
+// embedFailure is one photograph that could not be embedded, and why.
+type embedFailure struct {
+	Path   string
+	Reason string
+}
+
+/*
+ * attempt embeds a batch, gives what failed a second try from its cached
+ * thumbnail, and counts what still failed — once, here, so a photograph that
+ * fails its original and its thumbnail is one failure and not two.
+ */
+func (ix *Indexer) attempt(ctx context.Context, items []store.Item, model string) ([]embedFailure, error) {
+	failed, err := ix.batch(ctx, items, model)
+	if err != nil {
+		return nil, err
+	}
+	var out []embedFailure
+	var retry []store.Item
+	original := map[int64]string{}
+	reason := map[int64]string{}
+	for _, f := range failed {
+		if ix.Thumbnail != nil {
+			if thumb, ok := ix.Thumbnail(ctx, f.item); ok {
+				c := f.item
+				original[c.ID], reason[c.ID] = c.Path, f.reason
+				c.Path = thumb
+				retry = append(retry, c)
+				continue
+			}
+		}
+		out = append(out, embedFailure{Path: f.item.Path, Reason: f.reason})
+	}
+	if len(retry) > 0 {
+		again, err := ix.batch(ctx, retry, model)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range again {
+			out = append(out, embedFailure{Path: original[f.item.ID], Reason: reason[f.item.ID]})
+		}
+	}
+	for range out {
+		ix.set(func(s *EmbedStats) { s.Failed++ })
+	}
+	return out, nil
+}
+
+// report says once, at the end of a pass, what could not be indexed. Not a
+// line per photograph: a library of unreadable files would bury the log.
+func (ix *Indexer) report(failures []embedFailure) {
+	if len(failures) == 0 {
+		return
+	}
+	var examples []string
+	for i, f := range failures {
+		if i == 5 {
+			break
+		}
+		examples = append(examples, filepath.Base(f.Path))
+	}
+	ix.log.Warn("photographs could not be indexed for search",
+		"count", len(failures), "examples", examples, "reason", failures[0].Reason)
+}
+
+type batchFailure struct {
+	item   store.Item
+	reason string
+}
+
+/*
+ * batch sends one batch to the worker, stores what embeds, and returns what
+ * did not without counting it — attempt decides whether a failure is final.
+ *
+ * Paths map to a list rather than one item: two photographs that are the same
+ * file share one cached thumbnail, so a retry can send one path for two items.
+ */
+func (ix *Indexer) batch(ctx context.Context, items []store.Item, model string) ([]batchFailure, error) {
+	byPath := make(map[string][]store.Item, len(items))
+	var paths []string
+	for _, it := range items {
+		if _, seen := byPath[it.Path]; !seen {
+			paths = append(paths, it.Path)
+		}
+		byPath[it.Path] = append(byPath[it.Path], it)
+	}
+
+	embed := ix.embedFn
+	if embed == nil {
+		embed = ix.embedProcess
+	}
+	lines, err := embed(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
+	answered := map[string]bool{}
+	var failed []batchFailure
+	for _, line := range lines {
+		its, ok := byPath[line.Path]
+		if !ok {
+			ix.log.Warn("the embedding worker returned a path that was not sent",
+				"path", line.Path)
+			continue
+		}
+		answered[line.Path] = true
+		for _, it := range its {
+			if ok, reason := ix.store(ctx, it, line, model); !ok {
+				failed = append(failed, batchFailure{item: it, reason: reason})
+			}
+		}
+	}
+	// A path the worker never answered for is a failure too, not a silence.
+	for _, p := range paths {
+		if !answered[p] {
+			for _, it := range byPath[p] {
+				failed = append(failed, batchFailure{item: it, reason: "no answer from the worker"})
+			}
+		}
+	}
+	return failed, nil
+}
+
+// embedProcess runs the worker's `embed` command over paths and collects its
+// answers. Feeding and reading at once — see the file comment: a full output
+// buffer stops the worker reading, and writing everything first deadlocks.
+func (ix *Indexer) embedProcess(ctx context.Context, paths []string) ([]embedLine, error) {
 	path, ok := ix.tool.Path()
 	if !ok {
-		return fmt.Errorf("the worker is not installed")
+		return nil, fmt.Errorf("the worker is not installed")
 	}
-
-	byPath := make(map[string]store.Item, len(items))
-	for _, it := range items {
-		byPath[it.Path] = it
-	}
-
 	cmd := exec.CommandContext(ctx, path, "embed", "-models", ix.tool.ModelsDir)
 	cmd.Env = ix.tool.env()
-
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
-
-	// Feeding and reading at once — see the file comment. A full output buffer
-	// stops the worker reading, and writing everything first deadlocks.
 	go func() {
-		for _, it := range items {
-			if _, err := fmt.Fprintln(stdin, it.Path); err != nil {
+		for _, p := range paths {
+			if _, err := fmt.Fprintln(stdin, p); err != nil {
 				break
 			}
 		}
 		stdin.Close()
 	}()
 
+	var lines []embedLine
 	sc := bufio.NewScanner(stdout)
 	// 512 float32s as JSON text is comfortably past the default 64KB.
 	sc.Buffer(make([]byte, 0, 256*1024), 8*1024*1024)
@@ -197,22 +361,24 @@ func (ix *Indexer) batch(ctx context.Context, items []store.Item, model string) 
 			ix.log.Warn("unreadable line from the embedding worker", "error", err)
 			continue
 		}
-		it, ok := byPath[line.Path]
-		if !ok {
-			ix.log.Warn("the embedding worker returned a path that was not sent",
-				"path", line.Path)
-			continue
-		}
-		ix.record(ctx, it, line, model)
+		lines = append(lines, line)
 	}
-
 	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("embedding worker: %w", err)
+		return nil, fmt.Errorf("embedding worker: %w", err)
 	}
-	return sc.Err()
+	return lines, sc.Err()
 }
 
+// record stores one answer and counts it, success or failure.
 func (ix *Indexer) record(ctx context.Context, it store.Item, line embedLine, model string) {
+	if ok, _ := ix.store(ctx, it, line, model); !ok {
+		ix.set(func(s *EmbedStats) { s.Failed++ })
+	}
+}
+
+// store writes one answer and reports whether it was stored, counting a
+// success and leaving a failure for the caller to count.
+func (ix *Indexer) store(ctx context.Context, it store.Item, line embedLine, model string) (bool, string) {
 	if line.Error != "" || len(line.Vector) == 0 {
 		/*
 		 * A photograph that cannot be embedded is counted and left.
@@ -227,9 +393,9 @@ func (ix *Indexer) record(ctx context.Context, it store.Item, line embedLine, mo
 		 */
 		if line.Error != "" {
 			ix.log.Debug("could not embed a photograph", "path", it.Path, "error", line.Error)
+			return false, line.Error
 		}
-		ix.set(func(s *EmbedStats) { s.Failed++ })
-		return
+		return false, "an empty vector"
 	}
 
 	if err := ix.st.SavePhotoEmbedding(ctx, it.ID, model, line.Vector); err != nil {
@@ -242,8 +408,8 @@ func (ix *Indexer) record(ctx context.Context, it store.Item, line embedLine, mo
 		 * than an error to escalate, so it is counted and logged at debug.
 		 */
 		ix.log.Debug("could not store an embedding", "path", it.Path, "error", err)
-		ix.set(func(s *EmbedStats) { s.Failed++ })
-		return
+		return false, err.Error()
 	}
 	ix.set(func(s *EmbedStats) { s.Embedded++ })
+	return true, ""
 }
