@@ -26,8 +26,9 @@ v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 - **v0.9.54:** tidied the duplicates page and started the photo pass at boot.
 
 v0.9.52 was built and never published: its one change, Up Next, shipped in v0.9.53
-instead. Audio pass Phase 2 (music and browser tabs) is waiting for the music-metadata
-work to finish, not for a design.
+instead. Audio pass Phase 2 is built for music (night mode and vocals, measured
+offline; [plan](audio-pass-plan.md)) and waits on a listening test. Browser-tab
+films are the rest of that phase.
 
 **Shipped but never watched working.** Each one is something the suites
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
@@ -1596,8 +1597,9 @@ group is not priority.
   `AudioContext`, and `createMediaElementSource` works once per element.
   Every transition was read from `mpv.log` in the installed service, and both
   controls were **listened to** on action, a whisper-quiet scene and a stereo
-  track, and judged clearly worth having. Phase 2 is therefore worth building,
-  and unscheduled.
+  track, and judged clearly worth having. **Phase 2 is built for music**
+  (night mode and vocals on Web Audio, measured offline before shipping); the
+  browser-tab film path is what remains of it.
 
   The original entry follows.
 

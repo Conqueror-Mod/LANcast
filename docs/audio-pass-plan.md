@@ -264,6 +264,91 @@ Night mode maps to `DynamicsCompressorNode`. Dialogue boost on stereo is a
 peaking `BiquadFilterNode` around the speech band. That is an approximation, and
 the settings text should not promise more.
 
+### Built for music (2026-10-05)
+
+Music is the case that shipped first, because the desktop client plays it
+through the element (films go to mpv). The graph is `elementAudio.ts`, and the
+element routing is `elementEngine.ts`. Its preferences are separate from the
+film's (`nightMusic`, `vocalsMusic`).
+
+**Vocals, not a speech-band peak.** In music the voice is almost always mixed
+dead centre, so in stereo it is what both sides share. The graph lowers the
+side signal (L−R)/2 under the mid (L+R)/2, using the same gains Phase 1 gives
+every surround channel but the centre: −6 dB on low, −9 dB on high. As a 2×2
+matrix each output is a weighted average of L and R, so it cannot exceed the
+input's peak. The quirk of Phase 1's design, that the boost lowers the
+surroundings rather than raising the voice, holds here as well.
+
+**Where the controls engage.**
+- Night mode engages on mono or stereo only. A `DynamicsCompressorNode` carries
+  at most two channels and would fold surround down without saying so.
+- Vocals engages on stereo only.
+- Both are offered only once the probe has given the track's channel count.
+
+**The traps, as handled.**
+- The element is routed once, on the first control engaged, and is never
+  unrouted. Off means the graph re-routes itself to a straight wire.
+- The context's sink follows the output picker, because the element's own sink
+  stops counting once it is routed.
+- The context resumes on every play.
+- The element is shared with films in a browser tab. So the context's output is
+  opened to the device's full channel count, and the graph's ends pass whatever
+  arrives. A routed element playing a 5.1 film is not folded to stereo by a
+  graph doing nothing.
+
+Browser-tab films are not wired yet. That is the rest of this phase, and the
+pop-out move test gaining an `AudioContext` belongs to it.
+
+### Phase 2, measured (2026-10-05, offline)
+
+Measured with the exact module the player uses. It was bundled with esbuild and
+rendered through Chromium's own `OfflineAudioContext` to 32-bit float WAV, so
+any overs survive, then read with ffmpeg's `ebur128`. Three tracks from the test
+library:
+- a symphony movement: dynamic, with a 20.8 LU range;
+- a loud pop master: −9 LUFS, peaking over full scale;
+- an acoustic track: already narrow.
+
+**Everything off passes through untouched.** The symphony with every control
+off measured exactly as the file did: −18.7 LUFS, 20.8 LU, −0.9 dBTP.
+
+**Night mode: the film's numbers were wrong for music.** Phase 1's −40 dB at 8:1
+took the symphony to 6.3 LU, which was fine. It took the pop master from 8.1 LU
+to 1.1 LU and 7.8 dB quieter, which is a wall of sound. A sweep:
+
+| setting | symphony (LUFS / LRA) | pop | acoustic |
+|---|---|---|---|
+| off | −18.7 / 20.8 | −9.0 / 8.1 | −14.9 / 3.2 |
+| −40 dB, 8:1 | −19.6 / 6.3 | −16.8 / 1.1 | −17.9 / 1.3 |
+| **−30 dB, 4:1** (chosen) | −17.6 / 11.3 | −13.3 / 2.5 | −15.1 / 1.9 |
+| −24 dB, 3:1 | −16.7 / 15.3 | −11.6 / 3.6 | −13.9 / 2.1 |
+
+The chosen setting does three things:
+- it roughly halves the symphony's range;
+- it keeps quiet material within about a decibel of where it was;
+- it brings the loud master down 4 dB.
+
+The gap between the loudest and quietest of the three shrinks from 9.7 dB to
+4.3 dB. That is what late-night listening wants. The listening test decides
+whether pop at 2.5 LU is still too flat.
+
+**The ceiling.** The first ceiling bent towards full scale and measured
++1.4 dBTP. Inter-sample overs ride on top of a waveshaper's output, as they do on
+Phase 1's sample-peak limiter. A curve that is linear to 0.5 and never passes
+0.7 holds every render at −1.1 dBTP or below.
+
+The ceiling is a waveshaper, not a second compressor, because
+`DynamicsCompressorNode` always adds make-up gain. A "limiter" built from one
+makes everything louder.
+
+**Vocals did exactly what the matrix says.** The side signal fell 6.1 dB on low
+and 9.2 dB on high, against the mid, on every track. Overall loudness fell
+0.6–1.2 LU, which is the side content leaving. Peaks only fell: the pop master,
++1.0 dBTP off, measured +0.6 with vocals on.
+
+Neither number says anything sounds better. That is the listening test, in the
+desktop client, on the owner's speakers.
+
 ## Phase 3: the equaliser
 
 Bands on both engines (`equalizer` in lavfi, `BiquadFilterNode` in Web Audio),
