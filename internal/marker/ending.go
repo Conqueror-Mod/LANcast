@@ -109,3 +109,31 @@ func EpisodeCreditsFrom(black Credits, ending Intro, durationSec float64, gate f
 		return fromEnding()
 	}
 }
+
+/*
+ * TrustedCredits reports whether a credits marker from source may be acted on
+ * for an item of this kind: offered as Skip credits by the player, and on an
+ * episode used as the point the episode counts as watched.
+ *
+ * The same rule as the player's (web/src/lib/skip.ts), kept beside the sources
+ * it names: the gated rule on anything; the ungated rule and the closing theme
+ * on an episode only. The ungated rule was early on one film in five and the
+ * closing theme only exists for a season.
+ */
+func TrustedCredits(itemKind, source string) bool {
+	switch source {
+	case Source:
+		return true
+	case SourceUngated, SourceEnding:
+		return itemKind == "episode"
+	}
+	return false
+}
+
+// CreditsWindowLo and CreditsWindowHi bound where an acted-on credits marker may
+// sit, as shares of the file — the player's own check, so a stale marker (one
+// chosen against a length the file did not have) is never believed.
+const (
+	CreditsWindowLo = 0.88
+	CreditsWindowHi = 0.99
+)
