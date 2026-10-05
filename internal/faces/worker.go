@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"lancast/internal/photo"
 	"lancast/internal/store"
 )
 
@@ -56,13 +59,81 @@ type Worker struct {
 	// does not mean waiting for a library.
 	BatchSize int
 
+	/*
+	 * Display finds the upright copy the photo worker cached for the grid.
+	 *
+	 * Used for a photograph the detector would see wrongly or not at all (see
+	 * readsUpright). Nil, or no copy yet, and the file is used as before.
+	 */
+	Display func(ctx context.Context, it store.Item) (string, bool)
+
+	// upright reports whether the detector, given this file, sees the picture
+	// the right way up. A field so tests can answer without real photographs.
+	upright func(path string) bool
+
 	mu      sync.Mutex
 	running bool
 	stats   Stats
 }
 
 func NewWorker(st Store, tool *Tool, log *slog.Logger) *Worker {
-	return &Worker{st: st, tool: tool, log: log, BatchSize: 200}
+	return &Worker{st: st, tool: tool, log: log, BatchSize: 200, upright: readsUpright}
+}
+
+// detectable is what the face worker's decoder reads: the image/* packages it
+// registers. Anything else fails to decode there.
+var detectable = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true}
+
+/*
+ * readsUpright reports whether the detector sees this file as it is meant to be
+ * seen: a format it decodes, stored without an EXIF turn.
+ *
+ * Go's decoders ignore EXIF orientation, and so does the detector. On the live
+ * library, photos stored upright had a face found in 61% of cases, photos
+ * stored on their side in 10%, and upside down in none. HEIC, BMP and WebP were
+ * never decoded at all.
+ */
+func readsUpright(path string) bool {
+	if !detectable[strings.ToLower(filepath.Ext(path))] {
+		return false
+	}
+	o := photo.Orientation(path)
+	return o == 0 || o == 1
+}
+
+// target is one photograph the detector is about to read, and the picture its
+// boxes will be measured in.
+type target struct {
+	item  store.Item
+	frame string
+}
+
+/*
+ * plan decides what the detector reads for each photograph, keyed by the path
+ * sent to it.
+ *
+ * A path can stand for more than one photograph: exact duplicates share one
+ * cached display copy, and each of them gets the faces found in it.
+ */
+func (w *Worker) plan(ctx context.Context, items []store.Item) (map[string][]target, []string) {
+	byPath := make(map[string][]target, len(items))
+	var order []string
+	add := func(path string, t target) {
+		if _, seen := byPath[path]; !seen {
+			order = append(order, path)
+		}
+		byPath[path] = append(byPath[path], t)
+	}
+	for _, it := range items {
+		if w.Display != nil && w.upright != nil && !w.upright(it.Path) {
+			if shown, ok := w.Display(ctx, it); ok {
+				add(shown, target{item: it, frame: store.FrameDisplay})
+				continue
+			}
+		}
+		add(it.Path, target{item: it})
+	}
+	return byPath, order
 }
 
 // Stats returns a copy of the current progress.
@@ -171,10 +242,7 @@ func (w *Worker) batch(ctx context.Context, items []store.Item) error {
 		return fmt.Errorf("the face worker is not installed")
 	}
 
-	byPath := make(map[string]store.Item, len(items))
-	for _, it := range items {
-		byPath[it.Path] = it
-	}
+	byPath, order := w.plan(ctx, items)
 
 	args := []string{"detect", "-models", w.tool.ModelsDir}
 	cmd := exec.CommandContext(ctx, path, args...)
@@ -196,8 +264,8 @@ func (w *Worker) batch(ctx context.Context, items []store.Item) error {
 	// output buffer stops reading its input: writing the whole batch first
 	// deadlocks on any library big enough to matter.
 	go func() {
-		for _, it := range items {
-			if _, err := fmt.Fprintln(stdin, it.Path); err != nil {
+		for _, p := range order {
+			if _, err := fmt.Fprintln(stdin, p); err != nil {
 				break
 			}
 		}
@@ -214,13 +282,15 @@ func (w *Worker) batch(ctx context.Context, items []store.Item) error {
 			w.log.Warn("unreadable line from the face worker", "error", err)
 			continue
 		}
-		it, ok := byPath[r.Path]
+		targets, ok := byPath[r.Path]
 		if !ok {
 			w.log.Warn("the face worker returned a path that was not sent",
 				"path", r.Path)
 			continue
 		}
-		w.record(ctx, it, r)
+		for _, t := range targets {
+			w.record(ctx, t.item, t.frame, r)
+		}
 	}
 
 	if err := cmd.Wait(); err != nil {
@@ -229,7 +299,7 @@ func (w *Worker) batch(ctx context.Context, items []store.Item) error {
 	return sc.Err()
 }
 
-func (w *Worker) record(ctx context.Context, it store.Item, r result) {
+func (w *Worker) record(ctx context.Context, it store.Item, frame string, r result) {
 	if r.Error != "" {
 		// A photograph that cannot be read is marked examined anyway. It will
 		// not become readable by being tried again immediately, and leaving it
@@ -247,7 +317,7 @@ func (w *Worker) record(ctx context.Context, it store.Item, r result) {
 	for _, f := range r.Faces {
 		faces = append(faces, store.Face{
 			ItemID: it.ID, X: f.X, Y: f.Y, W: f.W, H: f.H,
-			Score: f.Score, Embedding: f.Embedding,
+			Score: f.Score, Embedding: f.Embedding, Frame: frame,
 		})
 	}
 	if err := w.st.RecordFaces(ctx, it.ID, faces); err != nil {

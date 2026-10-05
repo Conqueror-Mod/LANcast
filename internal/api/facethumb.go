@@ -10,6 +10,8 @@ import (
 	"strconv"
 
 	"golang.org/x/image/draw"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -59,6 +61,30 @@ func (s *Server) faceThumb(w http.ResponseWriter, r *http.Request) {
 			"face", id, "item", item.ID, "error", err)
 		writeError(w, http.StatusNotFound, "not_found", "no such face")
 		return
+	}
+
+	/*
+	 * A face found in the display copy is cut from the display copy.
+	 *
+	 * Its box is measured in that picture -- upright, and scaled for the grid --
+	 * and laid over the file it would land somewhere else, or nowhere: the
+	 * file may be on its side, or a HEIC nothing here decodes. The copy lives
+	 * in the artwork cache under a validated hash, so the containment check
+	 * above has already been passed by the photograph this face belongs to.
+	 */
+	if face.Frame == store.FrameDisplay {
+		items := []store.Item{*item}
+		shown, ok := "", false
+		if err := s.st.AttachArtwork(r.Context(), items); err == nil &&
+			items[0].Artwork != nil && items[0].Artwork.Poster != "" {
+			shown, ok = s.art.OriginalPath(items[0].Artwork.Poster)
+		}
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "unavailable",
+				"the photograph's display copy is missing")
+			return
+		}
+		path = shown
 	}
 
 	f, err := os.Open(path)

@@ -232,8 +232,6 @@ func (c *Cache) lockFor(key string) *sync.Mutex {
 	return l
 }
 
-// pathFor shards by the first two hash characters so no directory accumulates
-// tens of thousands of entries.
 // OriginalPath is where a cached original lives on disk, and whether it is
 // there. For a reader that wants a file rather than a stream — the embedding
 // worker takes paths.
@@ -248,6 +246,8 @@ func (c *Cache) OriginalPath(hash string) (string, bool) {
 	return p, true
 }
 
+// pathFor shards by the first two hash characters so no directory accumulates
+// tens of thousands of entries.
 func (c *Cache) pathFor(hash string, size Size) string {
 	return filepath.Join(c.root, hash[:2], hash, string(size)+".jpg")
 }

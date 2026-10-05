@@ -192,3 +192,41 @@ only executed during a release — the signing step that had never run, and the
 update swap that reached staging and stopped. `lancast-faces` should therefore
 be **built and published by CI before anything depends on it**, and exercised on
 a real install, before a line of the naming UI is written.
+
+## Amendment — 2026-10-05: the detector reads the picture upright
+
+**What was wrong.** The detector decodes with Go's image packages. Those read
+JPEG, PNG and GIF, and ignore EXIF orientation. On the live library, measured
+from a copy of its database:
+
+| Photos | With a face found |
+|---|---|
+| stored upright (2,555) | 61% |
+| stored on their side, EXIF 5–8 (347) | 10% |
+| stored upside down, EXIF 3 (19) | 0% |
+| HEIC, BMP, WebP (27) | 0%, every one a decode error |
+
+A phone held in portrait stores its picture sideways and says so in EXIF, so
+the detector was looking for faces lying down.
+
+**The fix.** For a photo the detector would read wrongly or not at all, it reads
+the display copy the photo worker already caches for the grid. That copy is
+decoded through ffmpeg where Go cannot decode the file, turned upright, and
+fitted to 1,600 pixels. A face box is measured in the picture it was found in,
+so each face row now records that picture: `face.frame` is `display` for the
+copy and NULL for the file. The face crop is cut from the same picture.
+
+Measured with the installed worker before building it:
+- the 27 undecodable photos went from 0 to 26 with faces (84 faces);
+- a sample of 60 rotated photos with no face found went from 0 to 22.
+
+On 40 upright photos, every one of 103 faces found in the file was found again
+in the copy. The weakest match was cosine 0.729, against a same-person line of
+0.363. So faces from copies join the groups the library already has, rather
+than forming new ones.
+
+**What revision 59 does.** It sends back the photos examined with **no** face
+found. Nothing hangs from those: no group, name or rejection. Photos that
+already have faces keep them, including 35 rotated photos whose sideways
+detections found something. Re-detecting those in the copy found 37 faces
+against the 51 they have, so there was nothing to gain by disturbing them.

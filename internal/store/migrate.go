@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 58
+const CurrentSchemaVersion = 59
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -35,6 +35,21 @@ type migration struct {
 	 * than something a migration could do quietly with a stray PRAGMA.
 	 */
 	rebuildsTable bool
+
+	/*
+	 * columns are added before sql runs, each only if it is not already there.
+	 *
+	 * SQLite has no ADD COLUMN IF NOT EXISTS, and a bare ALTER fails the second
+	 * time it runs. A real database never runs a revision twice, but the tests
+	 * that prove a data fix rewind the version and migrate again, and every
+	 * one of them would then fail on a column a later revision added.
+	 */
+	columns []column
+}
+
+// column is one ALTER TABLE ... ADD COLUMN.
+type column struct {
+	table, name, decl string
 }
 
 // migrations run in order, each inside its own transaction. schema.sql creates
@@ -97,6 +112,7 @@ var migrations = []migration{
 	{version: 56, sql: schemaRevision56},
 	{version: 57, sql: schemaRevision57},
 	{version: 58, sql: schemaRevision58},
+	{version: 59, sql: schemaRevision59, columns: []column{{"face", "frame", "TEXT"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -147,6 +163,20 @@ func applyMigration(db *sql.DB, m migration) error {
 		return fmt.Errorf("migration %d: begin: %w", m.version, err)
 	}
 	defer tx.Rollback()
+
+	for _, c := range m.columns {
+		var have int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`,
+			c.table, c.name).Scan(&have); err != nil {
+			return fmt.Errorf("migration %d: read %s columns: %w", m.version, c.table, err)
+		}
+		if have > 0 {
+			continue
+		}
+		if _, err := tx.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.name + ` ` + c.decl); err != nil {
+			return fmt.Errorf("migration %d: add %s.%s: %w", m.version, c.table, c.name, err)
+		}
+	}
 
 	if _, err := tx.Exec(m.sql); err != nil {
 		return fmt.Errorf("migration %d: %w", m.version, err)
@@ -1970,6 +2000,28 @@ CREATE TABLE IF NOT EXISTS photo_hash (
 );
 CREATE INDEX IF NOT EXISTS idx_photo_hash_sha ON photo_hash(sha256);
 UPDATE media_item SET cover_checked_at = NULL WHERE kind = 'photo' AND missing = 0;
+`
+
+/*
+ * Revision 59 -- a face says which picture its box is measured in.
+ *
+ * Nullable, and NULL means what every existing row means: the photograph file.
+ * The face pass now detects in the upright display copy for any photograph its
+ * decoder cannot read (HEIC, BMP, WebP) or whose EXIF turns it. On the live
+ * library those got a face on 0 of 27 and 10% of 366 photos, against 61% of
+ * upright ones.
+ *
+ * Photos examined with no face found are sent back once, which is what reaches
+ * those. It is safe because there is nothing to lose: no face rows, so no
+ * group, no name and no rejection hangs from them. An upright one simply finds
+ * nothing again. A rotated photo that already has faces keeps them; they are
+ * not re-detected unless the file changes.
+ */
+// The column itself is added by the migration's columns list.
+const schemaRevision59 = `
+UPDATE media_item SET faces_at = NULL
+ WHERE kind = 'photo' AND faces_at IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM face WHERE face.item_id = media_item.id);
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or

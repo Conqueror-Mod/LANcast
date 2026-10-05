@@ -32,7 +32,23 @@ type Face struct {
 	X, Y, W, H int
 	Score      float64
 	Embedding  []float32
+	// Frame is the picture the box is measured in: empty for the photograph
+	// file itself, FrameDisplay for the upright copy cached for the grid.
+	Frame string
 }
+
+/*
+ * FrameDisplay marks a face found in the display copy rather than the file.
+ *
+ * The detector reads pixels the way they are stored, and Go's decoders ignore
+ * EXIF orientation, so a phone photo taken in portrait reaches it on its side.
+ * On the live library that was the difference between 61% of upright photos
+ * with a face found and 10% of rotated ones. HEIC, BMP and WebP did not reach
+ * it at all. Those photos are detected in the copy the photo worker already
+ * made upright for the grid, and the box belongs to that copy: a crop has to
+ * be cut from the same picture the box was measured in.
+ */
+const FrameDisplay = "display"
 
 // FaceCluster is a group of faces believed to be one person.
 type FaceCluster struct {
@@ -146,9 +162,9 @@ func (s *Store) RecordFaces(ctx context.Context, itemID int64, faces []Face) err
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO face (item_id, x, y, w, h, score, embedding, detected_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			itemID, f.X, f.Y, f.W, f.H, f.Score, encodeEmbedding(f.Embedding), now); err != nil {
+			INSERT INTO face (item_id, x, y, w, h, score, embedding, detected_at, frame)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
+			itemID, f.X, f.Y, f.W, f.H, f.Score, encodeEmbedding(f.Embedding), now, f.Frame); err != nil {
 			return fmt.Errorf("record faces for item %d: %w", itemID, err)
 		}
 	}
@@ -523,11 +539,11 @@ func (s *Store) GetFace(ctx context.Context, faceID int64, userID string) (Face,
 	var sensitive int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT f.id, f.item_id, f.cluster_id, f.x, f.y, f.w, f.h, f.score,
-		       f.embedding, m.sensitive_effective
+		       f.embedding, COALESCE(f.frame, ''), m.sensitive_effective
 		  FROM face f JOIN media_item m ON m.id = f.item_id
 		 WHERE f.id = ?`, faceID).
 		Scan(&f.ID, &itemID, &f.ClusterID, &f.X, &f.Y, &f.W, &f.H, &f.Score,
-			&blob, &sensitive)
+			&blob, &f.Frame, &sensitive)
 	if err == sql.ErrNoRows || (err == nil && sensitive != 0) {
 		return Face{}, nil, ErrNotFound
 	}

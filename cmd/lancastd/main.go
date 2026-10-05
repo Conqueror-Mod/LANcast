@@ -452,13 +452,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		ModelsDir: faceDir,
 		Runtime:   faceRuntime,
 	}
-	faceWorker := faces.NewWorker(st, faceTool, log)
-	// Semantic search shares the worker binary and nothing else — its own
-	// indexer, its own models, its own progress (ADR 0060).
-	embedder := faces.NewIndexer(st, faceTool, log)
-	// A photograph its decoder cannot read is tried again from the JPEG the
-	// photo worker cached for the grid — HEIC and BMP among them.
-	embedder.Thumbnail = func(ctx context.Context, it store.Item) (string, bool) {
+	// displayCopy is the upright JPEG the photo worker cached for the grid,
+	// which both face detection and search read when the file itself would be
+	// read wrongly or not at all — HEIC and BMP among them.
+	displayCopy := func(ctx context.Context, it store.Item) (string, bool) {
 		items := []store.Item{it}
 		if err := st.AttachArtwork(ctx, items); err != nil ||
 			items[0].Artwork == nil || items[0].Artwork.Poster == "" {
@@ -466,6 +463,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}
 		return art.OriginalPath(items[0].Artwork.Poster)
 	}
+	faceWorker := faces.NewWorker(st, faceTool, log)
+	faceWorker.Display = displayCopy
+	// Semantic search shares the worker binary and nothing else — its own
+	// indexer, its own models, its own progress (ADR 0060).
+	embedder := faces.NewIndexer(st, faceTool, log)
+	embedder.Thumbnail = displayCopy
 
 	// Album art comes off the disk, not from a provider: the picture embedded
 	// in a track, or a cover.jpg beside it (ADR 0024). It gets its own worker
