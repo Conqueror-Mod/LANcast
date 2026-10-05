@@ -124,7 +124,7 @@ func TestFacesAreRecordedAgainstTheirPhotograph(t *testing.T) {
 	var r result
 	_ = json.Unmarshal([]byte(`{"path":"p","faces":[{"x":1,"y":2,"w":3,"h":4,`+
 		`"score":0.9,"embedding":[1,0]}]}`), &r)
-	w.record(context.Background(), store.Item{ID: 42, Path: "p"}, r)
+	w.record(context.Background(), store.Item{ID: 42, Path: "p"}, "", r)
 
 	got := st.recorded[42]
 	if len(got) != 1 {
@@ -149,7 +149,7 @@ func TestAPhotographWithNoFacesIsStillMarkedExamined(t *testing.T) {
 	st := newFakeStore()
 	w := quietWorker(st)
 
-	w.record(context.Background(), store.Item{ID: 7}, result{Path: "p"})
+	w.record(context.Background(), store.Item{ID: 7}, "", result{Path: "p"})
 
 	if !st.done[7] {
 		t.Error("a photograph with no faces was left pending for ever")
@@ -170,7 +170,7 @@ func TestAnUnreadablePhotographIsMarkedRatherThanRetriedForEver(t *testing.T) {
 	st := newFakeStore()
 	w := quietWorker(st)
 
-	w.record(context.Background(), store.Item{ID: 9}, result{Path: "p", Error: "decode: bad JPEG"})
+	w.record(context.Background(), store.Item{ID: 9}, "", result{Path: "p", Error: "decode: bad JPEG"})
 
 	if !st.done[9] {
 		t.Error("an unreadable photograph was left pending, which loops the pass")
@@ -196,7 +196,7 @@ func TestARefusedRecordingDoesNotMarkThePhotographExamined(t *testing.T) {
 	var r result
 	_ = json.Unmarshal([]byte(`{"path":"p","faces":[{"x":1,"y":1,"w":1,"h":1,`+
 		`"score":0.9,"embedding":[1]}]}`), &r)
-	w.record(context.Background(), store.Item{ID: 5, Path: "p"}, r)
+	w.record(context.Background(), store.Item{ID: 5, Path: "p"}, "", r)
 
 	if st.done[5] {
 		t.Error("a refused photograph was marked examined, so lifting the mark " +
