@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { Duplicates, removalNote } from "./Duplicates";
+import { Duplicates, removalNote, splitGroups } from "./Duplicates";
 import type { DuplicateGroup } from "@/api/types";
 
 declare global {
@@ -57,6 +57,35 @@ describe("what removing a copy says", () => {
     expect(removalNote(sameFolder, sameFolder.copies[2])).toBe(
       'This removes the photo from the library root. A copy stays in "Resin Art".',
     );
+  });
+});
+
+const allInOneAlbum: DuplicateGroup = {
+  sha256: "aa11",
+  size_bytes: 2_000_000,
+  copies: [
+    { item: photo(6, "Mackenzie 1"), album: "Mackenzie" },
+    { item: photo(7, "Mackenzie 1"), album: "Mackenzie" },
+  ],
+};
+
+const allAtTheRoot: DuplicateGroup = {
+  sha256: "bb22",
+  size_bytes: 1_000,
+  copies: [
+    { item: photo(8, "a"), album: null },
+    { item: photo(9, "a"), album: null },
+  ],
+};
+
+describe("splitting the groups", () => {
+  // Every copy in one album is almost always an accident; the same photo in
+  // two albums is often a decision. Shown apart, accidents first.
+  it("puts groups whose copies share an album apart from those that do not", () => {
+    const { sameAlbum, acrossAlbums } = splitGroups([crossAlbum, allInOneAlbum, sameFolder, allAtTheRoot]);
+    expect(sameAlbum.map((g) => g.sha256)).toEqual(["aa11", "bb22"]);
+    // sameFolder has two copies in Resin Art and one at the root: two places.
+    expect(acrossAlbums.map((g) => g.sha256)).toEqual(["9f2c", "77aa"]);
   });
 });
 
@@ -168,6 +197,15 @@ describe("the duplicates page", () => {
     expect(reads.length).toBeGreaterThan(1);
     expect(host.querySelectorAll(".dupes__copy")).toHaveLength(0);
     expect(host.textContent).toContain("No duplicates");
+  });
+
+  it("shows the same-album groups first, under their own heading", async () => {
+    groups = [crossAlbum, allInOneAlbum];
+    await render();
+    const heads = [...host.querySelectorAll(".dupes__section-head")].map((h) => h.firstChild?.textContent);
+    expect(heads).toEqual(["In the same album", "Filed in more than one album"]);
+    const albums = [...host.querySelectorAll(".dupes__album")].map((e) => e.textContent);
+    expect(albums).toEqual(["Mackenzie", "Mackenzie", "Animals", "Me & Us"]);
   });
 
   it("says so when there are none", async () => {

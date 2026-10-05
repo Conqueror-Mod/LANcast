@@ -60,8 +60,44 @@
   color: var(--text-secondary);
 }
 
+.dupes__section {
+  margin-bottom: 36px;
+}
+
+.dupes__section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dupes__section-head span {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.dupes__section-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Groups flow side by side. A group is two to four tiles wide, so stacking one
+   per row left most of a wide screen empty and made 35 groups a long scroll. */
+.dupes__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 40px;
+  align-items: flex-start;
+}
+
 .dupes__group {
-  margin-bottom: 28px;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .dupes__group-head {
@@ -80,15 +116,18 @@
 }
 
 .dupes__copies {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 
+/* A fixed tile width, so a group is exactly as wide as its copies and groups
+   can sit beside each other. */
 .dupes__copy {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 140px;
   min-width: 0;
 }
 
@@ -120,8 +159,15 @@
   .dupes {
     padding: 16px 16px 60px;
   }
+  .dupes__groups {
+    gap: 20px;
+  }
   .dupes__copies {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 12px;
+    gap: 10px;
+  }
+  /* Two tiles side by side inside the 16px gutters. */
+  .dupes__copy {
+    width: calc((100vw - 32px - 10px) / 2);
+    max-width: 160px;
   }
 }
