@@ -467,8 +467,15 @@ For Skip credits this is harmless, since nobody loses any of the film.
 **So decision 4 is taken for episodes and refused for films.** As a watched
 threshold, a late marker would leave someone who stopped at the real credits
 short of "finished". That would be 13 films in 30, each of which today's 90%
-counts as watched. For episodes the marker was exact 30 times out of 30. *(Not
-built yet: recorded as decided, waiting on the owner's go-ahead.)*
+counts as watched. For episodes the marker was exact 30 times out of 30.
+
+*Built 2026-10-05.* `PUT /api/items/{id}/progress` treats an episode as watched
+once the position reaches its credits marker less 15 seconds, and not before.
+Only a marker the player would offer Skip credits on is counted: `TrustedCredits`
+in `internal/marker`, inside the 88–99% window. It replaces the percentage, and
+the client's own `watched` flag with it, because that flag is a percentage too
+(the player sends it at 92%). Two cases are left alone. "Mark as watched", which
+posts position 0 with the flag, always stands. Films keep the percentage.
 
 **A new kind of early answer.** The held-out test put early film answers at
 0 of 40. This sample has 2 of 30:

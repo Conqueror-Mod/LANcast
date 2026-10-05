@@ -104,3 +104,26 @@ func TestEndingWithoutAGateTrustsTheMusic(t *testing.T) {
 		t.Errorf("got %+v, want the closing theme", got)
 	}
 }
+
+// The server's trust rule must match the player's (web/src/lib/skip.ts): the
+// gated rule on anything, the ungated rule and the closing theme on episodes.
+func TestTrustedCredits(t *testing.T) {
+	cases := []struct {
+		kind, source string
+		want         bool
+	}{
+		{"movie", Source, true},
+		{"episode", Source, true},
+		{"movie", SourceUngated, false},
+		{"episode", SourceUngated, true},
+		{"movie", SourceEnding, false},
+		{"episode", SourceEnding, true},
+		{"episode", "chapter", false},
+		{"episode", "", false},
+	}
+	for _, c := range cases {
+		if got := TrustedCredits(c.kind, c.source); got != c.want {
+			t.Errorf("TrustedCredits(%q, %q) = %v, want %v", c.kind, c.source, got, c.want)
+		}
+	}
+}

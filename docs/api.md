@@ -1640,6 +1640,19 @@ all. Reporting those as match failures buries the real ones.
 Returns `204`. Clients should throttle to roughly one call per five seconds
 during playback.
 
+**When a title counts as watched.** The server decides, and a client's
+`watched: true` is joined to its rule rather than trusted alone:
+
+- **An episode with a credits marker** is watched once `position_ms` reaches the
+  marker less 15 seconds, and not before, whatever the percentage setting or the
+  client's own flag says (ADR 0054, decision 4). The markers counted are the ones
+  a player would offer Skip credits on: `blackdetect-gated`, `blackdetect` or
+  `ending-audio`, between 88% and 99% of the file.
+- **Anything else** — a film, or an episode with no marker — is watched past the
+  server's percentage threshold (90% by default), or when the client says so.
+- **`position_ms: 0` with `watched: true`** is "Mark as watched". It always
+  stands.
+
 **Only an item with a file has a play state.** A show, season, artist, album,
 collection or playlist is `400 not_playable`: nothing reads a progress row
 written against one — Continue Watching and Next up judge a show by its

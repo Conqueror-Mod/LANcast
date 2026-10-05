@@ -328,6 +328,8 @@ export interface paths {
          *     Progress is per account (ADR 0006).
          *
          *     **Only an item with a file has a play state.** A show, season, artist, album, collection or playlist is `400 not_playable`: nothing reads progress written against one — Continue Watching and Next up judge a show by its episodes. Mark its episodes (`GET /api/items/{id}/episodes`) or tracks instead.
+         *
+         *     **When a title counts as watched.** An episode with a credits marker a player would offer Skip credits on (`blackdetect-gated`, `blackdetect` or `ending-audio`, between 88% and 99% of the file) is watched once `position_ms` reaches the marker less 15 seconds, and not before, whatever the percentage setting or the client's `watched` flag says (ADR 0054, decision 4). Anything else is watched past the server's percentage threshold, or when the client says so. `position_ms: 0` with `watched: true` is "Mark as watched" and always stands.
          */
         put: operations["putItemProgress"];
         post?: never;

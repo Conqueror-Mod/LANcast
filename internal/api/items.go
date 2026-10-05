@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"lancast/internal/marker"
 	"lancast/internal/media"
 	"lancast/internal/scan"
 	"lancast/internal/store"
@@ -861,6 +863,29 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 		duration = *it.DurationMS
 	}
 	watched := req.Watched || s.settings.Get().Watched(req.PositionMS, duration)
+	/*
+	 * An episode is finished at its credits (ADR 0054, decision 4, taken for
+	 * episodes on 2026-10-05).
+	 *
+	 * Measured: 30 of 30 episode markers sat exactly where the credits begin,
+	 * so for an episode the marker is a better answer than a percentage — the
+	 * 90% rule calls a 45-minute episode watched with four minutes of the last
+	 * act to go. It *replaces* the percentage rather than joining it, and that
+	 * includes the client's own "done" flag, which is a percentage too (the
+	 * player sends it at 92%). A player that played to the end posts a
+	 * position past the marker, so it is still counted.
+	 *
+	 * Two things are left exactly as they were. A position of zero with
+	 * watched is "Mark as watched" — somebody saying so, not a playhead — and
+	 * it stands. And a film keeps the percentage: film markers were late by
+	 * 90 seconds or more on 13 of 30, and a late threshold would leave somebody
+	 * who stopped at the real credits short of finished.
+	 */
+	if it.Kind == "episode" && req.PositionMS > 0 {
+		if at, ok := s.episodeFinishedAt(r.Context(), id, duration); ok {
+			watched = req.PositionMS >= at
+		}
+	}
 	if err := s.st.SaveProgress(r.Context(), id, s.userID(r), req.PositionMS, watched); err != nil {
 		s.writeInternal(w, err, "save progress")
 		return
@@ -872,4 +897,33 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 	// what this records goes to memory and never to a table (ADR 0045 §4).
 	s.recordWatching(s.userID(r), it)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// creditsSlackMS is how far before its credits marker an episode counts as
+// finished. A player that stops on the first credit card, or a progress write
+// that lands a beat before it, has watched the episode.
+const creditsSlackMS = 15_000
+
+// episodeFinishedAt is the position at which an episode counts as watched,
+// from a credits marker the player would trust, or false when there is none
+// and the percentage rule applies.
+func (s *Server) episodeFinishedAt(ctx context.Context, id, durationMS int64) (int64, bool) {
+	if durationMS <= 0 {
+		return 0, false
+	}
+	markers, err := s.st.MarkersFor(ctx, id)
+	if err != nil {
+		return 0, false
+	}
+	for _, m := range markers {
+		if m.Kind != store.MarkerCredits || !marker.TrustedCredits("episode", m.Source) {
+			continue
+		}
+		share := float64(m.StartMS) / float64(durationMS)
+		if share < marker.CreditsWindowLo || share >= marker.CreditsWindowHi {
+			continue
+		}
+		return m.StartMS - creditsSlackMS, true
+	}
+	return 0, false
 }
