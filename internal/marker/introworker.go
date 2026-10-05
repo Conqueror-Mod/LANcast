@@ -100,6 +100,12 @@ func (w *Worker) RunIntros(ctx context.Context) error {
 				return nil
 			}
 			if err := examine(ctx, st, se); err != nil {
+				// Our own shutdown is not a failure of the season: it is
+				// unstamped and comes back on the next pass. Logged as one, an
+				// installer's restart read as a broken show (v0.9.54).
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				w.log.Warn("intro detection failed",
 					"show", se.ShowName, "season", se.Season, "error", err)
 			}
@@ -160,6 +166,9 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			// One unreadable episode does not spoil the season: it simply
 			// takes no part in the comparison, and the others still have each
 			// other.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			w.log.Warn("intro decode failed", "item", ep.ID, "error", err)
 			continue
 		}
@@ -174,6 +183,9 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 		end, err := tailAudio(ctx, ep.Path, EndingTailSeconds)
 		if err != nil {
 			// No ending to compare, and the black run still decides alone.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			w.log.Warn("ending decode failed", "item", ep.ID, "error", err)
 			continue
 		}
@@ -361,7 +373,11 @@ func (w *Worker) episodeCredits(ctx context.Context, ep store.Item, ending Intro
 	from := dur * EpisodeScanFrom
 	stderr, err := tail(ctx, ep.Path, from)
 	if err != nil {
-		w.log.Warn("episode credits scan failed", "item", ep.ID, "error", err)
+		// A scan killed by our own shutdown is not a broken file, the same
+		// distinction the per-file pass draws (examine).
+		if ctx.Err() == nil {
+			w.log.Warn("episode credits scan failed", "item", ep.ID, "error", err)
+		}
 		return EpisodeCredits{}, false
 	}
 	black := CreditsFrom(ParseBlackDetect(stderr, from), dur, nil)
