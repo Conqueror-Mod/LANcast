@@ -49,6 +49,29 @@ export function removalNote(group: DuplicateGroup, copy: DuplicateCopy): string 
   return `This removes the photo from ${from}. A copy stays in ${kept}.`;
 }
 
+/*
+ * Which groups are the tidy-up and which are filing.
+ *
+ * On a real library, 10 of 37 groups had every copy in one album — four
+ * identical copies of one photo in one folder — and the other 27 were the same
+ * photo kept in two albums. The first kind is almost always an accident and the
+ * second often a decision, so they are shown apart, accidents first. Nothing is
+ * hidden: the second section is the same list, labelled for what it probably
+ * is. Order within each is the server's, largest group first.
+ */
+export function splitGroups(groups: DuplicateGroup[]): {
+  sameAlbum: DuplicateGroup[];
+  acrossAlbums: DuplicateGroup[];
+} {
+  const sameAlbum: DuplicateGroup[] = [];
+  const acrossAlbums: DuplicateGroup[] = [];
+  for (const g of groups) {
+    const albums = new Set(g.copies.map((c) => c.album ?? null));
+    (albums.size === 1 ? sameAlbum : acrossAlbums).push(g);
+  }
+  return { sameAlbum, acrossAlbums };
+}
+
 function Group({
   group,
   admin,
@@ -98,6 +121,7 @@ export function Duplicates() {
   );
 
   const groups = data?.groups ?? [];
+  const { sameAlbum, acrossAlbums } = splitGroups(groups);
   return (
     <div className="dupes">
       <div className="dupes__bar">
@@ -128,15 +152,43 @@ export function Duplicates() {
         </p>
       )}
 
-      {groups.map((g) => (
-        <Group
-          key={g.sha256}
-          group={g}
-          admin={admin}
-          onShow={(photos, at) => setShown({ photos, at })}
-          onRemove={(copy) => setRemoving({ group: g, copy })}
-        />
-      ))}
+      {[
+        {
+          key: "same",
+          title: "In the same album",
+          note: "Every copy sits in one album, so these are most likely accidental.",
+          list: sameAlbum,
+        },
+        {
+          key: "across",
+          title: "Filed in more than one album",
+          note: "The same photo kept in different albums, which is often on purpose.",
+          list: acrossAlbums,
+        },
+      ]
+        .filter((s) => s.list.length > 0)
+        .map((s) => (
+          <section key={s.key} className="dupes__section">
+            <h2 className="dupes__section-head">
+              {s.title}
+              <span>
+                {s.list.length} {s.list.length === 1 ? "group" : "groups"}
+              </span>
+            </h2>
+            <p className="dupes__section-note">{s.note}</p>
+            <div className="dupes__groups">
+              {s.list.map((g) => (
+                <Group
+                  key={g.sha256}
+                  group={g}
+                  admin={admin}
+                  onShow={(photos, at) => setShown({ photos, at })}
+                  onRemove={(copy) => setRemoving({ group: g, copy })}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
 
       {shown && (
         <PhotoViewer photos={shown.photos} startAt={shown.at} onClose={() => setShown(null)} />
