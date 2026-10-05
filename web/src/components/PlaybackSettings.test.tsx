@@ -149,59 +149,44 @@ describe("PlaybackSettings sound rows", () => {
 });
 
 /*
- * Music's pair (Phase 2). Web Audio on the element, so not tied to the
+ * Music's night mode (Phase 2). Web Audio on the element, so not tied to the
  * desktop's player: offered wherever music plays, once the probe has said how
- * many channels the track has.
+ * many channels the track has. Vocals was removed after the listening test.
  */
 describe("PlaybackSettings music rows", () => {
   beforeEach(() => {
     Object.assign(pb, { isAudio: true, native: false, audioFX: false, musicChannels: 2 });
   });
 
-  it("offers night mode and vocals on a stereo track, wherever it plays", () => {
-    render();
-    expect(labels()).toContain("Night mode");
-    expect(labels()).toContain("Vocals");
-    expect(labels()).not.toContain("Dialogue boost");
+  it("offers night mode on stereo and mono, wherever music plays", () => {
+    for (const n of [1, 2]) {
+      pb.musicChannels = n;
+      render();
+      expect(labels()).toContain("Night mode");
+      expect(labels()).not.toContain("Dialogue boost");
+    }
   });
 
-  it("keeps night mode and drops vocals on a mono track", () => {
-    pb.musicChannels = 1;
+  it("offers no vocals control: it made no audible difference", () => {
     render();
-    expect(labels()).toContain("Night mode");
     expect(labels()).not.toContain("Vocals");
   });
 
-  it("offers neither while the channel count is unknown, or on surround", () => {
+  it("offers nothing while the channel count is unknown, or on surround", () => {
     for (const n of [0, 6]) {
       pb.musicChannels = n;
       render();
       expect(labels()).not.toContain("Night mode");
-      expect(labels()).not.toContain("Vocals");
     }
   });
 
-  it("writes music's own preferences, never the film's", () => {
+  it("writes music's own preference, never the film's", () => {
     render();
-    const vocals = selectFor("Vocals");
-    act(() => {
-      vocals.value = "2";
-      vocals.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(pb.setPrefs).toHaveBeenLastCalledWith({ vocalsMusic: 2 });
     const night = selectFor("Night mode");
     act(() => {
       night.value = "on";
       night.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(pb.setPrefs).toHaveBeenLastCalledWith({ nightMusic: true });
-  });
-
-  it("says vocals makes the track quieter, and only while it is on", () => {
-    render();
-    expect(host.textContent).not.toMatch(/instruments at the sides down/);
-    pb.prefs = { ...DEFAULTS, vocalsMusic: 1 };
-    render();
-    expect(host.textContent).toMatch(/instruments at the sides down/);
   });
 });

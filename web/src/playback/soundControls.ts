@@ -27,18 +27,13 @@ export function canBoostDialogue(
 }
 
 /**
- * Music's two controls, offered from the probe's channel count
+ * Music's night mode, offered from the probe's channel count
  * (PlaybackState.musicChannels; 0 when not music, or not known). The same rule
  * the graph applies (elementAudio.ts, fxApplies), so a control is never shown
  * that the graph would then ignore.
  */
 export function canNightMusic(channels: number): boolean {
   return channels === 1 || channels === 2;
-}
-
-/** Vocals works on the centre of a stereo pair, so it needs exactly two. */
-export function canVocalsMusic(channels: number): boolean {
-  return channels === 2;
 }
 
 /** The dialogue level after this one: Off, Low, High, then back to Off. */

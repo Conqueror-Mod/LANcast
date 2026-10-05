@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, type SubFont } from "@/playback/prefs";
-import { canBoostDialogue, canNightMusic, canVocalsMusic } from "@/playback/soundControls";
+import { canBoostDialogue, canNightMusic } from "@/playback/soundControls";
 import { FONTS } from "@/playback/cueVars";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
@@ -326,9 +326,9 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        {/* Music's pair (Phase 2): Web Audio on the element, so offered
+        {/* Music's night mode (Phase 2): Web Audio on the element, so offered
             wherever music plays, desktop or browser, once the probe has said
-            the track is mono or stereo. Its own preferences: what suits an
+            the track is mono or stereo. Its own preference: what suits an
             album is not what suits a film at eleven at night. */}
         {pb.isAudio && canNightMusic(pb.musicChannels) && (
           <>
@@ -342,27 +342,6 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
                 <option value="on">On</option>
               </select>
             </Row>
-            {canVocalsMusic(pb.musicChannels) && (
-              <Row label="Vocals">
-                <select
-                  className="pbset__select"
-                  value={String(prefs.vocalsMusic)}
-                  onChange={(e) => setPrefs({ vocalsMusic: Number(e.target.value) })}
-                >
-                  {DIALOGUE_LEVELS.map((label, level) => (
-                    <option key={level} value={level}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </Row>
-            )}
-            {canVocalsMusic(pb.musicChannels) && prefs.vocalsMusic > 0 && (
-              <p className="pbset__note">
-                Vocals turns the instruments at the sides down rather than the
-                voice up, so the track gets a little quieter.
-              </p>
-            )}
           </>
         )}
 

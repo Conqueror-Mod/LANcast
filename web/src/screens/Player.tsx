@@ -41,7 +41,6 @@ import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
 import {
   canBoostDialogue,
   canNightMusic,
-  canVocalsMusic,
   nextDialogueLevel,
 } from "@/playback/soundControls";
 import "./Player.css";
@@ -860,8 +859,8 @@ export function Player() {
                   </button>
                 )}
 
-              {/* Music's pair, the same two buttons on its own preferences.
-                  Offered where the settings panel offers them (soundControls.ts). */}
+              {/* Music's night mode, on its own preference. Offered where
+                  the settings panel offers it (soundControls.ts). */}
               {pb.isAudio && canNightMusic(pb.musicChannels) && (
                 <button
                   className={"player__icon" + (pb.prefs.nightMusic ? " is-on" : "")}
@@ -871,27 +870,6 @@ export function Player() {
                   title={pb.prefs.nightMusic ? "Night mode: on" : "Night mode: off"}
                 >
                   <NightGlyph />
-                </button>
-              )}
-              {pb.isAudio && canVocalsMusic(pb.musicChannels) && (
-                <button
-                  className={
-                    "player__icon player__icon--level" +
-                    (pb.prefs.vocalsMusic > 0 ? " is-on" : "")
-                  }
-                  onClick={() =>
-                    pb.setPrefs({ vocalsMusic: nextDialogueLevel(pb.prefs.vocalsMusic) })
-                  }
-                  aria-label={`Vocals: ${DIALOGUE_LEVELS[pb.prefs.vocalsMusic] ?? "Off"}`}
-                  aria-pressed={pb.prefs.vocalsMusic > 0}
-                  title={`Vocals: ${DIALOGUE_LEVELS[pb.prefs.vocalsMusic] ?? "Off"}`}
-                >
-                  <DialogueGlyph />
-                  {pb.prefs.vocalsMusic > 0 && (
-                    <span className="player__level" aria-hidden="true">
-                      {DIALOGUE_LEVELS[pb.prefs.vocalsMusic]?.[0]}
-                    </span>
-                  )}
                 </button>
               )}
 
