@@ -77,22 +77,39 @@ export function dimensions(item: Item): string {
   return item.width && item.height ? `${item.width} × ${item.height}` : "Size unknown";
 }
 
+const area = (item: Item) => (item.width ?? 0) * (item.height ?? 0);
+
 /**
- * What removing one near copy leaves, in a sentence. Near copies differ in
- * size, so the sentence names sizes: removing the small one keeps the picture,
- * removing the large one keeps a smaller copy of it, and that is worth saying.
- * Exported for the test.
+ * Which copies to label Largest: every copy at the biggest size, and only when
+ * some copy is smaller. Half the groups on a real library were the same
+ * picture saved again at the same size, and marking one of those "Largest"
+ * named a difference that was not there. Exported for the test.
+ */
+export function largestIDs(group: NearCopyGroup): Set<number> {
+  const sizes = group.copies.map((c) => area(c.item));
+  const top = Math.max(...sizes);
+  if (sizes.every((a) => a === top)) return new Set();
+  return new Set(group.copies.filter((c) => area(c.item) === top).map((c) => c.item.id));
+}
+
+/**
+ * What removing one near copy leaves, in a sentence, by size: another copy as
+ * big stays, or a bigger one does, or this was the only biggest and the
+ * picture is kept smaller. Exported for the test.
  */
 export function nearRemovalNote(group: NearCopyGroup, copy: DuplicateCopy): string {
-  const keep = group.copies.find((c) => c.item.id === group.keep) ?? group.copies[0];
-  if (copy.item.id === keep.item.id) {
-    const next = group.copies.find((c) => c.item.id !== copy.item.id);
-    return next
-      ? `This is the largest copy. The ${dimensions(next.item)} copy stays, so the picture is kept smaller.`
-      : "";
-  }
-  const where = keep.album ? `"${keep.album}"` : ROOT;
-  return `The ${dimensions(keep.item)} copy stays in ${where}.`;
+  const others = group.copies.filter((c) => c.item.id !== copy.item.id);
+  if (others.length === 0) return "";
+  const mine = area(copy.item);
+  const place = (c: DuplicateCopy) => (c.album ? `"${c.album}"` : ROOT);
+  const same = others.find((c) => area(c.item) === mine);
+  const bigger = others
+    .filter((c) => area(c.item) > mine)
+    .sort((a, b) => area(b.item) - area(a.item))[0];
+  if (bigger) return `The ${dimensions(bigger.item)} copy stays in ${place(bigger)}.`;
+  if (same) return `Another copy at the same size stays in ${place(same)}.`;
+  const next = [...others].sort((a, b) => area(b.item) - area(a.item))[0];
+  return `This is the largest copy. The ${dimensions(next.item)} copy stays, so the picture is kept smaller.`;
 }
 
 function NearGroup({
@@ -107,6 +124,7 @@ function NearGroup({
   onRemove: (copy: DuplicateCopy) => void;
 }) {
   const photos = group.copies.map((c) => c.item);
+  const largest = largestIDs(group);
   return (
     <section className="dupes__group">
       <h2 className="dupes__group-head">
@@ -118,7 +136,7 @@ function NearGroup({
             <PosterTile item={c.item} onOpen={() => onShow(photos, i)} />
             <div className="dupes__size">
               {dimensions(c.item)}
-              {c.item.id === group.keep && <span className="dupes__largest">Largest</span>}
+              {largest.has(c.item.id) && <span className="dupes__largest">Largest</span>}
             </div>
             <div className="dupes__album">{c.album ?? "Library root"}</div>
             {admin && (

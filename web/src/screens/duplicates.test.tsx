@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { Duplicates, dimensions, nearRemovalNote, removalNote, splitGroups } from "./Duplicates";
+import { Duplicates, dimensions, largestIDs, nearRemovalNote, removalNote, splitGroups } from "./Duplicates";
 import type { DuplicateGroup, NearCopyGroup } from "@/api/types";
 
 declare global {
@@ -294,6 +294,51 @@ describe("near copies", () => {
     const reads = calls.filter((c) => c.method === "GET" && c.url.includes("/near-copies"));
     expect(reads.length).toBeGreaterThan(1);
     expect(host.querySelectorAll(".dupes__copy")).toHaveLength(0);
+  });
+});
+
+/*
+ * "Largest" means bigger. Half the near-copy groups on a real library were the
+ * same picture saved again at the same size, and one of each pair was labelled
+ * Largest for no reason but coming first.
+ */
+describe("which near copy is largest", () => {
+  const sameSize: NearCopyGroup = {
+    keep: 20,
+    copies: [
+      { item: sized(20, 624, 954), album: "Carl" },
+      { item: sized(21, 624, 954), album: "Carl" },
+    ],
+  };
+  const twoTop: NearCopyGroup = {
+    keep: 30,
+    copies: [
+      { item: sized(30, 720, 1280), album: "Me & Us" },
+      { item: sized(31, 720, 1280), album: "Profile" },
+      { item: sized(32, 337, 600), album: "Chris" },
+    ],
+  };
+
+  it("labels nothing when every version is the same size", () => {
+    expect(largestIDs(sameSize).size).toBe(0);
+  });
+
+  it("labels every version at the biggest size when another is smaller", () => {
+    expect([...largestIDs(twoTop)].sort()).toEqual([30, 31]);
+    expect([...largestIDs(resized)]).toEqual([10]);
+  });
+
+  it("says a same-size copy stays, not that the picture shrinks", () => {
+    expect(nearRemovalNote(sameSize, sameSize.copies[0])).toBe('Another copy at the same size stays in "Carl".');
+    expect(nearRemovalNote(twoTop, twoTop.copies[0])).toBe('Another copy at the same size stays in "Profile".');
+    expect(nearRemovalNote(twoTop, twoTop.copies[2])).toBe('The 720 × 1280 copy stays in "Me & Us".');
+  });
+
+  it("shows no Largest label on a same-size pair", async () => {
+    groups = [];
+    near = [sameSize];
+    await render();
+    expect(host.querySelectorAll(".dupes__largest")).toHaveLength(0);
   });
 });
 
