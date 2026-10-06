@@ -281,3 +281,36 @@ A native dialog in a frameless WebView2 window is a focus trap: dismissing it
 does not reliably hand keyboard focus back to the web contents, so the app
 keeps painting and clicking while nothing can be typed into. It reads as a
 random freeze that fixes itself when the user alt-tabs away and back.
+
+## Amendment, 2026-10-06 — GOG and the EA app
+
+Two more readers. Both read local files and keys, with no sign-in, the same
+as the others. Both start a game by running a file, as Battle.net does, and in
+each case the file is the one the launcher's own shortcut runs. Checked on a
+machine with Coromon (GOG) and skate. (EA app) installed.
+
+**GOG.** The installer writes one key per game under `GOG.com\Games\<id>`,
+naming the folder. In that folder, `goggame-<id>.info` gives the name and the
+play tasks, which is the list Galaxy reads.
+- DLC registers the same way, carries `dependsOn`, and is skipped.
+- When GOG Galaxy is installed, a game starts the way GOG's Start-menu shortcut
+  starts it: `GalaxyClient.exe /command=runGame /gameId=<id> /path="<folder>"`.
+  The command line is built to match that shortcut character for character,
+  so Galaxy gets its play time, cloud saves and overlay.
+- Without Galaxy, the primary game play task runs directly. GOG games are
+  DRM-free.
+- Galaxy is found from its registered `goggalaxy:` protocol command.
+
+**EA.** The EA app writes an ordinary uninstall entry per game: publisher
+Electronic Arts, an install folder holding `__Installer\installerdata.xml`, and
+a `DisplayIcon` naming the executable EA's desktop shortcut runs.
+- The manifest gives the content id (the game's id here) and the English title.
+- The EA app's own entry has no folder and no manifest, so it is never offered.
+- A game starts by that executable, which hands itself to the EA app for sign-in
+  and anti-cheat, as it does from the desktop.
+- Not `link2ea://`. That needs an offer id nothing on the disk records in a form
+  worth trusting, which is the Battle.net problem again.
+
+**Every executable is checked before it runs.** It comes from a fresh rescan,
+never from the page. It must be an `.exe`, inside the game's install folder,
+and present (`ExecutableTarget`).

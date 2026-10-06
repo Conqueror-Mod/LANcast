@@ -3,6 +3,7 @@ package games
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -85,6 +86,7 @@ func installedPrograms() []InstalledProgram {
 			p.Name, _, _ = k.GetStringValue("DisplayName")
 			p.InstallLocation, _, _ = k.GetStringValue("InstallLocation")
 			p.Publisher, _, _ = k.GetStringValue("Publisher")
+			p.DisplayIcon, _, _ = k.GetStringValue("DisplayIcon")
 			if size, _, err := k.GetIntegerValue("EstimatedSize"); err == nil {
 				p.EstimatedSizeKB = int64(size)
 			}
@@ -100,4 +102,70 @@ func installedPrograms() []InstalledProgram {
 		}
 	}
 	return out
+}
+
+/*
+ * gogInstalls reads what GOG's installer registered: one key per game under
+ * `GOG.com\Games`, in the 32-bit view where GOG writes it, and the 64-bit one
+ * in case a later installer moves. A key without a path is skipped.
+ */
+func gogInstalls() []GOGInstall {
+	var out []GOGInstall
+	seen := map[string]bool{}
+	for _, path := range []string{`SOFTWARE\WOW6432Node\GOG.com\Games`, `SOFTWARE\GOG.com\Games`} {
+		root, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.ENUMERATE_SUB_KEYS)
+		if err != nil {
+			continue
+		}
+		names, err := root.ReadSubKeyNames(-1)
+		root.Close()
+		if err != nil {
+			continue
+		}
+		for _, name := range names {
+			k, err := registry.OpenKey(registry.LOCAL_MACHINE, path+`\`+name, registry.QUERY_VALUE)
+			if err != nil {
+				continue
+			}
+			in := GOGInstall{}
+			in.GameID, _, _ = k.GetStringValue("gameID")
+			in.Path, _, _ = k.GetStringValue("path")
+			in.DependsOn, _, _ = k.GetStringValue("dependsOn")
+			k.Close()
+			if in.GameID == "" {
+				in.GameID = name
+			}
+			if in.Path == "" || seen[in.GameID] {
+				continue
+			}
+			seen[in.GameID] = true
+			out = append(out, in)
+		}
+	}
+	return out
+}
+
+/*
+ * GalaxyClient is where GOG Galaxy is installed, read from the command its
+ * `goggalaxy:` protocol is registered with: the one place Galaxy says where it
+ * lives. Only a GalaxyClient.exe that exists is returned.
+ */
+func GalaxyClient() (string, bool) {
+	k, err := registry.OpenKey(registry.CLASSES_ROOT, `goggalaxy\shell\open\command`, registry.QUERY_VALUE)
+	if err != nil {
+		return "", false
+	}
+	cmd, _, err := k.GetStringValue("")
+	k.Close()
+	if err != nil {
+		return "", false
+	}
+	exe := commandExecutable(cmd)
+	if !strings.EqualFold(filepath.Base(exe), "GalaxyClient.exe") {
+		return "", false
+	}
+	if st, err := os.Stat(exe); err != nil || st.IsDir() {
+		return "", false
+	}
+	return exe, true
 }

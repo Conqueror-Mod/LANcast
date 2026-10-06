@@ -175,6 +175,30 @@ func gamesBindings(dir string) map[string]any {
 				return map[string]any{"ok": true}
 			}
 
+			/*
+			 * GOG and EA are started by a file too, each the way its own
+			 * shortcut does it. GOG through Galaxy when Galaxy is installed,
+			 * which is what GOG's Start-menu entry runs and what keeps play
+			 * time and cloud saves; the game's own play task when it is not,
+			 * since GOG games are DRM-free. EA by the executable its desktop
+			 * shortcut names, which hands itself to the EA app.
+			 *
+			 * Every path is the rescan's, never the page's, and checked to be
+			 * inside the install folder before it runs (ExecutableTarget).
+			 */
+			if g.Source == games.SourceGOG || g.Source == games.SourceEA {
+				how, err := startByFile(g)
+				if err != nil {
+					slog.Info("could not start a game",
+						"game", g.Name, "launcher", g.Source.Label(), "err", err)
+					return map[string]any{"ok": false, "error": err.Error()}
+				}
+				slog.Info("started a game", "game", g.Name, "id", id,
+					"launcher", g.Source.Label(), "via", how)
+				watchForWindow(dir, id, g.Name)
+				return map[string]any{"ok": true}
+			}
+
 			uri, err := games.LaunchURI(id)
 			if err != nil {
 				return map[string]any{"ok": false, "error": err.Error()}
@@ -227,13 +251,7 @@ func gamesBindings(dir string) map[string]any {
 			 * hunting for ninety seconds and possibly moving somebody's
 			 * unrelated window.
 			 */
-			if prefs, err := games.LoadPrefs(dir); err == nil {
-				if device := prefs.DisplayFor(id); device != "" && device != games.DisplayDefault {
-					slog.Info("watching for this game's window",
-						"game", g.Name, "display", device)
-					moveGameToDisplay(device, g.Name)
-				}
-			}
+			watchForWindow(dir, id, g.Name)
 			return map[string]any{"ok": true}
 		},
 
@@ -427,4 +445,43 @@ func startDetached(target string) error {
 		return err
 	}
 	return cmd.Process.Release()
+}
+
+// watchForWindow moves a just-started game to the display chosen for it, if
+// one was. Shared by every way of starting a game, so a choice of display does
+// not depend on which launcher the game came from.
+func watchForWindow(dir, id, name string) {
+	prefs, err := games.LoadPrefs(dir)
+	if err != nil {
+		return
+	}
+	if device := prefs.DisplayFor(id); device != "" && device != games.DisplayDefault {
+		slog.Info("watching for this game's window", "game", name, "display", device)
+		moveGameToDisplay(device, name)
+	}
+}
+
+/*
+ * startByFile starts a GOG or EA game and says how. A GOG game goes through
+ * Galaxy when Galaxy is installed and to its play task when not; an EA game to
+ * the executable its own shortcut runs. Everything it runs was read by the
+ * rescan that confirmed the game is installed, and checked by ExecutableTarget
+ * or GalaxyArgs on the way.
+ */
+func startByFile(g games.Game) (string, error) {
+	if g.Source == games.SourceGOG {
+		if galaxy, ok := games.GalaxyClient(); ok {
+			_, own, _ := games.SplitID(g.ID)
+			args, err := games.GalaxyArgs(own, g.InstallPath)
+			if err != nil {
+				return "", err
+			}
+			return "GOG Galaxy", startGalaxy(galaxy, args)
+		}
+	}
+	exe, err := games.ExecutableTarget(g)
+	if err != nil {
+		return "", err
+	}
+	return exe, startDetached(exe)
 }

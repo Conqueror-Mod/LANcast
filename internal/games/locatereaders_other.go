@@ -13,3 +13,8 @@ package games
 func epicManifestDir() (string, bool) { return "", false }
 
 func installedPrograms() []InstalledProgram { return nil }
+
+func gogInstalls() []GOGInstall { return nil }
+
+// GalaxyClient finds GOG Galaxy, which only exists on Windows.
+func GalaxyClient() (string, bool) { return "", false }

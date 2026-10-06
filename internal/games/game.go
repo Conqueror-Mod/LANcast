@@ -1,5 +1,5 @@
-// Package games reads what Steam, Epic, Battle.net and the Xbox app have
-// installed on *this* machine.
+// Package games reads what Steam, Epic, Battle.net, the Xbox app, GOG and the
+// EA app have installed on *this* machine.
 //
 // It exists in the desktop client rather than the server, and that is the whole
 // decision (ADR 0066): a game is installed on one PC, cannot be streamed, and
@@ -57,6 +57,11 @@ type Game struct {
 	// process; the page is sent image bytes and never a path (ADR 0066).
 	PosterPath string `json:"-"`
 	HeaderPath string `json:"-"`
+	// Executable is what starts a game that is launched by running a file
+	// rather than a URI: GOG's primary play task, EA's own shortcut target.
+	// Read from the disk and registry on each scan, never from the page, and
+	// checked to be inside InstallPath before it is run (ExecutableTarget).
+	Executable string `json:"-"`
 }
 
 // Result is one scan: what was found and whether finding it worked.
@@ -73,7 +78,17 @@ type Result struct {
 // Locating Steam is the only part that is OS-specific; everything after it is
 // ScanRoot, which is a directory away from being testable.
 func Scan() Result {
-	return merge(scanSteam(), scanEpic(), scanBattleNet(), scanXbox())
+	return merge(scanSteam(), scanEpic(), scanBattleNet(), scanXbox(), scanGOG(), scanEA())
+}
+
+// scanGOG reads the games GOG's installer registered.
+func scanGOG() Result {
+	return ScanGOG(gogInstalls())
+}
+
+// scanEA reads the EA app's games from the uninstall entries.
+func scanEA() Result {
+	return EAGames(installedPrograms())
 }
 
 // scanXbox reads the install folders every drive's `.GamingRoot` names.
