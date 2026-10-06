@@ -102,7 +102,7 @@ func TestEAReadsGamesAndLeavesOutTheEAApp(t *testing.T) {
 	writeFile(t, filepath.Join(other, "__Installer", "installerdata.xml"), skateManifest)
 
 	r := EAGames([]InstalledProgram{
-		{Key: "{7B68}", Name: "skate.", Publisher: "Electronic Arts", InstallLocation: dir + `\`,
+		{Key: "{7B68}", Name: "skate.", Publisher: "Electronic Arts", InstallLocation: dir + string(filepath.Separator),
 			DisplayIcon: `"` + filepath.Join(dir, "Skate.exe") + `"`, EstimatedSizeKB: 2048},
 		// The EA app itself: same publisher, no folder, no manifest.
 		{Key: "{b346}", Name: "EA app", Publisher: "Electronic Arts"},

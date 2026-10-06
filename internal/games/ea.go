@@ -38,10 +38,13 @@ type eaManifest struct {
 func EAGames(programs []InstalledProgram) Result {
 	out := Result{Status: StatusNotInstalled, Games: []Game{}}
 	for _, p := range programs {
-		if !strings.Contains(p.Publisher, "Electronic Arts") || p.InstallLocation == "" {
+		// EA writes the folder with a trailing separator; trimmed before it is
+		// used for anything, not only for display.
+		dir := strings.TrimRight(p.InstallLocation, `\/`)
+		if !strings.Contains(p.Publisher, "Electronic Arts") || dir == "" {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(p.InstallLocation, "__Installer", "installerdata.xml"))
+		raw, err := os.ReadFile(filepath.Join(dir, "__Installer", "installerdata.xml"))
 		if err != nil {
 			continue
 		}
@@ -57,7 +60,7 @@ func EAGames(programs []InstalledProgram) Result {
 			ID:          EAID(id),
 			Name:        eaTitle(m, p.Name),
 			Source:      SourceEA,
-			InstallPath: strings.TrimRight(p.InstallLocation, `\/`),
+			InstallPath: dir,
 			Executable:  iconExecutable(p.DisplayIcon),
 		}
 		if p.EstimatedSizeKB > 0 {
