@@ -1214,10 +1214,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * how many channels the track has: a control engaged on a guess is a control
    * that might do nothing, and nobody can tell that from listening.
    */
-  const musicChannels =
-    isAudio && elementFXSupported()
-      ? ((audioTracks.find((t) => t.default) ?? audioTracks[0])?.channels ?? 0)
-      : 0;
+  // The track that is playing: the chosen one, else the file's default.
+  const sourceChannels =
+    (audioIndex != null
+      ? audioTracks.find((t) => t.index === audioIndex)
+      : (audioTracks.find((t) => t.default) ?? audioTracks[0])
+    )?.channels ?? 0;
+  const musicChannels = isAudio && elementFXSupported() ? sourceChannels : 0;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -1227,8 +1230,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const fx = isAudio
       ? fxApplies({ night: prefs.nightMusic }, musicChannels)
       : FX_OFF;
-    applyElementFX(v, fx, prefs.audioDevice);
-  }, [isAudio, musicChannels, prefs.nightMusic, prefs.audioDevice]);
+    // The output carries what the source has, so a routed element sends the
+    // mixer the same stream it would have sent unrouted (elementEngine.ts).
+    applyElementFX(v, fx, prefs.audioDevice, sourceChannels);
+  }, [isAudio, musicChannels, sourceChannels, prefs.nightMusic, prefs.audioDevice]);
 
   // A routed element is silent while its context is suspended, and a context
   // can be suspended by the system as well as at birth. Every play resumes it.
