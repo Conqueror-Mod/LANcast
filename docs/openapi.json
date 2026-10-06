@@ -9333,6 +9333,49 @@
           }
         }
       }
+    },
+    "/libraries/{id}/near-copies": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
+      "get": {
+        "operationId": "getLibraryNearCopies",
+        "tags": [
+          "libraries"
+        ],
+        "summary": "A picture library's near copies: probably the same picture, resized or re-saved",
+        "description": "Photos that are probably the same picture resized or re-saved (ADR 0075, 2026-10-06 amendment). A pair is a near copy when all four hold: search-embedding cosine >= 0.93; display-copy difference hashes within 8 bits; capture times equal or one unknown (so bursts are excluded); not both a screenshot resolution. Pairs join into groups. Measured on a real library: 32 pairs selected, 30 plainly the same picture, one uncertain, none different. Crops, edits and bursts are left out by design, and exact copies are not paired with each other (that is `/duplicates`). Copies come largest picture first, and `keep` names the largest as a suggestion; nothing is removed here. `pending` counts photos not yet comparable (no search embedding, or no hash). Marked and missing photos take no part.",
+        "responses": {
+          "200": {
+            "description": "The groups, how many copies beyond the first, and how many photos could not be compared yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearCopies"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`wrong_kind` on any library that is not a picture library.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -15146,6 +15189,51 @@
           "extra_copies": {
             "type": "integer",
             "description": "Copies beyond the first, summed across groups: what removing every duplicate would remove."
+          }
+        }
+      },
+      "NearCopies": {
+        "type": "object",
+        "required": [
+          "groups",
+          "extra_copies",
+          "pending"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NearCopyGroup"
+            }
+          },
+          "extra_copies": {
+            "type": "integer",
+            "description": "Copies beyond the first, summed across groups."
+          },
+          "pending": {
+            "type": "integer",
+            "description": "Photos that could not be compared yet: no search embedding, or no hash."
+          }
+        }
+      },
+      "NearCopyGroup": {
+        "type": "object",
+        "required": [
+          "copies",
+          "keep"
+        ],
+        "properties": {
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateCopy"
+            },
+            "description": "Largest picture first."
+          },
+          "keep": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The item id of the copy with the most pixels: a suggestion of which to keep."
           }
         }
       }

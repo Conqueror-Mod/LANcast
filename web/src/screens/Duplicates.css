@@ -137,6 +137,29 @@
   overflow-wrap: anywhere;
 }
 
+/* A near copy's size is the fact that tells the versions apart, so it reads
+   like the album does. "Largest" is a plain label: gold means where you are
+   (design.md), never which one to keep. */
+.dupes__size {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dupes__largest {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--text-faint);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
 .dupes__remove {
   align-self: flex-start;
   background: transparent;

@@ -4293,6 +4293,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{id}/near-copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A picture library's near copies: probably the same picture, resized or re-saved
+         * @description Photos that are probably the same picture resized or re-saved (ADR 0075, 2026-10-06 amendment). A pair is a near copy when all four hold: search-embedding cosine >= 0.93; display-copy difference hashes within 8 bits; capture times equal or one unknown (so bursts are excluded); not both a screenshot resolution. Pairs join into groups. Measured on a real library: 32 pairs selected, 30 plainly the same picture, one uncertain, none different. Crops, edits and bursts are left out by design, and exact copies are not paired with each other (that is `/duplicates`). Copies come largest picture first, and `keep` names the largest as a suggestion; nothing is removed here. `pending` counts photos not yet comparable (no search embedding, or no hash). Marked and missing photos take no part.
+         */
+        get: operations["getLibraryNearCopies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6589,6 +6612,22 @@ export interface components {
             groups: components["schemas"]["DuplicateGroup"][];
             /** @description Copies beyond the first, summed across groups: what removing every duplicate would remove. */
             extra_copies: number;
+        };
+        NearCopies: {
+            groups: components["schemas"]["NearCopyGroup"][];
+            /** @description Copies beyond the first, summed across groups. */
+            extra_copies: number;
+            /** @description Photos that could not be compared yet: no search embedding, or no hash. */
+            pending: number;
+        };
+        NearCopyGroup: {
+            /** @description Largest picture first. */
+            copies: components["schemas"]["DuplicateCopy"][];
+            /**
+             * Format: int64
+             * @description The item id of the copy with the most pixels: a suggestion of which to keep.
+             */
+            keep: number;
         };
     };
     responses: {
@@ -13348,6 +13387,40 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryNearCopies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The groups, how many copies beyond the first, and how many photos could not be compared yet. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NearCopies"];
+                };
+            };
+            /** @description `wrong_kind` on any library that is not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

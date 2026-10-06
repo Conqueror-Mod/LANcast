@@ -319,6 +319,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
 	mux.HandleFunc("GET /api/libraries/{id}/duplicates", s.photoDuplicates)
+	mux.HandleFunc("GET /api/libraries/{id}/near-copies", s.photoNearCopies)
 
 	// Faces (ADR 0052). Reading who is in a library is available to anyone who
 	// can see the library; starting a pass and naming a group are edits.

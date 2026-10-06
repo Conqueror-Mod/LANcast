@@ -3351,11 +3351,50 @@ Removing a copy is `DELETE /api/items/{id}?mode=` under that route's own rules �
 admin only, `delete` refused when media deletion is off, `ignore` to stop
 tracking a copy without touching the file. This endpoint grants nothing.
 
-**Exact only.** The same picture resized or re-saved is not reported: measured on
-that library, a perceptual hash could not tell a resized copy from two different
-screenshots of the same screen, at 64 bits or 256. Marked photos (ADR 0051) and
-missing ones take no part. A photo is grouped once the photo worker has read it,
-so a library still being processed reports what has been read so far.
+**Exact only.** The same picture resized or re-saved is
+`GET /api/libraries/{id}/near-copies`, below, and is never mixed into this list.
+Marked photos (ADR 0051) and missing ones take no part. A photo is grouped once
+the photo worker has read it, so a library still being processed reports what
+has been read so far.
+
+### `GET /api/libraries/{id}/near-copies`
+
+A picture library's **near copies**: photos that are probably the same picture,
+resized or re-saved (ADR 0075, 2026-10-06 amendment). `400 wrong_kind` on any
+other library kind.
+
+```json
+{ "groups": [
+    { "keep": 412,
+      "copies": [
+        { "item": { "id": 412, "kind": "photo", "width": 3648, "height": 2736, … }, "album": "Party" },
+        { "item": { "id": 977, "kind": "photo", "width": 720, "height": 540, … }, "album": "Party" } ] } ],
+  "extra_copies": 1,
+  "pending": 0 }
+```
+
+A pair is a near copy when **all four** hold:
+- their semantic-search embeddings are close: cosine ≥ 0.93;
+- their display copies' difference hashes differ by 8 bits or fewer;
+- they were not taken at different moments, so their capture times are equal
+  or one is unknown;
+- they are not both a screenshot resolution.
+
+Pairs join into groups. That rule was measured on a real library of 3,073
+photos. It selected 32 pairs: 30 plainly the same picture, one uncertain, none a
+different picture.
+
+- **What it leaves out:** bursts (shots a second apart), crops and edits, by
+  design. Exact copies are not paired with each other, because they are
+  `/duplicates`.
+- **`copies`** come largest picture first, and **`keep`** is the largest, as a
+  suggestion. Nothing is removed here; removal is `DELETE /api/items/{id}`, as
+  for duplicates.
+- **`pending`** counts photos that could not be compared yet: no search
+  embedding (the library has not been indexed for search) or no hash (the photo
+  worker has not read it since revision 60).
+
+Marked and missing photos take no part.
 
 ### `PUT /api/items/{id}/sensitive`
 

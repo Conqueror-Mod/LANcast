@@ -7,7 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
-import type { BackupFile, BackupsResponse, Duplicates } from "./types";
+import type { BackupFile, BackupsResponse, Duplicates, NearCopies } from "./types";
 import { isContainer } from "@/lib/kind";
 import { forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type {
@@ -1331,6 +1331,23 @@ export function usePhotoDuplicates(libraryID: number) {
     queryKey: ["duplicates", libraryID],
     queryFn: ({ signal }) =>
       apiGet<Duplicates>(`/api/libraries/${libraryID}/duplicates`, signal),
+    enabled: libraryID > 0,
+  });
+}
+
+/*
+ * A picture library's near copies (ADR 0075, 2026-10-06 amendment).
+ *
+ * Keyed under ["duplicates"] on purpose: useDeleteItem invalidates that prefix,
+ * so removing a copy refreshes this list as well as the exact one. A sibling
+ * key like ["near-copies"] would be missed by every existing invalidation and
+ * leave the removed copy on screen.
+ */
+export function usePhotoNearCopies(libraryID: number) {
+  return useQuery({
+    queryKey: ["duplicates", libraryID, "near"],
+    queryFn: ({ signal }) =>
+      apiGet<NearCopies>(`/api/libraries/${libraryID}/near-copies`, signal),
     enabled: libraryID > 0,
   });
 }

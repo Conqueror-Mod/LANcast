@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useIsAdmin, useLibraries, usePhotoDuplicates } from "@/api/hooks";
+import { useIsAdmin, useLibraries, usePhotoDuplicates, usePhotoNearCopies } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { RemoveDialog } from "@/components/RemoveDialog";
-import type { DuplicateCopy, DuplicateGroup, Item } from "@/api/types";
+import type { DuplicateCopy, DuplicateGroup, Item, NearCopyGroup } from "@/api/types";
 import { formatBytes } from "@/lib/format";
 import "./Duplicates.css";
 
@@ -72,6 +72,67 @@ export function splitGroups(groups: DuplicateGroup[]): {
   return { sameAlbum, acrossAlbums };
 }
 
+/** A photo's size in pixels, as a person reads it: "3648 × 2736". */
+export function dimensions(item: Item): string {
+  return item.width && item.height ? `${item.width} × ${item.height}` : "Size unknown";
+}
+
+/**
+ * What removing one near copy leaves, in a sentence. Near copies differ in
+ * size, so the sentence names sizes: removing the small one keeps the picture,
+ * removing the large one keeps a smaller copy of it, and that is worth saying.
+ * Exported for the test.
+ */
+export function nearRemovalNote(group: NearCopyGroup, copy: DuplicateCopy): string {
+  const keep = group.copies.find((c) => c.item.id === group.keep) ?? group.copies[0];
+  if (copy.item.id === keep.item.id) {
+    const next = group.copies.find((c) => c.item.id !== copy.item.id);
+    return next
+      ? `This is the largest copy. The ${dimensions(next.item)} copy stays, so the picture is kept smaller.`
+      : "";
+  }
+  const where = keep.album ? `"${keep.album}"` : ROOT;
+  return `The ${dimensions(keep.item)} copy stays in ${where}.`;
+}
+
+function NearGroup({
+  group,
+  admin,
+  onShow,
+  onRemove,
+}: {
+  group: NearCopyGroup;
+  admin: boolean;
+  onShow: (photos: Item[], at: number) => void;
+  onRemove: (copy: DuplicateCopy) => void;
+}) {
+  const photos = group.copies.map((c) => c.item);
+  return (
+    <section className="dupes__group">
+      <h2 className="dupes__group-head">
+        {group.copies.length} versions
+      </h2>
+      <div className="dupes__copies">
+        {group.copies.map((c, i) => (
+          <div key={c.item.id} className="dupes__copy">
+            <PosterTile item={c.item} onOpen={() => onShow(photos, i)} />
+            <div className="dupes__size">
+              {dimensions(c.item)}
+              {c.item.id === group.keep && <span className="dupes__largest">Largest</span>}
+            </div>
+            <div className="dupes__album">{c.album ?? "Library root"}</div>
+            {admin && (
+              <button className="dupes__remove" onClick={() => onRemove(c)}>
+                Remove…
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Group({
   group,
   admin,
@@ -115,10 +176,10 @@ export function Duplicates() {
   const { data: libraries } = useLibraries();
   const library = libraries?.find((l) => l.id === libraryID);
   const { data, isLoading } = usePhotoDuplicates(libraryID);
+  const { data: near } = usePhotoNearCopies(libraryID);
   const [shown, setShown] = useState<{ photos: Item[]; at: number } | null>(null);
-  const [removing, setRemoving] = useState<{ group: DuplicateGroup; copy: DuplicateCopy } | null>(
-    null,
-  );
+  const [removing, setRemoving] = useState<{ copy: DuplicateCopy; note: string } | null>(null);
+  const nearGroups = near?.groups ?? [];
 
   const groups = data?.groups ?? [];
   const { sameAlbum, acrossAlbums } = splitGroups(groups);
@@ -145,7 +206,7 @@ export function Duplicates() {
       </p>
 
       {isLoading && <p className="dupes__empty">Comparing photos…</p>}
-      {!isLoading && groups.length === 0 && (
+      {!isLoading && groups.length === 0 && nearGroups.length === 0 && (
         <p className="dupes__empty">
           No duplicates. A photo is compared once LANcast has read it, so a
           library that is still being processed may show more later.
@@ -183,12 +244,52 @@ export function Duplicates() {
                   group={g}
                   admin={admin}
                   onShow={(photos, at) => setShown({ photos, at })}
-                  onRemove={(copy) => setRemoving({ group: g, copy })}
+                  onRemove={(copy) => setRemoving({ copy, note: removalNote(g, copy) })}
                 />
               ))}
             </div>
           </section>
         ))}
+
+      {/* Near copies, after the exact ones and never mixed with them: those
+          are the same file, these are a measured judgement (ADR 0075
+          amendment). Nothing here is removed for anyone; the largest is
+          marked as the one to keep. */}
+      {(nearGroups.length > 0 || (near?.pending ?? 0) > 0) && (
+        <section className="dupes__section">
+          <h2 className="dupes__section-head">
+            Probably the same picture
+            {nearGroups.length > 0 && (
+              <span>
+                {nearGroups.length} {nearGroups.length === 1 ? "group" : "groups"}
+              </span>
+            )}
+          </h2>
+          <p className="dupes__section-note">
+            Not the same file: the same picture saved at another size or saved
+            again. The largest version is marked. Bursts, crops and edited
+            copies are left out.
+          </p>
+          {(near?.pending ?? 0) > 0 && (
+            <p className="dupes__section-note">
+              {near!.pending} {near!.pending === 1 ? "photo hasn't" : "photos haven't"} been
+              compared yet. Photos are compared once they are indexed for
+              search, so press Index photos on the library if this stays.
+            </p>
+          )}
+          <div className="dupes__groups">
+            {nearGroups.map((g) => (
+              <NearGroup
+                key={g.keep}
+                group={g}
+                admin={admin}
+                onShow={(photos, at) => setShown({ photos, at })}
+                onRemove={(copy) => setRemoving({ copy, note: nearRemovalNote(g, copy) })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {shown && (
         <PhotoViewer photos={shown.photos} startAt={shown.at} onClose={() => setShown(null)} />
@@ -196,7 +297,7 @@ export function Duplicates() {
       {removing && (
         <RemoveDialog
           item={removing.copy.item}
-          note={removalNote(removing.group, removing.copy)}
+          note={removing.note}
           onClose={() => setRemoving(null)}
           onDone={() => setRemoving(null)}
         />

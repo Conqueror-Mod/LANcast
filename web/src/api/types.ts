@@ -63,6 +63,9 @@ export type Item = components["schemas"]["Item"];
 export type Duplicates = components["schemas"]["Duplicates"];
 export type DuplicateGroup = components["schemas"]["DuplicateGroup"];
 export type DuplicateCopy = components["schemas"]["DuplicateCopy"];
+/** Near copies: probably the same picture, resized or re-saved (ADR 0075 amendment). */
+export type NearCopies = components["schemas"]["NearCopies"];
+export type NearCopyGroup = components["schemas"]["NearCopyGroup"];
 
 // The anatomy of a candidate's score: sub-scores (0..1) that combine by their
 // weights into the total. Nested keys are lowercase (the Go struct tags them).
