@@ -408,6 +408,40 @@ mixer the same stream an unrouted one would.
 the page, not only where the graph ends. A tap before the destination cannot
 see what the destination does.
 
+### The real cause: the volume slider sat before the compressor (v0.9.59)
+
+On v0.9.59, night mode was still louder than off. That held with Sonar on, and
+with Sonar off on the Windows default device. Three fixes in a row had changed
+something that was not the cause:
+- the trim;
+- Smart Volume;
+- the output channel count, which was a real fault, but not this one.
+
+That repetition was the signal to stop and look for what every measurement had
+held constant. **Every lab run was at full player volume.**
+
+The element's `volume` scales the sound *before* a `MediaElementAudioSourceNode`.
+So the slider fed the compressor. At a listening level the compressor saw a
+signal far under its −30 dB threshold, compressed almost nothing, and still
+applied its automatic make-up gain. Measured live on the shipped graph, on the
+same stretch of the loud master:
+
+| player volume | night on vs off |
+|---|---|
+| 1.0 | −9.0 dB |
+| 0.25 | −0.7 dB |
+| 0.1 | **+4.1 dB** |
+
+**Fix.** Once the element is routed, it plays at full volume, and the slider is
+a gain *after* the graph (`ElementEngine.level`, set through `setElementVolume`).
+The compressor always sees the track at its real level. Measured on the real
+engine, at the point the sound leaves the page, at volume 0.1: night mode is
+**8.9 dB quieter** than off.
+
+**What to keep from this:** a dynamics processor's result depends on its input
+level. Every control that scales the input, the volume slider above all, has
+to be one of the measured variables, or placed after the processor.
+
 ## Phase 3: the equaliser
 
 Bands on both engines (`equalizer` in lavfi, `BiquadFilterNode` in Web Audio),

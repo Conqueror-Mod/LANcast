@@ -6,7 +6,14 @@
  * that records what was asked of it.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { applyElementFX, engineFor, outputChannels, resume, setContextSink } from "./elementEngine";
+import {
+  applyElementFX,
+  engineFor,
+  outputChannels,
+  resume,
+  setContextSink,
+  setElementVolume,
+} from "./elementEngine";
 import { FX_OFF } from "./elementAudio";
 
 class FakeNode {
@@ -148,5 +155,38 @@ describe("outputChannels", () => {
     [Number.NaN, 8, 2],
   ])("source %s on a %s-channel device -> %s", (src, max, want) => {
     expect(outputChannels(src, max)).toBe(want);
+  });
+});
+
+/*
+ * The volume goes after the graph once the element is routed.
+ *
+ * The bug this pins: the element's own volume scaled the sound before night
+ * mode's compressor, so at a listening level of 10% the compressor saw a
+ * signal 20 dB down, compressed almost nothing, added its make-up gain, and
+ * night mode came out 4 dB louder than off. Measured live; every earlier lab
+ * run had been at full volume.
+ */
+describe("the player's volume", () => {
+  it("is the element's own until the element is routed", () => {
+    const el = document.createElement("video");
+    setElementVolume(el, 0.3);
+    expect(el.volume).toBeCloseTo(0.3);
+  });
+
+  it("moves after the graph when night mode first routes the element", () => {
+    const el = document.createElement("video");
+    el.volume = 0.1;
+    const engine = applyElementFX(el, NIGHT_ON, "", 2)!;
+    expect(el.volume).toBe(1);
+    expect(engine.level.gain.value).toBeCloseTo(0.1);
+  });
+
+  it("stays after the graph: the element is held at full volume", () => {
+    const el = document.createElement("video");
+    const engine = applyElementFX(el, NIGHT_ON, "", 2)!;
+    setElementVolume(el, 0.25);
+    expect(el.volume).toBe(1);
+    expect(engine.level.gain.value).toBeCloseTo(0.25);
   });
 });

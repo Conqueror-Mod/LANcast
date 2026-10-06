@@ -67,7 +67,14 @@ import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
 import { FX_OFF, fxApplies } from "./elementAudio";
-import { applyElementFX, elementFXSupported, engineFor, resume, setContextSink } from "./elementEngine";
+import {
+  applyElementFX,
+  elementFXSupported,
+  engineFor,
+  resume,
+  setContextSink,
+  setElementVolume,
+} from "./elementEngine";
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -1890,7 +1897,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setVolume(clamped);
     localStorage.setItem("lancast:volume", String(clamped));
     if (!v) return;
-    v.volume = clamped;
+    // The element's volume goes after night mode's graph once it is routed
+    // (elementEngine.ts); mpv takes it directly.
+    if (v === videoRef.current) setElementVolume(videoRef.current, clamped);
+    else v.volume = clamped;
     if (clamped > 0 && v.muted) {
       v.muted = false;
       setMuted(false);
@@ -2337,7 +2347,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // The element resets to full volume on every new source, so the
       // remembered level has to be re-applied — including across a
       // transcode seek, which reloads the source.
-      v.volume = volume;
+      if (v === videoRef.current) setElementVolume(videoRef.current, volume);
+      else v.volume = volume;
       // Same reason as volume: a fresh source resets playbackRate to 1,
       // so a chosen speed has to be re-applied or it silently reverts on
       // the next episode.
