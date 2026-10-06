@@ -30,17 +30,27 @@ func (r Rect) empty() bool { return r.Width() <= 0 || r.Height() <= 0 }
 
 // Monitor is one display as the system reports it.
 type Monitor struct {
-	// Device is the stable identity — `\\.\DISPLAY2` and friends.
+	// Device is the GDI name — `\\.\DISPLAY2` and friends.
 	//
 	// Coordinates are not identity. Two monitors swap positions and their
 	// rectangles swap with them, so a window remembered by position alone
-	// follows the geometry rather than the screen. The device name is what
-	// survives a rearrangement.
+	// follows the geometry rather than the screen. The device name survives a
+	// rearrangement, but not the graphics driver re-enumerating its screens,
+	// which renumbers them: one machine's three monitors went from DISPLAY3
+	// and friends to 6, 7 and 8. Path, below, survives that.
 	Device string
 	// Work is the usable area, taskbar excluded. A window restored into the
 	// full monitor rectangle sits under the taskbar.
 	Work    Rect
 	Primary bool
+	// Name is the monitor's own name from its EDID ("LG ULTRAGEAR"), empty
+	// when Windows does not know it. For showing, never for identity.
+	Name string
+	// Path is the monitor's device path: the physical monitor on its port. It
+	// survives what Device does not, the driver renumbering its screens, so it
+	// is what a remembered choice of screen should hold. Empty when the
+	// display configuration could not be read.
+	Path string
 }
 
 /*

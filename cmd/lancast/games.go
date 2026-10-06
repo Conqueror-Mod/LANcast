@@ -61,8 +61,21 @@ func gamesBindings(dir string) map[string]any {
 			res := games.Scan()
 			prefs, prefsErr := games.LoadPrefs(dir)
 
+			/*
+			 * A choice of screen saved by the driver's device name is moved to
+			 * the monitor's own identity while that name still means the same
+			 * monitor (resolveDisplay), and saved, so it survives the next time
+			 * Windows renumbers its screens.
+			 */
+			migrated := false
 			list := make([]map[string]any, 0, len(res.Games))
 			for _, g := range res.Games {
+				if stored := prefs.DisplayFor(g.ID); stored != "" {
+					if now := resolveDisplay(stored); now != stored {
+						prefs.SetDisplay(g.ID, now)
+						migrated = true
+					}
+				}
 				list = append(list, map[string]any{
 					"id":   g.ID,
 					"name": g.Name,
@@ -85,6 +98,11 @@ func gamesBindings(dir string) map[string]any {
 					// sentinel instead, and is never asked again.
 					"display": prefs.DisplayFor(g.ID),
 				})
+			}
+			if migrated && prefsErr == nil {
+				if err := games.SavePrefs(dir, prefs); err != nil {
+					slog.Info("could not save the updated screen choices", "err", err)
+				}
 			}
 			out := map[string]any{"status": string(res.Status), "games": list}
 			if res.Err != "" {

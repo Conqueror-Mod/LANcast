@@ -64,6 +64,12 @@ func Monitors() []Monitor {
 		return 1 // keep enumerating
 	})
 	_, _, _ = procEnumDisplayMonitors.Call(0, 0, cb, 0)
+	names := monitorNames()
+	for i := range out {
+		if n, ok := names[out[i].Device]; ok {
+			out[i].Name, out[i].Path = n.Friendly, n.Path
+		}
+	}
 	return out
 }
 

@@ -59,8 +59,9 @@ func (r Rect) Height() int { return r.Bottom - r.Top }
 
 // Display is one screen, as offered to the person choosing.
 type Display struct {
-	// Device is the identity: \.\DISPLAY2 and friends. Stored, compared and
-	// remembered by this, never by position — two monitors swapped in Windows'
+	// Device is the identity: the monitor's device path where Windows gives
+	// one, else the GDI name (DISPLAY2 and friends), which the driver
+	// renumbers. Stored, compared and remembered by this, never by position — two monitors swapped in Windows'
 	// display settings swap their rectangles with them, and a remembered
 	// position would follow the geometry rather than the screen.
 	Device string `json:"device"`
@@ -74,21 +75,146 @@ type Display struct {
 	Height  int  `json:"height"`
 }
 
-// DisplayLabel names a screen for a person rather than for Windows.
-//
-// The device name is the identity and is unreadable; the number in it is the
-// only part anybody recognises, and it matches what Windows' own display
-// settings show, which is where somebody will go to check.
-func DisplayLabel(device string, width, height int, primary bool) string {
-	name := device
-	if n := strings.TrimPrefix(device, devicePrefix); n != device && n != "" {
-		name = "Display " + n
+/*
+ * Screen is one monitor, as DisplayLabels reads it.
+ *
+ * Name is the monitor's own EDID name ("C27F398", "Roku 55R4AX"), empty when
+ * Windows has none. Rect places it on the desktop, for saying where it is
+ * relative to the main screen.
+ */
+type Screen struct {
+	Name          string
+	Width, Height int
+	Rect          Rect
+	Primary       bool
+}
+
+// genericNames are what Windows calls a monitor it knows nothing about. They
+// say nothing a person can use, so the screen is called "Screen" instead and
+// told apart by where it is.
+var genericNames = map[string]bool{
+	"": true, "display": true, "generic pnp monitor": true, "generic non-pnp monitor": true,
+	"default monitor": true,
+}
+
+/*
+ * DisplayLabels names every screen for a person.
+ *
+ * Not by the number in a device name like DISPLAY6. That number is the
+ * graphics driver's, not the one Windows' display settings show, and it
+ * climbs every time the driver re-enumerates: three monitors on one desk read
+ * as Displays 6, 7 and 8, which matched nothing anybody could see. The earlier
+ * version of this comment claimed it matched Windows' settings. It did not.
+ *
+ * So a screen is named by what it is and where it is: its own name when it has
+ * a useful one, and, for every screen but the main one, which side of the main
+ * screen it sits on. "Roku 55R4AX, left of main — 3840 x 2160". Two identical
+ * monitors are told apart by position too.
+ */
+func DisplayLabels(screens []Screen) []string {
+	var main *Screen
+	for i := range screens {
+		if screens[i].Primary {
+			main = &screens[i]
+			break
+		}
 	}
-	label := fmt.Sprintf("%s — %d x %d", name, width, height)
-	if primary {
-		label += " (main)"
+	out := make([]string, len(screens))
+	for i, sc := range screens {
+		name := strings.TrimSpace(sc.Name)
+		if genericNames[strings.ToLower(name)] {
+			name = "Screen"
+		}
+		if !sc.Primary && main != nil {
+			if where := relativePosition(sc.Rect, main.Rect); where != "" {
+				name += ", " + where
+			}
+		}
+		label := fmt.Sprintf("%s — %d x %d", name, sc.Width, sc.Height)
+		if sc.Primary {
+			label += " (main)"
+		}
+		out[i] = label
 	}
-	return label
+	return out
+}
+
+// relativePosition says which side of ref r is on, by the larger offset
+// between their centres: "left of main", "above main".
+func relativePosition(r, ref Rect) string {
+	dx := (r.Left + r.Right - ref.Left - ref.Right) / 2
+	dy := (r.Top + r.Bottom - ref.Top - ref.Bottom) / 2
+	if dx == 0 && dy == 0 {
+		return ""
+	}
+	if absInt(dx) >= absInt(dy) {
+		if dx < 0 {
+			return "left of main"
+		}
+		return "right of main"
+	}
+	if dy < 0 {
+		return "above main"
+	}
+	return "below main"
+}
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+/*
+ * Plan is how to put a window on a display.
+ *
+ * X, Y place it. Width and Height are zero to keep the window's own size, or
+ * the size to give it. Restore and Maximize bracket the move for a window that
+ * was maximized: a maximized window moved by position stays the size of the
+ * screen it was maximized on, which is how a game maximized on a 4K screen and
+ * sent to a 1080p one ends up across two screens. It has to be restored,
+ * moved, and maximized again where it now is.
+ */
+type Plan struct {
+	X, Y          int
+	Width, Height int
+	Restore       bool
+	Maximize      bool
+}
+
+/*
+ * PlanMove decides how to put a window on a display with work area work.
+ *
+ *   - A maximized window: restore it, centre its normal size on the display
+ *     (clamped to fit), and maximize it again there.
+ *   - A window bigger than the display: give it the work area, exactly. Moving
+ *     it alone pins its corner to the display's corner and leaves the rest of
+ *     it on the next screen, which is what the first version did to Minecraft,
+ *     twenty-eight times in twenty seconds.
+ *   - Anything else: centre it and keep its size (MoveTarget). A game sized its
+ *     window to its renderer, and resizing that behind its back is not asked.
+ *
+ * normal is the window's restored size, used for a maximized window; an empty
+ * one means not known, and the work area stands in for it.
+ */
+func PlanMove(win Rect, maximized bool, normal Rect, work Rect) Plan {
+	if maximized {
+		w, h := normal.Width(), normal.Height()
+		if w <= 0 || w > work.Width() {
+			w = work.Width()
+		}
+		if h <= 0 || h > work.Height() {
+			h = work.Height()
+		}
+		x, y := MoveTarget(Rect{Right: w, Bottom: h}, work)
+		return Plan{X: x, Y: y, Width: w, Height: h, Restore: true, Maximize: true}
+	}
+	if win.Width() > work.Width() || win.Height() > work.Height() {
+		return Plan{X: work.Left, Y: work.Top, Width: work.Width(), Height: work.Height()}
+	}
+	x, y := MoveTarget(win, work)
+	return Plan{X: x, Y: y}
 }
 
 /*

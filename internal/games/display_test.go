@@ -88,23 +88,76 @@ func TestTheDevicePrefixHasAllItsBackslashes(t *testing.T) {
 	}
 }
 
-func TestDisplayLabel(t *testing.T) {
-	for _, tc := range []struct {
-		device  string
-		w, h    int
-		primary bool
-		want    string
-	}{
-		{`\\.\DISPLAY1`, 1920, 1080, true, "Display 1 — 1920 x 1080 (main)"},
-		{`\\.\DISPLAY2`, 1440, 960, false, "Display 2 — 1440 x 960"},
-		{`\\.\DISPLAY3`, 2560, 1440, false, "Display 3 — 2560 x 1440"},
-		// Anything that is not shaped like a device name is shown as it is,
-		// rather than being mangled into "Display ".
-		{"HDMI-1", 1280, 720, false, "HDMI-1 — 1280 x 720"},
-	} {
-		if got := DisplayLabel(tc.device, tc.w, tc.h, tc.primary); got != tc.want {
-			t.Errorf("DisplayLabel(%q) = %q, want %q", tc.device, got, tc.want)
+// The desk this was found on: a Samsung as the main screen, a panel Windows
+// calls only "Display" to its right, and a Roku TV to its left, which Windows
+// numbered DISPLAY6, 7 and 8.
+func TestDisplayLabelsNameScreensByWhatAndWhere(t *testing.T) {
+	got := DisplayLabels([]Screen{
+		{Name: "C27F398", Width: 1920, Height: 1080, Primary: true, Rect: Rect{0, 0, 1920, 1080}},
+		{Name: "Display", Width: 2160, Height: 1440, Rect: Rect{1920, -294, 4080, 1146}},
+		{Name: "Roku 55R4AX", Width: 3840, Height: 2160, Rect: Rect{-3840, -693, 0, 1467}},
+	})
+	want := []string{
+		"C27F398 — 1920 x 1080 (main)",
+		"Screen, right of main — 2160 x 1440",
+		"Roku 55R4AX, left of main — 3840 x 2160",
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("label %d = %q, want %q", i, got[i], want[i])
 		}
+		if strings.Contains(got[i], "DISPLAY") {
+			t.Errorf("label %d leaks the driver's device name: %q", i, got[i])
+		}
+	}
+}
+
+func TestDisplayLabelsTellTwinsApartAndPlaceVertically(t *testing.T) {
+	got := DisplayLabels([]Screen{
+		{Name: "DELL U2720Q", Width: 2560, Height: 1440, Primary: true, Rect: Rect{0, 0, 2560, 1440}},
+		{Name: "DELL U2720Q", Width: 2560, Height: 1440, Rect: Rect{2560, 0, 5120, 1440}},
+		{Name: "", Width: 1920, Height: 1080, Rect: Rect{300, -1080, 2220, 0}},
+		{Name: "Generic PnP Monitor", Width: 1280, Height: 720, Rect: Rect{0, 1440, 1280, 2160}},
+	})
+	want := []string{
+		"DELL U2720Q — 2560 x 1440 (main)",
+		"DELL U2720Q, right of main — 2560 x 1440",
+		"Screen, above main — 1920 x 1080",
+		"Screen, below main — 1280 x 720",
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("label %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// Minecraft, maximized on the 4K screen and sent to the 1080p main one.
+func TestPlanMoveRemaximizesAMaximizedWindowWhereItLands(t *testing.T) {
+	work := Rect{0, 0, 1920, 1040}
+	p := PlanMove(Rect{-3840, -693, 0, 1427}, true, Rect{-3000, -400, -1000, 900}, work)
+	if !p.Restore || !p.Maximize {
+		t.Fatalf("plan = %+v, want restore, move, maximize", p)
+	}
+	if p.X < work.Left || p.Y < work.Top || p.X+p.Width > work.Right || p.Y+p.Height > work.Bottom {
+		t.Errorf("restored size %+v does not fit the work area %+v", p, work)
+	}
+}
+
+// A window bigger than the display gets the display, not its corner.
+func TestPlanMoveFitsAWindowTooBigForTheDisplay(t *testing.T) {
+	work := Rect{0, 0, 1920, 1040}
+	p := PlanMove(Rect{-3840, 0, 0, 2160}, false, Rect{}, work)
+	if p.X != 0 || p.Y != 0 || p.Width != 1920 || p.Height != 1040 || p.Maximize {
+		t.Errorf("plan = %+v, want the work area exactly", p)
+	}
+}
+
+// A window that fits keeps its size and is centred, as before.
+func TestPlanMoveCentresAWindowThatFits(t *testing.T) {
+	p := PlanMove(Rect{-1000, 0, -200, 600}, false, Rect{}, Rect{0, 0, 1920, 1040})
+	if p.Width != 0 || p.Height != 0 || p.Restore || p.Maximize || p.X != 560 || p.Y != 220 {
+		t.Errorf("plan = %+v, want centred at 560,220 with its own size", p)
 	}
 }
 
