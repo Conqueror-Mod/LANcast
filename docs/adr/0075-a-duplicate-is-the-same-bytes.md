@@ -90,3 +90,69 @@ search. Whether its similarity separates a resized copy from a similar
 screenshot is a measurement to make before anything is built on it. **Bursts** —
 choosing the best of several shots a second apart — are a different feature
 again.
+
+## Amendment — 2026-10-06: near copies, measured
+
+The question left open above, measured on the same picture library (now 3,073
+photos, every one with a search embedding). It is read-only: a copy of the
+database, and the cached upright display copies.
+
+**Method.** Every pair of photos was scored on four things:
+- cosine similarity of their semantic-search image embeddings;
+- the 64-bit dHash distance of their display copies;
+- whether they are in the same folder;
+- the gap between their capture times.
+
+There were 2,319 pairs at cosine 0.85 or above. The 43 exact copies on the
+Duplicates page all scored 1.0 with a dHash of 0, which calibrates the
+instrument. 106 further pairs were then judged by eye:
+- every pair at 0.97 or above;
+- a sample at 0.95–0.97;
+- every pair the final rule selects;
+- every pair below 0.93 that passes its other filters.
+
+**What sits close in embedding space, apart from copies.**
+- **Bursts** are the bulk of it. They are shots taken a second or more apart,
+  and many are indistinguishable at thumbnail size. One family-room burst alone
+  produced nine pairs at 0.97. The embedding cannot separate a burst from a
+  re-save. The **capture time** can: a burst has a gap of 1 second or more, and
+  a re-save of the same file has the same timestamp or none.
+- **Crops** of the same picture (a square profile crop of a portrait) score
+  0.95–0.99 with dHash 14–28, because the framing changes the hash.
+- **Variants**: a wallpaper in two colourways, or different screenshots of the
+  same application. Screenshots are the hard case ADR 0075 already named. Two
+  different screenshots of one dark interface scored 0.9885 with dHash 6.
+- **Edits** sit below 0.93. These are the same photo with names painted on it,
+  or with a colour filter.
+
+**The rule that holds.** A pair is a near copy when:
+- embedding cosine ≥ 0.93;
+- dHash distance ≤ 8;
+- the capture gap is zero or unknown;
+- they are not both screen-sized. Screenshots are left out entirely.
+
+On this library that is **32 pairs in 29 groups: 60 photos, 31 extra copies**.
+Judged by eye, 30 are plainly the same picture resized or re-saved, for example
+3648 px beside 720 px, or 1000 px beside 319 px. One is uncertain: a group
+photo at the same size, either a re-save or a burst with no EXIF. **None is a
+different picture.** 24 of the 32 pairs are in the same folder, which makes
+them accidental saves rather than filing.
+
+What it does not find:
+- crops, edits and bursts, by design;
+- one logo saved at two sizes, whose capture times are file dates a day apart.
+
+**What this changes.** Near copies are now measurable, and decision 1 still
+stands: a *duplicate* is the same bytes. If a near-copy section is built, it
+should keep these properties:
+- **separate from exact duplicates**, named as "probably the same picture";
+- **never acted on automatically**, with both shown at their real sizes and
+  the larger marked as the one to keep;
+- **built on stored signals.** The dHash would be written by the photo worker
+  beside the SHA-256, from the decode it already makes. The embedding exists
+  only once search has indexed the library, so the section says it is waiting
+  rather than showing an empty page.
+
+Bursts, which means choosing the best of a run of shots, remain the separate
+feature named above. On this library the capture-time gap measured here is
+the boundary that would define one.
