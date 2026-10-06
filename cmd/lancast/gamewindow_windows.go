@@ -59,6 +59,9 @@ const (
 	// opened.
 	watchFor   = 90 * time.Second
 	watchEvery = 500 * time.Millisecond
+	// maxMovesPerWindow is how many times one window is put back before it
+	// is left where it puts itself.
+	maxMovesPerWindow = 3
 	/*
 	 * watchAfterMove keeps the watch alive after a window is actually moved,
 	 * because a launcher appearing is evidence the game has not yet.
@@ -104,24 +107,85 @@ var shells = map[string]bool{
 // appears, and the loser would move the winner's game.
 var watchGeneration atomic.Int64
 
+/*
+ * displayID is how a screen is remembered: its monitor device path, which
+ * names the physical monitor on its port, or the GDI device name when Windows
+ * would not give a path.
+ *
+ * Not the GDI name when there is a choice. That name (`\\.\DISPLAY6`) is
+ * renumbered whenever the graphics driver re-enumerates its screens: a choice
+ * saved as DISPLAY3 was found pointing at nothing, while the same three
+ * monitors had become 6, 7 and 8, and the game quietly opened wherever it liked.
+ */
+func displayID(m clientwindow.Monitor) string {
+	if m.Path != "" {
+		return m.Path
+	}
+	return m.Device
+}
+
 // availableDisplays is the list the picker shows.
 func availableDisplays() []games.Display {
 	mons := clientwindow.Monitors()
 	here := monitorOfForegroundWindow(mons)
 
+	screens := make([]games.Screen, len(mons))
+	for i, m := range mons {
+		screens[i] = games.Screen{
+			Name: m.Name, Width: m.Work.Width(), Height: m.Work.Height(), Primary: m.Primary,
+			Rect: games.Rect{Left: m.Work.Left, Top: m.Work.Top, Right: m.Work.Right, Bottom: m.Work.Bottom},
+		}
+	}
+	labels := games.DisplayLabels(screens)
+
 	out := make([]games.Display, 0, len(mons))
-	for _, m := range mons {
-		w, h := m.Work.Width(), m.Work.Height()
+	for i, m := range mons {
 		out = append(out, games.Display{
-			Device:  m.Device,
-			Label:   games.DisplayLabel(m.Device, w, h, m.Primary),
+			Device:  displayID(m),
+			Label:   labels[i],
 			Primary: m.Primary,
 			Current: m.Device == here,
-			Width:   w,
-			Height:  h,
+			Width:   screens[i].Width,
+			Height:  screens[i].Height,
 		})
 	}
 	return out
+}
+
+/*
+ * resolveDisplay turns a stored choice into the identity the picker uses now.
+ *
+ * A choice saved before identities were device paths is a GDI name. While that
+ * monitor is still called by that name it is translated, so the choice keeps
+ * working and can be saved again in the form that survives renumbering. A name
+ * that matches nothing attached is returned as it is: the screen is unplugged,
+ * or was renumbered before this could notice, and either way the game opens
+ * where it likes and the page can offer the choice again.
+ */
+func resolveDisplay(stored string) string {
+	if stored == "" || stored == games.DisplayDefault {
+		return stored
+	}
+	for _, m := range clientwindow.Monitors() {
+		if m.Path != "" && m.Path == stored {
+			return stored
+		}
+		if m.Device == stored {
+			return displayID(m)
+		}
+	}
+	return stored
+}
+
+// targetMonitor finds the attached screen a stored choice names, in either
+// form.
+func targetMonitor(device string) (clientwindow.Monitor, bool) {
+	for _, m := range clientwindow.Monitors() {
+		if (m.Path != "" && m.Path == device) || m.Device == device {
+			return m, true
+		}
+	}
+	return clientwindow.Monitor{}, false
 }
 
 // monitorOfForegroundWindow is where LANcast is, asked at the moment the page
@@ -150,7 +214,8 @@ func monitorOfForegroundWindow(mons []clientwindow.Monitor) string {
 // happens in its own goroutine: a launch must not wait ninety seconds to tell
 // the page it worked.
 func moveGameToDisplay(device, name string) {
-	work, ok := workAreaOf(device)
+	mon, ok := targetMonitor(device)
+	work := games.Rect{Left: mon.Work.Left, Top: mon.Work.Top, Right: mon.Work.Right, Bottom: mon.Work.Bottom}
 	if !ok {
 		// The display was unplugged between choosing it and playing. Leaving
 		// the game where it opens is the right failure: the alternative is
@@ -180,6 +245,7 @@ func moveGameToDisplay(device, name string) {
 		 * is never the one somebody meant.
 		 */
 		placed := map[uintptr]bool{}
+		attempts := map[uintptr]int{}
 		moved := 0
 		lastMove := time.Time{}
 
@@ -193,20 +259,18 @@ func moveGameToDisplay(device, name string) {
 				if before[hwnd] || !isGameWindow(hwnd, self) {
 					continue
 				}
-				r, ok := windowRect(hwnd)
-				if !ok {
-					continue
-				}
 				/*
-				 * Already on the chosen screen.
+				 * Already on the chosen screen, as Windows sees it: the screen
+				 * holding most of the window. Not the window's centre, which
+				 * for a window bigger than its screen sits on the next one, and
+				 * which kept Minecraft being moved twenty-eight times.
 				 *
 				 * Recorded rather than ignored, so a window that later moves
 				 * itself off is noticed and put back — some games finish
 				 * initialising after their window exists and reposition it
 				 * onto whichever display their own settings name.
 				 */
-				cx, cy := r.Left+r.Width()/2, r.Top+r.Height()/2
-				if cx >= work.Left && cx < work.Right && cy >= work.Top && cy < work.Bottom {
+				if clientwindow.MonitorOfWindow(hwnd) == mon.Device {
 					if !placed[hwnd] {
 						placed[hwnd] = true
 						slog.Info("a game window opened on the chosen display already",
@@ -215,13 +279,32 @@ func moveGameToDisplay(device, name string) {
 					continue
 				}
 
-				x, y := games.MoveTarget(r, work)
-				if moveWindow(hwnd, x, y) {
+				/*
+				 * A window that keeps leaving is let go. A game that insists on
+				 * its own screen will win a tug of war, and losing it every half
+				 * second for a minute and a half is worse than losing it once.
+				 */
+				if attempts[hwnd] >= maxMovesPerWindow {
+					continue
+				}
+				win, maximized, normal, ok := clientwindow.WindowState(hwnd)
+				if !ok {
+					continue
+				}
+				plan := games.PlanMove(gameRect(win), maximized, gameRect(normal), work)
+				attempts[hwnd]++
+				if clientwindow.PlaceWindow(hwnd, plan.X, plan.Y, plan.Width, plan.Height, plan.Restore, plan.Maximize) {
 					moved++
 					placed[hwnd] = true
 					lastMove = time.Now()
 					slog.Info("moved a game window to the chosen display",
-						"game", name, "display", device, "x", x, "y", y, "moved_so_far", moved)
+						"game", name, "display", device, "x", plan.X, "y", plan.Y,
+						"width", plan.Width, "height", plan.Height, "maximize", plan.Maximize,
+						"moved_so_far", moved)
+					if attempts[hwnd] == maxMovesPerWindow {
+						slog.Info("a game window keeps moving itself; leaving it where it puts itself",
+							"game", name, "display", device)
+					}
 				} else if !placed[hwnd] {
 					// Almost always an elevated game: Windows refuses window
 					// changes from a lower-integrity process, and several
@@ -246,20 +329,6 @@ func moveGameToDisplay(device, name string) {
 // it can be tested without a window in sight.
 func watchDeadline(start, lastMove time.Time) time.Time {
 	return games.WatchDeadline(start, lastMove, watchFor, watchAfterMove, watchCap)
-}
-
-func workAreaOf(device string) (games.Rect, bool) {
-	for _, m := range clientwindow.Monitors() {
-		if m.Device == device {
-			return games.Rect{
-				Left:   m.Work.Left,
-				Top:    m.Work.Top,
-				Right:  m.Work.Right,
-				Bottom: m.Work.Bottom,
-			}, true
-		}
-	}
-	return games.Rect{}, false
 }
 
 func topLevelWindows() map[uintptr]bool {
@@ -357,11 +426,8 @@ func processName(pid uint32) string {
 	return filepath.Base(syscall.UTF16ToString(buf[:size]))
 }
 
-// moveWindow changes position and nothing else: no size, no z-order, and no
-// activation, so a game that is still loading is not yanked in front of
-// whatever the person is doing while they wait.
-func moveWindow(hwnd uintptr, x, y int) bool {
-	ok, _, _ := procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0,
-		swpNoSize|swpNoZOrder|swpNoActivate)
-	return ok != 0
+// gameRect copies a clientwindow rectangle into the games package's own type
+// (internal/games keeps its own, so the rules stay free of the window code).
+func gameRect(r clientwindow.Rect) games.Rect {
+	return games.Rect{Left: r.Left, Top: r.Top, Right: r.Right, Bottom: r.Bottom}
 }

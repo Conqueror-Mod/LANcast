@@ -314,3 +314,50 @@ a `DisplayIcon` naming the executable EA's desktop shortcut runs.
 **Every executable is checked before it runs.** It comes from a fresh rescan,
 never from the page. It must be an `.exe`, inside the game's install folder,
 and present (`ExecutableTarget`).
+
+## Amendment, 2026-10-06 — screens are named and remembered by the monitor
+
+Two faults, found when every launcher was first played on a three-screen desk.
+
+**The picker named screens "Display 6, 7, 8".** Those numbers are the graphics
+driver's GDI device names, `\\.\DISPLAY6` and friends. They are not the numbers
+Windows' display settings show, and they climb whenever the driver
+re-enumerates its screens. The same file held a choice saved weeks earlier as
+DISPLAY3, which no longer existed, so that game had quietly stopped going
+anywhere.
+
+Screens are now read through the display configuration API (`QueryDisplayConfig`).
+It gives each monitor two things:
+- its EDID name ("C27F398", "Roku 55R4AX");
+- its **device path**, which names the physical monitor on its port and
+  survives renumbering.
+
+The device path is the identity a choice is saved under. A choice saved under a
+GDI name is moved to the path while that name still means the same monitor.
+
+Labels are the monitor's name, or "Screen" when Windows calls it only
+"Display", plus where it sits relative to the main screen:
+- "C27F398 — 1920 x 1080 (main)"
+- "Screen, right of main — 2160 x 1440"
+- "Roku 55R4AX, left of main — 3840 x 2160"
+
+**Minecraft opened across two screens.** It was maximized on the 4K screen and
+sent to the 1080p one. The watcher moved it by position only. A window bigger
+than its target has its corner pinned to the target's corner, and the rest of
+it lands on the next screen. The "is it there yet?" check looked at the window's
+centre, which for an oversized window was still off the target, so it moved the
+window again, 28 times in 20 seconds.
+
+The move is now a plan (`PlanMove`):
+- **maximized:** restore it, move it, and maximize it again where it lands;
+- **bigger than the screen:** give it the work area;
+- **anything else:** centre it at its own size, as before.
+
+"There" is now the screen Windows says holds most of the window
+(`MonitorFromWindow`). A window is put back at most three times, then left
+alone.
+
+Both cases were driven against a real window on the three-screen desk before
+release:
+- maximized on the 4K screen → maximized on the main one;
+- 3000×1800 → inside the main screen's 1920×1080.

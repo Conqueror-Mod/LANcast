@@ -13,3 +13,6 @@ import "lancast/internal/games"
 func availableDisplays() []games.Display { return nil }
 
 func moveGameToDisplay(device, name string) {}
+
+// resolveDisplay has nothing to translate where there are no displays.
+func resolveDisplay(stored string) string { return stored }
