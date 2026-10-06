@@ -383,6 +383,31 @@ Lifting a voice in music needs one of two things:
 Neither is planned on the strength of this. Phase 1's dialogue boost on films is
 a different filter, on a different engine, and is not affected.
 
+### Still louder, and why the lab could not see it (v0.9.58)
+
+After the trim, night mode was still louder than off on the owner's machine.
+Turning off Sonar's Smart Volume did not change that. Every instrument said
+the opposite, offline and in a live `AudioContext`: 9 dB quieter on the loud
+master, no distortion, and the player's volume slider honoured. Every one of
+those instruments tapped the graph *before* the destination.
+
+The destination was the difference. To keep a browser-tab 5.1 film from being
+folded down, the routed output was opened to the device's full channel count.
+The owner's default output is Sonar's virtual device, which reports 8 channels
+(7.1). So once night mode had been used, every stereo track left as a 7.1
+stream, where the element on its own sends stereo. Night mode changed what
+reached the mixer as well as the level, and Sonar mixes the two differently.
+
+The output now carries what the source has: stereo for stereo and mono, six
+channels for a 5.1 film, capped at the device. Re-applied whenever the source
+changes. Whether this was the whole of "louder" is the owner's next listen. It
+is the right shape whatever the answer, since a routed element should send the
+mixer the same stream an unrouted one would.
+
+**The lesson for this kind of feature:** measure at the point the sound leaves
+the page, not only where the graph ends. A tap before the destination cannot
+see what the destination does.
+
 ## Phase 3: the equaliser
 
 Bands on both engines (`equalizer` in lavfi, `BiquadFilterNode` in Web Audio),

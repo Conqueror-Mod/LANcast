@@ -6,7 +6,7 @@
  * that records what was asked of it.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { applyElementFX, engineFor, resume, setContextSink } from "./elementEngine";
+import { applyElementFX, engineFor, outputChannels, resume, setContextSink } from "./elementEngine";
 import { FX_OFF } from "./elementAudio";
 
 class FakeNode {
@@ -28,7 +28,7 @@ let made: FakeContext[] = [];
 
 class FakeContext {
   state = "suspended";
-  destination = { channelCount: 2, maxChannelCount: 6 };
+  destination = { channelCount: 2, maxChannelCount: 8 }; // Sonar's virtual 7.1
   sinks: string[] = [];
   sources = 0;
   resume = vi.fn(async () => {
@@ -65,37 +65,51 @@ afterEach(() => {
 describe("applyElementFX", () => {
   it("leaves an element alone until something is asked of it", () => {
     const el = document.createElement("video");
-    expect(applyElementFX(el, FX_OFF, "")).toBeUndefined();
+    expect(applyElementFX(el, FX_OFF, "", 2)).toBeUndefined();
     expect(made).toHaveLength(0);
     expect(engineFor(el)).toBeUndefined();
   });
 
   it("routes the element once, however often it is asked", () => {
     const el = document.createElement("video");
-    applyElementFX(el, NIGHT_ON, "");
-    applyElementFX(el, FX_OFF, "");
-    applyElementFX(el, NIGHT_ON, "");
+    applyElementFX(el, NIGHT_ON, "", 2);
+    applyElementFX(el, FX_OFF, "", 2);
+    applyElementFX(el, NIGHT_ON, "", 2);
     expect(made).toHaveLength(1);
     expect(made[0].sources).toBe(1);
   });
 
   it("keeps the routed engine when everything is turned off", () => {
     const el = document.createElement("video");
-    const first = applyElementFX(el, NIGHT_ON, "");
+    const first = applyElementFX(el, NIGHT_ON, "", 2);
     // createMediaElementSource cannot be called again, so off must not drop it.
-    expect(applyElementFX(el, FX_OFF, "")).toBe(first);
+    expect(applyElementFX(el, FX_OFF, "", 2)).toBe(first);
     expect(engineFor(el)).toBe(first);
   });
 
-  it("opens the output to every channel the device has", () => {
+  /*
+   * The bug this replaced: the output was opened to the device's full count,
+   * so on a virtual 7.1 device (Sonar reports 8) a stereo track went to the
+   * mixer as 7.1 once night mode had been used, and was heard as louder.
+   */
+  it("sends a stereo track as stereo, even to a 7.1 device", () => {
     const el = document.createElement("video");
-    applyElementFX(el, NIGHT_ON, "");
+    applyElementFX(el, NIGHT_ON, "", 2);
+    expect(made[0].destination.channelCount).toBe(2);
+  });
+
+  it("follows the source, so a 5.1 film after music is not folded to stereo", () => {
+    const el = document.createElement("video");
+    applyElementFX(el, NIGHT_ON, "", 2);
+    applyElementFX(el, FX_OFF, "", 6);
     expect(made[0].destination.channelCount).toBe(6);
+    applyElementFX(el, FX_OFF, "", 2);
+    expect(made[0].destination.channelCount).toBe(2);
   });
 
   it("sends the context to the chosen device, since the element's sink no longer counts", () => {
     const el = document.createElement("video");
-    const engine = applyElementFX(el, NIGHT_ON, "speakers-id")!;
+    const engine = applyElementFX(el, NIGHT_ON, "speakers-id", 2)!;
     expect(made[0].sinks).toEqual(["speakers-id"]);
     setContextSink(engine, "headphones-id");
     expect(made[0].sinks).toEqual(["speakers-id", "headphones-id"]);
@@ -103,13 +117,13 @@ describe("applyElementFX", () => {
 
   it("resumes a suspended context when a control engages", () => {
     const el = document.createElement("video");
-    applyElementFX(el, NIGHT_ON, "");
+    applyElementFX(el, NIGHT_ON, "", 2);
     expect(made[0].resume).toHaveBeenCalled();
   });
 
   it("resumes only when suspended", async () => {
     const el = document.createElement("video");
-    const engine = applyElementFX(el, NIGHT_ON, "")!;
+    const engine = applyElementFX(el, NIGHT_ON, "", 2)!;
     await resume(engine);
     made[0].resume.mockClear();
     await resume(engine);
@@ -119,6 +133,20 @@ describe("applyElementFX", () => {
   it("does nothing where the engine has no Web Audio", () => {
     vi.stubGlobal("AudioContext", undefined);
     const el = document.createElement("video");
-    expect(applyElementFX(el, NIGHT_ON, "")).toBeUndefined();
+    expect(applyElementFX(el, NIGHT_ON, "", 2)).toBeUndefined();
+  });
+});
+
+describe("outputChannels", () => {
+  it.each([
+    [2, 8, 2],
+    [1, 8, 2],
+    [0, 8, 2],
+    [6, 8, 6],
+    [8, 8, 8],
+    [6, 2, 2],
+    [Number.NaN, 8, 2],
+  ])("source %s on a %s-channel device -> %s", (src, max, want) => {
+    expect(outputChannels(src, max)).toBe(want);
   });
 });
