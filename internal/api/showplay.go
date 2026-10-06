@@ -44,6 +44,7 @@ func (s *Server) continueShow(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
 		"resume":    next.Resume,
 		"exhausted": next.Exhausted,
+		"started":   next.Started,
 	}
 	if next.Item != nil {
 		out["episode"] = next.Item

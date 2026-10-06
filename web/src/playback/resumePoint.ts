@@ -135,3 +135,25 @@ export function resumePointAfterFailure(
 ): number {
   return live.id === streamItem && live.at > 0 ? live.at : base;
 }
+
+/*
+ * entrySeconds is where a newly loaded item starts.
+ *
+ * "Play from start" wins over everything: the person asked for the top. Then a
+ * live position for this same item (a quality change or a reload mid-play
+ * resumes where the picture was), then the saved progress by resumeSeconds'
+ * rules.
+ */
+export function entrySeconds(o: {
+  fromStart: boolean;
+  liveAt: number;
+  liveIsThisItem: boolean;
+  positionMs?: number | null;
+  watched?: boolean | null;
+  durationMs?: number | null;
+}): number {
+  if (o.fromStart) return 0;
+  if (o.liveIsThisItem && o.liveAt > 0) return o.liveAt;
+  return resumeSeconds(o);
+}
+

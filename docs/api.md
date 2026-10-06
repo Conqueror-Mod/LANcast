@@ -1746,8 +1746,14 @@ precaution.
 
 ```json
 { "episode": { "id": 412, "season": 2, "episode": 5, "progress": { "position_ms": 0 } },
-  "resume": false, "exhausted": false }
+  "resume": false, "exhausted": false, "started": true }
 ```
+
+`started` is true when any episode has been watched or is in progress. A client
+says **Continue** only when it is: on a show nobody has touched the answer is the
+first episode with `resume` false, which `resume` alone cannot tell apart from
+the next fresh episode of a show half watched. Asked with a season's id, every
+field is about that season.
 
 The rule, in order:
 

@@ -29,7 +29,7 @@ import {
   shouldAsk,
   type WatchRun,
 } from "./stillWatching";
-import { resumeSeconds, startedFloorMs } from "./resumePoint";
+import { entrySeconds, startedFloorMs } from "./resumePoint";
 import {
   shuffledStartingWith,
   queueAfterEntry,
@@ -278,7 +278,7 @@ interface PlaybackState {
    *  replays rather than advances. */
   nextItemID: number | null;
 
-  play: (id: number, queue: number[]) => void;
+  play: (id: number, queue: number[], fromStart?: boolean) => void;
   stop: () => void;
   togglePlay: () => void;
   seekTo: (t: number) => void;
@@ -900,8 +900,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const playingRef = useRef(itemID);
   playingRef.current = itemID;
-  const play = useCallback((id: number, q: number[]) => {
+  /*
+   * fromStartFor is the one item whose saved position is ignored the next time
+   * it loads: "Play from start". Cleared as soon as it is used, so it applies
+   * once and to nothing else.
+   */
+  const fromStartFor = useRef(0);
+  const play = useCallback((id: number, q: number[], fromStart = false) => {
     const resuming = playingRef.current === id;
+    fromStartFor.current = fromStart && !resuming ? id : 0;
     setItemID((prev) => {
       // Re-entering the player screen for what is already playing must not
       // restart it: that is the whole point of the element outliving the route.
@@ -1300,14 +1307,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // A new source is a new stream; whatever the last one was cut at says
     // nothing about this one.
     recoveredAt.current = null;
-    startedFrom.current =
-      live.id === item.id && live.at > 0
-        ? live.at
-        : resumeSeconds({
-            positionMs: item.progress?.position_ms,
-            watched: item.progress?.watched,
-            durationMs: item.duration_ms,
-          });
+    const restart = fromStartFor.current === item.id;
+    fromStartFor.current = 0;
+    startedFrom.current = entrySeconds({
+      fromStart: restart,
+      liveAt: live.at,
+      liveIsThisItem: live.id === item.id,
+      positionMs: item.progress?.position_ms,
+      watched: item.progress?.watched,
+      durationMs: item.duration_ms,
+    });
 
     (async () => {
       /*

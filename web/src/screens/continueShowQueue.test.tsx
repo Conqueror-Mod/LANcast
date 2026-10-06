@@ -74,7 +74,7 @@ function mount() {
           headers: { "Content-Type": "application/json" },
         });
       if (url.includes("/continue")) {
-        return json({ episode: ep(103, 3), resume: true, exhausted: false });
+        return json({ episode: ep(103, 3), resume: true, exhausted: false, started: true });
       }
       if (url.includes("/episodes")) return json({ episodes });
       // Children arrive from /api/items?parent_id=, not a /children path.

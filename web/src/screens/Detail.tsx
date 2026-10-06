@@ -18,7 +18,9 @@ import {
   usePlaylistEntries,
   useDeletePlaylist,
   fetchShowEpisodes,
+  useShowStanding,
 } from "@/api/hooks";
+import { resumeSeconds } from "@/playback/resumePoint";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { CastRow } from "./CastRow";
@@ -390,6 +392,16 @@ export function Detail() {
     null | "continue" | "play" | "random"
   >(null);
   const [showNote, setShowNote] = useState<string | null>(null);
+  /*
+   * Where a show or season stands, for its button. Called on every render,
+   * enabled by kind, for the reason the hooks above are: a hook that appears
+   * only once the item has loaded is the hook-count crash this page already
+   * had once.
+   */
+  const { data: standing } = useShowStanding(
+    itemID,
+    item?.kind === "show" || item?.kind === "season",
+  );
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
   const [posterOpen, setPosterOpen] = useState(false);
@@ -495,6 +507,12 @@ export function Detail() {
   const isEpisodeList =
     (children ?? []).length > 0 &&
     (children ?? []).every((c) => c.kind === "episode");
+  /*
+   * A list of episodes offers Continue only part way through. Untouched or
+   * finished, Play all is the whole answer and leads. Unknown (still asking,
+   * or a show whose episodes hang straight off it) keeps Continue, as before.
+   */
+  const seasonContinues = !standing || (standing.started && !standing.exhausted);
 
   const continueShow = async () => {
     if (!item || showBusy) return;
@@ -734,21 +752,42 @@ export function Detail() {
             {/* A show: start it, carry on with it, or play it at random.
                 Continue leads, because on a show you have started it is the
                 only one of the three anybody presses. */}
+            {/*
+             * Which button leads follows where the show stands: Play on a show
+             * nobody has started (Continue on one was a promise of a place to
+             * carry on from that did not exist), Continue watching on one part
+             * watched, Watch again on one finished. Until the answer arrives the
+             * page shows what it always showed.
+             */}
             {isShow && (
               <div className="detail__actions">
-                <PlayButton
-                  label={
-                    showBusy === "continue" ? "Finding…" : "Continue watching"
-                  }
-                  onPlay={() => void continueShow()}
-                />
-                <button
-                  className="detail__play detail__play--secondary"
-                  onClick={() => void playShow(false)}
-                  disabled={showBusy !== null}
-                >
-                  {showBusy === "play" ? "Gathering…" : "Play from start"}
-                </button>
+                {standing && !standing.started ? (
+                  <PlayButton
+                    label={showBusy === "play" ? "Gathering…" : "Play"}
+                    onPlay={() => void playShow(false)}
+                  />
+                ) : standing?.exhausted ? (
+                  <PlayButton
+                    label={showBusy === "play" ? "Gathering…" : "Watch again"}
+                    onPlay={() => void playShow(false)}
+                  />
+                ) : (
+                  <PlayButton
+                    label={
+                      showBusy === "continue" ? "Finding…" : "Continue watching"
+                    }
+                    onPlay={() => void continueShow()}
+                  />
+                )}
+                {standing?.started && !standing.exhausted && (
+                  <button
+                    className="detail__play detail__play--secondary"
+                    onClick={() => void playShow(false)}
+                    disabled={showBusy !== null}
+                  >
+                    {showBusy === "play" ? "Gathering…" : "Play from start"}
+                  </button>
+                )}
                 <button
                   className="detail__play detail__play--secondary"
                   onClick={() => void playShow(true)}
@@ -798,9 +837,34 @@ export function Detail() {
             )}
 
             <div className="detail__actions">
-              {!container && !isPicture(item) && !item.missing && (
-                <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
-              )}
+              {/*
+               * A title part watched says so: Continue watching, decided by the
+               * same rule the player uses to resume (resumeSeconds), so the
+               * button and what happens next cannot disagree. Play from start
+               * beside it is the one way to begin again without seeking back.
+               */}
+              {!container && !isPicture(item) && !item.missing &&
+                (resumeSeconds({
+                  positionMs: item.progress?.position_ms,
+                  watched: item.progress?.watched,
+                  durationMs: item.duration_ms,
+                }) > 0 ? (
+                  <>
+                    <PlayButton
+                      label="Continue watching"
+                      onPlay={() => navigate(`/watch/${item.id}`)}
+                    />
+                    <SecondaryButton
+                      label="Play from start"
+                      className="detail__play detail__play--secondary"
+                      onPress={() =>
+                        navigate(`/watch/${item.id}`, { state: { fromStart: true } })
+                      }
+                    />
+                  </>
+                ) : (
+                  <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
+                ))}
               {/*
                * A season leads with Continue, matching the show page so the
                * two do not disagree about what a season offers. It asks the
@@ -808,7 +872,7 @@ export function Detail() {
                * a season id answers with that season's next episode rather
                * than the show's.
                */}
-              {isEpisodeList && (
+              {isEpisodeList && seasonContinues && (
                 <PlayButton
                   label={showBusy === "continue" ? "Finding…" : "Continue"}
                   onPlay={() => void continueShow()}
@@ -829,7 +893,7 @@ export function Detail() {
                 <SecondaryButton
                   label="Play all"
                   className={
-                    isEpisodeList
+                    isEpisodeList && seasonContinues
                       ? "detail__play detail__play--secondary"
                       : "detail__play"
                   }

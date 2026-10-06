@@ -37,6 +37,11 @@ type NextEpisode struct {
 	// Exhausted is true when every episode has been watched — a finished show
 	// rather than an empty one, which the UI has to word differently.
 	Exhausted bool
+	// Started is true when any episode has been watched or is in progress. It
+	// is what tells "Play" from "Continue watching" on a show nobody has
+	// touched: there the answer is the first episode, which Resume false
+	// cannot tell apart from the next fresh episode of a show half watched.
+	Started bool
 }
 
 /*
@@ -96,7 +101,7 @@ func (s *Store) NextEpisodeFor(ctx context.Context, showID int64, userID string)
 		if perr != nil {
 			return NextEpisode{}, perr
 		}
-		return NextEpisode{Item: full, Resume: true}, nil
+		return NextEpisode{Item: full, Resume: true, Started: true}, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return NextEpisode{}, fmt.Errorf("next episode (in progress): %w", err)
@@ -141,7 +146,14 @@ func (s *Store) NextEpisodeFor(ctx context.Context, showID int64, userID string)
 		if perr != nil {
 			return NextEpisode{}, perr
 		}
-		return NextEpisode{Item: full}, nil
+		// Rule 2 also answers a show nobody has watched (the furthest watched
+		// is "none", so the first episode follows it); whether it was started
+		// is asked separately.
+		started, serr := s.hasWatchedEpisode(ctx, showID, userID)
+		if serr != nil {
+			return NextEpisode{}, serr
+		}
+		return NextEpisode{Item: full, Started: started}, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return NextEpisode{}, fmt.Errorf("next episode (after furthest): %w", err)
@@ -164,7 +176,7 @@ func (s *Store) NextEpisodeFor(ctx context.Context, showID int64, userID string)
 		return NextEpisode{}, err
 	}
 	if watchedAny {
-		return NextEpisode{Exhausted: true}, nil
+		return NextEpisode{Exhausted: true, Started: true}, nil
 	}
 	return NextEpisode{Item: first}, nil
 }
