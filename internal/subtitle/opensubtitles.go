@@ -53,8 +53,13 @@ type SearchQuery struct {
 	MovieHash string
 	IMDBID    string
 	TMDBID    string
-	Season    int
-	Episode   int
+	// ParentIMDBID and ParentTMDBID are a series' ids, for an episode: with
+	// Season and Episode they are how OpenSubtitles pins one episode of one
+	// show, where the episode's own title is noise.
+	ParentIMDBID string
+	ParentTMDBID string
+	Season       int
+	Episode      int
 }
 
 // OpenSubtitles is a client for the v1 REST API.
@@ -105,6 +110,12 @@ func (c *OpenSubtitles) Search(ctx context.Context, q SearchQuery) ([]Candidate,
 	}
 	if q.TMDBID != "" {
 		params.Set("tmdb_id", q.TMDBID)
+	}
+	if q.ParentIMDBID != "" {
+		params.Set("parent_imdb_id", strings.TrimPrefix(q.ParentIMDBID, "tt"))
+	}
+	if q.ParentTMDBID != "" {
+		params.Set("parent_tmdb_id", q.ParentTMDBID)
 	}
 	if q.Season > 0 {
 		params.Set("season_number", strconv.Itoa(q.Season))
