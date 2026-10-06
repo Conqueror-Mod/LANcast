@@ -134,17 +134,20 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
-	ident        identity.Identity
-	listenAddr   string
-	st           *store.Store
-	scanner      *scan.Scanner
-	reg          *meta.Registry
-	art          *artwork.Cache
-	worker       *enrich.Worker
-	probes       *probe.Worker
-	markers      *marker.Worker
-	facesW       *faces.Worker
-	faceModelJob *faceJob
+	ident      identity.Identity
+	listenAddr string
+	st         *store.Store
+	scanner    *scan.Scanner
+	reg        *meta.Registry
+	art        *artwork.Cache
+	worker     *enrich.Worker
+	probes     *probe.Worker
+	markers    *marker.Worker
+	facesW     *faces.Worker
+	// subtitleBaseURL points subtitle search at another host. Tests only: it
+	// is never set outside them, and the client defaults to OpenSubtitles.
+	subtitleBaseURL string
+	faceModelJob    *faceJob
 	// A second job, not a second flag on the first: two optional downloads can
 	// be in flight at once, and one byte count cannot describe both.
 	semanticModelJob *faceJob

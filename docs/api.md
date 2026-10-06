@@ -1866,6 +1866,20 @@ Searches OpenSubtitles. `?q=` overrides the query, `?language=` the language.
                     "reason": "matches this exact file" } ] }
 ```
 
+**Asked by id, not by title, whenever the item has one.** The metadata match
+already knows which film or show this is, so the provider is asked for exactly
+that, where a title query returns near-title noise (remakes, films that share
+words, every show of that name):
+
+- a film by its IMDb id (`imdb_id`), else its TMDB id (`tmdb_id`);
+- an episode by its **show's** IMDb or TMDB id (`parent_imdb_id`,
+  `parent_tmdb_id`) with `season_number` and `episode_number`. That is how
+  OpenSubtitles names one episode of one series.
+
+The title is sent instead only for an item with no id. **`?q=` always wins**: a
+typed search is how a wrong match is worked around, so it is never overridden
+by the id that may be the wrong one.
+
 The OpenSubtitles movie hash — file size plus the first and last 64KB — is
 computed and sent with every search. A hash match means the subtitle was timed
 against these exact bytes, so it scores 1.0 and short-circuits the rest.

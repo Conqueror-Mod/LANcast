@@ -43,27 +43,15 @@ func (s *Server) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := subtitle.SearchQuery{
-		Query:     strings.TrimSpace(r.URL.Query().Get("q")),
-		Languages: []string{"en"},
+	typed := strings.TrimSpace(r.URL.Query().Get("q"))
+	var show *store.Item
+	if it.Kind == "episode" && typed == "" {
+		show = s.showOf(r, it)
 	}
-	if query.Query == "" {
-		query.Query = it.Title
-		if it.Series != nil && *it.Series != "" {
-			query.Query = *it.Series
-		}
-	}
+	query, rankTitle := subtitleQuery(it, show, typed)
+	query.Languages = []string{"en"}
 	if lang := r.URL.Query().Get("language"); lang != "" {
 		query.Languages = []string{subtitle.NormalizeLanguage(lang)}
-	}
-	if it.Year != nil {
-		query.Year = *it.Year
-	}
-	if it.Season != nil {
-		query.Season = *it.Season
-	}
-	if it.Episode != nil {
-		query.Episode = *it.Episode
 	}
 	if hash, err := subtitle.MovieHash(path); err == nil {
 		query.MovieHash = hash
@@ -79,7 +67,7 @@ func (s *Server) searchSubtitles(w http.ResponseWriter, r *http.Request) {
 
 	subtitle.Rank(subtitle.Target{
 		FileName:   filepath.Base(path),
-		Title:      query.Query, // the same title asked of the provider
+		Title:      rankTitle, // the title the subtitle must be for
 		Year:       derefInt(it.Year),
 		FPS:        frameRateOf(it),
 		Height:     derefInt(it.Height),
@@ -260,7 +248,103 @@ func (s *Server) subtitleClient() *subtitle.OpenSubtitles {
 	if key == "" {
 		return nil
 	}
-	return subtitle.NewOpenSubtitles(key)
+	c := subtitle.NewOpenSubtitles(key)
+	if s.subtitleBaseURL != "" {
+		c.SetBaseURL(s.subtitleBaseURL)
+	}
+	return c
+}
+
+/*
+ * subtitleQuery is what to ask OpenSubtitles for an item, and the title a
+ * candidate must be for.
+ *
+ * By id when the item has one, not by title. A title query returns near-title
+ * noise: films that share words with this one, every remake, every episode of
+ * every show with that name. The ranking catches some of it (a Deadpool 2
+ * subtitle was once applied to Avengers), but a result that should never have
+ * been in the list is a result somebody can still pick. The ids are already
+ * here from the metadata match:
+ *
+ *   - a film by its IMDb id, else its TMDB id;
+ *   - an episode by its show's IMDb or TMDB id, plus season and episode, which
+ *     is how OpenSubtitles names one episode of one series.
+ *
+ * Only by title when there is no id (an unmatched item), and always by what was
+ * typed when somebody typed something: a manual search is how a wrong match is
+ * worked around, and it must not be overridden by the very id that is wrong.
+ */
+func subtitleQuery(it, show *store.Item, typed string) (subtitle.SearchQuery, string) {
+	var q subtitle.SearchQuery
+	if it.Season != nil {
+		q.Season = *it.Season
+	}
+	if it.Episode != nil {
+		q.Episode = *it.Episode
+	}
+	title := it.Title
+	if it.Series != nil && *it.Series != "" {
+		title = *it.Series
+	}
+
+	if typed != "" {
+		q.Query = typed
+		return q, typed
+	}
+
+	if it.Kind == "episode" {
+		if show != nil {
+			if show.IMDbID != nil && *show.IMDbID != "" {
+				q.ParentIMDBID = *show.IMDbID
+				return q, title
+			}
+			if id := tmdbID(show); id != "" {
+				q.ParentTMDBID = id
+				return q, title
+			}
+		}
+	} else {
+		if it.IMDbID != nil && *it.IMDbID != "" {
+			q.IMDBID = *it.IMDbID
+			return q, title
+		}
+		if id := tmdbID(it); id != "" {
+			q.TMDBID = id
+			return q, title
+		}
+	}
+
+	// No id: the title, narrowed by year as before.
+	q.Query = title
+	if it.Year != nil {
+		q.Year = *it.Year
+	}
+	return q, title
+}
+
+// tmdbID is an item's TMDB id when TMDB is what matched it.
+func tmdbID(it *store.Item) string {
+	if it.Provider != nil && *it.Provider == "tmdb" && it.ExternalID != nil {
+		return *it.ExternalID
+	}
+	return ""
+}
+
+// showOf finds an episode's show: its parent, or its parent's parent when the
+// episode sits in a season. Nil when there is none to find.
+func (s *Server) showOf(r *http.Request, ep *store.Item) *store.Item {
+	cur := ep
+	for i := 0; i < 2 && cur.ParentID != nil; i++ {
+		p, err := s.st.GetItem(r.Context(), *cur.ParentID, s.userID(r))
+		if err != nil {
+			return nil
+		}
+		if p.Kind == "show" {
+			return p
+		}
+		cur = p
+	}
+	return nil
 }
 
 // frameRateOf returns the probed video frame rate, or 0 when unknown.
