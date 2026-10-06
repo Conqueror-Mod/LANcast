@@ -423,7 +423,7 @@ Status: **planned** · **next** · *unplanned*
 | Stage 1 — own the window | **built, default** | `LANcast-Client.exe` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
 | Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
 | Flip `-window` to default | **built** | Done after living with it, not after arguing about it. The browser lost on three things a tab cannot fix: LANcast cannot say what its close button means, cannot pin the server's certificate, and gets a warning against a LAN-bound self-signed server that the window does not need. `-browser` is the opt-out, `-window` is kept as a no-op alias so existing shortcuts and the autostart run key keep working, a machine with no WebView2 runtime falls back on its own, and the installer's finish page offers both |
-| Installed games | **built** | Steam, Epic, Battle.net and the Xbox app, each read from the launcher's own files in the client, with no sign-in ([ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)). GOG and EA wait on a test install |
+| Installed games | **built** | Steam, Epic, Battle.net, the Xbox app, GOG and the EA app, each read from the launcher's own files in the client, with no sign-in ([ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)) |
 | Stage 2 — own playback (libmpv) | **built** | Shipped in v0.9.28: the window decodes with libmpv ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), built by LANcast itself as LGPL ([ADR 0069](adr/0069-lancast-builds-its-own-lgpl-libmpv.md)), and streams with a ticket ([ADR 0068](adr/0068-a-native-player-streams-with-a-ticket.md)). Since v0.9.29 the server no longer converts anything for the desktop client |
 
 ### Cross-cutting
@@ -722,14 +722,16 @@ group is not priority.
   *is* once it lands in a library, which is a bigger question than the feature
   looks.
 
-- **The rest of the launchers — GOG and EA.** **Xbox** followed on 2026-10-04,
+- **~~The rest of the launchers — GOG and EA~~ — built.** **Xbox** followed on 2026-10-04,
   read from the `.GamingRoot` file on each drive and each game's
   `MicrosoftGame.config` and `appxmanifest.xml`. It is launched by application
   user model id through `shell:AppsFolder`, the same route the Start menu takes.
   The package family name is computed from the manifest, and it was checked
   against the one Windows reports for a real install: Minecraft for Windows in
-  `D:\XboxGames`. GOG and EA are unscheduled, waiting on a game small enough to
-  install for testing. Steam **shipped in
+  `D:\XboxGames`. **GOG and EA followed on 2026-10-06**, read from GOG's registry keys and
+  `goggame-<id>.info`, and from EA's uninstall entries and
+  `installerdata.xml`. Each is started the way its own shortcut starts it:
+  GOG through Galaxy, EA by the game's executable. Steam **shipped in
   v0.9.19** under
   [ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md), which
   settled the model for all of them: a local read in the desktop client, no

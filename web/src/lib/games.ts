@@ -18,7 +18,8 @@ export interface GameRow {
   id: string;
   name: string;
   /**
-   * Which launcher this came from: "steam", "epic" or "battlenet", with
+   * Which launcher this came from: "steam", "epic", "battlenet", "xbox",
+   * "gog" or "ea", with
    * `source_label` the name a person reads.
    *
    * Optional because a client can be newer than the desktop binary it is

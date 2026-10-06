@@ -119,8 +119,8 @@ export function Games() {
       {status === "not-installed" && (
         <p className="browse__message">
           No games were found on this computer. LANcast reads the files Steam,
-          Epic, Battle.net and the Xbox app keep — it never signs in to your
-          accounts.
+          Epic, Battle.net, the Xbox app, GOG and the EA app keep — it never
+          signs in to your accounts.
         </p>
       )}
 
@@ -277,8 +277,8 @@ function GameTile({
           <img src={art} alt="" />
         ) : (
           // A lettered placeholder rather than a broken image: Steam caches
-          // artwork lazily, and Epic, Battle.net and the Xbox app keep none
-          // that fits a poster — so most tiles from those three land here.
+          // artwork lazily, and Epic, Battle.net, the Xbox app, GOG and EA keep
+          // none that fits a poster — so most tiles from those land here.
           // artwork lazily, so a game installed and never looked at has none.
           <span className="games__placeholder" aria-hidden="true">
             {game.name.slice(0, 1).toUpperCase()}

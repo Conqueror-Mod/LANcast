@@ -73,14 +73,14 @@ export function GamesSettings() {
       <span className="section-label">Games</span>
 
       <p className="desktop-note">
-        LANcast can list the games Steam, Epic and Battle.net have installed on
-        this computer and start them. It reads each launcher&rsquo;s own files on
+        LANcast can list the games Steam, Epic, Battle.net, the Xbox app, GOG and
+        the EA app have installed on this computer and start them. It reads each launcher&rsquo;s own files on
         this disk — there is no sign-in, and nothing is sent anywhere.
       </p>
 
       <LifecycleOption
         title="Show my installed games"
-        sub="List the games Steam, Epic and Battle.net have installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
+        sub="List the games Steam, Epic, Battle.net, the Xbox app, GOG and the EA app have installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
         checked={state.games}
         onChange={save}
         busy={saving}

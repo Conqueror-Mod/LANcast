@@ -45,6 +45,9 @@ type InstalledProgram struct {
 	// not require it and some installers omit it.
 	InstallLocation string
 	Publisher       string
+	// DisplayIcon is the icon Windows shows, which for most games is the
+	// executable itself, sometimes with an icon index (`Game.exe,0`).
+	DisplayIcon string
 	// EstimatedSize is the registry's own figure, in kilobytes. Approximate by
 	// construction — it is what the installer claimed, not what is on disk.
 	EstimatedSizeKB int64

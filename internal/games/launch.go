@@ -1,6 +1,11 @@
 package games
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 /*
  * LaunchURI builds the URI that starts a game.
@@ -81,8 +86,48 @@ func LaunchURI(id string) (string, error) {
 			return "", fmt.Errorf("not an Xbox app id: %q", own)
 		}
 		return `shell:AppsFolder\` + own, nil
+
+	case SourceGOG, SourceEA:
+		/*
+		 * Started by a file, like Battle.net: GOG through Galaxy or its play
+		 * task, EA by the executable its own shortcut runs. See
+		 * ExecutableTarget and GalaxyArgs.
+		 */
+		return "", fmt.Errorf("a %s game is launched from its folder, not a URI", source.Label())
 	}
 	return "", fmt.Errorf("unknown launcher for %q", id)
+}
+
+/*
+ * ExecutableTarget is the file to run for a game started by an executable,
+ * checked the way every path from data is checked before it reaches a process
+ * (ADR 0066): an absolute .exe that exists, inside the game's install folder.
+ * The registry and the info file that named it can be written by any
+ * installer, and this is the last step before a process starts.
+ */
+func ExecutableTarget(g Game) (string, error) {
+	if g.Executable == "" {
+		return "", fmt.Errorf("%s: no executable recorded for %s", g.Source.Label(), g.Name)
+	}
+	root, err := filepath.Abs(g.InstallPath)
+	if err != nil || g.InstallPath == "" {
+		return "", fmt.Errorf("%s: install path %q", g.Source.Label(), g.InstallPath)
+	}
+	exe, err := filepath.Abs(g.Executable)
+	if err != nil {
+		return "", fmt.Errorf("%s: executable %q", g.Source.Label(), g.Executable)
+	}
+	rel, err := filepath.Rel(root, exe)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("%s: %q is outside %q", g.Source.Label(), exe, root)
+	}
+	if !strings.EqualFold(filepath.Ext(exe), ".exe") {
+		return "", fmt.Errorf("%s: %q is not an executable", g.Source.Label(), exe)
+	}
+	if st, err := os.Stat(exe); err != nil || st.IsDir() {
+		return "", fmt.Errorf("%s: %q is not there", g.Source.Label(), exe)
+	}
+	return exe, nil
 }
 
 // isHex reports whether s is a non-empty run of hexadecimal digits, which is
