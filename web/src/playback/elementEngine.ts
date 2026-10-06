@@ -21,6 +21,15 @@
  * whatever is playing (outputChannels), so a 5.1 film after an evening of music
  * is not folded to stereo by a graph that is doing nothing.
  *
+ * And the volume moves. The element's own volume scales the sound *before*
+ * the graph, so a slider at 10% fed the compressor a signal 20 dB down. That
+ * sits under the threshold, gets almost no compression and all of the node's
+ * automatic make-up gain, and comes out louder: measured live, night mode was
+ * 9 dB quieter at full volume, level at 25%, and 4 dB louder at 10%. Every lab
+ * measurement had been taken at full volume. So once the element is routed it
+ * plays at full volume and the slider is a gain after the graph (`level`), and
+ * the compressor always sees the track at its real level.
+ *
  * It follows the source, not the device. The first version opened the output
  * to the device's full channel count, and on a machine whose output is a
  * virtual 7.1 device (SteelSeries Sonar reports 8 channels) every stereo track
@@ -37,6 +46,8 @@ type SinkContext = AudioContext & { setSinkId?: (id: string) => Promise<void> };
 export interface ElementEngine {
   ctx: SinkContext;
   graph: FXGraph;
+  /** The player's volume, applied after the graph. */
+  level: GainNode;
 }
 
 // Per element, because createMediaElementSource can be called once per element.
@@ -70,9 +81,15 @@ export function applyElementFX(
     const ctx: SinkContext = new AudioContext();
     const source = ctx.createMediaElementSource(el);
     const graph = buildGraph(ctx);
+    const level = ctx.createGain();
+    level.channelCountMode = "max";
+    // The slider's current value moves from the element to the gain.
+    level.gain.value = el.volume;
+    el.volume = 1;
     source.connect(graph.input);
-    graph.output.connect(ctx.destination);
-    engine = { ctx, graph };
+    graph.output.connect(level);
+    level.connect(ctx.destination);
+    engine = { ctx, graph, level };
     engines.set(el, engine);
     setContextSink(engine, sinkId);
   }
@@ -92,6 +109,21 @@ export function applyElementFX(
 export function outputChannels(sourceChannels: number, deviceMax: number): number {
   const want = Number.isFinite(sourceChannels) && sourceChannels > 2 ? Math.floor(sourceChannels) : 2;
   return Math.max(1, Math.min(want, deviceMax || 2));
+}
+
+/**
+ * Sets the player's volume on el: on the element itself until it is routed,
+ * and after the graph from then on, with the element held at full volume so
+ * night mode's compressor sees the track at its real level.
+ */
+export function setElementVolume(el: HTMLMediaElement, volume: number) {
+  const engine = engines.get(el);
+  if (!engine) {
+    el.volume = volume;
+    return;
+  }
+  el.volume = 1;
+  engine.level.gain.value = volume;
 }
 
 /** Points the context's output at the chosen device, when the engine can. */
