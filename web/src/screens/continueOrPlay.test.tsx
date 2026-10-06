@@ -41,6 +41,7 @@ const film = (progress?: { position_ms: number; watched: boolean }) => ({
 let host: HTMLDivElement;
 let root: Root;
 let landed: { path: string; state: unknown } | null;
+let seasonKids = [ep(101, 1), ep(102, 2)];
 
 function stub(item: Record<string, unknown>, standing?: Record<string, unknown>) {
   landed = null;
@@ -52,7 +53,7 @@ function stub(item: Record<string, unknown>, standing?: Record<string, unknown>)
       if (url.includes("/continue")) return json(standing ?? {});
       if (url.includes("/episodes")) return json({ episodes: [ep(101, 1), ep(102, 2)] });
       if (url.includes("parent_id=")) {
-        const kids = item.kind === "season" ? [ep(101, 1), ep(102, 2)] : [season];
+        const kids = item.kind === "season" ? seasonKids : [season];
         return json({ items: kids, total: kids.length });
       }
       if (/\/api\/items\/\d+$/.test(url.split("?")[0])) return json(item);
@@ -108,6 +109,7 @@ const button = (label: string) =>
   ) as HTMLButtonElement | undefined;
 
 beforeEach(() => {
+  seasonKids = [ep(101, 1), ep(102, 2)];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -155,6 +157,16 @@ describe("a season's buttons", () => {
     await render(950);
     expect(labels()).not.toContain("Continue");
     expect(labels()).toContain("Play all");
+  });
+});
+
+describe("a season of one episode", () => {
+  it("says Play rather than Play all", async () => {
+    seasonKids = [ep(101, 1)];
+    stub(season, { episode: ep(101, 1), resume: false, exhausted: false, started: false });
+    await render(950);
+    expect(labels()).toContain("Play");
+    expect(labels()).not.toContain("Play all");
   });
 });
 

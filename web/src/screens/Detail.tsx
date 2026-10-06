@@ -21,6 +21,7 @@ import {
   useShowStanding,
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
+import { playAllLabel } from "@/lib/playAll";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { CastRow } from "./CastRow";
@@ -891,7 +892,7 @@ export function Detail() {
               */}
               {container && !isArtist && playableChildren.length > 0 && (
                 <SecondaryButton
-                  label="Play all"
+                  label={playAllLabel(playableChildren.length)}
                   className={
                     isEpisodeList && seasonContinues
                       ? "detail__play detail__play--secondary"
@@ -915,7 +916,15 @@ export function Detail() {
                   shown and tracks in the order they play. */}
               {isArtist && artistParts.length > 0 && (
                 <PlayButton
-                  label={queueing ? "Gathering…" : "Play all"}
+                  label={
+                    queueing
+                      ? "Gathering…"
+                      : // One loose track and nothing else is one thing to play;
+                        // one album still holds its tracks.
+                        playAllLabel(
+                          artistParts.length === 1 && artistParts[0].kind === "track" ? 1 : undefined,
+                        )
+                  }
                   onPlay={playArtist}
                 />
               )}

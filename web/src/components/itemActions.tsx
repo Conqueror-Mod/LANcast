@@ -16,6 +16,7 @@ import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
 import type { MenuAction } from "./Menu";
 import type { Item } from "@/api/types";
+import { offersShuffle, playAllLabel } from "@/lib/playAll";
 
 /*
  * What a right-click offers on a poster, wherever the poster is.
@@ -304,19 +305,30 @@ export function useItemActions(): ItemActions {
          */
         const playable = item.kind !== "collection" && item.kind !== "playlist";
         const verb = watchedVerb(item);
+        /*
+         * How many things Play would play, when the tile can know: an album's
+         * children are tracks and a season's are episodes. A show's are
+         * seasons and an artist's albums, so one of those is still "all".
+         */
+        const leaves =
+          item.kind === "album" || item.kind === "season" ? item.child_count : undefined;
         return [
           ...(playable
             ? [
                 {
-                  label: gathering ? "Gathering…" : "Play all",
+                  label: gathering ? "Gathering…" : playAllLabel(leaves),
                   disabled: gathering,
                   onSelect: () => void playContainer(item, false),
                 },
-                {
-                  label: "Shuffle",
-                  disabled: gathering,
-                  onSelect: () => void playContainer(item, true),
-                },
+                ...(offersShuffle(leaves)
+                  ? [
+                      {
+                        label: "Shuffle",
+                        disabled: gathering,
+                        onSelect: () => void playContainer(item, true),
+                      },
+                    ]
+                  : []),
                 {
                   label: `Mark all as ${verb.past}`,
                   disabled: gathering || marking,

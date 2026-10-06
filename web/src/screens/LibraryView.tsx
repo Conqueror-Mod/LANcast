@@ -26,6 +26,7 @@ import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import type { LibraryKindConfig } from "./libraryConfig";
+import { offersShuffle, playAllLabel } from "@/lib/playAll";
 import "./Browse.css";
 
 // The facet params that live in the URL as repeated keys. Search, sort, and the
@@ -274,6 +275,13 @@ export function LibraryView({
   const items = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
   /*
+   * How many things the library's Play all would play, where the grid says:
+   * a film library's tiles are the films. A music or television library's grid
+   * is artists or shows, each holding many, so it is not a count of what plays
+   * and stays "Play all".
+   */
+  const titles = library.kind === "movie" ? total : undefined;
+  /*
    * Names for the people currently filtered on.
    *
    * The filter is by id because that is what identifies a person, but a pill
@@ -401,16 +409,18 @@ export function LibraryView({
               disabled={gathering !== null}
             >
               <span aria-hidden="true">▶</span>{" "}
-              {gathering === "play" ? "Gathering…" : "Play all"}
+              {gathering === "play" ? "Gathering…" : playAllLabel(titles)}
             </button>
-            <button
-              className="browse__playall-btn"
-              onClick={() => void playEverything(true)}
-              disabled={gathering !== null}
-            >
-              <ShuffleGlyph size={15} />{" "}
-              {gathering === "shuffle" ? "Gathering…" : shuffleLabel(playKind)}
-            </button>
+            {offersShuffle(titles) && (
+              <button
+                className="browse__playall-btn"
+                onClick={() => void playEverything(true)}
+                disabled={gathering !== null}
+              >
+                <ShuffleGlyph size={15} />{" "}
+                {gathering === "shuffle" ? "Gathering…" : shuffleLabel(playKind)}
+              </button>
+            )}
           </div>
         )}
         {/* Playlists, beside the play controls rather than in a tab strip: the

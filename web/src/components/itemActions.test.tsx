@@ -166,6 +166,28 @@ describe("what a poster offers", () => {
     expect(l).not.toContain("Play");
   });
 
+  /*
+   * Play all promises several things. An album of one track or a season of one
+   * episode reads Play, without Shuffle. A show of one *season* is still many
+   * episodes, and an artist of one album many tracks, so those stay Play all.
+   */
+  it("says Play, without Shuffle, on an album or season of one", () => {
+    for (const kind of ["album", "season"]) {
+      const l = labels(item({ kind, child_count: 1 } as Partial<Item>));
+      expect(l[0]).toBe("Play");
+      expect(l).not.toContain("Play all");
+      expect(l).not.toContain("Shuffle");
+    }
+  });
+
+  it("keeps Play all on a show of one season and an artist of one album", () => {
+    for (const kind of ["show", "artist"]) {
+      const l = labels(item({ kind, child_count: 1 } as Partial<Item>));
+      expect(l[0]).toBe("Play all");
+      expect(l).toContain("Shuffle");
+    }
+  });
+
   it("counts an album as heard rather than seen", () => {
     const l = labels(item({ kind: "album", child_count: 9 } as Partial<Item>));
     expect(l).toContain("Mark all as played");

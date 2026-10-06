@@ -115,10 +115,20 @@ function playAlls() {
 }
 
 describe("an artist's Play all", () => {
+  /*
+   * Still one button, which is what this guards. With a single loose track and
+   * nothing else there is one thing to play, so that button reads Play rather
+   * than Play all (lib/playAll.ts); counted by either label so the guard
+   * against two buttons survives the wording.
+   */
   it("is one button when a track sits directly under the artist", async () => {
     mount([{ id: 9856, kind: "track", title: "Halloweenie VI", missing: false }]);
     await render();
-    expect(playAlls().length).toBe(1);
+    const plays = [...host.querySelectorAll("button")].filter((b) =>
+      /^▶?\s*Play( all)?$/.test((b.textContent ?? "").trim()),
+    );
+    expect(plays.length).toBe(1);
+    expect(playAlls().length).toBe(0);
   });
 
   it("is one button for an ordinary artist with albums", async () => {
