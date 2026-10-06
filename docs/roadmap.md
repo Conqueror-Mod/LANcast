@@ -874,11 +874,13 @@ group is not priority.
 
   **Exact duplicate detection is built** (v0.9.53,
   [ADR 0075](adr/0075-a-duplicate-is-the-same-bytes.md)): the same bytes, each
-  copy shown with its album, and nothing picks which copy to keep. **Near copies**
-  (the same picture resized or re-saved) are a measurement still to make against
-  the semantic-search embeddings, once the library is fully indexed. A perceptual
-  hash could not separate them from similar screenshots. **RAW** is unbuilt, with
-  no RAW files to build against.
+  copy shown with its album, and nothing picks which copy to keep. **Near copies
+  are built too** (2026-10-06): the same picture resized or re-saved, measured
+  first. Neither the search embedding nor a perceptual hash works alone, because
+  bursts sit as close as re-saves. Together with the capture time they selected
+  31 extra copies on a real library, none of them a different picture. They are
+  shown apart from exact duplicates, with the largest version marked. **Bursts**
+  (picking the best of a run) and **RAW** are unbuilt.
 
   **Date-grouped browsing is built** — a Timeline view on a picture library,
   grouped by EXIF capture time rather than by folder, with each month fetched

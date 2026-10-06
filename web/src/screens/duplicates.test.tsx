@@ -9,8 +9,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { Duplicates, removalNote, splitGroups } from "./Duplicates";
-import type { DuplicateGroup } from "@/api/types";
+import { Duplicates, dimensions, nearRemovalNote, removalNote, splitGroups } from "./Duplicates";
+import type { DuplicateGroup, NearCopyGroup } from "@/api/types";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -93,11 +93,15 @@ let host: HTMLDivElement;
 let root: Root;
 let admin = true;
 let groups: DuplicateGroup[];
+let near: NearCopyGroup[];
+let pending: number;
 let calls: { url: string; method: string }[];
 
 beforeEach(() => {
   admin = true;
   groups = [crossAlbum];
+  near = [];
+  pending = 0;
   calls = [];
   host = document.createElement("div");
   document.body.append(host);
@@ -113,7 +117,11 @@ beforeEach(() => {
       if (method === "DELETE") {
         // The server removed it; the next read of the list no longer has it.
         groups = [];
+        near = [];
         return new Response(null, { status: 204 });
+      }
+      if (u.includes("/near-copies")) {
+        return json({ groups: near, extra_copies: near.reduce((n, g) => n + g.copies.length - 1, 0), pending });
       }
       if (u.includes("/duplicates")) {
         return json({ groups, extra_copies: groups.reduce((n, g) => n + g.copies.length - 1, 0) });
@@ -214,3 +222,78 @@ describe("the duplicates page", () => {
     expect(host.textContent).toContain("No duplicates");
   });
 });
+
+/*
+ * Near copies (ADR 0075, 2026-10-06 amendment): the same picture at another
+ * size. Shown after the exact duplicates, with sizes, the largest marked, and
+ * a removal sentence that names what stays.
+ */
+const sized = (id: number, w: number, h: number) =>
+  ({ id, kind: "photo", title: `p${id}`, library_id: 5, width: w, height: h }) as unknown as DuplicateGroup["copies"][number]["item"];
+
+const resized: NearCopyGroup = {
+  keep: 10,
+  copies: [
+    { item: sized(10, 3648, 2736), album: "Party" },
+    { item: sized(11, 720, 540), album: "Party" },
+  ],
+};
+
+describe("near copies", () => {
+  it("says what removing a smaller copy keeps", () => {
+    expect(nearRemovalNote(resized, resized.copies[1])).toBe('The 3648 × 2736 copy stays in "Party".');
+  });
+
+  it("warns that removing the largest keeps the picture smaller", () => {
+    expect(nearRemovalNote(resized, resized.copies[0])).toBe(
+      "This is the largest copy. The 720 × 540 copy stays, so the picture is kept smaller.",
+    );
+  });
+
+  it("reads a size as a person would", () => {
+    expect(dimensions(sized(1, 4160, 3120))).toBe("4160 × 3120");
+    expect(dimensions({ id: 2 } as never)).toBe("Size unknown");
+  });
+
+  it("shows each version's size and marks the largest, after the exact duplicates", async () => {
+    near = [resized];
+    await render();
+    const heads = [...host.querySelectorAll(".dupes__section-head")].map((h) => h.firstChild?.textContent);
+    expect(heads.at(-1)).toBe("Probably the same picture");
+    const sizes = [...host.querySelectorAll(".dupes__size")].map((e) => e.textContent);
+    expect(sizes).toEqual(["3648 × 2736Largest", "720 × 540"]);
+  });
+
+  it("is not called 'no duplicates' when only near copies exist", async () => {
+    groups = [];
+    near = [resized];
+    await render();
+    expect(host.textContent).not.toContain("No duplicates");
+    expect(host.textContent).toContain("Probably the same picture");
+  });
+
+  it("says how many photos have not been compared yet", async () => {
+    pending = 12;
+    await render();
+    expect(host.textContent).toContain("12 photos haven't been compared yet");
+  });
+
+  // The stale-list rule: removing a near copy must refresh this list too.
+  it("reads the near-copy list again after a copy is removed", async () => {
+    groups = [];
+    near = [resized];
+    await render();
+    await act(async () => button("Remove…")!.click());
+    await flush();
+    expect(host.querySelector(".removedlg__note")?.textContent).toBe(
+      "This is the largest copy. The 720 × 540 copy stays, so the picture is kept smaller.",
+    );
+    await act(async () => button("Remove from library")!.click());
+    await flush();
+    await flush();
+    const reads = calls.filter((c) => c.method === "GET" && c.url.includes("/near-copies"));
+    expect(reads.length).toBeGreaterThan(1);
+    expect(host.querySelectorAll(".dupes__copy")).toHaveLength(0);
+  });
+});
+

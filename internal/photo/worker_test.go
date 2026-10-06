@@ -25,6 +25,7 @@ type fakeStore struct {
 	art     map[int64]string
 	meta    map[int64][3]int64
 	sha     map[int64]string
+	dhash   map[int64]uint64
 	putErr  error
 }
 
@@ -35,6 +36,7 @@ func newFakeStore(items ...store.Item) *fakeStore {
 		art:     map[int64]string{},
 		meta:    map[int64][3]int64{},
 		sha:     map[int64]string{},
+		dhash:   map[int64]uint64{},
 	}
 }
 
@@ -80,6 +82,13 @@ func (f *fakeStore) SetPhotoMeta(_ context.Context, id int64, w, h int, taken in
 	defer f.mu.Unlock()
 	f.meta[id] = [3]int64{int64(w), int64(h), taken}
 	f.sha[id] = sha
+	return nil
+}
+
+func (f *fakeStore) SetPhotoDHash(_ context.Context, id int64, h uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dhash[id] = h
 	return nil
 }
 
@@ -156,6 +165,31 @@ func TestWorkerThumbnailsAPhoto(t *testing.T) {
 	}
 	if s := w.Stats(); s.Done != 1 || s.Failed != 0 {
 		t.Errorf("stats = %+v, want one done and no failures", s)
+	}
+}
+
+// The near-copy hash is recorded from the same pass, from the picture the grid
+// shows (ADR 0075 amendment).
+func TestWorkerRecordsTheDisplayCopysHash(t *testing.T) {
+	dir := t.TempDir()
+	img := gradient(60, 40, true)
+	path := filepath.Join(dir, "g.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	st := newFakeStore(store.Item{ID: 7, Kind: "photo", Path: path})
+	w := NewWorker(st, &fakeCache{}, &Decoder{}, quietLog())
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := st.dhash[7]; got != ^uint64(0) {
+		t.Errorf("recorded hash = %064b, want the falling gradient's (every bit)", got)
 	}
 }
 

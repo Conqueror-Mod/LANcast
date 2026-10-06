@@ -41,6 +41,19 @@ func (s *Store) PendingPhotoCount(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// SetPhotoDHash records a photo's difference hash beside its digest, for near
+// copies (ADR 0075, 2026-10-06 amendment). An update, not an upsert: the row
+// is written by SetPhotoMeta from the same pass, and a photo with no digest has
+// no business in either duplicate view. Stored as the hash's 64 bits read as a
+// signed integer, which SQLite keeps exactly.
+func (s *Store) SetPhotoDHash(ctx context.Context, itemID int64, dhash uint64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE photo_hash SET dhash = ? WHERE item_id = ?`, int64(dhash), itemID); err != nil {
+		return fmt.Errorf("set photo dhash: %w", err)
+	}
+	return nil
+}
+
 // SetPhotoMeta records what one decode pass learned.
 //
 // Written even when the thumbnail later fails: the dimensions and the capture

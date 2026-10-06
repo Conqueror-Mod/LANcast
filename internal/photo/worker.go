@@ -35,6 +35,7 @@ type Store interface {
 	MarkArtworkChecked(ctx context.Context, itemID int64) error
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
 	SetPhotoMeta(ctx context.Context, itemID int64, width, height int, takenAt int64, sha256 string) error
+	SetPhotoDHash(ctx context.Context, itemID int64, dhash uint64) error
 }
 
 // Cache is the artwork side of the worker.
@@ -212,7 +213,13 @@ func (w *Worker) one(ctx context.Context, ph store.Item) bool {
 		w.log.Warn("could not record picture metadata", "path", ph.Path, "error", err)
 	}
 
-	body, err := JPEG(Fit(Orient(img, meta.Orientation), displayMax))
+	shown := Fit(Orient(img, meta.Orientation), displayMax)
+	// The near-copy hash is taken from the picture the grid shows: upright and
+	// fitted, which is what the measurement hashed (ADR 0075 amendment).
+	if err := w.st.SetPhotoDHash(ctx, ph.ID, DHash(shown)); err != nil {
+		w.log.Warn("could not record picture hash", "path", ph.Path, "error", err)
+	}
+	body, err := JPEG(shown)
 	if err != nil {
 		w.bump(func(s *Stats) { s.Failed++ })
 		w.log.Warn("could not encode thumbnail", "path", ph.Path, "error", err)

@@ -156,3 +156,17 @@ should keep these properties:
 Bursts, which means choosing the best of a run of shots, remain the separate
 feature named above. On this library the capture-time gap measured here is
 the boundary that would define one.
+
+*Built 2026-10-06.* `GET /api/libraries/{id}/near-copies` applies exactly the
+rule above. On the Duplicates page it is a third section, "Probably the same
+picture", after the exact groups:
+- each version shows its size, and the largest is labelled (not in gold);
+- removal goes through the ordinary dialog, with a sentence naming the size
+  that stays.
+
+The dHash is written by the photo worker into `photo_hash.dhash` (revision 60),
+from the upright fitted picture it already makes for the grid. Revision 60
+sends every photo through the worker once to fill it in.
+
+Run against a migrated copy of the measured library, the shipped code returned
+the measurement's answer exactly: 29 groups, 60 photos, 31 extra copies.

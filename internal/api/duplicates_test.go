@@ -100,3 +100,69 @@ func TestDuplicatesEndpointAnswersAnEmptyList(t *testing.T) {
 		t.Errorf("groups = %#v, want []", m["groups"])
 	}
 }
+
+/*
+ * GET /api/libraries/{id}/near-copies (ADR 0075, 2026-10-06 amendment): a
+ * resized copy is grouped with the larger one kept, the other kinds are
+ * refused, and the empty answers are arrays.
+ */
+func TestNearCopiesEndpointGroupsAResizedCopy(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	lib := pictureLibrary(t, h)
+	big := seedPhotoRow(t, h, lib, "/p/big.jpg")
+	small := seedPhotoRow(t, h, lib, "/p/small.jpg")
+	for _, p := range []struct {
+		id   int64
+		w, h int
+		sha  string
+	}{{big, 3648, 2736, "aa"}, {small, 720, 540, "bb"}} {
+		if err := h.st.SetPhotoMeta(ctx, p.id, p.w, p.h, 0, p.sha); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.st.SetPhotoDHash(ctx, p.id, 0x0F0F); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.st.SavePhotoEmbedding(ctx, p.id, "clip", []float32{1, 0.1, 0, 0}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resp := h.do(t, "GET", "/api/libraries/"+itoa(lib)+"/near-copies", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Groups []struct {
+			Keep   int64 `json:"keep"`
+			Copies []struct {
+				Item struct{ ID int64 } `json:"item"`
+			} `json:"copies"`
+		} `json:"groups"`
+		ExtraCopies int `json:"extra_copies"`
+		Pending     int `json:"pending"`
+	}
+	decode(t, resp, &body)
+	if len(body.Groups) != 1 || body.Groups[0].Keep != big || body.ExtraCopies != 1 || body.Pending != 0 {
+		t.Fatalf("body = %+v, want one group keeping %d", body, big)
+	}
+}
+
+func TestNearCopiesEndpointRefusesOtherKinds(t *testing.T) {
+	h := newHarness(t)
+	lib, err := h.st.CreateLibrary(context.Background(), "Films", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantError(t, h.do(t, "GET", "/api/libraries/"+itoa(lib.ID)+"/near-copies", nil), 400, "wrong_kind")
+}
+
+func TestNearCopiesEndpointAnswersAnEmptyList(t *testing.T) {
+	h := newHarness(t)
+	lib := pictureLibrary(t, h)
+	m := decodeMap(t, h.do(t, "GET", "/api/libraries/"+itoa(lib)+"/near-copies", nil))
+	groups, ok := m["groups"].([]any)
+	if !ok || len(groups) != 0 {
+		t.Errorf("groups = %#v, want []", m["groups"])
+	}
+}

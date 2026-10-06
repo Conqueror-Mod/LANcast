@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 59
+const CurrentSchemaVersion = 60
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -113,6 +113,7 @@ var migrations = []migration{
 	{version: 57, sql: schemaRevision57},
 	{version: 58, sql: schemaRevision58},
 	{version: 59, sql: schemaRevision59, columns: []column{{"face", "frame", "TEXT"}}},
+	{version: 60, sql: schemaRevision60, columns: []column{{"photo_hash", "dhash", "INTEGER"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2022,6 +2023,20 @@ const schemaRevision59 = `
 UPDATE media_item SET faces_at = NULL
  WHERE kind = 'photo' AND faces_at IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM face WHERE face.item_id = media_item.id);
+`
+
+/*
+ * Revision 60 -- a photo's difference hash, for near copies (ADR 0075,
+ * 2026-10-06 amendment).
+ *
+ * A nullable column on photo_hash, beside the digest it is read with. Every
+ * photo goes back through the photo worker once so the ones already read get a
+ * hash, as revision 58 did for the digest: about two minutes for 3,079 photos,
+ * landing on the same content-addressed thumbnails they already have. The
+ * photo pass starts at boot, so nothing waits on a scan.
+ */
+const schemaRevision60 = `
+UPDATE media_item SET cover_checked_at = NULL WHERE kind = 'photo' AND missing = 0;
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or
