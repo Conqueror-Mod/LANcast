@@ -14109,7 +14109,8 @@
         "description": "Where a show should resume for the calling user.\n\nThe rule, in order: an episode **in progress** wins, most recently touched first — that is what was being watched, whatever the numbering says. Otherwise the first unwatched episode **after the furthest one watched** — deliberately *not* \"the earliest unwatched\", because skipping episode 5 and watching through 13 would then send you back to 5 on every press. Nothing watched: the first episode. Everything watched: `exhausted`, with no episode, so a client offers to start again rather than silently replaying the finale.",
         "required": [
           "resume",
-          "exhausted"
+          "exhausted",
+          "started"
         ],
         "properties": {
           "episode": {
@@ -14122,6 +14123,10 @@
           },
           "exhausted": {
             "type": "boolean"
+          },
+          "started": {
+            "type": "boolean",
+            "description": "True when any episode has been watched or is in progress. A client says \"Continue\" only when this is true: on a show nobody has touched the answer is the first episode with `resume` false, which `resume` alone cannot tell apart from the next fresh episode of a show half watched."
           }
         }
       },

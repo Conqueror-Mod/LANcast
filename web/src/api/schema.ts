@@ -6173,6 +6173,8 @@ export interface components {
             /** @description True when this episode was already started, so a client can say "resume" rather than "play" and the player can seek. */
             resume: boolean;
             exhausted: boolean;
+            /** @description True when any episode has been watched or is in progress. A client says "Continue" only when this is true: on a show nobody has touched the answer is the first episode with `resume` false, which `resume` alone cannot tell apart from the next fresh episode of a show half watched. */
+            started: boolean;
         };
         /** @description Album covers come off the disk rather than from a provider (ADR 0024): the picture embedded in a track first, then a `cover.jpg` or `folder.jpg` beside it. **Embedded wins because it travels with the record** — it was attached by whoever tagged the files and cannot be about a different album, where a loose image in a directory can be anything. */
         CoverArtProgress: {

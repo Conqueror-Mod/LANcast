@@ -2694,8 +2694,32 @@ export async function fetchShowContinue(showID: number): Promise<{
   episode?: Item;
   resume: boolean;
   exhausted: boolean;
+  /** Any episode watched or in progress: what tells Play from Continue. */
+  started?: boolean;
 }> {
   return apiGet(`/api/items/${showID}/continue`);
+}
+
+/*
+ * Where a show or season stands for this person, for choosing its button:
+ * Play when untouched, Continue watching when part watched, Watch again when
+ * finished.
+ *
+ * Keyed under ["continue"] on purpose. Every progress write and every "mark
+ * watched" already invalidates that prefix (it is the Continue Watching
+ * shelf's), so finishing an episode and coming back to the show finds the
+ * label already right. A sibling key would be missed by all of them.
+ *
+ * The same no-store endpoint Continue presses, so the label and the press can
+ * never disagree about where the show is.
+ */
+export function useShowStanding(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["continue", "show", id],
+    queryFn: () => fetchShowContinue(id),
+    enabled: enabled && id > 0,
+    staleTime: 0,
+  });
 }
 
 export async function fetchShowEpisodes(showID: number): Promise<Item[]> {

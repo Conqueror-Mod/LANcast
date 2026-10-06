@@ -96,6 +96,44 @@ func TestContinueStartsAtTheBeginningOfAnUntouchedShow(t *testing.T) {
 }
 
 /*
+ * Started is what tells Play from Continue on a show's page. Rule 2 answers an
+ * untouched show with its first episode and resume false, the same shape as the
+ * next fresh episode of a show half watched, so started has to say which.
+ */
+func TestContinueSaysWhetherTheShowWasStarted(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		set  func(st *Store, eps []int64)
+		want bool
+	}{
+		{"untouched", func(*Store, []int64) {}, false},
+		{"one in progress", func(st *Store, eps []int64) { markInProgress(t, st, eps[0], "u1", 10) }, true},
+		{"some watched", func(st *Store, eps []int64) { markWatched(t, st, eps[0], "u1") }, true},
+		{"all watched", func(st *Store, eps []int64) {
+			for _, e := range eps {
+				markWatched(t, st, e, "u1")
+			}
+		}, true},
+		{"watched by somebody else", func(st *Store, eps []int64) { markWatched(t, st, eps[0], "u2") }, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := openTestStore(t)
+			show, eps := seedShow(t, st)
+			c.set(st, eps)
+			next, err := st.NextEpisodeFor(ctx, show, "u1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.Started != c.want {
+				t.Errorf("started = %v, want %v (next %+v)", next.Started, c.want, next)
+			}
+		})
+	}
+}
+
+/*
  * The assertion this file exists for.
  *
  * Episode 5 was skipped and everything through 13 watched. "Earliest unwatched"

@@ -85,9 +85,11 @@ export function Player() {
   const handoff = (useLocation().state ?? null) as {
     queue?: number[];
     shuffle?: boolean;
+    fromStart?: boolean;
   } | null;
   const stateQueue = handoff?.queue;
   const stateShuffle = handoff?.shuffle;
+  const fromStart = !!handoff?.fromStart;
 
   const queueParam = searchParams.get("queue");
   const { play, setShuffle } = pb;
@@ -119,7 +121,15 @@ export function Player() {
         : queueParam
           ? queueParam.split(",").map(Number)
           : [itemID];
-    play(itemID, queue);
+    /*
+     * "Play from start" (the detail page of a title part watched). For one
+     * already playing, a seek to the top; otherwise the player is told to
+     * ignore the saved position for this one item, once.
+     */
+    if (fromStart && playingRef.current === itemID) {
+      pb.seekTo(0);
+    }
+    play(itemID, queue, fromStart);
     /*
      * An explicit request wins; supplying a queue means "in this order";
      * supplying nothing leaves the session's flag alone.
