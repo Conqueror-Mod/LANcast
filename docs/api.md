@@ -3519,8 +3519,12 @@ position.
 ```json
 { "sessions": [ { "id": "k3f9q2xw7m", "item_id": 87, "host_id": "u_3f9",
   "position_ms": 1284000, "paused": false, "updated_at": 1755200000,
+  "age_ms": 1400,
   "members": [ { "user_id": "u_3f9", "name": "Chris", "host": true,
-                 "last_seen": 1755200000 } ],
+                 "last_seen": 1755200000 },
+               { "user_id": "peer:7Q2M…/u_a81", "name": "Georgia",
+                 "host": false, "last_seen": 1755200001,
+                 "peer": "7Q2M…", "server": "Utopia" } ],
   "created_at": 1755199000 } ] }
 ```
 
@@ -3572,6 +3576,19 @@ client's cue to stop following.
 `updated_at` is when the host last reported, so a follower can work out how far
 the film has moved since - without it every poll would land one interval behind
 and never catch up.
+
+**Use `age_ms`, not `updated_at`, for that.** `age_ms` is how long ago the host
+reported, measured by the server as it answered. A follower adds the time since
+it *received* the answer, and so never compares its own clock with the
+server's. `updated_at` minus the device's own clock does exactly that, and is
+only as good as the two clocks agree. That is close enough on one LAN and is a
+silent drift between two households. `updated_at` stays for older clients.
+
+A member with `peer` and `server` is somebody from a paired server, admitted by
+the host answering their request to join (federation Phase 5). `peer` is that
+server's fingerprint and `server` its name, frozen when they joined. Their
+`user_id` is `peer:<fingerprint>/<person>` and never collides with an account
+here.
 
 ### `GET /api/channels`
 

@@ -5398,6 +5398,10 @@ export interface components {
              * @description When this member last polled. Reported because "who is actually here" is the question a room list answers, and a member who closed their laptop is still in the map until the sweep.
              */
             last_seen: number;
+            /** @description The fingerprint of the paired server that vouched for this member. Absent for an account on this server. */
+            peer?: string;
+            /** @description That server's name, frozen when the member joined, so a member list can say where somebody is watching from without asking across the network. */
+            server?: string;
         };
         /**
          * @description Several people playing the same thing at the same position.
@@ -5422,6 +5426,11 @@ export interface components {
              * @description When the host last reported, so a follower can work out how far the film has moved since. Without it every poll would land one interval behind and never catch up.
              */
             updated_at: number;
+            /**
+             * Format: int64
+             * @description How long ago the host reported, measured by this server as it answered. A follower adds the time since it received this answer, so it never compares its own clock with the server's. `updated_at` remains for clients that predate this.
+             */
+            age_ms: number;
             members: components["schemas"]["TogetherMember"][];
             /** Format: int64 */
             created_at: number;

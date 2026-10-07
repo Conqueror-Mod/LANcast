@@ -15,6 +15,15 @@ const at = (positionMS: number, updatedAtSeconds: number, paused = false) => ({
   updated_at: updatedAtSeconds,
 });
 
+// A session as a server with age_ms sends it. updated_at is deliberately
+// nonsense: these tests must not depend on it.
+const aged = (positionMS: number, ageMS: number) => ({
+  position_ms: positionMS,
+  paused: false,
+  updated_at: 0,
+  age_ms: ageMS,
+});
+
 describe("where the film should be now", () => {
   /*
    * The correction that makes following possible.
@@ -24,27 +33,48 @@ describe("where the film should be now", () => {
    * already stale when it was sent, and doing it again every two seconds never
    * closes the gap.
    */
-  it("adds the time since the host reported", () => {
-    const now = 1_700_000_002_000; // two seconds after the report
-    expect(expectedPosition(at(60_000, 1_700_000_000), now)).toBe(62_000);
+  it("adds the server's age and the time since the answer arrived", () => {
+    const received = 5_000;
+    const now = 5_500;
+    // The host reported 1.5 s before the server answered; half a second has
+    // passed here since.
+    expect(expectedPosition(aged(60_000, 1_500), received, now)).toBe(62_000);
+  });
+
+  /*
+   * The clock trap, stated as a test.
+   *
+   * This device's clock is an hour wrong. With age_ms it does not matter,
+   * because nothing compares it with the server's; the old arithmetic would
+   * have put the film an hour out.
+   */
+  it("does not read this device's clock against the server's", () => {
+    const hourWrong = 1_700_000_000_000 + 3_600_000;
+    const session = { ...aged(60_000, 1_000), updated_at: 1_700_000_000 };
+    expect(expectedPosition(session, hourWrong, hourWrong)).toBe(61_000);
   });
 
   // A paused film has not moved, however long ago that was said.
   it("does not advance a paused session", () => {
-    const now = 1_700_000_030_000;
-    expect(expectedPosition(at(60_000, 1_700_000_000, true), now)).toBe(60_000);
+    expect(expectedPosition({ ...aged(60_000, 30_000), paused: true }, 0, 0)).toBe(60_000);
+  });
+
+  // A server from before age_ms: the old arithmetic still works.
+  it("falls back to updated_at when the server sends no age", () => {
+    const now = 1_700_000_002_000; // two seconds after the report
+    expect(expectedPosition(at(60_000, 1_700_000_000), now, now)).toBe(62_000);
   });
 
   /*
    * Clocks between two machines are not the same clock.
    *
-   * If the host's timestamp is ahead of this device, the elapsed time is
-   * negative and the naive sum seeks *backwards* — on every single poll, which
-   * presents as a film that will not play forwards.
+   * On the fallback path, a host timestamp ahead of this device makes the
+   * elapsed time negative and the naive sum seeks *backwards* — on every
+   * single poll, which presents as a film that will not play forwards.
    */
   it("refuses to run backwards when the clocks disagree", () => {
     const now = 1_699_999_995_000; // this device is behind the host
-    expect(expectedPosition(at(60_000, 1_700_000_000), now)).toBe(60_000);
+    expect(expectedPosition(at(60_000, 1_700_000_000), now, now)).toBe(60_000);
   });
 });
 

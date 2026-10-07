@@ -12133,6 +12133,14 @@
             "type": "integer",
             "format": "int64",
             "description": "When this member last polled. Reported because \"who is actually here\" is the question a room list answers, and a member who closed their laptop is still in the map until the sweep."
+          },
+          "peer": {
+            "type": "string",
+            "description": "The fingerprint of the paired server that vouched for this member. Absent for an account on this server."
+          },
+          "server": {
+            "type": "string",
+            "description": "That server's name, frozen when the member joined, so a member list can say where somebody is watching from without asking across the network."
           }
         }
       },
@@ -12146,6 +12154,7 @@
           "position_ms",
           "paused",
           "updated_at",
+          "age_ms",
           "members",
           "created_at"
         ],
@@ -12172,6 +12181,12 @@
             "type": "integer",
             "format": "int64",
             "description": "When the host last reported, so a follower can work out how far the film has moved since. Without it every poll would land one interval behind and never catch up."
+          },
+          "age_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "How long ago the host reported, measured by this server as it answered. A follower adds the time since it received this answer, so it never compares its own clock with the server's. `updated_at` remains for clients that predate this."
           },
           "members": {
             "type": "array",

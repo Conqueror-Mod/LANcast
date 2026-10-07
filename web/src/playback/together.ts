@@ -37,15 +37,31 @@ const DRIFT_TOLERANCE_MS = 1500;
  * Without this, every correction would land a client one poll-interval behind
  * and it would never catch up — it would seek to a position that was already
  * two seconds stale at the moment it arrived, then do it again.
+ *
+ * "How long ago" is the server's `age_ms`, measured by the server as it
+ * answered, plus the time since this device received the answer. Neither half
+ * compares this device's clock with anybody else's. That matters once a room
+ * crosses to another household, where the two clocks are two machines' NTP
+ * and the error is silent: everybody just drifts.
  */
 export function expectedPosition(
-  session: Pick<TogetherSession, "position_ms" | "paused" | "updated_at">,
+  session: Pick<TogetherSession, "position_ms" | "paused" | "updated_at"> & {
+    age_ms?: number;
+  },
+  receivedAtMS: number,
   nowMS: number,
 ): number {
   if (session.paused) return session.position_ms;
-  const elapsed = nowMS - session.updated_at * 1000;
-  // A negative elapsed means the clocks disagree; trusting it would seek
-  // backwards on every poll. The reported position is the safer answer.
+  let elapsed: number;
+  if (typeof session.age_ms === "number") {
+    elapsed = session.age_ms + (nowMS - receivedAtMS);
+  } else {
+    // A server from before age_ms: the old arithmetic, which does compare
+    // clocks, and is only as good as they agree.
+    elapsed = nowMS - session.updated_at * 1000;
+  }
+  // A negative elapsed means something disagrees about time; trusting it would
+  // seek backwards on every poll. The reported position is the safer answer.
   if (elapsed < 0) return session.position_ms;
   return session.position_ms + elapsed;
 }
@@ -61,6 +77,8 @@ export function shouldResync(
 
 export interface TogetherControls {
   session: TogetherSession | null;
+  /** When this device received `session`, by its own clock (Date.now()). */
+  receivedAt: number;
   isHost: boolean;
   error: string | null;
   start: (itemID: number, positionMS: number) => Promise<TogetherSession | null>;
@@ -76,7 +94,14 @@ export interface TogetherControls {
  * is how the room finds out somebody left.
  */
 export function useTogether(userID: string | undefined): TogetherControls {
-  const [session, setSession] = useState<TogetherSession | null>(null);
+  const [session, setSessionState] = useState<TogetherSession | null>(null);
+  const [receivedAt, setReceivedAt] = useState(0);
+  // Every answer is stamped as it arrives: the server's age_ms is measured to
+  // the moment it answered, and the follower adds what has passed since.
+  const setSession = useCallback((next: TogetherSession | null) => {
+    setReceivedAt(Date.now());
+    setSessionState(next);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   // Held in a ref as well as state so the polling effect does not need to be
   // torn down and rebuilt every time the session object changes — which is
@@ -86,7 +111,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
   const stop = useCallback(() => {
     idRef.current = null;
     setSession(null);
-  }, []);
+  }, [setSession]);
 
   const start = useCallback(
     async (itemID: number, positionMS: number) => {
@@ -104,7 +129,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
         return null;
       }
     },
-    [],
+    [setSession],
   );
 
   const join = useCallback(async (id: string) => {
@@ -121,7 +146,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
       setError((e as Error).message);
       return null;
     }
-  }, []);
+  }, [setSession]);
 
   const leave = useCallback(async () => {
     const id = idRef.current;
@@ -162,6 +187,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
 
   return {
     session,
+    receivedAt,
     isHost: !!session && !!userID && session.host_id === userID,
     error,
     start,
