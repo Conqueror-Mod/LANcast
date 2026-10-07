@@ -128,12 +128,15 @@ type Prefs struct {
  * rearranged desk still put the window where it was *on that screen*.
  */
 type WindowPlacement struct {
-	Monitor   string `json:"monitor,omitempty"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	Maximized bool   `json:"maximized,omitempty"`
+	Monitor string `json:"monitor,omitempty"`
+	// MonitorPath identifies the monitor across the driver renumbering its
+	// screens (clientwindow.Placement.MonitorPath). Absent in older files.
+	MonitorPath string `json:"monitor_path,omitempty"`
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Maximized   bool   `json:"maximized,omitempty"`
 }
 
 // Load reads preferences from dir.

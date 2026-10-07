@@ -263,3 +263,52 @@ func TestNoCallerHandlerStillCloses(t *testing.T) {
 		t.Error("nothing was captured")
 	}
 }
+
+/*
+ * The driver renumbers its screens. On one desk the same three monitors went
+ * from DISPLAY3 and friends to DISPLAY6, 7 and 8, so a window saved on
+ * "DISPLAY8" can find that name gone, or worse, worn by another monitor. The
+ * device path names the physical monitor and survives it.
+ */
+func TestARenumberedScreenIsFoundByItsPath(t *testing.T) {
+	tv := Monitor{Device: `\.\DISPLAY8`, Path: `\?\DISPLAY#RKU0000#tv`, Work: Rect{-3840, 0, 0, 2160}}
+	main := Monitor{Device: `\.\DISPLAY6`, Path: `\?\DISPLAY#SAM0D45#main`, Primary: true, Work: Rect{0, 0, 1920, 1080}}
+	p := Placement{Monitor: `\.\DISPLAY3`, MonitorPath: tv.Path, X: 0, Y: 0, Width: 1280, Height: 720}
+	got, ok := Resolve(p, []Monitor{main, tv})
+	if !ok || got.Left != -3840 {
+		t.Errorf("got %+v, want the TV (left -3840), found by path though its name changed", got)
+	}
+}
+
+// After a renumber the saved name can belong to a different monitor. With a
+// path saved, the name is not trusted: the window goes to the primary rather
+// than onto whatever screen now wears the old name.
+func TestAStaleNameOnAnotherMonitorIsNotFollowed(t *testing.T) {
+	main := Monitor{Device: `\.\DISPLAY1`, Path: `\?\main`, Primary: true, Work: Rect{0, 0, 1920, 1080}}
+	other := Monitor{Device: `\.\DISPLAY2`, Path: `\?\other`, Work: Rect{1920, 0, 3840, 1080}}
+	p := Placement{Monitor: `\.\DISPLAY2`, MonitorPath: `\?\unplugged-tv`, X: 10, Y: 10, Width: 800, Height: 600}
+	got, ok := Resolve(p, []Monitor{main, other})
+	if !ok || got.Left >= 1920 {
+		t.Errorf("got %+v, want the primary: DISPLAY2 is now a different monitor", got)
+	}
+}
+
+// A placement saved before paths existed still finds its screen by name.
+func TestAnOldPlacementWithoutAPathStillUsesTheName(t *testing.T) {
+	r := right()
+	r.Path = `\?\right`
+	p := Placement{Monitor: `\.\DISPLAY2`, X: 100, Y: 50, Width: 1280, Height: 720}
+	got, ok := Resolve(p, []Monitor{laptop(), r})
+	if !ok || got.Left != 2020 {
+		t.Errorf("got %+v, want DISPLAY2 by name", got)
+	}
+}
+
+func TestCaptureRecordsTheMonitorsPath(t *testing.T) {
+	r := right()
+	r.Path = `\?\right`
+	p := Capture(Rect{2000, 100, 3000, 900}, []Monitor{laptop(), r}, false)
+	if p.Monitor != `\.\DISPLAY2` || p.MonitorPath != `\?\right` {
+		t.Errorf("captured %+v, want both the name and the path", p)
+	}
+}
