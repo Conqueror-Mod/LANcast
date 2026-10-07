@@ -215,7 +215,8 @@ func (n *nativePlayer) command(name string, value float64) error {
 	case "seek":
 		return n.player.Command("seek", num, "absolute+exact")
 	case "volume":
-		return n.player.Set("volume", strconv.FormatFloat(clamp(value, 0, 1)*100, 'f', 1, 64))
+		// Not the slider as a percentage: mpv's volume is cubic (mpv.Volume).
+		return n.player.Set("volume", strconv.FormatFloat(mpv.Volume(value), 'f', 2, 64))
 	case "mute":
 		return n.player.Set("mute", yesNo(value != 0))
 	case "speed":
