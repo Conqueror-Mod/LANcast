@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-04 · **v0.9.54 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-07 · **v0.9.66 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -13,23 +13,31 @@ way down. Details in the areas below; what the pass taught is at the end.
 
 ## Where it stands
 
-*Rewritten 2026-09-30 and refreshed 2026-10-04, when the release paragraph,
-the schema revision, the photo entry and two ADR statuses had fallen behind. The
+*Rewritten 2026-09-30, refreshed 2026-10-04, and refreshed again 2026-10-07
+after twelve releases in three days had left it at v0.9.54. The
 2026-09-30 note: the opening of this file had become a running commentary
 on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
 deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
 v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
-**Nothing sits unreleased.** v0.9.54 is current.
-- **v0.9.49–v0.9.51:** Skip credits, on films and then on episodes, plus two intro fixes.
-- **v0.9.53:** Up Next, photo duplicates and Xbox app games.
-- **v0.9.54:** tidied the duplicates page and started the photo pass at boot.
+**Nothing sits unreleased.** v0.9.66 is current. Since v0.9.54:
+- **v0.9.56:** an episode counts as watched at its credits, not at 90%.
+- **v0.9.60:** night mode for music, and faces found in HEIC and portrait photos.
+- **v0.9.63:** GOG and EA app games, games opening on the chosen screen, and
+  near copies on the Duplicates page.
+- **v0.9.64:** the film volume slider follows mpv's cubic curve, and Play /
+  Continue / Watch again say what they will do.
+- **v0.9.65:** Mark as watched on every detail page, media keys and Win+Arrow
+  in the desktop player.
+- **v0.9.66:** skip intro on seasons with two versions of their opening.
 
-v0.9.52 was built and never published: its one change, Up Next, shipped in v0.9.53
-instead. Audio pass Phase 2 is built for music: night mode, re-levelled after the
-listening test, which also removed a vocals control that did nothing audible
-([plan](audio-pass-plan.md)). Browser-tab
-films are the rest of that phase.
+v0.9.55, 57–59, 61 and 62 were tagged and never published; each one's changes
+went out in the next published release. Audio pass Phase 2 is built for music
+([plan](audio-pass-plan.md)). Browser-tab films are the rest of that phase.
+
+**In progress:** finishing skip intro across the TV library, from the
+[ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md) coverage audit (#767). v0.9.65 and
+v0.9.66 are the first two results of it.
 
 **Shipped but never watched working.** Each one is something the suites
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
@@ -37,16 +45,14 @@ session 0.
 
 - The **denial reset row** on Settings → Display: its wiring is tested, its
   appearance has never been looked at.
-- The **HLS file fallback** (#589/#590), as the installed service.
 - The **MSE live path**, which is moot while Chromium plays HLS natively, and
   parked with the rest of live TV.
-- **Up Next** in the running client (v0.9.53). Its wiring is tested against the
-  real still-watching prompt. Its card has been looked at only in a static page
-  built from its own stylesheet.
-- **Play on an Xbox app game** (v0.9.53). The id it launches matches what
-  Windows' Start menu uses for the same game, but nobody has pressed it.
 - **Skip credits on a film the server converts**, in a browser. Direct play
   through the desktop client was watched on Skyfall (v0.9.49).
+
+**Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
+as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
+app** games, and **media keys** with Win+Shift+Arrow to the TV.
 
 **Watched on 2026-10-04.** The **season pass**, which now decides episode
 credits from the closing theme as well as intros, ran as the installed service.
@@ -95,7 +101,7 @@ it works.
 native desktop client, which plays through libmpv. The media types are films,
 TV, music, pictures and live TV, with live TV parked. On top of that sit
 federation between servers, Watch Together, installed games, plugins and
-semantic photo search. The schema is at **revision 58**. The [Areas](#areas)
+semantic photo search. The schema is at **revision 63**. The [Areas](#areas)
 tables hold the status of each piece, and the [Releases](#releases) table records
 when each one landed. What is left is breadth, and it is listed in the
 [Feature backlog](#feature-backlog).
@@ -104,6 +110,13 @@ when each one landed. What is left is breadth, and it is listed in the
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.66** | 2026-10-07 | **Skip intro when a season has two versions of its opening (#771).** A season whose episodes split between a long and a short opening left the minority with no marker. A third episode that matches each side now joins them, the third side of a triangle. Futurama seasons 6 and 8 and Star Trek: The Next Generation season 1 are now complete, and It's Always Sunny season 15 went from 3 to 7 of 8. Network promos at the head of a file are no longer taken for the intro. Revision 63 |
+| **v0.9.65** | 2026-10-06 | **Mark as watched everywhere, and the desktop answers the keyboard (#766, #768, #769, #770).** Mark as watched on every detail page, and Mark all on shows, seasons, collections and multi-part films. Every list that shows a watched mark now redraws when one changes, the project's most-repeated bug, met again. Finished seasons carry the tick. Media keys control the player, and Win+Arrow and Win+Shift+Arrow work while a film is fullscreen. A season added after its show was matched gets its own poster. An ident that decided nothing no longer stops the intro search, adding four episodes. The window is remembered by the monitor's device path. Revisions 61 and 62 |
+| **v0.9.64** | 2026-10-06 | **Fixes from a day of use (#760–#765).** The film volume slider was linear into mpv's cubic gain, so 20–25% was silence; it now sends 100·∛slider. Play, Continue watching and Watch again follow where a title actually stands, and one thing to play says Play, not Play all. Subtitles are searched by IMDb/TMDB id, not title. Games from every launcher but Steam show their own icon or art. No schema change |
+| **v0.9.63** | 2026-10-06 | **GOG and EA games, the right screen, and near copies (#757, #758, #759).** GOG starts through Galaxy, as its own shortcut does, and EA by the game's executable. The display picker names monitors and remembers them by device path, and an oversized window is placed and maximised whole. **Near copies** join the Duplicates page: search embedding, difference hash and capture time together, measured at 30 of 32 clean before it was built ([ADR 0075](adr/0075-a-duplicate-is-the-same-bytes.md) amendment). v0.9.61 and v0.9.62 were tagged and not published. Revision 60 |
+| **v0.9.60** | 2026-10-06 | **Night mode for music, and faces the detector could not see (#751–#755).** Music night mode runs on Web Audio, with a −5 dB trim against Chromium's compressor make-up gain. The volume slider now applies after it, and routed output keeps the source's channel count. A vocals control was built, listened to and removed. The face detector reads the upright display copy, so portrait phone photos and HEIC, BMP and WebP are found. v0.9.57–v0.9.59 were tagged and not published. Revision 59 |
+| **v0.9.56** | 2026-10-04 | **An episode is watched at its credits, not at 90% (#750).** ADR 0054 decision 4, the strong form, after late markers were measured (#749). Films, and episodes without a credits marker, keep 90%. Also, from the unpublished v0.9.55: photo search indexing ends (a failed photo was retried within one pass), HEIC and BMP are indexed from thumbnails, cover art starts at boot, and a stopped service is not logged as a season-pass failure. No schema change |
+| v0.9.55 | 2026-10-04 | **Tagged, never published.** Its changes shipped in v0.9.56 |
 | **v0.9.54** | 2026-10-04 | **Duplicates, tidied, and photos read after an update without waiting for a scan.** On the live library, 10 of 37 duplicate groups had every copy in one album, such as four identical photos in one folder, and 27 were the same photo filed in two albums. The page now shows them apart, same-album copies first, because those are the accidents. Groups sit side by side: a 2,000 px window fits the ten same-album groups in three rows instead of ten. **The photo pass now starts at boot (#744).** v0.9.53's revision 58 queued every photo for a fingerprint, but that pass only ran after a library scan, so the Duplicates page stayed empty after the upgrade. No unit test covers the startup wiring. No schema change |
 | **v0.9.53** | 2026-10-04 | **Up Next, photo duplicates and Xbox games.** **Up Next (#740):** when an episode's credits begin and something is queued after it, a card names what follows and counts down ten seconds. Both ways forward play out the last three seconds, so the episode ends the way every episode ends. The countdown counts as unattended, so a season left playing still meets the still-watching prompt. **Photo duplicates (#742, [ADR 0075](adr/0075-a-duplicate-is-the-same-bytes.md)):** exact copies only, by SHA-256, each with its album, and nothing picks which copy to keep. Near copies are deferred on evidence: at both 64 and 256 bits, a perceptual hash put two different screenshots closer together than a real resized copy. **Xbox app games (#743):** read from each drive's `.GamingRoot`, `MicrosoftGame.config` and `appxmanifest.xml`, and launched through `shell:AppsFolder`. The package family name is computed from the files and checked against what Windows reports. Revision 58 |
 | v0.9.52 | 2026-10-04 | **Built, never published.** Its one change, Up Next, shipped in v0.9.53 |
@@ -851,8 +864,8 @@ group is not priority.
 - **Photos need more than a grid.** **Built so far:** people (face grouping and
   naming, in a native sidecar, [ADR 0052](adr/0052-face-grouping-runs-in-a-native-sidecar.md)),
   semantic search ([ADR 0060](adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
-  the Timeline, and exact duplicates. **Still open:** places, near-copy
-  duplicates, and RAW. All three are described below. The original entry
+  the Timeline, exact duplicates and near copies (v0.9.63). **Still open:**
+  places, bursts and RAW, described below. The original entry
   follows, starting with people. Face grouping is the
   feature Google Photos used to justify reading every family album ever uploaded,
   which makes doing it **entirely on the box** the sharpest available statement
@@ -1497,12 +1510,15 @@ group is not priority.
   - **Up Next** (#740): when an episode's credits begin, a card names what
     follows and counts down ten seconds, rolling on through the episode's own
     ending, so watched, auto play and the still-watching prompt all still apply.
-  - **Still open:** using the credits marker as the watched threshold (ADR 0054
-    decision 4). Measured on 2026-10-04: the gentle form, the earlier of the
-    marker and 90%, changes 40 of 1,260 trusted markers, too few to matter. The
-    strong form, where the marker replaces 90%, changes about 1,150, and
-    would turn a late marker into a title that stays on Continue Watching. It
-    needs a measurement of late markers first.
+  - **The credits marker is the watched threshold for episodes** (v0.9.56,
+    #750, ADR 0054 decision 4). The gentle form, the earlier of the marker and
+    90%, changed 40 of 1,260 markers, too few to matter. The strong form
+    replaces 90%, and was taken only after late markers were measured (#749).
+    Films keep 90%.
+  - **Coverage, in progress.** A library audit (#767) listed the seasons with
+    episodes lacking an intro. v0.9.65 (an ident that decided nothing) and
+    v0.9.66 (a season with two openings) closed the first of them. The rest is
+    being finished in its own session.
 
   The rest of this entry is the history that led there, kept for its reasoning.
 
