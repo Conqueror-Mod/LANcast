@@ -255,3 +255,32 @@ func TestIDsAreDistinct(t *testing.T) {
 		_ = m.Leave(id, "alice")
 	}
 }
+
+// The age is measured by this server when it answers, so a follower never has
+// to compare its own clock with anybody else's.
+func TestAgeIsMeasuredByTheServerAtAnswer(t *testing.T) {
+	m := New()
+	advance := atClock(m)
+	s := m.Create(42, "alice", "Alice", 0)
+	if _, err := m.Join(s.ID, "bob", "Bob"); err != nil {
+		t.Fatal(err)
+	}
+
+	advance(1500 * time.Millisecond)
+	got, err := m.Poll(s.ID, "bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AgeMS != 1500 {
+		t.Errorf("age = %dms, want 1500", got.AgeMS)
+	}
+
+	if _, err := m.Report(s.ID, "alice", 9000, false); err != nil {
+		t.Fatal(err)
+	}
+	advance(250 * time.Millisecond)
+	got, _ = m.Poll(s.ID, "bob")
+	if got.AgeMS != 250 || got.PositionMS != 9000 {
+		t.Errorf("after a report: age %dms at %dms, want 250 at 9000", got.AgeMS, got.PositionMS)
+	}
+}

@@ -43,7 +43,7 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
    */
   useEffect(() => {
     if (!t.session || t.isHost) return;
-    const target = expectedPosition(t.session, Date.now());
+    const target = expectedPosition(t.session, t.receivedAt, Date.now());
     if (shouldResync(pb.displayTime * 1000, target)) {
       pb.seekTo(target / 1000);
     }

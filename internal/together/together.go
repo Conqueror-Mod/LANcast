@@ -48,6 +48,17 @@ type Member struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	Host   bool   `json:"host"`
+	/*
+	 * Peer and Server say where a member came from: the fingerprint of the
+	 * paired server that vouched for them, and that server's name, frozen at
+	 * join like Name. Both empty for an account on this server.
+	 *
+	 * Frozen so a member list reads "Georgia · Utopia" without a call across
+	 * the network to draw it, and so a peer renaming itself mid-film does not
+	 * change who is in the room.
+	 */
+	Peer   string `json:"peer,omitempty"`
+	Server string `json:"server,omitempty"`
 	// LastSeen is when this member last polled. Reported because "who is
 	// actually here" is the question a room list answers, and a member who
 	// closed their laptop is still in the map until the sweep.
@@ -68,7 +79,19 @@ type Session struct {
 	// UpdatedAt is when the host last reported. A follower uses it to work out
 	// how far the film has moved since — without it, every poll would land a
 	// client one poll-interval behind and it would never catch up.
-	UpdatedAt int64    `json:"updated_at"`
+	UpdatedAt int64 `json:"updated_at"`
+	/*
+	 * AgeMS is how long ago the host reported, measured by this server at the
+	 * moment it answered.
+	 *
+	 * A follower used to subtract UpdatedAt from its own clock, which compares
+	 * two machines' clocks and is only safe while NTP keeps them close. Across
+	 * two households that is the drift the federation plan warned about, and
+	 * it is silent when it breaks. With the age, the follower adds the time
+	 * since it *received* this answer and never reads anybody else's clock.
+	 * UpdatedAt stays for clients built before this existed.
+	 */
+	AgeMS     int64    `json:"age_ms"`
 	Members   []Member `json:"members"`
 	CreatedAt int64    `json:"created_at"`
 }
@@ -82,6 +105,13 @@ type room struct {
 	updatedAt  time.Time
 	createdAt  time.Time
 	members    map[string]*Member
+}
+
+// RemoteID is a remote member's key in a room: the peer that vouched for them
+// and the person that peer named. It cannot collide with a local account id,
+// which is always "u_…", so a room needs no second map for its guests.
+func RemoteID(fingerprint, person string) string {
+	return "peer:" + fingerprint + "/" + person
 }
 
 /*
@@ -112,6 +142,12 @@ type Manager struct {
 	rooms map[string]*room
 	now   func() time.Time
 
+	// Requests to join from another server, and when each asker may next
+	// ask. Under the same lock as the rooms, because accepting one is what
+	// puts its asker in a room and the two must not be seen half-done.
+	requests map[string]*request
+	cooldown map[string]time.Time
+
 	// OnSweep, when set, hears what the sweep did. It is called with the
 	// manager's lock held, so it must not call back into the Manager; logging
 	// is what it is for. This package stays free of a logger.
@@ -119,7 +155,12 @@ type Manager struct {
 }
 
 func New() *Manager {
-	return &Manager{rooms: map[string]*room{}, now: time.Now}
+	return &Manager{
+		rooms:    map[string]*room{},
+		now:      time.Now,
+		requests: map[string]*request{},
+		cooldown: map[string]time.Time{},
+	}
 }
 
 // Create opens a room with its creator as host.
@@ -142,11 +183,25 @@ func (m *Manager) Create(itemID int64, userID, name string, positionMS int64) Se
 		},
 	}
 	m.rooms[r.id] = r
-	return snapshot(r)
+	return snapshot(r, now)
 }
 
 // Join adds a member and returns the room they are joining.
 func (m *Manager) Join(id, userID, name string) (Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.joinLocked(id, Member{UserID: userID, Name: name})
+}
+
+/*
+ * JoinRemote is a remote member coming back to a room they were admitted to.
+ *
+ * Only an accepted request puts a remote member in a room (see Accept), so
+ * this refuses anybody not already there: being paired with the host's server
+ * is not an invitation to every room on it. Rejoining after a dropped poll is
+ * allowed, the same as for an account, until the sweep has removed them.
+ */
+func (m *Manager) JoinRemote(id, fingerprint, person string) (Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -154,19 +209,31 @@ func (m *Manager) Join(id, userID, name string) (Session, error) {
 	if !ok {
 		return Session{}, ErrNotFound
 	}
+	mem, ok := r.members[RemoteID(fingerprint, person)]
+	if !ok {
+		return Session{}, ErrNotMember
+	}
+	return m.joinLocked(id, *mem)
+}
+
+func (m *Manager) joinLocked(id string, who Member) (Session, error) {
+	r, ok := m.rooms[id]
+	if !ok {
+		return Session{}, ErrNotFound
+	}
 	now := m.now()
 	// Rejoining is not an error and does not duplicate anybody: a refresh, a
 	// dropped connection and a second tab all arrive here.
-	r.members[userID] = &Member{
-		UserID: userID, Name: name, Host: userID == r.hostID, LastSeen: now.Unix(),
-	}
+	who.Host = who.UserID == r.hostID
+	who.LastSeen = now.Unix()
+	r.members[who.UserID] = &who
 	// Swept after the join, so an arriving guest is never counted among the
 	// absent — and so a room whose host has gone is still reported as gone.
 	m.sweepLocked()
 	if _, alive := m.rooms[id]; !alive {
 		return Session{}, ErrNotFound
 	}
-	return snapshot(r), nil
+	return snapshot(r, now), nil
 }
 
 // Poll is what a follower calls. It records that the caller is still here and
@@ -191,7 +258,8 @@ func (m *Manager) Poll(id, userID string) (Session, error) {
 	 * — which is precisely when the interval lands — was judged absent and took
 	 * their own room down with them, mid-film, for being on time.
 	 */
-	mem.LastSeen = m.now().Unix()
+	now := m.now()
+	mem.LastSeen = now.Unix()
 	m.sweepLocked()
 
 	// The sweep can still have closed the room around the caller: a guest whose
@@ -199,7 +267,7 @@ func (m *Manager) Poll(id, userID string) (Session, error) {
 	if _, alive := m.rooms[id]; !alive {
 		return Session{}, ErrNotFound
 	}
-	return snapshot(r), nil
+	return snapshot(r, now), nil
 }
 
 // Report is the host telling the room where it is. Only the host may.
@@ -223,7 +291,7 @@ func (m *Manager) Report(id, userID string, positionMS int64, paused bool) (Sess
 		mem.LastSeen = now.Unix()
 	}
 	m.sweepLocked()
-	return snapshot(r), nil
+	return snapshot(r, now), nil
 }
 
 /*
@@ -270,9 +338,10 @@ func (m *Manager) List() []Session {
 	defer m.mu.Unlock()
 	m.sweepLocked()
 
+	now := m.now()
 	out := make([]Session, 0, len(m.rooms))
 	for _, r := range m.rooms {
-		out = append(out, snapshot(r))
+		out = append(out, snapshot(r, now))
 	}
 	// Newest first, and stable: a list that reorders itself between polls is a
 	// list nobody can click.
@@ -320,7 +389,34 @@ func (m *Manager) emit(e Event) {
 	}
 }
 
-func snapshot(r *room) Session {
+/*
+ * Playing answers whether a remote person is in a live room that is playing
+ * this item, now.
+ *
+ * It is how being admitted to a room lets a guest stream the room's film
+ * without the film's library being shared (ADR 0046 §4, amended). Asked per
+ * request and swept first, so the permission ends when the room ends, when
+ * the host moves to something else, or when the guest stops polling, with
+ * nothing anywhere to revoke.
+ */
+func (m *Manager) Playing(fingerprint, person string, itemID int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sweepLocked()
+
+	id := RemoteID(fingerprint, person)
+	for _, r := range m.rooms {
+		if r.itemID != itemID {
+			continue
+		}
+		if _, ok := r.members[id]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func snapshot(r *room, now time.Time) Session {
 	members := make([]Member, 0, len(r.members))
 	for _, mem := range r.members {
 		members = append(members, *mem)
@@ -340,6 +436,7 @@ func snapshot(r *room) Session {
 		PositionMS: r.positionMS,
 		Paused:     r.paused,
 		UpdatedAt:  r.updatedAt.Unix(),
+		AgeMS:      max(0, now.Sub(r.updatedAt).Milliseconds()),
 		Members:    members,
 		CreatedAt:  r.createdAt.Unix(),
 	}
