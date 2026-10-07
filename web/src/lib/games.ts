@@ -35,6 +35,9 @@ export interface GameRow {
   install_path: string;
   has_poster: boolean;
   has_header: boolean;
+  /** The game's own picture from its install folder; optional because an older
+   *  desktop client does not send it. */
+  has_icon?: boolean;
   hidden: boolean;
   favourite: boolean;
   /**
@@ -80,7 +83,7 @@ declare global {
     lancastGames?: () => Promise<GamesResult>;
     lancastGameArt?: (
       id: string,
-      kind: "poster" | "header",
+      kind: "poster" | "header" | "icon",
     ) => Promise<{ ok: boolean; uri?: string; error?: string }>;
     lancastLaunchGame?: (id: string) => Promise<Ack>;
     lancastOpenGameFolder?: (id: string) => Promise<Ack>;
@@ -170,7 +173,7 @@ export function useGames() {
  */
 export function useGameArt(
   id: string,
-  kind: "poster" | "header",
+  kind: "poster" | "header" | "icon",
   has: boolean,
 ) {
   return useQuery({

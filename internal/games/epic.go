@@ -91,8 +91,13 @@ func ParseEpicManifest(raw []byte) (Game, bool) {
 	}
 
 	install := windowsPath(m.InstallLocation)
+	icon := ""
+	if m.LaunchExecutable != "" {
+		icon = filepath.Join(install, filepath.FromSlash(strings.ReplaceAll(m.LaunchExecutable, `\`, "/")))
+	}
 
 	return Game{
+		IconSource:  icon,
 		ID:          EpicID(m.AppName),
 		Source:      SourceEpic,
 		Name:        m.DisplayName,

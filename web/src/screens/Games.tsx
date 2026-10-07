@@ -268,6 +268,7 @@ function GameTile({
   starting: boolean;
 }) {
   const { data: art } = useGameArt(game.id, "poster", game.has_poster);
+  const { data: icon } = useGameArt(game.id, "icon", !game.has_poster && !!game.has_icon);
   const flags = useSetGameFlags();
 
   return (
@@ -275,11 +276,21 @@ function GameTile({
       <Link className="games__art" to={`/games/${game.id}`} title={game.name}>
         {art ? (
           <img src={art} alt="" />
+        ) : icon ? (
+          /*
+           * The game's own picture: an icon, a logo or a splash, none of them
+           * poster-shaped. Shown whole over a blurred copy of itself, so a
+           * square icon and a wide splash both fill the tile without being
+           * cropped or stretched.
+           */
+          <span className="games__iconart">
+            <img className="games__iconart-wash" src={icon} alt="" />
+            <img className="games__iconart-img" src={icon} alt="" />
+          </span>
         ) : (
-          // A lettered placeholder rather than a broken image: Steam caches
-          // artwork lazily, and Epic, Battle.net, the Xbox app, GOG and EA keep
-          // none that fits a poster — so most tiles from those land here.
-          // artwork lazily, so a game installed and never looked at has none.
+          // A lettered placeholder rather than a broken image, for a game with
+          // no poster and nothing of its own on disk to show (Steam caches
+          // posters lazily, so a game never looked at in Steam has none).
           <span className="games__placeholder" aria-hidden="true">
             {game.name.slice(0, 1).toUpperCase()}
           </span>
