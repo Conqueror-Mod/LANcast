@@ -1060,7 +1060,6 @@ export function Detail() {
               <EpisodeList
                 episodes={playableChildren}
                 queue={playableChildren.map((c) => c.id)}
-                parentID={item.id}
               />
             ) : isAlbum || isPlaylist ? (
               // A playlist is a numbered list for the same reason a record is,

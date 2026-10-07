@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFocusable } from "@/focus/FocusController";
-import { useIsAdmin, useSetWatched } from "@/api/hooks";
+import { useIsAdmin, useSetWatchedByID } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { RemoveDialog } from "./RemoveDialog";
@@ -29,17 +29,13 @@ import "./EpisodeList.css";
 export function EpisodeList({
   episodes,
   queue,
-  parentID,
 }: {
   episodes: Item[];
   /** Playing an episode queues the rest of the season from it, so a season
    *  keeps playing after the row that was pressed. */
   queue: number[];
-  /** The container being listed, so marking an episode watched can refresh the
-   *  list it is in. */
-  parentID: number;
 }) {
-  const setWatched = useSetWatched(parentID);
+  const setWatched = useSetWatchedByID();
   const isAdmin = useIsAdmin();
   /*
    * One dialog for the list, not one per row.

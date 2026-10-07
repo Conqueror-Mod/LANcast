@@ -6,6 +6,7 @@ import {
   fetchShowEpisodes,
   useIsAdmin,
   useSetSensitive,
+  invalidateWatchState,
   useSetWatchedByID,
   useSettings,
 } from "@/api/hooks";
@@ -145,8 +146,7 @@ export function useMarkAll(): {
          * right, and the season page you are looking at still draws every
          * episode unwatched.
          */
-        qc.invalidateQueries({ queryKey: ["children"] });
-        qc.invalidateQueries({ queryKey: ["item", item.id] });
+        invalidateWatchState(qc);
       } finally {
         setMarking(false);
       }
