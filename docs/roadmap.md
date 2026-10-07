@@ -45,20 +45,14 @@ session 0.
 
 - The **denial reset row** on Settings → Display: its wiring is tested, its
   appearance has never been looked at.
-- The **HLS file fallback** (#589/#590), as the installed service.
 - The **MSE live path**, which is moot while Chromium plays HLS natively, and
   parked with the rest of live TV.
-- **Up Next** in the running client (v0.9.53). Its wiring is tested against the
-  real still-watching prompt. Its card has been looked at only in a static page
-  built from its own stylesheet.
-- **Play on a GOG or EA app game** (v0.9.63). Both were read from real
-  installs; neither launch has been pressed.
-- **Media keys and Win+Shift+Arrow to the TV** (v0.9.65), in the installed
-  client.
-- **Play on an Xbox app game** (v0.9.53). The id it launches matches what
-  Windows' Start menu uses for the same game, but nobody has pressed it.
 - **Skip credits on a film the server converts**, in a browser. Direct play
   through the desktop client was watched on Skyfall (v0.9.49).
+
+**Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
+as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
+app** games, and **media keys** with Win+Shift+Arrow to the TV.
 
 **Watched on 2026-10-04.** The **season pass**, which now decides episode
 credits from the closing theme as well as intros, ran as the installed service.
