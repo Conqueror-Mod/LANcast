@@ -296,8 +296,23 @@ surroundings rather than raising the voice, holds here as well.
   arrives. A routed element playing a 5.1 film is not folded to stereo by a
   graph doing nothing.
 
-Browser-tab films are not wired yet. That is the rest of this phase, and the
-pop-out move test gaining an `AudioContext` belongs to it.
+### Built for films in a browser tab (2026-10-07)
+
+A film in a browser tab uses the same graph and the same numbers as music, and
+the film's own preference (`nightVideo`, the one mpv applies on the desktop).
+Dialogue boost stays desktop-only: the element is handed stereo, so it has no
+centre channel to find.
+
+**What decides is what reaches the element, not what the file carries.**
+- A converted soundtrack (`audio_action: encode`) is always stereo, because
+  the server mixes it down (`internal/transcode/args.go`). So most films in a
+  browser tab can use night mode.
+- A directly played or copied soundtrack arrives with the file's own channels.
+  On 5.1 the compressor would fold it to stereo, so night mode is not offered,
+  and the panel says why rather than hiding the row.
+
+Not yet exercised: the pop-out (ADR 0029) moving a routed element into
+another document. jsdom has no Web Audio, so this needs a real browser.
 
 ### Phase 2, measured (2026-10-05, offline)
 

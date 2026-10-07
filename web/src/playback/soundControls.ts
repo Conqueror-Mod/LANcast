@@ -36,6 +36,26 @@ export function canNightMusic(channels: number): boolean {
   return channels === 1 || channels === 2;
 }
 
+/**
+ * Whether the film's night mode can be offered: always in the desktop's own
+ * player (audioFX, applied by mpv), and in a browser tab when the element
+ * receives mono or stereo (PlaybackState.filmChannels). On more channels the
+ * graph would fold surround to stereo, which it does not do silently.
+ */
+export function canNightFilm(pb: { audioFX: boolean; isAudio: boolean; filmChannels: number }): boolean {
+  if (pb.isAudio) return false;
+  return pb.audioFX || pb.filmChannels === 1 || pb.filmChannels === 2;
+}
+
+/** True when a browser-tab film is surround, so night mode is unavailable. */
+export function filmNightBlockedBySurround(pb: {
+  audioFX: boolean;
+  isAudio: boolean;
+  filmChannels: number;
+}): boolean {
+  return !pb.isAudio && !pb.audioFX && pb.filmChannels > 2;
+}
+
 /** The dialogue level after this one: Off, Low, High, then back to Off. */
 export function nextDialogueLevel(level: number): number {
   const n = DIALOGUE_LEVELS.length;

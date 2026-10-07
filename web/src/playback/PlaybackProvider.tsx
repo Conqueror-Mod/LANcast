@@ -153,6 +153,9 @@ interface Decision {
    * anyone expects. See waitNote.
    */
   video_action?: string;
+  /** `copy` or `encode`. A re-encoded soundtrack is always stereo
+   *  (internal/transcode/args.go), whatever the file carries. */
+  audio_action?: string;
 }
 
 // A direct/remux source is a real file with Range support, so the browser seeks
@@ -243,6 +246,11 @@ interface PlaybackState {
   /** Channels in the music track that is playing, from the probe; 0 when not
    *  music or not known. Night mode is offered on 1 or 2. */
   musicChannels: number;
+  /** Channels a film in the element (a browser tab) actually receives: 2 when
+   *  the server re-encodes its audio, else the track's own. 0 when the film is
+   *  in mpv, is not a film, or is not known yet. Night mode is offered on 1 or
+   *  2; on more it would fold surround to stereo, and the panel says so. */
+  filmChannels: number;
   cover: string | undefined;
   surface: Surface;
 
@@ -1255,19 +1263,43 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       : (audioTracks.find((t) => t.default) ?? audioTracks[0])
     )?.channels ?? 0;
   const musicChannels = isAudio && elementFXSupported() ? sourceChannels : 0;
+  /*
+   * A film in a browser tab plays through the same element, so night mode
+   * runs on the same graph (docs/audio-pass-plan.md, Phase 2). What counts is
+   * what reaches the element: a converted soundtrack arrives as stereo, a
+   * directly played one with the file's own channels.
+   */
+  const [audioReencoded, setAudioReencoded] = useState(false);
+  const filmChannels =
+    !isAudio && !nativeOn && itemID > 0 && elementFXSupported()
+      ? audioReencoded
+        ? 2
+        : sourceChannels
+      : 0;
 
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    // Anything that is not music gets a straight wire. The element is shared
-    // with films in a browser tab, and they are not this effect's business.
+    // Music has its own preference; a film in the element has the film's
+    // (the same one mpv applies on the desktop). A film in mpv, or anything
+    // else, gets a straight wire.
     const fx = isAudio
       ? fxApplies({ night: prefs.nightMusic }, musicChannels)
-      : FX_OFF;
+      : filmChannels > 0
+        ? fxApplies({ night: prefs.nightVideo }, filmChannels)
+        : FX_OFF;
     // The output carries what the source has, so a routed element sends the
     // mixer the same stream it would have sent unrouted (elementEngine.ts).
     applyElementFX(v, fx, prefs.audioDevice, sourceChannels);
-  }, [isAudio, musicChannels, sourceChannels, prefs.nightMusic, prefs.audioDevice]);
+  }, [
+    isAudio,
+    musicChannels,
+    filmChannels,
+    sourceChannels,
+    prefs.nightMusic,
+    prefs.nightVideo,
+    prefs.audioDevice,
+  ]);
 
   // A routed element is silent while its context is suspended, and a context
   // can be suspended by the system as well as at birth. Every play resumes it.
@@ -1425,6 +1457,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         decision.current = { method: "direct", reason: "" };
       }
       transcoding.current = decision.current.method !== "direct";
+      setAudioReencoded(transcoding.current && decision.current.audio_action === "encode");
 
       /*
        * Say it before trying, not after failing (ADR 0048).
@@ -2351,6 +2384,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     native: nativeOn,
     audioFX: nativeOn && fxSupported,
     musicChannels,
+    filmChannels,
     cover,
     surface,
     playing,

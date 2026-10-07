@@ -28,6 +28,7 @@ const pb = {
   audioTracks: [] as MediaStream[],
   audioIndex: null as number | null,
   musicChannels: 0,
+  filmChannels: 0,
   subtitles: [],
   activeSub: null,
   subKey: null,
@@ -69,6 +70,7 @@ beforeEach(() => {
     isAudio: false,
     audioTracks: [track(6)],
     musicChannels: 0,
+    filmChannels: 0,
     prefs: { ...DEFAULTS },
   });
   pb.setPrefs.mockClear();
@@ -86,12 +88,38 @@ describe("PlaybackSettings sound rows", () => {
     expect(labels()).toContain("Dialogue boost");
   });
 
-  it("offers neither where the element plays, which has no filters yet", () => {
+  it("offers neither in a browser tab before it knows what the film carries", () => {
     pb.native = false;
     pb.audioFX = false;
     render();
     expect(labels()).not.toContain("Night mode");
     expect(labels()).not.toContain("Dialogue boost");
+  });
+
+  /*
+   * A film in a browser tab: night mode on Web Audio when the element receives
+   * mono or stereo, which every converted soundtrack is. Dialogue boost stays
+   * the desktop's, since the element has no centre channel to find.
+   */
+  it("offers night mode, and not dialogue boost, on a stereo film in a browser tab", () => {
+    Object.assign(pb, { native: false, audioFX: false, filmChannels: 2 });
+    render();
+    expect(labels()).toContain("Night mode");
+    expect(labels()).not.toContain("Dialogue boost");
+    act(() => {
+      const sel = selectFor("Night mode");
+      sel.value = "on";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(pb.setPrefs).toHaveBeenLastCalledWith({ nightVideo: true });
+  });
+
+  // Surround is not folded to stereo without saying so.
+  it("says why there is no night mode on a surround film in a browser tab", () => {
+    Object.assign(pb, { native: false, audioFX: false, filmChannels: 6 });
+    render();
+    expect(labels()).not.toContain("Night mode");
+    expect(host.textContent).toContain("surround");
   });
 
   it("offers neither on a native client too old to apply them", () => {
