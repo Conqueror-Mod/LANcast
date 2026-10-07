@@ -91,3 +91,67 @@ func TestSeasonPassLooksPastAnIdent(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The League's shape: a 6.5 s network ident at 0:00, too short for the
+ * majority rule, and a 4 s title card a minute or more in. Every comparison's
+ * longest shared run is the ident, so nothing is decided, IsIdent never
+ * fires, and the card behind it was never looked for.
+ */
+func TestSeasonPassLooksPastAnIdentThatDecidedNothing(t *testing.T) {
+	r := rand.New(rand.NewSource(11))
+	ident := noise(r, 6.5)
+	card := noise(r, 4)
+	at := []float64{64, 82, 105, 77, 98, 120}
+	heads := map[string][]float64{}
+	ms := int64(1300 * 1000)
+	var se store.Season
+	for i, c := range at {
+		p := fmt.Sprintf("e%d.mkv", i+1)
+		h := append([]float64{}, ident...)
+		h = append(h, noise(r, c-6.5)...)
+		h = append(h, card...)
+		h = append(h, noise(r, 20)...)
+		heads[p] = h
+		se.Episodes = append(se.Episodes, store.Item{ID: int64(i + 1), Kind: "episode", Path: p, DurationMS: &ms})
+	}
+	w := NewWorker(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.headFn = func(_ context.Context, p string, _ int) ([]float64, error) { return heads[p], nil }
+	w.tailAudioFn = func(context.Context, string, int) ([]float64, error) { return nil, fmt.Errorf("no tail") }
+	w.tailFn = func(context.Context, string, float64) (string, error) { return "", nil }
+
+	st := &seasonStore{}
+	if err := w.examineSeason(context.Background(), st, se); err != nil {
+		t.Fatal(err)
+	}
+	for i, ep := range se.Episodes {
+		var intro *store.Marker
+		for _, m := range st.saved[ep.ID] {
+			if m.Kind == store.MarkerIntro {
+				m := m
+				intro = &m
+			}
+		}
+		if intro == nil {
+			t.Errorf("episode %d: no intro; the card behind the ident was not found", ep.ID)
+			continue
+		}
+		start := float64(intro.StartMS) / 1000
+		if start < at[i]-1.5 || start > at[i]+1.5 {
+			t.Errorf("episode %d: intro starts at %.1fs, want the card at %.0fs", ep.ID, start, at[i])
+		}
+	}
+}
+
+// A comparison that is not ident-shaped is left exactly as it was, and with no
+// ident to look past there is nothing new to decide.
+func TestIntroPastIdentsLeavesOtherComparisonsAlone(t *testing.T) {
+	called := false
+	in := introPastIdents([][]uint32{make([]uint32, 4000)}, func(int) []uint32 {
+		called = true
+		return nil
+	}, []Candidate{{StartSec: 60, EndSec: 64}, {StartSec: 0, EndSec: 30}, {}})
+	if called || in.Found {
+		t.Errorf("re-ran a comparison with no ident (called=%v), decided %+v", called, in)
+	}
+}

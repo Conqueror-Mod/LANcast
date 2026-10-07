@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 61
+const CurrentSchemaVersion = 62
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -115,6 +115,7 @@ var migrations = []migration{
 	{version: 59, sql: schemaRevision59, columns: []column{{"face", "frame", "TEXT"}}},
 	{version: 60, sql: schemaRevision60, columns: []column{{"photo_hash", "dhash", "INTEGER"}}},
 	{version: 61, sql: schemaRevision61},
+	{version: 62, sql: schemaRevision62},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2066,6 +2067,24 @@ SET match_state = 'unmatched',
 WHERE kind = 'season'
   AND provider IS NULL
   AND id NOT IN (SELECT item_id FROM item_lock);
+`
+
+/*
+ * Revision 62 -- seasons with an episode lacking an intro are compared again
+ * (ADR 0055, 2026-10-06 amendment).
+ *
+ * No shape changes. The intro search now looks past a network ident that
+ * decided nothing, which gave The League's four-second card back to three
+ * episodes of S4. That rule only runs where nothing was decided, so only a
+ * season holding an episode with no intro can change: clearing those
+ * episodes' stamps sends exactly those seasons round again (a season is
+ * re-compared whole when any of its episodes is unstamped), rather than the
+ * whole library as revision 57 did. The pass starts at boot.
+ */
+const schemaRevision62 = `
+UPDATE media_item SET intros_at = NULL
+WHERE kind = 'episode' AND intros_at IS NOT NULL
+  AND id NOT IN (SELECT item_id FROM item_marker WHERE kind = 'intro');
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or
