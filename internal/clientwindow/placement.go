@@ -63,12 +63,16 @@ type Monitor struct {
  * difference invisible.
  */
 type Placement struct {
-	Monitor   string `json:"monitor,omitempty"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	Maximized bool   `json:"maximized,omitempty"`
+	Monitor string `json:"monitor,omitempty"`
+	// MonitorPath is the monitor's device path (Monitor.Path), which survives
+	// the driver renumbering its screens where Monitor does not. Empty in a
+	// placement saved before it existed.
+	MonitorPath string `json:"monitor_path,omitempty"`
+	X           int    `json:"x"`
+	Y           int    `json:"y"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Maximized   bool   `json:"maximized,omitempty"`
 }
 
 // Valid reports whether a placement says anything worth acting on.
@@ -98,7 +102,7 @@ func Resolve(p Placement, monitors []Monitor) (Rect, bool) {
 		return Rect{}, false
 	}
 
-	target, ok := findMonitor(p.Monitor, monitors)
+	target, ok := findMonitor(p.Monitor, p.MonitorPath, monitors)
 	if !ok {
 		return Rect{}, false
 	}
@@ -152,8 +156,23 @@ func Resolve(p Placement, monitors []Monitor) (Rect, bool) {
  * existed, or by a build that could not name the monitor — also lands on the
  * primary rather than being refused: the size is still worth honouring.
  */
-func findMonitor(device string, monitors []Monitor) (Monitor, bool) {
-	if device != "" {
+/*
+ * findMonitor is the screen a placement names, else the primary.
+ *
+ * By device path when one was saved, and then only by path. The GDI name is
+ * renumbered when the graphics driver re-enumerates its screens, so after a
+ * renumber the saved name can belong to a *different* monitor: matching it
+ * would put the window on the wrong screen, which is worse than the primary.
+ * A placement saved before paths were (name only) still matches by name.
+ */
+func findMonitor(device, path string, monitors []Monitor) (Monitor, bool) {
+	if path != "" {
+		for _, m := range monitors {
+			if m.Path == path && !m.Work.empty() {
+				return m, true
+			}
+		}
+	} else if device != "" {
 		for _, m := range monitors {
 			if m.Device == device && !m.Work.empty() {
 				return m, true
@@ -199,6 +218,7 @@ func Capture(win Rect, monitors []Monitor, maximized bool) Placement {
 		return p
 	}
 	p.Monitor = best.Device
+	p.MonitorPath = best.Path
 	p.X = win.Left - best.Work.Left
 	p.Y = win.Top - best.Work.Top
 	return p

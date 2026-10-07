@@ -337,10 +337,7 @@ func runWindow(l *launcher) {
 			if err != nil {
 				cur = prefs
 			}
-			cur.Window = &desktopprefs.WindowPlacement{
-				Monitor: pl.Monitor, X: pl.X, Y: pl.Y,
-				Width: pl.Width, Height: pl.Height, Maximized: pl.Maximized,
-			}
+			cur.Window = placementToPrefs(pl)
 			// Ignored on purpose. This is a windowsgui binary with nowhere to
 			// print, it runs as the window is closing, and the cost of failing
 			// is that the next launch opens where it always used to. Nothing
@@ -612,12 +609,22 @@ func (l *launcher) serverCertPin() string {
  * that later versions read, clientwindow owns behaviour — so this is the seam
  * where they meet, and it is four lines rather than an import cycle.
  */
+// placementToPrefs is the other direction, for saving. Kept beside it so a
+// field added to one is plainly missing from the other (placement_test.go
+// round-trips every field).
+func placementToPrefs(pl clientwindow.Placement) *desktopprefs.WindowPlacement {
+	return &desktopprefs.WindowPlacement{
+		Monitor: pl.Monitor, MonitorPath: pl.MonitorPath, X: pl.X, Y: pl.Y,
+		Width: pl.Width, Height: pl.Height, Maximized: pl.Maximized,
+	}
+}
+
 func placementFromPrefs(w *desktopprefs.WindowPlacement) clientwindow.Placement {
 	if w == nil {
 		return clientwindow.Placement{}
 	}
 	return clientwindow.Placement{
-		Monitor: w.Monitor, X: w.X, Y: w.Y,
+		Monitor: w.Monitor, MonitorPath: w.MonitorPath, X: w.X, Y: w.Y,
 		Width: w.Width, Height: w.Height, Maximized: w.Maximized,
 	}
 }
