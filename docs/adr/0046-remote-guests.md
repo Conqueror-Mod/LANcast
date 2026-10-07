@@ -259,3 +259,57 @@ Somebody wants a guest to choose what to watch rather than join what is already
 playing, a guest needs to be in two rooms, or the object-level item check proves
 too tight for something legitimate — in which case the answer is a wider
 *object* scope, never a wider route list.
+
+## Amendment — a room guest is relayed by their own server
+
+**Added 2026-10-07, while planning Phase 5
+([plan](../phase-5-room-crosses-the-boundary-plan.md)).**
+
+This ADR assumed a guest's player talks to the host's server directly, which
+is why it chose a bearer token (§6) and CORS (§7). The desktop client cannot
+do that. A window pins one server's key
+([ADR 0070](0070-the-desktop-client-can-trust-a-server-it-did-not-install.md)),
+so a request to any other server fails the TLS handshake.
+[ADR 0071's amendment](0071-a-shared-library-is-a-standing-grant.md) found
+this for browsing and streaming and moved both onto a relay through the
+friend's own server. It then left the room on the ticket, *"where the ticket
+earns itself"*, on the grounds that a room needs the host's own timing.
+
+A room's poll comes from the same window and goes to the same unreachable
+server, so it fails the same way. The timing argument also does not need a
+direct path. It needs the host's server to be the only clock, and the host
+achieves that by stating the room's age in each answer, not by being reached
+directly.
+
+### Decision
+
+**A remote member of a room reaches it through their own server, over the
+pinned peer channel, like every other federation call.** The person is that
+server's word, as it is for presence and shared libraries. The member is the
+pair (peer, person).
+
+- **§4, §5, §8 and §9 stand unchanged.** They describe the principal: join,
+  poll and leave its room, stream only the item the room is playing, write
+  nothing, lose everything when the room ends, never drive. The transport
+  does not change any of them.
+- **§4's object check moves to `federationPlay`.** Membership of a live room
+  playing that item is a second way to pass it, beside a shared library. It
+  is checked per request against the room.
+- **§2, §6 and §7 now apply only to a browser opened directly at the host.**
+  The ticket, the bearer token and CORS stay built and stay as narrow as they
+  are. The desktop client does not use them.
+- **Joining needs the host's answer in the moment** (ADR 0045 §7). The request
+  is held in memory on the host. Silence is a decline, and the asker hears
+  only "not now".
+
+### Rejected
+
+**Pin the host's key in the guest's window for the length of the room.** This
+is the multi-key pin ADR 0070 rejected, limited to a time span. Chromium's pin
+list is not scoped to a host, so for that span the window would accept either
+key at any address.
+
+**Switch the guest's window to the host's server** (ADR 0070's relaunch). The
+guest would leave their own LANcast to sit in somebody else's, and their
+progress, their player settings and their way back would all belong to the
+wrong server.
