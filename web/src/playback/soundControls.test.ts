@@ -3,7 +3,12 @@
  * bar), tested once so the two cannot drift.
  */
 import { describe, it, expect } from "vitest";
-import { canBoostDialogue, nextDialogueLevel } from "./soundControls";
+import {
+  canBoostDialogue,
+  canNightFilm,
+  filmNightBlockedBySurround,
+  nextDialogueLevel,
+} from "./soundControls";
 
 const t = (index: number, channels: number, isDefault = false) => ({
   index,
@@ -48,5 +53,23 @@ describe("nextDialogueLevel", () => {
     // localStorage is a person's browser; a value from an old build or a
     // hand edit must not leave the button stuck.
     for (const bad of [-1, 3, 1.5, NaN, 99]) expect(nextDialogueLevel(bad)).toBe(1);
+  });
+});
+
+describe("canNightFilm", () => {
+  const film = (audioFX: boolean, filmChannels: number) => ({ audioFX, isAudio: false, filmChannels });
+  it("is always on offer in the desktop's own player", () => {
+    expect(canNightFilm(film(true, 0))).toBe(true);
+  });
+  it("is on offer in a browser tab on mono or stereo, not before it knows or on surround", () => {
+    expect(canNightFilm(film(false, 1))).toBe(true);
+    expect(canNightFilm(film(false, 2))).toBe(true);
+    expect(canNightFilm(film(false, 0))).toBe(false);
+    expect(canNightFilm(film(false, 6))).toBe(false);
+    expect(filmNightBlockedBySurround(film(false, 6))).toBe(true);
+    expect(filmNightBlockedBySurround(film(false, 2))).toBe(false);
+  });
+  it("is never offered for music, which has its own", () => {
+    expect(canNightFilm({ audioFX: true, isAudio: true, filmChannels: 2 })).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ import { UpNextCard } from "@/components/UpNextCard";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
 import {
   canBoostDialogue,
+  canNightFilm,
   canNightMusic,
   nextDialogueLevel,
 } from "@/playback/soundControls";
@@ -834,7 +835,7 @@ export function Player() {
                   Off, Low, High, Off, and carries its level as a letter, since
                   "on" alone cannot tell Low from High.
               */}
-              {pb.audioFX && !pb.isAudio && (
+              {canNightFilm(pb) && (
                 <button
                   className={"player__icon" + (pb.prefs.nightVideo ? " is-on" : "")}
                   onClick={() => pb.setPrefs({ nightVideo: !pb.prefs.nightVideo })}
