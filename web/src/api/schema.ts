@@ -12953,6 +12953,8 @@ export interface operations {
             query: {
                 /** @description The item to stream. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -12985,6 +12987,8 @@ export interface operations {
             query: {
                 /** @description The item to ask about. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -13012,6 +13016,8 @@ export interface operations {
             query: {
                 /** @description The item to convert. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -13048,7 +13054,10 @@ export interface operations {
     };
     federationHLSPlaylist: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item to play. */
@@ -13087,7 +13096,10 @@ export interface operations {
     };
     federationHLSSegment: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item being played. */
@@ -13119,6 +13131,8 @@ export interface operations {
             query: {
                 /** @description The item to list subtitles for. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -13141,7 +13155,10 @@ export interface operations {
     };
     federationSubtitleFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item the track belongs to. */
@@ -13168,7 +13185,10 @@ export interface operations {
     };
     federationItem: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item. */
@@ -13208,6 +13228,8 @@ export interface operations {
             query?: {
                 /** @description Defaults to `poster`. */
                 size?: "thumb" | "poster" | "poster2x" | "fanart" | "original";
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path: {

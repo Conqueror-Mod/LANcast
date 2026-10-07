@@ -8245,6 +8245,15 @@
               "format": "int64"
             },
             "description": "The item to stream."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8287,6 +8296,15 @@
               "format": "int64"
             },
             "description": "The item to ask about."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8333,6 +8351,15 @@
               "format": "int64"
             },
             "description": "The item to convert."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8378,6 +8405,15 @@
               "format": "int64"
             },
             "description": "The item to play."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8441,6 +8477,15 @@
               "type": "string"
             },
             "description": "The segment file, from the playlist."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8480,6 +8525,15 @@
               "format": "int64"
             },
             "description": "The item to list subtitles for."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8528,6 +8582,15 @@
               "type": "string"
             },
             "description": "The track, from the listing above."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8567,6 +8630,15 @@
               "format": "int64"
             },
             "description": "The item."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -8657,6 +8729,15 @@
               ]
             },
             "description": "Defaults to `poster`."
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": false,
+            "description": "A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

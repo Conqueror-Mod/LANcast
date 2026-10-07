@@ -419,3 +419,33 @@ func TestTogetherFederationRoutesAreServerAuthenticated(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The file route answers the same as every other playback route.
+ *
+ * It used to ask its own question, and step 3 taught the room to one and not
+ * the other. A desktop client plays most films as the file, so a guest would
+ * have been refused exactly in the ordinary case, while every test of the
+ * gated routes passed.
+ */
+func TestTheFileRouteAdmitsTheRoomToo(t *testing.T) {
+	f := newRoomFixture(t)
+	file := func(person string) int {
+		target := "/api/federation/stream?item=" + itoa64(f.item)
+		if person != "" {
+			target += "&person=" + person
+		}
+		return f.call(f.h.srvAPI.federationStream, peerCall(t, f.georgia, http.MethodGet, target, nil)).Code
+	}
+
+	if code := file(georgiaPerson); code != http.StatusNotFound {
+		t.Fatalf("the file before being admitted: %d, want 404", code)
+	}
+	f.admitted(t)
+	if code := file(georgiaPerson); code != http.StatusOK {
+		t.Errorf("the room's file for a member: %d, want 200", code)
+	}
+	if code := file(""); code != http.StatusNotFound {
+		t.Errorf("the room's file with no person named: %d, want 404", code)
+	}
+}
