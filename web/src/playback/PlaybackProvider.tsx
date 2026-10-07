@@ -1918,6 +1918,54 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, [togglePlay, seekBy, seekTo, playNext, playPrev, hasNext, hasPrev]);
 
+  /*
+   * The keyboard's media keys, in the desktop app.
+   *
+   * MediaSession above only reaches them through Chromium, and Chromium only
+   * owns a media session while an HTML element is playing. A film in the native
+   * player (ADR 0067) is not one, so Play/Pause did nothing while the thing it
+   * was pressed for was on screen. The host hooks the keys instead
+   * (winkeys_windows.go) and calls this; it answers them only while this
+   * reports something loaded, so with nothing in the player they still reach
+   * whatever else on the machine wants them.
+   *
+   * Next and previous mean the queue's neighbours where there are any, and a
+   * ten-second skip where there are not — the same pair the MediaSession
+   * handlers offer, so the keys and the Windows overlay agree.
+   */
+  const mediaKey = useRef<(cmd: string) => void>(() => {});
+  mediaKey.current = (cmd: string) => {
+    switch (cmd) {
+      case "playpause":
+        togglePlay();
+        break;
+      case "next":
+        if (hasNext) playNext();
+        else seekBy(10);
+        break;
+      case "previous":
+        if (hasPrev) playPrev();
+        else seekBy(-10);
+        break;
+      case "stop":
+        stop();
+        break;
+    }
+  };
+  useEffect(() => {
+    const w = window as { __lancastMediaKey?: (cmd: string) => void };
+    w.__lancastMediaKey = (cmd) => mediaKey.current(cmd);
+    return () => {
+      delete w.__lancastMediaKey;
+    };
+  }, []);
+  useEffect(() => {
+    const claim = (window as { lancastMediaKeys?: (on: boolean) => Promise<unknown> })
+      .lancastMediaKeys;
+    if (!claim) return;
+    void claim(itemID > 0).catch(() => {});
+  }, [itemID]);
+
   // Apply and remember the level. Setting a level unmutes, which is what a user
   // dragging the slider up plainly means.
   const changeVolume = useCallback((next: number) => {
