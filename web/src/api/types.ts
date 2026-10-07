@@ -219,6 +219,8 @@ export type Viewing = components["schemas"]["Viewing"];
 export type TogetherMember = components["schemas"]["TogetherMember"];
 
 export type TogetherSession = components["schemas"]["TogetherSession"];
+export type TogetherRequest = components["schemas"]["TogetherRequest"];
+export type TogetherAskAnswer = components["schemas"]["TogetherAskAnswer"];
 
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".

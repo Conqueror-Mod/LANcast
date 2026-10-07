@@ -179,6 +179,7 @@
    */
   --z-dock-picture: 120; /* playback.css  — the docked video or cover */
   --z-dock-strip: 121; /* MiniPlayer.css — the controls beneath it */
+  --z-prompt: 125; /* JoinRequestPrompt.css — a friend asking in; over the dock, under a menu */
   --z-point-menu: 130; /* Menu.css — a menu the pointer summoned, over both */
   --z-viewer: 200; /* PhotoViewer.css — owns the screen, so it covers a menu */
 

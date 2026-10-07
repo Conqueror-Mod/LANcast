@@ -28,6 +28,8 @@ import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
+import { TogetherProvider } from "@/playback/TogetherProvider";
+import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
 import { useAuthStatus } from "@/api/hooks";
 import { DesignBench } from "@/screens/DesignBench";
 import "@/playback/playback.css";
@@ -65,6 +67,7 @@ export function App() {
   // client scope, docs/music-client-plan.md).
   return (
     <PlaybackProvider>
+      <TogetherProvider>
       <AppShell>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -130,7 +133,12 @@ export function App() {
         </Routes>
         {/* Outside Routes: it is what you see *instead of* the player screen. */}
         <MiniPlayer />
+        {/* A friend on another server asking to join what is playing. Outside
+            Routes for the same reason as the mini player: it has to reach the
+            host on whatever screen they are on. */}
+        <JoinRequestPrompt />
       </AppShell>
+      </TogetherProvider>
     </PlaybackProvider>
   );
 }
