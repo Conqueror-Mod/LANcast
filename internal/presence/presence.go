@@ -97,6 +97,15 @@ type State struct {
 	// announcing an episode title to a friend three seasons behind is a choice
 	// nobody made on purpose.
 	Watching string `json:"watching,omitempty"`
+
+	/*
+	 * Here says the film being watched is on this server rather than on a
+	 * paired one (ADR 0045 §10 lets presence name either). Never sent: it
+	 * decides whether somebody may ask to join, because a room can only be
+	 * built around a film this server holds (Phase 5 plan, §8), and saying
+	 * where somebody's film lives is not part of what presence discloses.
+	 */
+	Here bool `json:"-"`
 }
 
 // Idle reports the case a caller most often wants to phrase differently:
@@ -106,6 +115,7 @@ func (s State) Idle() bool { return s.Online && s.Watching == "" }
 type entry struct {
 	lastSeen time.Time
 	title    string
+	here     bool
 	lastBeat time.Time
 }
 
@@ -158,6 +168,16 @@ func (t *Tracker) Seen(userID string) {
  * not the other would produce somebody watching a film while offline.
  */
 func (t *Tracker) Watching(userID, title string) {
+	t.watching(userID, title, false)
+}
+
+// WatchingHere is Watching for a film on this server's own disk. See
+// State.Here for why the difference is kept.
+func (t *Tracker) WatchingHere(userID, title string) {
+	t.watching(userID, title, true)
+}
+
+func (t *Tracker) watching(userID, title string, here bool) {
 	if userID == "" {
 		return
 	}
@@ -167,9 +187,9 @@ func (t *Tracker) Watching(userID, title string) {
 	now := t.now()
 	e.lastSeen = now
 	if title == "" {
-		e.title, e.lastBeat = "", time.Time{}
+		e.title, e.here, e.lastBeat = "", false, time.Time{}
 	} else {
-		e.title, e.lastBeat = title, now
+		e.title, e.here, e.lastBeat = title, here, now
 	}
 	t.sweepLocked()
 }
@@ -190,7 +210,7 @@ func (t *Tracker) Stopped(userID string) {
 	defer t.mu.Unlock()
 	e := t.entryFor(userID)
 	e.lastSeen = t.now()
-	e.title, e.lastBeat = "", time.Time{}
+	e.title, e.here, e.lastBeat = "", false, time.Time{}
 	t.sweepLocked()
 }
 
@@ -219,7 +239,7 @@ func (t *Tracker) Snapshot(userID string) (State, bool) {
 	if !ok {
 		return State{}, false
 	}
-	return State{Online: true, Watching: e.title}, true
+	return State{Online: true, Watching: e.title, Here: e.here}, true
 }
 
 // Online lists the accounts currently present, sorted so a caller rendering
@@ -257,7 +277,7 @@ func (t *Tracker) sweepLocked() {
 	now := t.now()
 	for id, e := range t.by {
 		if !e.lastBeat.IsZero() && now.Sub(e.lastBeat) > watchingTimeout {
-			e.title, e.lastBeat = "", time.Time{}
+			e.title, e.here, e.lastBeat = "", false, time.Time{}
 		}
 		if now.Sub(e.lastSeen) > onlineTimeout {
 			delete(t.by, id)
