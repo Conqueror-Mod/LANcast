@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 60
+const CurrentSchemaVersion = 61
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -114,6 +114,7 @@ var migrations = []migration{
 	{version: 58, sql: schemaRevision58},
 	{version: 59, sql: schemaRevision59, columns: []column{{"face", "frame", "TEXT"}}},
 	{version: 60, sql: schemaRevision60, columns: []column{{"photo_hash", "dhash", "INTEGER"}}},
+	{version: 61, sql: schemaRevision61},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2037,6 +2038,34 @@ UPDATE media_item SET faces_at = NULL
  */
 const schemaRevision60 = `
 UPDATE media_item SET cover_checked_at = NULL WHERE kind = 'photo' AND missing = 0;
+`
+
+/*
+ * Revision 61 — seasons added after their show was matched get their own art.
+ *
+ * EnsureSeason stamped a season resolved at birth, from when a season had no
+ * provider lookup of its own and enriching one would only have re-fetched its
+ * show. fetchSeason changed that, and revision 26 queued every season then in
+ * the database to be resolved from its show — but a season the scanner made
+ * afterwards was still born stamped, so nothing ever looked it up. It drew its
+ * show's poster instead of its own: Futurama seasons 6 to 8, added later than
+ * 1 to 5, all wore the same image.
+ *
+ * EnsureSeason now leaves a new season pending. This queues the ones already
+ * stranded: a season with no provider identity and no lock is one nothing has
+ * resolved. Nothing is deleted — they hold no artwork of their own to lose —
+ * and enrichment runs at boot, so they are resolved without waiting for a
+ * scan. A season whose show is unmatched stays pending until its show is, as
+ * fetchSeason already arranges.
+ */
+const schemaRevision61 = `
+UPDATE media_item
+SET match_state = 'unmatched',
+    match_score = 0,
+    metadata_updated_at = NULL
+WHERE kind = 'season'
+  AND provider IS NULL
+  AND id NOT IN (SELECT item_id FROM item_lock);
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or
