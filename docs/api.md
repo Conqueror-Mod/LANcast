@@ -238,6 +238,11 @@ ADR 0044 declines to build.
 | `GET /api/peers/{fingerprint}/item/{item}` | Their item's name and length. The length is what makes a converted stream seekable |
 | `GET /api/peers/{fingerprint}/artwork/{item}/{hash}` | One of their images. A client cannot fetch it directly: the hash names bytes on **their** disk |
 | `PUT /api/peers/{fingerprint}/progress/{item}` | `{position_ms}` → where we are in one of their films. **Written here, never sent to them**; read back on the item route |
+| `POST /api/peers/{fingerprint}/together/requests` | `{person}` → ask to join that person on their server, as the caller. Relayed; see *Watching together across servers* |
+| `GET /api/peers/{fingerprint}/together/requests/{id}` | The answer: `pending`, `accepted` with `room_id`, or `not_now` |
+| `POST /api/peers/{fingerprint}/together/{room}/join` | Come back to a room the caller was admitted to |
+| `GET /api/peers/{fingerprint}/together/{room}` | Follow it: the room's snapshot, relayed |
+| `DELETE /api/peers/{fingerprint}/together/{room}/members/me` | Leave |
 | `POST /api/peers/{fingerprint}/ticket` | `{ticket, expires_at, peer}` — a short-lived signed ticket admitting **you** to that paired server (ADR 0046 §2). Any account, for itself only |
 | `POST /api/guest/session` | `{ticket}` → `{token, expires_at, peer}` — redeems a ticket minted by a paired server for a restricted session. **No session required**: this is how somebody who has none gets one |
 | `GET /api/guest/me` | `{peer, subject, expires_at}` — what this guest session is |
@@ -525,6 +530,14 @@ nothing else. It is checked against the room on every request, so it ends when
 the room ends, the host moves to another film, the guest leaves or stops
 polling, or the pairing goes. A request without `person` is the share check
 alone, exactly as before.
+
+**The guest's side is a relay.** The peer `together` routes listed under
+Peers carry these calls for the guest's client. The asker is always the
+caller's own account, never anything in the request. To play the room's film,
+the client adds `together=1` to the usual peer playback routes (stream,
+playback, transcode, HLS, subtitles, item, artwork, watching). Only then is the caller named to the host, and a playlist fetched that
+way names its segments the same way. Browsing a shared library still names a
+server, not a person. A `person` a client puts on the query is never forwarded.
 
 **Use `age_ms`.** The relay adds a hop, and the two households' clocks are two
 different machines. The room states its own age, and the guest adds the time
