@@ -197,8 +197,16 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 
 	now := time.Now().Unix()
 	examined := make([]int64, 0, n)
-	for i, ep := range se.Episodes {
-		examined = append(examined, ep.ID)
+	// Sibling-to-sibling runs, for the triangle rule. Kept for the season, since
+	// the same pair closes triangles for several episodes.
+	pairs := map[[2]int]Match{}
+	/*
+	 * Every episode decided first by the rules that compare it with its
+	 * nearest siblings, so the triangle rule below can see where this season's
+	 * intros sit before it accepts anything at 0:00.
+	 */
+	decided := make([]Intro, n)
+	for i := range se.Episodes {
 		if !prints[i].ok {
 			continue
 		}
@@ -237,6 +245,45 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			in = introPastIdents(prints[i].phases, func(k int) []uint32 {
 				return prints[peers[k]].single
 			}, cands)
+		}
+		decided[i] = in
+	}
+	atStart := opensAtStart(decided)
+
+	for i, ep := range se.Episodes {
+		examined = append(examined, ep.ID)
+		if !prints[i].ok {
+			continue
+		}
+		in := decided[i]
+		/*
+		 * Last, a season with two openings: two siblings sharing a long
+		 * stretch with this episode and with each other (IntroFromTriangle).
+		 * Every sibling is compared, which happens only for an episode nothing
+		 * else decided.
+		 */
+		if !in.Found {
+			var sibs []SiblingMatch
+			for p := 0; p < n; p++ {
+				if p == i || !prints[p].ok {
+					continue
+				}
+				m := BestCommonRunBridging(prints[i].phases, prints[p].single, IntroTolerance, IntroGapFrames)
+				sm := SiblingMatch{Peer: p}
+				if m.Frames > 0 {
+					sm.Candidate = Candidate{StartSec: Seconds(m.OffsetA), EndSec: Seconds(m.OffsetA + m.Frames)}
+					sm.PeerStartSec = Seconds(m.OffsetB)
+				}
+				sibs = append(sibs, sm)
+			}
+			in = IntroFromTriangle(sibs, atStart, func(p, q int) (float64, float64, float64) {
+				m, ok := pairs[[2]int{p, q}]
+				if !ok {
+					m = BestCommonRunBridging(prints[p].phases, prints[q].single, IntroTolerance, IntroGapFrames)
+					pairs[[2]int{p, q}] = m
+				}
+				return Seconds(m.OffsetA), Seconds(m.OffsetB), Seconds(m.Frames)
+			})
 		}
 
 		/*

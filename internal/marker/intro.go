@@ -1,6 +1,9 @@
 package marker
 
-import "sort"
+import (
+	"math"
+	"sort"
+)
 
 /*
  * Deciding a season's intros from what its episodes share (ADR 0055).
@@ -393,4 +396,103 @@ func IntroPeers(n, self, want int) []int {
 		}
 	}
 	return out
+}
+
+// SiblingMatch is one episode's best run against one sibling: where it sits in
+// this episode (Candidate) and where it begins in the sibling.
+type SiblingMatch struct {
+	Peer int
+	Candidate
+	PeerStartSec float64
+}
+
+/*
+ * IntroFromTriangle decides from two siblings that share a long stretch with
+ * this episode and with each other, at matching places in all three.
+ *
+ * It is for a season with two openings. Futurama S8 has a 29-second version on
+ * three episodes and a shorter one on the rest; every comparison is with the
+ * next four episodes two apart, so each of the three met one of the others at
+ * most and the majority rule never had a majority. Comparing with every sibling
+ * instead was measured and rejected (ADR 0055): over a whole season, two files
+ * agreeing on something is not evidence of a title sequence, and on Sunny S15 it
+ * invented an intro.
+ *
+ * What is evidence is the third side. E02 shares 0–29 s with E06 and with E07,
+ * and E06 shares those same seconds with E07: three files, one stretch, each
+ * pair placing it where the others do. A recap or a rip artefact two episodes
+ * happen to share does not close the triangle at consistent offsets. A network
+ * ident might, which is why one is refused here as everywhere else.
+ *
+ * mutual reports where the best run between two siblings starts in each and
+ * how long it is. Only a triangle with every side at least
+ * IntroStrongMinSeconds counts, and the answer is the stretch both of this
+ * episode's sides cover — the later start and the earlier end — so a long side
+ * cannot stretch the marker past what the other confirms.
+ *
+ * A stretch at 0:00 counts only when atStart says this season's own intros
+ * begin there (opensAtStart).
+ */
+func IntroFromTriangle(sibs []SiblingMatch, atStart bool, mutual func(p, q int) (pStart, qStart, length float64)) Intro {
+	long := make([]SiblingMatch, 0, len(sibs))
+	for _, s := range sibs {
+		if s.Len() >= IntroStrongMinSeconds && s.Len() <= IntroMaxSeconds && s.StartSec >= 0 {
+			long = append(long, s)
+		}
+	}
+	best, bestLen := Intro{}, 0.0
+	for a := 0; a < len(long); a++ {
+		for b := a + 1; b < len(long); b++ {
+			p, q := long[a], long[b]
+			if math.Abs(p.StartSec-q.StartSec) > IntroStrongSlack {
+				continue
+			}
+			start, end := math.Max(p.StartSec, q.StartSec), math.Min(p.EndSec, q.EndSec)
+			if !atStart && start < IntroIdentStartSeconds {
+				continue
+			}
+			if end-start < IntroStrongMinSeconds || end-start <= bestLen {
+				continue
+			}
+			ps, qs, n := mutual(p.Peer, q.Peer)
+			if n < IntroStrongMinSeconds ||
+				math.Abs(ps-p.PeerStartSec) > IntroStrongSlack ||
+				math.Abs(qs-q.PeerStartSec) > IntroStrongSlack {
+				continue
+			}
+			in := Intro{Found: true, StartSec: start, EndSec: end, Agreed: 2, Compared: len(sibs)}
+			if in.IsIdent() {
+				continue
+			}
+			best, bestLen = in, end-start
+		}
+	}
+	if !best.Found {
+		return Intro{Compared: len(sibs)}
+	}
+	best.Confidence = float64(best.Agreed) / float64(best.Compared)
+	return best
+}
+
+/*
+ * opensAtStart reports whether most of a season's decided intros begin at
+ * 0:00, which is when a triangle there can be the show's own titles.
+ *
+ * The League S4 opens several files on the same 17 seconds of pasted-in FX
+ * promos (Sunny, Archer, Wilfred). They close a triangle as well as any title
+ * sequence and are too long for the ident rule. The League's titles are a card
+ * a minute or more in, so nothing at 0:00 is its own. Futurama's titles open
+ * every episode, so its triangles at 0:00 are kept.
+ */
+func opensAtStart(decided []Intro) bool {
+	found, zero := 0, 0
+	for _, in := range decided {
+		if in.Found {
+			found++
+			if in.StartSec < IntroIdentStartSeconds {
+				zero++
+			}
+		}
+	}
+	return found > 0 && zero*2 > found
 }

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 62
+const CurrentSchemaVersion = 63
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -116,6 +116,7 @@ var migrations = []migration{
 	{version: 60, sql: schemaRevision60, columns: []column{{"photo_hash", "dhash", "INTEGER"}}},
 	{version: 61, sql: schemaRevision61},
 	{version: 62, sql: schemaRevision62},
+	{version: 63, sql: schemaRevision63},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2086,6 +2087,17 @@ UPDATE media_item SET intros_at = NULL
 WHERE kind = 'episode' AND intros_at IS NOT NULL
   AND id NOT IN (SELECT item_id FROM item_marker WHERE kind = 'intro');
 `
+
+/*
+ * Revision 63 -- the same re-comparison as 62, for the triangle rule (ADR 0055,
+ * 2026-10-07 amendment).
+ *
+ * A season with two openings, Futurama S8's, now finds the episodes carrying
+ * the rarer one. Like 62's rule it runs only where nothing was decided, so the
+ * same set of episodes -- those with no intro -- is all that can change, and
+ * a library that already ran 62 holds exactly that set again.
+ */
+const schemaRevision63 = schemaRevision62
 
 // showOf finds an episode's show, whether the episode hangs from a season or
 // straight from the show. It reads `mi` as the episode.

@@ -10,7 +10,14 @@ import (
 // whose every episode has one cannot be changed by a rule that runs only where
 // nothing was decided, and re-decoding it would be ten minutes of audio per
 // episode for nothing.
-func TestRevision62RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) {
+func TestRevision62RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) { checkIntroRequeue(t, "61") }
+
+// Revision 63 does the same for the triangle rule, on a library that has
+// already run 62 and stamped those episodes again.
+func TestRevision63RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) { checkIntroRequeue(t, "62") }
+
+func checkIntroRequeue(t *testing.T, from string) {
+	t.Helper()
 	ctx := context.Background()
 	s := openTestStore(t)
 	lib, err := s.CreateLibrary(ctx, "TV", "show", t.TempDir())
@@ -40,7 +47,7 @@ func TestRevision62RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) {
 	if err := s.MarkIntrosExamined(ctx, ids, 1000); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec(`UPDATE meta SET value = '61' WHERE key = 'schema_version'`); err != nil {
+	if _, err := s.db.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, from); err != nil {
 		t.Fatal(err)
 	}
 	if err := migrate(s.db); err != nil {

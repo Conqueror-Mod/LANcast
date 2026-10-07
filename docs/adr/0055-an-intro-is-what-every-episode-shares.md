@@ -402,3 +402,41 @@ episode is unanalysed. Eleven seasons fall under 80% on one or the other.
 **Credits:**
 
 - **School Days (4/12)** and **It's Always Sunny S7 (10/13)** are the only seasons under 80%. They have not yet been examined frame by frame.
+
+## Amendment — 2026-10-07: a season with two openings
+
+Futurama S8 has two versions of its opening.
+- E02, E06 and E07 carry a 29-second one; every other episode carries the 17-second one.
+- Each episode is compared with four siblings two apart, so each of the three met one of the others at most.
+- That left them with no majority, and no intro.
+
+It's Always Sunny S15 (recorded above as 3/8) has the same shape: two theme variants, with the cyclic peers crossing the groups.
+
+**Comparing with every sibling stays rejected.** Two files agreeing on something is not a title sequence; measured, it invented an intro on Sunny S15E04.
+
+**What is evidence is the third side of a triangle** (`IntroFromTriangle`).
+- E02 shares 0–29 s with E06 and with E07, and E06 shares those same seconds with E07.
+- That is three files and one stretch, with each pair placing it where the others do.
+- The rule requires every side to be at least 12 s long and the offsets to agree within a second.
+- The marker is the stretch both of the episode's own sides cover.
+- An ident is still refused.
+- It runs only for an episode nothing else decided, after every episode in the season has been decided by the existing rules.
+
+**A triangle at 0:00 needs a season that opens at 0:00** (`opensAtStart`).
+- The first whole-library run found The League S4 opening four files on the same 17 seconds of pasted-in FX promos for other shows (Sunny, Archer, Wilfred).
+- Those promos close a triangle as well as a title sequence does, and they are too long for the ident rule.
+- So a triangle starting in the first two seconds counts only when most of the season's decided intros start there.
+- Futurama's do; The League's are cards one to three minutes in.
+
+**Measured over the whole library (1,074 episodes): 1,012 → 1,024, 12 gained, none lost or moved.** Every one of the 12 was checked by eye from frames at the start, middle and end of the marker and just after it:
+
+| season | before | after | episodes gained |
+| --- | --- | --- | --- |
+| Futurama S6 | 23/26 | 26/26 | E05 and E14 (the 18 s opening); E19 (the 30 s one) |
+| Futurama S8 | 10/13 | **13/13** | E02, E06, E07 (the 29 s opening) |
+| It's Always Sunny S15 | 3/8 | **7/8** | E03, E04, E06, E07 (E08 has no opening) |
+| Star Trek: TNG S1 | 23/25 | **25/25** | E12, E15 (the full main titles) |
+
+**Not yet fixed:** The League S4E08's marker, 0–17.4 s, is the same promo block. It was decided by the majority rule before any of this, and the guard here does not reach it.
+
+**Revision 63** repeats revision 62: it clears the intro stamp on episodes with no intro, so that seasons that can change are compared again at boot.
