@@ -12,7 +12,7 @@ import type { Item } from "@/api/types";
  * Two readings of "watched" meet here:
  *
  *   a leaf answers for itself       — progress.watched, the server's own flag
- *   a show answers by aggregate     — unwatched_episodes === 0
+ *   a show or season answers by aggregate — unwatched_episodes === 0
  *
  * They cannot be collapsed. A show has no playback row of its own, so reading
  * `progress` on one is always undefined, and a film has no episodes, so
@@ -45,7 +45,7 @@ export function isWatched(item: Item): boolean {
    * unlike its mirror image, where a show that really is finished is missing
    * the one mark somebody is looking for.
    */
-  if (item.kind === "show") return item.unwatched_episodes === 0;
+  if (isSeries(item)) return item.unwatched_episodes === 0;
 
   // Everything else — a film, an episode, a part — carries its own flag.
   return item.progress?.watched === true;
@@ -59,5 +59,15 @@ export function isWatched(item: Item): boolean {
  * on the tile that answers, so the accessible name is where the answer goes.
  */
 export function watchedLabel(item: Item): string {
-  return item.kind === "show" ? "Every episode watched" : "Watched";
+  return isSeries(item) ? "Every episode watched" : "Watched";
+}
+
+/*
+ * A show or a season: a container of episodes with no play state of its own,
+ * which answers by aggregate. A season card on a show page is the same
+ * question one level down, and was missing its tick until the server counted
+ * seasons too.
+ */
+function isSeries(item: Item): boolean {
+  return item.kind === "show" || item.kind === "season";
 }

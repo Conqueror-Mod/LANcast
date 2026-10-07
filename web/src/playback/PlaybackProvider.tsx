@@ -11,7 +11,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useInRouterContext, useNavigate, type NavigateFunction } from "react-router-dom";
-import { useAuthStatus, useItem, useSubtitles } from "@/api/hooks";
+import { invalidateWatchState, useAuthStatus, useItem, useSubtitles } from "@/api/hooks";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend, artworkURL } from "@/api/client";
 import type { Item, SubtitleTrack, MediaStream } from "@/api/types";
 import {
@@ -649,6 +650,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * telling somebody to apply.
    */
   const auth = useAuthStatus().data;
+  const qc = useQueryClient();
   const authRef = useRef(auth);
   authRef.current = auth;
   const [subKey, setSubKey] = useState<string | null>(null);
@@ -801,6 +803,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   // ---- progress persistence -------------------------------------------------
   const lastSaved = useRef(0);
+  // The item whose finish has already redrawn the lists, so the writes that
+  // keep landing every five seconds through the credits do not each refetch
+  // every list on screen.
+  const finishedShown = useRef<number | null>(null);
   const saveProgress = useCallback(
     (force = false) => {
       const now = Date.now();
@@ -870,9 +876,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void apiSend(`/api/items/${itemID}/progress`, "PUT", {
         position_ms: Math.floor(pos * 1000),
         watched: done,
-      }).catch(() => {});
+      })
+        .then(() => {
+          /*
+           * Finishing something changes what the page behind the player
+           * shows: the season's tick, the show's count, the Continue shelf.
+           * Playing carries on with the page still mounted (the mini player,
+           * picture-in-picture), so without this the episode just finished
+           * still looked unwatched until something else redrew the list.
+           */
+          if (done && finishedShown.current !== itemID) {
+            finishedShown.current = itemID;
+            invalidateWatchState(qc);
+          }
+        })
+        .catch(() => {});
     },
-    [current, itemID, totalDuration],
+    [current, itemID, totalDuration, qc],
   );
 
   // The write that used to happen when the Player screen unmounted. It cannot

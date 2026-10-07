@@ -76,6 +76,16 @@ describe("what carries a finished-tick", () => {
     );
   });
 
+  it("marks a season with no episodes left, and not one an episode short", () => {
+    // A show page is a grid of season cards, and a finished season had no tick.
+    expect(isWatched(item({ kind: "season", unwatched_episodes: 0 }))).toBe(true);
+    expect(isWatched(item({ kind: "season", unwatched_episodes: 1 }))).toBe(false);
+    expect(isWatched(item({ kind: "season" }))).toBe(false);
+    expect(watchedLabel(item({ kind: "season", unwatched_episodes: 0 }))).toBe(
+      "Every episode watched",
+    );
+  });
+
   it("does not mark a show whose episode count is absent", () => {
     /*
      * The falsy-test bug, pinned. A show with no episodes on disk omits the

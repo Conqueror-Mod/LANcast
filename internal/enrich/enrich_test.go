@@ -737,10 +737,10 @@ func seasonHarness(t *testing.T, st *store.Store, lib *store.Library, seasonNum 
 	if err != nil {
 		t.Fatal(err)
 	}
-	// EnsureSeason stamps a season resolved at birth so it never queues, which
-	// is why this bug needed a trigger to surface at all: refreshing a
-	// library's metadata clears every stamp in it, seasons included, and hands
-	// them to the worker. That is the real path, so the test uses it.
+	// Refreshing a library's metadata clears every stamp in it, seasons
+	// included, and hands them to the worker. A new season is already pending
+	// (revision 61), but the refresh is the path this bug surfaced on, so the
+	// test keeps using it.
 	if err := st.ClearMetadataStamp(ctx, lib.ID, 0); err != nil {
 		t.Fatal(err)
 	}

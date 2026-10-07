@@ -216,3 +216,71 @@ func TestAMissingEpisodeIsNotCounted(t *testing.T) {
 		t.Fatalf("unwatched = %v, want 0 — the only one left is not on disk", got)
 	}
 }
+
+/*
+ * A season answers for its own episodes, and only its own.
+ *
+ * A show page is a grid of season cards. A finished season carried no tick,
+ * because a season has no playback row and the aggregate was only ever worked
+ * out for shows. The second season here is one episode short, which is the
+ * case that must stay unticked while the first, finished, is ticked.
+ */
+func TestASeasonCountsOnlyItsOwnEpisodes(t *testing.T) {
+	ctx := context.Background()
+	st := queueStore(t)
+	lib, err := st.CreateLibrary(ctx, "TV", "show", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "Show"
+	show, _, err := st.EnsureShow(ctx, lib.ID, filepath.Join(lib.Path, name), name, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seasons []int64
+	eps := map[int64][]int64{}
+	for sn := 1; sn <= 2; sn++ {
+		dir := filepath.Join(lib.Path, name, "S"+string(rune('0'+sn)))
+		season, _, err := st.EnsureSeason(ctx, lib.ID, show, sn, dir, "Season", "season")
+		if err != nil {
+			t.Fatal(err)
+		}
+		seasons = append(seasons, season)
+		for en := 1; en <= 3; en++ {
+			s, e := sn, en
+			id, err := st.UpsertItem(ctx, ScanFile{
+				LibraryID: lib.ID, Path: filepath.Join(dir, "e"+string(rune('0'+en))+".mkv"), Kind: "episode",
+				Title: "Ep", SortTitle: name, Series: &name, Season: &s, Episode: &e,
+				Container: "mkv", SizeBytes: 1, MTime: 1,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SetParent(ctx, id, &season); err != nil {
+				t.Fatal(err)
+			}
+			eps[season] = append(eps[season], id)
+		}
+	}
+	for _, id := range eps[seasons[0]] {
+		markWatched(t, st, id, "u1")
+	}
+	for _, id := range eps[seasons[1]][:2] {
+		markWatched(t, st, id, "u1")
+	}
+
+	items := []Item{
+		{ID: seasons[0], Kind: "season"},
+		{ID: seasons[1], Kind: "season"},
+		{ID: show, Kind: "show"},
+	}
+	if err := st.AttachUnwatchedEpisodes(ctx, items, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []int{0, 1, 1} {
+		got := items[i].UnwatchedEpisodes
+		if got == nil || *got != want {
+			t.Errorf("%s %d: unwatched = %v, want %d", items[i].Kind, items[i].ID, got, want)
+		}
+	}
+}

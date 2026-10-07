@@ -438,8 +438,9 @@ type Item struct {
 	ChildCount int `json:"child_count,omitempty"`
 
 	/*
-	 * UnwatchedEpisodes is how many of a show's episodes this account has not
-	 * finished. Set on shows only, and nil everywhere else.
+	 * UnwatchedEpisodes is how many of a show's or season's episodes this
+	 * account has not finished. Set on shows and seasons only, and nil
+	 * everywhere else.
 	 *
 	 * A pointer, and that is the whole design of this field. The value that
 	 * matters most is **zero** — it is what "you have seen all of this" looks
@@ -2028,10 +2029,13 @@ func (s *Store) EnsureShowByTitle(ctx context.Context, libraryID int64, sortTitl
 
 // EnsureSeason find-or-creates a season under a show. path is the season
 // directory when one exists, else a synthetic identity the caller derives from
-// the show and season number, so it stays UNIQUE either way. A season is
-// stamped resolved at birth: its identity comes from the show, and the provider
-// season endpoint (its own poster, overview) is deferred depth — enriching it
-// today would only re-fetch the show it already hangs off.
+// the show and season number, so it stays UNIQUE either way.
+//
+// A new season is left pending, for enrichment to resolve from its show
+// (enrich.fetchSeason) — never searched for by name. It used to be stamped
+// resolved at birth, from before seasons had a lookup of their own, which left
+// every season added after that change wearing its show's poster for ever
+// (revision 61).
 //
 // sortTitle must be normalized by the caller through internal/media.
 func (s *Store) EnsureSeason(ctx context.Context, libraryID, showID int64, seasonNum int, path, title, sortTitle string) (int64, bool, error) {
@@ -2040,9 +2044,9 @@ func (s *Store) EnsureSeason(ctx context.Context, libraryID, showID int64, seaso
 		INSERT INTO media_item
 			(library_id, kind, path, title, sort_title, season, parent_id,
 			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
-		VALUES (?, 'season', ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+		VALUES (?, 'season', ?, ?, ?, ?, ?, 'unmatched', 0, NULL, ?, ?, 0)
 		ON CONFLICT(path) DO NOTHING`,
-		libraryID, path, title, sortTitle, seasonNum, showID, now, now, now)
+		libraryID, path, title, sortTitle, seasonNum, showID, now, now)
 	if err != nil {
 		return 0, false, fmt.Errorf("ensure season %q: %w", path, err)
 	}

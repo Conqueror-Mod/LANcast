@@ -64,7 +64,6 @@ function render(episodes: Item[]) {
               <EpisodeList
                 episodes={episodes}
                 queue={episodes.map((e) => e.id)}
-                parentID={99}
               />
             </MemoryRouter>
           </PlaybackProvider>

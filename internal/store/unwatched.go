@@ -37,46 +37,37 @@ import (
  */
 
 /*
- * AttachUnwatchedEpisodes fills UnwatchedEpisodes on every show in a page.
+ * AttachUnwatchedEpisodes fills UnwatchedEpisodes on every show and season in a
+ * page.
  *
- * One query for the page, like AttachProgress and AttachChildCounts, because
- * the alternative is a query per tile on a grid of two hundred.
+ * One query per kind for the page, like AttachProgress and AttachChildCounts,
+ * because the alternative is a query per tile on a grid of two hundred.
  *
- * Items that are not shows are left nil — the question does not apply to a
+ * Seasons as well as shows, because a show page is a grid of season cards and
+ * a season is the same question one level down: it has no playback row of its
+ * own, so without an aggregate a season you had finished carried no tick at
+ * all while every episode inside it did.
+ *
+ * Items that are neither are left nil — the question does not apply to a
  * film, an album or a photograph, and answering zero for them would tick
  * every tile in a music library as finished. That is not hypothetical
  * caution: the rating ceiling shipped a bug of exactly this shape by
  * answering a video question for kinds that never had video.
  *
- * A show with no episodes at all is also left nil rather than zero. An empty
- * series is not a finished one, and "nothing left to watch" is a true sentence
- * about it that means the opposite of what a tick would say.
+ * A show or season with no episodes at all is also left nil rather than zero.
+ * An empty series is not a finished one, and "nothing left to watch" is a true
+ * sentence about it that means the opposite of what a tick would say.
  */
 func (s *Store) AttachUnwatchedEpisodes(ctx context.Context, items []Item, userID string) error {
-	if len(items) == 0 {
-		return nil
-	}
-
-	shows := make([]*Item, 0, len(items))
+	var shows, seasons []*Item
 	for i := range items {
-		if items[i].Kind == "show" {
+		switch items[i].Kind {
+		case "show":
 			shows = append(shows, &items[i])
+		case "season":
+			seasons = append(seasons, &items[i])
 		}
 	}
-	if len(shows) == 0 {
-		return nil
-	}
-
-	ph := make([]string, len(shows))
-	// The user id leads, because it is bound inside the SELECT before the id
-	// list reached by the WHERE.
-	args := make([]any, 0, len(shows)+1)
-	args = append(args, userID)
-	for i, it := range shows {
-		ph[i] = "?"
-		args = append(args, it.ID)
-	}
-	in := strings.Join(ph, ",")
 
 	/*
 	 * Counted per show in one pass: total episodes, and how many of them this
@@ -86,15 +77,41 @@ func (s *Store) AttachUnwatchedEpisodes(ctx context.Context, items []Item, userI
 	 * the season's parent where there is a season, and the episode's own parent
 	 * where the episode hangs directly off the show. Same two shapes the join
 	 * above matches, resolved to one id so the grouping is by show either way.
-	 *
-	 * `watched = 1` and nothing else. An episode stopped at 90% is not one you
-	 * have seen, and the continue-watching semantics say the same — an
-	 * in-progress episode is unwatched. A tick that appeared while the last
-	 * episode was still half-finished would be wrong in the direction that
-	 * matters, because the whole point of the mark is knowing what is left.
+	 * A season is simpler: its episodes are its children.
 	 */
+	if err := s.tallyUnwatched(ctx, shows, userID, `COALESCE(s.parent_id, e.parent_id)`); err != nil {
+		return err
+	}
+	return s.tallyUnwatched(ctx, seasons, userID, `e.parent_id`)
+}
+
+/*
+ * tallyUnwatched counts, for each container, its episodes and how many this
+ * account has not finished. owner is the SQL expression naming the container
+ * an episode belongs to.
+ *
+ * `watched = 1` and nothing else. An episode stopped at 90% is not one you
+ * have seen, and the continue-watching semantics say the same — an
+ * in-progress episode is unwatched. A tick that appeared while the last
+ * episode was still half-finished would be wrong in the direction that
+ * matters, because the whole point of the mark is knowing what is left.
+ */
+func (s *Store) tallyUnwatched(ctx context.Context, owners []*Item, userID, owner string) error {
+	if len(owners) == 0 {
+		return nil
+	}
+	ph := make([]string, len(owners))
+	// The user id leads, because it is bound inside the SELECT before the id
+	// list reached by the WHERE.
+	args := make([]any, 0, len(owners)+1)
+	args = append(args, userID)
+	for i, it := range owners {
+		ph[i] = "?"
+		args = append(args, it.ID)
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT COALESCE(s.parent_id, e.parent_id) AS show_id,
+		SELECT `+owner+` AS owner_id,
 		       COUNT(*) AS total,
 		       SUM(CASE WHEN EXISTS (
 		             SELECT 1 FROM playback_state ps
@@ -103,29 +120,29 @@ func (s *Store) AttachUnwatchedEpisodes(ctx context.Context, items []Item, userI
 		FROM media_item e
 		LEFT JOIN media_item s ON s.id = e.parent_id
 		WHERE e.kind = 'episode' AND e.missing = 0
-		  AND COALESCE(s.parent_id, e.parent_id) IN (`+in+`)
-		GROUP BY show_id`, args...)
+		  AND `+owner+` IN (`+strings.Join(ph, ",")+`)
+		GROUP BY owner_id`, args...)
 	if err != nil {
 		return fmt.Errorf("attach unwatched episodes: %w", err)
 	}
 	defer rows.Close()
 
 	type tally struct{ total, seen int }
-	byShow := map[int64]tally{}
+	byOwner := map[int64]tally{}
 	for rows.Next() {
 		var id int64
 		var t tally
 		if err := rows.Scan(&id, &t.total, &t.seen); err != nil {
 			return fmt.Errorf("attach unwatched episodes: %w", err)
 		}
-		byShow[id] = t
+		byOwner[id] = t
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	for _, it := range shows {
-		t, ok := byShow[it.ID]
+	for _, it := range owners {
+		t, ok := byOwner[it.ID]
 		if !ok || t.total == 0 {
 			// No episodes on disk. Left nil: an empty series is not a finished
 			// one.

@@ -203,8 +203,64 @@ describe("what a poster offers", () => {
   it("will not offer to play what it cannot gather", () => {
     for (const kind of ["collection", "playlist"]) {
       const l = labels(item({ kind, child_count: 4 } as Partial<Item>));
-      expect(l).toEqual(["Go to details"]);
+      expect(l).not.toContain("Play all");
+      expect(l).not.toContain("Shuffle");
     }
+    expect(labels(item({ kind: "playlist", child_count: 4 } as Partial<Item>))).toEqual([
+      "Go to details",
+    ]);
+  });
+
+  /*
+   * A collection can be marked, though not queued from a tile. Its members
+   * come through the join table, so the parent_id walk found nothing under it
+   * and the action could not be offered. Asserted on the writes, not the
+   * label: a menu item that reports success and marks nothing is the failure.
+   */
+  it("marks every film and episode a collection holds", async () => {
+    const puts: string[] = [];
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "PUT") {
+          puts.push(url);
+          return new Response(null, { status: 204 });
+        }
+        if (url.includes("collection_id=9")) {
+          return json({
+            items: [
+              { id: 11, kind: "movie", title: "Film", library_id: 1 },
+              { id: 12, kind: "show", title: "Show", library_id: 1, child_count: 1 },
+            ],
+            total: 2,
+          });
+        }
+        if (url.includes("/api/items/12/episodes")) {
+          return json({ episodes: [{ id: 21 }, { id: 22 }] });
+        }
+        return json({ items: [], total: 0 });
+      }),
+    );
+    const collection = item({ id: 9, kind: "collection", child_count: 2 } as Partial<Item>);
+    const mark = actions(collection).find((a) => a.label === "Mark all as watched") as
+      | { onSelect: () => void }
+      | undefined;
+    expect(mark).toBeDefined();
+    await act(async () => {
+      mark!.onSelect();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(puts.map((u) => u.match(/items\/(\d+)\/progress/)?.[1]).sort()).toEqual([
+      "11",
+      "21",
+      "22",
+    ]);
   });
 
   /*

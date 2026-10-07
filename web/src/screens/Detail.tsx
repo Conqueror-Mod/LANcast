@@ -19,6 +19,7 @@ import {
   useDeletePlaylist,
   fetchShowEpisodes,
   useShowStanding,
+  useSetWatchedByID,
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
 import { playAllLabel } from "@/lib/playAll";
@@ -38,6 +39,7 @@ import {
   childLabel,
   childCountLabel,
   isPicture,
+  watchedVerb,
 } from "@/lib/kind";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
@@ -46,7 +48,8 @@ import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { PosterTile } from "@/components/PosterTile";
-import { useItemActions } from "@/components/itemActions";
+import { useItemActions, useMarkAll } from "@/components/itemActions";
+import { isWatched } from "@/lib/watchedMark";
 import { startOf } from "@/playback/queueOrder";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { SensitiveReveal } from "@/lib/sensitiveAck";
@@ -269,6 +272,51 @@ function SecondaryButton({
     <button {...focusable} className={className} onClick={onPress}>
       {label}
     </button>
+  );
+}
+
+/*
+ * Mark as watched, from the page of the thing itself.
+ *
+ * It was only ever in a tile's right-click menu, which is a gesture nobody
+ * finds on a television remote and nobody thinks of on a detail page — the
+ * page where you are looking at the film you already saw elsewhere.
+ *
+ * A title toggles its own flag. A container (a show, a season, a collection, a
+ * multi-part work) marks every episode or film under it, the same useMarkAll
+ * the tile menu uses, and reads finished from the aggregate the server sends:
+ * a show or season carries unwatched_episodes, and anything else is finished
+ * when every child it lists is. So the button offers to undo a finished one
+ * rather than only ever offering to mark it again.
+ */
+function WatchedButton({ item, held }: { item: Item; held?: Item[] }) {
+  const setWatched = useSetWatchedByID();
+  const { markAll, marking } = useMarkAll();
+  const verb = watchedVerb(item);
+  if (!isContainer(item)) {
+    const seen = item.progress?.watched ?? false;
+    return (
+      <SecondaryButton
+        label={seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`}
+        onPress={() => setWatched.mutate({ itemID: item.id, watched: !seen })}
+      />
+    );
+  }
+  const series = item.kind === "show" || item.kind === "season";
+  const done = series
+    ? isWatched(item)
+    : (held?.length ?? 0) > 0 && held!.every(isWatched);
+  return (
+    <SecondaryButton
+      label={
+        marking
+          ? "Marking…"
+          : done
+            ? `Mark all as ${verb.negated}`
+            : `Mark all as ${verb.past}`
+      }
+      onPress={() => void markAll(item, !done)}
+    />
   );
 }
 
@@ -946,6 +994,11 @@ export function Detail() {
                   onPress={() => setAddOpen(true)}
                 />
               )}
+              {/* Things that are watched: not music, which marks itself by
+                  playing, nor pictures or a playlist somebody built. */}
+              {!isMusic && !isPicture(item) && !isPlaylist && (
+                <WatchedButton item={item} held={children} />
+              )}
               {/*
                * Pinning is a thing you think while looking at a film, not
                * while reading a settings page, so the gesture lives here and
@@ -1060,7 +1113,6 @@ export function Detail() {
               <EpisodeList
                 episodes={playableChildren}
                 queue={playableChildren.map((c) => c.id)}
-                parentID={item.id}
               />
             ) : isAlbum || isPlaylist ? (
               // A playlist is a numbered list for the same reason a record is,

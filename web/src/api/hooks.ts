@@ -2730,6 +2730,47 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
 }
 
 /*
+ * Everything that draws whether something has been watched.
+ *
+ * One list, because the per-hook lists drifted. Marking an episode watched from
+ * its tile's menu refreshed the browse grid and the Continue shelf, and not the
+ * season page the tile was on — that page reads ["children", …], which only
+ * the season page's own hook invalidated. So the request succeeded, the server
+ * was right, and the tick did not appear until something else redrew the page.
+ * A collection's films (["collection-members", …]) and search results had the
+ * same gap. This is the rule in CLAUDE.md about lists a write changes, and it
+ * is answered here by what a person could be *looking at*:
+ *
+ *   item               — a detail page, and a show's or season's count of
+ *                        episodes left, which changes when an episode does
+ *   items              — every grid, including the infinite one beneath it
+ *   children           — a season's episodes, a show's season cards
+ *   collection-members — a collection's films
+ *   continue           — the Continue shelf and a show's Play/Continue label
+ *   recently-added     — the hero is drawn from the same list
+ *   search             — results carry ticks too
+ *   profile, history-count — totals and history that count viewings
+ *
+ * Prefix invalidation refetches only what is mounted, so the breadth costs a
+ * request per visible list and nothing for the rest.
+ */
+export function invalidateWatchState(qc: QueryClient) {
+  for (const key of [
+    "item",
+    "items",
+    "children",
+    "collection-members",
+    "continue",
+    "recently-added",
+    "search",
+    "profile",
+    "history-count",
+  ]) {
+    qc.invalidateQueries({ queryKey: [key] });
+  }
+}
+
+/*
  * Marking an episode watched, or putting it back.
  *
  * The server already takes both through `PUT /api/items/{id}/progress`, and
@@ -2739,10 +2780,7 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
  * honest way to say "I have not seen this", because leaving the position
  * behind would put the row straight back on the Continue shelf.
  *
- * Invalidates the children list and the item, which is what redraws the row and
- * anything else showing that episode's state. Continue is deliberately *not*
- * invalidated: it is never cached (ADR-less by design, see showplay.go), so
- * there is nothing to clear.
+ * What it redraws is invalidateWatchState's list, below.
  */
 /*
  * The same two writes, for a caller with no parent to invalidate.
@@ -2762,46 +2800,7 @@ export function useSetWatchedByID() {
         position_ms: 0,
         watched: args.watched,
       }),
-    onSuccess: (_data, args) => {
-      qc.invalidateQueries({ queryKey: ["item", args.itemID] });
-      qc.invalidateQueries({ queryKey: ["continue"] });
-      // A tile leaving the Continue shelf changes what the hero shows, and the
-      // hero is drawn from the same list.
-      qc.invalidateQueries({ queryKey: ["recently-added"] });
-      /*
-       * And the browse grid, which is where this is now called from.
-       *
-       * Marking something watched clears its saved position, so the progress
-       * bar on its tile should go — and on a grid filtered to unwatched, the
-       * tile itself should. Neither happens without this: the grid's key is
-       * ["items", "infinite", …] and nothing else here reaches it.
-       *
-       * This is the same shape as the bug that kept a deleted film on screen
-       * for a whole release. Worth naming, because the failure is quiet: the
-       * write succeeds, the server is right, and only the picture is stale.
-       */
-      qc.invalidateQueries({ queryKey: ["items"] });
-    },
-  });
-}
-
-export function useSetWatched(parentID: number) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args: { itemID: number; watched: boolean }) =>
-      apiSend(`/api/items/${args.itemID}/progress`, "PUT", {
-        position_ms: 0,
-        watched: args.watched,
-      }),
-    onSuccess: (_data, args) => {
-      qc.invalidateQueries({ queryKey: ["children", parentID] });
-      qc.invalidateQueries({ queryKey: ["item", args.itemID] });
-      // The Continue Watching shelf reads the same state, and a season page is
-      // exactly where somebody corrects it after watching an episode elsewhere.
-      // The key matches useContinueWatching's, which is ["continue", limit] —
-      // a prefix invalidation covers every limit in play.
-      qc.invalidateQueries({ queryKey: ["continue"] });
-    },
+    onSuccess: () => invalidateWatchState(qc),
   });
 }
 
