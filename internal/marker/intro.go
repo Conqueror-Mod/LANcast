@@ -54,6 +54,19 @@ const (
 	 */
 	IntroGapFrames = 5
 	/*
+	 * IntroWideGapFrames is the bridge tried again, at one second, for an
+	 * episode nothing else decided -- and only there.
+	 *
+	 * Futurama S7 E03, E16 and E17 share their opening with their siblings
+	 * except for a sound of their own about nine seconds in, under a second
+	 * long, which breaks every run into two pieces too short to decide. A
+	 * one-second bridge joins them: E16's four comparisons all became 2.1–16.4.
+	 * It is not the default because a wider bridge everywhere is the measured
+	 * failure above, runs drifting past the titles. As a fallback it cannot
+	 * move an intro that was already decided.
+	 */
+	IntroWideGapFrames = 10
+	/*
 	 * IntroStartSlack is how far apart two candidates may begin and still be
 	 * called the same intro, in seconds.
 	 *

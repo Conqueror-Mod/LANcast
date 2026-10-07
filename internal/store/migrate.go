@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 63
+const CurrentSchemaVersion = 64
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -117,6 +117,7 @@ var migrations = []migration{
 	{version: 61, sql: schemaRevision61},
 	{version: 62, sql: schemaRevision62},
 	{version: 63, sql: schemaRevision63},
+	{version: 64, sql: schemaRevision64},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2098,6 +2099,13 @@ WHERE kind = 'episode' AND intros_at IS NOT NULL
  * a library that already ran 62 holds exactly that set again.
  */
 const schemaRevision63 = schemaRevision62
+
+/*
+ * Revision 64 -- the same again, for the wide bridge (ADR 0055, 2026-10-07
+ * second amendment): an opening broken by under a second of an episode's own
+ * sound. It too runs only where nothing was decided.
+ */
+const schemaRevision64 = schemaRevision62
 
 // showOf finds an episode's show, whether the episode hangs from a season or
 // straight from the show. It reads `mi` as the episode.

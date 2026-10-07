@@ -16,6 +16,9 @@ func TestRevision62RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) { checkIntro
 // already run 62 and stamped those episodes again.
 func TestRevision63RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) { checkIntroRequeue(t, "62") }
 
+// Revision 64, for the wide bridge.
+func TestRevision64RequeuesOnlyEpisodesWithoutAnIntro(t *testing.T) { checkIntroRequeue(t, "63") }
+
 func checkIntroRequeue(t *testing.T, from string) {
 	t.Helper()
 	ctx := context.Background()

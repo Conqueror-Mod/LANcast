@@ -285,6 +285,24 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 				return Seconds(m.OffsetA), Seconds(m.OffsetB), Seconds(m.Frames)
 			})
 		}
+		/*
+		 * And last of all the wide bridge (IntroWideGapFrames), after the
+		 * triangle: where both could answer, the triangle's is the whole
+		 * opening and the bridge's only the part every comparison shares.
+		 * Futurama S6E19's 30-second opening came back as 2.7–15.6 when the
+		 * bridge went first.
+		 */
+		if !in.Found {
+			var peers []int
+			for _, p := range IntroPeers(n, i, PeersPerEpisode) {
+				if prints[p].ok {
+					peers = append(peers, p)
+				}
+			}
+			in = introWideBridge(prints[i].phases, func(k int) []uint32 {
+				return prints[peers[k]].single
+			}, len(peers))
+		}
 
 		/*
 		 * The closing theme, found the same way: what this episode's last
@@ -394,6 +412,29 @@ func (w *Worker) introAfter(phases [][]uint32, peer func(int) ([]uint32, bool), 
 			StartSec: Seconds(m.OffsetA + cut),
 			EndSec:   Seconds(m.OffsetA + cut + m.Frames),
 		})
+	}
+	in := IntroFrom(cands)
+	if in.IsIdent() {
+		return Intro{}
+	}
+	return in
+}
+
+/*
+ * introWideBridge decides again with every comparison bridged across up to
+ * IntroWideGapFrames, for an episode nothing else decided. peer(k) is the
+ * fingerprint of the k-th of n compared siblings. An ident found this way is
+ * refused, as everywhere else.
+ */
+func introWideBridge(phases [][]uint32, peer func(k int) []uint32, n int) Intro {
+	cands := make([]Candidate, 0, n)
+	for k := 0; k < n; k++ {
+		m := BestCommonRunBridging(phases, peer(k), IntroTolerance, IntroWideGapFrames)
+		c := Candidate{}
+		if m.Frames > 0 {
+			c = Candidate{StartSec: Seconds(m.OffsetA), EndSec: Seconds(m.OffsetA + m.Frames)}
+		}
+		cands = append(cands, c)
 	}
 	in := IntroFrom(cands)
 	if in.IsIdent() {
