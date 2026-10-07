@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, type SubFont } from "@/playback/prefs";
-import { canBoostDialogue, canNightMusic } from "@/playback/soundControls";
+import {
+  canBoostDialogue,
+  canNightFilm,
+  canNightMusic,
+  filmNightBlockedBySurround,
+} from "@/playback/soundControls";
 import { FONTS } from "@/playback/cueVars";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
@@ -285,18 +290,29 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
         {/* Selects rather than a checkbox for night mode: the panel's
             checkbox draws its checked state in gold, and gold is the focus
             signal (design.md), not "on". */}
+        {/* Night mode for a film: mpv on the desktop, Web Audio in a browser
+            tab when what reaches the element is mono or stereo. */}
+        {canNightFilm(pb) && (
+          <Row label="Night mode">
+            <select
+              className="pbset__select"
+              value={prefs.nightVideo ? "on" : "off"}
+              onChange={(e) => setPrefs({ nightVideo: e.target.value === "on" })}
+            >
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+          </Row>
+        )}
+        {filmNightBlockedBySurround(pb) && (
+          <p className="pbset__note">
+            Night mode isn&apos;t available for this film in a browser. Its
+            soundtrack is surround, and night mode here would mix it down to
+            stereo. The desktop app applies it without that.
+          </p>
+        )}
         {pb.audioFX && !pb.isAudio && (
           <>
-            <Row label="Night mode">
-              <select
-                className="pbset__select"
-                value={prefs.nightVideo ? "on" : "off"}
-                onChange={(e) => setPrefs({ nightVideo: e.target.value === "on" })}
-              >
-                <option value="off">Off</option>
-                <option value="on">On</option>
-              </select>
-            </Row>
             {canBoost && (
               <Row label="Dialogue boost">
                 <select
