@@ -11,12 +11,13 @@ import {
   useSettings,
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
+import { apiGet } from "@/api/client";
 import { isContainer, isMusic, isPicture, watchedVerb } from "@/lib/kind";
 import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
 import type { MenuAction } from "./Menu";
-import type { Item } from "@/api/types";
+import type { Item, ItemsPage } from "@/api/types";
 import { offersShuffle, playAllLabel } from "@/lib/playAll";
 
 /*
@@ -80,7 +81,42 @@ async function queueFor(qc: QueryClient, item: Item): Promise<number[]> {
   if (item.kind === "show") {
     return (await fetchShowEpisodes(item.id)).map((e) => e.id);
   }
+  if (item.kind === "collection") {
+    /*
+     * A collection's members come through the join table, not parent_id, so
+     * the walk below finds nothing under one — which is why marking a
+     * collection watched could not be offered. Each member is then whatever
+     * it is: a film, or a show whose episodes are the leaves.
+     */
+    const ids: number[] = [];
+    for (const m of await fetchCollectionMembers(item.id)) {
+      if (m.kind === "show") {
+        ids.push(...(await fetchShowEpisodes(m.id)).map((e) => e.id));
+      } else if (isContainer(m)) {
+        ids.push(...(await fetchDescendantIDs(qc, m.id)));
+      } else if (!m.missing) {
+        ids.push(m.id);
+      }
+    }
+    return ids;
+  }
   return fetchDescendantIDs(qc, item.id);
+}
+
+// Every member of a collection, paged for the same reason fetchDescendantIDs
+// pages: the API caps `limit`, and a silent hundred is a silent truncation.
+async function fetchCollectionMembers(id: number): Promise<Item[]> {
+  const PAGE = 500;
+  const out: Item[] = [];
+  for (let offset = 0; ;) {
+    const page = await apiGet<ItemsPage>(
+      `/api/items?collection_id=${id}&limit=${PAGE}&offset=${offset}`,
+    );
+    out.push(...page.items);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+  return out;
 }
 
 /*
@@ -304,6 +340,10 @@ export function useItemActions(): ItemActions {
          * nothing is worse than no Play all.
          */
         const playable = item.kind !== "collection" && item.kind !== "playlist";
+        // A collection cannot be queued from a tile, but it can be marked:
+        // queueFor knows how to reach its members, and every one is a thing
+        // somebody watches.
+        const markable = playable || item.kind === "collection";
         const verb = watchedVerb(item);
         /*
          * How many things Play would play, when the tile can know: an album's
@@ -329,6 +369,10 @@ export function useItemActions(): ItemActions {
                       },
                     ]
                   : []),
+              ]
+            : []),
+          ...(markable
+            ? [
                 {
                   label: `Mark all as ${verb.past}`,
                   disabled: gathering || marking,
