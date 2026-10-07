@@ -603,6 +603,16 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	it.ChildCount = counted[0].ChildCount
+	/*
+	 * And how much of it is left, for a show or a season, so the detail page
+	 * can offer "Mark all as unwatched" on one already finished rather than
+	 * only ever offering to mark it watched again.
+	 */
+	if err := s.st.AttachUnwatchedEpisodes(r.Context(), counted, s.userID(r)); err != nil {
+		s.writeInternal(w, err, "attach unwatched episodes")
+		return
+	}
+	it.UnwatchedEpisodes = counted[0].UnwatchedEpisodes
 
 	/*
 	 * Markers ride along, so the player can draw a skip button without asking a

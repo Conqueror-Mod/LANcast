@@ -4665,9 +4665,9 @@ export interface components {
             child_count?: number;
             /**
              * Format: int64
-             * @description How many of a show's episodes this account has not finished. **Present on shows only**, and absent — not zero — everywhere else.
+             * @description How many of a show's or season's episodes this account has not finished. **Present on shows and seasons only**, and absent — not zero — everywhere else. Carried by listings and by `GET /api/items/{id}`.
              *
-             *     Zero means the series is finished, which is why the field is omitted rather than defaulted for anything that is not a show: a client reading a missing value as zero would mark every film, album and photograph in the library as watched.
+             *     Zero means the series (or season) is finished, which is why the field is omitted rather than defaulted for anything else: a client reading a missing value as zero would mark every film, album and photograph in the library as watched.
              *
              *     A show with **no episodes on disk** also omits it. An empty series is not a finished one, and "nothing left to watch" is a true sentence about it that means the opposite.
              *

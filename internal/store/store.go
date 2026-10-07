@@ -438,8 +438,9 @@ type Item struct {
 	ChildCount int `json:"child_count,omitempty"`
 
 	/*
-	 * UnwatchedEpisodes is how many of a show's episodes this account has not
-	 * finished. Set on shows only, and nil everywhere else.
+	 * UnwatchedEpisodes is how many of a show's or season's episodes this
+	 * account has not finished. Set on shows and seasons only, and nil
+	 * everywhere else.
 	 *
 	 * A pointer, and that is the whole design of this field. The value that
 	 * matters most is **zero** — it is what "you have seen all of this" looks

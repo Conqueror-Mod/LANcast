@@ -1218,8 +1218,9 @@ container opens its children (via `parent_id`) and offers no Play, so a
 — is not given a dead-end Play button. `kind` alone cannot express that, which
 is why the count is part of the item shape.
 
-`unwatched_episodes` is how many of a show's episodes this account has not
-finished. It is present **on shows only**, and *absent* rather than zero
+`unwatched_episodes` is how many of a show's or season's episodes this
+account has not finished. It is present **on shows and seasons only** — in
+listings and on `GET /api/items/{id}` — and *absent* rather than zero
 everywhere else — zero is what a finished series looks like, so a client that
 read a missing value as zero would tick every film, album and photograph in the
 library as watched. A show with **no episodes on disk** omits it too: an empty
