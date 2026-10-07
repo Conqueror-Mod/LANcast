@@ -9239,6 +9239,15 @@
               "type": "integer"
             },
             "description": "The item on their server."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9297,6 +9306,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server. Ids are theirs, not ours."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9352,6 +9370,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server. Ids are theirs, not ours."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9400,6 +9427,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9466,6 +9502,15 @@
               "type": "string"
             },
             "description": "The segment file, from the playlist."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9514,6 +9559,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server. Ids are theirs, not ours."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9571,6 +9625,15 @@
               "type": "string"
             },
             "description": "The track, from the listing above."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9619,6 +9682,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9664,6 +9736,15 @@
               "format": "int64"
             },
             "description": "The item on **their** server."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9767,6 +9848,15 @@
               ]
             },
             "description": "Defaults to `poster`."
+          },
+          {
+            "name": "together",
+            "in": "query",
+            "required": false,
+            "description": "Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9849,6 +9939,295 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/together/requests": {
+      "parameters": [
+        {
+          "name": "fingerprint",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The paired server, by its identity fingerprint."
+        }
+      ],
+      "post": {
+        "operationId": "peerAskTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Ask to join somebody on a paired server",
+        "description": "Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).\n\n`person` is the host's account id there, as `GET /people/peers` reported it. Answers `pending` with an id, or `not_now`; `404` when that person has not granted the caller presence.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "person"
+                ],
+                "properties": {
+                  "person": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending, or not now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/together/requests/{id}": {
+      "parameters": [
+        {
+          "name": "fingerprint",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The paired server, by its identity fingerprint."
+        },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The request's id on that server.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "peerTogetherRequest",
+        "tags": [
+          "peers"
+        ],
+        "summary": "The answer to a request to join",
+        "description": "Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).\n\nPoll every couple of seconds while waiting. `accepted` carries the room; `not_now` is final.",
+        "responses": {
+          "200": {
+            "description": "`pending`, `accepted` with the room, or `not_now`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/together/{room}": {
+      "parameters": [
+        {
+          "name": "fingerprint",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The paired server, by its identity fingerprint."
+        },
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id on that server.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "peerPollTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Follow a room on a paired server",
+        "description": "Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).\n\nThe same snapshot as `GET /together/{id}`. Use `age_ms`: the clocks are two households' machines.",
+        "responses": {
+          "200": {
+            "description": "The room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/together/{room}/join": {
+      "parameters": [
+        {
+          "name": "fingerprint",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The paired server, by its identity fingerprint."
+        },
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id on that server.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "peerJoinTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Come back to a room one was admitted to",
+        "description": "Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).\n\nOnly after the host accepted; everybody else is `404`.",
+        "responses": {
+          "200": {
+            "description": "The room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers/{fingerprint}/together/{room}/members/me": {
+      "parameters": [
+        {
+          "name": "fingerprint",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The paired server, by its identity fingerprint."
+        },
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id on that server.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "peerLeaveTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Leave a room on a paired server",
+        "description": "Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).\n\nEnds the caller's right to play the room's film at once.",
+        "responses": {
+          "204": {
+            "description": "Left."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }

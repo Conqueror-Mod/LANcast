@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -77,7 +78,7 @@ func (s *Server) pipeFromPeer(w http.ResponseWriter, r *http.Request, base strin
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p, base+url.QueryEscape(item)+forwardedQuery(r))
+	resp, err := s.openPeerStream(r, p, base+url.QueryEscape(item)+forwardedQuery(r)+s.memberQuery(r))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return
@@ -112,8 +113,14 @@ func (s *Server) peerHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p,
-		"/api/federation/hls/"+item+"/index.m3u8"+strings.TrimPrefix(forwardedQuery(r), "&"))
+	/*
+	 * withQuery, not concatenation. This appended the forwarded query with its
+	 * leading "&" trimmed and no "?", so a playlist asked for with any
+	 * parameter became a request for "index.m3u8t=120", a file that does not
+	 * exist.
+	 */
+	resp, err := s.openPeerStream(r, p, withQuery(
+		"/api/federation/hls/"+item+"/index.m3u8", forwardedQuery(r)+s.memberQuery(r)))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return
@@ -137,7 +144,7 @@ func (s *Server) peerHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // As above.
-	w.Write([]byte(repointPlaylistAtPeer(string(body), p.Fingerprint)))
+	w.Write([]byte(repointPlaylistAtPeer(string(body), p.Fingerprint, s.memberQuery(r) != "")))
 }
 
 // peerHLSSegment pulls one segment through, named by the rewritten playlist.
@@ -157,8 +164,8 @@ func (s *Server) peerHLSSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p, "/api/federation/hls/"+item+"/"+
-		url.PathEscape(session)+"/"+url.PathEscape(name))
+	resp, err := s.openPeerStream(r, p, withQuery("/api/federation/hls/"+item+"/"+
+		url.PathEscape(session)+"/"+url.PathEscape(name), s.memberQuery(r)))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return
@@ -186,8 +193,8 @@ func (s *Server) peerSubtitleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p,
-		"/api/federation/subtitles/"+item+"/"+url.PathEscape(key))
+	resp, err := s.openPeerStream(r, p, withQuery(
+		"/api/federation/subtitles/"+item+"/"+url.PathEscape(key), s.memberQuery(r)))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return
@@ -211,10 +218,29 @@ func (s *Server) peerSubtitleFile(w http.ResponseWriter, r *http.Request) {
  * A function, so it can be tested without two servers. That matters: this is
  * the piece whose failure plays the wrong film rather than failing.
  */
-func repointPlaylistAtPeer(body, fingerprint string) string {
-	return strings.ReplaceAll(body,
+func repointPlaylistAtPeer(body, fingerprint string, member bool) string {
+	out := strings.ReplaceAll(body,
 		"/api/federation/hls/",
 		"/api/peers/"+url.PathEscape(fingerprint)+"/hls/")
+	if !member {
+		return out
+	}
+	/*
+	 * A room member's segments must say so too. The player fetches them from
+	 * these URLs and adds nothing, so a playlist fetched as a member would
+	 * otherwise lead to segments fetched as nobody, and a film admitted only
+	 * by the room would play its playlist and then fail on the first segment.
+	 */
+	prefix := "/api/peers/" + url.PathEscape(fingerprint) + "/hls/"
+	return memberSegmentRe(prefix).ReplaceAllStringFunc(out, func(u string) string {
+		return withQuery(u, "&together=1")
+	})
+}
+
+// memberSegmentRe matches one rewritten segment URL: the prefix and the path
+// after it, up to a quote or whitespace.
+func memberSegmentRe(prefix string) *regexp.Regexp {
+	return regexp.MustCompile(regexp.QuoteMeta(prefix) + `[^"\s]*`)
 }
 
 /*
@@ -249,6 +275,11 @@ func peerItemSegment(w http.ResponseWriter, r *http.Request) (string, bool) {
 func forwardedQuery(r *http.Request) string {
 	q := r.URL.Query()
 	q.Del("item")
+	// Never forwarded from a client. Who is asking is this server's to say
+	// (memberQuery), and a person on the query would let one member of a
+	// household play as another.
+	q.Del("person")
+	q.Del("together")
 	if len(q) == 0 {
 		return ""
 	}
@@ -364,7 +395,7 @@ func (s *Server) peerTitle(r *http.Request, p store.Peer, item string) (string, 
 		// server that owns the item.
 		PresenceTitle string `json:"presence_title"`
 	}
-	if err := s.callPeer(r.Context(), p, peerItemPath(item), &body); err != nil {
+	if err := s.callPeer(r.Context(), p, withQuery(peerItemPath(item), s.memberQuery(r)), &body); err != nil {
 		return "", false
 	}
 
@@ -439,7 +470,7 @@ func (s *Server) peerItem(w http.ResponseWriter, r *http.Request) {
 	}
 	itemID, _ := strconv.ParseInt(item, 10, 64)
 	var body map[string]any
-	if err := s.callPeer(r.Context(), p, peerItemPath(item), &body); err != nil {
+	if err := s.callPeer(r.Context(), p, withQuery(peerItemPath(item), s.memberQuery(r)), &body); err != nil {
 		s.peerUnreachable(w, p, err)
 		return
 	}
@@ -557,8 +588,8 @@ func (s *Server) peerArtwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p, "/api/federation/artwork/"+item+"/"+
-		url.PathEscape(hash)+forwardedQuery(r))
+	resp, err := s.openPeerStream(r, p, withQuery("/api/federation/artwork/"+item+"/"+
+		url.PathEscape(hash), forwardedQuery(r)+s.memberQuery(r)))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return

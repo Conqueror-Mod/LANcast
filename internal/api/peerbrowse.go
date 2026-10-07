@@ -124,7 +124,7 @@ func (s *Server) peerStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.openPeerStream(r, p, "/api/federation/stream?item="+url.QueryEscape(item))
+	resp, err := s.openPeerStream(r, p, "/api/federation/stream?item="+url.QueryEscape(item)+s.memberQuery(r))
 	if err != nil {
 		s.peerUnreachable(w, p, err)
 		return

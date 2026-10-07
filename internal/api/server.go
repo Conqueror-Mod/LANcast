@@ -490,6 +490,16 @@ func (s *Server) Handler() http.Handler {
 	 * anybody is in a film. It is read back on the item route above.
 	 */
 	mux.HandleFunc("PUT /api/peers/{fingerprint}/progress/{item}", s.peerProgress)
+	/*
+	 * A room on a paired server, relayed for this household's client, which
+	 * cannot reach that server itself (federation Phase 5). The asker is
+	 * always the caller's own account. See togetherrelay.go.
+	 */
+	mux.HandleFunc("POST /api/peers/{fingerprint}/together/requests", s.peerAskTogether)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/together/requests/{id}", s.peerTogetherRequest)
+	mux.HandleFunc("POST /api/peers/{fingerprint}/together/{room}/join", s.peerJoinTogether)
+	mux.HandleFunc("GET /api/peers/{fingerprint}/together/{room}", s.peerPollTogether)
+	mux.HandleFunc("DELETE /api/peers/{fingerprint}/together/{room}/members/me", s.peerLeaveTogether)
 
 	/*
 	 * What a paired server may see. Administrative for the reason in

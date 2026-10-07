@@ -4482,6 +4482,139 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/peers/{fingerprint}/together/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask to join somebody on a paired server
+         * @description Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).
+         *
+         *     `person` is the host's account id there, as `GET /people/peers` reported it. Answers `pending` with an id, or `not_now`; `404` when that person has not granted the caller presence.
+         */
+        post: operations["peerAskTogether"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/together/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The request's id on that server. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The answer to a request to join
+         * @description Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).
+         *
+         *     Poll every couple of seconds while waiting. `accepted` carries the room; `not_now` is final.
+         */
+        get: operations["peerTogetherRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/together/{room}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Follow a room on a paired server
+         * @description Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).
+         *
+         *     The same snapshot as `GET /together/{id}`. Use `age_ms`: the clocks are two households' machines.
+         */
+        get: operations["peerPollTogether"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/together/{room}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Come back to a room one was admitted to
+         * @description Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).
+         *
+         *     Only after the host accepted; everybody else is `404`.
+         */
+        post: operations["peerJoinTogether"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/together/{room}/members/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave a room on a paired server
+         * @description Relayed to the paired server over the pinned peer channel, because a client here cannot reach it (ADR 0046, amended). **The asker is always the caller's own account**, taken from the session and never from the request, so nobody in a household can ask, join or play as somebody else. Success bodies are re-encoded here; a refusal keeps its status in this server's words, so `404` (the room ended, or was never open to you) stays distinct from `502` (that server is not answering).
+         *
+         *     Ends the caller's right to play the room's film at once.
+         */
+        delete: operations["peerLeaveTogether"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{id}/near-copies": {
         parameters: {
             query?: never;
@@ -13530,6 +13663,8 @@ export interface operations {
             query: {
                 /** @description The item on their server. */
                 item: number;
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13573,6 +13708,8 @@ export interface operations {
             query: {
                 /** @description The item on **their** server. Ids are theirs, not ours. */
                 item: number;
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13609,6 +13746,8 @@ export interface operations {
             query: {
                 /** @description The item on **their** server. Ids are theirs, not ours. */
                 item: number;
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13640,7 +13779,10 @@ export interface operations {
     };
     peerHLSPlaylist: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
+            };
             header?: never;
             path: {
                 /** @description The paired server, by its identity fingerprint. */
@@ -13673,7 +13815,10 @@ export interface operations {
     };
     peerHLSSegment: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
+            };
             header?: never;
             path: {
                 /** @description The paired server, by its identity fingerprint. */
@@ -13713,6 +13858,8 @@ export interface operations {
             query: {
                 /** @description The item on **their** server. Ids are theirs, not ours. */
                 item: number;
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13744,7 +13891,10 @@ export interface operations {
     };
     peerSubtitleFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
+            };
             header?: never;
             path: {
                 /** @description The paired server, by its identity fingerprint. */
@@ -13782,6 +13932,8 @@ export interface operations {
             query: {
                 /** @description The item on **their** server. */
                 item: number;
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13806,7 +13958,10 @@ export interface operations {
     };
     peerItem: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
+            };
             header?: never;
             path: {
                 /** @description The paired server. */
@@ -13858,6 +14013,8 @@ export interface operations {
             query?: {
                 /** @description Defaults to `poster`. */
                 size?: "thumb" | "poster" | "poster2x" | "fanart" | "original";
+                /** @description Set (any value) when playing as a member of a room on that server. Only then does this server name the caller to it, which is what admits a film that was not shared. A `person` on the query is never forwarded. */
+                together?: string;
             };
             header?: never;
             path: {
@@ -13925,6 +14082,187 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    peerAskTogether: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    person: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pending, or not now. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    peerTogetherRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The request's id on that server. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `pending`, `accepted` with the room, or `not_now`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    peerPollTogether: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    peerJoinTogether: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    peerLeaveTogether: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The room's id on that server. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getLibraryNearCopies: {

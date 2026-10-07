@@ -157,7 +157,7 @@ func TestAPeersPlaylistIsRepointedAtThisServer(t *testing.T) {
 		"",
 	}, "\n")
 
-	got := repointPlaylistAtPeer(in, fp)
+	got := repointPlaylistAtPeer(in, fp, false)
 
 	if strings.Contains(got, "/api/federation/") {
 		t.Error("a federation path survived: the player would ask this server for it")
