@@ -92,6 +92,21 @@ func (s *Server) federationPlay(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		allowed, err := s.st.MayPlay(r.Context(), store.Friend(fingerprint), itemID)
+		/*
+		 * The second way in: a person admitted to a room here may play the
+		 * film that room is playing, whether or not its library was shared
+		 * (ADR 0046 §4, amended for the relay). Asked of the room per request,
+		 * so it ends when the room ends, moves on, or drops them.
+		 *
+		 * Only when the share said no, and only with a person named: a peer
+		 * server with no person is asking for a share, and gets exactly the
+		 * answer it always did.
+		 */
+		if err == nil && !allowed {
+			if person := r.URL.Query().Get("person"); person != "" {
+				allowed = s.together.Playing(fingerprint, person, itemID)
+			}
+		}
 		if err != nil || !allowed {
 			writeError(w, http.StatusNotFound, "not_found", "no such item")
 			return

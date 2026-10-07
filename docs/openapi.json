@@ -3224,6 +3224,146 @@
         }
       }
     },
+    "/together/requests": {
+      "get": {
+        "operationId": "listTogetherRequests",
+        "tags": [
+          "together"
+        ],
+        "summary": "Requests from a paired server to join the caller",
+        "description": "Polled by the host's client while something plays, so a prompt appears on whatever screen the host is on. Open requests only, oldest first. Each carries `expires_at`, after which it is a no.",
+        "responses": {
+          "200": {
+            "description": "Open requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherRequestList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/together/requests/{id}/accept": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The request's id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "acceptTogetherRequest",
+        "tags": [
+          "together"
+        ],
+        "summary": "Say yes, into a room the caller hosts",
+        "description": "Adds the asker to the room, which must exist and be hosted by the caller. A host watching alone opens a room first (`POST /together`) and accepts into it. Nobody arrives in a room because it happened to be open.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "room_id"
+                ],
+                "properties": {
+                  "room_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The room, now including the asker.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already answered, or timed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/together/requests/{id}/decline": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The request's id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "declineTogetherRequest",
+        "tags": [
+          "together"
+        ],
+        "summary": "Say not now",
+        "description": "The asker learns only `not_now`, and cannot ask this host again for two minutes.",
+        "responses": {
+          "204": {
+            "description": "Declined."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already answered, or timed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/peers": {
       "get": {
         "operationId": "listPeers",
@@ -8539,6 +8679,304 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/together/requests": {
+      "post": {
+        "operationId": "federationAskTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Ask to join a person who is watching something here",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).\n\nAddressed to a **person**, not a room: the asker saw a title on the People page, and the host is usually watching alone. Requires a **presence grant** from that host to the asker, read on every call (ADR 0045 §7: the grant carries the right to ask). Without one the answer is `404`, the same as for nobody.\n\n**Every other no is `not_now`.** The host is idle, the host is watching a film on another server, or the asker is in the two-minute cooldown after a no. A decline that explains itself invites a negotiation about why. An unanswered request becomes `not_now` after 60 seconds.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "host"
+                ],
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "description": "The host's account id, as presence reported it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pending, or not now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/together/requests/{id}": {
+      "get": {
+        "operationId": "federationTogetherRequest",
+        "tags": [
+          "peers"
+        ],
+        "summary": "The answer to a request to join",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).\n\nOnly the asker may read it. Anybody else, and a request that has been replaced or cleared, reads `not_now`. An answer stays readable for two minutes, long enough for a server polling every couple of seconds.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The request's id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`pending`, `accepted` with the room, or `not_now`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/federation/together/{room}": {
+      "parameters": [
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "federationPollTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "A remote member following a room",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).\n\nThe remote equivalent of `GET /together/{id}`: records the member as present and returns the room. Use `age_ms`, never `updated_at` against your own clock.\n\n**The host's presence grant is re-checked on every poll.** A host who revokes it mid-film has said this person may not see what they are watching, so the member is removed and told the room has ended. `404` covers no such room, not admitted and no longer granted alike.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/together/{room}/join": {
+      "parameters": [
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "federationJoinTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "A remote member coming back to a room they were admitted to",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).\n\nOnly the host accepting a request admits a remote member. This lets an admitted member back in after a dropped connection, and refuses everybody else with `404`. Being paired with this server is not an invitation to every room on it.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The room.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/federation/together/{room}/members/me": {
+      "parameters": [
+        {
+          "name": "room",
+          "in": "path",
+          "required": true,
+          "description": "The room's id.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "federationLeaveTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "A remote member leaving a room",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).\n\nLeaving a room one is not in is success. Leaving ends the member's right to play the room's film at once.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Left."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -15254,6 +15692,101 @@
             "type": "integer",
             "format": "int64",
             "description": "The item id of the copy with the most pixels: a suggestion of which to keep."
+          }
+        }
+      },
+      "TogetherAskAnswer": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Empty when the answer was not now from the start."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "not_now"
+            ],
+            "description": "All the asker is told. A decline, a timeout and a cooldown are the same `not_now`."
+          },
+          "room_id": {
+            "type": "string",
+            "description": "Set once accepted."
+          }
+        }
+      },
+      "TogetherRequest": {
+        "type": "object",
+        "required": [
+          "id",
+          "host_id",
+          "peer",
+          "person",
+          "name",
+          "server",
+          "state",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "host_id": {
+            "type": "string"
+          },
+          "peer": {
+            "type": "string",
+            "description": "The asking server's fingerprint."
+          },
+          "person": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "From the roster this server holds, not from the request."
+          },
+          "server": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "declined"
+            ]
+          },
+          "room_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When an unanswered request becomes a no."
+          }
+        }
+      },
+      "TogetherRequestList": {
+        "type": "object",
+        "required": [
+          "requests"
+        ],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TogetherRequest"
+            }
           }
         }
       }

@@ -481,6 +481,55 @@ peer stays `added` — accepting an invite is not a pairing. A roster is stored
 wholesale, so somebody who turns their visibility off disappears from it on the
 next refresh and every grant naming them cascades away.
 
+### Watching together across servers
+
+Federation Phase 5 ([plan](phase-5-room-crosses-the-boundary-plan.md),
+[ADR 0046](adr/0046-remote-guests.md) as amended). Somebody on a paired server
+who may see what you are watching may **ask** to join it. You answer in the
+moment. If you say yes, they follow your room **through their own server**,
+which relays every call over the pinned peer channel. Their window trusts one
+server's key (ADR 0070), so it cannot reach yours directly.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/federation/together/requests?person={id}` | **Peer-to-peer.** `{host}` → ask to join that person. `404` without a presence grant from them; otherwise `{id, state}` with `state` `pending` or `not_now` |
+| `GET /api/federation/together/requests/{id}?person={id}` | **Peer-to-peer.** The answer: `pending`, `accepted` with `room_id`, or `not_now`. Only the asker may read it |
+| `POST /api/federation/together/{room}/join?person={id}` | **Peer-to-peer.** An admitted member coming back after a dropped connection. Nobody else |
+| `GET /api/federation/together/{room}?person={id}` | **Peer-to-peer.** Follow the room: the same snapshot as `GET /api/together/{id}` |
+| `DELETE /api/federation/together/{room}/members/me?person={id}` | **Peer-to-peer.** Leave |
+| `GET /api/together/requests` | The caller's open requests, oldest first, each with `expires_at` |
+| `POST /api/together/requests/{id}/accept` | `{room_id}` → admit the asker into a room the caller hosts |
+| `POST /api/together/requests/{id}/decline` | Not now |
+
+**The right to ask is the presence grant** (ADR 0045 §7), read on every call,
+never cached. Revoking presence revokes the right to ask on the next request,
+and removes somebody already in the room on their next poll.
+
+**Silence is a no.** A request nobody answers within **60 seconds** is
+declined, because a host who is asleep has not agreed to anything. A decline
+or a timeout starts a **two-minute cooldown** for that asker and host. Asking
+inside it returns `not_now` at once, and the host is never shown it.
+
+**The asker only ever hears `not_now`.** The host idle, the host watching a
+film on another server, a decline, a timeout and a cooldown all read the same.
+A decline that explains itself invites a negotiation about why.
+
+**Only accepting admits.** A remote member is `peer:<fingerprint>/<person>` in
+the room. `join` lets an admitted member back in and refuses everybody else,
+so being paired is not an invitation to every room.
+
+**Being in the room is how the guest plays its film.** The playback routes
+above accept a `?person=` beside the share check. A person in a live room here
+may play **that room's item**, whether or not its library was shared, and
+nothing else. It is checked against the room on every request, so it ends when
+the room ends, the host moves to another film, the guest leaves or stops
+polling, or the pairing goes. A request without `person` is the share check
+alone, exactly as before.
+
+**Use `age_ms`.** The relay adds a hop, and the two households' clocks are two
+different machines. The room states its own age, and the guest adds the time
+since it received the answer.
+
 ### Roles
 
 Every account is `admin` or `member` ([ADR 0015](adr/0015-multi-user-accounts.md)).
