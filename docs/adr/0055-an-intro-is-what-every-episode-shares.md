@@ -392,6 +392,11 @@ episode is unanalysed. Eleven seasons fall under 80% on one or the other.
   - Nothing is decided, so `IsIdent` never fires, and the search is never re-run from after the ident.
   - The card rule needs every comparison to agree, and the ident comparisons are the dissent.
   - The likely fix is to set the ident aside **per comparison**, not per decision: a comparison whose best run is ident-shaped is run again from just after it. That is a rule change, and before shipping it needs a whole-library before-and-after run. A rule that rescues one season and moves another is the failure this ADR keeps recording.
+  - **Done the same day** (`introPastIdents`). It runs only where nothing was decided, so no existing intro can move. Every season in the library was swept, before and after: **1,008 → 1,012 episodes, 4 changed, none lost or moved.**
+    - The League S4 went from 6 to 9: E1, E2 and E3 now have their card, at 158, 106 and 82 seconds, each agreed by 4 of 4 comparisons.
+    - Silicon Valley S2 went from 9 to 10: E1 now has a 6-second run at 262 seconds, agreed by 4 of 4.
+    - The League S5 did not change. Its gaps have a cause this rule does not reach.
+    - **Revision 62** clears the stamp only on episodes with no intro, so the seasons that can change are compared again at boot and no others are.
 - **Futurama S7 (20/26) and S8 (10/13).** The comparisons stop at about 14.7 seconds, at the point where the opening's gag changes from episode to episode. Some pairs then resume and run to 29 seconds. This is the varying-gag problem the 0.5-second bridge does not cross.
 
 **Credits:**
