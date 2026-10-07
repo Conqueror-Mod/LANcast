@@ -369,3 +369,31 @@ marked on them; it is one file.
 **Revision 57** clears `intros_at` so both changes reach seasons already
 compared.
 
+
+## Amendment — 2026-10-06: a library audit, and what is left
+
+Every episode in the library (1,074) was counted against what the player
+offers: a fingerprint intro, and a credits marker it trusts inside 88–99% of the
+running time. **1,008 have an intro (94%) and 1,039 usable credits (97%).** No
+episode is unanalysed. Eleven seasons fall under 80% on one or the other.
+
+**Known, and correct to leave:**
+
+- **Lanterns S1 (0/7).** What the episodes share at 0:00 is the HBO and DC idents. With the ident set aside, nothing else is shared.
+- **Storm of the Century (0/3).** It has no intro.
+- **Silicon Valley S1 (0/8).** Every comparison's best run is the 6.4-second HBO ident at 0:00. Searching from after it finds no title audio the episodes share, so the season has none to find.
+- **The League S1 (0/6).** Already recorded above as having none.
+- **It's Always Sunny S15 (3/8).** It has two theme variants: E1–4 at about 20 seconds, E5–7 at 18–21. E8 has none. The cyclic peers cross the two groups. Comparing against every sibling was measured and fixed nothing; it also invented an intro on E04. The peer count stays as decided.
+
+**Not yet explained, and likely fixable:**
+
+- **The League S4 (6/13) and S5 (10/13, measured 12/13 above).** The four-second card is found, a minute or two in, by two or three of each episode's four comparisons. The rest match the six-to-seven-second ident at 0:00 instead.
+  - That ident is under `IntroMinSeconds`, so the majority rule never decides it.
+  - Nothing is decided, so `IsIdent` never fires, and the search is never re-run from after the ident.
+  - The card rule needs every comparison to agree, and the ident comparisons are the dissent.
+  - The likely fix is to set the ident aside **per comparison**, not per decision: a comparison whose best run is ident-shaped is run again from just after it. That is a rule change, and before shipping it needs a whole-library before-and-after run. A rule that rescues one season and moves another is the failure this ADR keeps recording.
+- **Futurama S7 (20/26) and S8 (10/13).** The comparisons stop at about 14.7 seconds, at the point where the opening's gag changes from episode to episode. Some pairs then resume and run to 29 seconds. This is the varying-gag problem the 0.5-second bridge does not cross.
+
+**Credits:**
+
+- **School Days (4/12)** and **It's Always Sunny S7 (10/13)** are the only seasons under 80%. They have not yet been examined frame by frame.
