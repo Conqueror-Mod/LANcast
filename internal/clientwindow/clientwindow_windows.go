@@ -126,6 +126,19 @@ func open(o Options) error {
 		return fs.Toggle(uintptr(w.Window()))
 	}
 
+	/*
+	 * Media keys and Win+arrow (winkeys_windows.go). The page says when
+	 * something is in the player, which is when a media key is LANcast's to
+	 * answer; the hook is installed before the page loads so the first report
+	 * has somewhere to go.
+	 */
+	var keys *keyHook
+	o.Bindings["lancastMediaKeys"] = func(on bool) {
+		if keys != nil {
+			keys.SetMediaActive(on)
+		}
+	}
+
 	// Bound before Navigate: the binding is injected at document creation, and a
 	// page that has already started loading would miss it and conclude it is
 	// running in a browser.
@@ -134,6 +147,9 @@ func open(o Options) error {
 			return fmt.Errorf("client window: binding %s: %w", name, err)
 		}
 	}
+
+	keys = installKeyHook(w, &fs)
+	defer keys.remove()
 
 	if o.OnReady != nil {
 		o.OnReady(&controller{w: w, placed: &placed})
