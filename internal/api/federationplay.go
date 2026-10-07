@@ -91,7 +91,7 @@ func (s *Server) federationPlay(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		allowed, err := s.st.MayPlay(r.Context(), store.Friend(fingerprint), itemID)
+		allowed, err := s.peerMayPlay(r, fingerprint, itemID)
 		if err != nil || !allowed {
 			writeError(w, http.StatusNotFound, "not_found", "no such item")
 			return
@@ -108,6 +108,34 @@ func (s *Server) federationPlay(h http.HandlerFunc) http.HandlerFunc {
 		r = r.WithContext(withStreamOwner(r.Context(), peerOwner(fingerprint)))
 		h(w, r)
 	}
+}
+
+/*
+ * peerMayPlay is the whole answer to "may this peer play this item", for every
+ * route that hands a peer a film: federationPlay's wrapper and the file route
+ * alike. One function, because the file route used to ask its own question and
+ * the room's way in was added to one and not the other, which would have
+ * refused a guest exactly when their player could take the file as it is.
+ *
+ * The share first, through MayPlay with a Friend principal, which fails
+ * closed. Then the second way in: a person admitted to a room here may play
+ * the film that room is playing, whether or not its library was shared
+ * (ADR 0046 §4, amended for the relay). Asked of the room per request, so it
+ * ends when the room ends, moves on, or drops them.
+ *
+ * The room is consulted only when the share said no and a person is named. A
+ * peer server naming no person is asking about a share, and gets exactly the
+ * answer it always did.
+ */
+func (s *Server) peerMayPlay(r *http.Request, fingerprint string, itemID int64) (bool, error) {
+	allowed, err := s.st.MayPlay(r.Context(), store.Friend(fingerprint), itemID)
+	if err != nil || allowed {
+		return allowed, err
+	}
+	if person := r.URL.Query().Get("person"); person != "" {
+		return s.together.Playing(fingerprint, person, itemID), nil
+	}
+	return false, nil
 }
 
 /*

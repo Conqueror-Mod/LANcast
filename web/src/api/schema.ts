@@ -1202,6 +1202,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/together/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Requests from a paired server to join the caller
+         * @description Polled by the host's client while something plays, so a prompt appears on whatever screen the host is on. Open requests only, oldest first. Each carries `expires_at`, after which it is a no.
+         */
+        get: operations["listTogetherRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/together/requests/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say yes, into a room the caller hosts
+         * @description Adds the asker to the room, which must exist and be hosted by the caller. A host watching alone opens a room first (`POST /together`) and accepts into it. Nobody arrives in a room because it happened to be open.
+         */
+        post: operations["acceptTogetherRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/together/requests/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say not now
+         * @description The asker learns only `not_now`, and cannot ask this host again for two minutes.
+         */
+        post: operations["declineTogetherRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers": {
         parameters: {
             query?: never;
@@ -3934,6 +4000,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/together/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask to join a person who is watching something here
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).
+         *
+         *     Addressed to a **person**, not a room: the asker saw a title on the People page, and the host is usually watching alone. Requires a **presence grant** from that host to the asker, read on every call (ADR 0045 §7: the grant carries the right to ask). Without one the answer is `404`, the same as for nobody.
+         *
+         *     **Every other no is `not_now`.** The host is idle, the host is watching a film on another server, or the asker is in the two-minute cooldown after a no. A decline that explains itself invites a negotiation about why. An unanswered request becomes `not_now` after 60 seconds.
+         */
+        post: operations["federationAskTogether"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/together/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The answer to a request to join
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).
+         *
+         *     Only the asker may read it. Anybody else, and a request that has been replaced or cleared, reads `not_now`. An answer stays readable for two minutes, long enough for a server polling every couple of seconds.
+         */
+        get: operations["federationTogetherRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/together/{room}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * A remote member following a room
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).
+         *
+         *     The remote equivalent of `GET /together/{id}`: records the member as present and returns the room. Use `age_ms`, never `updated_at` against your own clock.
+         *
+         *     **The host's presence grant is re-checked on every poll.** A host who revokes it mid-film has said this person may not see what they are watching, so the member is removed and told the room has ended. `404` covers no such room, not admitted and no longer granted alike.
+         */
+        get: operations["federationPollTogether"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/together/{room}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A remote member coming back to a room they were admitted to
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).
+         *
+         *     Only the host accepting a request admits a remote member. This lets an admitted member back in after a dropped connection, and refuses everybody else with `404`. Being paired with this server is not an invitation to every room on it.
+         */
+        post: operations["federationJoinTogether"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/together/{room}/members/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * A remote member leaving a room
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, authenticated by the pinned identity key (ADR 0044 §4). Which person is asking is that server's word, as for presence. Part of a room crossing to another server (federation Phase 5, ADR 0046 as amended).
+         *
+         *     Leaving a room one is not in is success. Leaving ends the member's right to play the room's film at once.
+         */
+        delete: operations["federationLeaveTogether"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers/{fingerprint}/libraries": {
         parameters: {
             query?: never;
@@ -6640,6 +6829,40 @@ export interface components {
              */
             keep: number;
         };
+        TogetherAskAnswer: {
+            /** @description Empty when the answer was not now from the start. */
+            id?: string;
+            /**
+             * @description All the asker is told. A decline, a timeout and a cooldown are the same `not_now`.
+             * @enum {string}
+             */
+            state: "pending" | "accepted" | "not_now";
+            /** @description Set once accepted. */
+            room_id?: string;
+        };
+        TogetherRequest: {
+            id: string;
+            host_id: string;
+            /** @description The asking server's fingerprint. */
+            peer: string;
+            person: string;
+            /** @description From the roster this server holds, not from the request. */
+            name: string;
+            server: string;
+            /** @enum {string} */
+            state: "pending" | "accepted" | "declined";
+            room_id?: string;
+            /** Format: int64 */
+            created_at: number;
+            /**
+             * Format: int64
+             * @description When an unanswered request becomes a no.
+             */
+            expires_at: number;
+        };
+        TogetherRequestList: {
+            requests: components["schemas"]["TogetherRequest"][];
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -9144,6 +9367,101 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description No such room. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listTogetherRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Open requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherRequestList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    acceptTogetherRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    room_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The room, now including the asker. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Already answered, or timed out. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    declineTogetherRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Declined. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Already answered, or timed out. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12635,6 +12953,8 @@ export interface operations {
             query: {
                 /** @description The item to stream. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -12667,6 +12987,8 @@ export interface operations {
             query: {
                 /** @description The item to ask about. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -12694,6 +13016,8 @@ export interface operations {
             query: {
                 /** @description The item to convert. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -12730,7 +13054,10 @@ export interface operations {
     };
     federationHLSPlaylist: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item to play. */
@@ -12769,7 +13096,10 @@ export interface operations {
     };
     federationHLSSegment: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item being played. */
@@ -12801,6 +13131,8 @@ export interface operations {
             query: {
                 /** @description The item to list subtitles for. */
                 item: number;
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path?: never;
@@ -12823,7 +13155,10 @@ export interface operations {
     };
     federationSubtitleFile: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item the track belongs to. */
@@ -12850,7 +13185,10 @@ export interface operations {
     };
     federationItem: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
+            };
             header?: never;
             path: {
                 /** @description The item. */
@@ -12890,6 +13228,8 @@ export interface operations {
             query?: {
                 /** @description Defaults to `poster`. */
                 size?: "thumb" | "poster" | "poster2x" | "fanart" | "original";
+                /** @description A person on the calling server who is in a live room here. Only consulted when the share refuses: that person may then play the item the room is playing, and nothing else. Omitted, the answer is the share's alone. */
+                person?: string;
             };
             header?: never;
             path: {
@@ -12914,6 +13254,191 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    federationAskTogether: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The host's account id, as presence reported it. */
+                    host: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pending, or not now. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationTogetherRequest: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `pending`, `accepted` with the room, or `not_now`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    federationPollTogether: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationJoinTogether: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The room. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    federationLeaveTogether: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path: {
+                /** @description The room's id. */
+                room: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     peerLibraries: {

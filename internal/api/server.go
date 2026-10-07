@@ -570,6 +570,18 @@ func (s *Server) Handler() http.Handler {
 		s.federationPlay(s.federationArtwork))
 	mux.HandleFunc("GET /api/people/{id}/activity", s.personActivity)
 
+	/*
+	 * A room crossing to another server (federation Phase 5). The friend's
+	 * server asks to join a person here, polls for the answer, then follows
+	 * the room; all authenticated by the peer pin, the person being that
+	 * server's word. See togetherfederation.go.
+	 */
+	mux.HandleFunc("POST /api/federation/together/requests", s.federationAskTogether)
+	mux.HandleFunc("GET /api/federation/together/requests/{id}", s.federationTogetherRequest)
+	mux.HandleFunc("POST /api/federation/together/{room}/join", s.federationJoinTogether)
+	mux.HandleFunc("GET /api/federation/together/{room}", s.federationPollTogether)
+	mux.HandleFunc("DELETE /api/federation/together/{room}/members/me", s.federationLeaveTogether)
+
 	mux.HandleFunc("GET /api/channels", s.listChannels)
 	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
 	mux.HandleFunc("GET /api/channels/{id}/live", s.channelLive)
@@ -634,6 +646,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/together/{id}", s.pollTogether)
 	mux.HandleFunc("PUT /api/together/{id}", s.reportTogether)
 	mux.HandleFunc("DELETE /api/together/{id}", s.leaveTogether)
+	// The host answering somebody from a paired server who asked to join.
+	mux.HandleFunc("GET /api/together/requests", s.listTogetherRequests)
+	mux.HandleFunc("POST /api/together/requests/{id}/accept", s.acceptTogetherRequest)
+	mux.HandleFunc("POST /api/together/requests/{id}/decline", s.declineTogetherRequest)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	// Admin-only because it returns paths, which every other item response

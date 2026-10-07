@@ -495,7 +495,7 @@ func (s *Server) recordWatching(userID string, it *store.Item) {
 		s.presence.Stopped(userID)
 		return
 	}
-	s.presence.Watching(userID, title)
+	s.presence.WatchingHere(userID, title)
 }
 
 func presenceTitle(it *store.Item) string {

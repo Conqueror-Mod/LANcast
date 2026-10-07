@@ -231,3 +231,30 @@ func TestConcurrentUseIsSafe(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// Where the film lives is kept, because a room can only be built around a film
+// on this server, and it is cleared with the title so a stale "here" cannot
+// outlive the film it described.
+func TestHereFollowsTheTitle(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	tr := newAt(func() time.Time { return now })
+
+	tr.WatchingHere("u_c", "Blade Runner")
+	if st, _ := tr.Snapshot("u_c"); !st.Here {
+		t.Error("a film on this server is not marked here")
+	}
+	tr.Watching("u_c", "A Friend's Film")
+	if st, _ := tr.Snapshot("u_c"); st.Here || st.Watching != "A Friend's Film" {
+		t.Errorf("a friend's film reads %+v, want not here", st)
+	}
+	tr.WatchingHere("u_c", "Blade Runner")
+	tr.Stopped("u_c")
+	if st, _ := tr.Snapshot("u_c"); st.Here {
+		t.Error("here survived Stopped")
+	}
+	tr.WatchingHere("u_c", "Blade Runner")
+	now = now.Add(watchingTimeout + time.Second)
+	if st, _ := tr.Snapshot("u_c"); st.Here {
+		t.Error("here survived the watching sweep")
+	}
+}

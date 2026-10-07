@@ -215,7 +215,8 @@ func (s *Server) writeSharedStream(w http.ResponseWriter, r *http.Request, peerF
 		return
 	}
 
-	allowed, err := s.st.MayPlay(r.Context(), store.Friend(peerFP), itemID)
+	// The same decision every playback route makes, room membership included.
+	allowed, err := s.peerMayPlay(r, peerFP, itemID)
 	if err != nil || !allowed {
 		writeError(w, http.StatusNotFound, "not_found", "no such item")
 		return
