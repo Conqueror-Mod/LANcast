@@ -203,10 +203,12 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			continue
 		}
 		var cands []Candidate
+		var peers []int
 		for _, p := range IntroPeers(n, i, PeersPerEpisode) {
 			if !prints[p].ok {
 				continue
 			}
+			peers = append(peers, p)
 			m := BestCommonRunBridging(prints[i].phases, prints[p].single, IntroTolerance, IntroGapFrames)
 			if m.Frames == 0 {
 				// A comparison that found nothing is still a comparison, and
@@ -231,6 +233,10 @@ func (w *Worker) examineSeason(ctx context.Context, st IntroStore, se store.Seas
 			in = w.introAfter(prints[i].phases, func(p int) ([]uint32, bool) {
 				return prints[p].single, prints[p].ok
 			}, n, i, in.EndSec)
+		} else if !in.Found {
+			in = introPastIdents(prints[i].phases, func(k int) []uint32 {
+				return prints[peers[k]].single
+			}, cands)
 		}
 
 		/*
@@ -343,6 +349,58 @@ func (w *Worker) introAfter(phases [][]uint32, peer func(int) ([]uint32, bool), 
 		})
 	}
 	in := IntroFrom(cands)
+	if in.IsIdent() {
+		return Intro{}
+	}
+	return in
+}
+
+/*
+ * introPastIdents decides again after running each comparison whose best match
+ * was an ident from just past that ident, leaving the others as they were.
+ *
+ * It is for the season where nothing was decided because the ident split the
+ * vote. The League's four-second card sits a minute or two in; of each
+ * episode's four comparisons two or three found it and the rest found the
+ * six-second network ident at 0:00 instead, because it is longer. Too short
+ * for the majority rule and dissenting from the card rule, the ident decided
+ * nothing, so IsIdent never fired and nothing looked past it: The League S4
+ * was 6 of 13. Per comparison rather than per decision, because the ident is
+ * not what was decided — it is what stopped anything being decided.
+ *
+ * peer(k) is the fingerprint behind cands[k]. An ident decided here is
+ * refused, as introAfter refuses one.
+ */
+func introPastIdents(phases [][]uint32, peer func(k int) []uint32, cands []Candidate) Intro {
+	again := make([]Candidate, len(cands))
+	retried := false
+	for k, c := range cands {
+		again[k] = c
+		if c.Len() <= 0 || c.StartSec >= IntroIdentStartSeconds || c.Len() >= IntroIdentSeconds {
+			continue
+		}
+		cut := int(c.EndSec/Seconds(1)) + 1
+		trimmed := make([][]uint32, 0, len(phases))
+		for _, ph := range phases {
+			if cut >= len(ph) {
+				trimmed = nil
+				break
+			}
+			trimmed = append(trimmed, ph[cut:])
+		}
+		if trimmed == nil {
+			continue
+		}
+		retried = true
+		again[k] = Candidate{}
+		if m := BestCommonRunBridging(trimmed, peer(k), IntroTolerance, IntroGapFrames); m.Frames > 0 {
+			again[k] = Candidate{StartSec: Seconds(m.OffsetA + cut), EndSec: Seconds(m.OffsetA + cut + m.Frames)}
+		}
+	}
+	if !retried {
+		return Intro{}
+	}
+	in := IntroFrom(again)
 	if in.IsIdent() {
 		return Intro{}
 	}
