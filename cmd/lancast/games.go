@@ -90,8 +90,11 @@ func gamesBindings(dir string) map[string]any {
 					"install_path": g.InstallPath,
 					"has_poster":   g.PosterPath != "",
 					"has_header":   g.HeaderPath != "",
-					"hidden":       prefs.IsHidden(g.ID),
-					"favourite":    prefs.IsFavourite(g.ID),
+					// The game's own picture from its install folder, for the
+					// tiles no launcher cached a poster for (games.IconPNG).
+					"has_icon":  g.IconSource != "",
+					"hidden":    prefs.IsHidden(g.ID),
+					"favourite": prefs.IsFavourite(g.ID),
 					// Empty means nobody has been asked which display this one
 					// should open on, which is what raises the picker. A game
 					// answered with "wherever it opens" carries the default
@@ -132,6 +135,25 @@ func gamesBindings(dir string) map[string]any {
 				path = g.PosterPath
 			case "header":
 				path = g.HeaderPath
+			case "icon":
+				/*
+				 * Read from the install folder and handed over as PNG, whatever
+				 * it was on disk: an .ico, a logo, or an executable's icon. The
+				 * source is the rescan's and checked to sit inside the game's
+				 * folder (IconTarget) before anything opens it.
+				 */
+				src, err := games.IconTarget(g)
+				if err != nil {
+					return map[string]any{"ok": true, "uri": ""}
+				}
+				raw, err := games.IconPNG(src)
+				if err != nil || len(raw) > maxArtBytes {
+					return map[string]any{"ok": true, "uri": ""}
+				}
+				return map[string]any{
+					"ok":  true,
+					"uri": "data:image/png;base64," + base64.StdEncoding.EncodeToString(raw),
+				}
 			default:
 				return map[string]any{"ok": false, "error": "unknown image"}
 			}

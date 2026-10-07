@@ -72,6 +72,12 @@ func ScanGOG(installs []GOGInstall) Result {
 		if task := gogPrimaryTask(info); task != "" {
 			g.Executable = filepath.Join(in.Path, filepath.FromSlash(task))
 		}
+		// GOG ships the game's icon beside it; the executable's is the
+		// fallback, and usually the same picture.
+		g.IconSource = g.Executable
+		if ico := filepath.Join(in.Path, "goggame-"+in.GameID+".ico"); fileExists(ico) {
+			g.IconSource = ico
+		}
 		out.Games = append(out.Games, g)
 	}
 	return out
@@ -116,6 +122,11 @@ func GalaxyArgs(id, installPath string) ([]string, error) {
 		return nil, fmt.Errorf("not a usable GOG install path: %q", installPath)
 	}
 	return []string{"/command=runGame", "/gameId=" + id, `/path="` + installPath + `"`}, nil
+}
+
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
 }
 
 /*

@@ -63,6 +63,16 @@ func EAGames(programs []InstalledProgram) Result {
 			InstallPath: dir,
 			Executable:  iconExecutable(p.DisplayIcon),
 		}
+		/*
+		 * An EA game protected by EA's anti-cheat ships the splash that
+		 * anti-cheat shows, and it is the game's own key art: skate.'s is the
+		 * skate. logo over a screenshot. Many EA executables are packed with
+		 * no resources at all, so their icon is Windows' blank one.
+		 */
+		g.IconSource = g.Executable
+		if splash := filepath.Join(dir, "EAAntiCheat.Splash.png"); fileExists(splash) {
+			g.IconSource = splash
+		}
 		if p.EstimatedSizeKB > 0 {
 			g.SizeBytes = p.EstimatedSizeKB * 1024
 		} else {

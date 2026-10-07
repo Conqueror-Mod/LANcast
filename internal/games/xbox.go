@@ -117,6 +117,8 @@ type xboxGameConfig struct {
 	} `xml:"Identity"`
 	ShellVisuals struct {
 		DefaultDisplayName string `xml:"DefaultDisplayName,attr"`
+		Square480x480Logo  string `xml:"Square480x480Logo,attr"`
+		Square150x150Logo  string `xml:"Square150x150Logo,attr"`
 	} `xml:"ShellVisuals"`
 	Executables []struct {
 		ID string `xml:"Id,attr"`
@@ -223,6 +225,7 @@ func ScanXboxFolders(folders []string) Result {
 				continue
 			}
 			g.SizeBytes = dirSize(dir)
+			g.IconSource = xboxLogo(content, cfg)
 			games = append(games, g)
 		}
 	}
@@ -230,6 +233,40 @@ func ScanXboxFolders(folders []string) Result {
 		return strings.ToLower(games[i].Name) < strings.ToLower(games[j].Name)
 	})
 	return Result{Status: StatusOK, Games: games}
+}
+
+/*
+ * xboxLogo is the package's own square logo: the 480x480 one, else the 150x150,
+ * as MicrosoftGame.config names them. A package may ship scaled variants
+ * instead of the plain name (LargeLogo.scale-200.png); the largest file of
+ * that stem is taken then.
+ */
+func xboxLogo(content string, cfgRaw []byte) string {
+	var cfg xboxGameConfig
+	if xml.Unmarshal(cfgRaw, &cfg) != nil {
+		return ""
+	}
+	for _, name := range []string{cfg.ShellVisuals.Square480x480Logo, cfg.ShellVisuals.Square150x150Logo} {
+		if name == "" {
+			continue
+		}
+		p := filepath.Join(content, filepath.FromSlash(strings.ReplaceAll(name, `\`, "/")))
+		if fileExists(p) {
+			return p
+		}
+		stem := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+		matches, _ := filepath.Glob(filepath.Join(filepath.Dir(p), stem+".scale-*"+filepath.Ext(p)))
+		best, size := "", int64(-1)
+		for _, m := range matches {
+			if st, err := os.Stat(m); err == nil && st.Size() > size {
+				best, size = m, st.Size()
+			}
+		}
+		if best != "" {
+			return best
+		}
+	}
+	return ""
 }
 
 // readCaseless reads dir/name, matching the name without regard to case:

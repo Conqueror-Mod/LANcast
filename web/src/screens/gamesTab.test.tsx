@@ -236,6 +236,34 @@ describe("the games tab", () => {
     expect(tileNames()).toEqual(["Alpha Protocol", "Meridian", "Zephyr Drift"]);
   });
 
+  /*
+   * A game no launcher cached a poster for shows its own picture (an icon, a
+   * logo, a splash) rather than a letter, asked for by kind "icon" and only
+   * when there is no poster to show instead.
+   */
+  it("shows a game's own picture where there is no poster", async () => {
+    stub({
+      status: "ok",
+      games: [
+        game({ id: "gog:42", name: "Has Icon", has_icon: true }),
+        game({ id: "steam:43", name: "Has Neither" }),
+      ],
+    });
+    const art = vi.fn(async (_id: string, kind: string) => ({
+      ok: true,
+      uri: kind === "icon" ? "data:image/png;base64,AAAA" : "",
+    }));
+    (window as unknown as Record<string, unknown>).lancastGameArt = art;
+    await render();
+    const iconImgs = host.querySelectorAll(".games__iconart-img");
+    expect(iconImgs).toHaveLength(1);
+    expect((iconImgs[0] as HTMLImageElement).src).toContain("data:image/png");
+    expect(art).toHaveBeenCalledWith("gog:42", "icon");
+    expect(art).not.toHaveBeenCalledWith("steam:43", "icon");
+    // The game with nothing still gets its letter.
+    expect(host.querySelectorAll(".games__placeholder")).toHaveLength(1);
+  });
+
   it("reorders by last played, with the never-played last", async () => {
     stub({ status: "ok", games: three });
     await render();

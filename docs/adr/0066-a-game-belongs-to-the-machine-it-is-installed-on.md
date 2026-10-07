@@ -361,3 +361,29 @@ Both cases were driven against a real window on the three-screen desk before
 release:
 - maximized on the 4K screen → maximized on the main one;
 - 3000×1800 → inside the main screen's 1920×1080.
+
+## Amendment, 2026-10-06 — a game's own picture, from its own folder
+
+Only Steam caches posters on this disk. Every other launcher's games showed a
+letter. Fetching art would be the phone-home this ADR rules out, but each game
+already carries a picture of its own beside it, and that is shown instead:
+
+- **Xbox:** the package's 480×480 logo, named in `MicrosoftGame.config`, or
+  its largest scaled variant.
+- **GOG:** the `goggame-<id>.ico` it ships, else its play task's icon.
+- **EA:** `EAAntiCheat.Splash.png`, which EA's anti-cheat shows at launch and
+  which is the game's own key art (skate.'s is its logo over a screenshot). It
+  is used because packed EA executables often carry no icon at all; skate.'s
+  has no resource section.
+- **Epic:** the launch executable's icon.
+- **Battle.net:** the icon of the launcher it starts.
+
+**Decoding is pure Go** (`games.IconPNG`):
+- the ICO directory;
+- the PE resource table (`RT_GROUP_ICON` → `RT_ICON`);
+- both forms an icon image takes, PNG or a 32/24-bit bitmap with its mask.
+
+It is handed to the page as PNG. **The source is checked** to sit inside the
+game's install folder before it is read (`IconTarget`). **On the page**, the
+tile and the game page show the picture whole, over a blurred wash of itself,
+so a square icon and a wide splash both fill the space without cropping.

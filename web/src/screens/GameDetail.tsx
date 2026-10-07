@@ -52,6 +52,9 @@ export function GameDetail() {
 
   const game = data?.games?.find((g) => g.id === id);
   const { data: art } = useGameArt(id, "header", !!game?.has_header);
+  // The game's own picture, for a page with no header art: the same rule as
+  // its tile, so the two show the same thing.
+  const { data: icon } = useGameArt(id, "icon", !game?.has_header && !!game?.has_icon);
 
   if (!gamesSupported()) {
     return (
@@ -104,10 +107,17 @@ export function GameDetail() {
         </Link>
       </div>
 
-      {art && (
+      {art ? (
         <div className="game-detail__hero">
           <img src={art} alt="" />
         </div>
+      ) : (
+        icon && (
+          <div className="game-detail__hero game-detail__hero--icon">
+            <img className="games__iconart-wash" src={icon} alt="" />
+            <img className="games__iconart-img" src={icon} alt="" />
+          </div>
+        )
       )}
 
       <h1 className="game-detail__title">{game.name}</h1>

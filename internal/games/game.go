@@ -62,6 +62,12 @@ type Game struct {
 	// Read from the disk and registry on each scan, never from the page, and
 	// checked to be inside InstallPath before it is run (ExecutableTarget).
 	Executable string `json:"-"`
+	// IconSource is where this game's own picture is on this disk, for a game
+	// with no cached poster: an Xbox package's logo, GOG's .ico, the EA
+	// anti-cheat splash an EA game ships, or an executable whose icon is read
+	// (IconPNG). Checked to be inside InstallPath before it is read
+	// (IconTarget), like everything else a path from data reaches.
+	IconSource string `json:"-"`
 }
 
 // Result is one scan: what was found and whether finding it worked.
@@ -79,6 +85,16 @@ type Result struct {
 // ScanRoot, which is a directory away from being testable.
 func Scan() Result {
 	return merge(scanSteam(), scanEpic(), scanBattleNet(), scanXbox(), scanGOG(), scanEA())
+}
+
+// withBattleNetIcons gives each Blizzard game the icon of what starts it.
+func withBattleNetIcons(r Result) Result {
+	for i := range r.Games {
+		if exe, err := BattleNetLaunchTarget(r.Games[i].InstallPath); err == nil {
+			r.Games[i].IconSource = exe
+		}
+	}
+	return r
 }
 
 // scanGOG reads the games GOG's installer registered.
@@ -133,7 +149,7 @@ func scanBattleNet() Result {
 	if len(games) == 0 {
 		return Result{Status: StatusNotInstalled}
 	}
-	return Result{Status: StatusOK, Games: games}
+	return withBattleNetIcons(Result{Status: StatusOK, Games: games})
 }
 
 /*
