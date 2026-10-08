@@ -18,6 +18,8 @@ package certpin
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -85,4 +87,34 @@ func SPKIFromPEM(pemBytes []byte) (string, error) {
 func SPKIFromDER(spki []byte) string {
 	sum := sha256.Sum256(spki)
 	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+/*
+ * TLSConfig verifies a server by its public key and nothing else.
+ *
+ * Skipping the chain and hostname checks is replaced by the pin, not relaxed:
+ * a CA-issued certificate for the right name still fails it. Shared by every
+ * native client path that talks to the server outside the window — libmpv's
+ * relay and the retro player — so there is one copy of the check, compared
+ * through SPKIFromDER like every other pin here.
+ */
+func TLSConfig(pin string) *tls.Config {
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true, // replaced by VerifyPeerCertificate below
+		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+			if len(raw) == 0 {
+				return errors.New("server presented no certificate")
+			}
+			cert, err := x509.ParseCertificate(raw[0])
+			if err != nil {
+				return err
+			}
+			got := SPKIFromDER(cert.RawSubjectPublicKeyInfo)
+			if subtle.ConstantTimeCompare([]byte(got), []byte(pin)) != 1 {
+				return errors.New("server certificate does not match the pinned key")
+			}
+			return nil
+		},
+	}
 }

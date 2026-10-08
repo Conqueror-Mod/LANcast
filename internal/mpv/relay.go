@@ -2,10 +2,6 @@ package mpv
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -16,6 +12,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"lancast/internal/certpin"
 )
 
 /*
@@ -86,7 +84,7 @@ func NewRelay(origin, pin string) (*Relay, error) {
 		if pin == "" {
 			return nil, errors.New("mpv relay: https server with no certificate pin")
 		}
-		tr.TLSClientConfig = pinnedTLS(pin)
+		tr.TLSClientConfig = certpin.TLSConfig(pin)
 	case "http":
 		if pin != "" {
 			return nil, errors.New("mpv relay: a pin was given for a plain-http server")
@@ -110,32 +108,6 @@ func NewRelay(origin, pin string) (*Relay, error) {
 	r.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = r.srv.Serve(ln) }()
 	return r, nil
-}
-
-// pinnedTLS verifies the server by public key and nothing else. Skipping the
-// chain and hostname checks is replaced by the pin, not relaxed: a CA-issued
-// certificate for the right name still fails it. The same reasoning as
-// internal/certpin and peer.ClientConfig.
-func pinnedTLS(pin string) *tls.Config {
-	return &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: true, // replaced by VerifyPeerCertificate below
-		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
-			if len(raw) == 0 {
-				return errors.New("server presented no certificate")
-			}
-			cert, err := x509.ParseCertificate(raw[0])
-			if err != nil {
-				return err
-			}
-			sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
-			got := base64.StdEncoding.EncodeToString(sum[:])
-			if subtle.ConstantTimeCompare([]byte(got), []byte(pin)) != 1 {
-				return errors.New("server certificate does not match the pinned key")
-			}
-			return nil
-		},
-	}
 }
 
 // Register makes an item's stream available to mpv and returns the loopback
