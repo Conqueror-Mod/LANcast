@@ -1,10 +1,12 @@
 # Retro games — build plan
 
-**Status: back burner — planned, not started, no work scheduled.** The direction and stage order were approved on
-2026-09-30. The decisions are in
-[ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), which stays
-*proposed* until stage 1 begins and its open questions are answered. This
-document is the work breakdown only. Where the two disagree, the ADR wins.
+**Status: stage 1 in progress (2026-10-07).** The direction and stage order
+were approved on 2026-09-30. The decisions are in
+[ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), now accepted
+with its open questions answered: desktop only, XInput, no RetroArch stop-gap,
+PS1 identified in stage 1 and playable after N64, DATs installed from Settings,
+and one library filtered by console. This document is the work breakdown only.
+Where the two disagree, the ADR wins.
 
 Some of this was written from memory and not checked: core licences, how the
 buildbot pins versions, and the header rules in the DAT files. Each of those is
@@ -17,7 +19,6 @@ marked **verify**. Check them against the source before relying on them.
 | 1 | ROM library: scan, identify, art, browse | 2 weeks | 1–2 releases |
 | 2 | Desktop player for GBA/NES/SNES/Genesis, with saves to the server | 4–5 weeks | 2 releases |
 | 3 | N64 with a GL hardware context | 3–4 weeks | 1–2 releases |
-| *stop-gap* | Launch an installed RetroArch | 2–3 days | 1 session |
 | *later* | Browser player | 1–2 weeks | 1 release |
 
 The total through stage 3 is about **two to three months** on the traditional
@@ -188,13 +189,10 @@ controller, analog stick included.
 
 ---
 
-## Stop-gap (optional) — launch RetroArch
+## Stop-gap — dropped
 
-If RetroArch is installed, a ROM's Play button starts
-`retroarch.exe -L <core> <rom>`. The launch reuses the mechanics in
-`internal/games`, and the ROM path is re-verified against its library root
-before launch. This only works where the client machine can see the ROM path,
-such as a local drive or a mapped share. It is removed when stage 3 ships.
+Launching an installed RetroArch was declined on 2026-10-07 (ADR 0073,
+*Answers*). It kept the maintenance burden this feature exists to remove.
 
 ## Later — browser player
 

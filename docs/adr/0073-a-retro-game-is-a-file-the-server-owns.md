@@ -1,8 +1,7 @@
 # ADR 0073 — A retro game is a file the server owns
 
-Date: 2026-09-30 · Status: **proposed** — the direction and the stages were
-approved on 2026-09-30. The decisions below are proposals until someone starts
-stage 1 and confirms them. The build plan is
+Date: 2026-09-30 · Status: **accepted** 2026-10-07, when stage 1 began and the
+open questions were answered (see *Answers* below). The build plan is
 [retro-games-plan.md](../retro-games-plan.md).
 
 Extends [ADR 0002](0002-one-wide-media-item-table.md), because a ROM is a new
@@ -229,6 +228,33 @@ starts:
 4. **Does save sync across machines matter,** or is it one PC? The server-side
    saves are designed either way, but priority follows the answer.
 5. **Is the RetroArch stop-gap wanted at all?**
+
+### Answers (2026-10-07)
+
+1. **The desktop app only.** Browsers and TVs see the library and a "plays in
+   the LANcast desktop app" state. The browser player stays *later*.
+2. **SNES, NES, GB, GBC, GBA, Genesis and Master System, plus PS1.** Stage 2
+   keeps its order (GBA first, to prove the host) because every one of those
+   is a framebuffer system. **PS1 is in the library from stage 1 and plays
+   after N64.** A PS1 game is a disc rather than a file: a `.cue` with its
+   `.bin` tracks, a `.chd`, or an `.m3u` listing several discs. The row is the
+   game's entry file, and the files it refers to are not rows of their own.
+   The BIOS is a file the user provides. This amends *What LANcast will not
+   do*: PS1 is no longer out of scope, and the BIOS is still never supplied.
+3. **Xbox-style XInput pads.** There is no mapping screen in stage 2 or 3.
+4. **Mostly one PC.** Saves still live on the server as designed. Conflicts
+   stay simple: the newer save wins and the previous copy is kept. Two-machine
+   sync is not a gate for stage 2.
+5. **No stop-gap.** The RetroArch launch is dropped, not deferred.
+
+Two decisions from the build plan were confirmed at the same time:
+
+- **The DAT files are installed from Settings**, the way ffmpeg is (ADR 0043):
+  from a pinned commit, checked against a SHA-256, and only when the user
+  presses the button. A scan never makes a network call. Without the DATs, a
+  ROM keeps the title its filename gives it.
+- **One retro library, filtered by console.** One library holds every system.
+  The grid gets a console filter, and libraries are not split per console.
 
 ## Consequences
 
