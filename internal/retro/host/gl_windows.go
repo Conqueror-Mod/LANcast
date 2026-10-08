@@ -47,7 +47,6 @@ var (
 	procGlTexParameteri  = opengl32.NewProc("glTexParameteri")
 	procGlViewport       = opengl32.NewProc("glViewport")
 	procGlReadPixels     = opengl32.NewProc("glReadPixels")
-	procGlGetError       = opengl32.NewProc("glGetError")
 
 	procChoosePixelFormat = gdi32.NewProc("ChoosePixelFormat")
 	procSetPixelFormat    = gdi32.NewProc("SetPixelFormat")
@@ -358,10 +357,4 @@ func (g *WGL) Close() {
 	}
 	g.dc, g.rc, g.fbo, g.tex, g.rb = 0, 0, 0, 0, 0
 	g.f = glFuncs{}
-}
-
-// glError reports the GL error flag, for diagnostics.
-func glError() uint32 {
-	r, _, _ := procGlGetError.Call()
-	return uint32(r)
 }

@@ -407,10 +407,15 @@ context still exists, then `retro_unload_game`, then the context goes.
 asks for a 3.3 core profile as GLideN64 does, resolves its GL through the
 host's `get_proc_address`, and clears the host's framebuffer to green, which
 the test reads back. Removing the framebuffer hand-off fails the test.
-**Not proven:** a real N64 core's renderer, a second GPU, a window moved
-between monitors with a context live, and libmpv's D3D11 path drawing into a
-window that has had an OpenGL pixel format set. The last is the one most worth
-checking first, because the video window is shared.
+**libmpv still plays after a game.** The video window is shared, and a
+window's pixel format can be set only once, so every film after an N64 game is
+drawn by libmpv's D3D11 path into a window with an OpenGL pixel format. A test
+plays a clip through LANcast's own libmpv build into such a window, and into a
+clean one as the control. Both play. It runs only when `LANCAST_LIBMPV` names a
+DLL. It can show that nothing broke in this configuration on this GPU; it
+cannot show what another driver does. **Not proven:** a real N64 core's
+renderer, a second GPU, and a window moved between monitors with a context
+live.
 
 ## Consequences
 
