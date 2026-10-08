@@ -643,6 +643,12 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 			}
 			return nil
 		}
+		// A PlayStation disc's .bin tracks belong to the .cue that lists them
+		// (ADR 0073). Not marked seen, so a track an earlier build imported as
+		// a game of its own is marked missing rather than kept as a tile.
+		if lib.Kind == media.LibraryRetro && media.IsDiscTrack(root.Path, path) {
+			return nil
+		}
 		if ignored[path] {
 			// On the ignore list — present on disk, deliberately kept out of the
 			// library. Not counted as seen, so it is never re-added.
@@ -825,6 +831,14 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 			s.log.Info("galleries followed their photographs",
 				"library", lib.ID, "now_missing", marked, "restored", restored)
 		}
+		return s.st.TouchLibraryScanned(ctx, lib.ID)
+	}
+
+	// A retro library has no hierarchy to reconcile (ADR 0073): every ROM is
+	// a top-level game, and the video passes below would re-parse its name
+	// looking for seasons and parts. Identification is the identify worker's,
+	// after the scan, because it reads every file.
+	if lib.Kind == media.LibraryRetro {
 		return s.st.TouchLibraryScanned(ctx, lib.ID)
 	}
 
@@ -1168,6 +1182,8 @@ func reinterpreted(stored string, parsed media.Kind) bool {
 		return stored != "track"
 	case media.KindPhoto:
 		return stored != "photo"
+	case media.KindROM:
+		return stored != "rom"
 	default:
 		return stored != "other"
 	}
@@ -1272,6 +1288,12 @@ func (s *Scanner) upsert(ctx context.Context, lib store.Library, root store.Libr
 	if nfo.Edition != "" {
 		ed := nfo.Edition
 		f.Edition = &ed
+	}
+	// A ROM's console, when its name places it (ADR 0073). Nil otherwise; the
+	// identify worker may still place a zip by the file inside it.
+	if nfo.Platform != "" {
+		pl := nfo.Platform
+		f.Platform = &pl
 	}
 	if nfo.Series != "" {
 		sr := nfo.Series
