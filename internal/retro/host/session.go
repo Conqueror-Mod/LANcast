@@ -251,15 +251,30 @@ func (s *Session) Run(ctx context.Context) (err error) {
 		}
 		core.Run()
 		s.maybeFlushSRAM(false)
-		if s.cfg.Audio == nil {
-			// No sound to pace by: the frame clock instead, catching up
-			// rather than drifting when a frame runs long.
-			next = next.Add(frame)
-			if d := time.Until(next); d > 0 {
-				time.Sleep(d)
-			} else if d < -time.Second {
-				next = time.Now()
-			}
+		/*
+		 * The frame clock, always — not only when there is no sound.
+		 *
+		 * With sound, the audio sink blocks while its buffers are full and
+		 * that sets the pace. But it only blocks if the core feeds it a
+		 * frame's worth of samples per frame, and a core that emits less (or
+		 * a stretch of none) would otherwise run as fast as the CPU allows:
+		 * the binding's test core did, at 3,458 frames in 350ms. So the clock
+		 * runs too, two per cent fast when sound is playing so the sound
+		 * card stays the one that decides whenever it is being fed — two
+		 * clocks at the same rate drift, and drift against audio is a
+		 * crackle.
+		 */
+		period := frame
+		if s.cfg.Audio != nil {
+			period = time.Duration(float64(frame) / 1.02)
+		}
+		next = next.Add(period)
+		if d := time.Until(next); d > 0 {
+			time.Sleep(d)
+		} else if d < -time.Second {
+			// A long stall (a breakpoint, a sleeping laptop) is not caught
+			// up by running hundreds of frames at once.
+			next = time.Now()
 		}
 	}
 	return nil
