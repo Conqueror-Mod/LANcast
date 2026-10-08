@@ -8,8 +8,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"lancast/internal/media"
 
 	_ "modernc.org/sqlite"
 )
@@ -388,6 +391,15 @@ type Item struct {
 	// Platform is a ROM's console (ADR 0073): "n64", "snes", … Nil for every
 	// other kind, and for a ROM no extension or folder could place.
 	Platform *string `json:"platform,omitempty"`
+	/*
+	 * Region is a ROM's release region ("USA", "USA, Europe"), or empty.
+	 *
+	 * Not a column: it is read from the DAT name a match recorded as
+	 * external_id, or from the filename before there is one, by the same
+	 * media.ROMRegion either way — so the guess stays in internal/media and a
+	 * client never parses a name for itself.
+	 */
+	Region string `json:"region,omitempty"`
 
 	Container  *string `json:"container"`
 	SizeBytes  *int64  `json:"size_bytes"`
@@ -1113,6 +1125,14 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 	it.Missing = missing != 0
 	it.SensitiveOwn = own.Valid && own.Int64 != 0
 	it.Sensitive = effective != 0
+	if it.Kind == "rom" {
+		name := filepath.Base(it.Path)
+		// Only a DAT name is a No-Intro name; another provider's id is not.
+		if it.Provider != nil && *it.Provider == "libretro-db" && it.ExternalID != nil {
+			name = *it.ExternalID
+		}
+		it.Region = media.ROMRegion(name)
+	}
 	return &it, nil
 }
 

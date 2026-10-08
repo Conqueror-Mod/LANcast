@@ -4828,7 +4828,9 @@ N64 dumps in any of their three byte orders, headered and headerless NES and
 SNES dumps, de-interleaved Genesis `.smd` — and looked up in libretro's DAT
 files, which name it, give its year and genre, and set `provider`
 (`libretro-db`), `external_id` (the DAT's full name, region tags included) and
-`match_state`. A PlayStation disc is looked up by the serial on the disc. A
+`match_state`. `region` is the release region the name carries (`USA`,
+`USA, Europe`) — the DAT name once matched, the filename before. A
+PlayStation disc is looked up by the serial on the disc. A
 renamed file is the same game. Locked fields are never written, a locked match
 is never re-scored, and a ROM no DAT lists is `unmatched` and keeps the title
 its filename gave it.

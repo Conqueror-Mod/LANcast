@@ -172,3 +172,26 @@ func TestFacetsListPlatformsPresent(t *testing.T) {
 		t.Errorf("platforms = %v, want [n64]", f.Platforms)
 	}
 }
+
+// Region is read from the DAT name a match recorded, and from the filename
+// before there is one.
+func TestROMRegion(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	lib := romLibrary(t, s)
+	id := putROM(t, s, lib, "Sonic the Hedgehog (USA, Europe).md", "genesis", 1)
+	it, err := s.GetItem(ctx, id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Region != "USA, Europe" {
+		t.Errorf("region from filename = %q", it.Region)
+	}
+	if err := s.SetMatch(ctx, id, "libretro-db", "Sonic the Hedgehog (Japan)", "matched", 1); err != nil {
+		t.Fatal(err)
+	}
+	it, _ = s.GetItem(ctx, id, "")
+	if it.Region != "Japan" {
+		t.Errorf("region from DAT name = %q", it.Region)
+	}
+}

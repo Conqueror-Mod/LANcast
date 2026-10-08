@@ -5030,6 +5030,8 @@ export interface components {
             edition?: string | null;
             /** @description A ROM's console (ADR 0073): `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis` or `ps1`. Absent on every other kind, and on a ROM no extension, folder or hash could place. **An open set**, like `kind`: more consoles arrive without a major version. */
             platform?: string | null;
+            /** @description A ROM's release region as its name gives it (`USA`, `USA, Europe`), read from the DAT name once matched and from the filename before. Absent when the name carries none, and on every other kind. */
+            region?: string;
             /** @description The file's container, e.g. `mkv`. */
             container: string | null;
             /** Format: int64 */
