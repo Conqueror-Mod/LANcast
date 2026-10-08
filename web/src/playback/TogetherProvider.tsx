@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useCurrentUser } from "@/api/hooks";
 import { usePlayback } from "./PlaybackProvider";
 import {
@@ -49,10 +49,27 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
    * would seek and pause whatever they had moved on to, to the room's position
    * in a different film.
    */
+  /*
+   * Moving *away*, not merely being elsewhere. Joining from another screen
+   * opens the room's film and joins at once, and the two land in either order;
+   * judged by mismatch alone, the person would be put out of the room for the
+   * moment their player had not yet caught up. So the rule waits until this
+   * window has been on the room's film, and fires when it leaves it.
+   */
   const sessionItem = t.session?.item_id ?? 0;
+  const sessionID = t.session?.id ?? "";
   const { leave } = t;
+  const onRoomFilm = useRef(false);
   useEffect(() => {
-    if (sessionItem > 0 && pb.itemID !== sessionItem) void leave();
+    onRoomFilm.current = false;
+  }, [sessionID]);
+  useEffect(() => {
+    if (sessionItem <= 0) return;
+    if (pb.itemID === sessionItem) {
+      onRoomFilm.current = true;
+      return;
+    }
+    if (onRoomFilm.current) void leave();
   }, [sessionItem, pb.itemID, leave]);
 
   /*
@@ -80,6 +97,16 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
   }, [t.session, t.isHost]);
 
   return <TogetherContext.Provider value={t}>{children}</TogetherContext.Provider>;
+}
+
+/*
+ * The room, or null outside a TogetherProvider. For a component that only
+ * *offers* rooms, like the open-sessions list on People, and is reasonable to
+ * render where there is no player: a screen rendered on its own in a test,
+ * for one. Anything that acts on the room uses useTogetherRoom.
+ */
+export function useTogetherRoomIfAny(): TogetherControls | null {
+  return useContext(TogetherContext);
 }
 
 /** The room this window is in. Must be used inside TogetherProvider. */

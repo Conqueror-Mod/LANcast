@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PeerShares } from "@/components/PeerShares";
 import { AskToJoin } from "@/components/AskToJoin";
+import { OpenSessions } from "@/components/OpenSessions";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
@@ -51,6 +52,10 @@ export function People() {
         <h1 className="browse__title">People</h1>
         <span className="browse__count">{people.length || ""}</span>
       </div>
+
+      {/* Somebody here watching something you could join. Above the people,
+          because it is the one thing on this page that is happening now. */}
+      <OpenSessions heading="Watching together now" />
 
       {isLoading && <p className="browse__message">Loading…</p>}
 

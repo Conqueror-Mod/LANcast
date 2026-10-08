@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, ApiFailure } from "@/api/client";
 import type { TogetherSession } from "@/api/types";
 import { peerRoomURL } from "./peerSource";
@@ -101,6 +102,17 @@ export interface TogetherControls {
  * is how the room finds out somebody left.
  */
 export function useTogether(userID: string | undefined): TogetherControls {
+  const qc = useQueryClient();
+  /*
+   * Starting, joining and leaving all change what the open-sessions list
+   * holds, and somebody may be looking at it: the panel and the People page
+   * both show it. So each one invalidates it, rather than leaving a room that
+   * ended, or one you are already in, on screen until the next poll.
+   */
+  const changed = useCallback(
+    () => void qc.invalidateQueries({ queryKey: ["together-sessions"] }),
+    [qc],
+  );
   const [session, setSessionState] = useState<TogetherSession | null>(null);
   const [receivedAt, setReceivedAt] = useState(0);
   // Every answer is stamped as it arrives: the server's age_ms is measured to
@@ -130,13 +142,14 @@ export function useTogether(userID: string | undefined): TogetherControls {
         idRef.current = created.id;
         setSession(created);
         setError(null);
+        changed();
         return created;
       } catch (e) {
         setError((e as Error).message);
         return null;
       }
     },
-    [setSession],
+    [setSession, changed],
   );
 
   const join = useCallback(async (id: string) => {
@@ -148,12 +161,13 @@ export function useTogether(userID: string | undefined): TogetherControls {
       idRef.current = joined.id;
       setSession(joined);
       setError(null);
+      changed();
       return joined;
     } catch (e) {
       setError((e as Error).message);
       return null;
     }
-  }, [setSession]);
+  }, [setSession, changed]);
 
   const leave = useCallback(async () => {
     const id = idRef.current;
@@ -162,7 +176,8 @@ export function useTogether(userID: string | undefined): TogetherControls {
     // Best effort: the room drops a silent member within ninety seconds
     // anyway, so a failed leave is untidy rather than broken.
     await apiSend(`/api/together/${id}`, "DELETE").catch(() => {});
-  }, [stop]);
+    changed();
+  }, [stop, changed]);
 
   useEffect(() => {
     if (!session) return;
@@ -332,4 +347,22 @@ export function usePeerRoom(fingerprint: string, roomID: string | null): PeerRoo
   }, [fingerprint, roomID]);
 
   return state;
+}
+
+/*
+ * useOpenSessions lists the rooms on this server, for joining one.
+ *
+ * The join half of Watch Together had a hook and an endpoint from the start
+ * and nothing that called them: the panel told people to join "from the list
+ * of open sessions", and there was no list. Polled while somebody is looking,
+ * because a room opens and ends without anybody here doing anything.
+ */
+export function useOpenSessions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["together-sessions"],
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    queryFn: ({ signal }) =>
+      apiGet<{ sessions: TogetherSession[] }>("/api/together", signal),
+  });
 }

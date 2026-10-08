@@ -212,12 +212,16 @@ describe("a host's room after the film changes", () => {
 });
 
 /*
- * A follower who moves on to another film leaves the room, and their new film
- * is never steered to the room's position in a different one. The room used
- * to die with the panel; now it outlives every screen, so this has to be said.
+ * A follower's film and the room's film.
+ *
+ * Joining from People opens the room's film and joins at once, and the two
+ * land in either order, so a member still arriving is neither steered nor put
+ * out. Once they have been on the room's film, moving away from it is leaving:
+ * the room outlives every screen now, and their next film must never be seeked
+ * or paused to the room's position in a different one.
  */
-describe("a follower whose film is not the room's", () => {
-  it("leaves, and is never seeked or paused to the room", async () => {
+describe("a follower and the room's film", () => {
+  it("waits while they arrive, follows on the film, and leaves when they move on", async () => {
     steered.length = 0;
     let joinNow: ((id: string) => Promise<unknown>) | null = null;
     function Grab() {
@@ -227,7 +231,7 @@ describe("a follower whose film is not the room's", () => {
     mockServer();
     const base = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-      if (url === "/api/together/r9/join" || url === "/api/together/r9") {
+      if (url.startsWith("/api/together/r9")) {
         calls.push({ method: init?.method ?? "GET", url });
         return new Response(
           JSON.stringify({ ...session(), id: "r9", item_id: 7, host_id: "u_other", position_ms: 900_000 }),
@@ -238,22 +242,40 @@ describe("a follower whose film is not the room's", () => {
     });
     pending = [];
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    await act(async () => {
-      root.render(
-        <QueryClientProvider client={qc}>
-          <TogetherProvider>
-            <Grab />
-          </TogetherProvider>
-        </QueryClientProvider>,
-      );
-    });
+    const draw = () =>
+      act(async () => {
+        root.render(
+          <QueryClientProvider client={qc}>
+            <TogetherProvider>
+              <Grab />
+            </TogetherProvider>
+          </QueryClientProvider>,
+        );
+      });
+    const left = () => calls.some((c) => c.method === "DELETE" && c.url === "/api/together/r9");
+
+    // Still on another film when the join lands: not steered, not put out.
+    await draw();
     await flush();
     await act(async () => {
       await joinNow!("r9");
     });
     await flush();
-
     expect(steered).toEqual([]);
-    expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/together/r9")).toBe(true);
+    expect(left()).toBe(false);
+
+    // On the room's film: followed.
+    player.itemID = 7;
+    await draw();
+    await flush();
+    expect(left()).toBe(false);
+
+    // Moved on: out of the room, and the new film is left alone.
+    steered.length = 0;
+    player.itemID = 5;
+    await draw();
+    await flush();
+    expect(left()).toBe(true);
+    expect(steered).toEqual([]);
   });
 });
