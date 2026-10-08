@@ -120,6 +120,17 @@
   aspect-ratio: 1 / 1;
 }
 
+/* A game's box at its own shape (ADR 0073): wide for an American SNES or N64
+   box, tall for a Mega Drive one. There is no grid to keep in line here, so
+   nothing is cropped; the height is capped so a tall box does not push the
+   title down the page. */
+.detail__poster--box {
+  aspect-ratio: auto;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+
 .detail__info {
   flex: 1;
   min-width: 0;

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useGameSaves, useItem } from "@/api/hooks";
 import { useBackHandler, useFocusable } from "@/focus/FocusController";
 import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
+import { usePlayback } from "@/playback/PlaybackProvider";
 import {
   STATE_SLOTS,
   curatedOptions,
@@ -46,6 +47,7 @@ export function RetroPlay() {
   const qc = useQueryClient();
   const { data: item } = useItem(itemID);
   const { data: saves } = useGameSaves(itemID);
+  const pb = usePlayback();
 
   const [loading, setLoading] = useState<{ done: number; total: number } | null>({ done: 0, total: 0 });
   const [running, setRunning] = useState(false);
@@ -231,6 +233,20 @@ export function RetroPlay() {
             </div>
           )}
           <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
+          {pb.itemID !== 0 && (
+            /*
+             * Whatever is playing in the corner (ADR 0076), from the menu the
+             * pad can reach — the card's own buttons answer to the mouse,
+             * and somebody holding a controller should not need one.
+             */
+            <div className="retro-play__group" aria-label="In the corner">
+              <MenuButton
+                label={`${pb.playing ? "Pause" : "Play"} ${pb.item?.title ?? (pb.isAudio ? "the music" : "the film")}`}
+                onSelect={pb.togglePlay}
+              />
+              <MenuButton label={pb.isAudio ? "Stop the music" : "Stop the film"} onSelect={pb.stop} />
+            </div>
+          )}
           <MenuButton
             label="Restart"
             onSelect={() => {

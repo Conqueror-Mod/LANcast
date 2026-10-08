@@ -47,6 +47,28 @@
   display: block;
 }
 
+/* A game's box, whole and centred in a square tile (PosterTile.tsx). The wash
+   behind it is the same image blown up and blurred, so the space a wide or tall
+   box leaves is its own colours rather than a frame of grey. */
+.poster-tile__art img.poster-tile__box {
+  position: relative;
+  object-fit: contain;
+  object-position: center;
+  /* Clear of the tile's edge, so a box whose art runs to its border still
+     reads as a box sitting in the tile. */
+  padding: 6%;
+  box-sizing: border-box;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+.poster-tile__art img.poster-tile__box-wash {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  transform: scale(1.25);
+  filter: blur(18px) brightness(0.55) saturate(1.2);
+  pointer-events: none;
+}
+
 /*
  * An artless tile is not a rare edge case — a music library is mostly this, and
  * a wall of empty rectangles is what makes a library look broken rather than

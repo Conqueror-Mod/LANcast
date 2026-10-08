@@ -719,7 +719,8 @@ export function Detail() {
             poster && (
               <img
                 className={
-                  "detail__poster" + (isMusic ? " detail__poster--square" : "")
+                  "detail__poster" +
+                  (isMusic ? " detail__poster--square" : isROM(item) ? " detail__poster--box" : "")
                 }
                 src={poster}
                 alt=""
