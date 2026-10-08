@@ -316,6 +316,35 @@ func (w *Worker) identify(ctx context.Context, ix *retrodb.Index, rom store.Item
 	return outcomeMatched, w.apply(ctx, rom, platform, g)
 }
 
+// ErrNotInDAT is ApplyChosen's answer for a name the installed DATs do not
+// list on the ROM's console, or when no DATs are installed.
+var ErrNotInDAT = errors.New("that game is not in the installed ROM database for this console")
+
+/*
+ * ApplyChosen is Fix match for a ROM: a person picked a DAT entry by name.
+ *
+ * Written as an automatic match is — through apply, so a locked field is
+ * still left alone and the art is fetched the same way — and then locked, as
+ * every confirmed match is: a rescan reconciles files and never re-scores a
+ * choice somebody made. Only the ROM's own console is searched, so a match
+ * cannot put a game on a console its file is not for.
+ */
+func (w *Worker) ApplyChosen(ctx context.Context, rom store.Item, name string) error {
+	platform := ""
+	if rom.Platform != nil {
+		platform = *rom.Platform
+	}
+	g := w.Index().ByName(platform, name)
+	if g == nil {
+		return ErrNotInDAT
+	}
+	if err := w.apply(ctx, rom, platform, g); err != nil {
+		return err
+	}
+	locked := meta.StateLocked
+	return w.st.UpdateItemMetadata(ctx, rom.ID, store.ItemMetadata{MatchState: &locked})
+}
+
 // apply writes a match, field by field, leaving every locked field alone.
 func (w *Worker) apply(ctx context.Context, rom store.Item, platform string, g *retrodb.Game) error {
 	locked, err := w.st.LockedFields(ctx, rom.ID)

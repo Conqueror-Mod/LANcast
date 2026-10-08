@@ -2697,6 +2697,8 @@ export interface paths {
          *     **Omit `q`** to search by what the file is *named* — the identity re-derived from the filename — not by the current stored title, which after a wrong match *is* the wrong film; scoring against it would make the search circle the wrong identity. A title the user locked by hand is honoured instead.
          *
          *     **The search spans both film and television**, regardless of the item's own kind. A TV miniseries scanned into a movie library can only be corrected if the search can reach the provider's TV data; a movie-scoped search returns only the wrong, same-named film.
+         *
+         *     **A game (`kind` `rom`) is searched in the installed ROM database instead** (ADR 0073), never the film and TV providers: on its own console, by the words of `q` (all of them must be in the name), or of the filename's title when `q` is omitted. Each candidate's `ExternalID` and `Title` are the DAT name whole — region and revision tags included, since they are what tells one line from the next — its `Kind` is `rom`, `Overview` is the genre, and `PosterURL` is the box art's address. `Breakdown.title` is the only measure.
          */
         get: operations["searchMatchCandidates"];
         put?: never;
@@ -2726,6 +2728,8 @@ export interface paths {
          *     **Applying is synchronous and deliberately does not go through the background pass**, which skips locked items and re-searches — that would re-pick the rejected candidate.
          *
          *     Audited as `item.match`.
+         *
+         *     **For a game (`kind` `rom`),** `provider` must be `libretro-db` and `external_id` a DAT name on the game's own console, as `/candidates` returned it. It is applied as an automatic match is — locked fields honoured, box art fetched — and then locked. A name the installed database does not list there is `400` `not_found`.
          */
         post: operations["applyMatch"];
         delete?: never;
@@ -6611,7 +6615,7 @@ export interface components {
         MatchCandidate: {
             Provider: string;
             ExternalID: string;
-            /** @description `movie` or `show`. */
+            /** @description `movie` or `show`; `rom` for a game. */
             Kind: string;
             Title: string;
             Year: number;
@@ -11900,7 +11904,7 @@ export interface operations {
     searchMatchCandidates: {
         parameters: {
             query?: {
-                /** @description Overrides the title and drops the year, for a fresh user-driven search. A provider id or URL targets exactly. */
+                /** @description Overrides the title and drops the year, for a fresh user-driven search. A provider id or URL targets exactly. For a game, the words to find in the ROM database's names. */
                 q?: string;
             };
             header?: never;
@@ -11924,6 +11928,24 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A game whose console is not known (`no_platform`): there is nothing to search. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A game, and the ROM database is not installed (`unavailable`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     applyMatch: {
@@ -11955,6 +11977,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A game, and the ROM database is not installed (`unavailable`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     refreshItem: {

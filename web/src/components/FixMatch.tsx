@@ -31,25 +31,36 @@ function ScoreBar({
   breakdown,
   total,
   showYear,
+  titleOnly = false,
 }: {
   breakdown: ScoreBreakdown;
   total: number;
   showYear: boolean;
+  // A game is scored on its title alone (the ROM database has no popularity,
+  // and a DAT's year is not what somebody searches by). Meters for the
+  // others would sit at zero and read as a poor match.
+  titleOnly?: boolean;
 }) {
   return (
     <div className="fixmatch__break">
       <span className="fixmatch__total">{scorePct(total)} match</span>
       <Meter label="Title" v={breakdown.title} />
-      {showYear && (
+      {showYear && !titleOnly && (
         <Meter
           label="Year"
           v={breakdown.year}
           note={breakdown.year_gap ? `${breakdown.year_gap}y off` : undefined}
         />
       )}
-      <Meter label="Popularity" v={breakdown.popularity} />
+      {!titleOnly && <Meter label="Popularity" v={breakdown.popularity} />}
     </div>
   );
+}
+
+// What a candidate is, for the label beside its title.
+function kindLabel(kind: string): string {
+  if (kind === "rom") return "Game";
+  return kind === "show" || kind === "episode" || kind === "season" ? "TV" : "Movie";
 }
 
 // Correcting an item's identity: search a provider, pick the right title, and
@@ -186,7 +197,6 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
           {candidates.data?.map((c) => {
             const current =
               c.Provider === item.provider && c.ExternalID === item.external_id;
-            const isTV = c.Kind === "show" || c.Kind === "episode" || c.Kind === "season";
             return (
               <button
                 key={`${c.Provider}-${c.Kind}-${c.ExternalID}`}
@@ -195,7 +205,12 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                 onClick={() => pick(c)}
               >
                 {c.PosterURL ? (
-                  <img className="fixmatch__poster" src={c.PosterURL} alt="" loading="lazy" />
+                  <img
+                    className={"fixmatch__poster" + (c.Kind === "rom" ? " fixmatch__poster--box" : "")}
+                    src={c.PosterURL}
+                    alt=""
+                    loading="lazy"
+                  />
                 ) : (
                   <div className="fixmatch__poster fixmatch__poster--empty" />
                 )}
@@ -203,7 +218,7 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                   <div className="fixmatch__cand-title">
                     {c.Title}
                     {c.Year ? <span className="fixmatch__year"> ({c.Year})</span> : null}
-                    <span className="fixmatch__kind">{isTV ? "TV" : "Movie"}</span>
+                    <span className="fixmatch__kind">{kindLabel(c.Kind)}</span>
                     {current && <span className="fixmatch__current-tag">current</span>}
                   </div>
                   {c.Overview && (
@@ -213,6 +228,7 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                     breakdown={c.Breakdown}
                     total={c.Score}
                     showYear={item.kind !== "episode"}
+                    titleOnly={c.Kind === "rom"}
                   />
                 </div>
               </button>

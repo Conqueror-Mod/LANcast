@@ -179,6 +179,11 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if it.Kind == string(media.KindROM) {
+		s.romCandidates(w, r, it)
+		return
+	}
+
 	q := meta.Query{Kind: meta.Kind(it.Kind), Title: it.Title}
 	if v := strings.TrimSpace(r.URL.Query().Get("q")); v != "" {
 		q.Title = v
@@ -283,6 +288,10 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Provider == "" || req.ExternalID == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "provider and external_id are required")
+		return
+	}
+	if it.Kind == string(media.KindROM) {
+		s.applyROMMatch(w, r, it, req.Provider, req.ExternalID)
 		return
 	}
 	if _, found := s.reg.Provider(req.Provider); !found {

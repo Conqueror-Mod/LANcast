@@ -149,6 +149,12 @@
 .fixmatch__poster--empty {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+/* A game's box, whole: box art is rarely the 2:3 a film poster is, and a
+   cover crop shows the middle of a wide box (PosterTile.css). */
+.fixmatch__poster--box {
+  width: 69px;
+  object-fit: contain;
+}
 
 .fixmatch__cand-body {
   min-width: 0;

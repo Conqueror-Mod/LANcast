@@ -46,6 +46,12 @@ func (c *Cache) Index() *Index {
 	return ix
 }
 
+// Preloaded is a Cache already holding ix, for a caller that built its own
+// index — tests of what consults one, without DAT files on disk.
+func Preloaded(ix *Index) *Cache {
+	return &Cache{ix: ix, loaded: true}
+}
+
 // Forget drops the loaded index so the next call reads the directory again.
 func (c *Cache) Forget() {
 	c.mu.Lock()
