@@ -10,6 +10,7 @@ import (
 	"lancast/internal/faces"
 	"lancast/internal/photo"
 	"lancast/internal/probe"
+	"lancast/internal/retro/identify"
 	"lancast/internal/scan"
 	"lancast/internal/selfupdate"
 	"lancast/internal/transcode"
@@ -53,6 +54,7 @@ type snapshot struct {
 	enrich   enrich.Stats
 	probe    probe.Stats
 	covers   coverart.Stats
+	retro    identify.Stats
 	photos   photo.Stats
 	faces    faces.Stats
 	semantic faces.EmbedStats
@@ -93,6 +95,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.covers != nil {
 		snap.covers = s.covers.Stats()
+	}
+	if s.retro != nil {
+		snap.retro = s.retro.Stats()
 	}
 	if s.facesW != nil {
 		snap.faces = s.facesW.Stats()
@@ -204,6 +209,13 @@ func buildActivity(snap snapshot) []Activity {
 			Detail: failedDetail(st.Failed),
 		})
 	}
+	if st := snap.retro; st.Running {
+		tasks = append(tasks, Activity{
+			Kind: "retro", ID: "retro", Title: "Identifying games",
+			State: "running", Done: st.Matched + st.Unmatched + st.Failed, Total: st.Total,
+			Detail: failedDetail(st.Failed),
+		})
+	}
 	if st := snap.faces; st.Running {
 		/*
 		 * Total is the photographs *examined plus remaining* rather than a
@@ -296,9 +308,11 @@ func photoDetail(st photo.Stats) string {
 /*
  * lastCompleted is the most recent moment any background work finished.
  *
- * Scans are the only worker that records a finish time today, which is enough:
- * they are what changes what a list holds. Enrichment and probing alter rows a
- * list already contains, and those surfaces refetch on their own.
+ * Scans record a finish time because they change what a list holds. ROM
+ * identification does too (ADR 0073): it renames every game in a grid that
+ * was drawn with filenames, and on a small library it finishes between two
+ * polls. Enrichment and probing alter rows a list already contains, and those
+ * surfaces refetch on their own.
  *
  * Zero when nothing has ever finished, which a client must read as "no
  * information" rather than as "just now" — the difference matters on a fresh
@@ -311,6 +325,9 @@ func lastCompleted(snap snapshot) int64 {
 		if sc.progress.FinishedAt != nil && *sc.progress.FinishedAt > latest {
 			latest = *sc.progress.FinishedAt
 		}
+	}
+	if snap.retro.FinishedAt > latest {
+		latest = snap.retro.FinishedAt
 	}
 	return latest
 }

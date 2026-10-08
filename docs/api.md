@@ -2480,7 +2480,8 @@ that wants to show "what is happening" has to know the whole list of workers and
 poll each one — including `/api/libraries/{id}/scan` once per library. This
 answers the question without that knowledge, in one shape:
 
-- `kind` is `scan`, `enrich`, `probe`, `coverart`, or `transcode`. New workers
+- `kind` is `scan`, `enrich`, `probe`, `coverart`, `retro` (identifying
+  ROMs, ADR 0073), or `transcode`. New workers
   add new values; a client that does not recognise one still has a title and a
   progress pair, which is the point of normalizing.
 - `id` is stable for the task's lifetime, so a list can be keyed by it.

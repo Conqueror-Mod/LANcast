@@ -313,3 +313,20 @@ func TestArtworkOnlyWhenEnabled(t *testing.T) {
 		}
 	}
 }
+
+// A pass that changed something records when it finished; a later pass with
+// nothing to do keeps that stamp rather than hiding it.
+func TestFinishedAtSurvivesAnEmptyPass(t *testing.T) {
+	f := newFixture(t, map[string]romhash.Result{"sm64.z64": {Sums: sums("3CE60709", marioSHA)}})
+	f.w.Index = func() *retrodb.Index { return testIndex(t) }
+	f.add(t, "sm64.z64", "n64")
+	f.run(t)
+	first := f.w.Stats().FinishedAt
+	if first == 0 {
+		t.Fatal("no finish recorded for a pass that identified a game")
+	}
+	f.run(t)
+	if got := f.w.Stats().FinishedAt; got != first {
+		t.Errorf("an empty pass moved FinishedAt from %d to %d", first, got)
+	}
+}

@@ -54,6 +54,17 @@ type Stats struct {
 	Remaining int   `json:"remaining"`
 	Total     int   `json:"total"`
 	UpdatedAt int64 `json:"updated_at"`
+	/*
+	 * FinishedAt is when a pass that changed something last ended, or zero.
+	 *
+	 * It is what tells a client its grid is stale. Identification renames rows
+	 * a list already holds, and a pass over a small library finishes between
+	 * two polls of /api/activity — so a client watching only for the
+	 * running-to-idle edge never sees it, and the grid keeps the filenames.
+	 * Kept across passes: a later pass that found nothing to do must not hide
+	 * the one before it.
+	 */
+	FinishedAt int64 `json:"finished_at,omitempty"`
 }
 
 // Worker identifies pending ROMs in the background.
@@ -109,7 +120,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		return nil
 	}
 	w.running = true
-	w.stats = Stats{Running: true, UpdatedAt: time.Now().Unix()}
+	w.stats = Stats{Running: true, UpdatedAt: time.Now().Unix(), FinishedAt: w.stats.FinishedAt}
 	w.mu.Unlock()
 
 	if total, err := w.st.PendingROMCount(ctx); err == nil {
@@ -126,6 +137,9 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.stats.Remaining = remaining
 		}
 		w.stats.UpdatedAt = time.Now().Unix()
+		if w.stats.Matched+w.stats.Unmatched+w.stats.Failed > 0 {
+			w.stats.FinishedAt = w.stats.UpdatedAt
+		}
 		w.mu.Unlock()
 	}()
 
