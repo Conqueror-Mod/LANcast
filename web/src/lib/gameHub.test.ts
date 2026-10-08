@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hubOffered, insideHub, pcHalf, retroHalf } from "./gameHub";
+import { PREVIEW_COUNT, dailySeed, hubOffered, insideHub, pcHalf, pcPreview, retroHalf } from "./gameHub";
 import type { GameRow } from "./games";
 
 const game = (over: Partial<GameRow> = {}): GameRow =>
@@ -50,6 +50,31 @@ describe("the retro half", () => {
     const unknown = retroHalf({ libraries: libs, databaseInstalled: undefined });
     expect(missing.kind === "ready" && missing.needsDatabase).toBe(true);
     expect(unknown.kind === "ready" && unknown.needsDatabase).toBe(false);
+  });
+});
+
+describe("the previews", () => {
+  it("shows PC games most recently played first, never-played last, hidden ones not at all", () => {
+    const list = [
+      game({ id: "old", name: "Old", last_played: 100 }),
+      game({ id: "never", name: "Never", last_played: 0 }),
+      game({ id: "new", name: "New", last_played: 900 }),
+      game({ id: "hid", name: "Hidden", last_played: 999, hidden: true }),
+    ];
+    expect(pcPreview(list).map((g) => g.id)).toEqual(["new", "old", "never"]);
+    expect(pcPreview(undefined)).toEqual([]);
+  });
+
+  it("shows at most a preview's worth", () => {
+    const many = Array.from({ length: 40 }, (_, i) => game({ id: String(i), name: `G${i}`, last_played: i + 1 }));
+    expect(pcPreview(many)).toHaveLength(PREVIEW_COUNT);
+  });
+
+  it("changes the retro selection by local day, not by the hour", () => {
+    expect(dailySeed(new Date(2026, 9, 8, 0, 1))).toBe(dailySeed(new Date(2026, 9, 8, 23, 59)));
+    expect(dailySeed(new Date(2026, 9, 8, 23, 59))).not.toBe(dailySeed(new Date(2026, 9, 9, 0, 1)));
+    // Local, so an evening in the Americas is still today.
+    expect(dailySeed(new Date(2026, 9, 8, 21, 0))).toBe(20261008);
   });
 });
 
