@@ -1,5 +1,6 @@
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useTogetherRoom } from "@/playback/TogetherProvider";
+import { OpenSessions } from "@/components/OpenSessions";
 import "./TogetherPanel.css";
 
 /*
@@ -43,13 +44,14 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
           >
             Start a session
           </button>
-          {/* The code is what somebody reads out across a room or types into
-              another device. There is no link to send: on a household server
-              the other person is already signed in and looking at the list. */}
+          {/* There is no link to send: on a household server the other person
+              is already signed in, and the session appears in their list. This
+              hint promised that list for months before it existed. */}
           <p className="together__hint">
-            Others can join from their own player, or from the list of open
-            sessions.
+            Others on this server can join from People, or from Watch Together
+            in their own player.
           </p>
+          <OpenSessions heading="Or join one" />
         </div>
       )}
 

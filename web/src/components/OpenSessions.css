@@ -1,0 +1,83 @@
+/* Rooms on this server you could join. Quiet rows in the together panel's
+   language; gold only on focus, because a room somebody else is in is not
+   where you are. */
+
+.open-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.open-sessions__title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.open-sessions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.open-sessions__room {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Rows in a flex column must not collapse — see CLAUDE.md. */
+  flex-shrink: 0;
+}
+
+.open-sessions__what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.open-sessions__line {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-sessions__line strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.open-sessions__who {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.open-sessions__join {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.open-sessions__join:hover,
+.open-sessions__join:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* On the People page it sits above the list as its own block. */
+.people .open-sessions {
+  margin: 0 0 1.5rem;
+  max-width: 40rem;
+}
