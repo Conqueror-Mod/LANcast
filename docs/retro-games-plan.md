@@ -232,6 +232,19 @@ Nothing here can be judged from a test.
 
 ## Stage 3 — N64
 
+### Status (2026-10-08)
+
+**The GPU path is built and proven against a test core. No N64 game has
+run.** The branch is `feat/retro-gl`. The work items below are done as
+described, except the curated core-options UI and the analog dead-zone
+settings: the dead zones use XInput's own, and the options are the core's
+defaults. The context-loss item is answered by never losing the context: the
+framebuffer is sized to the core's maximum, and window size and position are
+read every frame. The "Done when" checks need a Mupen64Plus-Next DLL and real
+games, and nothing short of them counts.
+
+
+
 **Goal:** N64 games play at full speed from the desktop client with an XInput
 controller, analog stick included.
 

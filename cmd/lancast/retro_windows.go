@@ -96,12 +96,9 @@ func (r *retroPlayer) availability(platform string) map[string]any {
 	if !ok {
 		return map[string]any{"available": false, "reason": "This console is not supported yet."}
 	}
+	// needs_gl is reported so the page can say a console draws through the
+	// GPU; since stage 3 it no longer stops a game (host.WGL).
 	out := map[string]any{"core": c.Display, "licence": c.Licence, "needs_gl": c.NeedsGL}
-	if c.NeedsGL {
-		out["available"] = false
-		out["reason"] = "Games for this console play in a later release."
-		return out
-	}
 	path, _, err := cores.Resolve(platform, retroDir("cores"), coreOverrides())
 	switch {
 	case err == nil:
@@ -160,12 +157,9 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 	if w == nil || w.VideoWindow() == 0 {
 		return errors.New("no window to play into")
 	}
-	corePath, info, err := cores.Resolve(platform, retroDir("cores"), coreOverrides())
+	corePath, _, err := cores.Resolve(platform, retroDir("cores"), coreOverrides())
 	if err != nil {
 		return err
-	}
-	if info.NeedsGL {
-		return errors.New("games for this console play in a later release")
 	}
 	game, err := remote.New(r.origin, r.pin, itemID, ticket)
 	if err != nil {
@@ -234,8 +228,11 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		SystemDir: retroDir("system"),
 		// Where a core writes anything of its own. The game's save goes to
 		// the server through the session, not here.
-		SaveDir:         retroDir("core-saves"),
-		Video:           &host.GDIVideo{HWND: w.VideoWindow()},
+		SaveDir: retroDir("core-saves"),
+		Video:   &host.GDIVideo{HWND: w.VideoWindow()},
+		// The GPU path (stage 3). A framebuffer core never asks for it, so
+		// it costs nothing there; an N64 core cannot run without it.
+		GL:              &host.WGL{HWND: w.VideoWindow()},
 		Audio:           &host.WaveOut{},
 		Input:           host.Controllers{HWND: w.VideoWindow()},
 		Saves:           game,

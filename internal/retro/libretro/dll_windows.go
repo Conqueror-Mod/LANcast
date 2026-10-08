@@ -39,6 +39,8 @@ var (
 	cbAudioBatch    uintptr
 	cbInputPoll     uintptr
 	cbInputState    uintptr
+	cbCurrentFB     uintptr
+	cbProcAddress   uintptr
 	activeMu        sync.Mutex
 	active          *dllCore
 	errNoActiveCore = errors.New("libretro: callback with no active core")
@@ -116,6 +118,27 @@ type retroMessage struct {
 	frames uint32
 }
 
+// retroHWRenderCallback mirrors struct retro_hw_render_callback: 64 bytes,
+// with Go's alignment matching the header's field for field.
+type retroHWRenderCallback struct {
+	contextType           uint32
+	contextReset          uintptr
+	getCurrentFramebuffer uintptr
+	getProcAddress        uintptr
+	depth                 bool
+	stencil               bool
+	bottomLeftOrigin      bool
+	versionMajor          uint32
+	versionMinor          uint32
+	cacheContext          bool
+	contextDestroy        uintptr
+	debugContext          bool
+}
+
+// hwFrameValid is RETRO_HW_FRAME_BUFFER_VALID, ((void*)-1): the frame is in
+// the framebuffer object, not in memory.
+const hwFrameValid = ^uintptr(0)
+
 type dllCore struct {
 	dll   *syscall.DLL
 	procs map[string]*syscall.Proc
@@ -129,6 +152,9 @@ type dllCore struct {
 	game     unsafe.Pointer
 	gamePath unsafe.Pointer
 	loaded   bool
+
+	// The core's own hardware-context callbacks, when it asked for one.
+	contextReset, contextDestroy uintptr
 }
 
 var coreFuncs = []string{
@@ -184,6 +210,8 @@ func (c *dllCore) Init(fe Frontend) error {
 		cbAudioBatch = syscall.NewCallback(audioBatchCB)
 		cbInputPoll = syscall.NewCallback(inputPollCB)
 		cbInputState = syscall.NewCallback(inputStateCB)
+		cbCurrentFB = syscall.NewCallback(currentFramebufferCB)
+		cbProcAddress = syscall.NewCallback(procAddressCB)
 	})
 	activeMu.Lock()
 	active = c
@@ -267,6 +295,18 @@ func (c *dllCore) Memory(id uint32) []byte {
 		return nil
 	}
 	return unsafe.Slice((*byte)(cPointer(p)), int(n))
+}
+
+func (c *dllCore) ContextReset() {
+	if c.contextReset != 0 {
+		_, _, _ = syscall.SyscallN(c.contextReset)
+	}
+}
+
+func (c *dllCore) ContextDestroy() {
+	if c.contextDestroy != 0 {
+		_, _, _ = syscall.SyscallN(c.contextDestroy)
+	}
 }
 
 func (c *dllCore) UnloadGame() {
@@ -412,6 +452,25 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 	case EnvShutdown:
 		fe.Shutdown()
 		return true
+	case EnvSetHWRender:
+		if data == nil {
+			return false
+		}
+		cb := (*retroHWRenderCallback)(data)
+		req := HWRender{
+			Context: HWContext(cb.contextType), Major: cb.versionMajor, Minor: cb.versionMinor,
+			Depth: cb.depth, Stencil: cb.stencil, BottomLeftOrigin: cb.bottomLeftOrigin,
+			Debug: cb.debugContext,
+		}
+		if !fe.SetHWRender(req) {
+			return false
+		}
+		// The core gives its reset and destroy; the host gives back where to
+		// draw and how to find GL functions.
+		c.contextReset, c.contextDestroy = cb.contextReset, cb.contextDestroy
+		cb.getCurrentFramebuffer = cbCurrentFB
+		cb.getProcAddress = cbProcAddress
+		return true
 	case EnvGetLanguage:
 		if data != nil {
 			*(*uint32)(data) = 0 // English
@@ -453,7 +512,9 @@ func videoRefreshCB(data, width, height, pitch uintptr) uintptr {
 		return 0
 	}
 	f := Frame{Width: uint32(width), Height: uint32(height), Pitch: pitch, Format: c.format}
-	if data != 0 && f.Height > 0 && pitch > 0 && pitch < 1<<20 && f.Height < 1<<16 {
+	if data == hwFrameValid {
+		f.HW = true
+	} else if data != 0 && f.Height > 0 && pitch > 0 && pitch < 1<<20 && f.Height < 1<<16 {
 		f.Data = unsafe.Slice((*byte)(cPointer(data)), int(pitch)*int(f.Height))
 	}
 	c.fe.VideoRefresh(f)
@@ -496,4 +557,22 @@ func inputStateCB(port, device, index, id uintptr) uintptr {
 		return 0
 	}
 	return uintptr(uint16(c.fe.InputState(uint32(port), uint32(device), uint32(index), uint32(id))))
+}
+
+// currentFramebufferCB: uintptr_t (void).
+func currentFramebufferCB() uintptr {
+	c, err := current()
+	if err != nil {
+		return 0
+	}
+	return c.fe.CurrentFramebuffer()
+}
+
+// procAddressCB: retro_proc_address_t (const char *sym).
+func procAddressCB(sym uintptr) uintptr {
+	c, err := current()
+	if err != nil || sym == 0 {
+		return 0
+	}
+	return c.fe.ProcAddress(goString((*byte)(cPointer(sym))))
 }

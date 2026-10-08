@@ -79,8 +79,10 @@ func (c *fakeCore) Memory(id uint32) []byte {
 	}
 	return nil
 }
-func (c *fakeCore) UnloadGame() { c.unloaded = true }
-func (c *fakeCore) Close()      { c.closed = true }
+func (c *fakeCore) UnloadGame()     { c.unloaded = true }
+func (c *fakeCore) ContextReset()   {}
+func (c *fakeCore) ContextDestroy() {}
+func (c *fakeCore) Close()          { c.closed = true }
 
 type fakeSaves struct {
 	mu        sync.Mutex

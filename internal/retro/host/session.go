@@ -29,6 +29,24 @@ type AudioSink interface {
 	Close()
 }
 
+/*
+ * GLSink is the GPU path a hardware-rendering core draws through (stage 3).
+ *
+ * Every method is called on the core's locked thread, with the context the
+ * sink made current there: OpenGL contexts belong to a thread, and a core
+ * that found its context current somewhere else would draw into nothing.
+ */
+type GLSink interface {
+	// Init creates a context the core asked for and a framebuffer at least
+	// maxW by maxH for it to draw into.
+	Init(req libretro.HWRender, maxW, maxH int) error
+	Framebuffer() uintptr
+	ProcAddress(name string) uintptr
+	// Present shows the part of the framebuffer the core drew this frame.
+	Present(width, height int, aspect float64, bottomLeftOrigin bool)
+	Close()
+}
+
 // InputSource reports the controllers once per frame.
 type InputSource interface {
 	Poll() (pads [2]Pad, guide, escape bool)
@@ -67,6 +85,10 @@ type Config struct {
 	Options map[string]string
 
 	Video VideoSink
+	// GL is the GPU path, for cores that render through OpenGL. Nil refuses
+	// a core's request for a hardware context, which a framebuffer core never
+	// makes and an N64 core cannot run without.
+	GL    GLSink
 	Audio AudioSink // nil runs on a timer instead
 	Input InputSource
 	Saves SaveStore
@@ -110,6 +132,8 @@ type Session struct {
 	stopping  bool
 	sramSum   uint32
 	sramAt    time.Time
+	hw        *libretro.HWRender // what the core asked for, if anything
+	glReady   bool
 
 	pending sync.WaitGroup // uploads in flight
 }
@@ -209,6 +233,24 @@ func (s *Session) Run(ctx context.Context) (err error) {
 		return err
 	}
 	s.av = core.AVInfo()
+	/*
+	 * A hardware-rendering core asked for its context during LoadGame; it is
+	 * made now, on this thread, and only then is the core told it exists.
+	 * The framebuffer is sized to the largest picture the core declared, so
+	 * a resolution change mid-game never needs a new one.
+	 */
+	if s.hw != nil {
+		w, h := int(s.av.MaxWidth), int(s.av.MaxHeight)
+		if w <= 0 || h <= 0 {
+			w, h = int(s.av.BaseWidth), int(s.av.BaseHeight)
+		}
+		if err := s.cfg.GL.Init(*s.hw, w, h); err != nil {
+			core.UnloadGame()
+			return fmt.Errorf("the graphics this game needs could not start: %w", err)
+		}
+		s.glReady = true
+		core.ContextReset()
+	}
 	core.SetControllerPortDevice(0, libretro.DeviceJoypad)
 	core.SetControllerPortDevice(1, libretro.DeviceJoypad)
 
@@ -437,7 +479,16 @@ func (s *Session) finish() {
 	case <-time.After(30 * time.Second):
 		s.cfg.Log.Warn("retro session: saves still uploading after 30s; closing anyway")
 	}
+	// The core lets go of its GPU objects while the context still exists,
+	// then the game is unloaded, then the context goes.
+	if s.glReady {
+		s.cfg.Core.ContextDestroy()
+	}
 	s.cfg.Core.UnloadGame()
+	if s.glReady {
+		s.cfg.GL.Close()
+		s.glReady = false
+	}
 }
 
 func cloneWith(m map[string]string, k, v string) map[string]string {
@@ -517,6 +568,12 @@ func (s *Session) Message(text string, _ uint32) {
 func (s *Session) Shutdown() { s.stopping = true }
 
 func (s *Session) VideoRefresh(f libretro.Frame) {
+	if f.HW {
+		if s.glReady {
+			s.cfg.GL.Present(int(f.Width), int(f.Height), s.aspect(f), s.hw.BottomLeftOrigin)
+		}
+		return
+	}
 	if f.Data == nil || s.cfg.Video == nil {
 		return // a repeated frame: what is on screen is already right
 	}
@@ -535,6 +592,38 @@ func (s *Session) aspect(f libretro.Frame) float64 {
 		return 4.0 / 3.0
 	}
 	return float64(f.Width) / float64(f.Height)
+}
+
+/*
+ * SetHWRender accepts desktop OpenGL — compatibility or core profile — when
+ * there is a GL sink, and nothing else. OpenGL ES and Vulkan are refused, so
+ * a core that can fall back to another renderer does, and one that cannot
+ * says so rather than drawing into a context it did not ask for.
+ */
+func (s *Session) SetHWRender(req libretro.HWRender) bool {
+	if s.cfg.GL == nil {
+		return false
+	}
+	if req.Context != libretro.HWContextOpenGL && req.Context != libretro.HWContextOpenGLCore {
+		return false
+	}
+	r := req
+	s.hw = &r
+	return true
+}
+
+func (s *Session) CurrentFramebuffer() uintptr {
+	if !s.glReady {
+		return 0
+	}
+	return s.cfg.GL.Framebuffer()
+}
+
+func (s *Session) ProcAddress(name string) uintptr {
+	if s.cfg.GL == nil {
+		return 0
+	}
+	return s.cfg.GL.ProcAddress(name)
 }
 
 func (s *Session) AudioBatch(samples []int16) int {

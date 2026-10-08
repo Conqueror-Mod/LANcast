@@ -85,6 +85,9 @@ func (r *recorder) SetSystemAVInfo(AVInfo)        {}
 func (r *recorder) Message(text string, _ uint32) { r.messages = append(r.messages, text) }
 func (r *recorder) Shutdown()                     {}
 func (r *recorder) InputPoll()                    { r.polls++ }
+func (r *recorder) SetHWRender(HWRender) bool     { return false }
+func (r *recorder) CurrentFramebuffer() uintptr   { return 0 }
+func (r *recorder) ProcAddress(string) uintptr    { return 0 }
 func (r *recorder) AudioBatch(s []int16) int      { r.audio = append(r.audio, s...); return len(s) / 2 }
 func (r *recorder) VideoRefresh(f Frame) {
 	r.frames = append(r.frames, f)

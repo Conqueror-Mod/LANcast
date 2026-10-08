@@ -4,6 +4,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -39,13 +40,17 @@ func TestSetCoreOverrideRefuses(t *testing.T) {
 	}
 }
 
-// A console whose core draws through OpenGL says so, rather than offering a
-// Play button that cannot work until stage 3.
+// A console whose core draws through OpenGL says so, and since stage 3 that
+// no longer stops it: with no core chosen it is unavailable for that reason,
+// not for being N64.
 func TestAvailabilityOfAGLConsole(t *testing.T) {
 	r := &retroPlayer{}
 	got := r.availability("n64")
-	if got["available"] != false || got["needs_gl"] != true || got["reason"] == "" {
-		t.Errorf("n64 = %v", got)
+	if got["needs_gl"] != true {
+		t.Errorf("n64 = %v, want needs_gl", got)
+	}
+	if reason, _ := got["reason"].(string); got["available"] == false && strings.Contains(reason, "later release") {
+		t.Errorf("n64 is still refused as a later release: %v", got)
 	}
 	if got := r.availability("dreamcast"); got["available"] != false {
 		t.Errorf("an unknown console = %v", got)

@@ -385,6 +385,33 @@ second. Held, because some games use Select+Start themselves as a soft reset.
 root owner. The video window is an owned popup, and while a game runs, the
 window in front is the main window or the page overlay above the picture.
 
+## Amendments from building stage 3's GPU path (2026-10-08)
+
+**OpenGL through `syscall`, with no float arguments.** A core's
+`SET_HW_RENDER` is answered for desktop OpenGL, compatibility or core profile,
+when the session has a GL sink, and refused for GLES and Vulkan. `host.WGL`
+creates the context on the session's locked thread. It sets the window's pixel
+format once in the window's life, starts from a legacy context, and moves to
+`wglCreateContextAttribsARB` for a versioned or core-profile one. It gives the
+core a framebuffer object sized to its declared maximum geometry, and each
+frame it blits the part the core drew into the video window, using the same
+integer-scaled `Layout` as the GDI path. `syscall` passes arguments in integer
+registers, and Windows x64 passes floats in XMM, so the host never calls a GL
+function that takes a float: the bars are cleared with `glClearBufferfv`. The
+core is C and calls whatever it likes.
+
+**The order of teardown** is fixed: the core's `context_destroy` while the
+context still exists, then `retro_unload_game`, then the context goes.
+
+**Proven** on the development machine against `testdata/glcore.c`. That core
+asks for a 3.3 core profile as GLideN64 does, resolves its GL through the
+host's `get_proc_address`, and clears the host's framebuffer to green, which
+the test reads back. Removing the framebuffer hand-off fails the test.
+**Not proven:** a real N64 core's renderer, a second GPU, a window moved
+between monitors with a context live, and libmpv's D3D11 path drawing into a
+window that has had an OpenGL pixel format set. The last is the one most worth
+checking first, because the video window is shared.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).
