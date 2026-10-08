@@ -247,6 +247,12 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 	if err != nil {
 		return err
 	}
+	// Zipped dumps are extracted beside the download for a core that cannot
+	// open a zip, and a file the core never claimed is refused before it can
+	// crash the process.
+	if entry, err = host.GameFile(entry, core.SystemInfo(), filepath.Join(filepath.Dir(entry), ".extracted")); err != nil {
+		return err
+	}
 	var data []byte
 	if !core.SystemInfo().NeedFullpath {
 		if data, err = os.ReadFile(entry); err != nil {

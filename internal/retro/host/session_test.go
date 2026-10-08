@@ -26,6 +26,10 @@ type fakeCore struct {
 	closed   bool
 	onRun    func(*fakeCore)
 	name     string
+	// stateNeedsFrame refuses a state until a frame has run, as
+	// Mupen64Plus-Next does; refuseStates refuses every one.
+	stateNeedsFrame bool
+	refuseStates    bool
 }
 
 func (c *fakeCore) SystemInfo() libretro.SystemInfo {
@@ -67,6 +71,9 @@ func (c *fakeCore) Serialize(b []byte) bool {
 	return true
 }
 func (c *fakeCore) Unserialize(b []byte) bool {
+	if c.refuseStates || (c.stateNeedsFrame && c.counter.Load() == 0) {
+		return false
+	}
 	if len(b) != 4 {
 		return false
 	}
@@ -340,6 +347,10 @@ func TestMenuPauses(t *testing.T) {
 	h.input.escape = true
 	h.input.mu.Unlock()
 	h.waitFor(t, "menu")
+	// The menu opens from inside a frame (its input poll), and that frame
+	// still finishes; sampling before it does flaked. Pausing is about the
+	// frames after it.
+	time.Sleep(10 * time.Millisecond)
 	n := h.core.counter.Load()
 	time.Sleep(30 * time.Millisecond)
 	if h.core.counter.Load() != n {
