@@ -4,7 +4,7 @@ import { artworkURL } from "@/api/client";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
 import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
-import { containerCountLabel, isSquareArt } from "@/lib/kind";
+import { containerCountLabel, isROM, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
 import { isWatched, watchedLabel } from "@/lib/watchedMark";
 import type { Item } from "@/api/types";
@@ -280,7 +280,7 @@ export function PosterTile({
           "poster-tile__art" +
           (wide
             ? " poster-tile__art--wide"
-            : isSquareArt(item)
+            : isSquareArt(item) || isROM(item)
               ? " poster-tile__art--square"
               : "")
         }
@@ -298,6 +298,20 @@ export function PosterTile({
               {canReveal ? "Sensitive — click to show" : "Sensitive"}
             </span>
           </div>
+        ) : poster && isROM(item) ? (
+          /*
+           * Box art, whole. A game's box is whatever shape its console and
+           * region made it — wide for an American SNES or N64 box, tall for a
+           * Mega Drive one — so no single crop suits them, and a cover crop
+           * into a poster frame zoomed every wide box onto its middle third,
+           * which read as art off-centre and scaled wrong. Every game gets the
+           * same square tile, so the grid keeps its rows, and the box sits
+           * inside it uncropped over a blurred wash of itself.
+           */
+          <>
+            <img className="poster-tile__box-wash" src={poster} alt="" aria-hidden="true" draggable={false} />
+            <img className="poster-tile__box" src={poster} alt="" loading="lazy" draggable={false} />
+          </>
         ) : poster ? (
           <img src={poster} alt="" loading="lazy" draggable={false} />
         ) : (
