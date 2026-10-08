@@ -3305,7 +3305,7 @@ const DEVICE_PANES: Pane[] = [
    * and worked was reported as having no interface at all. Off by default is
    * the right decision (ADR 0066) and undiscoverable is not the same thing.
    */
-  { id: "games", label: "Games" },
+  { id: "games", label: "PC Games" },
   { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
 ];

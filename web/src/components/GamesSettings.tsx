@@ -70,7 +70,7 @@ export function GamesSettings() {
 
   return (
     <section className="settings__section">
-      <span className="section-label">Games</span>
+      <span className="section-label">PC Games</span>
 
       <p className="desktop-note">
         LANcast can list the games Steam, Epic, Battle.net, the Xbox app, GOG and
@@ -80,7 +80,7 @@ export function GamesSettings() {
 
       <LifecycleOption
         title="Show my installed games"
-        sub="List the games Steam, Epic, Battle.net, the Xbox app, GOG and the EA app have installed on this computer, in a Games tab. LANcast starts them; it does not stream them."
+        sub="List the games Steam, Epic, Battle.net, the Xbox app, GOG and the EA app have installed on this computer, in a PC Games tab. LANcast starts them; it does not stream them."
         checked={state.games}
         onChange={save}
         busy={saving}
@@ -91,7 +91,7 @@ export function GamesSettings() {
         This is a setting for this computer, and the tab appears only in the
         LANcast desktop app: the games are installed here, so a phone or a
         browser tab could not start one. Switching it on adds{" "}
-        <strong>Games</strong> to the rail on the left straight away.
+        <strong>PC Games</strong> to the rail on the left straight away.
       </p>
     </section>
   );
