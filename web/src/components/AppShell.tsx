@@ -23,6 +23,7 @@ import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
 import { reportServerIdentity } from "@/lib/serverIdentity";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
 import { useGamesTab } from "@/lib/games";
+import { railOrder } from "@/lib/railOrder";
 import {
   LibraryIcon,
   HomeIcon,
@@ -189,30 +190,53 @@ export function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
 
           <nav className="app-shell__libs" aria-label="Libraries">
-            {libraries && libraries.length > 0 && (
+            {((libraries && libraries.length > 0) || gamesTab) && (
               <span className="section-label app-shell__rail-label">
                 Libraries
               </span>
             )}
-            {libraries?.map((lib) => (
-              <NavLink
-                key={lib.id}
-                to={`/library/${lib.id}`}
-                title={lib.name}
-                onClick={releaseRail}
-                className={({ isActive }) =>
-                  "app-shell__lib" + (isActive ? " is-active" : "")
-                }
-              >
-                <LibraryIcon kind={lib.kind} />
-                <span className="app-shell__lib-name app-shell__label">
-                  {lib.name}
-                </span>
-                <span className="app-shell__lib-count app-shell__label">
-                  {navCount(lib).toLocaleString()}
-                </span>
-              </NavLink>
-            ))}
+            {/* By kind, with PC Games between Retro Games and Pictures
+                (lib/railOrder.ts). PC Games is only here in the desktop
+                window, when the person using it has asked for it: the games
+                are installed on this machine, and a rail entry on a phone
+                would lead to a grid of things that phone can never start
+                (ADR 0066). */}
+            {railOrder(libraries ?? [], gamesTab).map((entry) =>
+              entry.type === "pc-games" ? (
+                <NavLink
+                  key="pc-games"
+                  to="/games"
+                  title="PC Games"
+                  onClick={releaseRail}
+                  className={({ isActive }) =>
+                    "app-shell__lib" + (isActive ? " is-active" : "")
+                  }
+                >
+                  <GamesIcon />
+                  <span className="app-shell__lib-name app-shell__label">
+                    PC Games
+                  </span>
+                </NavLink>
+              ) : (
+                <NavLink
+                  key={entry.lib.id}
+                  to={`/library/${entry.lib.id}`}
+                  title={entry.lib.name}
+                  onClick={releaseRail}
+                  className={({ isActive }) =>
+                    "app-shell__lib" + (isActive ? " is-active" : "")
+                  }
+                >
+                  <LibraryIcon kind={entry.lib.kind} />
+                  <span className="app-shell__lib-name app-shell__label">
+                    {entry.lib.name}
+                  </span>
+                  <span className="app-shell__lib-count app-shell__label">
+                    {navCount(entry.lib).toLocaleString()}
+                  </span>
+                </NavLink>
+              ),
+            )}
 
             {/*
               Other servers' libraries, under their own heading and below our
@@ -253,27 +277,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Live TV
               </span>
             </NavLink>
-
-            {/* Games is the only entry in this rail that is not about the
-                server. It appears in the desktop window, when the person using
-                it has asked for it, and nowhere else: the games are installed
-                on this machine, and a rail entry on a phone would lead to a
-                grid of things that phone can never start (ADR 0066). */}
-            {gamesTab && (
-              <NavLink
-                to="/games"
-                title="Games"
-                onClick={releaseRail}
-                className={({ isActive }) =>
-                  "app-shell__lib" + (isActive ? " is-active" : "")
-                }
-              >
-                <GamesIcon />
-                <span className="app-shell__lib-name app-shell__label">
-                  Games
-                </span>
-              </NavLink>
-            )}
           </div>
 
           <div className="app-shell__group">

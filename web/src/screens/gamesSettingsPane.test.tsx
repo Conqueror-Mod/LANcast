@@ -117,20 +117,20 @@ describe("the games settings pane", () => {
     // path they are already walking.
     stubDesktop();
     await render();
-    expect(navLabels()).toContain("Games");
+    expect(navLabels()).toContain("PC Games");
   });
 
   it("offers nothing of the sort in a browser tab", async () => {
     // No bindings: the games are on the machine running the desktop app, and a
     // heading leading to an empty column is worse than no heading.
     await render();
-    expect(navLabels()).not.toContain("Games");
+    expect(navLabels()).not.toContain("PC Games");
   });
 
   it("shows the switch, off, when nothing has been turned on", async () => {
     stubDesktop(false);
     await render();
-    await click(navItem("Games"));
+    await click(navItem("PC Games"));
     expect(host.textContent).toContain("Show my installed games");
     const box = host.querySelector<HTMLInputElement>(
       ".settings__pane input[type=checkbox]",
@@ -141,7 +141,7 @@ describe("the games settings pane", () => {
   it("reads as on once it is on", async () => {
     stubDesktop(true);
     await render();
-    await click(navItem("Games"));
+    await click(navItem("PC Games"));
     const box = host.querySelector<HTMLInputElement>(
       ".settings__pane input[type=checkbox]",
     );
@@ -157,7 +157,7 @@ describe("the games settings pane", () => {
      */
     const set = stubDesktop(false);
     await render();
-    await click(navItem("Games"));
+    await click(navItem("PC Games"));
     const box = host.querySelector<HTMLInputElement>(
       ".settings__pane input[type=checkbox]",
     )!;

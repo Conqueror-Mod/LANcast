@@ -6,6 +6,7 @@ package webview2
 import (
 	"encoding/json"
 	"errors"
+	"image"
 	"log"
 	"reflect"
 	"strconv"
@@ -68,6 +69,11 @@ type webview struct {
 	// game is the window a retro game draws into, shown while gameOn.
 	game   uintptr
 	gameOn bool
+	// iconic is set once DWM agreed to take its taskbar pictures from this
+	// window, and thumbCache is the last capture before it was minimised
+	// (thumbnail.go).
+	iconic     bool
+	thumbCache *image.RGBA
 	// shield catches clicks on the docked native picture (overlay.go).
 	shield uintptr
 	// handingOff is set while this package moves activation to the overlay,
@@ -252,6 +258,9 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 		if r, done := w.overlayMessage(msg, wp, lp); done {
 			return r
 		}
+		if r, done := w.thumbnailMessage(msg, wp, lp); done {
+			return r
+		}
 		switch msg {
 		case w32.WMMove, w32.WMMoving:
 			_ = w.browser.NotifyParentWindowPositionChanged()
@@ -401,6 +410,9 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 		0,
 	)
 	setWindowContext(w.hwnd, w)
+	// The taskbar thumbnail from what is really on screen, not from this
+	// window's empty surface (thumbnail.go).
+	w.enableIconicPreview()
 
 	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
 	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)

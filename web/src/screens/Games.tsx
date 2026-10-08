@@ -241,7 +241,7 @@ function GamesShell({
   return (
     <div className="browse games">
       <div className="browse__head browse__head--sticky">
-        <h1 className="browse__title">Games</h1>
+        <h1 className="browse__title">PC Games</h1>
         <span className="browse__count">{count ? count : ""}</span>
         {onRescan && (
           <button className="games__rescan" onClick={onRescan}>
