@@ -39,6 +39,8 @@ import (
 	"lancast/internal/photo"
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
+	"lancast/internal/retro/identify"
+	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
 	"lancast/internal/selfupdate"
 	"lancast/internal/service"
@@ -484,6 +486,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// run. ffmpeg is handed over for HEIC, which nothing in the standard
 	// library can read and which a phone backup is mostly made of.
 	photos := photo.NewWorker(st, art, &photo.Decoder{FFmpeg: photo.NewFFmpeg()}, log)
+	// ROMs are named by their own worker, against DAT files fetched on
+	// request (ADR 0073). It reads every file, so like the two above it runs
+	// behind a scan rather than inside one. With no DATs installed it still
+	// hashes, so an install later is a lookup rather than a re-read.
+	retroDB := &retrodb.Cache{Dir: filepath.Join(cfg.DataDir, "retrodb"), Log: log}
+	roms := identify.NewWorker(st, log)
+	roms.Index = retroDB.Index
+	roms.Art = art
+	roms.Artwork = func() bool { return settings.Get().RetroArtwork }
 	// Music takes its metadata from the file's own tags during the scan, not
 	// from the filename (ADR 0024). Without a prober the scan still works and
 	// tracks keep what their folders gave them.
@@ -591,6 +602,19 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer photoMu.Unlock()
 			if err := photos.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("photo thumbnail pass failed", "error", err)
+			}
+		}()
+	}
+
+	var romMu sync.Mutex
+	romSoon := func() {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			romMu.Lock()
+			defer romMu.Unlock()
+			if err := roms.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("rom identification pass failed", "error", err)
 			}
 		}()
 	}
@@ -733,6 +757,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
+		Retro: roms, RetroDB: retroDB, RetroSoon: romSoon,
 		Faces: faceWorker, FaceTool: faceTool, Embedder: embedder,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
 		// Only for installs that are not a service; the service path
@@ -783,6 +808,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		enrichSoon()
 		coverSoon()
 		photoSoon()
+		romSoon()
 		// Last, and it will mostly find nothing to do on this pass: the items
 		// this scan added are not probed yet, so they become eligible on the
 		// next one rather than this one. That is the ordering being honest
@@ -837,6 +863,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 */
 	photoSoon()
 	coverSoon()
+	// And ROMs, for the same reason: revision 64 adds the queue, and a
+	// library scanned before it would otherwise wait for the next scan.
+	romSoon()
 
 	// Bind before serving so a port clash is a clear startup failure rather
 	// than a background error nobody sees. An older instance still holding the

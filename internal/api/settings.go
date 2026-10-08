@@ -77,6 +77,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			return out
 		}(),
 		"detect_markers": cur.DetectMarkers,
+		"retro_artwork":  cur.RetroArtwork,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -108,6 +109,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		UpdateCheck      *bool    `json:"update_check"`
 		SensitiveMarking *bool    `json:"sensitive_marking"`
 		DetectMarkers    *bool    `json:"detect_markers"`
+		RetroArtwork     *bool    `json:"retro_artwork"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
@@ -173,6 +175,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DetectMarkers != nil {
 		next.DetectMarkers = *req.DetectMarkers
+	}
+	if req.RetroArtwork != nil {
+		next.RetroArtwork = *req.RetroArtwork
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
@@ -352,6 +357,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if next.DetectMarkers && !prev.DetectMarkers && s.detectMarkers != nil {
 		s.detectMarkers()
 	}
+	// The same, for box art: games identified while it was off are asked
+	// again, by lookup against hashes already stored, so their pictures come
+	// now rather than when each file next changes.
+	if next.RetroArtwork && !prev.RetroArtwork {
+		s.requeueROMs(r.Context())
+	}
 
 	s.getSettings(w, r)
 }
@@ -377,6 +388,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
 	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
+	add("retro_artwork", prev.RetroArtwork != next.RetroArtwork)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)

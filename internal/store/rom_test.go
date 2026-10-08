@@ -150,3 +150,25 @@ func TestRequeueROMsSkipsLocked(t *testing.T) {
 		t.Errorf("pending = %+v, want only the unlocked rom", pending)
 	}
 }
+
+// The Console filter offers only consoles the library holds, and a missing
+// game's console is not one of them.
+func TestFacetsListPlatformsPresent(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	lib := romLibrary(t, s)
+	putROM(t, s, lib, "a.z64", "n64", 1)
+	putROM(t, s, lib, "b.z64", "n64", 1)
+	gone := putROM(t, s, lib, "c.gba", "gba", 1)
+	putROM(t, s, lib, "d.zip", "", 1)
+	if err := s.MarkMissing(ctx, []int64{gone}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := s.LibraryFacets(ctx, lib.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Platforms) != 1 || f.Platforms[0] != "n64" {
+		t.Errorf("platforms = %v, want [n64]", f.Platforms)
+	}
+}

@@ -677,7 +677,7 @@ should be able to show them side by side without explaining the gap.
 
 ### `POST /api/libraries`
 
-`kind` is one of `movie`, `show`, `music`, `picture`, `other`. Every path must
+`kind` is one of `movie`, `show`, `music`, `picture`, `retro`, `other`. Every path must
 exist and be a directory; all are validated **before** anything is inserted, so
 a typo in the third location does not leave a half-made library behind.
 
@@ -847,7 +847,8 @@ far that one has got*, and this endpoint gives it. Branch on the status, not on
 the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
-library indexes audio, a `picture` library images, everything else video — and
+library indexes audio, a `picture` library images, a `retro` library ROMs and
+disc images, everything else video — and
 it biases matching between films and TV. There is no endpoint to change it:
 altering it would mean a rescan re-litigating identity for an entire library,
 which is what field locking exists to prevent. Remove the library and add it
@@ -1096,12 +1097,16 @@ sorted; decades, years and resolutions are widest/newest-first.
   "years": [2019, 2003, 1994],
   "resolutions": [{ "key": "uhd", "label": "4K", "min_width": 3000, "max_width": 0 },
                   { "key": "hd1080", "label": "1080p", "min_width": 1700, "max_width": 2999 }],
+  "platforms": [],
   "has_in_progress": true, "has_unmatched": false }
 ```
 
 `years` is offered **alongside** `decades`, not instead of it: a decade is how
 you browse and a year is how you find. A library spanning a century has too many
 years for a row of chips and exactly the right number for a searchable list.
+
+`platforms` are the consoles present in a retro library (ADR 0073), and empty
+in every other kind.
 
 `resolutions` are **buckets over the probed width**, not a stored field —
 nothing in the database says "4K". Bucketed on width because height is what
@@ -1189,6 +1194,7 @@ rather than matching everybody.
 | `content_rating` | Restrict to this exact content rating (PG, R, TV-MA…). **Repeatable** |
 | `year` | Restrict to this exact release year. **Repeatable**; a non-numeric value is `400` |
 | `resolution` | Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. **Repeatable**. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page |
+| `platform` | Restrict a retro library to some consoles (ADR 0073), by the values `platform` carries: `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis`, `ps1`. **Repeatable**, OR within the facet. An **unrecognised console is ignored rather than rejected**, for the reason resolution keys are |
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
 | `face_cluster` | Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page. **Not `person`**, which is a film credit: a credit is what a provider said about a film, a face group is a cluster of embeddings this server computed from photographs, and nothing joins them. **Repeatable**, OR within the facet like every other — see below, because the reason is not consistency. A non-numeric value is `400`. **Marked folders are excluded and the caller cannot opt in**: being able to ask who is in a folder you cannot open is the disclosure [ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md) covers, by another route |
@@ -4361,6 +4367,7 @@ to "have I watched this".
 | `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |
 | `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
 | `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime. **Switching it on starts a pass immediately** rather than waiting for the next scan — it did wait, and a setting whose effect arrives hours later cannot be told apart from one that does nothing |
+| `retro_artwork` | `false` | — | Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game, and no phone-home has no convenience exception. Identifying ROMs is offline and does not depend on it. **Switching it on re-queues identified ROMs** so their pictures arrive now, by lookup against hashes already stored rather than by reading every file again |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
 | `artwork_cache_mb` | `0` | 0 or more | A cap on the artwork cache, in megabytes. **0 is no limit**, the default. A *target* rather than a guarantee: a daily pass removes things in the order of what can be recovered — **orphans** (artwork nothing references) at any setting, then **derived sizes** oldest-first to meet the cap, and **never a live original**. An original is the only copy that cannot be rebuilt without going back to a provider, so a cap that could remove one would turn a disk-space setting into "some of your posters are gone now". A library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number. Orphans are removed even at 0, because they are waste under every policy and removing one cannot cost a visible picture. No upper bound: a large array may reasonably hold a great deal of artwork, and an invented ceiling would be wrong with no way to say so |
 | `max_transcodes` | `3` | 1 to 64 | How many conversions may run at once. Each is a whole ffmpeg, so this is a statement about the machine rather than a preference. A **ceiling, not a queue**: past it a request is refused and the client reports a busy server, which is honest — admitting everybody and letting every stream stutter is not. **Direct play does not count**; a file sent as it is costs no session however many people are watching. Applied live, so an operator relieving a struggling server does not have to restart it and drop the sessions they are trying to help; those already running are left alone and the ceiling decides what is admitted next |
@@ -4796,6 +4803,79 @@ absolute, or names the live database. A name that is well-formed but absent is
 
 Removes one. `204` on success, `400` for a name that is not a backup name,
 `404` when there is no such file. Recorded as `backup.delete`.
+
+## Retro games
+
+A `retro` library holds ROMs and disc images of every console it recognises, in
+one library filtered by `platform` rather than one library per console
+([ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)). Each is an
+item of kind `rom` carrying a `platform`: `nes`, `snes`, `n64`, `gb`, `gbc`,
+`gba`, `sms`, `genesis` or `ps1`.
+
+**The platform is read from the name.** The extension decides when it names one
+console; `.bin` and `.zip` name none, and resolve by the nearest folder between
+the library root and the file that does (`N64`, `Sega Genesis`, or libretro's
+own `Nintendo - Nintendo 64`). A file nothing places has no `platform` until its
+contents do: a zip by the file inside it, anything else by its SHA-1 once the
+ROM database is installed.
+
+**A PlayStation disc is one item.** The `.cue` is the game; the `.bin` tracks it
+lists are not items of their own. `.chd` and `.pbp` are single files and are
+items as they are.
+
+**Identity comes from the bytes**, not the name. Each ROM is hashed once —
+N64 dumps in any of their three byte orders, headered and headerless NES and
+SNES dumps, de-interleaved Genesis `.smd` — and looked up in libretro's DAT
+files, which name it, give its year and genre, and set `provider`
+(`libretro-db`), `external_id` (the DAT's full name, region tags included) and
+`match_state`. A PlayStation disc is looked up by the serial on the disc. A
+renamed file is the same game. Locked fields are never written, a locked match
+is never re-scored, and a ROM no DAT lists is `unmatched` and keeps the title
+its filename gave it.
+
+Identification runs **after** a scan, by its own worker, because it reads every
+file: a first scan lists the games, and the names follow.
+
+**ROM libraries are not shared with paired servers.** Granting one is refused
+with `400 not_shareable`, and a retro library is never in a friend's scope
+whatever is stored: sending a ROM to another household is a different act from
+streaming it a film, and needs its own decision.
+
+**No ROM plays here yet.** A retro game plays in the LANcast desktop app, which
+gains its player in a later stage; until then a client lists the library and
+says where the game will play.
+
+### `GET /api/retro/database` · `POST /api/retro/database/install` · `POST /api/retro/database/install/cancel`
+
+The DAT files ROMs are identified against, fetched on request. Admin only.
+
+```json
+{ "installed": false, "commit": "fbeefcb46c2e…", "licence": "CC BY-SA 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "bytes_total": 15213728, "platforms": ["nes", "snes", "n64", "…"],
+  "files": [ { "name": "n64.dat", "size_bytes": 369835, "url": "https://raw.githubusercontent.com/…" } ],
+  "job": { "running": false, "stage": "", "file": "", "bytes_done": 0, "bytes_total": 0 },
+  "identify": { "running": false, "matched": 0, "unmatched": 0, "failed": 0,
+                "remaining": 12, "total": 12, "updated_at": 1791432000 } }
+```
+
+The `GET` names every file, its size, the licence and the commit **before
+anything is fetched** — a download somebody cannot identify is not consent — and
+carries the identify worker's progress, which answers the other half of the same
+question.
+
+`POST …/install` returns `202` with the job snapshot; progress is polled from
+the `GET`. **The URLs are pinned in the server**, each to one commit of
+libretro-database with a SHA-256, and are never taken from the request. Files
+are staged and verified, and only a complete, verified set replaces what was
+there, so a failure leaves any previous install exactly as it was. `installed`
+is true only for a complete install of *this build's* pinned set.
+
+When the install finishes, every ROM that is not locked is looked up again. The
+hashes are already stored, so this is a lookup per game rather than a read of
+every file. Pressing install twice while it runs returns the same snapshot.
+
+`POST …/install/cancel` stops a running download; nothing partial is left.
 
 ## Plugins
 

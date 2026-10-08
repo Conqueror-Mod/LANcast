@@ -621,7 +621,10 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// clause in the store rather than a 400: these arrive from a bookmarked
 		// query string, and a tier that has been renamed should widen the grid
 		// back to everything rather than break the page.
-		Resolutions:    nonEmpty(q["resolution"]),
+		Resolutions: nonEmpty(q["resolution"]),
+		// Unknown consoles are dropped rather than refused, for the reason
+		// resolution keys are: a bookmark should widen, not break the page.
+		Platforms:      knownPlatforms(q["platform"]),
 		PersonIDs:      people,
 		ActorIDs:       actors,
 		DirectorIDs:    directors,

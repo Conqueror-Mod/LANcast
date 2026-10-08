@@ -4638,6 +4638,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retro/database": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What identifying ROMs would download, and how identification is going
+         * @description Administrators only. Names every file, its size, the licence and the pinned commit **before anything is fetched**; a download somebody cannot identify is not consent. Also carries the identify worker's progress, which answers the other half of the same question.
+         */
+        get: operations["getRetroDatabase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retro/database/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the DAT download
+         * @description Administrators only. Asynchronous; progress is polled from `GET /api/retro/database`.
+         *
+         *     **The URLs are pinned in the server and never taken from the request**, each to a fixed commit with a SHA-256. Files are staged and verified, and only a complete, verified set replaces what was there: a failure leaves any previous install untouched. When it finishes, every ROM that is not locked is looked up again against hashes already stored.
+         *
+         *     Pressing it twice while it runs returns the same snapshot.
+         */
+        post: operations["installRetroDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retro/database/install/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a running DAT download
+         * @description Administrators only. Nothing partial is left behind.
+         */
+        post: operations["cancelRetroDatabaseInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4799,7 +4863,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
-            /** @description **An open set.** `movie`, `show`, `music` and `picture` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
+            /** @description **An open set.** `movie`, `show`, `music`, `picture` and `retro` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
             kind: string;
             /**
              * @description The library's first location.
@@ -4948,7 +5012,7 @@ export interface components {
             id: number;
             /** Format: int64 */
             library_id: number;
-            /** @description **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
+            /** @description **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `rom` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
             kind: string;
             title: string;
             year: number | null;
@@ -4964,6 +5028,8 @@ export interface components {
              *     Displayed so two editions of one work can be told apart in a grid; **never a grouping key**. The file that motivated that decision called itself an alternate cut and was byte-for-byte the theatrical copy — the marker is a thing the user wrote, so show it, do not believe it.
              */
             edition?: string | null;
+            /** @description A ROM's console (ADR 0073): `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis` or `ps1`. Absent on every other kind, and on a ROM no extension, folder or hash could place. **An open set**, like `kind`: more consoles arrive without a major version. */
+            platform?: string | null;
             /** @description The file's container, e.g. `mkv`. */
             container: string | null;
             /** Format: int64 */
@@ -5328,6 +5394,8 @@ export interface components {
             /** @description Whether picture folders and photos can be marked sensitive (ADR 0051). */
             sensitive_marking: boolean;
             detect_markers: boolean;
+            /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
+            retro_artwork: boolean;
             auto_enrich: boolean;
             update_check: boolean;
             /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
@@ -5427,6 +5495,8 @@ export interface components {
             update_check?: boolean;
             sensitive_marking?: boolean;
             detect_markers?: boolean;
+            /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
+            retro_artwork?: boolean;
             hardware_encoder?: string;
             debug_logging?: boolean;
             watched_threshold?: number;
@@ -5580,6 +5650,8 @@ export interface components {
             /** @description Offered **alongside** `decades`, not instead of it: a decade is how you browse and a year is how you find. A library spanning a century has too many years for a row of chips and exactly the right number for a searchable list. */
             years: number[];
             resolutions: components["schemas"]["ResolutionBucket"][];
+            /** @description Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something. */
+            platforms: string[];
             /** @description Most-populated first. */
             collections: components["schemas"]["CollectionFacet"][];
             /** @description The highest rating present, so a client offers only thresholds that can match: a library topping out at 8.4 has no business showing a 9+ filter guaranteed to return nothing. */
@@ -6996,6 +7068,51 @@ export interface components {
         TogetherRequestList: {
             requests: components["schemas"]["TogetherRequest"][];
         };
+        RetroDatabaseJob: {
+            running: boolean;
+            /** @description `downloading`, `verifying` or `installing`; empty before the first install. */
+            stage: string;
+            /** @description The file in flight. */
+            file?: string;
+            /** Format: int64 */
+            bytes_done: number;
+            /** Format: int64 */
+            bytes_total: number;
+            error?: string;
+            /** Format: int64 */
+            finished_at?: number;
+        };
+        RetroIdentifyStats: {
+            running: boolean;
+            matched: number;
+            unmatched: number;
+            failed: number;
+            remaining: number;
+            total: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        RetroDatabase: {
+            /** @description A complete install of this build's pinned set. A partial install, or one of another commit, is `false`. */
+            installed: boolean;
+            /** @description The libretro-database commit the files are pinned to. */
+            commit: string;
+            licence: string;
+            licence_url: string;
+            files: {
+                name: string;
+                /** Format: int64 */
+                size_bytes: number;
+                /** @description Where the server would fetch it. Display only. */
+                url: string;
+            }[];
+            /** Format: int64 */
+            bytes_total: number;
+            /** @description Every console a retro library recognises. */
+            platforms: string[];
+            job: components["schemas"]["RetroDatabaseJob"];
+            identify?: components["schemas"]["RetroIdentifyStats"];
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -7617,6 +7734,8 @@ export interface operations {
                 year?: number[];
                 /** @description Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 resolution?: string[];
+                /** @description Restrict a retro library to some consoles (ADR 0073), by the values `Item.platform` carries. An **unrecognised console is ignored rather than rejected**, for the reason resolution keys are. **Repeatable**, OR within the facet. */
+                platform?: string[];
                 /** @description Restrict to items this person is credited on, **in any role**. Ids come from the library's cast list, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 person?: number[];
                 /** @description The person filter scoped to acting credits. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant. Somebody who does both matches under both, once in each. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
@@ -14297,6 +14416,72 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getRetroDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pinned set, whether it is installed, and any running job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroDatabase"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    installRetroDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download has started, or was already running. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroDatabaseJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    cancelRetroDatabaseInstall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job as it stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroDatabaseJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

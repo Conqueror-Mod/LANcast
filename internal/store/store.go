@@ -626,7 +626,7 @@ type ScanFile struct {
 	 * called itself an alternate cut and was byte-for-byte the theatrical copy.
 	 * Nothing joins on it, dedupes by it, or ranks with it.
 	 */
-	Edition   *string
+	Edition *string
 	// Platform is a ROM's console (ADR 0073), or nil.
 	Platform  *string
 	Container string
@@ -890,9 +890,9 @@ type ItemFilter struct {
 	Scoped bool
 	Scope  []int64
 
-	Years       []int    // exact release years
+	Years []int // exact release years
 	// Platforms restricts a retro library to some consoles (ADR 0073).
-	Platforms []string
+	Platforms   []string
 	Resolutions []string // bucket keys: uhd | hd1080 | hd720 | sd
 
 	/*
@@ -1627,6 +1627,11 @@ type Facets struct {
 	// same table the filter matches on.
 	Resolutions []ResolutionBucket `json:"resolutions"`
 
+	// Consoles present in a retro library (ADR 0073), alphabetical; the
+	// client orders them for display. Empty everywhere else, so the Console
+	// filter only exists where it can narrow something.
+	Platforms []string `json:"platforms"`
+
 	// Collections in this library, most-populated first — the same ordering
 	// principle as the cast list, and for the same reason: the franchises
 	// somebody actually has are more useful at the top than the alphabet is.
@@ -1673,7 +1678,27 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 	f := Facets{
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
-		Collections: []CollectionFacet{}, Tags: []Tag{},
+		Collections: []CollectionFacet{}, Tags: []Tag{}, Platforms: []string{},
+	}
+
+	prows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT platform FROM media_item
+		WHERE library_id = ? AND missing = 0 AND platform IS NOT NULL
+		ORDER BY platform`, libraryID)
+	if err != nil {
+		return f, fmt.Errorf("library facets (platforms): %w", err)
+	}
+	for prows.Next() {
+		var p string
+		if err := prows.Scan(&p); err != nil {
+			prows.Close()
+			return f, fmt.Errorf("library facets (platforms): %w", err)
+		}
+		f.Platforms = append(f.Platforms, p)
+	}
+	prows.Close()
+	if err := prows.Err(); err != nil {
+		return f, err
 	}
 
 	/*

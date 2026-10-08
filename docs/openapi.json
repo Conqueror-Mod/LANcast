@@ -108,6 +108,10 @@
     {
       "name": "tags",
       "description": "**Private to the calling account** (ADR 0062). You see your own tags; nobody else on the server sees them, removes them, or can discover that they exist. The vocabulary is per-account too — two people using the word \"christmas\" have two tags — because a shared name table would leak the names through anything that lists them."
+    },
+    {
+      "name": "retro",
+      "description": "Retro games: identifying ROMs offline (ADR 0073)."
     }
   ],
   "paths": {
@@ -817,6 +821,18 @@
             "in": "query",
             "required": false,
             "description": "Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "description": "Restrict a retro library to some consoles (ADR 0073), by the values `Item.platform` carries. An **unrecognised console is ignored rather than rejected**, for the reason resolution keys are. **Repeatable**, OR within the facet.",
             "schema": {
               "type": "array",
               "items": {
@@ -10274,6 +10290,90 @@
           }
         }
       }
+    },
+    "/retro/database": {
+      "get": {
+        "operationId": "getRetroDatabase",
+        "tags": [
+          "retro"
+        ],
+        "summary": "What identifying ROMs would download, and how identification is going",
+        "description": "Administrators only. Names every file, its size, the licence and the pinned commit **before anything is fetched**; a download somebody cannot identify is not consent. Also carries the identify worker's progress, which answers the other half of the same question.",
+        "responses": {
+          "200": {
+            "description": "The pinned set, whether it is installed, and any running job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroDatabase"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/retro/database/install": {
+      "post": {
+        "operationId": "installRetroDatabase",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Start the DAT download",
+        "description": "Administrators only. Asynchronous; progress is polled from `GET /api/retro/database`.\n\n**The URLs are pinned in the server and never taken from the request**, each to a fixed commit with a SHA-256. Files are staged and verified, and only a complete, verified set replaces what was there: a failure leaves any previous install untouched. When it finishes, every ROM that is not locked is looked up again against hashes already stored.\n\nPressing it twice while it runs returns the same snapshot.",
+        "responses": {
+          "202": {
+            "description": "The download has started, or was already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroDatabaseJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/retro/database/install/cancel": {
+      "post": {
+        "operationId": "cancelRetroDatabaseInstall",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Stop a running DAT download",
+        "description": "Administrators only. Nothing partial is left behind.",
+        "responses": {
+          "200": {
+            "description": "The job as it stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroDatabaseJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10887,7 +10987,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "**An open set.** `movie`, `show`, `music` and `picture` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
+            "description": "**An open set.** `movie`, `show`, `music`, `picture` and `retro` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
           },
           "path": {
             "type": "string",
@@ -11219,7 +11319,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
+            "description": "**An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `rom` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give."
           },
           "title": {
             "type": "string"
@@ -11262,6 +11362,13 @@
               "null"
             ],
             "description": "The edition marker the filename claimed (ADR 0042), or absent.\n\nDisplayed so two editions of one work can be told apart in a grid; **never a grouping key**. The file that motivated that decision called itself an alternate cut and was byte-for-byte the theatrical copy — the marker is a thing the user wrote, so show it, do not believe it."
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A ROM's console (ADR 0073): `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis` or `ps1`. Absent on every other kind, and on a ROM no extension, folder or hash could place. **An open set**, like `kind`: more consoles arrive without a major version."
           },
           "container": {
             "type": [
@@ -12068,6 +12175,7 @@
           "write_nfo",
           "sensitive_marking",
           "detect_markers",
+          "retro_artwork",
           "auto_enrich",
           "update_check",
           "debug_logging",
@@ -12173,6 +12281,10 @@
           },
           "detect_markers": {
             "type": "boolean"
+          },
+          "retro_artwork": {
+            "type": "boolean",
+            "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
           },
           "auto_enrich": {
             "type": "boolean"
@@ -12326,6 +12438,10 @@
           },
           "detect_markers": {
             "type": "boolean"
+          },
+          "retro_artwork": {
+            "type": "boolean",
+            "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
           },
           "hardware_encoder": {
             "type": "string"
@@ -12592,6 +12708,7 @@
           "has_watched",
           "years",
           "resolutions",
+          "platforms",
           "collections",
           "max_rating",
           "has_in_progress",
@@ -12636,6 +12753,13 @@
             "items": {
               "$ref": "#/components/schemas/ResolutionBucket"
             }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something."
           },
           "collections": {
             "type": "array",
@@ -16247,6 +16371,149 @@
             "items": {
               "$ref": "#/components/schemas/TogetherRequest"
             }
+          }
+        }
+      },
+      "RetroDatabaseJob": {
+        "type": "object",
+        "required": [
+          "running",
+          "stage",
+          "bytes_done",
+          "bytes_total"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "stage": {
+            "type": "string",
+            "description": "`downloading`, `verifying` or `installing`; empty before the first install."
+          },
+          "file": {
+            "type": "string",
+            "description": "The file in flight."
+          },
+          "bytes_done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RetroIdentifyStats": {
+        "type": "object",
+        "required": [
+          "running",
+          "matched",
+          "unmatched",
+          "failed",
+          "remaining",
+          "total",
+          "updated_at"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "matched": {
+            "type": "integer"
+          },
+          "unmatched": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RetroDatabase": {
+        "type": "object",
+        "required": [
+          "installed",
+          "commit",
+          "licence",
+          "licence_url",
+          "files",
+          "bytes_total",
+          "platforms",
+          "job"
+        ],
+        "properties": {
+          "installed": {
+            "type": "boolean",
+            "description": "A complete install of this build's pinned set. A partial install, or one of another commit, is `false`."
+          },
+          "commit": {
+            "type": "string",
+            "description": "The libretro-database commit the files are pinned to."
+          },
+          "licence": {
+            "type": "string"
+          },
+          "licence_url": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "size_bytes",
+                "url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Where the server would fetch it. Display only."
+                }
+              }
+            }
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every console a retro library recognises."
+          },
+          "job": {
+            "$ref": "#/components/schemas/RetroDatabaseJob"
+          },
+          "identify": {
+            "$ref": "#/components/schemas/RetroIdentifyStats"
           }
         }
       }

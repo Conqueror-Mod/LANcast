@@ -30,6 +30,8 @@ import (
 	"lancast/internal/photo"
 	"lancast/internal/presence"
 	"lancast/internal/probe"
+	"lancast/internal/retro/identify"
+	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
@@ -66,6 +68,11 @@ type Deps struct {
 	Embedder *faces.Indexer
 	Covers   *coverart.Worker
 	Photos   *photo.Worker
+	// Retro identifies ROMs (ADR 0073), and RetroDB holds the DAT index it
+	// reads. RetroSoon triggers a pass.
+	Retro     *identify.Worker
+	RetroDB   *retrodb.Cache
+	RetroSoon func()
 	// ServiceManaged reports whether this process is running under a service
 	// manager. It decides what "finish the update" can do: a service can be
 	// restarted for the user, a foreground server can only be told to close and
@@ -155,6 +162,10 @@ type Server struct {
 	faceTool         *faces.Tool
 	covers           *coverart.Worker
 	photos           *photo.Worker
+	retro            *identify.Worker
+	retroDB          *retrodb.Cache
+	retroSoon        func()
+	retroInstall     *retroJob
 	serviceManaged   bool
 	relaunch         func() error
 	trans            *transcode.Manager
@@ -267,6 +278,7 @@ func New(d Deps) *Server {
 		peerDown:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
+		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{},
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 		crashes:  crashlog.New(d.DataDir, Version),
@@ -392,6 +404,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Media tools. Admin-only: this makes the server download a binary and then
 	// execute it (ADR 0043). The URL is pinned in mediatools, never a parameter.
+	mux.HandleFunc("GET /api/retro/database", s.adminOnly(s.retroDatabase))
+	mux.HandleFunc("POST /api/retro/database/install", s.adminOnly(s.installRetroDatabase))
+	mux.HandleFunc("POST /api/retro/database/install/cancel", s.adminOnly(s.cancelRetroDatabaseInstall))
 	mux.HandleFunc("GET /api/media-tools", s.adminOnly(s.mediaToolsStatus))
 	mux.HandleFunc("POST /api/media-tools/install", s.adminOnly(s.installMediaTools))
 	mux.HandleFunc("POST /api/media-tools/install/cancel", s.adminOnly(s.cancelMediaToolsInstall))
