@@ -123,6 +123,15 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
 	return tx.Commit()
 }
 
+/*
+ * notProbed is what ffprobe has nothing to say about: a ROM (ADR 0073) is a
+ * cartridge dump or a disc image, not a media container. Found on the first
+ * real retro library, where every game was handed to ffprobe on every pass
+ * and logged "Invalid data found when processing input". ROMs are read by
+ * their own worker (internal/retro/identify).
+ */
+const notProbed = `kind != 'rom'`
+
 // PendingProbe returns items that have never been probed, or whose file
 // changed since they were.
 func (s *Store) PendingProbe(ctx context.Context, limit int) ([]Item, error) {
@@ -131,6 +140,7 @@ func (s *Store) PendingProbe(ctx context.Context, limit int) ([]Item, error) {
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item
 		WHERE probed_at IS NULL AND missing = 0 AND path IS NOT NULL AND container IS NOT NULL
+		  AND `+notProbed+`
 		ORDER BY added_at LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("pending probe: %w", err)
@@ -153,7 +163,8 @@ func (s *Store) PendingProbeCount(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM media_item
-		WHERE probed_at IS NULL AND missing = 0 AND container IS NOT NULL`).Scan(&n)
+		WHERE probed_at IS NULL AND missing = 0 AND container IS NOT NULL
+		  AND `+notProbed).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("pending probe count: %w", err)
 	}
