@@ -4829,7 +4829,12 @@ N64 dumps in any of their three byte orders, headered and headerless NES and
 SNES dumps, de-interleaved Genesis `.smd` — and looked up in libretro's DAT
 files, which name it, give its year and genre, and set `provider`
 (`libretro-db`), `external_id` (the DAT's full name, region tags included) and
-`match_state`. `region` is the release region the name carries (`USA`,
+`match_state`. Where libretro's ESRB DAT rates the game, `content_rating`
+is set to the label **with its system's name** (`ESRB T`, `ESRB M`), because a
+bare `M` is Australia's 15 on the ceiling ladder and ESRB's M is 17. Coverage is
+uneven: thousands of 8- and 16-bit games and almost no N64 or PlayStation ones.
+A content-rating ceiling blocks an unrated game as it blocks any unrated item.
+`region` is the release region the name carries (`USA`,
 `USA, Europe`) — the DAT name once matched, the filename before. A
 PlayStation disc is looked up by the serial on the disc. A
 renamed file is the same game. Locked fields are never written, a locked match
@@ -4855,7 +4860,7 @@ The DAT files ROMs are identified against, fetched on request. Admin only.
 ```json
 { "installed": false, "commit": "fbeefcb46c2e…", "licence": "CC BY-SA 4.0",
   "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-  "bytes_total": 15213728, "platforms": ["nes", "snes", "n64", "…"],
+  "bytes_total": 15787080, "platforms": ["nes", "snes", "n64", "…"],
   "files": [ { "name": "n64.dat", "size_bytes": 369835, "url": "https://raw.githubusercontent.com/…" } ],
   "job": { "running": false, "stage": "", "file": "", "bytes_done": 0, "bytes_total": 0 },
   "identify": { "running": false, "matched": 0, "unmatched": 0, "failed": 0,

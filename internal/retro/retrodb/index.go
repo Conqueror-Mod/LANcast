@@ -19,6 +19,9 @@ type Game struct {
 	Serial   string
 	Year     int
 	Genre    string
+	// ESRB is the bare ESRB label ("E", "T", "M"), or "". Coverage is uneven:
+	// thousands of 8- and 16-bit games, and almost no N64 or PS1 ones.
+	ESRB string
 }
 
 // Index answers hash and serial lookups for every installed platform.
@@ -142,6 +145,9 @@ func (ix *Index) Build(platform string, games []Entry, metadata ...[]Entry) {
 			}
 			if g.Genre == "" {
 				g.Genre = e.Genre
+			}
+			if g.ESRB == "" && e.ESRB != "" && !strings.EqualFold(e.ESRB, "NOT RATED") {
+				g.ESRB = strings.ToUpper(strings.TrimSpace(e.ESRB))
 			}
 		}
 	}

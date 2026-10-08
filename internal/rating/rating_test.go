@@ -150,3 +150,20 @@ func TestUnknownIsNotSuitableForEverybody(t *testing.T) {
 		t.Error("G is not unknown")
 	}
 }
+
+// ESRB's M is 17+, and a bare M is Australia's 15. A game's rating carries its
+// system's name so the two never become one label (ADR 0073).
+func TestESRBIsKeptApartFromAustralianM(t *testing.T) {
+	if Rank("ESRB M") != 17 {
+		t.Errorf("ESRB M = %d, want 17", Rank("ESRB M"))
+	}
+	if Rank("M") != 15 {
+		t.Errorf("M = %d, want 15 (Australia)", Rank("M"))
+	}
+	if !Allowed("ESRB E10+", "PG-13") || Allowed("ESRB M", "PG-13") {
+		t.Error("ESRB labels do not sit on the ladder by age")
+	}
+	if Allowed("ESRB RP", "PG") {
+		t.Error("rating pending is a rating that says nothing, and must be blocked")
+	}
+}

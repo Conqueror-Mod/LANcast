@@ -330,3 +330,34 @@ func TestFinishedAtSurvivesAnEmptyPass(t *testing.T) {
 		t.Errorf("an empty pass moved FinishedAt from %d to %d", first, got)
 	}
 }
+
+// An ESRB rating is written with its system's name, so a ceiling reads it as
+// ESRB's 17+ and not Australia's 15; a locked rating is left alone.
+func TestESRBRatingIsWrittenWithItsSystem(t *testing.T) {
+	esrbIndex := func() *retrodb.Index {
+		games, _ := retrodb.Parse(strings.NewReader(`game ( name "Shooter (USA)" rom ( name "s.sfc" size 1 crc 11111111 sha1 aa ) )
+game ( name "Puzzle (USA)" rom ( name "p.sfc" size 1 crc 22222222 sha1 bb ) )`))
+		esrb, _ := retrodb.Parse(strings.NewReader(`game ( comment "Shooter (USA)" esrb_rating "M" rom ( crc 11111111 ) )
+game ( comment "Puzzle (USA)" esrb_rating "E" rom ( crc 22222222 ) )`))
+		ix := &retrodb.Index{}
+		ix.Build("snes", games, esrb)
+		return ix
+	}
+	f := newFixture(t, map[string]romhash.Result{
+		"s.sfc": {Sums: sums("11111111", "")},
+		"p.sfc": {Sums: sums("22222222", "")},
+	})
+	f.w.Index = esrbIndex
+	shooter := f.add(t, "s.sfc", "snes")
+	puzzle := f.add(t, "p.sfc", "snes")
+	if err := f.st.LockField(context.Background(), puzzle, "content_rating"); err != nil {
+		t.Fatal(err)
+	}
+	f.run(t)
+	if cr := f.item(t, shooter).ContentRating; cr == nil || *cr != "ESRB M" {
+		t.Errorf("content rating = %v, want ESRB M", cr)
+	}
+	if cr := f.item(t, puzzle).ContentRating; cr != nil && *cr != "" {
+		t.Errorf("a locked rating was written: %q", *cr)
+	}
+}

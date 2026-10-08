@@ -131,7 +131,7 @@ func TestRetroDatabaseStatus(t *testing.T) {
 	if got.Installed || got.Commit == "" || got.Licence == "" || got.BytesTotal <= 0 {
 		t.Errorf("got %+v", got)
 	}
-	if len(got.Files) != 25 || len(got.Platforms) != 9 {
+	if len(got.Files) != 34 || len(got.Platforms) != 9 {
 		t.Errorf("%d files, %d platforms", len(got.Files), len(got.Platforms))
 	}
 	if got.Job.Running {

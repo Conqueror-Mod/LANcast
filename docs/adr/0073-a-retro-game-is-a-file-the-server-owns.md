@@ -301,18 +301,24 @@ game is three rows until it is. This narrows answer 2 above.
 that a match records as `external_id`, or from the filename before there is a
 match, so no client parses a ROM name.
 
-**A content-rating ceiling hides ROMs.** Games carry ESRB and PEGI ratings,
-which LANcast does not read yet, so `rom` is not one of the kinds exempt from
-ceilings. An account with a ceiling sees no games until ratings are filled in.
-That is the existing rule for things someone could rate and did not. Exempting
-ROMs would let a child account see every game. libretro publishes `esrb` and
-`bbfc` metadata DATs, which would fill `content_rating` without a network
-call.
+**A content-rating ceiling applies to games, by their ESRB rating.** Games
+carry ratings, so `rom` is not one of the kinds exempt from ceilings, and an
+unrated game is blocked like any unrated item. Exempting ROMs would let a child
+account see every game. The rating comes from libretro's `esrb` metadata DAT,
+offline, and is stored **with its system's name** (`ESRB M`). A bare `M`
+already sits on the ladder as Australia's 15, and ESRB's M is 17+, so the
+prefix keeps the two statements apart. `rating` has rungs for `ESRB EC`, `E`,
+`KA`, `E10+`, `T`, `M` and `AO`, and `RP` (rating pending) is not stored.
+**Coverage is the catch:** at the pinned commit the ESRB DAT rates thousands of
+NES, SNES, Game Boy, GBA and Genesis games, one N64 game and a handful of PS1
+games. Under a ceiling, most N64 and PS1 games stay hidden until someone rates
+them by hand. That is the existing rule working as written, and whether games
+deserve an exception is a decision still open.
 
-**The pinned set.** 25 files, 15.2 MB, CC BY-SA 4.0, from libretro-database
+**The pinned set.** 34 files, 15.8 MB, CC BY-SA 4.0, from libretro-database
 at commit `fbeefcb4`: the No-Intro DATs for eight consoles and Redump's for the
-PlayStation, each with libretro's release-year and genre DATs (PS1 has
-neither, and Redump carries some years inline). Box art and a screenshot come
+PlayStation, each with libretro's release-year, genre and ESRB DATs (PS1 has
+no year or genre DAT, and Redump carries some years inline). Box art and a screenshot come
 from libretro-thumbnails, addressed by the matched DAT name, and only when
 `retro_artwork` is on.
 

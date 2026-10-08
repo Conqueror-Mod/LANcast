@@ -332,6 +332,14 @@ func (w *Worker) apply(ctx context.Context, rom store.Item, platform string, g *
 		y := g.Year
 		upd.Year = &y
 	}
+	// Written with the system's name, which is what keeps ESRB's M (17) from
+	// being read as Australia's M (15) on the ceiling ladder. "RP" — rating
+	// pending — says nothing, and is left off rather than stored as a label
+	// that blocks exactly as an absent one would.
+	if g.ESRB != "" && g.ESRB != "RP" && !lockedSet[meta.FieldContentRating] {
+		cr := "ESRB " + g.ESRB
+		upd.ContentRating = &cr
+	}
 	if err := w.st.UpdateItemMetadata(ctx, rom.ID, upd); err != nil {
 		return err
 	}

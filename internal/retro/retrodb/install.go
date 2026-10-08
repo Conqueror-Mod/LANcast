@@ -83,44 +83,56 @@ func meta(platform, kind, libretroName, sha string, size int64) File {
 
 /*
  * platformFiles is the pinned set: No-Intro for cartridges, Redump for the
- * PlayStation, and libretro's release-year and genre DATs beside each. PS1
- * has neither metadata DAT at this commit; Redump carries its years inline.
+ * PlayStation, and libretro's release-year, genre and ESRB DATs beside each.
+ * PS1 has no year or genre DAT at this commit; Redump carries its years
+ * inline. The ESRB DATs are uneven — thousands of 8- and 16-bit games, one
+ * N64 game — and are pinned anyway, because a rating is what lets an account
+ * with a content ceiling see a game at all.
  */
 var platformFiles = []platformSet{
 	set("nes", "Nintendo - Nintendo Entertainment System", "no-intro",
 		"853ffc356c664d72ca6c17a8382a2d8dd533dfd8a7e4644b1438ec6979e621e1", 3308190,
 		meta("nes", "releaseyear", "Nintendo - Nintendo Entertainment System", "75f3c80a816fee115920eb9d2c63c97f6cbc15f50e8563f1aa982f9a1877311c", 218336),
-		meta("nes", "genre", "Nintendo - Nintendo Entertainment System", "931e910cc48b43861c7e7250273d2015350e38f23f8d4d33748737a8830fb2f6", 319291)),
+		meta("nes", "genre", "Nintendo - Nintendo Entertainment System", "931e910cc48b43861c7e7250273d2015350e38f23f8d4d33748737a8830fb2f6", 319291),
+		meta("nes", "esrb", "Nintendo - Nintendo Entertainment System", "88c2c4371b56d5c9ab9e43834e7f024321ff1456a35b8f3504ab42ddaf4e705a", 54234)),
 	set("snes", "Nintendo - Super Nintendo Entertainment System", "no-intro",
 		"175c69cc8b50dc60c84828ad570e581a7c03602518776540733636235aa0ff8a", 987445,
 		meta("snes", "releaseyear", "Nintendo - Super Nintendo Entertainment System", "a38acd1af1d9f2aa9ebe9efaa74d2335fdb40aefff8512c9fd1dedf8577d3998", 322971),
-		meta("snes", "genre", "Nintendo - Super Nintendo Entertainment System", "92f0ed22dfecf2bb8338f5680dd0b5556c70e6a63ab9fe36285d8c945649f67e", 370035)),
+		meta("snes", "genre", "Nintendo - Super Nintendo Entertainment System", "92f0ed22dfecf2bb8338f5680dd0b5556c70e6a63ab9fe36285d8c945649f67e", 370035),
+		meta("snes", "esrb", "Nintendo - Super Nintendo Entertainment System", "b9d92c83115325ef0c631ad53ac785c73f0e4427b147e25772b969a4f0dc1e65", 107619)),
 	set("n64", "Nintendo - Nintendo 64", "no-intro",
 		"eb20ef6164e86eee57b049a5f45bac21cb36a40e5edab26c44db19e4ec47ac8b", 369835,
 		meta("n64", "releaseyear", "Nintendo - Nintendo 64", "20b37b55fbfd9a382118dbebb3570885e1521920dad056bc7d8a93623e124ecf", 182568),
-		meta("n64", "genre", "Nintendo - Nintendo 64", "ed12f13a9fbc8d4debe449fccc92b6a64803873b0461fdd3caef2780013af143", 196745)),
+		meta("n64", "genre", "Nintendo - Nintendo 64", "ed12f13a9fbc8d4debe449fccc92b6a64803873b0461fdd3caef2780013af143", 196745),
+		meta("n64", "esrb", "Nintendo - Nintendo 64", "5f271ecdb010563d4e746614d562968e010d1c7fae8dbf9d34d6ad67011170e7", 170)),
 	set("gb", "Nintendo - Game Boy", "no-intro",
 		"6fa0187a63666d9cdf5af9bb50baeca392f9f2195bcb2371e56c0a00e62989de", 530791,
 		meta("gb", "releaseyear", "Nintendo - Game Boy", "3b36730fd4a3974a12d7406327883d7d42bc1a93f62e62b2334ecdd51680dec3", 92230),
-		meta("gb", "genre", "Nintendo - Game Boy", "3d88c5579fdb2f9c6d828170defe34b89cd855792fbb937e3c6f50a51c4b63c2", 166649)),
+		meta("gb", "genre", "Nintendo - Game Boy", "3d88c5579fdb2f9c6d828170defe34b89cd855792fbb937e3c6f50a51c4b63c2", 166649),
+		meta("gb", "esrb", "Nintendo - Game Boy", "a28156a52a4c40f2509eee3012ba4c93d0181ed020dbf0c0fd4dd14528f44023", 36086)),
 	set("gbc", "Nintendo - Game Boy Color", "no-intro",
 		"f884fb411b10cee473f5e5cd0aff7e3b485d1f19dc40d893b5c2d0a6d52d6a7e", 667128,
 		meta("gbc", "releaseyear", "Nintendo - Game Boy Color", "a89f8dedb4d231c473a3189b27a1f0073ec03cb6917842c44772370d66f67e56", 112137),
-		meta("gbc", "genre", "Nintendo - Game Boy Color", "affde021868fa8042e360cd910e85e320953d9ab6c49ed0d565bbadd581a30a0", 170421)),
+		meta("gbc", "genre", "Nintendo - Game Boy Color", "affde021868fa8042e360cd910e85e320953d9ab6c49ed0d565bbadd581a30a0", 170421),
+		meta("gbc", "esrb", "Nintendo - Game Boy Color", "716d562477ea2d203dd567257332d504ea4f218c712916c61d65709466cdb087", 95910)),
 	set("gba", "Nintendo - Game Boy Advance", "no-intro",
 		"90188f6e4e481cb2be98eda6271844b7f56813575497bebaaeddf7b76a6353db", 1014501,
 		meta("gba", "releaseyear", "Nintendo - Game Boy Advance", "80a10952a808809cb998953eeecac45c4f10c2a12fe4d355a18858a681967022", 225711),
-		meta("gba", "genre", "Nintendo - Game Boy Advance", "d819fa478a9376076df91bd3762a3c0ce84ba28cf0f5d6f5bdcde09f5923fbc3", 330976)),
+		meta("gba", "genre", "Nintendo - Game Boy Advance", "d819fa478a9376076df91bd3762a3c0ce84ba28cf0f5d6f5bdcde09f5923fbc3", 330976),
+		meta("gba", "esrb", "Nintendo - Game Boy Advance", "889365e1a4add6eeddec32d9d3ac0da38df22a30a8dedba517958945b20b6029", 191084)),
 	set("sms", "Sega - Master System - Mark III", "no-intro",
 		"f383714cf27e699eb6fa1df2b5bfa137dc036da0267f1b3eaa2eaf7a0d2f1a4a", 266518,
 		meta("sms", "releaseyear", "Sega - Master System - Mark III", "c05ec368088ddba3b1717b8328ddfe236cdd31ebbcefea7b0403f9234a99fd8b", 22884),
-		meta("sms", "genre", "Sega - Master System - Mark III", "45f2ffd52f355a47cc4bd3121ec1bf24c5cd9882174e0afaeafd6d6682191ecb", 60713)),
+		meta("sms", "genre", "Sega - Master System - Mark III", "45f2ffd52f355a47cc4bd3121ec1bf24c5cd9882174e0afaeafd6d6682191ecb", 60713),
+		meta("sms", "esrb", "Sega - Master System - Mark III", "319ed000931739ad306dd9c2470aad820814a06ebbd67663683972e087f6570f", 10347)),
 	set("genesis", "Sega - Mega Drive - Genesis", "no-intro",
 		"d858f1ddffbc82eda9d7295fb790d1e87d156dc10385a02a2c343c01cafde349", 913828,
 		meta("genesis", "releaseyear", "Sega - Mega Drive - Genesis", "2f8b2a9c58eb2b75e48b09192f3526dcd79c70444810ae3c0f61dd7cbf70ec70", 175858),
-		meta("genesis", "genre", "Sega - Mega Drive - Genesis", "efcba66ce8ee19d2049f6c61df3430f2d636d1a4aed8b43f821c2f90eb74ba6e", 258365)),
+		meta("genesis", "genre", "Sega - Mega Drive - Genesis", "efcba66ce8ee19d2049f6c61df3430f2d636d1a4aed8b43f821c2f90eb74ba6e", 258365),
+		meta("genesis", "esrb", "Sega - Mega Drive - Genesis", "db702120eee175797097feae8fc122b55ea51e611d3ca74fef8996cea3687849", 77257)),
 	set("ps1", "Sony - PlayStation", "redump",
-		"55453a532d8a659b3723eaf818bce83afea2ba926b3a0021adc904d54f46ab11", 3929602),
+		"55453a532d8a659b3723eaf818bce83afea2ba926b3a0021adc904d54f46ab11", 3929602,
+		meta("ps1", "esrb", "Sony - PlayStation", "2669857e0e7d6fc502f434d1dae5f148db6e0dabb7e5808ff52ad25a715280d4", 645)),
 }
 
 // Files is every pinned file, in download order.

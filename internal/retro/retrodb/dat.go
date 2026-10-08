@@ -36,6 +36,7 @@ type Entry struct {
 	Serial  string
 	Year    string
 	Genre   string
+	ESRB    string // "E", "T", "M", … from libretro's esrb metadata DAT
 	ROMs    []ROM
 }
 
@@ -209,6 +210,8 @@ func (t *tokenizer) game() (Entry, error) {
 			e.Year = v
 		case "genre":
 			e.Genre = v
+		case "esrb_rating":
+			e.ESRB = v
 		}
 	}, func(k string) error {
 		if k != "rom" {
