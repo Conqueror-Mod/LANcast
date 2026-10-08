@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 65
+const CurrentSchemaVersion = 66
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -122,6 +122,7 @@ var migrations = []migration{
 		{"media_item", "rom_checked_at", "INTEGER"},
 	}},
 	{version: 65, sql: schemaRevision65},
+	{version: 66, sql: schemaRevision66},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2175,6 +2176,27 @@ CREATE TABLE IF NOT EXISTS rom_save (
     prev_sha256       TEXT,
     prev_updated_at   INTEGER,
     PRIMARY KEY (user_id, item_id, slot)
+);
+`
+
+/*
+ * Revision 66 changes no shape. It sends ROMs back through identification
+ * once, because three things it gets right now were wrong when they went
+ * through: a zipped dump in the wrong console's folder is placed by the file
+ * inside, a box missing under its exact DAT name is looked for under the
+ * set's own name for it, and an unmatched ROM's art is looked for by its
+ * file's name.
+ *
+ * Only the ROMs those can change: every unmatched one, and every matched one
+ * with no box art. A matched ROM with its box is left alone, so its art is
+ * not fetched again. Hashes are kept, so this is lookups, not re-reads, and
+ * the worker starts at boot, so nothing waits for a scan.
+ */
+const schemaRevision66 = `
+UPDATE media_item SET rom_checked_at = NULL
+WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
+    COALESCE(match_state, '') != 'matched'
+    OR id NOT IN (SELECT item_id FROM item_artwork WHERE kind = 'poster')
 );
 `
 

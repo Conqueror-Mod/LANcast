@@ -5,9 +5,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
+	"lancast/internal/media"
 	"lancast/internal/retro/romhash"
 )
 
@@ -33,6 +36,10 @@ type table struct {
 	bySHA1   map[string]*Game
 	byCRC    map[string]*Game
 	bySerial map[string]*Game
+	// byName and games are for a person correcting a match by hand (Fix
+	// match): every game the DAT lists, findable by its name.
+	byName map[string]*Game
+	games  []*Game
 }
 
 func newTable() *table {
@@ -40,7 +47,88 @@ func newTable() *table {
 		bySHA1:   map[string]*Game{},
 		byCRC:    map[string]*Game{},
 		bySerial: map[string]*Game{},
+		byName:   map[string]*Game{},
 	}
+}
+
+// ByName is the game a DAT lists under exactly this name on a console, or nil.
+func (ix *Index) ByName(platform, name string) *Game {
+	if ix == nil || ix.tables[platform] == nil {
+		return nil
+	}
+	return ix.tables[platform].byName[name]
+}
+
+/*
+ * Search finds a console's games by the words of their names, for Fix match.
+ *
+ * Every word of the query must be in the name — "fire emblem" finds every
+ * Fire Emblem, "fire emblem japan" the Japanese ones — and nothing looser,
+ * because a person reading the list is the matcher here and a long list of
+ * near misses hides the right line. A title that is the query exactly comes
+ * first, then titles with the fewest words beyond it, then by name.
+ *
+ * A fan translation is not in a DAT under its English name: The Binding
+ * Blade is listed as "Fire Emblem - Fuuin no Tsurugi (Japan)", which the
+ * words "fire emblem" reach and "binding blade" do not.
+ */
+func (ix *Index) Search(platform, query string, limit int) []*Game {
+	if ix == nil || ix.tables[platform] == nil {
+		return nil
+	}
+	want := nameWords(query)
+	if len(want) == 0 {
+		return nil
+	}
+	type hit struct {
+		g     *Game
+		exact bool
+		extra int
+	}
+	var hits []hit
+	for _, g := range ix.tables[platform].games {
+		have := map[string]bool{}
+		for _, w := range nameWords(g.Name) {
+			have[w] = true
+		}
+		all := true
+		for _, w := range want {
+			if !have[w] {
+				all = false
+				break
+			}
+		}
+		if !all {
+			continue
+		}
+		title := nameWords(media.ROMTitle(g.Name))
+		hits = append(hits, hit{g, strings.Join(title, " ") == strings.Join(want, " "), len(title) - len(want)})
+	}
+	sort.Slice(hits, func(i, j int) bool {
+		a, b := hits[i], hits[j]
+		if a.exact != b.exact {
+			return a.exact
+		}
+		if a.extra != b.extra {
+			return a.extra < b.extra
+		}
+		return a.g.Name < b.g.Name
+	})
+	if limit > 0 && len(hits) > limit {
+		hits = hits[:limit]
+	}
+	out := make([]*Game, len(hits))
+	for i, h := range hits {
+		out[i] = h.g
+	}
+	return out
+}
+
+// nameWords is a name's words, lower-cased, letters and digits only.
+func nameWords(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 }
 
 // Platforms reports which platforms the index can identify.
@@ -115,6 +203,10 @@ func (ix *Index) Build(platform string, games []Entry, metadata ...[]Entry) {
 			Serial: e.Serial, Year: atoi(e.Year), Genre: e.Genre,
 		}
 		byName[e.Name] = g
+		if _, dup := t.byName[e.Name]; !dup && e.Name != "" {
+			t.byName[e.Name] = g
+			t.games = append(t.games, g)
+		}
 		for _, s := range splitSerials(e.Serial) {
 			addOnce(t.bySerial, s, g)
 		}

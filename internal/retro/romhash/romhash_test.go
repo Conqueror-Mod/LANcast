@@ -320,6 +320,38 @@ func TestReadZipHashesTheROMInside(t *testing.T) {
 	}
 }
 
+/*
+ * A zip filed under the wrong console is read as the console the file inside
+ * names. Found on a real library: a GBA dump zipped into "nes roms" was hashed
+ * and looked up as NES. Here an N64 dump in byte-swapped .v64 order is read
+ * with "nes" from its folder; only N64's rules turn it back into the z64 hash
+ * the DAT lists, so the hash itself proves which console's rules ran.
+ */
+func TestAZipsInnerFileOverrulesItsFolder(t *testing.T) {
+	z := n64Fixture()
+	path := filepath.Join(t.TempDir(), "Game.zip")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	w, _ := zw.Create("Super Mario 64 (USA).v64")
+	w.Write(toV64(z))
+	zw.Close()
+	f.Close()
+
+	r, err := Read(path, "nes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Platform != "n64" {
+		t.Errorf("platform %q, want the n64 the file inside names", r.Platform)
+	}
+	if len(r.Sums) == 0 || r.Sums[0] != Of(z) {
+		t.Errorf("hashed under the folder's console: %+v", r.Sums)
+	}
+}
+
 func TestReadCartridge(t *testing.T) {
 	z := n64Fixture()
 	path := filepath.Join(t.TempDir(), "Game.n64")

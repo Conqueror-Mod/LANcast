@@ -126,8 +126,16 @@ func readZip(path, platform string) (Result, error) {
 	if pick.UncompressedSize64 > MaxCartridge {
 		return Result{}, ErrTooLarge
 	}
-	if platform == "" {
-		platform = media.PlatformOfExt(pick.Name)
+	/*
+	 * The file inside decides, when its extension names a console, exactly as
+	 * a loose file's extension beats its folder (media.Platform). A zip is only
+	 * an envelope; its folder is somebody's filing, and filing can be wrong.
+	 * Found on a real library: a Game Boy Advance dump zipped into "nes roms"
+	 * was hashed and looked up as an NES game, matched nothing, and showed no
+	 * art, while the same file in "gba roms" matched at once.
+	 */
+	if p := media.PlatformOfExt(pick.Name); p != "" {
+		platform = p
 	}
 	rc, err := pick.Open()
 	if err != nil {

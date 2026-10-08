@@ -3563,6 +3563,30 @@ than present a bare number.
                    "total": 0.94, "year_gap": 0 } } ]
 ```
 
+**A game (`kind` `rom`) is searched in the installed ROM database instead**
+(ADR 0073), never the film and TV providers — which found nothing for a game,
+and would have offered a film of the same name to be applied to a cartridge.
+The search is on the game's own console, by the words of `q`, every one of
+which must be in the name ("fire emblem" finds each Fire Emblem, "fire emblem
+japan" the Japanese ones), or of the filename's title when `q` is omitted.
+`ExternalID` and `Title` are the DAT name whole, region and revision tags
+included, because those are what tell one line from the next; `Kind` is `rom`,
+`Overview` the genre, `PosterURL` the box art's address, and `Breakdown.title`
+the only measure. `409` `no_platform` for a game whose console is not known,
+`503` `unavailable` when the ROM database is not installed.
+
+A fan translation is not in the database under its English name: The Binding
+Blade is listed as "Fire Emblem - Fuuin no Tsurugi (Japan)", which "fire
+emblem" reaches and "binding blade" does not.
+
+```json
+[ { "Provider": "libretro-db", "ExternalID": "Fire Emblem - Fuuin no Tsurugi (Japan)",
+    "Kind": "rom", "Title": "Fire Emblem - Fuuin no Tsurugi (Japan)", "Year": 2002,
+    "Overview": "Strategy", "PosterURL": "https://thumbnails.libretro.com/…",
+    "Score": 0.37, "Breakdown": { "title": 0.37, "year": 0, "popularity": 0,
+                                  "total": 0, "year_gap": 0 } } ]
+```
+
 ### `POST /api/items/{id}/match`
 
 Apply a chosen candidate. Fetches that exact record from the provider and
@@ -3578,6 +3602,16 @@ provider's TV endpoint. Omit it to fetch as the item's existing kind.
 
 ```json
 { "provider": "tmdb", "external_id": "335984", "kind": "movie" }
+```
+
+**For a game,** `provider` is `libretro-db` and `external_id` a DAT name on
+the game's own console, as `/candidates` returned it. It is applied as an
+automatic match is — locked fields honoured, box art fetched — and then locked.
+A name the installed database does not list there is `400` `not_found`;
+`503` `unavailable` when no database is installed.
+
+```json
+{ "provider": "libretro-db", "external_id": "Fire Emblem - Fuuin no Tsurugi (Japan)" }
 ```
 
 ### `GET` / `POST /api/together`
