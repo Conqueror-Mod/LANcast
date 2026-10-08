@@ -195,3 +195,22 @@ func TestROMRegion(t *testing.T) {
 		t.Errorf("region from DAT name = %q", it.Region)
 	}
 }
+
+// ffprobe is never handed a ROM: it is not a media container, and every
+// pass would log a failure for every game.
+func TestROMsAreNotProbed(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	lib := romLibrary(t, s)
+	putROM(t, s, lib, "a.z64", "n64", 1)
+	items, err := s.PendingProbe(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Errorf("%d ROMs pending probe", len(items))
+	}
+	if n, _ := s.PendingProbeCount(ctx); n != 0 {
+		t.Errorf("probe count = %d, want 0", n)
+	}
+}
