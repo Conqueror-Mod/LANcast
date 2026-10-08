@@ -22,8 +22,9 @@ import { plainVersion } from "./UpdateSettings";
 import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
 import { reportServerIdentity } from "@/lib/serverIdentity";
 import { useScrollRestoration } from "@/lib/useScrollRestoration";
-import { useGamesTab } from "@/lib/games";
+import { gamesSupported } from "@/lib/games";
 import { railOrder } from "@/lib/railOrder";
+import { GAME_HUB_PATH, hubOffered, insideHub } from "@/lib/gameHub";
 import {
   LibraryIcon,
   HomeIcon,
@@ -173,7 +174,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Back returns you to where you were, and a new page starts at the top.
   // Neither is the browser's default in a single-page app; see the hook.
   useScrollRestoration();
-  const gamesTab = useGamesTab();
+  // The Game Hub: offered with a retro library, in the desktop app, or to an
+  // admin who can add one from its instructions (lib/gameHub.ts).
+  const retroIDs = (libraries ?? []).filter((l) => l.kind === "retro").map((l) => l.id);
+  const hub = hubOffered({ retroLibraries: retroIDs.length, desktop: gamesSupported(), admin: isAdmin });
+  const inHub = hub && insideHub(location.pathname, retroIDs);
 
   return (
     <div className="app-shell">
@@ -190,31 +195,30 @@ export function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
 
           <nav className="app-shell__libs" aria-label="Libraries">
-            {((libraries && libraries.length > 0) || gamesTab) && (
+            {((libraries && libraries.length > 0) || hub) && (
               <span className="section-label app-shell__rail-label">
                 Libraries
               </span>
             )}
-            {/* By kind, with PC Games between Retro Games and Pictures
-                (lib/railOrder.ts). PC Games is only here in the desktop
-                window, when the person using it has asked for it: the games
-                are installed on this machine, and a rail entry on a phone
-                would lead to a grid of things that phone can never start
-                (ADR 0066). */}
-            {railOrder(libraries ?? [], gamesTab).map((entry) =>
-              entry.type === "pc-games" ? (
+            {/* By kind, with the Game Hub in the games slot (lib/railOrder.ts,
+                docs/game-hub-plan.md). The hub stands for the retro libraries
+                and for PC Games, so it is marked as where you are inside
+                either of them too — a rail that lit nothing while you were in
+                a retro library would be a rail that had lost you. */}
+            {railOrder(libraries ?? [], hub).map((entry) =>
+              entry.type === "game-hub" ? (
                 <NavLink
-                  key="pc-games"
-                  to="/games"
-                  title="PC Games"
+                  key="game-hub"
+                  to={GAME_HUB_PATH}
+                  title="Game Hub"
                   onClick={releaseRail}
-                  className={({ isActive }) =>
-                    "app-shell__lib" + (isActive ? " is-active" : "")
+                  className={() =>
+                    "app-shell__lib" + (inHub ? " is-active" : "")
                   }
                 >
                   <GamesIcon />
                   <span className="app-shell__lib-name app-shell__label">
-                    PC Games
+                    Game Hub
                   </span>
                 </NavLink>
               ) : (

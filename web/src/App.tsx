@@ -20,6 +20,7 @@ import { Favourites, TagItems } from "@/screens/Marked";
 import { WatchHistory } from "@/screens/WatchHistory";
 import { Downloads } from "@/screens/Downloads";
 import { Games } from "@/screens/Games";
+import { GameHub } from "@/screens/GameHub";
 import { GameDetail } from "@/screens/GameDetail";
 import { Addons } from "@/screens/Addons";
 import { LiveTV } from "@/screens/LiveTV";
@@ -123,6 +124,7 @@ export function App() {
               useful to almost nobody: without the desktop bindings the page
               says so, which is a better answer than a 404 to somebody who
               followed a link from the machine where it works. */}
+          <Route path="/game-hub" element={<GameHub />} />
           <Route path="/games" element={<Games />} />
           <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/addons" element={<Addons />} />

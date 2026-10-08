@@ -9,7 +9,7 @@ From Chris's notes, 2026-10-08:
 > IF no installed games exist, let user know at split screen selector; if no
 > retro game library detected tell user how to add, at split screen.
 
-Not built yet. This plan is for Chris to read before any code is written.
+**Stage 1 built 2026-10-08** with the defaults below, which Chris accepted by asking for it to be built. Stage 2, the look, is still to come.
 
 ## What changes
 
@@ -19,7 +19,7 @@ Pictures (`lib/railOrder.ts`, one rank instead of two). The hub is
 highlighted while you're on the hub itself, inside PC Games, or inside a
 retro library, so the rail always says where you are.
 
-**The hub** (`/games/hub`, a new screen) has two halves:
+**The hub** (`/game-hub`, a new screen; not `/games/hub`, which the PC game detail route `/games/:id` would also claim) has two halves:
 
 | Left: PC Games | Right: Retro Games |
 |---|---|
