@@ -11,6 +11,9 @@ import {
   mpvBackend,
   nativeFeatures,
   resetNativePlaybackAvailability,
+  resetNativeVideoHolders,
+  holdNativeVideo,
+  releaseNativeVideo,
   streamItem,
 } from "./mpvBackend";
 import { getPrefs, resetPrefs, setPrefs } from "./prefs";
@@ -48,10 +51,33 @@ describe("MpvBackend", () => {
   });
 
   afterEach(() => {
-    document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+    resetNativeVideoHolders();
     delete window.lancastMpvOpen;
     delete window.lancastMpvCommand;
     delete window.lancastMpvStop;
+  });
+
+  /*
+   * Found in the window: a film docked in the corner, a game started and
+   * quit, then the film maximised — a black picture with the sound playing.
+   * Quitting the game had taken the see-through class off a page whose film
+   * still needed it (ADR 0076).
+   */
+  it("keeps the page see-through for a film after a game screen lets go", async () => {
+    const b = new MpvBackend();
+    b.src = "/api/stream/42";
+    b.load();
+    await flush();
+    holdNativeVideo("game");
+    releaseNativeVideo("game");
+    expect(document.documentElement.classList.contains(NATIVE_VIDEO_CLASS)).toBe(true);
+    // And the other way round: the film stopping under a running game.
+    holdNativeVideo("game");
+    b.removeAttribute("src");
+    b.load();
+    expect(document.documentElement.classList.contains(NATIVE_VIDEO_CLASS)).toBe(true);
+    releaseNativeVideo("game");
+    expect(document.documentElement.classList.contains(NATIVE_VIDEO_CLASS)).toBe(false);
   });
 
   it("mints a ticket for the item and opens it, never a URL", async () => {

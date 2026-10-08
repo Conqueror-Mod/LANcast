@@ -60,7 +60,7 @@ type nativePlayer struct {
 
 func (n *nativePlayer) retro() *retroPlayer {
 	n.retroOnce.Do(func() {
-		n.retroP = &retroPlayer{origin: n.origin, pin: n.pin, stopVideo: n.stop}
+		n.retroP = &retroPlayer{origin: n.origin, pin: n.pin}
 	})
 	return n.retroP
 }
@@ -346,7 +346,7 @@ func (n *nativePlayer) mpvBindings() map[string]any {
 				return errors.New("no window")
 			}
 			switch layout {
-			case "full", "mini", "hidden":
+			case "full", "mini", "pip", "hidden":
 			default:
 				return fmt.Errorf("unknown layout %q", layout)
 			}

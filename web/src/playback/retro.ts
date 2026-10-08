@@ -67,6 +67,8 @@ declare global {
     lancastRetroSetCore?: (platform: string, path: string) => Promise<void>;
     lancastRetroCores?: () => Promise<Record<string, string>>;
     lancastRetroSetOption?: (platform: string, key: string, value: string) => Promise<void>;
+    lancastRetroVolume?: () => Promise<number>;
+    lancastRetroSetVolume?: (volume: number) => Promise<void>;
     __lancastRetroEvent?: (e: RetroEvent) => void;
   }
 }
@@ -167,4 +169,66 @@ export function nextValue(o: RetroOption): string {
 export async function setRetroOption(platform: string, key: string, value: string): Promise<void> {
   if (!window.lancastRetroSetOption) return;
   await window.lancastRetroSetOption(platform, key, value);
+}
+
+/*
+ * The game's own volume (ADR 0076). A film can play in the corner while a game
+ * runs, and each keeps a volume of its own: the film's is the player's, this
+ * one is the game's, and the client applies it to the game's samples alone.
+ * The menu offers steps rather than a fader, because the pad is what is in
+ * somebody's hands.
+ */
+export const VOLUME_STEPS = [1, 0.75, 0.5, 0.25, 0] as const;
+
+export function volumeLabel(v: number): string {
+  return v <= 0 ? "Off" : `${Math.round(v * 100)}%`;
+}
+
+/** The step after the current one, wrapping round; an odd value goes to full. */
+export function nextVolume(v: number): number {
+  const i = VOLUME_STEPS.findIndex((s) => Math.abs(s - v) < 0.01);
+  return VOLUME_STEPS[(i + 1) % VOLUME_STEPS.length];
+}
+
+export async function gameVolume(): Promise<number> {
+  if (!window.lancastRetroVolume) return 1;
+  try {
+    return await window.lancastRetroVolume();
+  } catch {
+    return 1;
+  }
+}
+
+export async function setGameVolume(v: number): Promise<void> {
+  if (!window.lancastRetroSetVolume) return;
+  await window.lancastRetroSetVolume(v);
+}
+
+/*
+ * Whether a game screen is up, for the playback provider (ADR 0076).
+ *
+ * The docked film goes *above* the page while a game runs ("pip") and above
+ * the main window otherwise ("mini"). The provider lives above the router and
+ * cannot see which route is showing, and the game screen cannot reach into
+ * the provider; this is the one fact they share, so it is a tiny store rather
+ * than a context either side would have to be rearranged to provide.
+ */
+let gameOnScreen = false;
+const screenListeners = new Set<() => void>();
+
+export function setGameOnScreen(on: boolean): void {
+  if (gameOnScreen === on) return;
+  gameOnScreen = on;
+  for (const l of screenListeners) l();
+}
+
+export function isGameOnScreen(): boolean {
+  return gameOnScreen;
+}
+
+export function subscribeGameOnScreen(fn: () => void): () => void {
+  screenListeners.add(fn);
+  return () => {
+    screenListeners.delete(fn);
+  };
 }

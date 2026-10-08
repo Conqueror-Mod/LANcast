@@ -10,7 +10,7 @@
 import type { Surface } from "./PlaybackProvider";
 
 export interface NativeLayout {
-  layout: "full" | "mini" | "hidden";
+  layout: "full" | "mini" | "pip" | "hidden";
   x: number;
   y: number;
   width: number;
@@ -19,11 +19,18 @@ export interface NativeLayout {
 
 export const HIDDEN: NativeLayout = { layout: "hidden", x: 0, y: 0, width: 0, height: 0 };
 
+/*
+ * `overGame`: a game screen is up (ADR 0076). The docked picture is then
+ * "pip" — floated above the page, which stays over the game — rather than
+ * "mini", above the main window. The rectangle is the same docked box either
+ * way; only what it floats above differs.
+ */
 export function nativeLayout(
   surface: Surface,
   playingNatively: boolean,
   box: { left: number; top: number; width: number; height: number } | null,
   devicePixelRatio: number,
+  overGame = false,
 ): NativeLayout {
   if (!playingNatively || surface === "idle") return HIDDEN;
   if (surface === "full") return { layout: "full", x: 0, y: 0, width: 0, height: 0 };
@@ -34,7 +41,7 @@ export function nativeLayout(
   const x = Math.floor(box.left * r);
   const y = Math.floor(box.top * r);
   return {
-    layout: "mini",
+    layout: overGame ? "pip" : "mini",
     x,
     y,
     width: Math.ceil((box.left + box.width) * r) - x,

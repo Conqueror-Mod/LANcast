@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"hash/crc32"
 	"log/slog"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lancast/internal/retro/libretro"
@@ -148,6 +150,13 @@ type Session struct {
 	glReady   bool
 
 	pending sync.WaitGroup // uploads in flight
+
+	// volume is a float64's bits, set from any goroutine (SetVolume); scaled
+	// is the core thread's buffer for samples at less than full volume.
+	volume atomic.Uint64
+	scaled []int16
+
+	stats frameStats // core thread only
 }
 
 // New prepares a session. Nothing runs until Run.
@@ -161,7 +170,9 @@ func New(cfg Config) *Session {
 	if cfg.OnEvent == nil {
 		cfg.OnEvent = func(Event) {}
 	}
-	return &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{}}
+	s := &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{}}
+	s.volume.Store(math.Float64bits(1))
+	return s
 }
 
 func (s *Session) send(c command) {
@@ -368,7 +379,9 @@ func (s *Session) run(ctx context.Context) (err error) {
 		if s.paused {
 			continue
 		}
+		runStart := time.Now()
 		core.Run()
+		s.frameDone(time.Since(runStart))
 		if resume != nil {
 			resumeTries++
 			switch {
@@ -452,6 +465,14 @@ func (s *Session) handle(c command) {
 	case "resume":
 		if s.paused {
 			s.paused = false
+			/*
+			 * A pause is not a slow frame; the frame log starts again here.
+			 * Here and not in the run loop, because a drain that handles a
+			 * pause goes on to wait for the resume itself, so the loop never
+			 * sees the game paused at all: the menu's fourteen seconds were
+			 * logged as one frame, at 8.9 fps.
+			 */
+			s.stats = frameStats{}
 			s.cfg.OnEvent(Event{Kind: "resumed"})
 		}
 	case "stop":
@@ -685,6 +706,8 @@ func (s *Session) Message(text string, _ uint32) {
 func (s *Session) Shutdown() { s.stopping = true }
 
 func (s *Session) VideoRefresh(f libretro.Frame) {
+	start := time.Now()
+	defer func() { s.stats.present += time.Since(start) }()
 	if f.HW {
 		if s.glReady {
 			s.cfg.GL.Present(int(f.Width), int(f.Height), s.aspect(f), s.hw.BottomLeftOrigin)
@@ -697,6 +720,57 @@ func (s *Session) VideoRefresh(f libretro.Frame) {
 	f.Format = s.format
 	s.bgra = ToBGRA(f, s.bgra)
 	s.cfg.Video.Present(s.bgra, int(f.Width), int(f.Height), s.aspect(f))
+}
+
+/*
+ * frameStats is where a game's frames go, logged every few seconds.
+ *
+ * Built when a game became unplayably laggy with a film playing in the
+ * corner (ADR 0076), and nothing recorded why. A frame is the core's run —
+ * inside which it presents the picture and hands over its sound — and then
+ * the frame clock's sleep. Splitting run into presenting, waiting on audio
+ * and the rest names which of the three a slow frame spent its time in:
+ * a present stuck behind another presenter's vsync, a sound card draining
+ * slowly, or emulation itself.
+ */
+type frameStats struct {
+	since               time.Time
+	frames              int
+	run, present, audio time.Duration
+	slowest, slowestRun time.Duration
+	lastFrame           time.Time
+}
+
+const statsEvery = 5 * time.Second
+
+func (s *Session) frameDone(runTook time.Duration) {
+	now := time.Now()
+	st := &s.stats
+	if st.since.IsZero() {
+		st.since, st.lastFrame = now, now
+		return
+	}
+	st.frames++
+	st.run += runTook
+	if gap := now.Sub(st.lastFrame); gap > st.slowest {
+		st.slowest = gap
+	}
+	if runTook > st.slowestRun {
+		st.slowestRun = runTook
+	}
+	st.lastFrame = now
+	if el := now.Sub(st.since); el >= statsEvery && st.frames > 0 {
+		n := time.Duration(st.frames)
+		s.cfg.Log.Info("retro frames",
+			"fps", fmt.Sprintf("%.1f", float64(st.frames)/el.Seconds()),
+			"target", fmt.Sprintf("%.1f", s.av.FPS),
+			"run_avg", (st.run / n).Round(10*time.Microsecond),
+			"present_avg", (st.present / n).Round(10*time.Microsecond),
+			"audio_avg", (st.audio / n).Round(10*time.Microsecond),
+			"run_max", st.slowestRun.Round(10*time.Microsecond),
+			"frame_max", st.slowest.Round(10*time.Microsecond))
+		*st = frameStats{since: now, lastFrame: now}
+	}
 }
 
 // aspect is the display aspect for a frame. A core that changes resolution
@@ -745,9 +819,49 @@ func (s *Session) ProcAddress(name string) uintptr {
 
 func (s *Session) AudioBatch(samples []int16) int {
 	if s.cfg.Audio != nil {
-		s.cfg.Audio.Write(samples)
+		start := time.Now()
+		s.cfg.Audio.Write(s.scale(samples))
+		s.stats.audio += time.Since(start)
 	}
 	return len(samples) / 2
+}
+
+/*
+ * SetVolume sets the game's own volume, 0 silent to 1 as the core made it,
+ * from any goroutine (ADR 0076).
+ *
+ * Applied to the samples here rather than through waveOutSetVolume, which on
+ * Windows Vista and later sets the whole application's audio session — the
+ * one libmpv shares — so turning a game down would turn the film in the
+ * corner down with it. Linear in amplitude: the menu offers a handful of
+ * steps, not a fader, and each step is plainly quieter than the last.
+ */
+func (s *Session) SetVolume(v float64) {
+	if v != v || v < 0 {
+		v = 0
+	}
+	if v > 1 {
+		v = 1
+	}
+	s.volume.Store(math.Float64bits(v))
+}
+
+// scale returns samples at the session's volume. Full volume hands the
+// core's own slice through untouched; anything else is written to a buffer
+// of the session's, never back into the core's memory.
+func (s *Session) scale(samples []int16) []int16 {
+	v := math.Float64frombits(s.volume.Load())
+	if v >= 1 {
+		return samples
+	}
+	if cap(s.scaled) < len(samples) {
+		s.scaled = make([]int16, len(samples))
+	}
+	out := s.scaled[:len(samples)]
+	for i, x := range samples {
+		out[i] = int16(float64(x) * v)
+	}
+	return out
 }
 
 func (s *Session) InputPoll() {

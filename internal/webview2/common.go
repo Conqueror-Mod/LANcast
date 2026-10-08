@@ -45,6 +45,10 @@ type WebView interface {
 	// above an opaque one, or hidden. LOCAL ADDITION (ADR 0067, overlay.go).
 	VideoWindow() (uintptr, error)
 	SetVideoLayout(layout VideoLayout, x, y, width, height int) error
+	// GameWindow is the window a retro game draws into, and SetGameLayout
+	// shows it under the page or hides it (ADR 0076, overlay.go).
+	GameWindow() (uintptr, error)
+	SetGameLayout(on bool) error
 
 	// Destroy destroys a webview and closes the native window.
 	Destroy()

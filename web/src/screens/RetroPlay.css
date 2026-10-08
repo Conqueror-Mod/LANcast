@@ -12,6 +12,16 @@ html.lancast-native-video:has(.retro-play) .retro-play,
 html.lancast-native-video:has(.retro-play) .retro-play * {
   visibility: visible;
 }
+/* And the docked player, which is the picture-in-picture over a game
+   (ADR 0076): its controls, and its picture or cover. A film's own picture is
+   the client's window floated above this box; music shows its cover here. Both
+   were hidden with everything else until the corner became something to keep. */
+html.lancast-native-video:has(.retro-play) .mini,
+html.lancast-native-video:has(.retro-play) .mini *,
+html.lancast-native-video:has(.retro-play) .playback--mini,
+html.lancast-native-video:has(.retro-play) .playback--mini * {
+  visibility: visible;
+}
 
 .retro-play {
   position: fixed;

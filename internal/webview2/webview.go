@@ -60,8 +60,14 @@ type webview struct {
 	// Native video windows and layout (overlay.go).
 	overlay uintptr
 	video   uintptr
-	layout  VideoLayout
-	mini    videoRect
+	// layout is what is in effect; asked is what the page last sent. They
+	// differ when a game comes or goes under a docked film (ADR 0076).
+	layout VideoLayout
+	asked  VideoLayout
+	mini   videoRect
+	// game is the window a retro game draws into, shown while gameOn.
+	game   uintptr
+	gameOn bool
 	// shield catches clicks on the docked native picture (overlay.go).
 	shield uintptr
 	// handingOff is set while this package moves activation to the overlay,

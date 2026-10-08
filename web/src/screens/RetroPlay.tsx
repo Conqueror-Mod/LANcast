@@ -3,17 +3,22 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGameSaves, useItem } from "@/api/hooks";
 import { useBackHandler, useFocusable } from "@/focus/FocusController";
-import { NATIVE_VIDEO_CLASS } from "@/playback/mpvBackend";
+import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
 import {
   STATE_SLOTS,
   curatedOptions,
+  gameVolume,
   nextValue,
+  nextVolume,
   onRetroEvent,
+  setGameOnScreen,
+  setGameVolume,
   setRetroOption,
   openGame,
   retroCommand,
   slotLabel,
   stopGame,
+  volumeLabel,
   type RetroEvent,
   type RetroOption,
 } from "@/playback/retro";
@@ -49,13 +54,33 @@ export function RetroPlay() {
   const [notice, setNotice] = useState<string | null>(null);
   const [options, setOptions] = useState<RetroOption[]>([]);
 
-  // The page is see-through over the picture while this screen is up.
+  // The page is see-through over the picture while this screen is up, and a
+  // docked film floats above it rather than above the main window (ADR 0076).
+  // Held, not set: a film in the corner needs the page see-through too, and
+  // goes on after this screen (mpvBackend.holdNativeVideo).
   useEffect(() => {
-    document.documentElement.classList.add(NATIVE_VIDEO_CLASS);
+    holdNativeVideo("game");
+    setGameOnScreen(true);
     return () => {
-      document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+      releaseNativeVideo("game");
+      setGameOnScreen(false);
     };
   }, []);
+
+  // The game's own volume, read once; the menu changes it from there.
+  const [volume, setVolume] = useState(1);
+  useEffect(() => {
+    let live = true;
+    void gameVolume().then((v) => live && setVolume(v));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const cycleVolume = useCallback(() => {
+    const next = nextVolume(volume);
+    setVolume(next);
+    void setGameVolume(next).catch(() => setNotice("The game's volume could not be changed."));
+  }, [volume]);
 
   // Events from the client, for the life of the screen.
   useEffect(
@@ -112,8 +137,10 @@ export function RetroPlay() {
     });
     return () => {
       cancelled = true;
+      // Only the game. The video window belongs to whatever film is docked,
+      // which may be playing in the corner and goes on playing after this
+      // screen (ADR 0076); the client hides the game's own window itself.
       void stopGame();
-      void window.lancastMpvLayout?.("hidden", 0, 0, 0, 0);
     };
   }, [item, itemID, resume]);
 
@@ -203,6 +230,7 @@ export function RetroPlay() {
               <p className="retro-play__hint">Some picture changes take effect when the game next starts.</p>
             </div>
           )}
+          <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
           <MenuButton
             label="Restart"
             onSelect={() => {
