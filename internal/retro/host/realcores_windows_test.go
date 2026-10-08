@@ -3,7 +3,6 @@
 package host
 
 import (
-	"archive/zip"
 	"context"
 	"io"
 	"log/slog"
@@ -55,22 +54,6 @@ func (v *capVideo) Present(b []byte, w, h int, aspect float64) {
 	v.nonBlack = n
 }
 
-func unzipFirst(t *testing.T, zp, dir string) string {
-	zr, err := zip.OpenReader(zp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer zr.Close()
-	f := zr.File[0]
-	rc, _ := f.Open()
-	defer rc.Close()
-	out := filepath.Join(dir, filepath.Base(f.Name))
-	w, _ := os.Create(out)
-	io.Copy(w, rc)
-	w.Close()
-	return out
-}
-
 func TestRealCoresDrawRealGames(t *testing.T) {
 	lib, cores := os.Getenv("RETRO_LIB"), os.Getenv("RETRO_CORES")
 	if lib == "" {
@@ -105,13 +88,22 @@ func TestRealCoresDrawRealGames(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.core, func(t *testing.T) {
 			dir := t.TempDir()
-			game := unzipFirst(t, filepath.Join(lib, c.zip), dir)
-			data, _ := os.ReadFile(game)
 			core, err := libretro.Open(filepath.Join(cores, c.core+"_libretro.dll"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			info := core.SystemInfo()
+			// The zip goes in exactly as the client receives it. This test
+			// once unzipped each game itself, and so passed for a whole stage
+			// while the client handed every core a .zip none could open.
+			game, err := GameFile(filepath.Join(lib, c.zip), info, filepath.Join(dir, "extracted"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var data []byte
+			if !info.NeedFullpath {
+				data, _ = os.ReadFile(game)
+			}
 			t.Logf("core %s %s exts=%s fullpath=%v", info.LibraryName, info.LibraryVersion, info.ValidExtensions, info.NeedFullpath)
 			video := &capVideo{}
 			gl := &WGL{HWND: hwnd, CaptureCentre: true}
