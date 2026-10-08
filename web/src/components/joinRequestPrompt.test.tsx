@@ -19,11 +19,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 // The player, as far as the prompt and the room can see it.
 const player = { itemID: 5, isAudio: false, displayTime: 12, playing: true };
+const steered: string[] = [];
 vi.mock("@/playback/PlaybackProvider", () => ({
-  usePlayback: () => ({ ...player, seekTo: () => {}, togglePlay: () => {} }),
+  usePlayback: () => ({
+    ...player,
+    seekTo: (t: number) => steered.push(`seek ${t}`),
+    togglePlay: () => steered.push("toggle"),
+  }),
 }));
 
-import { TogetherProvider } from "@/playback/TogetherProvider";
+import { TogetherProvider, useTogetherRoom } from "@/playback/TogetherProvider";
 import { JoinRequestPrompt } from "./JoinRequestPrompt";
 
 let host: HTMLDivElement;
@@ -203,5 +208,52 @@ describe("a host's room after the film changes", () => {
     await render();
     await flush();
     expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/together/r1")).toBe(true);
+  });
+});
+
+/*
+ * A follower who moves on to another film leaves the room, and their new film
+ * is never steered to the room's position in a different one. The room used
+ * to die with the panel; now it outlives every screen, so this has to be said.
+ */
+describe("a follower whose film is not the room's", () => {
+  it("leaves, and is never seeked or paused to the room", async () => {
+    steered.length = 0;
+    let joinNow: ((id: string) => Promise<unknown>) | null = null;
+    function Grab() {
+      joinNow = useTogetherRoom().join;
+      return null;
+    }
+    mockServer();
+    const base = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (url === "/api/together/r9/join" || url === "/api/together/r9") {
+        calls.push({ method: init?.method ?? "GET", url });
+        return new Response(
+          JSON.stringify({ ...session(), id: "r9", item_id: 7, host_id: "u_other", position_ms: 900_000 }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return base(url, init);
+    });
+    pending = [];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={qc}>
+          <TogetherProvider>
+            <Grab />
+          </TogetherProvider>
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    await act(async () => {
+      await joinNow!("r9");
+    });
+    await flush();
+
+    expect(steered).toEqual([]);
+    expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/together/r9")).toBe(true);
   });
 });

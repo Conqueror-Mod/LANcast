@@ -39,18 +39,21 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
   }));
 
   /*
-   * A host who stops, or moves to another film, ends the room.
+   * Playing something other than the room's film is leaving the room.
    *
    * While the room lived in the panel this happened by accident: leaving the
    * player unmounted it. Now that the room outlives every screen it has to be
-   * said, or a room would go on advertising a film nobody is playing, and a
-   * friend admitted to it would go on being allowed that film.
+   * said. For a host, or the room would go on advertising a film nobody is
+   * playing and a friend admitted to it would go on being allowed that film
+   * (a host leaving ends the room). For a follower, or the convergence below
+   * would seek and pause whatever they had moved on to, to the room's position
+   * in a different film.
    */
   const sessionItem = t.session?.item_id ?? 0;
-  const { isHost, leave } = t;
+  const { leave } = t;
   useEffect(() => {
-    if (isHost && sessionItem > 0 && pb.itemID !== sessionItem) void leave();
-  }, [isHost, sessionItem, pb.itemID, leave]);
+    if (sessionItem > 0 && pb.itemID !== sessionItem) void leave();
+  }, [sessionItem, pb.itemID, leave]);
 
   /*
    * A follower converges on the room.
@@ -61,6 +64,8 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     if (!t.session || t.isHost) return;
+    // Never steer a different film to this room's position.
+    if (pb.itemID !== t.session.item_id) return;
     const target = expectedPosition(t.session, t.receivedAt, Date.now());
     if (shouldResync(pb.displayTime * 1000, target)) {
       pb.seekTo(target / 1000);
