@@ -238,6 +238,8 @@ func TestRevision65Replays(t *testing.T) {
 	}
 	if err := migrate(s.db); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+}
 
 // ffprobe is never handed a ROM: it is not a media container, and every
 // pass would log a failure for every game.
