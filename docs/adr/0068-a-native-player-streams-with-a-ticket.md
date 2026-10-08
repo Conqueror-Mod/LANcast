@@ -1,6 +1,8 @@
 # ADR 0068 — A native player streams with a ticket
 
-**Status:** Accepted
+**Status:** Accepted · amended by [ADR 0073](0073-a-retro-game-is-a-file-the-server-owns.md)
+(a ticket minted for a retro game also opens that game's files and the
+minting person's saves for it, including writing a save)
 **Date:** 2026-09-16
 
 ## Context

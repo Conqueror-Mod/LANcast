@@ -4855,6 +4855,58 @@ streaming it a film, and needs its own decision.
 gains its player in a later stage; until then a client lists the library and
 says where the game will play.
 
+### `GET /api/items/{id}/files` · `GET /api/stream/{id}/files?name=`
+
+Every file a game is made of, for the desktop player to fetch before a disc game
+can start. A cartridge is its one file; a `.cue` is itself and the tracks it
+names; an `.m3u` is itself, each disc it lists, and each disc's tracks. Names are
+relative to the entry file, with `/` separators.
+
+```json
+{ "files": [ { "name": "Disc.cue", "size_bytes": 92, "present": true },
+             { "name": "Disc (Track 1).bin", "size_bytes": 737280000, "present": true } ] }
+```
+
+Every file is resolved inside the entry file's own folder and re-checked inside
+the library location. A cue or a list is a text file anybody can write, so a line
+naming `..\something` is not a file of the game. `present: false` marks a
+named file missing from disk, so the player can say which one rather than fail
+inside the emulator. `GET /api/stream/{id}/files?name=` serves one file by the
+name the listing gave it, with range support. The name is a query parameter
+because it carries slashes.
+
+### `GET /api/items/{id}/saves` · `GET` / `PUT /api/items/{id}/saves/{slot}`
+
+A person's saves for one game, kept on the server so they follow the person
+([ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)). One person's
+only: another account sees none of them.
+
+Slots are `sram` (the game's own save, readable by any core version), `auto` (the
+state written when a game is closed) and `state-0` to `state-9`. The `PUT` body is
+the save's bytes, at most 64 MB. **A save state names the core that wrote it**
+(`?core=mupen64plus_next&core_version=2.6`), and a `GET` returns it as
+`X-LANcast-Core` / `X-LANcast-Core-Version`. A client must refuse to load a
+state into any other core or version: a state is a memory dump of one build, and
+loading it into another is a crash rather than an error.
+
+**The newer write wins and the one it replaces is kept**: `?previous=1` returns
+it, and the listing describes both. That is the whole conflict policy, on
+purpose.
+
+```json
+{ "saves": [ { "slot": "sram", "size_bytes": 32768, "sha256": "…", "updated_at": 1791432000,
+               "previous": { "size_bytes": 32768, "sha256": "…", "updated_at": 1791431000 } } ] }
+```
+
+**A game's stream ticket reaches all of these**: its files, and the minting
+person's saves for that game, including the `PUT`. The desktop player holds no
+cookie, and without this it could neither load a disc nor save. It is still one
+item and one person, re-checked on every request. A film's ticket reaches none
+of them, and no ticket reaches another game. This is the only write a ticket can
+make.
+
+Deleting an account deletes its saves.
+
 ### `GET /api/retro/database` · `POST /api/retro/database/install` · `POST /api/retro/database/install/cancel`
 
 The DAT files ROMs are identified against, fetched on request. Admin only.

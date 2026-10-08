@@ -326,6 +326,37 @@ no year or genre DAT, and Redump carries some years inline). Box art and a scree
 from libretro-thumbnails, addressed by the matched DAT name, and only when
 `retro_artwork` is on.
 
+## Amendments from building stage 2's server half (2026-10-08)
+
+**A game's ticket opens its files and saves, and it can write a save.** The
+desktop player reaches the server the way libmpv does: through a stream ticket
+(ADR 0068), because it holds no cookie. A disc game needs more files than its
+entry, and a player that cannot save is not a player, so a ticket minted for a
+`rom` also opens:
+- `GET /api/items/{id}/files` and `GET /api/stream/{id}/files?name=` for its
+  own game, and
+- `GET` and `PUT` on the minting person's saves for that game.
+
+That is the first write a ticket can make, and it is allowed because nothing
+about the ticket gets wider. It is still one item and one person, and the
+minting credential is still re-checked on every request. A film's ticket opens
+none of these routes. `ticketRoute` in `streamticket.go` is the whole list.
+
+**Saves are files with a row each.** Revision 65 adds `rom_save`, one row per
+person, game and slot, describing the current copy and the previous one. The
+bytes live under `<data>/saves/<hash of the account id>/<item>/`, so an account
+id never becomes a path. A write goes to a temporary file, is synced, and then
+two renames make the old current copy the previous one and the new copy
+current. At no point is there no current save. `user_id` is not a foreign key,
+because the owner of an unsecured server is `local`, which has no account row.
+Deleting an account deletes its rows and its save directory.
+
+**The game's files are what its entry file names, inside its folder.**
+`romhash.GameFiles` lists the cue's tracks and the m3u's discs and their
+tracks. Every path is resolved against the entry's folder and kept inside it,
+then re-checked inside the library location by the handler. Files are served
+by the name the listing gave and by no other.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).

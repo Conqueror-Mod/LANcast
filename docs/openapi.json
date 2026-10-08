@@ -10374,6 +10374,392 @@
           }
         }
       }
+    },
+    "/items/{id}/files": {
+      "get": {
+        "operationId": "listGameFiles",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Every file a retro game is made of",
+        "description": "A cartridge is its one file; a `.cue` is itself and the tracks it names; an `.m3u` is itself, each disc it lists, and each disc's tracks. Every file is kept inside the entry file's folder, so a cue naming `..\\something` lists nothing for that line. `404` for an item that is not a game. A game's stream ticket reaches this.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The files, entry first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameFiles"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The game's files cannot be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
+      }
+    },
+    "/stream/{id}/files": {
+      "get": {
+        "operationId": "streamGameFile",
+        "tags": [
+          "retro"
+        ],
+        "summary": "One file of a retro game",
+        "description": "By the name `GET /api/items/{id}/files` gave it and by no other, with range support. A query parameter rather than a path, because the names carry slashes. A game's stream ticket reaches this.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The file is gone from disk.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/saves": {
+      "get": {
+        "operationId": "listGameSaves",
+        "tags": [
+          "retro"
+        ],
+        "summary": "The caller's saves for one game",
+        "description": "One person's, never anybody else's. A game's stream ticket reaches this, as the person who minted it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every slot the caller has used, by slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ROMSaves"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
+      }
+    },
+    "/items/{id}/saves/{slot}": {
+      "get": {
+        "operationId": "getGameSave",
+        "tags": [
+          "retro"
+        ],
+        "summary": "One save's bytes",
+        "description": "`?previous=1` returns the copy the current one replaced. A save state carries `X-LANcast-Core` and `X-LANcast-Core-Version` naming what wrote it; **a client must refuse to load a state into any other core or version**, because a state is a memory dump of one build and loading it elsewhere is a crash rather than an error. `ETag` is the SHA-256.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "path",
+            "required": true,
+            "description": "`sram` (the game's own save), `auto` (the state written when a game is closed) or `state-0` to `state-9`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(sram|auto|state-[0-9])$"
+            }
+          },
+          {
+            "name": "previous",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The save.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a slot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "No save in this slot, or no previous copy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putGameSave",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Store a save",
+        "description": "The body is the save's bytes, at most 64 MB. A save state must name the core that wrote it (`?core=&core_version=`); save RAM needs neither.\n\n**The newer write wins and the one it replaces is kept** as the previous copy, so a bad save costs one step back. That is the whole conflict policy, deliberately: two machines saving one slot at the same moment is not how one household plays.\n\nThe one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "path",
+            "required": true,
+            "description": "`sram` (the game's own save), `auto` (the state written when a game is closed) or `state-0` to `state-9`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(sram|auto|state-[0-9])$"
+            }
+          },
+          {
+            "name": "core",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "core_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The slot as it now stands, with its previous copy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ROMSave"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a slot, or a save state that does not name its core.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "description": "Larger than any core writes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "streamTicket": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -16523,6 +16909,119 @@
           },
           "identify": {
             "$ref": "#/components/schemas/RetroIdentifyStats"
+          }
+        }
+      },
+      "RomFile": {
+        "type": "object",
+        "required": [
+          "name",
+          "size_bytes",
+          "present"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Relative to the game's entry file, with `/` separators (`.hidden/Disc 1.cue`)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "present": {
+            "type": "boolean",
+            "description": "False for a file the game names that is not on disk, such as a cue's missing track."
+          }
+        }
+      },
+      "GameFiles": {
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RomFile"
+            },
+            "description": "Entry file first."
+          }
+        }
+      },
+      "ROMSavePrevious": {
+        "type": "object",
+        "required": [
+          "size_bytes",
+          "sha256",
+          "updated_at"
+        ],
+        "properties": {
+          "core": {
+            "type": "string"
+          },
+          "core_version": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ROMSave": {
+        "type": "object",
+        "required": [
+          "slot",
+          "size_bytes",
+          "sha256",
+          "updated_at"
+        ],
+        "properties": {
+          "slot": {
+            "type": "string"
+          },
+          "core": {
+            "type": "string",
+            "description": "The core that wrote a save state. Absent for `sram`."
+          },
+          "core_version": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/ROMSavePrevious"
+          }
+        }
+      },
+      "ROMSaves": {
+        "type": "object",
+        "required": [
+          "saves"
+        ],
+        "properties": {
+          "saves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ROMSave"
+            }
           }
         }
       }

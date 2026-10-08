@@ -50,7 +50,11 @@ const (
 )
 
 type ticket struct {
-	itemID  int64
+	itemID int64
+	// rom is set when the item is a retro game (ADR 0073). A game's ticket
+	// also opens its other files and its player's saves: the desktop player
+	// has no cookie, and without this it could neither load a disc nor save.
+	rom     bool
 	credH   string // hash of the minting credential; "" on an unsecured server
 	viaKey  bool
 	expires time.Time
@@ -124,7 +128,7 @@ func (s *Server) mintStreamTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := ticket{itemID: id}
+	t := ticket{itemID: id, rom: it.Kind == "rom"}
 	if s.secured(r.Context()) {
 		h, viaKey, ok := mintingCredential(r)
 		if !ok {
@@ -166,28 +170,23 @@ func mintingCredential(r *http.Request) (hash string, viaKey bool, ok bool) {
  * streamTicket resolves a ticket presented on a stream request, returning the
  * session it stands in for.
  *
- * Only `GET` or `HEAD` of exactly `/api/stream/{id}` for the ticket's own item.
- * Anything else returns false and the request carries on to the ordinary
- * checks, so a ticket shown anywhere else is simply not a credential there.
+ * Only `GET` or `HEAD` of exactly `/api/stream/{id}` for the ticket's own item
+ * — and, for a ticket minted for a retro game, that game's files and saves
+ * (ticketRoute). Anything else returns false and the request carries on to
+ * the ordinary checks, so a ticket shown anywhere else is simply not a
+ * credential there.
  */
 func (s *Server) streamTicket(r *http.Request) (*store.Session, bool) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return nil, false
-	}
 	h := r.Header.Get("Authorization")
 	if len(h) <= len(ticketScheme) || !strings.EqualFold(h[:len(ticketScheme)], ticketScheme) {
 		return nil, false
 	}
-	rest, found := strings.CutPrefix(r.URL.Path, "/api/stream/")
-	if !found {
-		return nil, false
-	}
-	id, err := strconv.ParseInt(rest, 10, 64)
-	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != rest {
+	id, romOnly, ok := ticketRoute(r.Method, r.URL.Path)
+	if !ok {
 		return nil, false
 	}
 	t, ok := s.tickets.get(auth.HashToken(strings.TrimSpace(h[len(ticketScheme):])), time.Now())
-	if !ok || t.itemID != id {
+	if !ok || t.itemID != id || (romOnly && !t.rom) {
 		return nil, false
 	}
 	if t.viaKey {
@@ -196,4 +195,58 @@ func (s *Server) streamTicket(r *http.Request) (*store.Session, bool) {
 	}
 	sess, err := s.st.LookupSession(r.Context(), t.credH)
 	return sess, err == nil
+}
+
+/*
+ * ticketRoute is the whole of where a ticket is a credential, and the item it
+ * must have been minted for.
+ *
+ * Every ticket: `GET`/`HEAD /api/stream/{id}`. A game's ticket (ADR 0073)
+ * also: the game's file list and files, and the minting person's saves for
+ * that game — read, and written with `PUT`, which is the one write a ticket
+ * can make. It is still one item and still the person who minted it, and the
+ * CSRF check has nothing to say about it for the reason it has nothing to say
+ * about an API key: nothing attaches this header by itself.
+ */
+func ticketRoute(method, path string) (id int64, romOnly bool, ok bool) {
+	read := method == http.MethodGet || method == http.MethodHead
+	if rest, found := strings.CutPrefix(path, "/api/stream/"); found {
+		head, tail, _ := strings.Cut(rest, "/")
+		id, ok = parseTicketID(head)
+		switch {
+		case !ok || !read:
+			return 0, false, false
+		case tail == "":
+			if strings.Contains(rest, "/") {
+				return 0, false, false
+			}
+			return id, false, true
+		case tail == "files":
+			return id, true, true
+		}
+		return 0, false, false
+	}
+	if rest, found := strings.CutPrefix(path, "/api/items/"); found {
+		head, tail, _ := strings.Cut(rest, "/")
+		id, ok = parseTicketID(head)
+		if !ok {
+			return 0, false, false
+		}
+		switch {
+		case (tail == "files" || tail == "saves") && read:
+			return id, true, true
+		case strings.HasPrefix(tail, "saves/") && !strings.Contains(tail[len("saves/"):], "/") &&
+			(read || method == http.MethodPut):
+			return id, true, true
+		}
+	}
+	return 0, false, false
+}
+
+func parseTicketID(s string) (int64, bool) {
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != s {
+		return 0, false
+	}
+	return id, true
 }
