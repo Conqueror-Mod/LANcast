@@ -7,6 +7,7 @@ import (
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
 	"lancast/internal/probe"
+	"lancast/internal/retro/identify"
 	"lancast/internal/scan"
 	"lancast/internal/transcode"
 )
@@ -128,5 +129,18 @@ func TestActivitySkipsFinishedTranscodes(t *testing.T) {
 	}
 	if tasks[0].ID != "transcode:b" || tasks[0].Kind != "transcode" {
 		t.Errorf("task = %+v", tasks[0])
+	}
+}
+
+// ROM identification is activity while it runs, and a pass that changed
+// something advances completed_at even if no poll ever saw it running — the
+// stamp is what makes a client throw away a grid still showing filenames.
+func TestActivityRetroIdentification(t *testing.T) {
+	running := buildActivity(snapshot{retro: identify.Stats{Running: true, Matched: 3, Unmatched: 1, Total: 9}})
+	if len(running) != 1 || running[0].Kind != "retro" || running[0].Done != 4 || running[0].Total != 9 {
+		t.Errorf("tasks = %+v", running)
+	}
+	if got := lastCompleted(snapshot{retro: identify.Stats{FinishedAt: 1234}}); got != 1234 {
+		t.Errorf("lastCompleted = %d, want the identify pass's finish", got)
 	}
 }

@@ -67,6 +67,17 @@ function glyph(kind: string) {
           <path d="M3 14l4.5-4 3.5 3 2.5-2 3.5 3" />
         </>
       );
+    case "retro":
+      // A gamepad: a rounded body, a cross on the left, two buttons on the
+      // right. Reads as "games" at 18px where a cartridge reads as a box.
+      return (
+        <>
+          <path d="M6 6.5h8a4 4 0 0 1 3.8 5.2l-1 3.1a2 2 0 0 1-3.3.8L11.5 14h-3l-2 1.6a2 2 0 0 1-3.3-.8l-1-3.1A4 4 0 0 1 6 6.5z" />
+          <path d="M6.5 9v3M5 10.5h3" />
+          <circle cx="13" cy="10" r="0.6" />
+          <circle cx="14.6" cy="11.6" r="0.6" />
+        </>
+      );
     default:
       return <rect x="3" y="4" width="14" height="12" rx="1.5" />;
   }

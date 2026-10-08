@@ -303,3 +303,23 @@ describe("the library grid menu", () => {
     expect(labels().join(" ")).not.toContain("Remove");
   });
 });
+
+// A retro game (ADR 0073) has no player in this client yet, so its menu holds
+// nothing that would navigate to /watch and hand a ROM to the video element.
+describe("the grid menu on a retro game", () => {
+  it("offers details and removal, and nothing that plays", async () => {
+    mount([
+      {
+        id: 21,
+        title: "Super Mario 64",
+        kind: "rom",
+        library_id: 1,
+        platform: "n64",
+        artwork: {},
+      },
+    ]);
+    await render();
+    expect(rightClick(tile("Super Mario 64"))).toBe(true);
+    expect(labels()).toEqual(["Go to details", "Remove from library…"]);
+  });
+});

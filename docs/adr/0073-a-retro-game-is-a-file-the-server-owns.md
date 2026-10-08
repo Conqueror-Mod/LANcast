@@ -1,8 +1,7 @@
 # ADR 0073 — A retro game is a file the server owns
 
-Date: 2026-09-30 · Status: **proposed** — the direction and the stages were
-approved on 2026-09-30. The decisions below are proposals until someone starts
-stage 1 and confirms them. The build plan is
+Date: 2026-09-30 · Status: **accepted** 2026-10-07, when stage 1 began and the
+open questions were answered (see *Answers* below). The build plan is
 [retro-games-plan.md](../retro-games-plan.md).
 
 Extends [ADR 0002](0002-one-wide-media-item-table.md), because a ROM is a new
@@ -229,6 +228,103 @@ starts:
 4. **Does save sync across machines matter,** or is it one PC? The server-side
    saves are designed either way, but priority follows the answer.
 5. **Is the RetroArch stop-gap wanted at all?**
+
+### Answers (2026-10-07)
+
+1. **The desktop app only.** Browsers and TVs see the library and a "plays in
+   the LANcast desktop app" state. The browser player stays *later*.
+2. **SNES, NES, GB, GBC, GBA, Genesis and Master System, plus PS1.** Stage 2
+   keeps its order (GBA first, to prove the host) because every one of those
+   is a framebuffer system. **PS1 is in the library from stage 1 and plays
+   after N64.** A PS1 game is a disc rather than a file: a `.cue` with its
+   `.bin` tracks, a `.chd`, or an `.m3u` listing several discs. The row is the
+   game's entry file, and the files it refers to are not rows of their own.
+   The BIOS is a file the user provides. This amends *What LANcast will not
+   do*: PS1 is no longer out of scope, and the BIOS is still never supplied.
+3. **Xbox-style XInput pads.** There is no mapping screen in stage 2 or 3.
+4. **Mostly one PC.** Saves still live on the server as designed. Conflicts
+   stay simple: the newer save wins and the previous copy is kept. Two-machine
+   sync is not a gate for stage 2.
+5. **No stop-gap.** The RetroArch launch is dropped, not deferred.
+
+Two decisions from the build plan were confirmed at the same time:
+
+- **The DAT files are installed from Settings**, the way ffmpeg is (ADR 0043):
+  from a pinned commit, checked against a SHA-256, and only when the user
+  presses the button. A scan never makes a network call. Without the DATs, a
+  ROM keeps the title its filename gives it.
+- **One retro library, filtered by console.** One library holds every system.
+  The grid gets a console filter, and libraries are not split per console.
+
+## Amendments from building stage 1 (2026-10-07)
+
+Building stage 1 contradicted the plan in a few places. Each change is listed
+here, so this ADR describes what was built.
+
+**Identification is its own worker, not a `meta` provider.** A provider must
+answer `Search(title)`, and a hash lookup has no title to search. If ROMs had
+stayed in the enrichment queue, every ROM no provider could answer would have
+stayed pending for ever and been read again on every pass. That is the trap
+that once stranded 4,238 photos. So `rom` is not an enrichable kind.
+`internal/retro/identify` runs behind every scan and at startup, like the
+album-art and photo workers, and stamps every outcome: matched, unmatched and
+unreadable. Locks are respected field by field, and a `locked` match is never
+re-scored.
+
+**One more column and one more table than planned.** Revision 64 adds
+`media_item.rom_checked_at`, the identify worker's stamp, and `rom_hash`, a
+side table like `photo_hash` that holds what reading the file produced. The
+hashes are kept apart from the stamp on purpose. Installing the DATs, or
+turning box art on, clears the stamp of every unlocked ROM, and because the
+hashes are already there, re-identifying is a lookup per game rather than a
+re-read of every file. A changed file drops its hash and is queued again.
+
+**libretro's NES DAT hashes the iNES header in.** The plan said to strip it,
+which would have made every NES ROM miss. The DAT lists Super Mario Bros. at
+40,976 bytes, which is 16 + 40,960. Each dump is hashed in every layout a DAT
+might list, the likeliest first: N64 converted to big-endian from whichever
+order its header word says, NES whole and then headerless, SNES without a
+512-byte copier header and then with it, and Genesis `.smd` de-interleaved. A
+SHA-1 is unique across consoles, so a `.bin` or `.zip` that no folder placed is
+placed by its SHA-1 alone. A CRC32 is not unique across consoles, and is never
+used that way.
+
+**A PlayStation disc is identified by its serial, and a multi-disc game is
+one row.**
+The serial comes from `SYSTEM.CNF` on the first track a `.cue` names, or from
+`PARAM.SFO` in a `.pbp`. That avoids hashing 700 MB. A cue cannot name a track
+outside its own folder. A `.bin` under a PlayStation folder is a track and not
+a row. A `.chd` is listed by its filename, because its codecs are not in the
+standard library. An `.m3u` that lists disc images is the game's row, and
+the discs it lists are not rows, whether they sit beside it or in a subfolder
+below it (the `.hidden` layout). It is identified by its first disc. A list
+that names no disc is not a game, and a list cannot name a disc outside its
+own folder. Without an `.m3u`, each disc is a row of its own.
+
+**Region is read, not stored.** `media.ROMRegion` reads it from the DAT name
+that a match records as `external_id`, or from the filename before there is a
+match, so no client parses a ROM name.
+
+**A content-rating ceiling applies to games, by their ESRB rating.** Games
+carry ratings, so `rom` is not one of the kinds exempt from ceilings, and an
+unrated game is blocked like any unrated item. Exempting ROMs would let a child
+account see every game. The rating comes from libretro's `esrb` metadata DAT,
+offline, and is stored **with its system's name** (`ESRB M`). A bare `M`
+already sits on the ladder as Australia's 15, and ESRB's M is 17+, so the
+prefix keeps the two statements apart. `rating` has rungs for `ESRB EC`, `E`,
+`KA`, `E10+`, `T`, `M` and `AO`, and `RP` (rating pending) is not stored.
+**Coverage is the catch:** at the pinned commit the ESRB DAT rates thousands of
+NES, SNES, Game Boy, GBA and Genesis games, one N64 game and a handful of PS1
+games. Under a ceiling, most N64 and PS1 games stay hidden until someone rates
+them by hand. That is the existing rule working as written, and whether games
+deserve an exception is a decision still open.
+
+**The pinned set.** 34 files, 15.8 MB, CC BY-SA 4.0, from libretro-database
+at commit `fbeefcb4`: the No-Intro DATs for eight consoles and Redump's for the
+PlayStation, each with libretro's release-year, genre and ESRB DATs (PS1 has
+no year or genre DAT, and Redump carries some years inline). Box art and a screenshot come
+from libretro-thumbnails, addressed by the matched DAT name, and only when
+`retro_artwork` is on.
 
 ## Consequences
 

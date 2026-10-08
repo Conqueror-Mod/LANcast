@@ -29,7 +29,11 @@ const (
 	// would collide in every helper that switches on kind.
 	KindGallery Kind = "gallery"
 	KindPhoto   Kind = "photo"
-	KindOther   Kind = "other"
+	// A retro game's ROM or disc image (ADR 0073). Not "game": ADR 0066 uses
+	// that word for installed PC games, which are never server rows, and two
+	// opposite concepts sharing one word would be a trap.
+	KindROM   Kind = "rom"
+	KindOther Kind = "other"
 )
 
 // Library kinds, as stored on a library row and accepted by the API. Spelled
@@ -42,7 +46,10 @@ const (
 	// because the leaf kind is `photo`, and a library kind that reads identically
 	// to an item kind is a bug waiting to be written by autocomplete.
 	LibraryPicture = "picture"
-	LibraryOther   = "other"
+	// Retro games (ADR 0073): ROMs of every console in one library, filtered
+	// by platform rather than split into a library per console.
+	LibraryRetro = "retro"
+	LibraryOther = "other"
 )
 
 // Info is what we could infer from a path alone.
@@ -67,6 +74,9 @@ type Info struct {
 	 * do not believe it, and never join on it.
 	 */
 	Edition string
+	// Platform is the console a ROM belongs to (ADR 0073), or empty. Set only
+	// in a retro library.
+	Platform string
 }
 
 var videoExts = map[string]bool{
@@ -137,6 +147,8 @@ func IsScannable(path, libKind string) bool {
 		return IsAudio(path)
 	case LibraryPicture:
 		return IsImage(path)
+	case LibraryRetro:
+		return IsROM(path)
 	default:
 		return IsVideo(path)
 	}
@@ -326,6 +338,13 @@ func Parse(root, path, libKind string) Info {
 	// tidied UUID is a poor title that has been lied about.
 	if libKind == LibraryPicture {
 		return Info{Kind: KindPhoto, Title: base}
+	}
+
+	// A ROM's name is a No-Intro or GoodTools name, whose tags are release
+	// metadata rather than noise (ADR 0073). The title is a fallback: the hash
+	// lookup replaces it with the DAT's canonical name when one matches.
+	if libKind == LibraryRetro {
+		return Info{Kind: KindROM, Title: ROMTitle(path), Platform: Platform(root, path)}
 	}
 
 	if m := reSeasonEp.FindStringSubmatch(base); m != nil {

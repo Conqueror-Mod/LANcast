@@ -39,8 +39,10 @@ import {
   childLabel,
   childCountLabel,
   isPicture,
+  isROM,
   watchedVerb,
 } from "@/lib/kind";
+import { platformLabel } from "@/lib/platforms";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
@@ -499,6 +501,9 @@ export function Detail() {
     item.kind !== "season" &&
     !isMusic &&
     !isPicture(item) &&
+    // A ROM is identified by its hash against a DAT (ADR 0073); Fix match
+    // searches film and TV providers that have never heard of it.
+    !isROM(item) &&
     // A playlist has no provider identity to correct. It is a list somebody
     // named, and the only thing a search could do with "Road Trip" is offer the
     // film — the same reason a collection and a season are excluded, arrived at
@@ -623,6 +628,10 @@ export function Detail() {
   };
 
   const meta = [
+    // A game's console comes first, the way a box is labelled, then its
+    // region: "Nintendo 64 · USA · 1996" (ADR 0073).
+    isROM(item) ? platformLabel(item.platform) : "",
+    isROM(item) ? (item.region ?? "") : "",
     // An album's artist belongs on the line that says what this is, ahead of
     // the year — "Between the Buried and Me · 2021", the way a record is named.
     isAlbum ? (item.artist ?? "") : "",
@@ -892,7 +901,15 @@ export function Detail() {
                * button and what happens next cannot disagree. Play from start
                * beside it is the one way to begin again without seeking back.
                */}
-              {!container && !isPicture(item) && !item.missing &&
+              {/* Where a retro game plays, in place of a Play button that
+                  would hand a ROM to the video player (ADR 0073). A neutral
+                  note, not a control: nothing here can be pressed yet. */}
+              {isROM(item) && (
+                <p className="detail__plays-elsewhere" role="note">
+                  Plays in the LANcast desktop app — coming in a later release.
+                </p>
+              )}
+              {!container && !isPicture(item) && !isROM(item) && !item.missing &&
                 (resumeSeconds({
                   positionMs: item.progress?.position_ms,
                   watched: item.progress?.watched,
@@ -988,7 +1005,7 @@ export function Detail() {
                   silently mean "add its twelve tracks", which is a different
                   request and not one this button asked. Pictures are not
                   playable at all. */}
-              {!container && !isPicture(item) && (
+              {!container && !isPicture(item) && !isROM(item) && (
                 <SecondaryButton
                   label="Add to playlist"
                   onPress={() => setAddOpen(true)}
@@ -996,7 +1013,7 @@ export function Detail() {
               )}
               {/* Things that are watched: not music, which marks itself by
                   playing, nor pictures or a playlist somebody built. */}
-              {!isMusic && !isPicture(item) && !isPlaylist && (
+              {!isMusic && !isPicture(item) && !isROM(item) && !isPlaylist && (
                 <WatchedButton item={item} held={children} />
               )}
               {/*
@@ -1065,7 +1082,9 @@ export function Detail() {
                 synopsis, because a note you wrote is worth more to you than a
                 summary you have already read. Containers and photos are not
                 things anybody rates. */}
-            {!container && !isPicture(item) && <RateItem itemID={item.id} />}
+            {!container && !isPicture(item) && !isROM(item) && (
+              <RateItem itemID={item.id} />
+            )}
             {/* Tags and the heart sit with the rating: all three are this
                 account's own opinion of the item rather than facts about it. */}
             {!container && <TagItem itemID={item.id} />}

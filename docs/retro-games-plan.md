@@ -1,10 +1,12 @@
 # Retro games — build plan
 
-**Status: back burner — planned, not started, no work scheduled.** The direction and stage order were approved on
-2026-09-30. The decisions are in
-[ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), which stays
-*proposed* until stage 1 begins and its open questions are answered. This
-document is the work breakdown only. Where the two disagree, the ADR wins.
+**Status: stage 1 in progress (2026-10-07).** The direction and stage order
+were approved on 2026-09-30. The decisions are in
+[ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), now accepted
+with its open questions answered: desktop only, XInput, no RetroArch stop-gap,
+PS1 identified in stage 1 and playable after N64, DATs installed from Settings,
+and one library filtered by console. This document is the work breakdown only.
+Where the two disagree, the ADR wins.
 
 Some of this was written from memory and not checked: core licences, how the
 buildbot pins versions, and the header rules in the DAT files. Each of those is
@@ -17,7 +19,6 @@ marked **verify**. Check them against the source before relying on them.
 | 1 | ROM library: scan, identify, art, browse | 2 weeks | 1–2 releases |
 | 2 | Desktop player for GBA/NES/SNES/Genesis, with saves to the server | 4–5 weeks | 2 releases |
 | 3 | N64 with a GL hardware context | 3–4 weeks | 1–2 releases |
-| *stop-gap* | Launch an installed RetroArch | 2–3 days | 1 session |
 | *later* | Browser player | 1–2 weeks | 1 release |
 
 The total through stage 3 is about **two to three months** on the traditional
@@ -90,6 +91,37 @@ box art. Nothing plays yet, and the detail page says so.
   game.
 - Renaming a file to nonsense changes nothing, because identity comes from the
   hash.
+
+### Status (2026-10-07)
+
+**Built, and passing against synthetic fixtures. The real-file check is still
+owed.** Every item of work above has landed on `feat/retro-library`. The
+differences from this plan are recorded in ADR 0073 under *Amendments from
+building stage 1*. The **verify** marks in this stage are resolved: the DAT
+header rules (NES is hashed with its header, the opposite of what was written
+here), the thumbnail URL scheme (checked against a live request) and the DAT
+licence (CC BY-SA 4.0).
+
+What tests could check: the three N64 byte orders hash alike, renaming a file
+does not change what it is, a rescan is a no-op (the test fails without the
+`reinterpreted` case), locks hold, and a retro library never reaches a paired
+server. The real pinned DATs were loaded once: 43,145 games in 179 ms, with
+lookups for a known N64 SHA-1, a headered NES CRC and a PS1 serial.
+
+What only real files can check, in `Test Libraries\Test Retro Library` and
+never a live ROM folder:
+
+1. Install the ROM database from Settings → Retro games, then scan.
+2. Every dump is named, N64 in all three byte orders included, and a file
+   renamed to nonsense is named the same.
+3. A PS1 `.cue` is one row with its serial matched, and its `.bin` tracks are
+   not rows.
+4. With box art on, posters arrive. Read `lancastd.log` for `rom
+   identification failed`.
+
+Added after the first pass: `.m3u` multi-disc grouping, and ESRB ratings
+from libretro's DAT (which let a content ceiling admit rated games). Not built
+in stage 1: CHD identification. A `.chd` is listed by its filename.
 
 ---
 
@@ -188,13 +220,10 @@ controller, analog stick included.
 
 ---
 
-## Stop-gap (optional) — launch RetroArch
+## Stop-gap — dropped
 
-If RetroArch is installed, a ROM's Play button starts
-`retroarch.exe -L <core> <rom>`. The launch reuses the mechanics in
-`internal/games`, and the ROM path is re-verified against its library root
-before launch. This only works where the client machine can see the ROM path,
-such as a local drive or a mapped share. It is removed when stage 3 ships.
+Launching an installed RetroArch was declined on 2026-10-07 (ADR 0073,
+*Answers*). It kept the maintenance burden this feature exists to remove.
 
 ## Later — browser player
 

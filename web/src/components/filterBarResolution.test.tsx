@@ -45,6 +45,7 @@ declare global {
 // after cropping.
 const facets: Facets = {
   initials: [],
+  platforms: [],
   genres: [],
   decades: [],
   content_ratings: [],

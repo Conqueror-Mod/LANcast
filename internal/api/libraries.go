@@ -23,6 +23,8 @@ func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
 
 var validKinds = map[string]bool{
 	"movie": true, "show": true, "music": true, "picture": true, "other": true,
+	// ROMs of every console (ADR 0073).
+	"retro": true,
 }
 
 func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {

@@ -60,6 +60,7 @@ export function LibraryView({
   const contentRatings = params.getAll("content_rating");
   const years = params.getAll("year");
   const resolutions = params.getAll("resolution");
+  const platforms = params.getAll("platform");
   const people = params.getAll("person");
   const actors = params.getAll("actor");
   const directors = params.getAll("director");
@@ -178,6 +179,7 @@ export function LibraryView({
     unwatched,
     years: years.map(Number),
     resolutions,
+    platforms,
     people: people.map(Number),
     actors: actors.map(Number),
     directors: directors.map(Number),
@@ -326,6 +328,7 @@ export function LibraryView({
     contentRatings.length > 0 ||
     years.length > 0 ||
     resolutions.length > 0 ||
+    platforms.length > 0 ||
     people.length > 0 ||
     actors.length > 0 ||
     directors.length > 0 ||

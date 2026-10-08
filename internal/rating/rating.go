@@ -92,6 +92,22 @@ var ages = map[string]int{
 	"MA15+":  15,
 	"R18+":   18,
 	"X18+":   18,
+	/*
+	 * Games (ADR 0073), ESRB — and always written with the system's name.
+	 *
+	 * A bare "M" already means 15 here, because that is Australia's
+	 * certificate, and ESRB's M is 17+. Storing "ESRB M" keeps the two
+	 * statements apart rather than letting whichever was entered first
+	 * decide what a game is old enough for. The retro identify worker writes
+	 * these, and nothing else does.
+	 */
+	"ESRB EC":   0,
+	"ESRB E":    0,
+	"ESRB KA":   0, // Kids to Adults, ESRB's name for E until 1998
+	"ESRB E10+": 10,
+	"ESRB T":    13,
+	"ESRB M":    17,
+	"ESRB AO":   18,
 	// Explicitly unrated labels. Named so that "NR" is recognised as *saying*
 	// nothing rather than as unrecognised — the rank is the same, and the
 	// distinction is worth keeping in the table for anybody reading it.

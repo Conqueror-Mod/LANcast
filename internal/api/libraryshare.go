@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lancast/internal/identity"
+	"lancast/internal/media"
 	"lancast/internal/rating"
 	"lancast/internal/store"
 )
@@ -165,6 +166,13 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		s.writeInternal(w, err, "library for share")
+		return
+	}
+	// ROMs are not shared with paired servers (ADR 0073) until a separate
+	// decision says otherwise.
+	if l.Kind == media.LibraryRetro {
+		writeError(w, http.StatusBadRequest, "not_shareable",
+			"game libraries cannot be shared with another server")
 		return
 	}
 	if body.Ceiling != "" && !ceilingApplies(l.Kind) {

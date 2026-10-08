@@ -25,6 +25,7 @@ const facets: Facets = {
   // present and empty rather than absent — which is why this fixture carries
   // `initials` even though nothing here reads it.
   initials: [],
+  platforms: [],
   genres: ["Drama"],
   decades: [1990],
   content_ratings: ["R"],

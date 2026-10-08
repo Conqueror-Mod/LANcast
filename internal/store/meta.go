@@ -220,7 +220,10 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 //
 // The lesson the music entry already paid for, repeated: the test is not "did
 // we forget a kind" but "can a provider ever answer for this kind".
-const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery')`
+//
+// A ROM is the third case (ADR 0073). It is identified by hash against a DAT
+// file, by its own worker, and no provider in the registry can search for one.
+const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery', 'rom')`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.

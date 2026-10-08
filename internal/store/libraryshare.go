@@ -122,8 +122,19 @@ func (s *Store) SharesTo(ctx context.Context, fingerprint string) ([]LibraryShar
  * returns a slice rather than an optional filter.
  */
 func (s *Store) SharedLibraries(ctx context.Context, fingerprint string) ([]int64, error) {
+	/*
+	 * A retro library is never in scope, whatever library_share holds (ADR
+	 * 0073). Sending a ROM to another household is a different act from
+	 * streaming it a film, and that needs its own decision. The grant is
+	 * refused at the handler too; this is the line that holds if a row ever
+	 * gets here some other way, because it is what every friend listing
+	 * filters on.
+	 */
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT library_id FROM library_share WHERE fingerprint = ? ORDER BY library_id`,
+		`SELECT ls.library_id FROM library_share ls
+		   JOIN library l ON l.id = ls.library_id
+		  WHERE ls.fingerprint = ? AND l.kind != 'retro'
+		  ORDER BY ls.library_id`,
 		fingerprint)
 	if err != nil {
 		return nil, fmt.Errorf("shared libraries for %s: %w", fingerprint, err)

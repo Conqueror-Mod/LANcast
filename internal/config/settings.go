@@ -95,6 +95,16 @@ type Settings struct {
 	 */
 	DetectMarkers bool `json:"detect_markers"`
 
+	/*
+	 * RetroArtwork fetches box art and a screenshot for each identified ROM
+	 * from libretro-thumbnails (ADR 0073).
+	 *
+	 * Off by default because it is a network fetch per game, and no
+	 * phone-home has no convenience exception. Identification itself is
+	 * offline and does not depend on this.
+	 */
+	RetroArtwork bool `json:"retro_artwork"`
+
 	// ---- library and playback rules -------------------------------------
 	//
 	// These four are the server's opinion about what a client shows, and they

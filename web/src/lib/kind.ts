@@ -143,6 +143,16 @@ export function isPicture(item: Item): boolean {
   return PICTURE_KINDS.has(item.kind);
 }
 
+/*
+ * A retro game (ADR 0073). Its own predicate rather than a member of the
+ * picture set, because the two share only "the video player cannot play it":
+ * a ROM has no sensitive marking and no gallery, and a photo is never going to
+ * gain a player of its own in the desktop app.
+ */
+export function isROM(item: Item): boolean {
+  return item.kind === "rom";
+}
+
 // Kinds whose artwork is square rather than a 2:3 poster. A record sleeve is
 // square, and an artist wearing a borrowed album cover (ADR 0025) is square by
 // inheritance — so both frame square until artist images arrive from a provider,

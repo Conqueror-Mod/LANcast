@@ -7,7 +7,13 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
-import type { BackupFile, BackupsResponse, Duplicates, NearCopies } from "./types";
+import type {
+  BackupFile,
+  BackupsResponse,
+  Duplicates,
+  NearCopies,
+  RetroDatabase,
+} from "./types";
 import { isContainer } from "@/lib/kind";
 import { forgetAcknowledgements } from "@/lib/sensitiveAck";
 import type {
@@ -1192,6 +1198,8 @@ export interface ItemQuery {
   years?: number[];
   /** Resolution bucket keys — uhd | hd1080 | hd720 | sd. */
   resolutions?: string[];
+  /** Retro consoles (ADR 0073) — nes | snes | n64 | … */
+  platforms?: string[];
   /** Person ids from /cast. Matches any credited role. */
   people?: number[];
   /** Person ids restricted to acting credits. */
@@ -1236,6 +1244,7 @@ function itemsParams({
   unwatched = false,
   years = [],
   resolutions = [],
+  platforms = [],
   people = [],
   actors = [],
   directors = [],
@@ -1265,6 +1274,7 @@ function itemsParams({
   for (const c of contentRatings) params.append("content_rating", c);
   for (const y of years) params.append("year", String(y));
   for (const r of resolutions) params.append("resolution", r);
+  for (const p of platforms) params.append("platform", p);
   for (const p of people) params.append("person", String(p));
   for (const a of actors) params.append("actor", String(a));
   for (const d of directors) params.append("director", String(d));
@@ -1643,6 +1653,42 @@ export function useInstallFaceModels() {
       // install.
       qc.invalidateQueries({ queryKey: ["face-capabilities"] });
     },
+  });
+}
+
+/*
+ * The ROM database (ADR 0073): libretro's DAT files, fetched on request.
+ *
+ * Polled while the download runs *or* while games are being identified,
+ * because the pane shows both — "is it installed" and "are my games named
+ * yet" are the same question to the person asking it.
+ */
+export function useRetroDatabase(enabled = true) {
+  return useQuery({
+    queryKey: ["retro-database"],
+    queryFn: ({ signal }) => apiGet<RetroDatabase>("/api/retro/database", signal),
+    enabled,
+    refetchInterval: (q) =>
+      q.state.data?.job?.running || q.state.data?.identify?.running ? 1000 : false,
+  });
+}
+
+export function useInstallRetroDatabase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/retro/database/install", "POST"),
+    // Only the pane's own state. The grids change later, as identification
+    // renames games, and /api/activity's completed_at is what refreshes them —
+    // invalidating them here would refetch a library that has not changed yet.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["retro-database"] }),
+  });
+}
+
+export function useCancelRetroDatabase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/retro/database/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["retro-database"] }),
   });
 }
 
@@ -2673,6 +2719,7 @@ export function playableKindFor(
     case "show":
       return "episode";
     case "picture":
+    case "retro":
     case "other":
       return null;
     default:
