@@ -4702,6 +4702,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every file a retro game is made of
+         * @description A cartridge is its one file; a `.cue` is itself and the tracks it names; an `.m3u` is itself, each disc it lists, and each disc's tracks. Every file is kept inside the entry file's folder, so a cue naming `..\something` lists nothing for that line. `404` for an item that is not a game. A game's stream ticket reaches this.
+         */
+        get: operations["listGameFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stream/{id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One file of a retro game
+         * @description By the name `GET /api/items/{id}/files` gave it and by no other, with range support. A query parameter rather than a path, because the names carry slashes. A game's stream ticket reaches this.
+         */
+        get: operations["streamGameFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/saves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's saves for one game
+         * @description One person's, never anybody else's. A game's stream ticket reaches this, as the person who minted it.
+         */
+        get: operations["listGameSaves"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/saves/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One save's bytes
+         * @description `?previous=1` returns the copy the current one replaced. A save state carries `X-LANcast-Core` and `X-LANcast-Core-Version` naming what wrote it; **a client must refuse to load a state into any other core or version**, because a state is a memory dump of one build and loading it elsewhere is a crash rather than an error. `ETag` is the SHA-256.
+         */
+        get: operations["getGameSave"];
+        /**
+         * Store a save
+         * @description The body is the save's bytes, at most 64 MB. A save state must name the core that wrote it (`?core=&core_version=`); save RAM needs neither.
+         *
+         *     **The newer write wins and the one it replaces is kept** as the previous copy, so a bad save costs one step back. That is the whole conflict policy, deliberately: two machines saving one slot at the same moment is not how one household plays.
+         *
+         *     The one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.
+         */
+        put: operations["putGameSave"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7119,6 +7207,42 @@ export interface components {
             platforms: string[];
             job: components["schemas"]["RetroDatabaseJob"];
             identify?: components["schemas"]["RetroIdentifyStats"];
+        };
+        RomFile: {
+            /** @description Relative to the game's entry file, with `/` separators (`.hidden/Disc 1.cue`). */
+            name: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description False for a file the game names that is not on disk, such as a cue's missing track. */
+            present: boolean;
+        };
+        GameFiles: {
+            /** @description Entry file first. */
+            files: components["schemas"]["RomFile"][];
+        };
+        ROMSavePrevious: {
+            core?: string;
+            core_version?: string;
+            /** Format: int64 */
+            size_bytes: number;
+            sha256: string;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        ROMSave: {
+            slot: string;
+            /** @description The core that wrote a save state. Absent for `sram`. */
+            core?: string;
+            core_version?: string;
+            /** Format: int64 */
+            size_bytes: number;
+            sha256: string;
+            /** Format: int64 */
+            updated_at: number;
+            previous?: components["schemas"]["ROMSavePrevious"];
+        };
+        ROMSaves: {
+            saves: components["schemas"]["ROMSave"][];
         };
     };
     responses: {
@@ -14489,6 +14613,203 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listGameFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The files, entry first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GameFiles"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The game's files cannot be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    streamGameFile: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description A range of the file. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The file is gone from disk. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listGameSaves: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every slot the caller has used, by slot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ROMSaves"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getGameSave: {
+        parameters: {
+            query?: {
+                previous?: "1";
+            };
+            header?: never;
+            path: {
+                id: number;
+                /** @description `sram` (the game's own save), `auto` (the state written when a game is closed) or `state-0` to `state-9`. */
+                slot: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The save. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Not a slot. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No save in this slot, or no previous copy. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    putGameSave: {
+        parameters: {
+            query?: {
+                core?: string;
+                core_version?: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+                /** @description `sram` (the game's own save), `auto` (the state written when a game is closed) or `state-0` to `state-9`. */
+                slot: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The slot as it now stands, with its previous copy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ROMSave"];
+                };
+            };
+            /** @description Not a slot, or a save state that does not name its core. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Larger than any core writes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

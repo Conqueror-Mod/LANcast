@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 64
+const CurrentSchemaVersion = 65
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -121,6 +121,7 @@ var migrations = []migration{
 		{"media_item", "platform", "TEXT"},
 		{"media_item", "rom_checked_at", "INTEGER"},
 	}},
+	{version: 65, sql: schemaRevision65},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2139,6 +2140,42 @@ CREATE TABLE IF NOT EXISTS rom_hash (
 );
 CREATE INDEX IF NOT EXISTS idx_media_item_platform
     ON media_item(library_id, platform) WHERE platform IS NOT NULL;
+`
+
+/*
+ * Revision 65 — game saves follow the person (ADR 0073).
+ *
+ * One row per person, game and slot, describing the file that holds the
+ * bytes (internal/retro/saves) and the previous copy kept beside it. The
+ * bytes are not here: a save state is megabytes, and a database backup should
+ * not grow with every evening somebody plays.
+ *
+ * user_id is not a foreign key, for the reason playback_state's is not: the
+ * owner of an unsecured server is 'local', which has no account row.
+ * DeleteUser removes these rows by hand, as it does playback.
+ *
+ * core and core_version are what wrote a save state. A state is a memory dump
+ * of one build of one emulator, and loading it into another is a crash rather
+ * than a refusal, so it is recorded and checked before loading. Save RAM is
+ * the game's own format and carries neither.
+ */
+const schemaRevision65 = `
+CREATE TABLE IF NOT EXISTS rom_save (
+    user_id           TEXT    NOT NULL,
+    item_id           INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    slot              TEXT    NOT NULL,
+    core              TEXT,
+    core_version      TEXT,
+    size_bytes        INTEGER NOT NULL,
+    sha256            TEXT    NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    prev_core         TEXT,
+    prev_core_version TEXT,
+    prev_size_bytes   INTEGER,
+    prev_sha256       TEXT,
+    prev_updated_at   INTEGER,
+    PRIMARY KEY (user_id, item_id, slot)
+);
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or

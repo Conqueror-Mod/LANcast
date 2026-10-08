@@ -249,6 +249,11 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM playback_state WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user playback: %w", err)
 	}
+	// Game saves (ADR 0073): the rows here, the files by the caller, which
+	// owns the save directory.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM rom_save WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user saves: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM viewing WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user viewings: %w", err)
 	}

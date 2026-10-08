@@ -196,6 +196,51 @@ func TestROMRegion(t *testing.T) {
 	}
 }
 
+// A second save moves the first into the previous columns, and the slots of
+// one person, one game are listed apart from everyone else's.
+func TestROMSaveKeepsThePrevious(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	lib := romLibrary(t, s)
+	id := putROM(t, s, lib, "a.z64", "n64", 1)
+	first := ROMSave{Slot: "state-1", Core: "mupen64plus_next", CoreVersion: "2.6", SizeBytes: 10, SHA256: "aa", UpdatedAt: 100}
+	if err := s.PutROMSave(ctx, "u_1", id, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutROMSave(ctx, "u_1", id, ROMSave{Slot: "state-1", Core: "mupen64plus_next", CoreVersion: "2.7", SizeBytes: 12, SHA256: "bb", UpdatedAt: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutROMSave(ctx, "u_2", id, ROMSave{Slot: "sram", SizeBytes: 1, SHA256: "cc", UpdatedAt: 300}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetROMSave(ctx, "u_1", id, "state-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SHA256 != "bb" || got.CoreVersion != "2.7" || got.Previous == nil ||
+		got.Previous.SHA256 != "aa" || got.Previous.CoreVersion != "2.6" || got.Previous.UpdatedAt != 100 {
+		t.Errorf("got %+v prev %+v", got, got.Previous)
+	}
+	list, _ := s.ROMSaves(ctx, "u_1", id)
+	if len(list) != 1 {
+		t.Errorf("u_1 sees %d saves, want only their own one", len(list))
+	}
+	if _, err := s.GetROMSave(ctx, "u_1", id, "sram"); err != ErrNotFound {
+		t.Errorf("another person's slot leaked: %v", err)
+	}
+}
+
+// Revision 65 replays over a database that already has it.
+func TestRevision65Replays(t *testing.T) {
+	s := openTestStore(t)
+	if _, err := s.db.Exec(`UPDATE meta SET value = '64' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(s.db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+}
+
 // ffprobe is never handed a ROM: it is not a media container, and every
 // pass would log a failure for every game.
 func TestROMsAreNotProbed(t *testing.T) {

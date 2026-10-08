@@ -119,6 +119,12 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteUser(r.Context(), id); s.notFoundOr(w, err, "delete user", "no such user") {
 		return
 	}
+	// The rows went with the account; the save files are the other half
+	// (ADR 0073). A failure here leaves files nothing refers to, which is
+	// worth a warning and not worth failing a deletion that has happened.
+	if err := s.saveFiles().RemoveUser(id); err != nil {
+		s.log.Warn("removing a deleted user's saves", "user", id, "error", err)
+	}
 	// The deleted account's own audit events keep its name, because actor_name
 	// was frozen at write time — which is the reason it is stored that way.
 	s.audit(r, "user.delete", "user", id,

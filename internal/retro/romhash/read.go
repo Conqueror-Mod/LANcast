@@ -438,3 +438,85 @@ func SerialFromSFO(sfo []byte) string {
 	}
 	return ""
 }
+
+/*
+ * GameFiles lists every file a game is made of, entry file first: a cartridge
+ * is itself; a .cue is itself and the tracks it names; an .m3u is itself,
+ * each disc it lists, and each disc's tracks.
+ *
+ * It is what the desktop client fetches before a disc game can start, and it
+ * is the whole of what the server will serve for a game beyond its entry file
+ * (ADR 0073). So every path is resolved against the entry's folder and kept
+ * inside it — a cue or a list is a text file anybody can write — and a name
+ * that would leave the folder is dropped rather than served.
+ */
+func GameFiles(path string) ([]string, error) {
+	dir := filepath.Clean(filepath.Dir(path))
+	out := []string{path}
+	seen := map[string]bool{filepath.Clean(path): true}
+	add := func(p string) {
+		p = filepath.Clean(p)
+		if !seen[p] && inside(dir, p) {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".cue":
+		tracks, err := cueFiles(path)
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range tracks {
+			add(t)
+		}
+	case ".m3u":
+		discs, err := M3UDiscs(path)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range discs {
+			add(d)
+			if strings.EqualFold(filepath.Ext(d), ".cue") {
+				tracks, err := cueFiles(d)
+				if err != nil {
+					// A disc whose sheet is missing is reported when the
+					// client asks for it, not by refusing the whole list.
+					continue
+				}
+				for _, t := range tracks {
+					add(t)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// cueFiles is every FILE a cue sheet names, beside the sheet.
+func cueFiles(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []string
+	sc := bufio.NewScanner(io.LimitReader(f, 64<<10))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(strings.ToUpper(line), "FILE ") {
+			continue
+		}
+		name := strings.ReplaceAll(cueFileName(line[5:]), `\`, "/")
+		if name == "" {
+			continue
+		}
+		out = append(out, filepath.Join(filepath.Dir(path), filepath.FromSlash(name)))
+	}
+	return out, sc.Err()
+}
+
+func inside(dir, p string) bool {
+	rel, err := filepath.Rel(dir, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}

@@ -739,6 +739,13 @@ func (s *Server) Handler() http.Handler {
 	// the client knows items, not paths, and paths never leave the server.
 	mux.HandleFunc("GET /api/items/{id}/photo", s.photo)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
+	// A retro game's files and its player's saves (ADR 0073). A ticket minted
+	// for the game reaches these too; see streamticket.go.
+	mux.HandleFunc("GET /api/stream/{id}/files", s.streamGameFile)
+	mux.HandleFunc("GET /api/items/{id}/files", s.listGameFiles)
+	mux.HandleFunc("GET /api/items/{id}/saves", s.listSaves)
+	mux.HandleFunc("GET /api/items/{id}/saves/{slot}", s.getSave)
+	mux.HandleFunc("PUT /api/items/{id}/saves/{slot}", s.putSave)
 	mux.HandleFunc("POST /api/items/{id}/stream-ticket", s.mintStreamTicket)
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)
