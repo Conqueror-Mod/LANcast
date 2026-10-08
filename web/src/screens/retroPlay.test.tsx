@@ -194,6 +194,17 @@ describe("a film in the corner (ADR 0076)", () => {
     delete window.lancastMpvLayout;
   });
 
+  it("leaves the page see-through on the way out when a film still needs it", async () => {
+    const { holdNativeVideo, resetNativeVideoHolders, NATIVE_VIDEO_CLASS } = await import("@/playback/mpvBackend");
+    holdNativeVideo("film"); // a film docked in the corner, playing natively
+    await render("/play/41");
+    act(() => root.unmount());
+    // Taken off here, the maximised film was a black page over a playing film.
+    expect(document.documentElement.classList.contains(NATIVE_VIDEO_CLASS)).toBe(true);
+    root = createRoot(host);
+    resetNativeVideoHolders();
+  });
+
   it("offers the game's own volume in steps and sends the next one", async () => {
     window.lancastRetroVolume = vi.fn(async () => 0.5);
     window.lancastRetroSetVolume = vi.fn(async () => {});

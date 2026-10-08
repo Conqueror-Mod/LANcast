@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGameSaves, useItem } from "@/api/hooks";
 import { useBackHandler, useFocusable } from "@/focus/FocusController";
-import { NATIVE_VIDEO_CLASS } from "@/playback/mpvBackend";
+import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
 import {
   STATE_SLOTS,
   curatedOptions,
@@ -56,11 +56,13 @@ export function RetroPlay() {
 
   // The page is see-through over the picture while this screen is up, and a
   // docked film floats above it rather than above the main window (ADR 0076).
+  // Held, not set: a film in the corner needs the page see-through too, and
+  // goes on after this screen (mpvBackend.holdNativeVideo).
   useEffect(() => {
-    document.documentElement.classList.add(NATIVE_VIDEO_CLASS);
+    holdNativeVideo("game");
     setGameOnScreen(true);
     return () => {
-      document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+      releaseNativeVideo("game");
       setGameOnScreen(false);
     };
   }, []);

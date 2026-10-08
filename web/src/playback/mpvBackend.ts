@@ -105,6 +105,34 @@ export function streamItem(src: string): number | null {
  *  see-through where the picture is (playback.css). */
 export const NATIVE_VIDEO_CLASS = "lancast-native-video";
 
+/*
+ * Who needs the page see-through, so the class comes off only when nobody does.
+ *
+ * Two things set it: a film playing natively, for as long as the file is
+ * open, and a game screen, for as long as it is up. Each used to add and
+ * remove it on its own, which was fine while starting a game stopped the
+ * film. Once a film could go on in the corner (ADR 0076), quitting the game
+ * removed the class the film still needed: maximised, the player's page
+ * painted opaque black over a film that was playing, sound and all.
+ */
+const nativeHolders = new Set<string>();
+
+export function holdNativeVideo(who: "film" | "game"): void {
+  nativeHolders.add(who);
+  document.documentElement.classList.add(NATIVE_VIDEO_CLASS);
+}
+
+export function releaseNativeVideo(who: "film" | "game"): void {
+  nativeHolders.delete(who);
+  if (nativeHolders.size === 0) document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+}
+
+/** For tests, which share one document. */
+export function resetNativeVideoHolders(): void {
+  nativeHolders.clear();
+  document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+}
+
 class NativeMediaError {
   readonly MEDIA_ERR_ABORTED = 1;
   readonly MEDIA_ERR_NETWORK = 2;
@@ -249,7 +277,7 @@ export class MpvBackend extends EventTarget implements MediaBackend {
           {},
         );
         if (gen !== this.generation) return;
-        document.documentElement.classList.add(NATIVE_VIDEO_CLASS);
+        holdNativeVideo("film");
         await window.lancastMpvOpen!(id, t.ticket);
         // play() usually arrives before the player exists, and the client opens
         // files paused; honour the page's intent now there is something to
@@ -282,7 +310,7 @@ export class MpvBackend extends EventTarget implements MediaBackend {
     this.generation++;
     this.src = "";
     this.loaded = false;
-    document.documentElement.classList.remove(NATIVE_VIDEO_CLASS);
+    releaseNativeVideo("film");
     void window.lancastMpvStop?.();
   }
 
