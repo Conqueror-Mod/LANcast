@@ -369,6 +369,14 @@ func keyDown(vk int) bool {
 	return r&0x8000 != 0
 }
 
+/*
+ * focused reports whether the keyboard is the game's.
+ *
+ * Compared by root owner, not by handle: the video window is an owned popup,
+ * and while a game runs the window in front is the main window or the page
+ * overlay above the picture (internal/webview2/overlay.go) — never the video
+ * window itself. All three share one root owner, and another program does not.
+ */
 func (c Controllers) focused() bool {
 	if c.HWND == 0 {
 		return false
@@ -377,9 +385,10 @@ func (c Controllers) focused() bool {
 	if fg == 0 {
 		return false
 	}
-	const gaRoot = 2
-	root, _, _ := procGetAncestor.Call(c.HWND, gaRoot)
-	return fg == c.HWND || fg == root
+	const gaRootOwner = 3
+	mine, _, _ := procGetAncestor.Call(c.HWND, gaRootOwner)
+	theirs, _, _ := procGetAncestor.Call(fg, gaRootOwner)
+	return mine != 0 && mine == theirs
 }
 
 func syscallN(fn uintptr, args ...uintptr) (uintptr, uintptr, error) {

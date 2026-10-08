@@ -24,6 +24,7 @@ import { GameDetail } from "@/screens/GameDetail";
 import { Addons } from "@/screens/Addons";
 import { LiveTV } from "@/screens/LiveTV";
 import { People } from "@/screens/People";
+import { RetroPlay } from "@/screens/RetroPlay";
 import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -110,6 +111,8 @@ export function App() {
           <Route path="/library/:id/photos/search" element={<PhotoSearch />} />
           <Route path="/item/:id" element={<Detail />} />
           <Route path="/watch/:id" element={<Player />} />
+          {/* A retro game, in the desktop client's own player (ADR 0073). */}
+          <Route path="/play/:id" element={<RetroPlay />} />
           <Route path="/review" element={<Review />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/favourites" element={<Favourites />} />

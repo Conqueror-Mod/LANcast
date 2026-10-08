@@ -43,6 +43,9 @@ import {
   watchedVerb,
 } from "@/lib/kind";
 import { platformLabel } from "@/lib/platforms";
+import { retroAvailability } from "@/playback/retro";
+import { useGameSaves } from "@/api/hooks";
+import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { RemoveDialog } from "@/components/RemoveDialog";
@@ -904,11 +907,7 @@ export function Detail() {
               {/* Where a retro game plays, in place of a Play button that
                   would hand a ROM to the video player (ADR 0073). A neutral
                   note, not a control: nothing here can be pressed yet. */}
-              {isROM(item) && (
-                <p className="detail__plays-elsewhere" role="note">
-                  Plays in the LANcast desktop app — coming in a later release.
-                </p>
-              )}
+              {isROM(item) && !item.missing && <RetroActions item={item} />}
               {!container && !isPicture(item) && !isROM(item) && !item.missing &&
                 (resumeSeconds({
                   positionMs: item.progress?.position_ms,
@@ -1240,5 +1239,45 @@ export function Detail() {
         />
       )}
     </div>
+  );
+}
+
+/*
+ * What a retro game's page offers (ADR 0073, stage 2).
+ *
+ * Play where this window can run the console; Continue as well when the
+ * person left a game mid-way, which is where Quit leaves it. Anywhere else, a
+ * sentence saying where and why — a browser tab has no player, an older
+ * desktop client has no bindings, a console waits on a later stage or a core
+ * nobody has installed — rather than a button that cannot work.
+ */
+function RetroActions({ item }: { item: Item }) {
+  const navigate = useNavigate();
+  const { data: can } = useQuery({
+    queryKey: ["retro-available", item.platform ?? ""],
+    queryFn: () => retroAvailability(item.platform),
+    staleTime: 30_000,
+  });
+  const { data: saves } = useGameSaves(item.id, !!can?.available);
+  if (!can) return null;
+  if (!can.available) {
+    return (
+      <p className="detail__plays-elsewhere" role="note">
+        {can.reason ?? "Plays in the LANcast desktop app."}
+      </p>
+    );
+  }
+  const left = (saves ?? []).some((s) => s.slot === "auto");
+  return left ? (
+    <>
+      <PlayButton label="Continue" onPlay={() => navigate(`/play/${item.id}?resume=1`)} />
+      <SecondaryButton
+        label="Start over"
+        className="detail__play detail__play--secondary"
+        onPress={() => navigate(`/play/${item.id}`)}
+      />
+    </>
+  ) : (
+    <PlayButton onPlay={() => navigate(`/play/${item.id}`)} />
   );
 }

@@ -1,0 +1,102 @@
+/* Playing a retro game (ADR 0073): the page is see-through over the native
+   picture, as it is over a film (playback.css), and only this screen shows. */
+html.lancast-native-video:has(.retro-play),
+html.lancast-native-video:has(.retro-play) body,
+html.lancast-native-video:has(.retro-play) #root {
+  background: transparent !important;
+}
+html.lancast-native-video:has(.retro-play) body * {
+  visibility: hidden;
+}
+html.lancast-native-video:has(.retro-play) .retro-play,
+html.lancast-native-video:has(.retro-play) .retro-play * {
+  visibility: visible;
+}
+
+.retro-play {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* Outside the desktop window there is no picture behind, so the page is
+     its own black rather than the field. */
+  background: #000;
+  z-index: 50;
+}
+
+html.lancast-native-video .retro-play {
+  background: transparent;
+}
+
+.retro-play__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 300px;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: var(--radius-panel);
+  background: rgba(5, 7, 15, 0.88);
+  box-shadow: var(--elev-2);
+  color: var(--text-primary);
+}
+
+.retro-play__title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.retro-play__sub {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.retro-play__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.retro-play__group:empty {
+  display: none;
+}
+
+/* Gold is earned: dormant at rest, full on the focused button only. */
+.retro-play__button {
+  padding: 10px 14px;
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-tile);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.retro-play__button:hover,
+.retro-play__button:focus-visible,
+.retro-play__button:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.retro-play__hint {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.retro-play__notice {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: var(--radius-tile);
+  background: rgba(5, 7, 15, 0.85);
+  color: var(--text-primary);
+  font-size: 14px;
+}
