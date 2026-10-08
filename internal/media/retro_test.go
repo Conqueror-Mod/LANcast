@@ -170,3 +170,21 @@ func TestParseInRetroLibrary(t *testing.T) {
 		t.Errorf("a ROM was read as an episode: %+v", info)
 	}
 }
+
+// An .m3u is a game in a retro library; it names no console by itself.
+func TestM3UIsAnAmbiguousROM(t *testing.T) {
+	if !IsScannable("Game.m3u", LibraryRetro) {
+		t.Error(".m3u not scannable in a retro library")
+	}
+	if got := Platform(retroRoot, rp("PS1/Game (USA).m3u")); got != PlatformPS1 {
+		t.Errorf("platform = %q, want ps1 from the folder", got)
+	}
+	if got := Platform(retroRoot, rp("Game (USA).m3u")); got != "" {
+		t.Errorf("platform = %q, want unknown", got)
+	}
+	for p, want := range map[string]bool{"a.cue": true, "a.CHD": true, "a.pbp": true, "a.bin": false, "a.m3u": false} {
+		if IsDisc(p) != want {
+			t.Errorf("IsDisc(%s) = %v", p, !want)
+		}
+	}
+}

@@ -4820,9 +4820,11 @@ own `Nintendo - Nintendo 64`). A file nothing places has no `platform` until its
 contents do: a zip by the file inside it, anything else by its SHA-1 once the
 ROM database is installed.
 
-**A PlayStation disc is one item.** The `.cue` is the game; the `.bin` tracks it
-lists are not items of their own. `.chd` and `.pbp` are single files and are
-items as they are.
+**A PlayStation disc is one item, and so is a multi-disc game.** The `.cue` is
+the game; the `.bin` tracks it lists are not items of their own. `.chd` and
+`.pbp` are single files and are items as they are. An `.m3u` listing several
+discs is the game, and the discs it lists, beside it or in a subfolder under
+it, are not items; an `.m3u` naming no disc is not a game.
 
 **Identity comes from the bytes**, not the name. Each ROM is hashed once —
 N64 dumps in any of their three byte orders, headered and headerless NES and

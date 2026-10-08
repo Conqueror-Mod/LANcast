@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"lancast/internal/media"
+	"lancast/internal/retro/romhash"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 )
@@ -602,6 +604,43 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 	 */
 	wantsSubtitles := lib.Kind == media.LibraryMovie || lib.Kind == media.LibraryShow
 
+	/*
+	 * The discs the .m3u lists beside a disc, or one folder up, have named.
+	 *
+	 * Both places because both layouts are common: the list beside its discs,
+	 * and the list in a game's folder with the discs in a subfolder (often
+	 * `.hidden`) so a front end shows only the list. Cached per directory for
+	 * the walk, like dirCache, so a ten-disc folder reads its lists once.
+	 */
+	discLists := map[string]map[string]bool{}
+	listedDiscs := func(disc string) map[string]bool {
+		dir := filepath.Dir(disc)
+		if m, ok := discLists[dir]; ok {
+			return m
+		}
+		m := map[string]bool{}
+		for _, d := range []string{dir, filepath.Dir(dir)} {
+			entries, err := readDir(d)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".m3u") {
+					continue
+				}
+				discs, err := romhash.M3UDiscs(filepath.Join(d, e.Name()))
+				if err != nil {
+					continue
+				}
+				for _, p := range discs {
+					m[filepath.Clean(p)] = true
+				}
+			}
+		}
+		discLists[dir] = m
+		return m
+	}
+
 	err = filepath.WalkDir(root.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// A single unreadable directory shouldn't abort the whole scan.
@@ -621,7 +660,19 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		// during the walk rather than by a second one: a library is walked once,
 		// and a 200,000-file tree does not want traversing twice for the handful
 		// of .m3u files in it.
-		if isPlaylistFile(path) {
+		/*
+		 * In a retro library an .m3u is a game that spans discs, not a
+		 * playlist (ADR 0073) — but only when it lists a disc. One that lists
+		 * nothing playable is somebody's notes, and is not a game.
+		 */
+		if lib.Kind == media.LibraryRetro && isPlaylistFile(path) {
+			if !strings.EqualFold(filepath.Ext(path), ".m3u") {
+				return nil
+			}
+			if discs, err := romhash.M3UDiscs(path); err != nil || len(discs) == 0 {
+				return nil
+			}
+		} else if isPlaylistFile(path) {
 			*playlists = append(*playlists, path)
 			return nil
 		}
@@ -647,6 +698,12 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		// (ADR 0073). Not marked seen, so a track an earlier build imported as
 		// a game of its own is marked missing rather than kept as a tile.
 		if lib.Kind == media.LibraryRetro && media.IsDiscTrack(root.Path, path) {
+			return nil
+		}
+		// And a disc an .m3u lists belongs to that list: a three-disc game is
+		// one tile, not three. Not marked seen either, so a disc that was a
+		// game of its own before its list appeared is marked missing.
+		if lib.Kind == media.LibraryRetro && media.IsDisc(path) && listedDiscs(path)[filepath.Clean(path)] {
 			return nil
 		}
 		if ignored[path] {

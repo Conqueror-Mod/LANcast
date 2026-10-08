@@ -289,13 +289,17 @@ SHA-1 is unique across consoles, so a `.bin` or `.zip` that no folder placed is
 placed by its SHA-1 alone. A CRC32 is not unique across consoles, and is never
 used that way.
 
-**A PlayStation disc is identified by its serial, and one row is one disc.**
+**A PlayStation disc is identified by its serial, and a multi-disc game is
+one row.**
 The serial comes from `SYSTEM.CNF` on the first track a `.cue` names, or from
 `PARAM.SFO` in a `.pbp`. That avoids hashing 700 MB. A cue cannot name a track
 outside its own folder. A `.bin` under a PlayStation folder is a track and not
 a row. A `.chd` is listed by its filename, because its codecs are not in the
-standard library. **`.m3u` multi-disc grouping is not built**: a three-disc
-game is three rows until it is. This narrows answer 2 above.
+standard library. An `.m3u` that lists disc images is the game's row, and
+the discs it lists are not rows, whether they sit beside it or in a subfolder
+below it (the `.hidden` layout). It is identified by its first disc. A list
+that names no disc is not a game, and a list cannot name a disc outside its
+own folder. Without an `.m3u`, each disc is a row of its own.
 
 **Region is read, not stored.** `media.ROMRegion` reads it from the DAT name
 that a match records as `external_id`, or from the filename before there is a

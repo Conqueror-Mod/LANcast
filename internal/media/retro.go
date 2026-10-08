@@ -70,9 +70,10 @@ var romExts = map[string]string{
 }
 
 // ambiguousExts are scanned in a retro library but name no console by
-// themselves. `.7z` is deliberately absent: the standard library cannot open
+// themselves. An `.m3u` is a game that spans several discs, and is placed by
+// its folder or by the first disc it lists. `.7z` is deliberately absent: the standard library cannot open
 // it, so a 7z ROM could be listed and never identified or played.
-var ambiguousExts = map[string]bool{".bin": true, ".zip": true}
+var ambiguousExts = map[string]bool{".bin": true, ".zip": true, ".m3u": true}
 
 // folderPlatforms maps a normalised folder name to the console it names.
 // Normalised by normalizeDirName, so "Nintendo - Nintendo 64", "nintendo_64"
@@ -142,6 +143,16 @@ func platformFromDirs(root, path string) string {
 		}
 	}
 	return ""
+}
+
+// IsDisc reports whether a file is a whole disc image: what an .m3u lists
+// when a game spans several discs.
+func IsDisc(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".cue", ".chd", ".pbp":
+		return true
+	}
+	return false
 }
 
 // IsDiscTrack reports whether a file is one track of a disc rather than a game.

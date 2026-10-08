@@ -149,3 +149,86 @@ func romNames(m map[string]store.Item) []string {
 	}
 	return out
 }
+
+// A multi-disc game is one row: its .m3u. The discs it lists are not games of
+// their own, whether they sit beside it or in a subfolder below it, and an
+// .m3u that lists no disc is not a game at all.
+func TestRetroMultiDiscGameIsOneRow(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := retroFixture(t, st)
+
+	// Beside: discs and list in one folder.
+	writeFile(t, root, "PS1/FF7/Final Fantasy VII (USA).m3u", 0)
+	m3u := filepath.Join(root, "PS1", "FF7", "Final Fantasy VII (USA).m3u")
+	if err := os.WriteFile(m3u, []byte("Final Fantasy VII (USA) (Disc 1).cue\nFinal Fantasy VII (USA) (Disc 2).cue\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "PS1/FF7/Final Fantasy VII (USA) (Disc 1).cue", 10)
+	writeFile(t, root, "PS1/FF7/Final Fantasy VII (USA) (Disc 1).bin", 10)
+	writeFile(t, root, "PS1/FF7/Final Fantasy VII (USA) (Disc 2).cue", 10)
+	writeFile(t, root, "PS1/FF7/Final Fantasy VII (USA) (Disc 2).bin", 10)
+
+	// Below: the list in the game's folder, the discs hidden under it.
+	m3u2 := filepath.Join(root, "PS1", "MGS", "Metal Gear Solid (USA).m3u")
+	writeFile(t, root, "PS1/MGS/.hidden/Metal Gear Solid (USA) (Disc 1).chd", 10)
+	writeFile(t, root, "PS1/MGS/.hidden/Metal Gear Solid (USA) (Disc 2).chd", 10)
+	if err := os.WriteFile(m3u2, []byte(".hidden/Metal Gear Solid (USA) (Disc 1).chd\n.hidden/Metal Gear Solid (USA) (Disc 2).chd\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A list of nothing playable is not a game.
+	notes := filepath.Join(root, "PS1", "notes.m3u")
+	if err := os.WriteFile(notes, []byte("readme.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanAndWait(t, sc, lib)
+	got := retroItems(t, st, lib)
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want the two lists: %v", len(got), romNames(got))
+	}
+	for name, title := range map[string]string{
+		"Final Fantasy VII (USA).m3u": "Final Fantasy VII",
+		"Metal Gear Solid (USA).m3u":  "Metal Gear Solid",
+	} {
+		it, ok := got[name]
+		if !ok {
+			t.Errorf("missing %s", name)
+			continue
+		}
+		if it.Title != title || it.Platform == nil || *it.Platform != "ps1" {
+			t.Errorf("%s: title %q platform %v", name, it.Title, it.Platform)
+		}
+	}
+}
+
+// A disc that was a game before its list appeared is marked missing, not
+// deleted, once the list covers it.
+func TestRetroDiscBecomesPartOfANewList(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := retroFixture(t, st)
+	writeFile(t, root, "PS1/Game (USA) (Disc 1).cue", 10)
+	writeFile(t, root, "PS1/Game (USA) (Disc 2).cue", 10)
+	scanAndWait(t, sc, lib)
+	if n := len(retroItems(t, st, lib)); n != 2 {
+		t.Fatalf("before the list: %d rows, want 2", n)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "PS1", "Game (USA).m3u"),
+		[]byte("Game (USA) (Disc 1).cue\nGame (USA) (Disc 2).cue\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, lib)
+	present := 0
+	for name, it := range retroItems(t, st, lib) {
+		if !it.Missing {
+			present++
+			if name != "Game (USA).m3u" {
+				t.Errorf("%s is still a game beside its list", name)
+			}
+		}
+	}
+	if present != 1 {
+		t.Errorf("%d present rows, want the list alone", present)
+	}
+}

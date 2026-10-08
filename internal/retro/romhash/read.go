@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"lancast/internal/media"
+	"lancast/internal/playlist"
 )
 
 // MaxCartridge is the largest cartridge read into memory to hash. The biggest
@@ -47,6 +48,8 @@ func Read(path, platform string) (Result, error) {
 	case ".cue":
 		serial, err := cueSerial(path)
 		return Result{Serial: serial, Platform: platform}, err
+	case ".m3u":
+		return readM3U(path, platform)
 	case ".pbp":
 		serial, err := pbpSerial(path)
 		return Result{Serial: serial, Platform: platform}, err
@@ -137,6 +140,68 @@ func readZip(path, platform string) (Result, error) {
 	}
 	ext := strings.ToLower(filepath.Ext(pick.Name))
 	return Result{Sums: sumAll(platform, ext, b), InnerName: pick.Name, Platform: platform}, nil
+}
+
+/*
+ * readM3U identifies a multi-disc game by its first disc.
+ *
+ * The list's own name is not a disc, and every disc of one game shares the
+ * game's identity, so the first is enough — and disc 1 is the one whose
+ * serial a DAT lists under the game's name. The disc must lie inside the
+ * list's own folder: an .m3u is a text file anybody can write, and a game
+ * that reaches out of its folder is not one this library holds.
+ */
+func readM3U(path, platform string) (Result, error) {
+	discs, err := M3UDiscs(path)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(discs) == 0 {
+		return Result{Platform: platform}, nil
+	}
+	first := discs[0]
+	if platform == "" {
+		platform = media.PlatformOfExt(first)
+	}
+	r, err := Read(first, platform)
+	if err != nil {
+		return Result{Platform: platform}, err
+	}
+	r.InnerName = filepath.Base(first)
+	if r.Platform == "" {
+		r.Platform = platform
+	}
+	return r, nil
+}
+
+// M3UDiscs lists the disc images an .m3u names, resolved and kept inside its
+// folder. Entries that are not disc images, or that escape the folder, are
+// dropped rather than failing the list. The scanner uses the same answer to
+// decide which discs are covered by a list, so the two cannot disagree.
+func M3UDiscs(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	entries, err := playlist.Parse(io.LimitReader(f, 64<<10))
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Clean(filepath.Dir(path))
+	var out []string
+	for _, e := range entries {
+		p, ok := playlist.Resolve(dir, e.Path)
+		if !ok || !media.IsDisc(p) {
+			continue
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 // cueSerial reads the serial from the first data track a cue sheet names.

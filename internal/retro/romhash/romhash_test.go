@@ -348,3 +348,45 @@ func write(t *testing.T, path string, b []byte) {
 		t.Fatal(err)
 	}
 }
+
+// An .m3u names its discs relative to itself. Only disc images inside its own
+// folder count: a list cannot reach out of the game's folder, and a line that
+// is not a disc is not one.
+func TestM3UDiscs(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "Game")
+	hidden := filepath.Join(dir, ".hidden")
+	if err := os.MkdirAll(hidden, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m3u := filepath.Join(dir, "Game (USA).m3u")
+	write(t, m3u, []byte("#EXTM3U\n.hidden\\Game (USA) (Disc 1).cue\n.hidden/Game (USA) (Disc 2).cue\n..\\Elsewhere.cue\nreadme.txt\n"))
+	discs, err := M3UDiscs(m3u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(hidden, "Game (USA) (Disc 1).cue"),
+		filepath.Join(hidden, "Game (USA) (Disc 2).cue"),
+	}
+	if len(discs) != 2 || discs[0] != want[0] || discs[1] != want[1] {
+		t.Errorf("discs = %v, want %v", discs, want)
+	}
+}
+
+// A multi-disc game is identified by its first disc's serial, and takes its
+// platform from that disc when its folder said nothing.
+func TestReadM3UFollowsTheFirstDisc(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "Game (Disc 1) (Track 1).bin"), rawMode2(isoWithCNF(fixtureCNF)))
+	write(t, filepath.Join(dir, "Game (Disc 1).cue"), []byte("FILE \"Game (Disc 1) (Track 1).bin\" BINARY\n"))
+	m3u := filepath.Join(dir, "Game.m3u")
+	write(t, m3u, []byte("Game (Disc 1).cue\nGame (Disc 2).cue\n"))
+	r, err := Read(m3u, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Serial != "SLUS-00594" || r.Platform != "ps1" || r.InnerName != "Game (Disc 1).cue" {
+		t.Errorf("got %+v", r)
+	}
+}

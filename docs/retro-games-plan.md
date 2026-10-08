@@ -119,8 +119,9 @@ never a live ROM folder:
 4. With box art on, posters arrive. Read `lancastd.log` for `rom
    identification failed`.
 
-Not built in stage 1: `.m3u` multi-disc grouping, so a three-disc game is
-three rows, and CHD identification.
+Added after the first pass: `.m3u` multi-disc grouping, and ESRB ratings
+from libretro's DAT (which let a content ceiling admit rated games). Not built
+in stage 1: CHD identification. A `.chd` is listed by its filename.
 
 ---
 
