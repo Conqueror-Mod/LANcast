@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { PlaybackProvider } from "@/playback/PlaybackProvider";
+import { PlaybackProvider, usePlayback } from "@/playback/PlaybackProvider";
 import { RetroPlay } from "./RetroPlay";
 import { Detail } from "./Detail";
 
@@ -36,6 +36,20 @@ const game = {
   missing: false,
 };
 
+// A film to dock in the corner while the game runs.
+const FILM = {
+  id: 77,
+  library_id: 1,
+  kind: "movie",
+  title: "1408",
+  duration_ms: 6_000_000,
+  progress: { position_ms: 0, watched: false },
+  streams: [
+    { index: 0, kind: "video", codec: "h264" },
+    { index: 1, kind: "audio", codec: "aac" },
+  ],
+};
+
 let host: HTMLDivElement;
 let root: Root;
 let saves: { slot: string; updated_at: number; size_bytes: number }[];
@@ -49,13 +63,18 @@ beforeEach(() => {
   fetches = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
       fetches.push(url);
       const json = (b: unknown) =>
         new Response(JSON.stringify(b), { status: 200, headers: { "Content-Type": "application/json" } });
       if (url.includes("/stream-ticket")) return json({ ticket: "tk-secret", item_id: 41, expires_at: 0 });
       if (url.includes("/saves")) return json({ saves });
       if (url.includes("/children")) return json({ items: [] });
+      if (url.split("?")[0].endsWith(`/api/items/${FILM.id}`)) return json(FILM);
+      if (url.includes(`/api/items/${FILM.id}/playback`)) {
+        return json({ decision: { method: "direct", reason: "" } });
+      }
       if (/\/api\/items\/\d+$/.test(url.split("?")[0])) return json(game);
       return json({ items: [], total: 0 });
     }),
@@ -86,6 +105,12 @@ async function settle() {
   }
 }
 
+let pb: ReturnType<typeof usePlayback> | undefined;
+function Probe() {
+  pb = usePlayback();
+  return null;
+}
+
 async function render(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
@@ -93,6 +118,7 @@ async function render(path: string) {
       <QueryClientProvider client={client}>
         <FocusProvider>
           <PlaybackProvider>
+            <Probe />
             <MemoryRouter initialEntries={[path]}>
               <Routes>
                 <Route path="/play/:id" element={<RetroPlay />} />
@@ -216,6 +242,37 @@ describe("a film in the corner (ADR 0076)", () => {
     expect(button("Game volume: 25%")).toBeTruthy();
     delete window.lancastRetroVolume;
     delete window.lancastRetroSetVolume;
+  });
+
+  it("offers nothing for the corner when nothing is playing", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    expect(host.querySelector('[aria-label="In the corner"]')).toBeNull();
+  });
+
+  it("pauses and stops what plays in the corner from the menu the pad can reach", async () => {
+    const proto = window.HTMLMediaElement.prototype;
+    vi.spyOn(proto, "load").mockImplementation(() => {});
+    vi.spyOn(proto, "play").mockImplementation(async () => {});
+    vi.spyOn(proto, "pause").mockImplementation(() => {});
+    await render("/play/41");
+    emit({ kind: "started" });
+    // A film docked in the corner: the provider has an item.
+    await act(async () => pb!.play(FILM.id, [FILM.id]));
+    await settle();
+    emit({ kind: "menu" });
+    const group = host.querySelector('[aria-label="In the corner"]');
+    expect(group).not.toBeNull();
+    const labels = [...group!.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "");
+    expect(labels.some((l) => l === `Pause ${FILM.title}` || l === `Play ${FILM.title}`)).toBe(true);
+    expect(labels).toContain("Stop the film");
+
+    // Stop goes to the player, and the corner group goes with the film.
+    await act(async () => button("Stop the film").click());
+    await settle();
+    expect(pb!.itemID).toBe(0);
+    expect(host.querySelector('[aria-label="In the corner"]')).toBeNull();
   });
 
   it("goes round from off back to full", async () => {
