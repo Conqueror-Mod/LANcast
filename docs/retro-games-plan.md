@@ -236,9 +236,11 @@ Nothing here can be judged from a test.
 
 **The GPU path is built and proven against a test core. No N64 game has
 run.** The branch is `feat/retro-gl`. The work items below are done as
-described, except the curated core-options UI and the analog dead-zone
-settings: the dead zones use XInput's own, and the options are the core's
-defaults. The context-loss item is answered by never losing the context: the
+described, except the analog dead-zone settings: the dead zones use XInput's
+own. The curated options are in the in-game menu's Picture section. They are
+matched by key suffix from whatever the core declares (4:3 and wide
+resolution, aspect, native-resolution factor), remembered per console on the
+machine, and applied at the next start. The context-loss item is answered by never losing the context: the
 framebuffer is sized to the core's maximum, and window size and position are
 read every frame. The "Done when" checks need a Mupen64Plus-Next DLL and real
 games, and nothing short of them counts.

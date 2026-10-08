@@ -89,6 +89,44 @@ func setCoreOverride(platform, path string) error {
 	return os.WriteFile(retroDir("cores.json"), b, 0o644)
 }
 
+/*
+ * Core options a person has chosen, per console, kept beside the cores
+ * file: like the choice of core, they are about this machine (an upscaling
+ * factor one GPU can run another cannot).
+ */
+func savedOptions(platform string) map[string]string {
+	all := map[string]map[string]string{}
+	if b, err := os.ReadFile(retroDir("options.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	if all[platform] == nil {
+		return map[string]string{}
+	}
+	return all[platform]
+}
+
+func saveOption(platform, key, value string) error {
+	if _, ok := cores.For(platform); !ok {
+		return fmt.Errorf("no console called %q", platform)
+	}
+	if key == "" || len(key) > 128 || len(value) > 128 {
+		return errors.New("not an option")
+	}
+	all := map[string]map[string]string{}
+	if b, err := os.ReadFile(retroDir("options.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	if all[platform] == nil {
+		all[platform] = map[string]string{}
+	}
+	all[platform][key] = value
+	if err := os.MkdirAll(retroDir(), 0o755); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(all, "", "  ")
+	return os.WriteFile(retroDir("options.json"), b, 0o644)
+}
+
 // availability is what the page needs to decide between a Play button and a
 // sentence saying why not.
 func (r *retroPlayer) availability(platform string) map[string]any {
@@ -184,7 +222,7 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 		if r.stopVideo != nil {
 			r.stopVideo()
 		}
-		err := r.run(ctx, game, corePath, w, resume)
+		err := r.run(ctx, game, corePath, w, resume, platform)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("retro game", "item", itemID, "error", err)
 			r.emit(map[string]any{"kind": "error", "text": err.Error()})
@@ -193,7 +231,7 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 	return nil
 }
 
-func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath string, w clientwindow.Controller, resume bool) error {
+func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath string, w clientwindow.Controller, resume bool, platform string) error {
 	r.emit(map[string]any{"kind": "loading", "done": 0, "total": 0})
 	last := time.Time{}
 	entry, err := game.Download(ctx, r.gameCache(gameID(game)), func(done, total int64) {
@@ -236,6 +274,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		Audio:           &host.WaveOut{},
 		Input:           host.Controllers{HWND: w.VideoWindow()},
 		Saves:           game,
+		Options:         savedOptions(platform),
 		ResumeState:     resumeSlot,
 		SaveStateOnStop: true,
 		OnEvent: func(e host.Event) {
@@ -245,6 +284,9 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 			}
 			if e.Text != "" {
 				out["text"] = e.Text
+			}
+			if e.Options != nil {
+				out["options"] = e.Options
 			}
 			r.emit(out)
 		},
@@ -337,6 +379,20 @@ func (r *retroPlayer) bindings() map[string]any {
 		"lancastRetroSetCore": setCoreOverride,
 		"lancastRetroCores": func() map[string]string {
 			return coreOverrides()
+		},
+		// A core option, remembered for the console and applied to the
+		// running game if there is one.
+		"lancastRetroSetOption": func(platform, key, value string) error {
+			if err := saveOption(platform, key, value); err != nil {
+				return err
+			}
+			r.mu.Lock()
+			s := r.session
+			r.mu.Unlock()
+			if s != nil {
+				s.SetOption(key, value)
+			}
+			return nil
 		},
 	}
 }

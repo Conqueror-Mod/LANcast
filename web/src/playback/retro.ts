@@ -23,11 +23,20 @@ export interface RetroAvailability {
   installable?: boolean;
 }
 
+/** One core option, as the running core declared it. */
+export interface RetroOption {
+  key: string;
+  description: string;
+  values: string[];
+  value: string;
+}
+
 /** One event from a running game. */
 export interface RetroEvent {
   kind:
     | "loading"
     | "started"
+    | "options"
     | "paused"
     | "resumed"
     | "menu"
@@ -41,6 +50,7 @@ export interface RetroEvent {
   text?: string;
   done?: number;
   total?: number;
+  options?: RetroOption[];
 }
 
 declare global {
@@ -56,6 +66,7 @@ declare global {
     lancastRetroStop?: () => Promise<void>;
     lancastRetroSetCore?: (platform: string, path: string) => Promise<void>;
     lancastRetroCores?: () => Promise<Record<string, string>>;
+    lancastRetroSetOption?: (platform: string, key: string, value: string) => Promise<void>;
     __lancastRetroEvent?: (e: RetroEvent) => void;
   }
 }
@@ -125,4 +136,35 @@ export function slotLabel(slot: string): string {
   if (slot === "auto") return "Where you left off";
   const m = /^state-(\d)$/.exec(slot);
   return m ? `Slot ${m[1]}` : slot;
+}
+
+/*
+ * The few core options the menu offers (ADR 0073: a short curated list, not
+ * every switch a core has). Matched by the end of the key, so the list does
+ * not depend on the prefix a particular build of a core gives its options;
+ * the core declares them, and only those it declares are shown. Today these
+ * are Mupen64Plus-Next's picture options; a console whose core declares none
+ * of them simply has no Picture section.
+ */
+const CURATED_SUFFIXES = ["-43screensize", "-169screensize", "-aspect", "-EnableNativeResFactor"];
+
+export function curatedOptions(options: RetroOption[] | undefined): RetroOption[] {
+  if (!options) return [];
+  const out: RetroOption[] = [];
+  for (const suffix of CURATED_SUFFIXES) {
+    const o = options.find((x) => x.key.endsWith(suffix) && x.values.length > 1);
+    if (o) out.push(o);
+  }
+  return out;
+}
+
+/** The value after the current one, wrapping round. */
+export function nextValue(o: RetroOption): string {
+  const i = o.values.indexOf(o.value);
+  return o.values[(i + 1) % o.values.length];
+}
+
+export async function setRetroOption(platform: string, key: string, value: string): Promise<void> {
+  if (!window.lancastRetroSetOption) return;
+  await window.lancastRetroSetOption(platform, key, value);
 }
