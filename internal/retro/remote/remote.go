@@ -191,6 +191,17 @@ func (g *Game) Download(ctx context.Context, dir string, progress func(done, tot
 // LocalPath turns a listed name into a path under dir, refusing any name
 // that would leave it.
 func LocalPath(dir, name string) (string, error) {
+	/*
+	 * The server sends names with "/" separators and nothing else, so a
+	 * backslash or a colon is refused on every platform rather than
+	 * interpreted: on Windows they are a separator and a drive, on Linux
+	 * merely odd characters — and a name whose meaning depends on the
+	 * platform reading it is not one a listing could have produced. Neither
+	 * can appear in a file name on Windows, where the games came from.
+	 */
+	if strings.ContainsAny(name, `\:`) {
+		return "", fmt.Errorf("refusing file name %q", name)
+	}
 	clean := filepath.Clean(filepath.FromSlash(name))
 	// A leading separator is refused outright. On Windows "/etc/passwd" has
 	// no drive and would join to a path inside dir — harmless, but a server
