@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiGet, apiPost, apiSend } from "@/api/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost, apiSend, ApiFailure } from "@/api/client";
 import type { TogetherSession } from "@/api/types";
+import { peerRoomURL } from "./peerSource";
 
 /*
  * Watching the same thing at the same time.
@@ -84,6 +86,12 @@ export interface TogetherControls {
   start: (itemID: number, positionMS: number) => Promise<TogetherSession | null>;
   join: (id: string) => Promise<TogetherSession | null>;
   leave: () => Promise<void>;
+  /**
+   * Take a room the server just answered with as the current one: accepting
+   * a friend into the room answers with the room including them, and the
+   * member list should show them now rather than on the next poll.
+   */
+  adopt: (next: TogetherSession) => void;
 }
 
 /**
@@ -94,6 +102,17 @@ export interface TogetherControls {
  * is how the room finds out somebody left.
  */
 export function useTogether(userID: string | undefined): TogetherControls {
+  const qc = useQueryClient();
+  /*
+   * Starting, joining and leaving all change what the open-sessions list
+   * holds, and somebody may be looking at it: the panel and the People page
+   * both show it. So each one invalidates it, rather than leaving a room that
+   * ended, or one you are already in, on screen until the next poll.
+   */
+  const changed = useCallback(
+    () => void qc.invalidateQueries({ queryKey: ["together-sessions"] }),
+    [qc],
+  );
   const [session, setSessionState] = useState<TogetherSession | null>(null);
   const [receivedAt, setReceivedAt] = useState(0);
   // Every answer is stamped as it arrives: the server's age_ms is measured to
@@ -123,13 +142,14 @@ export function useTogether(userID: string | undefined): TogetherControls {
         idRef.current = created.id;
         setSession(created);
         setError(null);
+        changed();
         return created;
       } catch (e) {
         setError((e as Error).message);
         return null;
       }
     },
-    [setSession],
+    [setSession, changed],
   );
 
   const join = useCallback(async (id: string) => {
@@ -141,12 +161,13 @@ export function useTogether(userID: string | undefined): TogetherControls {
       idRef.current = joined.id;
       setSession(joined);
       setError(null);
+      changed();
       return joined;
     } catch (e) {
       setError((e as Error).message);
       return null;
     }
-  }, [setSession]);
+  }, [setSession, changed]);
 
   const leave = useCallback(async () => {
     const id = idRef.current;
@@ -155,7 +176,8 @@ export function useTogether(userID: string | undefined): TogetherControls {
     // Best effort: the room drops a silent member within ninety seconds
     // anyway, so a failed leave is untidy rather than broken.
     await apiSend(`/api/together/${id}`, "DELETE").catch(() => {});
-  }, [stop]);
+    changed();
+  }, [stop, changed]);
 
   useEffect(() => {
     if (!session) return;
@@ -185,6 +207,13 @@ export function useTogether(userID: string | undefined): TogetherControls {
     };
   }, [session, stop]);
 
+  const adopt = useCallback(
+    (next: TogetherSession) => {
+      if (idRef.current === next.id) setSession(next);
+    },
+    [setSession],
+  );
+
   return {
     session,
     receivedAt,
@@ -193,6 +222,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
     start,
     join,
     leave,
+    adopt,
   };
 }
 
@@ -226,4 +256,113 @@ export function useHostReporting(
     }, REPORT_MS);
     return () => clearInterval(timer);
   }, [sessionID, isHost]);
+}
+
+/*
+ * How a follower of a room on another server decides to seek.
+ *
+ * The local rule, with one difference that matters on a converted stream. A
+ * seek there is not a seek: it asks the far server to start converting again
+ * from somewhere else, and for several seconds the clock reads the new
+ * starting point while nothing plays. Judged by the ordinary 1.5 s tolerance,
+ * every poll in those seconds would find the follower "behind" and seek again,
+ * restarting the conversion each time, so the film would never start.
+ *
+ * So a converted stream gets a wider tolerance, and no seek is judged until
+ * the last one has had time to land.
+ */
+export const CONVERTING_TOLERANCE_MS = 8000;
+
+export function followerShouldSeek(
+  localMS: number,
+  expectedMS: number,
+  converting: boolean,
+  msSinceLastSeek: number,
+): boolean {
+  const settle = converting ? CONVERTING_TOLERANCE_MS : 2500;
+  if (msSinceLastSeek < settle) return false;
+  return shouldResync(
+    localMS,
+    expectedMS,
+    converting ? CONVERTING_TOLERANCE_MS : DRIFT_TOLERANCE_MS,
+  );
+}
+
+export interface PeerRoomState {
+  session: TogetherSession | null;
+  /** When this device received `session`, by its own clock. */
+  receivedAt: number;
+  /** The host's server says the room is over, or was never open to us. */
+  ended: boolean;
+}
+
+/*
+ * usePeerRoom follows a room on a paired server, through this one.
+ *
+ * Joins on arrival (rejoining is harmless, which is what a reload is), polls
+ * while mounted, and leaves on the way out. Leaving is best effort for the
+ * same reason as locally: the host's server drops a member who stops polling
+ * within ninety seconds anyway.
+ *
+ * Only a 404 ends it. That is the host's server saying the room is gone or
+ * this person is not in it. A gateway error is a network having a bad moment,
+ * and giving up on the room over one would be this side deciding the evening
+ * was over.
+ */
+export function usePeerRoom(fingerprint: string, roomID: string | null): PeerRoomState {
+  const [state, setState] = useState<PeerRoomState>({
+    session: null,
+    receivedAt: 0,
+    ended: false,
+  });
+
+  useEffect(() => {
+    if (!roomID || !fingerprint) return;
+    const url = peerRoomURL(fingerprint, roomID);
+    let cancelled = false;
+    let over = false;
+
+    const take = (s: TogetherSession) => {
+      if (!cancelled) setState({ session: s, receivedAt: Date.now(), ended: false });
+    };
+    const fail = (e: unknown) => {
+      if (cancelled) return;
+      if (e instanceof ApiFailure && e.status === 404) {
+        over = true;
+        setState((prev) => ({ ...prev, ended: true }));
+      }
+    };
+
+    void apiPost<TogetherSession>(`${url}/join`, {}).then(take).catch(fail);
+    const timer = setInterval(() => {
+      if (over) return;
+      apiGet<TogetherSession>(url).then(take).catch(fail);
+    }, POLL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      if (!over) void apiSend(`${url}/members/me`, "DELETE").catch(() => {});
+    };
+  }, [fingerprint, roomID]);
+
+  return state;
+}
+
+/*
+ * useOpenSessions lists the rooms on this server, for joining one.
+ *
+ * The join half of Watch Together had a hook and an endpoint from the start
+ * and nothing that called them: the panel told people to join "from the list
+ * of open sessions", and there was no list. Polled while somebody is looking,
+ * because a room opens and ends without anybody here doing anything.
+ */
+export function useOpenSessions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["together-sessions"],
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    queryFn: ({ signal }) =>
+      apiGet<{ sessions: TogetherSession[] }>("/api/together", signal),
+  });
 }

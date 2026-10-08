@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-07 · **v0.9.67 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-08 · **v0.9.68 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,7 +20,7 @@ on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
 deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
 v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
-**Nothing sits unreleased.** v0.9.67 is current. Since v0.9.54:
+**Nothing sits unreleased.** v0.9.68 is current. Since v0.9.54:
 - **v0.9.56:** an episode counts as watched at its credits, not at 90%.
 - **v0.9.60:** night mode for music, and faces found in HEIC and portrait photos.
 - **v0.9.63:** GOG and EA app games, games opening on the chosen screen, and
@@ -32,17 +32,24 @@ v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 - **v0.9.66:** skip intro on seasons with two versions of their opening.
 - **v0.9.67:** night mode for films in a browser tab, a friend's converted film
   resumes again, and the server half of Watch Together across servers.
+- **v0.9.68:** Watch Together across servers in the app (Ask to join, the
+  host's prompt), and Watch Together on one server joinable at last.
 
 v0.9.55, 57–59, 61 and 62 were tagged and never published; each one's changes
 went out in the next published release. Audio pass Phase 2 is built: night
 mode for music and for films in a browser tab ([plan](audio-pass-plan.md)).
 
-**Watch Together across servers (federation Phase 5) is built server-side and
-not reachable yet** ([plan](phase-5-room-crosses-the-boundary-plan.md)). Requests
-to join, the host's answer, room admission and the relay through the guest's
-own server all ship in v0.9.67 and are tested with two real servers in one
-process. The client (Ask to join, the host's prompt, following a room) is
-step 5, and a test with Georgia on two machines is step 6.
+**Watch Together across servers (federation Phase 5) is built end to end**
+([plan](phase-5-room-crosses-the-boundary-plan.md)): the server half in v0.9.67,
+the client in v0.9.68. Tested with two real servers in one process and in jsdom;
+**not yet watched on two machines**. Step 6 is one session with Georgia, both
+servers on v0.9.68 as the installed service.
+
+**Watch Together on one server was never joinable from the app until v0.9.68.**
+The join endpoint and hook existed from the first build (9d342771) and nothing
+called them; the panel promised a list of open sessions that did not exist.
+v0.9.68 adds it, on People and in the panel. The follower side of local Watch
+Together has therefore never been watched by a person either.
 
 **In progress:** finishing skip intro across the TV library, from the
 [ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md) coverage audit (#767). v0.9.65 and
@@ -119,6 +126,7 @@ when each one landed. What is left is breadth, and it is listed in the
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.68** | 2026-10-08 | **Watch Together across servers in the app, and Watch Together on one server joinable at last.** **Across servers (#779):** People offers *Ask to join* beside a paired person who lets you see them and is watching; the host gets a prompt on any screen, with a countdown, and *Let them join* opens a room around the film at where they are. The guest's player follows the room by its `age_ms`, marks every request as a member's, and hands transport control to the host; a converted stream gets an 8 s tolerance and waits out its own restart, or it would re-seek every poll and never start. The room moved from the panel into `TogetherProvider`, because it had existed only while the panel was open. **On one server (#780):** `join` had an endpoint and a hook since the first build and nothing called them; the panel promised a list of open sessions that did not exist. *Watching together now* on People and *Or join one* in the panel, ceiling-respecting. A member leaves on moving away from the room's film, never while still arriving. No schema change |
 | **v0.9.67** | 2026-10-07 | **Night mode for films in a browser tab, a friend's film resumes again, and the server half of Watch Together across servers.** **Night mode (#775)** uses the music graph under the film's own preference, and only where the element receives mono or stereo: every converted soundtrack, never a directly played 5.1 one, which the panel explains. **A friend's converted film resumes again (#777):** the relay joined the playlist's query with no `?`, so resuming or seeking past 0:00 asked the host for `index.m3u8t=…` and was refused as "did not share this with you". Artwork had the same join. **Watch Together across servers, server side (#774, #776, #777, [plan](phase-5-room-crosses-the-boundary-plan.md)):** requests to join (silence for 60 s is a no, the asker only ever hears "not now", a two-minute cooldown), admission to the room's film by membership, the grant re-checked on every poll, and the relay through the guest's own server, tested with two real servers in one process. The room's position now carries `age_ms`, so a follower never compares its clock with the server's; this applies to Watch Together on one server too. No client yet. No schema change |
 | **v0.9.66** | 2026-10-07 | **Skip intro when a season has two versions of its opening (#771).** A season whose episodes split between a long and a short opening left the minority with no marker. A third episode that matches each side now joins them, the third side of a triangle. Futurama seasons 6 and 8 and Star Trek: The Next Generation season 1 are now complete, and It's Always Sunny season 15 went from 3 to 7 of 8. Network promos at the head of a file are no longer taken for the intro. Revision 63 |
 | **v0.9.65** | 2026-10-06 | **Mark as watched everywhere, and the desktop answers the keyboard (#766, #768, #769, #770).** Mark as watched on every detail page, and Mark all on shows, seasons, collections and multi-part films. Every list that shows a watched mark now redraws when one changes, the project's most-repeated bug, met again. Finished seasons carry the tick. Media keys control the player, and Win+Arrow and Win+Shift+Arrow work while a film is fullscreen. A season added after its show was matched gets its own poster. An ident that decided nothing no longer stops the intro search, adding four episodes. The window is remembered by the monitor's device path. Revisions 61 and 62 |

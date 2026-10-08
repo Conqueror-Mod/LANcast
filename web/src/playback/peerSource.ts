@@ -161,3 +161,34 @@ export function peerArtworkURL(
 export function peerProgressURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/progress/${item}`;
 }
+
+/*
+ * asMember marks a playback URL as being for a room member
+ * (federation Phase 5).
+ *
+ * A film that was not shared is playable only because this person is in a
+ * room on that server playing it, and that server checks the person by name.
+ * This server names the caller to it only when the URL says so: browsing a
+ * shared library names a server, not a person, and nothing on that path needs
+ * to say who in this household is looking. One function, applied to every
+ * playback URL in a room, so no route can be the one that forgot.
+ */
+export function asMember(url: string, member: boolean): string {
+  if (!member) return url;
+  return url + (url.includes("?") ? "&" : "?") + "together=1";
+}
+
+/** Asking to join somebody on that server, relayed by ours. */
+export function peerAskURL(fingerprint: string): string {
+  return `${base(fingerprint)}/together/requests`;
+}
+
+/** The answer to one request. */
+export function peerRequestURL(fingerprint: string, request: string): string {
+  return `${base(fingerprint)}/together/requests/${encodeURIComponent(request)}`;
+}
+
+/** A room on that server: poll it here, join and leave beneath it. */
+export function peerRoomURL(fingerprint: string, room: string): string {
+  return `${base(fingerprint)}/together/${encodeURIComponent(room)}`;
+}

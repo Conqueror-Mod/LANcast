@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { PeerShares } from "@/components/PeerShares";
+import { AskToJoin } from "@/components/AskToJoin";
+import { OpenSessions } from "@/components/OpenSessions";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
@@ -50,6 +52,10 @@ export function People() {
         <h1 className="browse__title">People</h1>
         <span className="browse__count">{people.length || ""}</span>
       </div>
+
+      {/* Somebody here watching something you could join. Above the people,
+          because it is the one thing on this page that is happening now. */}
+      <OpenSessions heading="Watching together now" />
 
       {isLoading && <p className="browse__message">Loading…</p>}
 
@@ -319,6 +325,16 @@ function PeerPersonRow({
           {statusOf(person, reachable)}
         </span>
       </div>
+
+      {/*
+       * Only beside somebody who lets you see them and is watching something
+       * now: that is the grant that carries the right to ask (ADR 0045 §7),
+       * and a title is the thing being asked about. Whether they will say yes
+       * is theirs to answer, in the moment.
+       */}
+      {reachable && person.shares && person.online && person.watching && (
+        <AskToJoin fingerprint={fingerprint} person={person.id} name={person.name} />
+      )}
 
       <label className="people__grant">
         {/*

@@ -1,0 +1,29 @@
+/* Ask to join, on a person's row on the People page. The page's own quiet
+   button language; gold only on focus, because asking is not where you are. */
+
+.ask-join {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+}
+
+.ask-join:hover,
+.ask-join:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.ask-join__state {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.ask-join__state--failed {
+  color: #e08a7a;
+}

@@ -1,0 +1,86 @@
+/* A friend asking to join. The together panel's popover language, fixed to
+   the corner above the docked player so it reaches the host on any screen,
+   including a fullscreen film (fullscreen is the whole document here). Gold
+   only on focus: a request is not where you are. */
+
+.join-prompt {
+  position: fixed;
+  right: 16px;
+  bottom: 120px;
+  z-index: var(--z-prompt);
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(7, 11, 24, 0.97);
+  box-shadow: var(--elev-3);
+}
+
+.join-prompt__title,
+.join-prompt__detail,
+.join-prompt__error {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.join-prompt__title {
+  color: var(--text-primary);
+}
+
+.join-prompt__detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.join-prompt__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.join-prompt__yes,
+.join-prompt__no {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.join-prompt__no {
+  color: var(--text-secondary);
+}
+
+.join-prompt__yes:hover,
+.join-prompt__yes:focus-visible,
+.join-prompt__no:hover,
+.join-prompt__no:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.join-prompt__yes:disabled,
+.join-prompt__no:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Time left to answer: quiet, and tabular so it does not jitter as it counts. */
+.join-prompt__left {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.join-prompt__error {
+  font-size: 12px;
+  color: #e08a7a;
+}
