@@ -132,6 +132,9 @@ func (g *Game) Files(ctx context.Context) ([]File, error) {
 
 func (g *Game) id() string { return strconv.FormatInt(g.itemID, 10) }
 
+// ItemID is the game this client was made for.
+func (g *Game) ItemID() int64 { return g.itemID }
+
 /*
  * Download fetches every file of the game into dir and returns the entry
  * file's local path.

@@ -51,6 +51,18 @@ type nativePlayer struct {
 	fx       mpv.AudioFX
 	channels int
 	af       string
+
+	// retro plays games into the same video window (ADR 0073). Made on
+	// first use, so a client that never opens a game builds nothing.
+	retroOnce sync.Once
+	retroP    *retroPlayer
+}
+
+func (n *nativePlayer) retro() *retroPlayer {
+	n.retroOnce.Do(func() {
+		n.retroP = &retroPlayer{origin: n.origin, pin: n.pin, stopVideo: n.stop}
+	})
+	return n.retroP
 }
 
 // applyAF hands mpv the graph for the current settings and channel count, if
@@ -83,6 +95,10 @@ func (n *nativePlayer) attach(c clientwindow.Controller) {
 	n.mu.Lock()
 	n.window = c
 	n.mu.Unlock()
+	r := n.retro()
+	r.mu.Lock()
+	r.window = c
+	r.mu.Unlock()
 }
 
 func (n *nativePlayer) available() bool {
@@ -180,6 +196,8 @@ func jsonNumber(f float64) any {
 }
 
 func (n *nativePlayer) open(itemID int64, ticket string) error {
+	// One video window: a film takes it from a game.
+	n.retro().stop()
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if itemID <= 0 || ticket == "" {
@@ -301,6 +319,14 @@ func trackID(v float64) string {
 var mpvFeatures = []string{"audiofx"}
 
 func (n *nativePlayer) bindings() map[string]any {
+	b := n.mpvBindings()
+	for name, fn := range n.retro().bindings() {
+		b[name] = fn
+	}
+	return b
+}
+
+func (n *nativePlayer) mpvBindings() map[string]any {
 	return map[string]any{
 		"lancastMpvAvailable": n.available,
 		"lancastMpvFeatures":  func() []string { return mpvFeatures },
