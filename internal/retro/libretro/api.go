@@ -153,6 +153,29 @@ func (a AVInfo) DisplayAspect() float64 {
 	return float64(a.BaseWidth) / float64(a.BaseHeight)
 }
 
+// HWContext is the kind of hardware context a core asks for.
+type HWContext uint32
+
+const (
+	HWContextNone       HWContext = 0
+	HWContextOpenGL     HWContext = 1 // compatibility profile
+	HWContextOpenGLES2  HWContext = 2
+	HWContextOpenGLCore HWContext = 3
+	HWContextOpenGLES3  HWContext = 4
+	HWContextVulkan     HWContext = 6
+)
+
+// HWRender is a core's request to render through the GPU rather than hand
+// over finished frames (SET_HW_RENDER). The N64 cores make it; framebuffer
+// cores never do.
+type HWRender struct {
+	Context          HWContext
+	Major, Minor     uint32
+	Depth, Stencil   bool
+	BottomLeftOrigin bool
+	Debug            bool
+}
+
 // Frame is one video frame as the core produced it. Data is nil when the
 // core repeats the previous frame (it may, because the host says it can dupe).
 //
@@ -164,6 +187,10 @@ type Frame struct {
 	Width, Height uint32
 	Pitch         uintptr
 	Format        PixelFormat
+	// HW marks a frame the core rendered into the host's framebuffer object
+	// (RETRO_HW_FRAME_BUFFER_VALID); Data is nil and Width and Height say how
+	// much of the framebuffer it used.
+	HW bool
 }
 
 // Variable is one core option, in the legacy SET_VARIABLES form every core
@@ -224,6 +251,16 @@ type Frontend interface {
 	Shutdown()
 
 	VideoRefresh(Frame)
+
+	// SetHWRender is asked when a core wants a GPU context. Returning false
+	// makes the core fall back or refuse the game; true promises a context by
+	// the time Core.ContextReset is called.
+	SetHWRender(HWRender) bool
+	// CurrentFramebuffer is the framebuffer object the core draws into this
+	// frame, and ProcAddress resolves a GL function for it. Both are asked
+	// on the core's thread with the context current.
+	CurrentFramebuffer() uintptr
+	ProcAddress(name string) uintptr
 	// AudioBatch receives interleaved stereo samples and returns how many
 	// frames (pairs) it consumed.
 	AudioBatch(samples []int16) int
@@ -255,6 +292,11 @@ type Core interface {
 	// own memory: read it on the core's thread and copy before keeping it.
 	Memory(id uint32) []byte
 	UnloadGame()
+	// ContextReset tells a hardware-rendering core its context is ready (or
+	// ready again); ContextDestroy that it is about to go. Both do nothing for
+	// a core that never asked for one.
+	ContextReset()
+	ContextDestroy()
 	// Close deinitialises the core. It is not unloaded from the process: a
 	// DLL that has run is not safely unloadable, and the next game may use
 	// the same core.

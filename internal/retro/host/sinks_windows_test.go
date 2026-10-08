@@ -40,7 +40,9 @@ func TestWaveOutPacesTheWriter(t *testing.T) {
 	if el < 120*time.Millisecond {
 		t.Errorf("250ms of sound written in %v: the writer is not being paced", el)
 	}
-	if el > 2*time.Second {
+	// Generous: the floor is the claim; the ceiling only catches a hang,
+	// and a machine busy compiling the rest of the suite is slow, not hung.
+	if el > 5*time.Second {
 		t.Errorf("250ms of sound took %v to write", el)
 	}
 }

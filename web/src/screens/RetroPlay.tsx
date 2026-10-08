@@ -6,12 +6,16 @@ import { useBackHandler, useFocusable } from "@/focus/FocusController";
 import { NATIVE_VIDEO_CLASS } from "@/playback/mpvBackend";
 import {
   STATE_SLOTS,
+  curatedOptions,
+  nextValue,
   onRetroEvent,
+  setRetroOption,
   openGame,
   retroCommand,
   slotLabel,
   stopGame,
   type RetroEvent,
+  type RetroOption,
 } from "@/playback/retro";
 import { platformLabel } from "@/lib/platforms";
 import "./RetroPlay.css";
@@ -43,6 +47,7 @@ export function RetroPlay() {
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [options, setOptions] = useState<RetroOption[]>([]);
 
   // The page is see-through over the picture while this screen is up.
   useEffect(() => {
@@ -66,6 +71,9 @@ export function RetroPlay() {
             break;
           case "menu":
             setMenu(true);
+            break;
+          case "options":
+            setOptions(curatedOptions(e.options));
             break;
           case "state-saved":
             if (e.slot !== "auto") setNotice(`Saved to ${slotLabel(e.slot ?? "")}.`);
@@ -183,6 +191,18 @@ export function RetroPlay() {
               />
             ))}
           </div>
+          {options.length > 0 && (
+            <div className="retro-play__group" aria-label="Picture">
+              {options.map((o) => (
+                <MenuButton
+                  key={o.key}
+                  label={`${o.description}: ${o.value}`}
+                  onSelect={() => void setRetroOption(item?.platform ?? "", o.key, nextValue(o))}
+                />
+              ))}
+              <p className="retro-play__hint">Some picture changes take effect when the game next starts.</p>
+            </div>
+          )}
           <MenuButton
             label="Restart"
             onSelect={() => {

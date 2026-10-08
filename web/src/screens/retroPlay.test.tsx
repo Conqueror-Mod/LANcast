@@ -204,3 +204,33 @@ describe("a game's detail page", () => {
     expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(false);
   });
 });
+
+describe("picture options", () => {
+  it("curates by the end of the key, in a fixed order, only what the core declares", async () => {
+    const { curatedOptions, nextValue } = await import("@/playback/retro");
+    const declared = [
+      { key: "mupen64plus-aspect", description: "Aspect Ratio", values: ["4:3", "16:9"], value: "4:3" },
+      { key: "mupen64plus-cpucore", description: "CPU Core", values: ["a", "b"], value: "a" },
+      { key: "mupen64plus-43screensize", description: "4:3 Resolution", values: ["320x240", "640x480"], value: "640x480" },
+      { key: "x-EnableNativeResFactor", description: "Native", values: ["0"], value: "0" },
+    ];
+    const got = curatedOptions(declared).map((o) => o.key);
+    expect(got).toEqual(["mupen64plus-43screensize", "mupen64plus-aspect"]);
+    expect(nextValue(declared[2])).toBe("320x240");
+    expect(curatedOptions(undefined)).toEqual([]);
+  });
+
+  it("offers them in the menu and cycles one through the client", async () => {
+    window.lancastRetroSetOption = vi.fn(async () => {});
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({
+      kind: "options",
+      options: [{ key: "mupen64plus-43screensize", description: "4:3 Resolution", values: ["640x480", "960x720"], value: "640x480" }],
+    });
+    emit({ kind: "menu" });
+    await act(async () => button("4:3 Resolution: 640x480").click());
+    expect(window.lancastRetroSetOption).toHaveBeenCalledWith("n64", "mupen64plus-43screensize", "960x720");
+    delete window.lancastRetroSetOption;
+  });
+});

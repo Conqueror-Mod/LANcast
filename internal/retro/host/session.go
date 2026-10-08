@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"log/slog"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -26,6 +27,24 @@ type VideoSink interface {
 type AudioSink interface {
 	Open(sampleRate int) error
 	Write(samples []int16)
+	Close()
+}
+
+/*
+ * GLSink is the GPU path a hardware-rendering core draws through (stage 3).
+ *
+ * Every method is called on the core's locked thread, with the context the
+ * sink made current there: OpenGL contexts belong to a thread, and a core
+ * that found its context current somewhere else would draw into nothing.
+ */
+type GLSink interface {
+	// Init creates a context the core asked for and a framebuffer at least
+	// maxW by maxH for it to draw into.
+	Init(req libretro.HWRender, maxW, maxH int) error
+	Framebuffer() uintptr
+	ProcAddress(name string) uintptr
+	// Present shows the part of the framebuffer the core drew this frame.
+	Present(width, height int, aspect float64, bottomLeftOrigin bool)
 	Close()
 }
 
@@ -48,10 +67,21 @@ type SaveStore interface {
 
 // Event is something the person should hear about.
 type Event struct {
-	Kind string // started, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped
+	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped
 	Slot string
 	Text string
 	Err  error
+	// Options, on an "options" event, are the core options the core
+	// declared, each with its current value.
+	Options []Option
+}
+
+// Option is one core option as a menu shows it.
+type Option struct {
+	Key         string   `json:"key"`
+	Description string   `json:"description"`
+	Values      []string `json:"values"`
+	Value       string   `json:"value"`
 }
 
 // Config is one game session.
@@ -67,6 +97,10 @@ type Config struct {
 	Options map[string]string
 
 	Video VideoSink
+	// GL is the GPU path, for cores that render through OpenGL. Nil refuses
+	// a core's request for a hardware context, which a framebuffer core never
+	// makes and an N64 core cannot run without.
+	GL    GLSink
 	Audio AudioSink // nil runs on a timer instead
 	Input InputSource
 	Saves SaveStore
@@ -110,6 +144,8 @@ type Session struct {
 	stopping  bool
 	sramSum   uint32
 	sramAt    time.Time
+	hw        *libretro.HWRender // what the core asked for, if anything
+	glReady   bool
 
 	pending sync.WaitGroup // uploads in flight
 }
@@ -204,11 +240,38 @@ func (s *Session) Run(ctx context.Context) (err error) {
 	if err := core.Init(s); err != nil {
 		return err
 	}
+	/*
+	 * Registered before Close, so it runs after it: RetroArch's order, which
+	 * cores are written against. The game is unloaded (finish), the core is
+	 * deinitialised, and only then is it told its GL context is going, and
+	 * the context goes. Mupen64Plus-Next still touches GL while unloading and
+	 * deinitialising, and killed the process when the context had already
+	 * been deleted under it.
+	 */
+	defer s.teardownGL()
 	defer core.Close()
 	if err := core.LoadGame(s.cfg.GamePath, s.cfg.GameData); err != nil {
 		return err
 	}
 	s.av = core.AVInfo()
+	/*
+	 * A hardware-rendering core asked for its context during LoadGame; it is
+	 * made now, on this thread, and only then is the core told it exists.
+	 * The framebuffer is sized to the largest picture the core declared, so
+	 * a resolution change mid-game never needs a new one.
+	 */
+	if s.hw != nil {
+		w, h := int(s.av.MaxWidth), int(s.av.MaxHeight)
+		if w <= 0 || h <= 0 {
+			w, h = int(s.av.BaseWidth), int(s.av.BaseHeight)
+		}
+		if err := s.cfg.GL.Init(*s.hw, w, h); err != nil {
+			core.UnloadGame()
+			return fmt.Errorf("the graphics this game needs could not start: %w", err)
+		}
+		s.glReady = true
+		core.ContextReset()
+	}
 	core.SetControllerPortDevice(0, libretro.DeviceJoypad)
 	core.SetControllerPortDevice(1, libretro.DeviceJoypad)
 
@@ -230,6 +293,7 @@ func (s *Session) Run(ctx context.Context) (err error) {
 		}
 	}
 	s.cfg.OnEvent(Event{Kind: "started"})
+	s.announceOptions()
 
 	defer func() {
 		s.finish()
@@ -330,6 +394,7 @@ func (s *Session) handle(c command) {
 		if v, ok := s.vars[c.key]; ok {
 			s.cfg.Options = cloneWith(s.cfg.Options, c.key, validOption(v, c.val))
 			s.varsDirty = true
+			s.announceOptions()
 		}
 	case "save-state":
 		data, ok := s.serialize()
@@ -347,6 +412,30 @@ func (s *Session) handle(c command) {
 			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "The game refused that save."})
 		}
 	}
+}
+
+/*
+ * announceOptions tells the page which options the core declared and what
+ * each is set to. The page decides which few to show (ADR 0073 asks for a
+ * short curated list, not every switch a core has); the session reports
+ * what is true.
+ */
+func (s *Session) announceOptions() {
+	if len(s.vars) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(s.vars))
+	for k := range s.vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]Option, 0, len(keys))
+	for _, k := range keys {
+		v := s.vars[k]
+		val, _ := s.Variable(k)
+		out = append(out, Option{Key: k, Description: v.Description, Values: v.Values, Value: val})
+	}
+	s.cfg.OnEvent(Event{Kind: "options", Options: out})
 }
 
 func (s *Session) serialize() ([]byte, bool) {
@@ -440,6 +529,17 @@ func (s *Session) finish() {
 	s.cfg.Core.UnloadGame()
 }
 
+// teardownGL tells a hardware-rendering core its context is going, then
+// deletes it. It runs after the core is deinitialised (see Run).
+func (s *Session) teardownGL() {
+	if !s.glReady {
+		return
+	}
+	s.cfg.Core.ContextDestroy()
+	s.cfg.GL.Close()
+	s.glReady = false
+}
+
 func cloneWith(m map[string]string, k, v string) map[string]string {
 	out := make(map[string]string, len(m)+1)
 	for a, b := range m {
@@ -517,6 +617,12 @@ func (s *Session) Message(text string, _ uint32) {
 func (s *Session) Shutdown() { s.stopping = true }
 
 func (s *Session) VideoRefresh(f libretro.Frame) {
+	if f.HW {
+		if s.glReady {
+			s.cfg.GL.Present(int(f.Width), int(f.Height), s.aspect(f), s.hw.BottomLeftOrigin)
+		}
+		return
+	}
 	if f.Data == nil || s.cfg.Video == nil {
 		return // a repeated frame: what is on screen is already right
 	}
@@ -535,6 +641,38 @@ func (s *Session) aspect(f libretro.Frame) float64 {
 		return 4.0 / 3.0
 	}
 	return float64(f.Width) / float64(f.Height)
+}
+
+/*
+ * SetHWRender accepts desktop OpenGL — compatibility or core profile — when
+ * there is a GL sink, and nothing else. OpenGL ES and Vulkan are refused, so
+ * a core that can fall back to another renderer does, and one that cannot
+ * says so rather than drawing into a context it did not ask for.
+ */
+func (s *Session) SetHWRender(req libretro.HWRender) bool {
+	if s.cfg.GL == nil {
+		return false
+	}
+	if req.Context != libretro.HWContextOpenGL && req.Context != libretro.HWContextOpenGLCore {
+		return false
+	}
+	r := req
+	s.hw = &r
+	return true
+}
+
+func (s *Session) CurrentFramebuffer() uintptr {
+	if !s.glReady {
+		return 0
+	}
+	return s.cfg.GL.Framebuffer()
+}
+
+func (s *Session) ProcAddress(name string) uintptr {
+	if s.cfg.GL == nil {
+		return 0
+	}
+	return s.cfg.GL.ProcAddress(name)
 }
 
 func (s *Session) AudioBatch(samples []int16) int {
