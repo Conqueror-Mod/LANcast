@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
@@ -75,6 +75,65 @@ function render(episodes: Item[]) {
 
 const rows = () => [...host.querySelectorAll(".eprow")];
 const bars = () => [...host.querySelectorAll(".eprow__bar-fill")];
+
+// Where the router went, and with what.
+let lastLocation: { pathname: string; state: unknown } = { pathname: "", state: null };
+function LocationProbe() {
+  const loc = useLocation();
+  lastLocation = { pathname: loc.pathname, state: loc.state };
+  return null;
+}
+
+/*
+ * Play from start, from an episode's menu. It used to forget the position and
+ * navigate in the same instant, without telling the player — which read the
+ * old position whenever it got there first, and could not restart an episode
+ * already playing at all. It now carries the same fromStart flag the detail
+ * page sends, beside the queue.
+ */
+describe("Play from start on an episode", () => {
+  it("tells the player to start from the top, and keeps the queue", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } })),
+    );
+    const eps = [
+      episode({ id: 1, duration_ms: 1_000_000, progress: { position_ms: 600_000, watched: false } }),
+      episode({ id: 2, episode: 2 }),
+    ];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    act(() => {
+      root.render(
+        <QueryClientProvider client={qc}>
+          <FocusProvider>
+            <PlaybackProvider>
+              <MemoryRouter>
+                <EpisodeList episodes={eps} queue={[1, 2]} />
+                <LocationProbe />
+              </MemoryRouter>
+            </PlaybackProvider>
+          </FocusProvider>
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () => {
+      rows()[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+    });
+    const item = [...document.querySelectorAll("button, [role='menuitem']")].find(
+      (b) => b.textContent?.trim() === "Play from start",
+    ) as HTMLElement | undefined;
+    expect(item, "no Play from start in the episode's menu").toBeDefined();
+    await act(async () => {
+      item!.click();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(lastLocation.pathname).toBe("/watch/1");
+    const state = lastLocation.state as { fromStart?: boolean; queue?: number[] } | null;
+    expect(state?.fromStart).toBe(true);
+    expect(state?.queue).toEqual([1, 2]);
+    vi.unstubAllGlobals();
+  });
+});
 
 describe("the episode list", () => {
   it("renders a row per episode, in the order given", () => {

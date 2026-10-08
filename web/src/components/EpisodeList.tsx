@@ -167,10 +167,18 @@ function EpisodeRow({
     ...(pct > 0
       ? [
           {
+            /*
+             * The position is still forgotten, so every other client agrees,
+             * but the player is also told: it used to rely on the forgetting
+             * alone, sent at the same moment as the navigation, and read the
+             * old position whenever it got there first. The flag is what the
+             * detail page's Play from start always sent (Player.tsx), and it
+             * is also what restarts an episode that is already playing.
+             */
             label: "Play from start",
             onSelect: () => {
               onSetWatched(false);
-              play();
+              navigate(`/watch/${episode.id}`, { state: { queue, fromStart: true } });
             },
           },
         ]

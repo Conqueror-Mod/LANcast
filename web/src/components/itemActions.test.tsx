@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { useItemActions } from "./itemActions";
@@ -33,6 +33,14 @@ let actions: (item: Item) => { label: string }[];
 
 function Probe() {
   actions = useItemActions().actions;
+  return null;
+}
+
+// Where the router went, and with what, for the actions that navigate.
+let lastLocation: { pathname: string; state: unknown } = { pathname: "", state: null };
+function LocationProbe() {
+  const loc = useLocation();
+  lastLocation = { pathname: loc.pathname, state: loc.state };
   return null;
 }
 
@@ -69,6 +77,7 @@ beforeEach(async () => {
           <PlaybackProvider>
             <MemoryRouter>
               <Probe />
+              <LocationProbe />
             </MemoryRouter>
           </PlaybackProvider>
         </FocusProvider>
@@ -84,6 +93,33 @@ afterEach(() => {
 });
 
 const labels = (i: Item) => actions(i).map((a) => a.label);
+
+/*
+ * Play from start tells the player, not only the server.
+ *
+ * It used to forget the saved position and navigate, and nothing more. A film
+ * already loaded — docked in the corner, say — is re-entered rather than
+ * reloaded, so its saved position is never read, and it simply went on from
+ * where it was. The fromStart flag is what the detail page's Play from start
+ * always sent, and what makes the player seek a playing film to the top.
+ */
+describe("Play from start", () => {
+  it("forgets the position and tells the player to start from the top", async () => {
+    const started = item({ progress: { position_ms: 4_800_000, watched: false } } as Partial<Item>);
+    const restart = (actions(started) as { label: string; onSelect: () => void }[]).find(
+      (a) => a.label === "Play from start",
+    );
+    expect(restart).toBeDefined();
+    await act(async () => {
+      restart!.onSelect();
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(lastLocation.pathname).toBe("/watch/1");
+    expect((lastLocation.state as { fromStart?: boolean } | null)?.fromStart).toBe(true);
+    const calls = (fetch as unknown as { mock: { calls: [RequestInfo | URL, RequestInit?][] } }).mock.calls;
+    expect(calls.some(([u, init]) => String(u).includes("/api/items/1") && init?.method && init.method !== "GET")).toBe(true);
+  });
+});
 
 describe("what a poster offers", () => {
   it("gives an untouched film the full set", () => {

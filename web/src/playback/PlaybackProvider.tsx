@@ -973,6 +973,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const stop = useCallback(() => {
     saveRef.current(true);
+    /*
+     * Nothing is playing, so nothing is "already playing here". The live
+     * position was written on every timeupdate and never cleared, so after
+     * 1408 was watched to 1:20:00 and stopped it still said "1408, at 4800",
+     * and the next load of 1408 — Play from start, its saved position just
+     * forgotten — took that as playing in progress and resumed at 4800.
+     * Reported as Play from start "often" resuming: only for the title last
+     * played. restartAfterStop.test.tsx.
+     */
+    livePos.current = { id: 0, at: 0 };
     setNativeOn(false);
     const v = media();
     if (v) {

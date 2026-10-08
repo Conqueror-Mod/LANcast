@@ -430,24 +430,24 @@ export function useItemActions(): ItemActions {
           ? [
               {
                 /*
-                 * Starting over *is* discarding the resume point.
+                 * Starting over discards the resume point, so every client
+                 * agrees — and tells the player so, with the same fromStart
+                 * flag the detail page's Play from start sends (Player.tsx).
                  *
-                 * The tempting version passes a `restart` flag through the
-                 * route into the provider, which already decides where to begin
-                 * from `item.progress` — a second source of truth for where a
-                 * film starts, and the two would disagree the first time
-                 * anything else navigated to it. Forgetting the position
-                 * instead needs no new mechanism, says the same thing to every
-                 * client, and is what somebody picking this actually means.
+                 * Forgetting alone was not enough, and was reported as Play
+                 * from start "often" resuming. A film that is already playing
+                 * (docked in the corner, say) is re-entered rather than
+                 * reloaded, so its saved position is never read at all; only
+                 * the flag makes the player seek it to the top.
                  *
-                 * Awaited, or the navigation races the invalidation and the
-                 * provider reads the position it is being told to forget.
+                 * Still awaited, so the position the next device reads is the
+                 * forgotten one.
                  */
                 label: "Play from start",
                 onSelect: () =>
                   void setWatched
                     .mutateAsync({ itemID: item.id, watched: false })
-                    .finally(() => navigate(`/watch/${item.id}`)),
+                    .finally(() => navigate(`/watch/${item.id}`, { state: { fromStart: true } })),
               },
             ]
           : []),
