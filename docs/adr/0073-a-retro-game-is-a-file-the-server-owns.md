@@ -357,6 +357,34 @@ tracks. Every path is resolved against the entry's folder and kept inside it,
 then re-checked inside the library location by the handler. Files are served
 by the name the listing gave and by no other.
 
+## Amendments from building stage 2's player (2026-10-08)
+
+**No core is pinned, because none can be.** The decision said cores come from
+a pinned URL with a recorded checksum, and that if the buildbot could not be
+pinned, from a mirror. It cannot: per-core zips exist only under nightly
+`latest/`, which is rebuilt every night, and a stable release is one 230 MB
+`.7z` of every core. The mirror means publishing GPL binaries with their
+source, so it waits for the project's owner. Until then the advanced option
+this ADR already allowed, pointing a console at your own core DLL, is the way
+to play. It is kept per machine in the desktop client, because which DLL plays
+a console is a fact about this computer.
+
+**The sinks are GDI and waveOut, not WASAPI.** A framebuffer core hands over a
+small finished picture, and `StretchDIBits` draws it at any size with
+nearest-neighbour scaling and no device to create or lose. `waveOut` blocks
+its writer while its buffers are full, which is exactly how the game is paced.
+A frame clock runs as well, 2% fast while sound plays, because pacing by audio
+alone lets a core that emits little sound run unbounded. Stage 3's OpenGL
+presentation will be a different sink. These do not stand in its way.
+
+**The menu has three ways in:** Escape, Guide where the driver reports it
+(only through XInput's unnamed ordinal-100 export), and Select+Start held for a
+second. Held, because some games use Select+Start themselves as a soft reset.
+
+**The keyboard counts only while LANcast is in front,** and that is decided by
+root owner. The video window is an owned popup, and while a game runs, the
+window in front is the main window or the page overlay above the picture.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).
