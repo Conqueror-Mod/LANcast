@@ -88,7 +88,11 @@ describe("the rail", () => {
   it("keeps places that are not libraries out of the library list", async () => {
     await render();
     const libs = host.querySelector(".app-shell__libs");
-    expect(names(libs)).toEqual(["Movies"]);
+    // The Game Hub is the one exception, by design: it stands for the retro
+    // libraries and PC Games, so it takes the games slot among the libraries
+    // (docs/game-hub-plan.md). An admin is offered it even with no retro
+    // library yet, because its own page is where adding one is explained.
+    expect(names(libs)).toEqual(["Movies", "Game Hub"]);
   });
 
   it("puts Live TV first behind its own break, then Add-ons, Downloads and People", async () => {

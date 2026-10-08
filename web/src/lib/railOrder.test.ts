@@ -3,7 +3,7 @@ import { railOrder } from "./railOrder";
 
 const lib = (name: string, kind: string) => ({ name, kind });
 const labels = (entries: ReturnType<typeof railOrder<{ name: string; kind: string }>>) =>
-  entries.map((e) => (e.type === "pc-games" ? "PC Games" : e.lib.name));
+  entries.map((e) => (e.type === "game-hub" ? "Game Hub" : e.lib.name));
 
 // The server's order is by name; the rail's is by kind.
 const byName = [
@@ -17,37 +17,48 @@ const byName = [
 ];
 
 describe("railOrder", () => {
-  it("goes Movies, TV Shows, Music, Retro Games, PC Games, Pictures", () => {
+  it("goes Movies, TV Shows, Music, Game Hub, Pictures", () => {
     expect(labels(railOrder(byName, true))).toEqual([
       "Classic Films",
       "Movies",
       "Anime",
       "TV Shows",
       "Music",
-      "Retro games",
-      "PC Games",
+      "Game Hub",
       "Family Photos",
     ]);
   });
 
-  it("leaves PC Games out when it is not shown", () => {
-    expect(labels(railOrder(byName, false))).not.toContain("PC Games");
+  it("lists retro libraries through the hub, not beside it", () => {
+    expect(labels(railOrder(byName, true))).not.toContain("Retro games");
   });
 
-  it("keeps PC Games in its place when kinds around it are missing", () => {
+  it("keeps a retro library in the games slot when there is no hub", () => {
+    expect(labels(railOrder(byName, false))).toEqual([
+      "Classic Films",
+      "Movies",
+      "Anime",
+      "TV Shows",
+      "Music",
+      "Retro games",
+      "Family Photos",
+    ]);
+  });
+
+  it("keeps the hub in its place when kinds around it are missing", () => {
     expect(labels(railOrder([lib("Movies", "movie"), lib("Pics", "picture")], true))).toEqual([
       "Movies",
-      "PC Games",
+      "Game Hub",
       "Pics",
     ]);
-    expect(labels(railOrder([lib("Movies", "movie")], true))).toEqual(["Movies", "PC Games"]);
-    expect(labels(railOrder([], true))).toEqual(["PC Games"]);
+    expect(labels(railOrder([lib("Movies", "movie")], true))).toEqual(["Movies", "Game Hub"]);
+    expect(labels(railOrder([], true))).toEqual(["Game Hub"]);
   });
 
   it("puts a kind it does not know last rather than dropping it", () => {
     expect(labels(railOrder([lib("Odd", "audiobook"), lib("Movies", "movie")], true))).toEqual([
       "Movies",
-      "PC Games",
+      "Game Hub",
       "Odd",
     ]);
   });

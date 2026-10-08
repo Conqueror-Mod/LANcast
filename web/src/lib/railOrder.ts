@@ -1,47 +1,54 @@
 /*
- * The order of the rail's libraries, and where PC Games sits among them.
+ * The order of the rail's libraries, and where the Game Hub sits among them.
  *
  * The server lists libraries by name, which is the order a settings table
  * wants and not the order somebody reaches for things in: "Anime" above
  * "Movies", "Zelda Hacks" below "TV". The rail goes by what a library is —
- * Movies, TV Shows, Music, Retro Games, PC Games, Pictures — and keeps the
- * name order within each kind.
+ * Movies, TV Shows, Music, Game Hub, Pictures — and keeps the name order
+ * within each kind.
  *
- * PC Games is not a library — its games are installed on this machine, not
- * kept by the server (ADR 0066) — but it is somewhere you go to play, so it
- * sits beside Retro Games rather than down with Live TV and Add-ons, where it
- * read as an afterthought. Chris's order, from his notes on 2026-10-08.
+ * The Game Hub (docs/game-hub-plan.md) stands for both kinds of game: the
+ * retro libraries on this server and the PC games installed on this
+ * computer. So retro libraries are not listed one by one here — the hub lists
+ * them — and the hub takes their place in the order. Chris's notes,
+ * 2026-10-08: first Retro Games then PC Games, then one Game Hub for both.
  */
 
-export type RailEntry<L> = { type: "library"; lib: L } | { type: "pc-games" };
+export type RailEntry<L> = { type: "library"; lib: L } | { type: "game-hub" };
 
-// Where each kind goes. PC Games takes the slot between retro and pictures;
-// a kind not named here (a new one, or one this client does not know) goes
-// last rather than vanishing.
+// Where each kind goes. The hub takes the games slot, between music and
+// pictures; a kind not named here (a new one, or one this client does not
+// know) goes last rather than vanishing.
 const KIND_RANK: Record<string, number> = {
   movie: 0,
   show: 1,
   music: 2,
-  retro: 3,
-  picture: 5,
+  picture: 4,
 };
-const PC_GAMES_RANK = 4;
-const UNKNOWN_RANK = 6;
+const HUB_RANK = 3;
+const UNKNOWN_RANK = 5;
 
-export function railOrder<L extends { kind: string }>(libraries: L[], pcGames: boolean): RailEntry<L>[] {
-  const ranked = libraries.map((lib, i) => ({ lib, i, rank: KIND_RANK[lib.kind] ?? UNKNOWN_RANK }));
-  // Stable on the server's order within a kind: sort by rank, then by where
-  // the server put it.
+export function railOrder<L extends { kind: string }>(libraries: L[], hub: boolean): RailEntry<L>[] {
+  // Retro libraries are reached through the hub whenever it is offered. When
+  // it is not, they have nowhere else to be, so they keep a place of their
+  // own in the hub's slot.
+  const listed = hub ? libraries.filter((l) => l.kind !== "retro") : libraries;
+  const ranked = listed.map((lib, i) => ({
+    lib,
+    i,
+    rank: lib.kind === "retro" ? HUB_RANK : (KIND_RANK[lib.kind] ?? UNKNOWN_RANK),
+  }));
+  // Stable on the server's order within a kind.
   ranked.sort((a, b) => a.rank - b.rank || a.i - b.i);
   const out: RailEntry<L>[] = [];
-  let placed = !pcGames;
+  let placed = !hub;
   for (const r of ranked) {
-    if (!placed && r.rank > PC_GAMES_RANK) {
-      out.push({ type: "pc-games" });
+    if (!placed && r.rank > HUB_RANK) {
+      out.push({ type: "game-hub" });
       placed = true;
     }
     out.push({ type: "library", lib: r.lib });
   }
-  if (!placed) out.push({ type: "pc-games" });
+  if (!placed) out.push({ type: "game-hub" });
   return out;
 }

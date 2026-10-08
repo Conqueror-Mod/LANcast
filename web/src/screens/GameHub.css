@@ -1,0 +1,186 @@
+/* The Game Hub (docs/game-hub-plan.md): two halves side by side, PC on the
+   left and retro on the right, each one large way in. On a narrow window they
+   stack. Gold only where focus is (docs/design.md). */
+
+.game-hub {
+  padding: 24px 0 48px;
+}
+
+.game-hub__title {
+  margin: 0 0 20px;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.game-hub__halves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 760px) {
+  .game-hub__halves {
+    grid-template-columns: 1fr;
+  }
+}
+
+.game-hub__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  border-radius: var(--radius-panel);
+  background: var(--space-raised);
+  border: 1px solid var(--gold-dormant);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+
+/* Each half carries a faint wash of its own, so the two read as two places
+   rather than one box cut in half. Field colours only — never gold. */
+.game-hub__panel--pc {
+  background-image: radial-gradient(ellipse 90% 70% at 20% 0%, rgba(38, 88, 168, 0.28), transparent 65%);
+}
+.game-hub__panel--retro {
+  background-image: radial-gradient(ellipse 90% 70% at 80% 0%, rgba(90, 74, 158, 0.3), transparent 65%);
+}
+
+.game-hub__open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 28px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-panel);
+  transition:
+    box-shadow var(--dur-fast) ease,
+    background-color var(--dur-fast) ease;
+}
+.game-hub__open--inert {
+  cursor: default;
+}
+.game-hub__open:hover,
+.game-hub__open:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    0 0 0 4px var(--gold-ring);
+}
+
+.game-hub__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+.game-hub__head svg {
+  width: 28px;
+  height: 28px;
+}
+
+.game-hub__name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.game-hub__line {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.game-hub__steps {
+  margin: 0;
+  padding-left: 20px;
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* The way in, said as a quiet label at the foot of the panel: the whole panel
+   is the button. */
+.game-hub__action {
+  margin-top: auto;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.game-hub__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Several retro libraries: one row each. */
+.game-hub__panel--list .game-hub__head {
+  padding: 28px 28px 8px;
+}
+.game-hub__libs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 20px 20px;
+}
+.game-hub__lib {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-tile);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.game-hub__lib:hover,
+.game-hub__lib:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+.game-hub__lib-name {
+  font-size: 15px;
+}
+.game-hub__lib-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* The ROM database missing: a sentence, not an alarm. */
+.game-hub__nudge {
+  margin: 0 20px 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+.game-hub__nudge:hover,
+.game-hub__nudge:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
