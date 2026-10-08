@@ -6,7 +6,7 @@
  * installed games, PC games switched off, a browser that can never start one,
  * no retro library, a retro library with no ROM database, several.
  */
-import type { GamesResult } from "./games";
+import { sortGames, visibleGames, type GameRow, type GamesResult } from "./games";
 
 export type PCHalf =
   /** Not the desktop app: a phone or a browser tab cannot start a PC game. */
@@ -73,6 +73,32 @@ export function retroHalf<L extends { kind: string }>(o: {
  */
 export function hubOffered(o: { retroLibraries: number; desktop: boolean; admin: boolean }): boolean {
   return o.retroLibraries > 0 || o.desktop || o.admin;
+}
+
+/*
+ * The previews: a glimpse of what each half holds, so the hub is not two
+ * headings and a lot of field (Chris, looking at stage 1).
+ *
+ * PC games most recently played first — what somebody is likeliest to go
+ * back to, and the preview doubles as the way back in. Hidden games stay
+ * hidden, as on the PC Games screen.
+ */
+export const PREVIEW_COUNT = 12;
+
+export function pcPreview(games: GameRow[] | undefined): GameRow[] {
+  return sortGames(visibleGames(games ?? []), "played").slice(0, PREVIEW_COUNT);
+}
+
+/*
+ * The retro half's selection is the server's random order with a seed that
+ * changes once a day: stable while somebody comes and goes from the hub in an
+ * evening, and a different handful tomorrow, so the hub shows off the
+ * collection rather than the same first twelve by title for ever. Local
+ * date, not UTC — a UTC day turns over in the evening in the Americas, which
+ * is when this is used (the trap the global rules name).
+ */
+export function dailySeed(now: Date): number {
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 }
 
 // The routes the hub stands for, so the rail can mark it as where you are

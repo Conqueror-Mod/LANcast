@@ -1,11 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useIsAdmin, useLibraries, useRetroDatabase } from "@/api/hooks";
+import { useIsAdmin, useItems, useLibraries, useRetroDatabase } from "@/api/hooks";
+import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { GamesIcon, LibraryIcon } from "@/components/LibraryIcon";
-import { gamesSupported, useGames, useGamesTab } from "@/lib/games";
-import { pcHalf, retroHalf, type PCHalf, type RetroHalf } from "@/lib/gameHub";
-import type { Library } from "@/api/types";
+import { gamesSupported, useGameArt, useGames, useGamesTab, type GameRow } from "@/lib/games";
+import { PREVIEW_COUNT, dailySeed, pcHalf, pcPreview, retroHalf, type PCHalf, type RetroHalf } from "@/lib/gameHub";
+import type { Item, Library } from "@/api/types";
 import "./GameHub.css";
 
 /*
@@ -15,8 +16,9 @@ import "./GameHub.css";
  * A front door, not a replacement. Each half opens the screen it always
  * opened — PC Games, or a retro library — and those screens are unchanged.
  * What the hub adds is the sentence for every case where there is nothing to
- * open yet: no games installed, the list switched off, a phone that could
- * never start one, no retro library, no ROM database.
+ * open yet, and, where there is, a glimpse of what each half holds: PC games
+ * most recently played first, and a handful of retro games that changes by
+ * the day. Every tile opens its own game.
  */
 export function GameHub() {
   const navigate = useNavigate();
@@ -37,7 +39,7 @@ export function GameHub() {
     <div className="game-hub">
       <h1 className="game-hub__title">Game Hub</h1>
       <div className="game-hub__halves">
-        <PCPanel half={pc} isAdmin={isAdmin} navigate={navigate} />
+        <PCPanel half={pc} games={pc.kind === "ready" ? games?.games : undefined} navigate={navigate} />
         <RetroPanel half={retro} isAdmin={isAdmin} navigate={navigate} />
       </div>
     </div>
@@ -46,10 +48,11 @@ export function GameHub() {
 
 function PCPanel({
   half,
+  games,
   navigate,
 }: {
   half: PCHalf;
-  isAdmin: boolean;
+  games: GameRow[] | undefined;
   navigate: (to: string) => void;
 }) {
   const open = useCallback(() => {
@@ -86,6 +89,7 @@ function PCPanel({
       break;
   }
 
+  const preview = pcPreview(games);
   return (
     <HubPanel
       side="pc"
@@ -94,6 +98,15 @@ function PCPanel({
       line={line}
       action={action}
       onOpen={actionable ? open : undefined}
+      preview={
+        preview.length > 0 ? (
+          <div className="game-hub__preview game-hub__preview--pc" aria-label="Recently played">
+            {preview.map((g) => (
+              <PCTile key={g.id} game={g} onOpen={() => navigate(`/games/${encodeURIComponent(g.id)}`)} />
+            ))}
+          </div>
+        ) : null
+      }
     />
   );
 }
@@ -107,8 +120,16 @@ function RetroPanel({
   isAdmin: boolean;
   navigate: (to: string) => void;
 }) {
+  const first = half.kind === "ready" ? half.libraries[0] : undefined;
+  const nudge =
+    half.kind === "ready" && half.needsDatabase ? (
+      <DatabaseNudge onOpen={() => navigate("/settings?pane=retro")} />
+    ) : null;
+  const preview = first ? <RetroPreview library={first} navigate={navigate} /> : null;
+
   if (half.kind === "ready" && half.libraries.length > 1) {
-    // Several retro libraries: each one is its own way in.
+    // Several retro libraries: each one is its own way in, and the preview is
+    // from the first of them.
     return (
       <section className="game-hub__panel game-hub__panel--retro game-hub__panel--list" aria-label="Retro Games">
         <div className="game-hub__head">
@@ -120,22 +141,23 @@ function RetroPanel({
             <LibraryRow key={lib.id} lib={lib} onOpen={() => navigate(`/library/${lib.id}`)} />
           ))}
         </div>
-        {half.needsDatabase && <DatabaseNudge onOpen={() => navigate("/settings?pane=retro")} />}
+        {preview}
+        {nudge}
       </section>
     );
   }
 
-  if (half.kind === "ready") {
-    const lib = half.libraries[0];
+  if (half.kind === "ready" && first) {
     return (
       <HubPanel
         side="retro"
         title="Retro Games"
         icon={<LibraryIcon kind="retro" />}
-        line={`${lib.item_count} ${lib.item_count === 1 ? "game" : "games"} in ${lib.name}`}
+        line={`${first.item_count} ${first.item_count === 1 ? "game" : "games"} in ${first.name}`}
         action="Open Retro Games"
-        onOpen={() => navigate(`/library/${lib.id}`)}
-        footer={half.needsDatabase ? <DatabaseNudge onOpen={() => navigate("/settings?pane=retro")} /> : null}
+        onOpen={() => navigate(`/library/${first.id}`)}
+        preview={preview}
+        footer={nudge}
       />
     );
   }
@@ -163,6 +185,25 @@ function RetroPanel({
   );
 }
 
+// A handful of the library's games, a different handful each day.
+function RetroPreview({ library, navigate }: { library: Library; navigate: (to: string) => void }) {
+  const { data } = useItems({
+    libraryID: library.id,
+    sort: "random",
+    seed: dailySeed(new Date()),
+    limit: PREVIEW_COUNT,
+  });
+  const items = data?.items ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div className="game-hub__preview game-hub__preview--retro" aria-label="From your collection">
+      {items.map((it) => (
+        <RetroTile key={it.id} item={it} onOpen={() => navigate(`/item/${it.id}`)} />
+      ))}
+    </div>
+  );
+}
+
 function HubPanel({
   side,
   title,
@@ -171,17 +212,19 @@ function HubPanel({
   steps,
   action,
   onOpen,
+  preview,
   footer,
   note,
 }: {
   side: "pc" | "retro";
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   line: string;
   steps?: string[];
   action?: string | null;
   onOpen?: () => void;
-  footer?: React.ReactNode;
+  preview?: ReactNode;
+  footer?: ReactNode;
   note?: string | null;
 }) {
   const f = useFocusable(onOpen);
@@ -190,6 +233,7 @@ function HubPanel({
       <div className="game-hub__head">
         {icon}
         <h2 className="game-hub__name">{title}</h2>
+        {action && <span className="game-hub__action">{action}</span>}
       </div>
       <p className="game-hub__line">{line}</p>
       {steps && (
@@ -199,7 +243,6 @@ function HubPanel({
           ))}
         </ol>
       )}
-      {action && <span className="game-hub__action">{action}</span>}
       {note && <p className="game-hub__note">{note}</p>}
     </>
   );
@@ -219,8 +262,70 @@ function HubPanel({
       ) : (
         <div className="game-hub__open game-hub__open--inert">{body}</div>
       )}
+      {preview}
       {footer}
     </section>
+  );
+}
+
+// A PC game's tile: its poster, else its own icon shown whole over a wash of
+// itself, else its initial — the same three the PC Games grid falls through.
+function PCTile({ game, onOpen }: { game: GameRow; onOpen: () => void }) {
+  const f = useFocusable(onOpen);
+  const { data: poster } = useGameArt(game.id, "poster", game.has_poster);
+  const { data: icon } = useGameArt(game.id, "icon", !game.has_poster && !!game.has_icon);
+  return (
+    <button
+      type="button"
+      className="game-hub__tile game-hub__tile--pc"
+      title={game.name}
+      ref={f.ref}
+      tabIndex={f.tabIndex}
+      data-focus-id={f["data-focus-id"]}
+      onClick={onOpen}
+    >
+      {poster ? (
+        <img className="game-hub__tile-img" src={poster} alt="" />
+      ) : icon ? (
+        <>
+          <img className="game-hub__tile-wash" src={icon} alt="" aria-hidden="true" />
+          <img className="game-hub__tile-img game-hub__tile-img--whole" src={icon} alt="" />
+        </>
+      ) : (
+        <span className="game-hub__tile-letter" aria-hidden="true">
+          {game.name.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <span className="game-hub__tile-name">{game.name}</span>
+    </button>
+  );
+}
+
+// A retro game's tile: its box whole over a wash of itself, as the library
+// grid shows it, else its title.
+function RetroTile({ item, onOpen }: { item: Item; onOpen: () => void }) {
+  const f = useFocusable(onOpen);
+  const box = artworkURL(item.artwork?.poster, "poster");
+  return (
+    <button
+      type="button"
+      className="game-hub__tile game-hub__tile--retro"
+      title={item.title}
+      ref={f.ref}
+      tabIndex={f.tabIndex}
+      data-focus-id={f["data-focus-id"]}
+      onClick={onOpen}
+    >
+      {box ? (
+        <>
+          <img className="game-hub__tile-wash" src={box} alt="" aria-hidden="true" />
+          <img className="game-hub__tile-img game-hub__tile-img--whole" src={box} alt="" loading="lazy" />
+        </>
+      ) : (
+        <span className="game-hub__tile-letter game-hub__tile-letter--title">{item.title}</span>
+      )}
+      <span className="game-hub__tile-name">{item.title}</span>
+    </button>
   );
 }
 

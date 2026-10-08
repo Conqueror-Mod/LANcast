@@ -26,6 +26,8 @@ let libraries: unknown[];
 let role: string;
 let dbInstalled: boolean;
 let where = "";
+let retroItems: unknown[] = [];
+let itemRequests: string[] = [];
 
 function Where() {
   const loc = useLocation();
@@ -41,6 +43,8 @@ beforeEach(() => {
   role = "admin";
   dbInstalled = true;
   where = "";
+  retroItems = [];
+  itemRequests = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -49,6 +53,10 @@ beforeEach(() => {
       if (url.includes("/api/auth/status")) return json({ user: { id: "u_1", role }, setup_required: false });
       if (url.includes("/api/libraries")) return json(libraries);
       if (url.includes("/api/retro/database")) return json({ installed: dbInstalled, files: [], platforms: [] });
+      if (url.includes("/api/items?")) {
+        itemRequests.push(url);
+        return json({ items: retroItems, total: retroItems.length });
+      }
       return json({});
     }),
   );
@@ -102,6 +110,59 @@ function desktop(enabled: boolean, games: unknown[] | "not-installed") {
 
 const pcGame = (id: string, hidden = false) => ({ id, name: id, size_bytes: 1, last_played: 0, install_path: "",
   has_poster: false, has_header: false, hidden, favourite: false, display: "" });
+
+/*
+ * The previews: a glimpse of what each half holds (Chris, looking at stage 1:
+ * "a lot of bare space"). Each tile opens its own game.
+ */
+describe("the previews", () => {
+  it("shows PC games most recently played first, and opens the one chosen", async () => {
+    desktop(true, [
+      { ...pcGame("old"), name: "Old", last_played: 100 },
+      { ...pcGame("new"), name: "New", last_played: 900 },
+      { ...pcGame("hid", true), name: "Hidden", last_played: 999 },
+    ]);
+    window.lancastGameArt = vi.fn(async () => ({ ok: true, uri: "" }));
+    await open();
+    const tiles = [...half("PC Games").querySelectorAll(".game-hub__tile")];
+    expect(tiles.map((t) => t.getAttribute("title"))).toEqual(["New", "Old"]);
+    await click(tiles[1]);
+    expect(where).toBe("/games/old");
+    delete window.lancastGameArt;
+  });
+
+  it("shows none where there are no PC games to show", async () => {
+    await open(); // a browser
+    expect(half("PC Games").querySelector(".game-hub__tile")).toBeNull();
+  });
+
+  it("shows a day's handful of retro games, box art and all, and opens the one chosen", async () => {
+    libraries = [{ id: 4, kind: "retro", name: "Retro", item_count: 91 }];
+    retroItems = [
+      { id: 501, kind: "rom", title: "Road Rash II", artwork: { poster: "abc" } },
+      { id: 502, kind: "rom", title: "Fire Emblem", artwork: {} },
+    ];
+    await open();
+    const tiles = [...half("Retro Games").querySelectorAll(".game-hub__tile")];
+    expect(tiles.map((t) => t.getAttribute("title"))).toEqual(["Road Rash II", "Fire Emblem"]);
+    expect(tiles[0].querySelector("img.game-hub__tile-img")?.getAttribute("src")).toContain("/api/artwork/abc");
+    // No art: the title stands in, once.
+    expect(tiles[1].querySelector(".game-hub__tile-letter--title")?.textContent).toBe("Fire Emblem");
+    const req = itemRequests.find((u) => u.includes("library_id=4")) ?? itemRequests[0];
+    expect(req).toMatch(/sort=random/);
+    expect(req).toMatch(/seed=\d{8}/);
+    await click(tiles[0]);
+    expect(where).toBe("/item/501");
+  });
+
+  it("keeps the top of a half as the way into the whole screen", async () => {
+    libraries = [{ id: 4, kind: "retro", name: "Retro", item_count: 91 }];
+    retroItems = [{ id: 501, kind: "rom", title: "Road Rash II", artwork: {} }];
+    await open();
+    await click(half("Retro Games").querySelector(".game-hub__open"));
+    expect(where).toBe("/library/4");
+  });
+});
 
 describe("the PC half", () => {
   it("in a browser, says PC games play in the desktop app and opens nothing", async () => {

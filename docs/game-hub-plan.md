@@ -9,7 +9,7 @@ From Chris's notes, 2026-10-08:
 > IF no installed games exist, let user know at split screen selector; if no
 > retro game library detected tell user how to add, at split screen.
 
-**Stage 1 built 2026-10-08** with the defaults below, which Chris accepted by asking for it to be built. Stage 2, the look, is still to come.
+**Stage 1 built 2026-10-08** with the defaults below, which Chris accepted by asking for it to be built. **Stage 2 began the same day** with the previews he asked for on seeing stage 1 ("a lot of bare space"): PC games most recently played first, and a day's random handful of retro games, each tile opening its own game.
 
 ## What changes
 
