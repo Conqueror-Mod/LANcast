@@ -54,6 +54,71 @@ func (v *capVideo) Present(b []byte, w, h int, aspect float64) {
 	v.nonBlack = n
 }
 
+/*
+ * Continue on a real N64 game: play, quit (which writes "auto"), start again
+ * resuming "auto", and require the core to have taken it. Mupen64Plus-Next
+ * refuses a state until it has run a frame, so applying it before the first
+ * frame, as every other core allows, left Continue starting from the
+ * beginning — quietly, because an in-game save still carried progress.
+ */
+func TestRealN64ContinueResumes(t *testing.T) {
+	lib, cores := os.Getenv("RETRO_LIB"), os.Getenv("RETRO_CORES")
+	if lib == "" {
+		t.Skip()
+	}
+	class, _ := windows.UTF16PtrFromString("STATIC")
+	hwnd, _, _ := user32.NewProc("CreateWindowExW").Call(0, uintptr(unsafe.Pointer(class)), 0, 0, 0, 0, 640, 480, 0, 0, 0, 0)
+	saves := newFakeSaves()
+	dir := t.TempDir()
+	play := func(resume string) []string {
+		core, err := libretro.Open(filepath.Join(cores, "mupen64plus_next_libretro.dll"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		game, err := GameFile(filepath.Join(lib, "n64 roms/Super Mario 64 (USA).zip"), core.SystemInfo(), filepath.Join(dir, "extracted"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := os.ReadFile(game)
+		var mu sync.Mutex
+		var events []string
+		s := New(Config{
+			Core: core, GamePath: game, GameData: data, Video: &capVideo{}, GL: &WGL{HWND: hwnd},
+			Saves: saves, SystemDir: dir, SaveDir: dir, ResumeState: resume, SaveStateOnStop: true,
+			Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+			OnEvent: func(e Event) {
+				mu.Lock()
+				defer mu.Unlock()
+				if e.Kind != "options" {
+					events = append(events, e.Kind+" "+e.Slot+" "+e.Text)
+				}
+			},
+		})
+		done := make(chan error, 1)
+		go func() { done <- s.Run(context.Background()) }()
+		time.Sleep(5 * time.Second)
+		s.Stop()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return events
+	}
+	play("")
+	if d, _, _, _ := saves.LoadState("auto"); len(d) == 0 {
+		t.Fatal("quitting wrote no auto state")
+	}
+	events := play("auto")
+	t.Logf("events: %q", events)
+	for _, e := range events {
+		if strings.HasPrefix(e, "state-loaded auto") {
+			return
+		}
+	}
+	t.Error("Continue did not resume: the core never took the auto state")
+}
+
 func TestRealCoresDrawRealGames(t *testing.T) {
 	lib, cores := os.Getenv("RETRO_LIB"), os.Getenv("RETRO_CORES")
 	if lib == "" {
@@ -64,6 +129,9 @@ func TestRealCoresDrawRealGames(t *testing.T) {
 		{"mesen", "nes roms/Legend of Zelda, The (USA) (Rev 1).zip"},
 		{"bsnes", "snes roms/Bubsy II (USA).zip"},
 		{"blastem", "genesis roms/Sonic The Hedgehog 3 (USA).zip"},
+		{"mupen64plus_next", "n64 roms/Super Mario 64 (USA).zip"},
+		// Twice, deliberately: the second N64 game in one process crashed
+		// the client until every session shared one thread (see Run).
 		{"mupen64plus_next", "n64 roms/Super Mario 64 (USA).zip"},
 	}
 	class, _ := windows.UTF16PtrFromString("STATIC")

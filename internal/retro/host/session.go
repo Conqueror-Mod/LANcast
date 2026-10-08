@@ -224,14 +224,54 @@ func (s *Session) stateMismatch(core, version string) string {
 }
 
 /*
- * Run plays the game until Stop, a core's own shutdown, or ctx ends. It
- * locks its OS thread for its whole life: libretro assumes one thread, and
- * the OpenGL cores of stage 3 cannot survive moving.
+ * Run plays the game until Stop, a core's own shutdown, or ctx ends.
+ *
+ * Every session in the process runs on one OS thread, the same one each
+ * time — not merely a locked one. A locked thread per session was enough for
+ * one game and crashed the second: Mupen64Plus-Next turns the thread it first
+ * runs on into a fiber and keeps that fiber in a static, and the DLL stays
+ * loaded between games. The next session, on another thread, switched to a
+ * fiber that belonged to the old one, and the process died in KERNELBASE
+ * (0xc0000005 writing 0x1e18). RetroArch never meets this because every core
+ * it runs is on its main thread; one permanent thread gives cores the same
+ * promise. Sessions never overlap — the client waits for the previous game
+ * before starting the next — so one thread costs nothing.
  */
-func (s *Session) Run(ctx context.Context) (err error) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+func (s *Session) Run(ctx context.Context) error {
+	return onCoreThread(func() error { return s.run(ctx) })
+}
 
+var (
+	coreThreadOnce sync.Once
+	coreThreadWork chan func()
+)
+
+// onCoreThread runs f on the process's one core thread and waits for it. A
+// panic is left to happen where it is, with its own stack: carrying it back
+// to the caller would trade the trace that says why for one that says where
+// it was re-raised, and the process ends either way.
+func onCoreThread(f func() error) error {
+	coreThreadOnce.Do(func() {
+		coreThreadWork = make(chan func())
+		go func() {
+			// Never unlocked: the thread must outlive every session.
+			runtime.LockOSThread()
+			for w := range coreThreadWork {
+				w()
+			}
+		}()
+	})
+	var err error
+	done := make(chan struct{})
+	coreThreadWork <- func() {
+		defer close(done)
+		err = f()
+	}
+	<-done
+	return err
+}
+
+func (s *Session) run(ctx context.Context) (err error) {
 	core := s.cfg.Core
 	if core == nil {
 		return ErrNoCore
@@ -285,14 +325,29 @@ func (s *Session) Run(ctx context.Context) (err error) {
 	}
 
 	s.loadSRAM()
-	if slot := s.cfg.ResumeState; slot != "" {
-		if data, c, v, err := s.cfg.Saves.LoadState(slot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
-			if !core.Unserialize(data) {
-				s.cfg.Log.Warn("retro session: resume state refused by the core", "slot", slot)
+	/*
+	 * Continue. Most cores take a state as soon as the game is loaded, but
+	 * Mupen64Plus-Next starts its emulator on the first retro_run and refuses
+	 * any state before then. So a refusal here is retried after each frame
+	 * for a while, rather than taken as final: taking it as final made
+	 * Continue on every N64 game start from the beginning, with only a line
+	 * in the log to say so.
+	 */
+	var resume []byte
+	resumeSlot, resumeTries, resumed := s.cfg.ResumeState, 0, false
+	if resumeSlot != "" {
+		if data, c, v, err := s.cfg.Saves.LoadState(resumeSlot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
+			if resumed = core.Unserialize(data); !resumed {
+				resume = data
 			}
 		}
 	}
 	s.cfg.OnEvent(Event{Kind: "started"})
+	if resumed {
+		// After "started", like the retried case, so the page hears it while
+		// the game is on screen rather than over its loading message.
+		s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: resumeSlot})
+	}
 	s.announceOptions()
 
 	defer func() {
@@ -314,6 +369,19 @@ func (s *Session) Run(ctx context.Context) (err error) {
 			continue
 		}
 		core.Run()
+		if resume != nil {
+			resumeTries++
+			switch {
+			case core.Unserialize(resume):
+				resume = nil
+				s.cfg.Log.Info("retro session: resumed after the core's first frames", "slot", resumeSlot, "frames", resumeTries)
+				s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: resumeSlot})
+			case resumeTries >= resumeFrames:
+				resume = nil
+				s.cfg.Log.Warn("retro session: resume state refused by the core", "slot", resumeSlot, "frames", resumeTries)
+				s.cfg.OnEvent(Event{Kind: "error", Slot: resumeSlot, Text: "This game could not carry on from where you left off, so it has started from the beginning. In-game saves are not affected."})
+			}
+		}
 		s.maybeFlushSRAM(false)
 		/*
 		 * The frame clock, always — not only when there is no sound.
@@ -703,6 +771,10 @@ func (s *Session) InputState(port, device, index, id uint32) int16 {
 	}
 	return s.pads[port].State(device, index, id)
 }
+
+// resumeFrames is how long a refused Continue is retried: two seconds at
+// 60 fps, far longer than any core yet seen needs to start its emulator.
+const resumeFrames = 120
 
 // ErrNoCore is returned when a session is started without a core.
 var ErrNoCore = errors.New("retro session: no core")
