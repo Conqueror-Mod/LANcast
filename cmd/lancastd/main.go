@@ -495,6 +495,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	roms.Index = retroDB.Index
 	roms.Art = art
 	roms.Artwork = func() bool { return settings.Get().RetroArtwork }
+	// A thumbnail set's own index, read only after a game's exact art name
+	// missed: the sets and the DATs name some releases differently.
+	roms.Listing = (&retrodb.Listings{}).Get
 	// Music takes its metadata from the file's own tags during the scan, not
 	// from the filename (ADR 0024). Without a prober the scan still works and
 	// tracks keep what their folders gave them.

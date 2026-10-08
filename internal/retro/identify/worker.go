@@ -11,7 +11,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -79,6 +81,10 @@ type Worker struct {
 	// asked per ROM, so switching it off stops fetching at once.
 	Art     ArtCache
 	Artwork func() bool
+	// Listing returns the image names in one thumbnail set's directory, for
+	// when a game's exact name is not among them. Nil looks up exact names
+	// only. retrodb.Listings.Get in the server.
+	Listing func(ctx context.Context, url string) ([]string, error)
 	// Read hashes a ROM. romhash.Read, replaceable in tests.
 	Read func(path, platform string) (romhash.Result, error)
 
@@ -244,6 +250,14 @@ func (w *Worker) identify(ctx context.Context, ix *retrodb.Index, rom store.Item
 	if err != nil {
 		return outcomeFailed, err
 	}
+	// A hash taken under the folder's console when the file inside the zip
+	// names another (romhash.readZip): read it again under the right one, so
+	// the header rules and the lookup are that console's.
+	if h != nil && h.InnerName != "" {
+		if p := media.PlatformOfExt(h.InnerName); p != "" && p != platform {
+			h = nil
+		}
+	}
 	if h == nil {
 		res, err := w.Read(rom.Path, platform)
 		if err != nil {
@@ -266,7 +280,7 @@ func (w *Worker) identify(ctx context.Context, ix *retrodb.Index, rom store.Item
 		if err := w.st.PutROMHash(ctx, rom.ID, *h); err != nil {
 			return outcomeFailed, err
 		}
-		if platform == "" && res.Platform != "" {
+		if res.Platform != "" && res.Platform != platform {
 			platform = res.Platform
 			if err := w.st.SetPlatform(ctx, rom.ID, platform); err != nil {
 				return outcomeFailed, err
@@ -293,7 +307,11 @@ func (w *Worker) identify(ctx context.Context, ix *retrodb.Index, rom store.Item
 	g := ix.Lookup(platform, sums, h.Serial)
 	if g == nil {
 		state := meta.StateUnmatched
-		return outcomeUnmatched, w.st.UpdateItemMetadata(ctx, rom.ID, store.ItemMetadata{MatchState: &state})
+		if err := w.st.UpdateItemMetadata(ctx, rom.ID, store.ItemMetadata{MatchState: &state}); err != nil {
+			return outcomeUnmatched, err
+		}
+		w.artForUnmatched(ctx, rom, platform)
+		return outcomeUnmatched, nil
 	}
 	return outcomeMatched, w.apply(ctx, rom, platform, g)
 }
@@ -349,26 +367,62 @@ func (w *Worker) apply(ctx context.Context, rom store.Item, platform string, g *
 		}
 	}
 	if w.Art != nil && w.Artwork() && !lockedSet[meta.FieldArtwork] {
-		w.fetchArt(ctx, rom.ID, g)
+		gp := g.Platform
+		if gp == "" {
+			gp = platform
+		}
+		w.fetchArt(ctx, rom.ID, gp, g.Name)
 	}
 	return nil
 }
 
-// fetchArt stores the box art as the poster and a screenshot as the fanart.
-// A missing image is ordinary — the thumbnail sets do not cover every
-// release — and is logged at debug, not as a failure.
-func (w *Worker) fetchArt(ctx context.Context, itemID int64, g *retrodb.Game) {
+/*
+ * artForUnmatched looks for box art by the file's own name, for a ROM no DAT
+ * knows: a fan translation, a hack, a homebrew release. Only the same title
+ * is accepted (bestThumbnail), so this finds "Fire Emblem - The Binding
+ * Blade (USA)" for "Fire Emblem - The Binding Blade (T)" and nothing for a
+ * name the set does not hold. The ROM stays unmatched: art is not identity.
+ */
+func (w *Worker) artForUnmatched(ctx context.Context, rom store.Item, platform string) {
+	if w.Art == nil || !w.Artwork() || platform == "" {
+		return
+	}
+	locked, err := w.st.LockedFields(ctx, rom.ID)
+	if err != nil || meta.LockedSet(locked)[meta.FieldArtwork] {
+		return
+	}
+	name := filepath.Base(rom.Path)
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	w.fetchArt(ctx, rom.ID, platform, name)
+}
+
+// fetchArt stores the box art as the poster and a screenshot as the fanart:
+// by the exact name first, then, if the set has no image by that name, by
+// the closest name of the same game in the set's own listing. A missing image
+// is ordinary — the thumbnail sets do not cover every release — and is logged
+// at debug, not as a failure.
+func (w *Worker) fetchArt(ctx context.Context, itemID int64, platform, name string) {
 	for _, a := range []struct{ set, kind string }{
 		{retrodb.Boxart, string(meta.ArtPoster)},
 		{retrodb.Snap, string(meta.ArtFanart)},
 	} {
-		u := retrodb.ThumbnailURL(g.Platform, a.set, g.Name)
+		u := retrodb.ThumbnailURL(platform, a.set, name)
 		if u == "" {
 			continue
 		}
 		hash, width, height, size, err := w.Art.Download(ctx, u)
+		if err != nil && w.Listing != nil {
+			if listing, lerr := w.Listing(ctx, retrodb.ListingURL(platform, a.set)); lerr == nil {
+				if best := bestThumbnail(name, listing); best != "" {
+					u = retrodb.ThumbnailURL(platform, a.set, best)
+					hash, width, height, size, err = w.Art.Download(ctx, u)
+				}
+			} else {
+				w.log.Debug("rom artwork listing unavailable", "set", a.set, "error", lerr)
+			}
+		}
 		if err != nil {
-			w.log.Debug("rom artwork not found", "item", itemID, "url", u, "error", err)
+			w.log.Debug("rom artwork not found", "item", itemID, "name", name, "error", err)
 			continue
 		}
 		if err := w.st.PutArtwork(ctx, itemID, hash, a.kind, u, width, height, size); err != nil {

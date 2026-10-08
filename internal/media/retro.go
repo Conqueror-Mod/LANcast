@@ -222,6 +222,30 @@ func ROMTitle(name string) string {
 	return strings.TrimSpace(base)
 }
 
+// ROMTags returns a ROM name's parenthesised tags, each comma-separated word
+// on its own and lower-cased — "Road Rash II (USA, Europe) (Rev 1)" is usa,
+// europe, rev 1 — and whether it carries a bracketed tag, which in No-Intro
+// and libretro naming marks a hack or a fan translation ("[T-En by …]").
+func ROMTags(name string) (tags []string, bracketed bool) {
+	base := name
+	if IsROM(name) {
+		base = strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
+	}
+	for _, tag := range reROMTag.FindAllString(base, -1) {
+		inner := strings.TrimSpace(tag)
+		if strings.HasPrefix(inner, "[") {
+			bracketed = true
+			continue
+		}
+		for _, w := range strings.Split(inner[1:len(inner)-1], ",") {
+			if w = strings.ToLower(strings.TrimSpace(w)); w != "" {
+				tags = append(tags, w)
+			}
+		}
+	}
+	return tags, bracketed
+}
+
 // ROMRegion returns the region tag of a ROM's filename or DAT name, verbatim
 // ("USA", "USA, Europe"), or "" when it carries none.
 func ROMRegion(name string) string {
