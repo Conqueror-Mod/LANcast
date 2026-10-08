@@ -240,6 +240,15 @@ func (s *Session) Run(ctx context.Context) (err error) {
 	if err := core.Init(s); err != nil {
 		return err
 	}
+	/*
+	 * Registered before Close, so it runs after it: RetroArch's order, which
+	 * cores are written against. The game is unloaded (finish), the core is
+	 * deinitialised, and only then is it told its GL context is going, and
+	 * the context goes. Mupen64Plus-Next still touches GL while unloading and
+	 * deinitialising, and killed the process when the context had already
+	 * been deleted under it.
+	 */
+	defer s.teardownGL()
 	defer core.Close()
 	if err := core.LoadGame(s.cfg.GamePath, s.cfg.GameData); err != nil {
 		return err
@@ -517,16 +526,18 @@ func (s *Session) finish() {
 	case <-time.After(30 * time.Second):
 		s.cfg.Log.Warn("retro session: saves still uploading after 30s; closing anyway")
 	}
-	// The core lets go of its GPU objects while the context still exists,
-	// then the game is unloaded, then the context goes.
-	if s.glReady {
-		s.cfg.Core.ContextDestroy()
-	}
 	s.cfg.Core.UnloadGame()
-	if s.glReady {
-		s.cfg.GL.Close()
-		s.glReady = false
+}
+
+// teardownGL tells a hardware-rendering core its context is going, then
+// deletes it. It runs after the core is deinitialised (see Run).
+func (s *Session) teardownGL() {
+	if !s.glReady {
+		return
 	}
+	s.cfg.Core.ContextDestroy()
+	s.cfg.GL.Close()
+	s.glReady = false
 }
 
 func cloneWith(m map[string]string, k, v string) map[string]string {

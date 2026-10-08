@@ -41,10 +41,20 @@ var (
 	cbInputState    uintptr
 	cbCurrentFB     uintptr
 	cbProcAddress   uintptr
+	cbLog           uintptr
 	activeMu        sync.Mutex
 	active          *dllCore
 	errNoActiveCore = errors.New("libretro: callback with no active core")
 )
+
+// Log, when set, receives a core's log lines: its level (0 debug to 3 error)
+// and its format string, unformatted (see logCB).
+var Log func(level int, msg string)
+
+// Trace, when set, is told every environment call a core makes and how it
+// was answered. A core that crashes inside its own code leaves nothing else
+// to go on: the last question it asked is usually the one it mishandled.
+var Trace func(string)
 
 // cPointer turns an address a core handed over back into a pointer. go vet
 // cannot see that the address came from C, where its rules do not apply;
@@ -212,21 +222,31 @@ func (c *dllCore) Init(fe Frontend) error {
 		cbInputState = syscall.NewCallback(inputStateCB)
 		cbCurrentFB = syscall.NewCallback(currentFramebufferCB)
 		cbProcAddress = syscall.NewCallback(procAddressCB)
+		cbLog = syscall.NewCallback(logCB)
 	})
 	activeMu.Lock()
 	active = c
 	activeMu.Unlock()
 	c.fe = fe
 	c.format = Format0RGB1555
-	// The environment comes first: a core may ask questions from inside
-	// retro_init, and the header says set_environment precedes it.
+	/*
+	 * The order is RetroArch's, and it is not a matter of taste.
+	 *
+	 * The environment comes first, because a core asks questions from inside
+	 * retro_init. The other five come *after* retro_init: the header promises
+	 * only that they precede the first retro_run, and real cores rely on the
+	 * order RetroArch uses. Mesen's retro_set_video_refresh hands the callback
+	 * to an object retro_init creates, so setting it first dereferenced null
+	 * and killed the process -- found on the first real core run, which the
+	 * test core (setting nothing up in retro_init) could never have shown.
+	 */
 	c.call("retro_set_environment", cbEnvironment)
+	c.call("retro_init")
 	c.call("retro_set_video_refresh", cbVideoRefresh)
 	c.call("retro_set_audio_sample", cbAudioSample)
 	c.call("retro_set_audio_sample_batch", cbAudioBatch)
 	c.call("retro_set_input_poll", cbInputPoll)
 	c.call("retro_set_input_state", cbInputState)
-	c.call("retro_init")
 	return nil
 }
 
@@ -298,6 +318,9 @@ func (c *dllCore) Memory(id uint32) []byte {
 }
 
 func (c *dllCore) ContextReset() {
+	if Trace != nil {
+		Trace(fmt.Sprintf("context_reset %#x", c.contextReset))
+	}
 	if c.contextReset != 0 {
 		_, _, _ = syscall.SyscallN(c.contextReset)
 	}
@@ -364,7 +387,14 @@ func environmentCB(cmd, data uintptr) uintptr {
 	if err != nil {
 		return 0
 	}
-	return boolResult(c.environment(uint32(cmd), cPointer(data)))
+	if Trace != nil {
+		Trace(fmt.Sprintf("env %d asked", cmd&0xffff))
+	}
+	ok := c.environment(uint32(cmd), cPointer(data))
+	if Trace != nil {
+		Trace(fmt.Sprintf("env %d (%#x) data=%#x -> %v", cmd&0xffff, uint32(cmd), data, ok))
+	}
+	return boolResult(ok)
 }
 
 func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
@@ -471,6 +501,23 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 		cb.getCurrentFramebuffer = cbCurrentFB
 		cb.getProcAddress = cbProcAddress
 		return true
+	case EnvGetLogInterface:
+		/*
+		 * Answered, though the callback is printf-style variadic, because
+		 * cores call it without checking: Mupen64Plus-Next jumped to address
+		 * zero on its first real run when this was refused. On Windows x64 a
+		 * variadic call passes arguments exactly as a fixed one does and the
+		 * caller cleans up, so a callback taking the level and the format
+		 * string and ignoring the rest is safe. It logs the format
+		 * unformatted -- "%s loaded" rather than "Mario loaded" — which is
+		 * enough to diagnose with, and formatting C varargs from Go is not
+		 * worth the risk.
+		 */
+		if data == nil {
+			return false
+		}
+		*(*uintptr)(data) = cbLog
+		return true
 	case EnvGetLanguage:
 		if data != nil {
 			*(*uint32)(data) = 0 // English
@@ -498,9 +545,8 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 	}
 	/*
 	 * Declined: core options v1 and v2 (a core falls back to SET_VARIABLES
-	 * when GET_CORE_OPTIONS_VERSION is refused), hardware rendering until
-	 * stage 3, the log interface (its callback is variadic, which a Go
-	 * callback cannot be), rotation, and everything else.
+	 * when GET_CORE_OPTIONS_VERSION is refused), GLES and Vulkan contexts
+	 * (see SetHWRender), rotation, and everything else.
 	 */
 	return false
 }
@@ -565,7 +611,11 @@ func currentFramebufferCB() uintptr {
 	if err != nil {
 		return 0
 	}
-	return c.fe.CurrentFramebuffer()
+	fb := c.fe.CurrentFramebuffer()
+	if Trace != nil {
+		Trace(fmt.Sprintf("get_current_framebuffer -> %d", fb))
+	}
+	return fb
 }
 
 // procAddressCB: retro_proc_address_t (const char *sym).
@@ -574,5 +624,18 @@ func procAddressCB(sym uintptr) uintptr {
 	if err != nil || sym == 0 {
 		return 0
 	}
-	return c.fe.ProcAddress(goString((*byte)(cPointer(sym))))
+	name := goString((*byte)(cPointer(sym)))
+	p := c.fe.ProcAddress(name)
+	if Trace != nil {
+		Trace(fmt.Sprintf("get_proc_address %s -> %#x", name, p))
+	}
+	return p
+}
+
+// logCB: void (enum retro_log_level level, const char *fmt, ...).
+func logCB(level, format uintptr) uintptr {
+	if Log != nil && format != 0 {
+		Log(int(uint32(level)), goString((*byte)(cPointer(format))))
+	}
+	return 0
 }
