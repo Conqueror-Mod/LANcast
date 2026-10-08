@@ -12,6 +12,7 @@ import {
   type FilterCategory,
 } from "@/lib/browseFilters";
 import { RATING_THRESHOLDS } from "@/lib/browseFilters";
+import { orderPlatforms, platformLabel } from "@/lib/platforms";
 import "./FilterBar.css";
 
 /*
@@ -122,6 +123,10 @@ export function FilterBar({
         );
       case "resolution":
         return (facets?.resolutions?.length ?? 0) > 0;
+      // One console is not a choice: the filter could only reselect what the
+      // grid already shows.
+      case "platform":
+        return (facets?.platforms?.length ?? 0) > 1;
       case "status":
         return !!(
           facets?.has_in_progress ||
@@ -299,6 +304,13 @@ function FilterPanel({
           (facets?.resolutions ?? []).map((b) =>
             chip(b.key, b.label, selected.has(b.key), () =>
               onToggle("resolution", b.key),
+            ),
+          )}
+
+        {category.key === "platform" &&
+          orderPlatforms(facets?.platforms ?? []).map((p) =>
+            chip(p, platformLabel(p), selected.has(p), () =>
+              onToggle("platform", p),
             ),
           )}
 

@@ -119,6 +119,18 @@ const PICTURE: LibraryKindConfig = {
   ],
 };
 
+// A retro library's top level is games (ADR 0073), every console in one
+// library and narrowed by the Console filter. Rating is absent because no
+// rating source covers ROMs; year comes from the DAT where it has one.
+const RETRO: LibraryKindConfig = {
+  searchPlaceholder: "Search games",
+  sorts: [
+    { value: "title", label: "Title" },
+    { value: "year", label: "Year" },
+    { value: "added", label: "Recently added" },
+  ],
+};
+
 export function configForKind(kind: string | undefined): LibraryKindConfig {
   switch (kind) {
     case "show":
@@ -127,6 +139,8 @@ export function configForKind(kind: string | undefined): LibraryKindConfig {
       return MUSIC;
     case "picture":
       return PICTURE;
+    case "retro":
+      return RETRO;
     default:
       return MOVIE;
   }
@@ -143,6 +157,10 @@ export const LIBRARY_KINDS: { value: string; label: string }[] = [
   { value: "show", label: "Shows" },
   { value: "music", label: "Music" },
   { value: "picture", label: "Pictures" },
+  // "Retro games" rather than "Games": the Games tab is installed PC games
+  // (ADR 0066), which are never a library, and one word for both would send
+  // somebody looking for their Steam list into the add-library form.
+  { value: "retro", label: "Retro games" },
   { value: "other", label: "Other" },
 ];
 

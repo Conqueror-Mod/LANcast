@@ -54,6 +54,9 @@ import {
   useInstallFaceModels,
   useCancelFaceModels,
   useServerIdentity,
+  useRetroDatabase,
+  useInstallRetroDatabase,
+  useCancelRetroDatabase,
 } from "@/api/hooks";
 import {
   capabilities,
@@ -2590,6 +2593,123 @@ function ServerLogSection() {
  * unexpectedly after an update.
  */
 /*
+ * Retro games (ADR 0073): the ROM database and box art.
+ *
+ * Two separate consents, deliberately apart. The database is a one-off
+ * download after which naming games is offline; box art is a fetch per game,
+ * every time a game is identified. Somebody may well want the first and not
+ * the second, and one switch for both would make that impossible.
+ */
+function RetroSection() {
+  const { data: settings } = useSettings();
+  const update = useUpdateSettings();
+  const { data: db } = useRetroDatabase();
+  const install = useInstallRetroDatabase();
+  const cancel = useCancelRetroDatabase();
+
+  const job = db?.job;
+  const running = job?.running ?? false;
+  const pct =
+    job && job.bytes_total > 0
+      ? Math.min(100, Math.round((job.bytes_done / job.bytes_total) * 100))
+      : 0;
+  const ident = db?.identify;
+
+  return (
+    <section className="settings__section">
+      <span className="section-label">Retro games</span>
+
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Name games from the ROM database</div>
+          <div className="set-row__sub">
+            Each game is identified by what is inside the file, not by its name,
+            so a renamed or badly named ROM still gets its proper title and
+            year. It runs entirely on this machine once the database is here.
+          </div>
+        </div>
+      </div>
+
+      {db && !db.installed && !running && (
+        <>
+          <p className="set-row__sub">
+            This needs a one-off download of{" "}
+            <strong>{formatBytes(db.bytes_total)}</strong> —{" "}
+            {db.files.length} files from libretro-database, licensed{" "}
+            <a href={db.licence_url} target="_blank" rel="noreferrer">
+              {db.licence}
+            </a>
+            . Nothing is fetched until you press the button. Without it, games
+            keep the titles their file names give them.
+          </p>
+          <button
+            className="set-btn"
+            onClick={() => install.mutate()}
+            disabled={install.isPending}
+          >
+            {install.isPending ? "Starting…" : "Download the ROM database"}
+          </button>
+        </>
+      )}
+
+      {running && job && (
+        <>
+          <p className="set-row__sub">
+            {job.stage === "verifying"
+              ? "Checking what arrived…"
+              : job.stage === "installing"
+                ? "Putting it in place…"
+                : `Downloading ${job.file ?? ""}`}{" "}
+            — {pct}%
+          </p>
+          <button className="set-btn" onClick={() => cancel.mutate()}>
+            Cancel
+          </button>
+        </>
+      )}
+
+      {job?.error && !running && (
+        <p className="set-row__sub set-row__sub--warn">
+          The download did not finish: {job.error}
+        </p>
+      )}
+
+      {db?.installed && (
+        <p className="set-row__sub">
+          The ROM database is installed.
+          {ident?.running
+            ? ` Identifying games — ${ident.matched + ident.unmatched + ident.failed} of ${ident.total}.`
+            : ident && ident.matched + ident.unmatched > 0
+              ? ` Last pass: ${ident.matched} named, ${ident.unmatched} not in the database.`
+              : ""}
+        </p>
+      )}
+
+      {settings && (
+        <>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.retro_artwork}
+              onChange={(e) =>
+                update.mutate({ retro_artwork: e.target.checked })
+              }
+            />
+            Fetch box art for identified games
+          </label>
+          <p className="set-row__sub">
+            Box art and a screenshot for each game come from
+            libretro-thumbnails, one download per game. Off by default because
+            it reaches the internet; turning it on fetches art for games already
+            identified.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/*
  * Everything a picture library can be told to do (ADR 0051, ADR 0052).
  *
  * Its own pane because there are now two of these and there will be more —
@@ -3142,6 +3262,10 @@ const SERVER_PANES: Pane[] = [
    * Made a home now rather than after the third.
    */
   { id: "pictures", label: "Pictures", admin: true },
+  // Retro games (ADR 0073). Its own pane for the reason Pictures has one: it
+  // holds an optional download and a network switch, and both would be lost
+  // in a general pane.
+  { id: "retro", label: "Retro games", admin: true },
   { id: "metadata", label: "Metadata", admin: true },
   { id: "playback", label: "Playback", admin: true },
   { id: "users", label: "Users", admin: true },
@@ -3273,6 +3397,7 @@ export function Settings() {
                 </>
               )}
               {pane === "pictures" && <PicturesSection />}
+              {pane === "retro" && <RetroSection />}
               {pane === "activity" && (
                 <>
                   {/*

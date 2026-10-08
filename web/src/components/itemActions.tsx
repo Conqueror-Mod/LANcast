@@ -12,7 +12,7 @@ import {
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
-import { isContainer, isMusic, isPicture, watchedVerb } from "@/lib/kind";
+import { isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
 import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
@@ -329,6 +329,21 @@ export function useItemActions(): ItemActions {
               ...remove,
             ]
           : [...sensitive, ...remove];
+      }
+
+      /*
+       * A retro game plays in the desktop app's own player, which does not
+       * exist yet (ADR 0073). Play, queue and playlist would each hand a ROM
+       * to the video player, so the menu offers what is true of it now.
+       */
+      if (isROM(item)) {
+        return [
+          {
+            label: "Go to details",
+            onSelect: () => navigate(`/item/${item.id}`),
+          },
+          ...remove,
+        ];
       }
 
       if (isContainer(item)) {

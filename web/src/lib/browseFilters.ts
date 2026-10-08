@@ -1,4 +1,5 @@
 import type { Facets, CastMember } from "@/api/types";
+import { platformLabel } from "@/lib/platforms";
 
 /*
  * The browse filter model.
@@ -59,6 +60,9 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
   { key: "content_rating", label: "Content rating", mode: "chips" },
   { key: "min_rating", label: "Rating", mode: "chips", single: true },
   { key: "resolution", label: "Format", mode: "chips" },
+  // Only drawn in a library that holds more than one console's games, like
+  // every category that cannot change the grid otherwise (ADR 0073).
+  { key: "platform", label: "Console", mode: "chips" },
   /*
    * Tag is chips rather than a search, because a person's own tags are a small
    * list by construction — they typed every one of them. That is the same
@@ -221,6 +225,8 @@ export function activePills(
     const bucket = ctx.facets?.resolutions?.find((b) => b.key === r);
     push("resolution", r, bucket?.label ?? r);
   }
+
+  for (const p of params.getAll("platform")) push("platform", p, platformLabel(p));
 
   const status = params.get("status");
   if (status && STATUS_LABELS[status]) {
