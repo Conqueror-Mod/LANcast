@@ -385,6 +385,9 @@ type Item struct {
 	 * a thing the user wrote -- show it, do not believe it.
 	 */
 	Edition *string `json:"edition,omitempty"`
+	// Platform is a ROM's console (ADR 0073): "n64", "snes", … Nil for every
+	// other kind, and for a ROM no extension or folder could place.
+	Platform *string `json:"platform,omitempty"`
 
 	Container  *string `json:"container"`
 	SizeBytes  *int64  `json:"size_bytes"`
@@ -624,6 +627,8 @@ type ScanFile struct {
 	 * Nothing joins on it, dedupes by it, or ranks with it.
 	 */
 	Edition   *string
+	// Platform is a ROM's console (ADR 0073), or nil.
+	Platform  *string
 	Container string
 	SizeBytes int64
 	MTime     int64
@@ -669,8 +674,8 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
 			(library_id, root_id, kind, path, title, sort_title, year, series, season, episode,
-			 edition, container, size_bytes, mtime, added_at, updated_at, missing)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+			 edition, platform, container, size_bytes, mtime, added_at, updated_at, missing)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 		ON CONFLICT(path) DO UPDATE SET
 			-- root_id is refreshed too. A file can change roots without changing
 			-- path only if the roots themselves moved, which RepointRoot does --
@@ -681,7 +686,7 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			kind = excluded.kind, title = excluded.title, sort_title = excluded.sort_title,
 			year = excluded.year, series = excluded.series, season = excluded.season,
 			episode = excluded.episode, edition = excluded.edition,
-			container = excluded.container,
+			platform = excluded.platform, container = excluded.container,
 			size_bytes = excluded.size_bytes, mtime = excluded.mtime,
 			updated_at = excluded.updated_at, missing = 0,
 			-- The scanner only upserts files whose size or mtime changed, so
@@ -689,7 +694,7 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			-- probe describes a file that no longer exists.
 			probed_at = NULL`,
 		f.LibraryID, f.RootID, f.Kind, f.Path, f.Title, f.SortTitle, f.Year, f.Series, f.Season, f.Episode,
-		f.Edition, f.Container, f.SizeBytes, f.MTime, now, now)
+		f.Edition, f.Platform, f.Container, f.SizeBytes, f.MTime, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("upsert item %q: %w", f.Path, err)
 	}
@@ -720,6 +725,24 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE media_item SET cover_checked_at = NULL WHERE id = ?`, id); err != nil {
 			return 0, fmt.Errorf("upsert item %q: requeue photo: %w", f.Path, err)
+		}
+	}
+	/*
+	 * A changed ROM is hashed and identified again (ADR 0073).
+	 *
+	 * The same reasoning as a photo: its hash is a fact about bytes, and a
+	 * re-dump replacing a bad one is exactly the case where the old identity
+	 * is wrong. A locked match is not re-litigated — the identify worker skips
+	 * it — but its stale hash is still dropped, because a hash that describes
+	 * bytes no longer on disk is wrong whatever anyone decided about the title.
+	 */
+	if f.Kind == "rom" {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM rom_hash WHERE item_id = ?`, id); err != nil {
+			return 0, fmt.Errorf("upsert item %q: clear rom hash: %w", f.Path, err)
+		}
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE media_item SET rom_checked_at = NULL WHERE id = ?`, id); err != nil {
+			return 0, fmt.Errorf("upsert item %q: requeue rom: %w", f.Path, err)
 		}
 	}
 	return id, nil
@@ -868,6 +891,8 @@ type ItemFilter struct {
 	Scope  []int64
 
 	Years       []int    // exact release years
+	// Platforms restricts a retro library to some consoles (ADR 0073).
+	Platforms []string
 	Resolutions []string // bucket keys: uhd | hd1080 | hd720 | sd
 
 	/*
@@ -1044,7 +1069,7 @@ const itemCols = `id, library_id, root_id, kind, path, title, sort_title, year, 
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
 	audio_codec, audio_channels, video_frame_rate, imdb_id, artist, taken_at,
-	sensitive, sensitive_effective`
+	sensitive, sensitive_effective, platform`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -1081,7 +1106,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
 		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID,
-		&it.Artist, &it.TakenAt, &own, &effective)
+		&it.Artist, &it.TakenAt, &own, &effective, &it.Platform)
 	if err != nil {
 		return nil, err
 	}
@@ -1116,6 +1141,12 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	if f.Kind != "" {
 		where += ` AND kind = ?`
 		args = append(args, f.Kind)
+	}
+	if len(f.Platforms) > 0 {
+		where += ` AND platform IN (` + placeholders(len(f.Platforms)) + `)`
+		for _, p := range f.Platforms {
+			args = append(args, p)
+		}
 	}
 	switch {
 	case f.ParentID != nil:

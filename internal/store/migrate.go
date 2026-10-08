@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 63
+const CurrentSchemaVersion = 64
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -117,6 +117,10 @@ var migrations = []migration{
 	{version: 61, sql: schemaRevision61},
 	{version: 62, sql: schemaRevision62},
 	{version: 63, sql: schemaRevision63},
+	{version: 64, sql: schemaRevision64, columns: []column{
+		{"media_item", "platform", "TEXT"},
+		{"media_item", "rom_checked_at", "INTEGER"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2098,6 +2102,44 @@ WHERE kind = 'episode' AND intros_at IS NOT NULL
  * a library that already ran 62 holds exactly that set again.
  */
 const schemaRevision63 = schemaRevision62
+
+/*
+ * Revision 64 — retro games (ADR 0073).
+ *
+ * `platform` is a ROM's console, and the only thing a retro library is
+ * filtered by. A nullable column rather than a side table because it is read
+ * by every listing of the library; it is NULL on every row that is not a ROM.
+ *
+ * `rom_checked_at` is the identify worker's stamp, the way cover_checked_at is
+ * the album-art worker's: NULL means nothing has looked at this ROM yet.
+ *
+ * `rom_hash` holds what reading the file produced. A side table, like
+ * photo_hash, because hashes are derived from bytes and are only ever read
+ * by the identify worker — media_item is already wide, and nothing that lists
+ * items wants a SHA-1. It is kept apart from the stamp on purpose: installing
+ * the DAT files clears the stamp so every ROM is looked up again, and the
+ * hashes being already here is what makes that a lookup rather than a re-read
+ * of every disc image in the library. Either hash may be NULL — a disc is
+ * identified by the serial in its SYSTEM.CNF, not by hashing 700MB.
+ */
+const schemaRevision64 = `
+CREATE TABLE IF NOT EXISTS rom_hash (
+    item_id   INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    crc32     TEXT,
+    sha1      TEXT,
+    -- crc32 and sha1 of the file with a copier header removed, when it had
+    -- one: a dump is listed in a DAT one way or the other, never both.
+    alt_crc32 TEXT,
+    alt_sha1  TEXT,
+    serial    TEXT,
+    -- The file inside a zip that was hashed, so a platform can be read from
+    -- its extension when the zip's own folder says nothing.
+    inner_name TEXT,
+    hashed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_media_item_platform
+    ON media_item(library_id, platform) WHERE platform IS NOT NULL;
+`
 
 // showOf finds an episode's show, whether the episode hangs from a season or
 // straight from the show. It reads `mi` as the episode.
