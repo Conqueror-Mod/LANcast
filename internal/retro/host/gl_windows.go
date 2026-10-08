@@ -5,6 +5,7 @@ package host
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -106,6 +107,9 @@ type WGL struct {
 	// without a person looking at the window.
 	CaptureCentre bool
 	LastCentre    [4]byte
+	// NoVsync reports, after Init, that the driver agreed not to wait for a
+	// refresh on each swap — see Init for why that matters.
+	NoVsync bool
 
 	dc, rc        uintptr
 	fbo, tex, rb  uint32
@@ -161,9 +165,9 @@ func (g *WGL) Init(req libretro.HWRender, maxW, maxH int) error {
 	}
 	g.dc = dc
 	/*
-	 * A window's pixel format can be set once in its life. The video window
-	 * outlives a game, so the second game finds it already set — and the
-	 * format chosen here is the one it would choose again.
+	 * A window's pixel format can be set once in its life. The game window
+	 * outlives a game (ADR 0076), so the second game finds it already set —
+	 * and the format chosen here is the one it would choose again.
 	 */
 	if pf, _, _ := procGetPixelFormat.Call(dc); pf == 0 {
 		pfd := pixelFormatDescriptor{version: 1,
@@ -226,6 +230,25 @@ func (g *WGL) Init(req libretro.HWRender, maxW, maxH int) error {
 		g.rc = rc
 	}
 
+	/*
+	 * No vsync: the session paces every game, with the sound card as the
+	 * clock (session.go), and a windowed swap is composited by DWM, so there
+	 * is no tearing for vsync to prevent.
+	 *
+	 * Left at the driver's default, SwapBuffers waited for a refresh as well,
+	 * and two pacers that do not line up cost a refresh each: Super Mario 64
+	 * ran at exactly 30.0 fps against a target of 60, every frame 33.3 ms,
+	 * with or without a film in the corner. The wait did not show in the
+	 * present at all (0.1 ms) — a swap is queued, and the stall lands on the
+	 * core's next GL call, inside its run. Measured by the session's frame
+	 * log; a framebuffer game, which never swaps, ran at 59.8 beside it.
+	 */
+	if set := g.ProcAddress("wglSwapIntervalEXT"); set != 0 {
+		g.NoVsync = call(set, 0) != 0
+	}
+	// A driver set to force vsync refuses or ignores this; the frame log
+	// then still says 30, and this line says why.
+	slog.Info("retro: OpenGL context ready", "vsync_off", g.NoVsync)
 	if err := g.loadFuncs(); err != nil {
 		g.Close()
 		return err
