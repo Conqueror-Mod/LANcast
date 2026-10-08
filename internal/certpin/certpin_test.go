@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"lancast/internal/tlscert"
+	"net/http"
+	"net/http/httptest"
 )
 
 // generate writes a real server certificate the way the server does, so the
@@ -120,5 +122,26 @@ func TestUnreadableCertificateIsDistinctFromMissing(t *testing.T) {
 	}
 	if errors.Is(err, ErrNoCertificate) {
 		t.Error("an unreadable certificate was reported as a missing one")
+	}
+}
+
+// The right pin connects and any other is refused, whatever the chain says.
+func TestTLSConfigPinsThePublicKey(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	pin := SPKIFromDER(srv.Certificate().RawSubjectPublicKeyInfo)
+	get := func(pin string) error {
+		c := &http.Client{Transport: &http.Transport{TLSClientConfig: TLSConfig(pin)}}
+		resp, err := c.Get(srv.URL)
+		if err == nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+	if err := get(pin); err != nil {
+		t.Errorf("the right pin was refused: %v", err)
+	}
+	if err := get(SPKIFromDER([]byte("some other key"))); err == nil {
+		t.Error("a wrong pin connected")
 	}
 }

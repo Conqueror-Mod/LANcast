@@ -1,0 +1,11 @@
+/* A console's core path and its Save button, side by side (RetroCoreSettings). */
+.set-row__inline {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.set-row__inline .set-input {
+  flex: 1;
+  min-width: 0;
+}

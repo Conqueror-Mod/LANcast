@@ -1692,6 +1692,23 @@ export function useCancelRetroDatabase() {
   });
 }
 
+/*
+ * A game's saves for the person asking (ADR 0073), so a detail page can offer
+ * Continue where there is somewhere to continue from. Its own key rather than
+ * a child of ["item"]: the game screen invalidates it when a game stops or
+ * saves, and nothing about an item's metadata changes when it does.
+ */
+export type GameSave = { slot: string; updated_at: number; size_bytes: number; core?: string; core_version?: string };
+
+export function useGameSaves(itemID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["game-saves", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<{ saves: GameSave[] }>(`/api/items/${itemID}/saves`, signal).then((r) => r?.saves ?? []),
+    enabled: enabled && itemID > 0,
+  });
+}
+
 export function useCancelFaceModels() {
   const qc = useQueryClient();
   return useMutation({

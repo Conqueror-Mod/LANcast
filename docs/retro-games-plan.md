@@ -182,6 +182,52 @@ Genesis then work through the same host with no new host code.
 - A save made on one PC loads on a second PC.
 - Quitting in the middle of a game loses nothing that was written to save RAM.
 
+### Status (2026-10-08)
+
+**Built and proven against a real DLL; not yet played.** The server half is on
+`feat/retro-saves` (#783) and the player is on `feat/retro-player` (#784).
+What changed from the plan is in ADR 0073 under the stage 2 amendments.
+
+Where the plan said **verify**, here is what was found:
+- **Pinning the buildbot.** It cannot be pinned per core. Per-core zips exist
+  only under nightly `latest/`, which is rebuilt every night, and stable ships
+  one 230 MB `.7z` of every core. So no core is pinned, and `cores.Install`
+  refuses. A LANcast-hosted mirror (the ADR's fallback) is the owner's call.
+  Until then, Settings → This app points a console at a core DLL already on
+  the machine.
+- **Licences.** All were read from the upstream repositories. mGBA is MPL-2.0.
+  Mesen, bsnes, BlastEm, Gearsystem and SwanStation are GPL-3.0.
+  Mupen64Plus-Next and Beetle PSX are GPL-2.0.
+- **`need_fullpath`.** This no longer matters: the player always downloads a
+  game's files into a cache, so a core gets a real path either way, and its
+  bytes as well when it wants them.
+
+Departures from the plan:
+- **Audio is `waveOut`, not WASAPI.** It blocks the writer exactly as pacing
+  needs, and has no COM to get wrong. A frame clock always runs too, because
+  pacing by audio alone let a core that emits little sound run at 3,458
+  frames in 350 ms.
+- **Video is a GDI blit**, which has no device to create or lose. Stage 3's
+  OpenGL path is a separate sink.
+- **The menu also opens with Select and Start held for a second,** beside
+  Escape and Guide, because Guide is only available through an undocumented
+  export.
+
+What a real DLL has proven: `libretro/testdata/testcore.c` was built with gcc
+on the development machine and run through the binding, through a session, and
+end to end against a real API server. Save RAM survived a round trip that only
+a restore could explain. These tests skip on CI, which has no gcc.
+
+**Still owed:** a real game in the real window. That means:
+1. a core DLL chosen in Settings → This app,
+2. a ROM in `Test Retro Library`,
+3. Play: the picture is crisp and full speed, the sound has the right pitch,
+   and a pad works,
+4. save in game and Quit, then play again: the save is there,
+5. save state 1, carry on, load state 1.
+
+Nothing here can be judged from a test.
+
 ---
 
 ## Stage 3 — N64

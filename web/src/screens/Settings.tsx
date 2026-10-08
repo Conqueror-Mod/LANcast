@@ -71,6 +71,7 @@ import { forgetHLS, hlsRecord } from "@/playback/fileTransport";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { PeerSettings } from "@/components/PeerSettings";
+import { RetroCoreSettings } from "@/components/RetroCoreSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
 import { errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
@@ -3441,6 +3442,7 @@ export function Settings() {
           {pane === "app" && (
             <>
               <DesktopSettings />
+              <RetroCoreSettings />
               {/*
                 On the device pane rather than the admin Logs one. This file is
                 written by this window, on this machine, and it is not the
