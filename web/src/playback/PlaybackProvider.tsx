@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -64,6 +65,7 @@ import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
+import { isGameOnScreen, subscribeGameOnScreen } from "./retro";
 import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
@@ -699,12 +701,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * window the client had hidden on the way out of the one before.
    */
   const sentLayout = useRef(HIDDEN);
+  // A game screen coming or going moves a docked film between "mini" and
+  // "pip" (ADR 0076), so it is one of the things that re-sends the layout.
+  const overGame = useSyncExternalStore(subscribeGameOnScreen, isGameOnScreen, () => false);
   useEffect(() => {
     if (!window.lancastMpvLayout) return;
     const el = containerRef.current;
     const send = () => {
       const r = el?.getBoundingClientRect();
-      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio);
+      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio, overGame);
       if (sameLayout(next, sentLayout.current)) return;
       sentLayout.current = next;
       void window
@@ -756,7 +761,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("resize", send);
       ratio?.removeEventListener("change", onRatio);
     };
-  }, [surface, nativeOn]);
+  }, [surface, nativeOn, overGame]);
 
   /*
    * Total runtime: the server's measured one whenever there is one.

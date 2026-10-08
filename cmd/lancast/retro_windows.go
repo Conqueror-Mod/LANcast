@@ -31,14 +31,14 @@ import (
  * every path. A compromised page can at most play a game it can already see,
  * with a core this machine already has.
  *
- * The picture goes into the same video window libmpv draws into, so starting
- * a game stops whatever mpv was playing, and the page owns the window's layout
- * as it does for films.
+ * The picture goes into a game window of its own (ADR 0076), not libmpv's
+ * video window, so a film can go on playing in the docked corner above the
+ * game. This side shows the game window while a game runs and hides it the
+ * moment one stops; where the film goes is still the page's to say.
  */
 
 type retroPlayer struct {
 	origin, pin string
-	stopVideo   func() // stops libmpv before a game takes its window
 
 	mu      sync.Mutex
 	window  clientwindow.Controller
@@ -192,7 +192,13 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 	r.mu.Lock()
 	w := r.window
 	r.mu.Unlock()
-	if w == nil || w.VideoWindow() == 0 {
+	// Made here, on the window's thread, as GameWindow requires; the game's
+	// goroutine only ever uses the handle.
+	var hwnd uintptr
+	if w != nil {
+		hwnd = w.GameWindow()
+	}
+	if hwnd == 0 {
 		return errors.New("no window to play into")
 	}
 	corePath, _, err := cores.Resolve(platform, retroDir("cores"), coreOverrides())
@@ -219,10 +225,7 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 				slog.Warn("retro: the previous game is still sending its saves")
 			}
 		}
-		if r.stopVideo != nil {
-			r.stopVideo()
-		}
-		err := r.run(ctx, game, corePath, w, resume, platform)
+		err := r.run(ctx, game, corePath, w, hwnd, resume, platform)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("retro game", "item", itemID, "error", err)
 			r.emit(map[string]any{"kind": "error", "text": err.Error()})
@@ -231,7 +234,7 @@ func (r *retroPlayer) open(itemID int64, ticket, platform string, resume bool) e
 	return nil
 }
 
-func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath string, w clientwindow.Controller, resume bool, platform string) error {
+func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath string, w clientwindow.Controller, hwnd uintptr, resume bool, platform string) error {
 	r.emit(map[string]any{"kind": "loading", "done": 0, "total": 0})
 	last := time.Time{}
 	entry, err := game.Download(ctx, r.gameCache(gameID(game)), func(done, total int64) {
@@ -273,12 +276,12 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		// Where a core writes anything of its own. The game's save goes to
 		// the server through the session, not here.
 		SaveDir: retroDir("core-saves"),
-		Video:   &host.GDIVideo{HWND: w.VideoWindow()},
+		Video:   &host.GDIVideo{HWND: hwnd},
 		// The GPU path (stage 3). A framebuffer core never asks for it, so
 		// it costs nothing there; an N64 core cannot run without it.
-		GL:              &host.WGL{HWND: w.VideoWindow()},
+		GL:              &host.WGL{HWND: hwnd},
 		Audio:           &host.WaveOut{},
-		Input:           host.Controllers{HWND: w.VideoWindow()},
+		Input:           host.Controllers{HWND: hwnd},
 		Saves:           game,
 		Options:         savedOptions(platform),
 		ResumeState:     resumeSlot,
@@ -298,6 +301,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		},
 		Log: slog.Default(),
 	})
+	s.SetVolume(r.volume())
 	r.mu.Lock()
 	r.session = s
 	r.mu.Unlock()
@@ -305,8 +309,9 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		r.mu.Lock()
 		r.session = nil
 		r.mu.Unlock()
+		w.SetGameLayout(false)
 	}()
-	w.SetVideoLayout("full", 0, 0, 0, 0)
+	w.SetGameLayout(true)
 	return s.Run(ctx)
 }
 
@@ -360,8 +365,14 @@ func validStateSlot(s string) bool {
  */
 func (r *retroPlayer) stop() <-chan struct{} {
 	r.mu.Lock()
-	s, cancel, done := r.session, r.cancel, r.done
+	s, cancel, done, w := r.session, r.cancel, r.done, r.window
 	r.mu.Unlock()
+	// The picture goes now, not when the last save has been sent: the person
+	// has left the game, and a film docked above it is what they are looking
+	// at next. Run hides it again when it returns, which is harmless.
+	if w != nil && (s != nil || cancel != nil) {
+		w.SetGameLayout(false)
+	}
 	switch {
 	case s != nil:
 		s.Stop()
@@ -400,5 +411,55 @@ func (r *retroPlayer) bindings() map[string]any {
 			}
 			return nil
 		},
+		// The game's own volume, kept apart from a film's (ADR 0076): both
+		// can play at once, and turning one down must not touch the other.
+		"lancastRetroVolume": r.volume,
+		"lancastRetroSetVolume": func(v float64) error {
+			if err := r.setVolume(v); err != nil {
+				return err
+			}
+			r.mu.Lock()
+			s := r.session
+			r.mu.Unlock()
+			if s != nil {
+				s.SetVolume(v)
+			}
+			return nil
+		},
 	}
+}
+
+// retroSettings is the client's own state about games that is not per
+// console. Only the volume, so far.
+type retroSettings struct {
+	Volume *float64 `json:"volume,omitempty"`
+}
+
+func readRetroSettings() retroSettings {
+	var s retroSettings
+	if b, err := os.ReadFile(retroDir("settings.json")); err == nil {
+		_ = json.Unmarshal(b, &s)
+	}
+	return s
+}
+
+// volume is the game volume, 0 to 1, full until somebody chooses otherwise.
+func (r *retroPlayer) volume() float64 {
+	if v := readRetroSettings().Volume; v != nil && *v >= 0 && *v <= 1 {
+		return *v
+	}
+	return 1
+}
+
+func (r *retroPlayer) setVolume(v float64) error {
+	if v < 0 || v > 1 || v != v {
+		return errors.New("a volume is between 0 and 1")
+	}
+	s := readRetroSettings()
+	s.Volume = &v
+	if err := os.MkdirAll(retroDir(), 0o755); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(s, "", "  ")
+	return os.WriteFile(retroDir("settings.json"), b, 0o644)
 }

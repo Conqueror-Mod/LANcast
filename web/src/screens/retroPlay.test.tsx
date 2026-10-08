@@ -178,6 +178,45 @@ describe("the game screen", () => {
   });
 });
 
+describe("a film in the corner (ADR 0076)", () => {
+  it("says a game is on screen while it is, and leaves the film's window alone on the way out", async () => {
+    const { isGameOnScreen } = await import("@/playback/retro");
+    window.lancastMpvLayout = vi.fn(async () => {});
+    await render("/play/41");
+    expect(isGameOnScreen()).toBe(true);
+    act(() => root.unmount());
+    expect(isGameOnScreen()).toBe(false);
+    // The video window belongs to whatever film is docked; hiding it here
+    // would black out a film somebody is watching in the corner.
+    expect(window.lancastMpvLayout).not.toHaveBeenCalled();
+    expect(window.lancastRetroStop).toHaveBeenCalled();
+    root = createRoot(host);
+    delete window.lancastMpvLayout;
+  });
+
+  it("offers the game's own volume in steps and sends the next one", async () => {
+    window.lancastRetroVolume = vi.fn(async () => 0.5);
+    window.lancastRetroSetVolume = vi.fn(async () => {});
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Game volume: 50%").click());
+    expect(window.lancastRetroSetVolume).toHaveBeenCalledWith(0.25);
+    expect(button("Game volume: 25%")).toBeTruthy();
+    delete window.lancastRetroVolume;
+    delete window.lancastRetroSetVolume;
+  });
+
+  it("goes round from off back to full", async () => {
+    const { nextVolume, volumeLabel } = await import("@/playback/retro");
+    expect(nextVolume(0)).toBe(1);
+    expect(nextVolume(1)).toBe(0.75);
+    expect(nextVolume(0.6)).toBe(1); // a value off the steps goes to full
+    expect(volumeLabel(0)).toBe("Off");
+    expect(volumeLabel(0.75)).toBe("75%");
+  });
+});
+
 describe("a game's detail page", () => {
   it("offers Play where the console can run here", async () => {
     await render("/item/41");

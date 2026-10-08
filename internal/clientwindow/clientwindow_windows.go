@@ -322,8 +322,23 @@ func (c *controller) SetVideoLayout(layout string, x, y, width, height int) {
 		l = webview2.VideoFull
 	case "mini":
 		l = webview2.VideoMini
+	case "pip":
+		l = webview2.VideoPiP
 	}
 	c.w.Dispatch(func() { _ = c.w.SetVideoLayout(l, x, y, width, height) })
+}
+
+// GameWindow has VideoWindow's threading rule: call it on the window's thread.
+func (c *controller) GameWindow() uintptr {
+	h, err := c.w.GameWindow()
+	if err != nil {
+		return 0
+	}
+	return h
+}
+
+func (c *controller) SetGameLayout(on bool) {
+	c.w.Dispatch(func() { _ = c.w.SetGameLayout(on) })
 }
 
 func (c *controller) Eval(js string) {

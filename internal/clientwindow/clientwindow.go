@@ -134,8 +134,14 @@ type Controller interface {
 	// OnReady). Zero where there is no native window.
 	VideoWindow() uintptr
 	// SetVideoLayout places native video: "full", "mini" with the docked
-	// rectangle in client pixels, or "hidden".
+	// rectangle in client pixels, "pip" (docked above a game, ADR 0076), or
+	// "hidden".
 	SetVideoLayout(layout string, x, y, width, height int)
+	// GameWindow is the native handle a retro game draws into (ADR 0076),
+	// with VideoWindow's threading rule. SetGameLayout shows it over the whole
+	// client area beneath the page, or hides it.
+	GameWindow() uintptr
+	SetGameLayout(on bool)
 	// Eval runs script in the page, on the window's thread.
 	Eval(js string)
 	// ShowHTML replaces the page with one the caller carries -- the server

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"hash/crc32"
 	"log/slog"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lancast/internal/retro/libretro"
@@ -148,6 +150,11 @@ type Session struct {
 	glReady   bool
 
 	pending sync.WaitGroup // uploads in flight
+
+	// volume is a float64's bits, set from any goroutine (SetVolume); scaled
+	// is the core thread's buffer for samples at less than full volume.
+	volume atomic.Uint64
+	scaled []int16
 }
 
 // New prepares a session. Nothing runs until Run.
@@ -161,7 +168,9 @@ func New(cfg Config) *Session {
 	if cfg.OnEvent == nil {
 		cfg.OnEvent = func(Event) {}
 	}
-	return &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{}}
+	s := &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{}}
+	s.volume.Store(math.Float64bits(1))
+	return s
 }
 
 func (s *Session) send(c command) {
@@ -745,9 +754,47 @@ func (s *Session) ProcAddress(name string) uintptr {
 
 func (s *Session) AudioBatch(samples []int16) int {
 	if s.cfg.Audio != nil {
-		s.cfg.Audio.Write(samples)
+		s.cfg.Audio.Write(s.scale(samples))
 	}
 	return len(samples) / 2
+}
+
+/*
+ * SetVolume sets the game's own volume, 0 silent to 1 as the core made it,
+ * from any goroutine (ADR 0076).
+ *
+ * Applied to the samples here rather than through waveOutSetVolume, which on
+ * Windows Vista and later sets the whole application's audio session — the
+ * one libmpv shares — so turning a game down would turn the film in the
+ * corner down with it. Linear in amplitude: the menu offers a handful of
+ * steps, not a fader, and each step is plainly quieter than the last.
+ */
+func (s *Session) SetVolume(v float64) {
+	if v != v || v < 0 {
+		v = 0
+	}
+	if v > 1 {
+		v = 1
+	}
+	s.volume.Store(math.Float64bits(v))
+}
+
+// scale returns samples at the session's volume. Full volume hands the
+// core's own slice through untouched; anything else is written to a buffer
+// of the session's, never back into the core's memory.
+func (s *Session) scale(samples []int16) []int16 {
+	v := math.Float64frombits(s.volume.Load())
+	if v >= 1 {
+		return samples
+	}
+	if cap(s.scaled) < len(samples) {
+		s.scaled = make([]int16, len(samples))
+	}
+	out := s.scaled[:len(samples)]
+	for i, x := range samples {
+		out[i] = int16(float64(x) * v)
+	}
+	return out
 }
 
 func (s *Session) InputPoll() {

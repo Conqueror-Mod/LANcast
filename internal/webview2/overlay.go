@@ -144,7 +144,39 @@ const (
 	VideoHidden VideoLayout = iota
 	VideoFull
 	VideoMini
+	// VideoPiP is the docked picture while a game holds the screen (ADR 0076):
+	// the page stays in the overlay over the game, and the picture floats above
+	// the overlay at the docked box rather than above the main window.
+	VideoPiP
 )
+
+/*
+ * The two layout questions, as pure functions of what the page asked for and
+ * whether a game is on screen (ADR 0076).
+ *
+ * The page sends "pip" when it knows a game is up and "mini" otherwise, but
+ * the game's window comes and goes on the client's own schedule, and the two
+ * messages can cross. So the client does not trust the word alone: a docked
+ * picture over a game is always PiP, and PiP with no game under it is just
+ * docked. Either crossing would otherwise leave the picture under the page
+ * (mini with the page in the overlay) or the page torn out from over a game
+ * (PiP leaving the overlay), and neither looks like anything but a bug.
+ */
+func effectiveLayout(asked VideoLayout, gameOn bool) VideoLayout {
+	switch {
+	case asked == VideoMini && gameOn:
+		return VideoPiP
+	case asked == VideoPiP && !gameOn:
+		return VideoMini
+	}
+	return asked
+}
+
+// overlayWanted is whether the page belongs in the transparent overlay: over
+// a film at full size, or over a game.
+func overlayWanted(layout VideoLayout, gameOn bool) bool {
+	return gameOn || layout == VideoFull
+}
 
 // videoRect is a rectangle in the main window's client coordinates, physical
 // pixels.
@@ -290,27 +322,63 @@ func (w *webview) VideoWindow() (uintptr, error) {
 	return h, nil
 }
 
+// GameWindow returns the window a game draws into (ADR 0076), creating it
+// hidden on first use. A game has a window of its own so that starting one no
+// longer has to stop a film: libmpv keeps the video window, and a docked film
+// can go on playing above the game.
+func (w *webview) GameWindow() (uintptr, error) {
+	if w.game != 0 {
+		return w.game, nil
+	}
+	// The video window's class and rules: black behind the first frame, never
+	// activated, so the keyboard stays with the page.
+	h := w.createOwnedOf(wsExNoActivate, videoClass())
+	if h == 0 {
+		return 0, errors.New("webview2: could not create the game window")
+	}
+	setWindowContext(h, videoOf{w})
+	w.game = h
+	return h, nil
+}
+
+// SetGameLayout shows the game window over the whole client area, beneath the
+// page overlay, or hides it.
+func (w *webview) SetGameLayout(on bool) error {
+	if on {
+		if _, err := w.GameWindow(); err != nil {
+			return err
+		}
+	}
+	w.gameOn = on
+	return w.applyLayout()
+}
+
 // SetVideoLayout places native video. x, y, width and height are the docked
-// rectangle in client pixels and are read only for VideoMini.
+// rectangle in client pixels and are read only for VideoMini and VideoPiP.
 func (w *webview) SetVideoLayout(layout VideoLayout, x, y, width, height int) error {
-	w.layout = layout
+	w.asked = layout
 	w.mini = videoRect{int32(x), int32(y), int32(width), int32(height)}
-	switch layout {
-	case VideoFull:
+	if layout != VideoHidden {
 		if _, err := w.VideoWindow(); err != nil {
 			return err
 		}
+	}
+	return w.applyLayout()
+}
+
+// applyLayout settles the overlay and every extra window for the film's asked
+// layout and whether a game is on screen.
+func (w *webview) applyLayout() error {
+	w.layout = effectiveLayout(w.asked, w.gameOn)
+	if overlayWanted(w.layout, w.gameOn) {
 		if err := w.enterOverlay(); err != nil {
 			return err
 		}
-	case VideoMini:
-		if _, err := w.VideoWindow(); err != nil {
-			return err
-		}
+	} else {
 		w.leaveOverlay()
+	}
+	if w.layout == VideoMini {
 		w.ensureShield()
-	default:
-		w.leaveOverlay()
 	}
 	w.syncVideo()
 	return nil
@@ -393,6 +461,19 @@ func (w *webview) syncVideo() {
 		w.browser.Resize()
 	}
 
+	// The game, directly beneath the page overlay. Placed before the film so
+	// that a film placed beneath the overlay afterwards lands above it.
+	if w.game != 0 {
+		if visible != 0 && w.gameOn && w.overlay != 0 {
+			_, _, _ = w32.User32SetWindowPos.Call(w.game, w.overlay,
+				uintptr(full.x), uintptr(full.y), uintptr(full.w), uintptr(full.h),
+				swpNoActivate|swpShowWindow)
+		} else {
+			_, _, _ = w32.User32SetWindowPos.Call(w.game, 0, 0, 0, 0, 0,
+				swpNoMove|swpNoSize|swpNoZOrder|swpNoActivate|swpHideWindow)
+		}
+	}
+
 	if w.video == 0 {
 		return
 	}
@@ -421,6 +502,8 @@ func (w *webview) syncVideo() {
 			_, _, _ = w32.User32SetWindowPos.Call(w.video, 0, x, y, cw, ch,
 				swpNoZOrder|swpNoActivate|swpShowWindow)
 		}
+	case w.layout == VideoPiP:
+		w.raisePiP(origin)
 	}
 	// The shield is for the docked picture only.
 	if w.shield != 0 && (visible == 0 || w.layout != VideoMini) {
@@ -471,7 +554,7 @@ const refocusInterval = 50
 
 // ours reports whether h is one of the extra windows this file owns.
 func (w *webview) ours(h uintptr) bool {
-	return h != 0 && (h == w.overlay || h == w.video)
+	return h != 0 && (h == w.overlay || h == w.video || h == w.game)
 }
 
 // drawCaption repaints the main window's frame as active or not, without
@@ -533,7 +616,7 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 		}
 		return 0, true
 	}
-	if w.overlay == 0 && w.video == 0 {
+	if w.overlay == 0 && w.video == 0 && w.game == 0 {
 		return 0, false
 	}
 	switch msg {
@@ -556,6 +639,9 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 			}
 			if w.video != 0 {
 				_, _, _ = w32.User32ShowWindow.Call(w.video, swHide)
+			}
+			if w.game != 0 {
+				_, _, _ = w32.User32ShowWindow.Call(w.game, swHide)
 			}
 			if w.shield != 0 {
 				_, _, _ = w32.User32ShowWindow.Call(w.shield, swHide)
@@ -600,4 +686,27 @@ func (w *webview) activateOverlay() {
 	_, _, _ = procSetActiveWindow.Call(w.overlay)
 	w.handingOff = false
 	w.browser.Focus()
+	// Activation brings the overlay to the top of the owned windows, which
+	// would bury a picture-in-picture film beneath the page it floats above.
+	if w.layout == VideoPiP && w.video != 0 {
+		origin := w32.Point{}
+		_, _, _ = procClientToScreen.Call(w.hwnd, uintptr(unsafe.Pointer(&origin)))
+		w.raisePiP(origin)
+	}
+}
+
+/*
+ * raisePiP floats the film above the page overlay at the docked box.
+ *
+ * HWND_TOP among the main window's owned windows. Owned windows stack above
+ * their owner already, so this only decides the order among the overlay, the
+ * game and the film: the film last, on top. The shield is not used here; a
+ * click on the film over a game does nothing rather than opening the full
+ * player out from under the game.
+ */
+func (w *webview) raisePiP(origin w32.Point) {
+	const hwndTop = 0
+	_, _, _ = w32.User32SetWindowPos.Call(w.video, hwndTop,
+		uintptr(origin.X+w.mini.x), uintptr(origin.Y+w.mini.y), uintptr(w.mini.w), uintptr(w.mini.h),
+		swpNoActivate|swpShowWindow)
 }

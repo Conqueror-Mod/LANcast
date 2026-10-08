@@ -32,7 +32,8 @@ declare global {
     lancastMpvCommand?: (name: string, value: number) => Promise<void>;
     lancastMpvStop?: () => Promise<void>;
     lancastMpvLayout?: (
-      layout: "full" | "mini" | "hidden",
+      // "pip" is docked above a game (ADR 0076).
+      layout: "full" | "mini" | "pip" | "hidden",
       x: number,
       y: number,
       width: number,
