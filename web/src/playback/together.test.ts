@@ -7,7 +7,7 @@
  * forever.
  */
 import { describe, it, expect } from "vitest";
-import { expectedPosition, shouldResync } from "./together";
+import { expectedPosition, shouldResync, followerShouldSeek } from "./together";
 
 const at = (positionMS: number, updatedAtSeconds: number, paused = false) => ({
   position_ms: positionMS,
@@ -95,5 +95,30 @@ describe("when a follower is worth correcting", () => {
   // and an absolute comparison is the only thing that catches a seek forwards.
   it("is symmetric", () => {
     expect(shouldResync(10_000, 20_000)).toBe(shouldResync(20_000, 10_000));
+  });
+});
+
+/*
+ * A follower of a room on another server, on a converted stream.
+ *
+ * A seek there restarts the far server's conversion, and for several seconds
+ * the clock reads the new start while nothing plays. Under the ordinary
+ * tolerance every poll in those seconds would seek again, restarting it each
+ * time, and the film would never begin.
+ */
+describe("when a follower in another household's room seeks", () => {
+  it("seeks a direct file at the ordinary tolerance", () => {
+    expect(followerShouldSeek(60_000, 64_000, false, 10_000)).toBe(true);
+    expect(followerShouldSeek(60_000, 61_000, false, 10_000)).toBe(false);
+  });
+
+  it("leaves a converted stream's few seconds of drift alone", () => {
+    expect(followerShouldSeek(60_000, 64_000, true, 60_000)).toBe(false);
+    expect(followerShouldSeek(60_000, 90_000, true, 60_000)).toBe(true);
+  });
+
+  it("does not seek again before the last seek has landed", () => {
+    expect(followerShouldSeek(0, 600_000, true, 3_000)).toBe(false);
+    expect(followerShouldSeek(0, 600_000, false, 1_000)).toBe(false);
   });
 });

@@ -1,12 +1,5 @@
-import { useEffect } from "react";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { useCurrentUser } from "@/api/hooks";
-import {
-  useTogether,
-  useHostReporting,
-  expectedPosition,
-  shouldResync,
-} from "@/playback/together";
+import { useTogetherRoom } from "@/playback/TogetherProvider";
 import "./TogetherPanel.css";
 
 /*
@@ -18,43 +11,14 @@ import "./TogetherPanel.css";
  * poster would mean starting a room at zero for a film somebody is forty
  * minutes into.
  *
- * The asymmetry between host and follower is the whole design and it is visible
- * in this component: the host's player is the clock and this panel never
- * touches it, while a follower's player is corrected towards the room and its
- * transport controls become somebody else's.
+ * A view of the room, not its owner. The room, the host's reports and the
+ * follower's convergence live in TogetherProvider, so closing this panel no
+ * longer ends a session, which matters now that a host can admit a friend
+ * from another server without it being open.
  */
 export function TogetherPanel({ onClose }: { onClose: () => void }) {
   const pb = usePlayback();
-  const user = useCurrentUser();
-  const t = useTogether(user?.id);
-
-  // The host reports where they are; nothing corrects them.
-  useHostReporting(t.session?.id ?? null, t.isHost, () => ({
-    positionMS: pb.displayTime * 1000,
-    paused: !pb.playing,
-  }));
-
-  /*
-   * A follower converges on the room.
-   *
-   * Only when out of step by more than the tolerance: a video element seeking
-   * is a visible stutter, and stuttering every two seconds to correct a quarter
-   * of a second nobody can perceive is worse than the drift.
-   */
-  useEffect(() => {
-    if (!t.session || t.isHost) return;
-    const target = expectedPosition(t.session, t.receivedAt, Date.now());
-    if (shouldResync(pb.displayTime * 1000, target)) {
-      pb.seekTo(target / 1000);
-    }
-    // Play state follows too, or a follower who was paused when they joined
-    // stays paused while everybody else watches.
-    if (t.session.paused && pb.playing) pb.togglePlay();
-    if (!t.session.paused && !pb.playing) pb.togglePlay();
-    // Deliberately keyed on the session only. Including displayTime would run
-    // this on every frame of playback and fight the element for control.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.session, t.isHost]);
+  const t = useTogetherRoom();
 
   const members = t.session?.members ?? [];
 
@@ -106,6 +70,9 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
             {members.map((m) => (
               <li className="together__member" key={m.user_id}>
                 <span className="together__name">{m.name}</span>
+                {/* Where a friend from a paired server is watching from, so a
+                    stranger's name in the list is never a mystery. */}
+                {m.server && <span className="together__server">{m.server}</span>}
                 {m.host && <span className="together__host">host</span>}
               </li>
             ))}

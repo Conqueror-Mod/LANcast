@@ -3,8 +3,7 @@ import {
   peerSourceURL,
   peerSubtitleURL,
   peerSubtitlesURL,
-  peerPlaybackURL,
-} from "./peerSource";
+  peerPlaybackURL, asMember } from "./peerSource";
 
 /*
  * Where a peer's film comes from (ADR 0071 §5).
@@ -66,5 +65,27 @@ describe("a peer's playback URLs", () => {
     expect(peerSubtitleURL("a/b", 42, "en/gb")).toBe(
       "/api/peers/a%2Fb/subtitles/42/en%2Fgb",
     );
+  });
+});
+
+/*
+ * A room member's URLs say so, and nobody else's do (federation Phase 5).
+ *
+ * The far server admits a film that was not shared only to a person in the
+ * room, and this server names the caller only when the URL asks it to. A URL
+ * that forgot would play the trailer of a refusal; a URL that always said it
+ * would name this household's people while they browse.
+ */
+describe("asMember", () => {
+  it("leaves a URL alone outside a room", () => {
+    expect(asMember("/api/peers/F/stream?item=1", false)).toBe("/api/peers/F/stream?item=1");
+  });
+  it("adds to an existing query", () => {
+    expect(asMember("/api/peers/F/stream?item=1", true)).toBe(
+      "/api/peers/F/stream?item=1&together=1",
+    );
+  });
+  it("starts a query where there is none", () => {
+    expect(asMember("/api/peers/F/item/1", true)).toBe("/api/peers/F/item/1?together=1");
   });
 });

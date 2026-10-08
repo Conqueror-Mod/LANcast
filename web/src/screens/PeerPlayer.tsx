@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
 import type { SubtitleTrack } from "@/api/types";
@@ -13,7 +13,13 @@ import {
   peerSubtitleURL,
   peerProgressURL,
   peerWatchingURL,
+  asMember,
 } from "@/playback/peerSource";
+import {
+  usePeerRoom,
+  expectedPosition,
+  followerShouldSeek,
+} from "@/playback/together";
 import { PeerControls } from "@/components/PeerControls";
 import "./PeerPlayer.css";
 
@@ -47,6 +53,17 @@ export function PeerPlayer() {
   const { fingerprint = "", item = "" } = useParams();
   const itemID = Number(item);
   /*
+   * In a room on their server (federation Phase 5), arrived at by being let
+   * in from the People page. Every playback URL then says so, because a film
+   * that was not shared is playable only by being in the room, and their
+   * server checks that by person. The host drives; this player follows.
+   */
+  const [params] = useSearchParams();
+  const roomID = params.get("room");
+  const member = roomID !== null && roomID !== "";
+  const room = usePeerRoom(fingerprint, member ? roomID : null);
+  const host = room.session?.members.find((m) => m.host)?.name;
+  /*
    * Asked for, not carried.
    *
    * The title used to ride in router state from the tile that was pressed,
@@ -56,12 +73,12 @@ export function PeerPlayer() {
    * a converted stream has a scrubber with no scale.
    */
   const info = useQuery({
-    queryKey: ["peer-item", fingerprint, itemID],
+    queryKey: ["peer-item", fingerprint, itemID, member],
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
     queryFn: ({ signal }) =>
       apiGet<{ title?: string; duration_ms?: number; position_ms?: number }>(
-        peerItemURL(fingerprint, itemID),
+        asMember(peerItemURL(fingerprint, itemID), member),
         signal,
       ),
   });
@@ -135,23 +152,23 @@ export function PeerPlayer() {
   const atRef = useRef(0);
 
   const playback = useQuery({
-    queryKey: ["peer-playback", fingerprint, itemID],
+    queryKey: ["peer-playback", fingerprint, itemID, member],
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
     queryFn: ({ signal }) =>
       apiGet<{ decision: { method: string; reason: string } }>(
-        peerPlaybackURL(fingerprint, itemID),
+        asMember(peerPlaybackURL(fingerprint, itemID), member),
         signal,
       ),
   });
 
   const subtitles = useQuery({
-    queryKey: ["peer-subtitles", fingerprint, itemID],
+    queryKey: ["peer-subtitles", fingerprint, itemID, member],
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
     queryFn: ({ signal }) =>
       apiGet<{ subtitles: SubtitleTrack[] }>(
-        peerSubtitlesURL(fingerprint, itemID),
+        asMember(peerSubtitlesURL(fingerprint, itemID), member),
         signal,
       ),
   });
@@ -183,7 +200,7 @@ export function PeerPlayer() {
       // Errors are swallowed on purpose. A failed beat means presence expires,
       // which is the truthful outcome, and a viewer must never be told their
       // film is in trouble because a *disclosure* did not go through.
-      void apiSend(peerWatchingURL(fingerprint, itemID), "PUT").catch(() => {});
+      void apiSend(asMember(peerWatchingURL(fingerprint, itemID), member), "PUT").catch(() => {});
     };
     const start = () => {
       if (timer !== undefined) return;
@@ -209,7 +226,7 @@ export function PeerPlayer() {
       el.removeEventListener("ended", stop);
       el.removeEventListener("emptied", stop);
     };
-  }, [fingerprint, itemID, video]);
+  }, [fingerprint, itemID, member, video]);
 
   /*
    * Picking up where this household left off (ADR 0071 §4).
@@ -225,10 +242,12 @@ export function PeerPlayer() {
    */
   useEffect(() => {
     const at = (info.data?.position_ms ?? 0) / 1000;
+    // In a room the host's position is where the film is, not ours.
+    if (member) return;
     if (!video || resumed.current || at <= 0) return;
     resumed.current = true;
     seekRef.current?.(at);
-  }, [video, info.data?.position_ms]);
+  }, [video, info.data?.position_ms, member]);
 
   /*
    * Writing it down, which is the one record a peer's film produces.
@@ -308,6 +327,43 @@ export function PeerPlayer() {
     return () => el.removeEventListener("error", onError);
   }, [hlsUsable, video]);
 
+  /*
+   * Following the host, on every answer from the room.
+   *
+   * Where the film should be is the room's position plus how long ago the
+   * host's server said so (age_ms) plus how long ago this device heard it:
+   * no clock on this machine is compared with any clock on theirs. Whether
+   * that is far enough out to seek is followerShouldSeek's, which waits out a
+   * converted stream's restart instead of seeking again into it.
+   */
+  const lastSeek = useRef(0);
+  const convertingRef = useRef(false);
+  useEffect(() => {
+    const el = video;
+    const sess = room.session;
+    if (!member || !el || !sess) return;
+    const target = expectedPosition(sess, room.receivedAt, Date.now());
+    if (
+      followerShouldSeek(
+        atRef.current * 1000,
+        target,
+        convertingRef.current,
+        Date.now() - lastSeek.current,
+      )
+    ) {
+      lastSeek.current = Date.now();
+      seekRef.current?.(target / 1000);
+    }
+    if (sess.paused && !el.paused) el.pause();
+    if (!sess.paused && el.paused) resume(el);
+  }, [member, video, room.session, room.receivedAt]);
+
+  // The room is over: stop, rather than go on playing a film that was only
+  // ever ours to watch with them.
+  useEffect(() => {
+    if (member && room.ended && video && !video.paused) video.pause();
+  }, [member, room.ended, video]);
+
   if (!fingerprint || itemID <= 0) {
     return <PeerPlayerNote>That is not something on another server.</PeerPlayerNote>;
   }
@@ -334,7 +390,7 @@ export function PeerPlayer() {
 
   const path = filePath(playback.data.decision.method, hlsUsable);
   const converting = path !== "direct";
-  const src = peerSourceURL(fingerprint, itemID, path, offset);
+  const src = asMember(peerSourceURL(fingerprint, itemID, path, offset), member);
   const tracks = (subtitles.data?.subtitles ?? []).filter((t) => t.available);
 
   // What the film is at, and how long it is. See the offset and probed
@@ -363,7 +419,7 @@ export function PeerPlayer() {
     }
     setOffset(target);
     setElapsed(0);
-    el.src = peerSourceURL(fingerprint, itemID, path, target);
+    el.src = asMember(peerSourceURL(fingerprint, itemID, path, target), member);
     el.load();
     resume(el);
   };
@@ -371,6 +427,7 @@ export function PeerPlayer() {
   // Kept current for the effects above, which run before either exists.
   seekRef.current = seek;
   atRef.current = at;
+  convertingRef.current = converting;
 
   return (
     <div className="peer-player">
@@ -414,7 +471,7 @@ export function PeerPlayer() {
             label={t.label}
             srcLang={t.language}
             default={t.default}
-            src={peerSubtitleURL(fingerprint, itemID, t.key)}
+            src={asMember(peerSubtitleURL(fingerprint, itemID, t.key), member)}
           />
         ))}
       </video>
@@ -425,12 +482,15 @@ export function PeerPlayer() {
         total={total}
         converting={converting}
         onPlayPause={() => {
+          // In a room the host drives (ADR 0046 §9): a follower pausing would
+          // be corrected on the next poll, which reads as a broken button.
+          if (member) return;
           const el = video;
           if (!el) return;
           if (el.paused) resume(el);
           else el.pause();
         }}
-        onSeek={seek}
+        onSeek={member ? () => {} : seek}
       />
 
       {/*
@@ -445,10 +505,20 @@ export function PeerPlayer() {
         host does not, and saying so is worth a line: it is the difference
         between a position being private and a person assuming it is.
       */}
-      <p className="peer-player__note">
-        Playing from their machine. Where you are in it is kept here, not there
-        — they cannot see it, and unpairing forgets it.
-      </p>
+      {member ? (
+        <p className="peer-player__note" role="status">
+          {room.ended
+            ? "This session has ended."
+            : host
+              ? `Watching with ${host}. They control playback.`
+              : "Joining the session…"}
+        </p>
+      ) : (
+        <p className="peer-player__note">
+          Playing from their machine. Where you are in it is kept here, not there
+          — they cannot see it, and unpairing forgets it.
+        </p>
+      )}
     </div>
   );
 }

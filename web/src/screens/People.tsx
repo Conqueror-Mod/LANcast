@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PeerShares } from "@/components/PeerShares";
+import { AskToJoin } from "@/components/AskToJoin";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
@@ -319,6 +320,16 @@ function PeerPersonRow({
           {statusOf(person, reachable)}
         </span>
       </div>
+
+      {/*
+       * Only beside somebody who lets you see them and is watching something
+       * now: that is the grant that carries the right to ask (ADR 0045 §7),
+       * and a title is the thing being asked about. Whether they will say yes
+       * is theirs to answer, in the moment.
+       */}
+      {reachable && person.shares && person.online && person.watching && (
+        <AskToJoin fingerprint={fingerprint} person={person.id} name={person.name} />
+      )}
 
       <label className="people__grant">
         {/*
