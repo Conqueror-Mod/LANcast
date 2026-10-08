@@ -92,6 +92,36 @@ box art. Nothing plays yet, and the detail page says so.
 - Renaming a file to nonsense changes nothing, because identity comes from the
   hash.
 
+### Status (2026-10-07)
+
+**Built, and passing against synthetic fixtures. The real-file check is still
+owed.** Every item of work above has landed on `feat/retro-library`. The
+differences from this plan are recorded in ADR 0073 under *Amendments from
+building stage 1*. The **verify** marks in this stage are resolved: the DAT
+header rules (NES is hashed with its header, the opposite of what was written
+here), the thumbnail URL scheme (checked against a live request) and the DAT
+licence (CC BY-SA 4.0).
+
+What tests could check: the three N64 byte orders hash alike, renaming a file
+does not change what it is, a rescan is a no-op (the test fails without the
+`reinterpreted` case), locks hold, and a retro library never reaches a paired
+server. The real pinned DATs were loaded once: 43,145 games in 179 ms, with
+lookups for a known N64 SHA-1, a headered NES CRC and a PS1 serial.
+
+What only real files can check, in `Test Libraries\Test Retro Library` and
+never a live ROM folder:
+
+1. Install the ROM database from Settings → Retro games, then scan.
+2. Every dump is named, N64 in all three byte orders included, and a file
+   renamed to nonsense is named the same.
+3. A PS1 `.cue` is one row with its serial matched, and its `.bin` tracks are
+   not rows.
+4. With box art on, posters arrive. Read `lancastd.log` for `rom
+   identification failed`.
+
+Not built in stage 1: `.m3u` multi-disc grouping, so a three-disc game is
+three rows, and CHD identification.
+
 ---
 
 ## Stage 2 — desktop player, framebuffer systems

@@ -802,9 +802,12 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
-- **Retro games (emulated ROMs)** — **back burner**: planned and parked, with no
-  work scheduled. Stages approved 2026-09-30. [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
-  (proposed) and [the build plan](retro-games-plan.md). The request: play old
+- **Retro games (emulated ROMs)** — **stage 1 built, real-file check owed**
+  (2026-10-07). [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
+  is accepted with its open questions answered (desktop only, XInput, no
+  RetroArch stop-gap, PS1 identified now and playable after N64), and
+  [the build plan](retro-games-plan.md) records what stage 1 built and the
+  check that still needs real dumps. The request: play old
   console games, N64 first, inside LANcast without keeping a separate emulator
   front end up to date. **A ROM is not an installed game.** ADR 0066 kept PC
   games off the server because they live on one PC and cannot be served. A ROM

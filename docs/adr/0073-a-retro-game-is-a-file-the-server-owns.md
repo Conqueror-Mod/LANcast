@@ -256,6 +256,66 @@ Two decisions from the build plan were confirmed at the same time:
 - **One retro library, filtered by console.** One library holds every system.
   The grid gets a console filter, and libraries are not split per console.
 
+## Amendments from building stage 1 (2026-10-07)
+
+Building stage 1 contradicted the plan in a few places. Each change is listed
+here, so this ADR describes what was built.
+
+**Identification is its own worker, not a `meta` provider.** A provider must
+answer `Search(title)`, and a hash lookup has no title to search. If ROMs had
+stayed in the enrichment queue, every ROM no provider could answer would have
+stayed pending for ever and been read again on every pass. That is the trap
+that once stranded 4,238 photos. So `rom` is not an enrichable kind.
+`internal/retro/identify` runs behind every scan and at startup, like the
+album-art and photo workers, and stamps every outcome: matched, unmatched and
+unreadable. Locks are respected field by field, and a `locked` match is never
+re-scored.
+
+**One more column and one more table than planned.** Revision 64 adds
+`media_item.rom_checked_at`, the identify worker's stamp, and `rom_hash`, a
+side table like `photo_hash` that holds what reading the file produced. The
+hashes are kept apart from the stamp on purpose. Installing the DATs, or
+turning box art on, clears the stamp of every unlocked ROM, and because the
+hashes are already there, re-identifying is a lookup per game rather than a
+re-read of every file. A changed file drops its hash and is queued again.
+
+**libretro's NES DAT hashes the iNES header in.** The plan said to strip it,
+which would have made every NES ROM miss. The DAT lists Super Mario Bros. at
+40,976 bytes, which is 16 + 40,960. Each dump is hashed in every layout a DAT
+might list, the likeliest first: N64 converted to big-endian from whichever
+order its header word says, NES whole and then headerless, SNES without a
+512-byte copier header and then with it, and Genesis `.smd` de-interleaved. A
+SHA-1 is unique across consoles, so a `.bin` or `.zip` that no folder placed is
+placed by its SHA-1 alone. A CRC32 is not unique across consoles, and is never
+used that way.
+
+**A PlayStation disc is identified by its serial, and one row is one disc.**
+The serial comes from `SYSTEM.CNF` on the first track a `.cue` names, or from
+`PARAM.SFO` in a `.pbp`. That avoids hashing 700 MB. A cue cannot name a track
+outside its own folder. A `.bin` under a PlayStation folder is a track and not
+a row. A `.chd` is listed by its filename, because its codecs are not in the
+standard library. **`.m3u` multi-disc grouping is not built**: a three-disc
+game is three rows until it is. This narrows answer 2 above.
+
+**Region is read, not stored.** `media.ROMRegion` reads it from the DAT name
+that a match records as `external_id`, or from the filename before there is a
+match, so no client parses a ROM name.
+
+**A content-rating ceiling hides ROMs.** Games carry ESRB and PEGI ratings,
+which LANcast does not read yet, so `rom` is not one of the kinds exempt from
+ceilings. An account with a ceiling sees no games until ratings are filled in.
+That is the existing rule for things someone could rate and did not. Exempting
+ROMs would let a child account see every game. libretro publishes `esrb` and
+`bbfc` metadata DATs, which would fill `content_rating` without a network
+call.
+
+**The pinned set.** 25 files, 15.2 MB, CC BY-SA 4.0, from libretro-database
+at commit `fbeefcb4`: the No-Intro DATs for eight consoles and Redump's for the
+PlayStation, each with libretro's release-year and genre DATs (PS1 has
+neither, and Redump carries some years inline). Box art and a screenshot come
+from libretro-thumbnails, addressed by the matched DAT name, and only when
+`retro_artwork` is on.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).
