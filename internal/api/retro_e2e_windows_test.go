@@ -105,11 +105,26 @@ func TestRetroEndToEnd(t *testing.T) {
 	if len(first) != 16 || first[2] != 77 {
 		t.Fatalf("save RAM on the server after one run = % x (byte 2 is the game's first byte)", first)
 	}
-	// The second run starts from the first run's save: the counter in byte 0
-	// carries on rather than starting again.
+	/*
+	 * The second run starts from the save on the server. Proved by a byte
+	 * only a restore can put there: the test core sets byte 1 when A is
+	 * pressed and never clears it, nothing presses A here, so a 1 in byte 1
+	 * after the second run came from the save it was given. (Byte 0 would
+	 * not do: it is a counter held in a static in the DLL, which survives
+	 * between runs in one process whether or not anything was restored.)
+	 */
+	game, err := remote.New(h.srv.URL, "", id, ticket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marked := append([]byte(nil), first...)
+	marked[1] = 1
+	if err := game.StoreSRAM(marked); err != nil {
+		t.Fatal(err)
+	}
 	second := play(200 * time.Millisecond)
-	if second[0] == 0 || second[0] == first[0] {
-		t.Errorf("second run's save % x did not move on from the first % x", second, first)
+	if len(second) != 16 || second[1] != 1 {
+		t.Errorf("second run's save = % x; byte 1 should have come back from the server", second)
 	}
 	auto, err := h.st.GetROMSave(context.Background(), userOfTicket(t, h), id, "auto")
 	if err != nil || auto.Core != "lancast-test" || auto.CoreVersion != "1.0" || auto.Previous == nil {
