@@ -138,11 +138,28 @@ func platformFromDirs(root, path string) string {
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	for i := len(parts) - 2; i >= 0; i-- {
-		if p, ok := folderPlatforms[normalizeDirName(parts[i])]; ok {
+		if p, ok := folderPlatforms[consoleFolder(parts[i])]; ok {
 			return p
 		}
 	}
 	return ""
+}
+
+/*
+ * consoleFolder normalises a folder name for the console lookup, dropping a
+ * trailing "roms" or "games": "gba roms", "N64 Games" and "SNES_ROMs" name
+ * their console as plainly as "gba" does. Found on the first real library
+ * this was pointed at, where every folder was "<console> roms" and none was
+ * recognised.
+ */
+func consoleFolder(name string) string {
+	n := normalizeDirName(name)
+	for _, suffix := range []string{"roms", "rom", "games"} {
+		if t := strings.TrimSuffix(n, suffix); t != n && t != "" {
+			return t
+		}
+	}
+	return n
 }
 
 // IsDisc reports whether a file is a whole disc image: what an .m3u lists
