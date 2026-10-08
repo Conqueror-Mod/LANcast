@@ -423,3 +423,54 @@ func TestUnfetchableSaveStartsFresh(t *testing.T) {
 	s.Stop()
 	<-done
 }
+
+// The page is told which options the core declared and their values, at
+// start and again when one changes.
+func TestOptionsAreAnnounced(t *testing.T) {
+	var mu sync.Mutex
+	var last []Option
+	h := start(t, func(c *Config) {
+		inner := c.OnEvent
+		c.Options = map[string]string{"colour": "green"}
+		c.OnEvent = func(e Event) {
+			if e.Kind == "options" {
+				mu.Lock()
+				last = e.Options
+				mu.Unlock()
+			}
+			inner(e)
+		}
+	})
+	// Waited for, not slept for: the options are announced just after
+	// "started", and a fixed sleep is a race the race detector's slowdown
+	// can lose.
+	var got []Option
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		mu.Lock()
+		got = last
+		mu.Unlock()
+		if got != nil {
+			break
+		}
+	}
+	if len(got) != 1 || got[0].Key != "colour" || got[0].Value != "green" || len(got[0].Values) != 3 {
+		t.Fatalf("options = %+v", got)
+	}
+	h.s.SetOption("colour", "blue")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		v := last[0].Value
+		mu.Unlock()
+		if v == "blue" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if last[0].Value != "blue" {
+		t.Errorf("after choosing blue the page was told %q", last[0].Value)
+	}
+	h.stop(t)
+}

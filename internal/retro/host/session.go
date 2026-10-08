@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"log/slog"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -66,10 +67,21 @@ type SaveStore interface {
 
 // Event is something the person should hear about.
 type Event struct {
-	Kind string // started, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped
+	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped
 	Slot string
 	Text string
 	Err  error
+	// Options, on an "options" event, are the core options the core
+	// declared, each with its current value.
+	Options []Option
+}
+
+// Option is one core option as a menu shows it.
+type Option struct {
+	Key         string   `json:"key"`
+	Description string   `json:"description"`
+	Values      []string `json:"values"`
+	Value       string   `json:"value"`
 }
 
 // Config is one game session.
@@ -272,6 +284,7 @@ func (s *Session) Run(ctx context.Context) (err error) {
 		}
 	}
 	s.cfg.OnEvent(Event{Kind: "started"})
+	s.announceOptions()
 
 	defer func() {
 		s.finish()
@@ -372,6 +385,7 @@ func (s *Session) handle(c command) {
 		if v, ok := s.vars[c.key]; ok {
 			s.cfg.Options = cloneWith(s.cfg.Options, c.key, validOption(v, c.val))
 			s.varsDirty = true
+			s.announceOptions()
 		}
 	case "save-state":
 		data, ok := s.serialize()
@@ -389,6 +403,30 @@ func (s *Session) handle(c command) {
 			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "The game refused that save."})
 		}
 	}
+}
+
+/*
+ * announceOptions tells the page which options the core declared and what
+ * each is set to. The page decides which few to show (ADR 0073 asks for a
+ * short curated list, not every switch a core has); the session reports
+ * what is true.
+ */
+func (s *Session) announceOptions() {
+	if len(s.vars) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(s.vars))
+	for k := range s.vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]Option, 0, len(keys))
+	for _, k := range keys {
+		v := s.vars[k]
+		val, _ := s.Variable(k)
+		out = append(out, Option{Key: k, Description: v.Description, Values: v.Values, Value: val})
+	}
+	s.cfg.OnEvent(Event{Kind: "options", Options: out})
 }
 
 func (s *Session) serialize() ([]byte, bool) {
