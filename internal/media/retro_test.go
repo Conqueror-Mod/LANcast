@@ -188,3 +188,22 @@ func TestM3UIsAnAmbiguousROM(t *testing.T) {
 		}
 	}
 }
+
+// "<console> roms" is how a lot of libraries are laid out, and names its
+// console as plainly as the console's name alone does.
+func TestPlatformFromRomsFolders(t *testing.T) {
+	cases := map[string]string{
+		"gba roms/x.zip":    PlatformGBA,
+		"N64 Games/x.zip":   PlatformN64,
+		"SNES_ROMs/x.zip":   PlatformSNES,
+		"genesis-rom/x.bin": PlatformGenesis,
+		"ps1 roms/x.zip":    PlatformPS1,
+		"roms/x.zip":        "",
+		"My Games/x.zip":    "",
+	}
+	for rel, want := range cases {
+		if got := Platform(retroRoot, rp(rel)); got != want {
+			t.Errorf("%s: got %q, want %q", rel, got, want)
+		}
+	}
+}
