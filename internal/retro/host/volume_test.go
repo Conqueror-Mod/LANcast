@@ -71,6 +71,29 @@ func TestScalingNeverWritesIntoTheCoresBuffer(t *testing.T) {
 	}
 }
 
+/*
+ * A paused game must not be logged as one enormous frame. The menu pauses
+ * from inside a frame, the paused drain waits for the resume, and the
+ * counter used to see only the running state either side of the wait.
+ */
+func TestAPauseIsNotASlowFrame(t *testing.T) {
+	h := start(t, nil)
+	defer h.stop(t)
+	h.s.Pause()
+	h.waitFor(t, "paused")
+	time.Sleep(300 * time.Millisecond)
+	h.s.Resume()
+	h.waitFor(t, "resumed")
+	time.Sleep(50 * time.Millisecond)
+	h.s.Pause()
+	h.waitFor(t, "paused")
+	// Read on the core thread's side of a pause: stats are core-thread only,
+	// and a paused session is parked in its drain, not touching them.
+	if gap := h.s.stats.slowest; gap >= 250*time.Millisecond {
+		t.Fatalf("the pause was counted as a %v frame", gap)
+	}
+}
+
 func TestVolumeIsClamped(t *testing.T) {
 	s := New(Config{})
 	for _, v := range []float64{-1, 2} {

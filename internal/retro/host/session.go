@@ -377,8 +377,6 @@ func (s *Session) run(ctx context.Context) (err error) {
 			break
 		}
 		if s.paused {
-			// A pause is not a slow frame; the count starts again after it.
-			s.stats = frameStats{}
 			continue
 		}
 		runStart := time.Now()
@@ -467,6 +465,14 @@ func (s *Session) handle(c command) {
 	case "resume":
 		if s.paused {
 			s.paused = false
+			/*
+			 * A pause is not a slow frame; the frame log starts again here.
+			 * Here and not in the run loop, because a drain that handles a
+			 * pause goes on to wait for the resume itself, so the loop never
+			 * sees the game paused at all: the menu's fourteen seconds were
+			 * logged as one frame, at 8.9 fps.
+			 */
+			s.stats = frameStats{}
 			s.cfg.OnEvent(Event{Kind: "resumed"})
 		}
 	case "stop":
