@@ -338,3 +338,44 @@ func TestWithQuery(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * Cancel crosses: the guest takes the ask back through its own server, the
+ * host's prompt list empties, and asking again is pending at once rather
+ * than not now — a withdraw is not a decline. Run over the real peer TLS, so
+ * the DELETE is proven to pass the federation gate and the relay.
+ */
+func TestACancelledAskLeavesTheHostsPrompt(t *testing.T) {
+	x := newTwoServers(t)
+	a := x.ask(t)
+
+	pending := func() int {
+		t.Helper()
+		resp := x.host.authed(t, "GET", "/api/together/requests", nil)
+		defer resp.Body.Close()
+		var list struct {
+			Requests []together.Request `json:"requests"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&list)
+		return len(list.Requests)
+	}
+	if n := pending(); n != 1 {
+		t.Fatalf("the host has %d requests before the cancel, want 1 (the positive control)", n)
+	}
+
+	code, raw := x.guestCall(t, "DELETE", "/together/requests/"+a.ID, nil)
+	if code != http.StatusOK {
+		t.Fatalf("cancel: %d %s", code, raw)
+	}
+	var answer relayAnswer
+	_ = json.Unmarshal(raw, &answer)
+	if answer.State != "withdrawn" {
+		t.Errorf("cancel answered %+v", answer)
+	}
+	if n := pending(); n != 0 {
+		t.Errorf("the host still has %d requests after the cancel", n)
+	}
+	if again := x.ask(t); again.State != "pending" {
+		t.Errorf("asking again after a cancel is %q, want pending", again.State)
+	}
+}

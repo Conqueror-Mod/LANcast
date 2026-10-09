@@ -4044,7 +4044,11 @@ export interface paths {
         get: operations["federationTogetherRequest"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Take back a request to join
+         * @description **Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, on behalf of the person who asked. Only that person's own open request is removed; anything else is left alone. Always `200` with `withdrawn`, so it cannot be used to learn whether a request id exists or whose it is. Unlike a decline, it starts no cooldown.
+         */
+        delete: operations["federationWithdrawTogether"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4532,7 +4536,11 @@ export interface paths {
         get: operations["peerTogetherRequest"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Take back a request to join before it is answered
+         * @description Relayed to the paired server over the pinned peer channel, as the caller's own account. The request leaves the host's prompt on their next poll, and no cooldown starts: the caller may ask again at once. Always answers `withdrawn`, whether or not the request was still open, so it reveals nothing about the request.
+         */
+        delete: operations["peerWithdrawTogether"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7133,10 +7141,10 @@ export interface components {
             /** @description Empty when the answer was not now from the start. */
             id?: string;
             /**
-             * @description All the asker is told. A decline, a timeout and a cooldown are the same `not_now`.
+             * @description All the asker is told. A decline, a timeout and a cooldown are the same `not_now`. `withdrawn` answers only the asker's own DELETE.
              * @enum {string}
              */
-            state: "pending" | "accepted" | "not_now";
+            state: "pending" | "accepted" | "not_now" | "withdrawn";
             /** @description Set once accepted. */
             room_id?: string;
         };
@@ -13750,6 +13758,42 @@ export interface operations {
             };
         };
     };
+    federationWithdrawTogether: {
+        parameters: {
+            query: {
+                /** @description The asking server's person id. That server's word, on the same basis a pairing rests on. */
+                person: string;
+            };
+            header?: never;
+            path: {
+                /** @description The request's id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `withdrawn`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description No peer certificate, or one that is not a paired server. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     federationPollTogether: {
         parameters: {
             query: {
@@ -14424,6 +14468,41 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description `pending`, `accepted` with the room, or `not_now`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TogetherAskAnswer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description That server is not answering. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    peerWithdrawTogether: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The paired server, by its identity fingerprint. */
+                fingerprint: string;
+                /** @description The request's id on that server. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `withdrawn`. */
             200: {
                 headers: {
                     [name: string]: unknown;

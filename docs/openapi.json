@@ -8945,6 +8945,60 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "federationWithdrawTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Take back a request to join",
+        "description": "**Peer-to-peer, and not a session route.** Called by a paired server over mutual TLS, on behalf of the person who asked. Only that person's own open request is removed; anything else is left alone. Always `200` with `withdrawn`, so it cannot be used to learn whether a request id exists or whose it is. Unlike a decline, it starts no cooldown.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The request's id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "person",
+            "in": "query",
+            "required": true,
+            "description": "The asking server's person id. That server's word, on the same basis a pairing rests on.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`withdrawn`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "No peer certificate, or one that is not a paired server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/federation/together/{room}": {
@@ -10102,6 +10156,39 @@
         "responses": {
           "200": {
             "description": "`pending`, `accepted` with the room, or `not_now`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TogetherAskAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "description": "That server is not answering.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "peerWithdrawTogether",
+        "tags": [
+          "peers"
+        ],
+        "summary": "Take back a request to join before it is answered",
+        "description": "Relayed to the paired server over the pinned peer channel, as the caller's own account. The request leaves the host's prompt on their next poll, and no cooldown starts: the caller may ask again at once. Always answers `withdrawn`, whether or not the request was still open, so it reveals nothing about the request.",
+        "responses": {
+          "200": {
+            "description": "`withdrawn`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -16727,9 +16814,10 @@
             "enum": [
               "pending",
               "accepted",
-              "not_now"
+              "not_now",
+              "withdrawn"
             ],
-            "description": "All the asker is told. A decline, a timeout and a cooldown are the same `not_now`."
+            "description": "All the asker is told. A decline, a timeout and a cooldown are the same `not_now`. `withdrawn` answers only the asker's own DELETE."
           },
           "room_id": {
             "type": "string",

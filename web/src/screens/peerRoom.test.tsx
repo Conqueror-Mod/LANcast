@@ -277,6 +277,33 @@ describe("asking to join from People", () => {
     expect(landed).toBe(`/peers/${FP}/item/42?room=${ROOM}`);
   });
 
+  it("can be cancelled while it waits, which tells their server and offers the button again", async () => {
+    mockServer({
+      peers: peers("Blade Runner"),
+      route: (method, path) => {
+        if (method === "POST" && path === `/api/peers/${FP}/together/requests`)
+          return { status: 200, body: { id: "q1", state: "pending" } };
+        if (path === `/api/peers/${FP}/together/requests/q1`)
+          return { status: 200, body: { id: "q1", state: method === "DELETE" ? "withdrawn" : "pending" } };
+        return undefined;
+      },
+    });
+    await render("/people");
+    await act(async () => {
+      button()!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+    const cancel = [...host.querySelectorAll("button")].find((b) => b.textContent === "Cancel");
+    expect(cancel).toBeTruthy();
+    await act(async () => {
+      cancel!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+    expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith(`/together/requests/q1`))).toBe(true);
+    expect(host.textContent).not.toContain("Asking Chris…");
+    expect(button()).toBeTruthy();
+  });
+
   it("says not now, and nothing more", async () => {
     mockServer({
       peers: peers("Blade Runner"),

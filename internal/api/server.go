@@ -512,6 +512,7 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("POST /api/peers/{fingerprint}/together/requests", s.peerAskTogether)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/together/requests/{id}", s.peerTogetherRequest)
+	mux.HandleFunc("DELETE /api/peers/{fingerprint}/together/requests/{id}", s.peerWithdrawTogether)
 	mux.HandleFunc("POST /api/peers/{fingerprint}/together/{room}/join", s.peerJoinTogether)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/together/{room}", s.peerPollTogether)
 	mux.HandleFunc("DELETE /api/peers/{fingerprint}/together/{room}/members/me", s.peerLeaveTogether)
@@ -603,6 +604,7 @@ func (s *Server) Handler() http.Handler {
 	 */
 	mux.HandleFunc("POST /api/federation/together/requests", s.federationAskTogether)
 	mux.HandleFunc("GET /api/federation/together/requests/{id}", s.federationTogetherRequest)
+	mux.HandleFunc("DELETE /api/federation/together/requests/{id}", s.federationWithdrawTogether)
 	mux.HandleFunc("POST /api/federation/together/{room}/join", s.federationJoinTogether)
 	mux.HandleFunc("GET /api/federation/together/{room}", s.federationPollTogether)
 	mux.HandleFunc("DELETE /api/federation/together/{room}/members/me", s.federationLeaveTogether)
