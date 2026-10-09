@@ -5,6 +5,7 @@ import { useGameSaves, useItem } from "@/api/hooks";
 import { useBackHandler, useFocusable } from "@/focus/FocusController";
 import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
 import { usePlayback } from "@/playback/PlaybackProvider";
+import { CORNER_LABEL, SIZE_LABEL, nextCorner, nextSize, setDock, useDock } from "@/lib/dock";
 import {
   STATE_SLOTS,
   curatedOptions,
@@ -48,6 +49,7 @@ export function RetroPlay() {
   const { data: item } = useItem(itemID);
   const { data: saves } = useGameSaves(itemID);
   const pb = usePlayback();
+  const dock = useDock();
 
   const [loading, setLoading] = useState<{ done: number; total: number } | null>({ done: 0, total: 0 });
   const [running, setRunning] = useState(false);
@@ -245,6 +247,16 @@ export function RetroPlay() {
                 onSelect={pb.togglePlay}
               />
               <MenuButton label={pb.isAudio ? "Stop the music" : "Stop the film"} onSelect={pb.stop} />
+              {/* Where the card sits and how big, for a pad: the strip's grip
+                  and size button are the same choices for a mouse. */}
+              <MenuButton
+                label={`Corner: ${CORNER_LABEL[dock.corner]}`}
+                onSelect={() => setDock({ corner: nextCorner(dock.corner) })}
+              />
+              <MenuButton
+                label={`Size: ${SIZE_LABEL[dock.size]}`}
+                onSelect={() => setDock({ size: nextSize(dock.size) })}
+              />
             </div>
           )}
           <MenuButton

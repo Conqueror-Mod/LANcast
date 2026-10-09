@@ -268,6 +268,15 @@ describe("a film in the corner (ADR 0076)", () => {
     expect(labels.some((l) => l === `Pause ${FILM.title}` || l === `Play ${FILM.title}`)).toBe(true);
     expect(labels).toContain("Stop the film");
 
+    // Where the card sits and how big, from the pad (ADR 0076 stage 2).
+    await act(async () => button("Corner: Bottom right").click());
+    expect(button("Corner: Bottom left")).toBeTruthy();
+    await act(async () => button("Size: Medium").click());
+    expect(button("Size: Large")).toBeTruthy();
+    const { resetDock } = await import("@/lib/dock");
+    localStorage.clear();
+    resetDock();
+
     // Stop goes to the player, and the corner group goes with the film.
     await act(async () => button("Stop the film").click());
     await settle();

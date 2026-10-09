@@ -1,10 +1,91 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useFocusable } from "@/focus/FocusController";
 import { PrevGlyph, NextGlyph, VolumeGlyph } from "@/components/PlayerGlyphs";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
+import {
+  CORNER_LABEL,
+  SIZE_LABEL,
+  getDock,
+  nearestCorner,
+  nextCorner,
+  nextSize,
+  setDock,
+  useDock,
+} from "@/lib/dock";
 import "./MiniPlayer.css";
+
+// Movement below this is a click, not a drag: a hand on a mouse is never
+// perfectly still, and a press that wobbled two pixels should move the card
+// round a corner, not leave it where it was.
+const DRAG_THRESHOLD = 4;
+
+/*
+ * The handle the card is dragged by (lib/dock.ts, ADR 0076 stage 2).
+ *
+ * On the strip, not on the picture: a film's picture in the desktop app is a
+ * window of the client's own, laid over the page, and the page never hears a
+ * pointer on it. Dragged, the card follows the pointer and settles into the
+ * nearest corner when let go. Clicked, or pressed from the keyboard or the
+ * pad, it moves round to the next corner — the same choice without a drag.
+ */
+function DockGrip() {
+  const dock = useDock();
+  const cycle = () => setDock({ corner: nextCorner(getDock().corner) });
+  const f = useFocusable(cycle);
+  // A drag ends in a click as well; this says the click was the drag's.
+  const justDragged = useRef(false);
+  return (
+    <button
+      {...f}
+      className="mini__icon mini__grip"
+      aria-label={`Move the player: ${CORNER_LABEL[dock.corner]}`}
+      title="Drag to move the player to another corner, or press to go round"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        const start = { x: e.clientX, y: e.clientY };
+        let dragged = false;
+        const el = e.currentTarget;
+        // Keep the drag when the pointer leaves the grip, as it will at once.
+        el.setPointerCapture?.(e.pointerId);
+        const move = (m: PointerEvent) => {
+          const dx = m.clientX - start.x;
+          const dy = m.clientY - start.y;
+          if (!dragged && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+          dragged = true;
+          setDock({ dx, dy });
+        };
+        const up = (u: PointerEvent) => {
+          el.removeEventListener("pointermove", move);
+          el.removeEventListener("pointerup", up);
+          el.removeEventListener("pointercancel", up);
+          if (dragged) {
+            justDragged.current = true;
+            setDock({
+              corner: nearestCorner(u.clientX, u.clientY, window.innerWidth, window.innerHeight),
+              dx: 0,
+              dy: 0,
+            });
+          }
+        };
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerup", up);
+        el.addEventListener("pointercancel", up);
+      }}
+      onClick={() => {
+        // Only a press that did not move goes round the corners.
+        if (justDragged.current) {
+          justDragged.current = false;
+          return;
+        }
+        cycle();
+      }}
+    >
+      ⠿
+    </button>
+  );
+}
 
 // The docked player, bottom-right, when something is playing and you are not on
 // the player screen.
@@ -31,6 +112,9 @@ export function MiniPlayer() {
   const [addOpen, setAddOpen] = useState(false);
   const addFocus = useFocusable(() => setAddOpen(true));
   const volFocus = useFocusable(() => setVolOpen((o) => !o));
+  const dock = useDock();
+  const cycleSize = () => setDock({ size: nextSize(getDock().size) });
+  const sizeFocus = useFocusable(cycleSize);
 
   if (pb.surface !== "mini") return null;
 
@@ -57,6 +141,7 @@ export function MiniPlayer() {
       </button>
 
       <div className="mini__controls">
+        <DockGrip />
         {/* Track navigation is the point of a mini-player: moving through a
             record without leaving the page you are on. Hidden rather than
             disabled when there is no queue — a permanently dead button in a
@@ -142,6 +227,15 @@ export function MiniPlayer() {
             +
           </button>
         )}
+        <button
+          {...sizeFocus}
+          className="mini__icon mini__size"
+          onClick={cycleSize}
+          aria-label={`Picture size: ${SIZE_LABEL[dock.size]}`}
+          title={`Picture size: ${SIZE_LABEL[dock.size]} — press for ${SIZE_LABEL[nextSize(dock.size)]}`}
+        >
+          {dock.size.toUpperCase()}
+        </button>
         <button
           {...stopFocus}
           className="mini__icon"

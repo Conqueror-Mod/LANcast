@@ -1,0 +1,74 @@
+/*
+ * The docked player's corner and size (lib/dock.ts, ADR 0076 stage 2).
+ *
+ * The picture (playback.css) and the control strip (MiniPlayer.css) are two
+ * fixed elements, so each corner is written for both here, in one place, and
+ * they can never disagree about where the card is. The size and the drag
+ * offset arrive as custom properties on <html>, set by PlaybackProvider from
+ * the dock store; the corner as html[data-dock-corner]. Bottom right is the
+ * rules in playback.css and MiniPlayer.css as they always were.
+ */
+
+:root {
+  /* Clear of the rail on the left, and of the page's header at the top. */
+  --dock-left: calc(var(--rail-collapsed) + var(--mini-inset));
+  --dock-top: 64px;
+}
+
+/* While dragging, both halves move together; the corner is chosen on release. */
+.playback--mini,
+.mini {
+  transform: translate(var(--dock-dx, 0px), var(--dock-dy, 0px));
+}
+html[data-dock-dragging] .playback--mini,
+html[data-dock-dragging] .mini {
+  transition: none;
+  /* The card is under the pointer; the page beneath must not take the drag
+     as a text selection. */
+  user-select: none;
+}
+
+/* ---- Film: the picture above the strip, both against the same side ---- */
+
+html[data-dock-corner="bl"] .playback--mini:not(.playback--audio),
+html[data-dock-corner="tl"] .playback--mini:not(.playback--audio) {
+  right: auto;
+  left: var(--dock-left);
+}
+html[data-dock-corner="bl"] .mini,
+html[data-dock-corner="tl"] .mini {
+  right: auto;
+  left: var(--dock-left);
+}
+
+/* At the top the order flips with the edge: the picture at the edge, the
+   strip below it. Its height is the picture's, 16:9 of its width. */
+html[data-dock-corner="tl"] .playback--mini:not(.playback--audio),
+html[data-dock-corner="tr"] .playback--mini:not(.playback--audio) {
+  bottom: auto;
+  top: var(--dock-top);
+}
+html[data-dock-corner="tl"] .mini,
+html[data-dock-corner="tr"] .mini {
+  bottom: auto;
+  top: calc(var(--dock-top) + var(--mini-w, 300px) * 9 / 16 + var(--mini-gap));
+}
+
+/* ---- Music: the square cover beside the strip, on the same baseline ---- */
+
+html[data-dock-corner="bl"] .playback--mini.playback--audio,
+html[data-dock-corner="tl"] .playback--mini.playback--audio {
+  right: auto;
+  left: calc(var(--dock-left) + var(--mini-strip-w) + var(--mini-gap));
+}
+html[data-dock-corner="tl"] .playback--mini.playback--audio,
+html[data-dock-corner="tr"] .playback--mini.playback--audio {
+  bottom: auto;
+  top: var(--dock-top);
+}
+/* With a cover, the strip at the top sits level with it, not below.
+   data-dock-audio is set by PlaybackProvider while a record is playing. */
+html[data-dock-audio][data-dock-corner="tl"] .mini,
+html[data-dock-audio][data-dock-corner="tr"] .mini {
+  top: var(--dock-top);
+}

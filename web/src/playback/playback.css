@@ -26,7 +26,8 @@
 .playback--mini {
   right: var(--mini-inset);
   bottom: calc(var(--mini-inset) + var(--mini-strip-h) + var(--mini-gap));
-  width: 300px;
+  /* Small, medium or large (lib/dock.ts); medium is the 300px it always was. */
+  width: var(--mini-w, 300px);
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-panel);
   border: 1px solid var(--gold-dormant);
@@ -39,7 +40,7 @@
 /* A record is square, so the docked surface is too — a 16:9 box around a square
    cover is two black bars and a smaller picture. */
 .playback--mini.playback--audio {
-  width: 132px;
+  width: var(--mini-audio-w, 132px);
   aspect-ratio: 1 / 1;
   /* A square is narrow enough to sit beside the strip rather than above it, so
      this one clears sideways and drops back to the strip's own baseline. */
