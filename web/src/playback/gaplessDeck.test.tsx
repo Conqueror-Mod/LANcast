@@ -252,3 +252,72 @@ describe("the taper on the queue's start and end", () => {
   });
 });
 
+describe("with night mode on", () => {
+  class FakeNode {
+    channelCountMode = "explicit";
+    channelCount = 2;
+    gain = { value: 1 };
+    threshold = { value: 0 };
+    knee = { value: 0 };
+    ratio = { value: 0 };
+    attack = { value: 0 };
+    release = { value: 0 };
+    curve: unknown = null;
+    oversample = "none";
+    connect() {}
+    disconnect() {}
+  }
+  const contexts: { sources: number; level?: FakeNode }[] = [];
+  class FakeContext {
+    state = "running";
+    destination = { channelCount: 2, maxChannelCount: 2 };
+    sources = 0;
+    constructor() {
+      contexts.push(this);
+    }
+    resume = async () => {};
+    createMediaElementSource() {
+      this.sources++;
+      return new FakeNode();
+    }
+    createGain = () => new FakeNode();
+    createChannelSplitter = () => new FakeNode();
+    createChannelMerger = () => new FakeNode();
+    createDynamicsCompressor = () => new FakeNode();
+    createWaveShaper = () => new FakeNode();
+    setSinkId = async () => {};
+  }
+
+  it("still plays music on the deck, through one graph for both elements, and joins gaplessly", async () => {
+    contexts.length = 0;
+    vi.stubGlobal("AudioContext", FakeContext);
+    setPrefs({ nightMusic: true, taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      expect(notes).toContain("music on deck");
+      expect(notes.some((n) => n.startsWith("music on element"))).toBe(false);
+      // Both deck elements feed the same context.
+      const deckContexts = contexts.filter((c) => c.sources === 2);
+      expect(deckContexts).toHaveLength(1);
+      // Held at full level before the graph; the slider lives after it.
+      const one = playingOn("/api/stream/1")!;
+      expect(one.volume).toBe(1);
+
+      await act(async () => one.at(15));
+      await settle(80);
+      const two = playingOn("/api/stream/2")!;
+      await act(async () => one.at(29.7));
+      await settle(400);
+      await act(async () => one.end());
+      await settle(120);
+      expect(pb.itemID).toBe(2);
+      expect(two.pauses).toBe(0);
+      expect(notes.some((n) => n.startsWith("track join gapless"))).toBe(true);
+    } finally {
+      resetPrefs();
+    }
+  });
+});
+

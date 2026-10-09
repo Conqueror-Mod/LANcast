@@ -88,6 +88,7 @@ import { struggling, type Sample } from "./decodeHealth";
 import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
 import { FX_OFF, fxApplies } from "./elementAudio";
 import {
+  applyDeckFX,
   applyElementFX,
   elementFXSupported,
   engineFor,
@@ -200,6 +201,11 @@ let sharedDeck: MusicDeck | null = null;
 function musicDeck(): MusicDeck {
   if (!sharedDeck) sharedDeck = new MusicDeck(new Audio(), new Audio());
   return sharedDeck;
+}
+
+/** The deck's two elements, for the audio graph: real audio elements at run time. */
+function deckPair(): [HTMLMediaElement, HTMLMediaElement] {
+  return musicDeck().elements() as unknown as [HTMLMediaElement, HTMLMediaElement];
 }
 
 /** Tests only: the next use makes a fresh deck from whatever `Audio` is now. */
@@ -533,10 +539,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // Same reasoning for the whole object, read by the `ended` handler.
   const prefsRef = useRef<Prefs>(prefs);
   prefsRef.current = prefs;
-  // Night mode and a chosen output device are routed on the one element, so
-  // music uses the deck only without them (docs/gapless-plan.md, step 2).
+  // Every directly played track uses the deck: night mode and the output
+  // device are carried on its shared graph (docs/gapless-plan.md, step 2).
   const deckAllowedRef = useRef(true);
-  deckAllowedRef.current = !prefs.nightMusic && !prefs.audioDevice;
 
   const { data: item } = useItem(itemID);
   // Filled by NavigateBridge below when there is a router to navigate with.
@@ -1148,8 +1153,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // The one place a level reaches a backend: the element's goes after night
   // mode's graph (elementEngine.ts); the deck and mpv take it directly.
   const applyLevel = useCallback((v: MediaBackend, level: number) => {
-    if (v === videoRef.current) setElementVolume(videoRef.current, level);
-    else v.volume = level;
+    if (v === videoRef.current) {
+      setElementVolume(videoRef.current, level);
+      return;
+    }
+    // A routed deck: the level is the shared gain after night mode's graph,
+    // and the deck holds its elements at full volume (elementEngine.ts).
+    const deckEngine = v === sharedDeck ? engineFor(deckPair()[0]) : undefined;
+    if (deckEngine) {
+      deckEngine.level.gain.value = level;
+      v.volume = 1;
+      return;
+    }
+    v.volume = level;
   }, []);
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
@@ -1415,6 +1431,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // The output carries what the source has, so a routed element sends the
     // mixer the same stream it would have sent unrouted (elementEngine.ts).
     applyElementFX(v, fx, prefs.audioDevice, sourceChannels);
+    // The deck carries music only, through one graph for both its elements
+    // (applyDeckFX); anything else leaves it on a straight wire.
+    applyDeckFX(
+      deckPair(),
+      isAudio ? fxApplies({ night: prefs.nightMusic }, musicChannels) : FX_OFF,
+      prefs.audioDevice,
+      musicChannels,
+    );
   }, [
     isAudio,
     musicChannels,
@@ -1575,8 +1599,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const engine = engineFor(v);
       if (engine) void resume(engine);
     };
+    const onDeckPlay = () => {
+      const engine = engineFor(deckPair()[0]);
+      if (engine) void resume(engine);
+    };
+    musicDeck().addEventListener("play", onDeckPlay);
     v.addEventListener("play", onPlay);
-    return () => v.removeEventListener("play", onPlay);
+    return () => {
+      v.removeEventListener("play", onPlay);
+      musicDeck().removeEventListener("play", onDeckPlay);
+    };
   }, []);
 
   // Choosing a track reloads the source, because the server decides delivery
@@ -1792,13 +1824,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (item.kind === "track") {
         // Which path a track took, and why not the deck: the first question
         // when a join is not gapless.
-        const why = transcoding.current
-          ? "converted"
-          : prefsRef.current.nightMusic
-            ? "night mode on"
-            : prefsRef.current.audioDevice
-              ? "output device chosen"
-              : "";
+        const why = transcoding.current ? "converted" : "deck unavailable";
         clientNote("info", "playback", useDeck ? "music on deck" : `music on element (${why})`);
       }
       v.src = sourceURL(
@@ -2520,6 +2546,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // so its sink is the one that counts (elementEngine.ts).
     const engine = v ? engineFor(v) : undefined;
     if (engine) setContextSink(engine, prefs.audioDevice);
+    // The deck's two elements, through their shared context when routed and
+    // each element's own sink when not.
+    const pair = deckPair() as (HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> })[];
+    const deckEngine = engineFor(pair[0]);
+    if (deckEngine) setContextSink(deckEngine, prefs.audioDevice);
+    else for (const el of pair) el.setSinkId?.(prefs.audioDevice).catch(() => {});
     if (!v?.setSinkId) return;
     v.setSinkId(prefs.audioDevice).catch(() => {
       // A device that has been unplugged since it was chosen. Falling back to

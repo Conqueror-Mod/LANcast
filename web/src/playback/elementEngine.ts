@@ -100,6 +100,52 @@ export function applyElementFX(
   return engine;
 }
 
+/*
+ * applyDeckFX is applyElementFX for the music deck's two elements
+ * (playback/musicDeck.ts, docs/gapless-plan.md step 2).
+ *
+ * Both elements feed **one** context, one graph and one volume gain: the
+ * standby's source joins the active's at the graph's input, so night mode is
+ * one compressor across a gapless join or a crossfade rather than two that
+ * would disagree for its length. Each element still gets its one source, made
+ * once, and both are recorded against the same engine, so engineFor answers
+ * for either.
+ *
+ * The slider is the shared `level`, after the graph, exactly as on the single
+ * element; the deck holds its elements at full volume and fades them against
+ * each other before the graph, where a crossfade belongs.
+ */
+export function applyDeckFX(
+  els: [HTMLMediaElement, HTMLMediaElement],
+  fx: ElementFX,
+  sinkId: string,
+  sourceChannels: number,
+): ElementEngine | undefined {
+  let engine = engines.get(els[0]) ?? engines.get(els[1]);
+  if (!engine) {
+    if (!fxActive(fx) || !elementFXSupported()) return undefined;
+    const ctx: SinkContext = new AudioContext();
+    const graph = buildGraph(ctx);
+    const level = ctx.createGain();
+    level.channelCountMode = "max";
+    level.gain.value = els[0].volume;
+    graph.output.connect(level);
+    level.connect(ctx.destination);
+    engine = { ctx, graph, level };
+    for (const el of els) {
+      ctx.createMediaElementSource(el).connect(graph.input);
+      el.volume = 1;
+      engines.set(el, engine);
+    }
+    setContextSink(engine, sinkId);
+  }
+  const dest = engine.ctx.destination;
+  dest.channelCount = outputChannels(sourceChannels, dest.maxChannelCount);
+  engine.graph.set(fx);
+  if (fxActive(fx)) void resume(engine);
+  return engine;
+}
+
 /**
  * How many channels the routed output carries: as many as the source has, at
  * least two (the element's own stereo for mono), and no more than the device
