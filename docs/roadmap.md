@@ -813,12 +813,18 @@ group is not priority.
   reopens that door for every plugin that follows. That tension is the decision,
   and nothing should be built until it is made.
 
-- **Retro games (emulated ROMs)** — **stage 1 built, real-file check owed**
-  (2026-10-07). [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)
-  is accepted with its open questions answered (desktop only, XInput, no
-  RetroArch stop-gap, PS1 identified now and playable after N64), and
-  [the build plan](retro-games-plan.md) records what stage 1 built and the
-  check that still needs real dumps. The request: play old
+- **Retro games (emulated ROMs)** — **built**: all three stages, released in
+  v0.9.69, with the core download, the BIOS check, rating by hand and the
+  pad-driven menu following in v0.9.70.
+  [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md) and its
+  amendments hold the decisions; [the build plan](retro-games-plan.md) opens
+  with where it stands. Played on real cores in the window: NES, SNES, GBA,
+  Mega Drive, N64 and PlayStation. Not yet played: Game Boy, Game Boy Color
+  and Master System, for want of dumps. **Still open:** a browser player,
+  which needs its own ADR, because the cores' licences and which clients may
+  run them are decisions rather than engineering.
+
+  Original entry, kept for the reasoning: the request was to play old
   console games, N64 first, inside LANcast without keeping a separate emulator
   front end up to date. **A ROM is not an installed game.** ADR 0066 kept PC
   games off the server because they live on one PC and cannot be served. A ROM
@@ -837,10 +843,10 @@ group is not priority.
   own because its cores need an **OpenGL context owned by the host**, which is
   most of the risk and can only be proven on real hardware. Rough size: two to
   three months on a traditional estimate. ROM libraries are **not shared with
-  paired servers** by default. **Five questions are open** (where people play,
+  paired servers** by default. Five questions were open (where people play,
   which systems, which controller, whether saves sync across machines, and
-  whether a RetroArch launcher is wanted as a stop-gap). They are listed in the
-  ADR and must be answered before stage 1.
+  whether a RetroArch launcher is wanted as a stop-gap); all five were answered
+  in the ADR before stage 1.
 
 - **Lyrics** — **built**; the rest of music below is not.
   [internal/lyrics](../internal/lyrics/lyrics.go) parses LRC,
