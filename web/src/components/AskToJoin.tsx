@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiPost } from "@/api/client";
+import { apiGet, apiPost, apiSend } from "@/api/client";
 import type { TogetherAskAnswer, TogetherSession } from "@/api/types";
 import { peerAskURL, peerRequestURL, peerRoomURL } from "@/playback/peerSource";
 import "./AskToJoin.css";
@@ -72,6 +72,24 @@ export function AskToJoin({
     }
   };
 
+  /*
+   * Changing your mind. The host's server removes the request, so it leaves
+   * their prompt on its next poll, and no cooldown starts: asking again is
+   * allowed at once. Back to the button whether or not the cancel reached
+   * them — a request nobody answers is declined within the minute anyway.
+   */
+  const cancel = async () => {
+    const id = request;
+    setRequest(null);
+    setPhase("idle");
+    if (!id) return;
+    try {
+      await apiSend(peerRequestURL(fingerprint, id), "DELETE");
+    } catch {
+      // Unreachable or already answered: the minute ends it either way.
+    }
+  };
+
   // Waiting for the answer. Stops when it comes, or when the minute is
   // clearly over, so a tab left open does not ask for ever.
   useEffect(() => {
@@ -110,10 +128,20 @@ export function AskToJoin({
 
   switch (phase) {
     case "asking":
-    case "waiting":
       return (
         <span className="ask-join__state" role="status">
           Asking {name}…
+        </span>
+      );
+    case "waiting":
+      return (
+        <span className="ask-join__waiting">
+          <span className="ask-join__state" role="status">
+            Asking {name}…
+          </span>
+          <button type="button" className="ask-join ask-join--cancel" onClick={() => void cancel()}>
+            Cancel
+          </button>
         </span>
       );
     case "joining":

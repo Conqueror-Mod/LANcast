@@ -300,3 +300,36 @@ func TestARemoteMemberPollingOnTimeIsKept(t *testing.T) {
 		t.Errorf("guest polling at the boundary: %v, want kept", err)
 	}
 }
+
+// The asker can take a request back: it leaves the host's list, nobody else
+// can withdraw it, an answered one is untouched, and no cooldown starts.
+func TestWithdrawIsTheAskersAndStartsNoCooldown(t *testing.T) {
+	m, _, room, req := open(t)
+
+	m.Withdraw(req.ID, "FP-SOMEONE-ELSE", person)
+	m.Withdraw(req.ID, fp, "u_other")
+	if len(m.Pending("alice")) != 1 {
+		t.Fatal("somebody other than the asker withdrew the request")
+	}
+
+	m.Withdraw(req.ID, fp, person)
+	if n := len(m.Pending("alice")); n != 0 {
+		t.Fatalf("pending after withdraw = %d, want 0", n)
+	}
+	if st := m.Status(req.ID, fp, person); st.State != "not_now" {
+		t.Errorf("a withdrawn request reads %q", st.State)
+	}
+	again := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	if again.State != RequestPending {
+		t.Errorf("asking again after a withdraw is %q, want pending: a withdraw is not a decline", again.State)
+	}
+
+	// An accepted request is the host's answer, and stays.
+	if _, err := m.Accept(again.ID, "alice", room.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.Withdraw(again.ID, fp, person)
+	if st := m.Status(again.ID, fp, person); st.State != RequestAccepted {
+		t.Errorf("withdraw undid an accepted request: %q", st.State)
+	}
+}

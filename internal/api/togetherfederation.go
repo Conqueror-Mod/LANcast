@@ -159,6 +159,22 @@ func (s *Server) federationTogetherRequest(w http.ResponseWriter, r *http.Reques
 }
 
 /*
+ * federationWithdrawTogether is the asker changing their mind. Always 200
+ * and the same body, so it cannot be used to learn whether a request id
+ * exists or whose it is.
+ */
+func (s *Server) federationWithdrawTogether(w http.ResponseWriter, r *http.Request) {
+	fingerprint, person, ok := s.federationPerson(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	s.together.Withdraw(id, fingerprint, person)
+	s.log.Info("watch together: ask withdrawn", "request", id)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "state": "withdrawn"})
+}
+
+/*
  * remoteRoom runs one room call for a remote member, and is where membership
  * is re-checked against the host's grant.
  *

@@ -184,6 +184,16 @@ func (s *Server) peerTogetherRequest(w http.ResponseWriter, r *http.Request) {
 		"/api/federation/together/requests/"+id+"?"+s.asMe(r), nil, &relayAnswer{})
 }
 
+// peerWithdrawTogether takes the caller's ask back before it is answered.
+func (s *Server) peerWithdrawTogether(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathPart(w, r, "id", "which request")
+	if !ok {
+		return
+	}
+	s.relayRoom(w, r, http.MethodDelete,
+		"/api/federation/together/requests/"+id+"?"+s.asMe(r), nil, &relayAnswer{})
+}
+
 func (s *Server) peerJoinTogether(w http.ResponseWriter, r *http.Request) {
 	room, ok := pathPart(w, r, "room", "which room")
 	if !ok {

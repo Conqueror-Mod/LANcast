@@ -240,6 +240,7 @@ ADR 0044 declines to build.
 | `PUT /api/peers/{fingerprint}/progress/{item}` | `{position_ms}` → where we are in one of their films. **Written here, never sent to them**; read back on the item route |
 | `POST /api/peers/{fingerprint}/together/requests` | `{person}` → ask to join that person on their server, as the caller. Relayed; see *Watching together across servers* |
 | `GET /api/peers/{fingerprint}/together/requests/{id}` | The answer: `pending`, `accepted` with `room_id`, or `not_now` |
+| `DELETE /api/peers/{fingerprint}/together/requests/{id}` | Take the ask back before it is answered. Always `withdrawn`; no cooldown starts, so asking again is allowed at once |
 | `POST /api/peers/{fingerprint}/together/{room}/join` | Come back to a room the caller was admitted to |
 | `GET /api/peers/{fingerprint}/together/{room}` | Follow it: the room's snapshot, relayed |
 | `DELETE /api/peers/{fingerprint}/together/{room}/members/me` | Leave |
@@ -499,6 +500,7 @@ server's key (ADR 0070), so it cannot reach yours directly.
 |---|---|
 | `POST /api/federation/together/requests?person={id}` | **Peer-to-peer.** `{host}` → ask to join that person. `404` without a presence grant from them; otherwise `{id, state}` with `state` `pending` or `not_now` |
 | `GET /api/federation/together/requests/{id}?person={id}` | **Peer-to-peer.** The answer: `pending`, `accepted` with `room_id`, or `not_now`. Only the asker may read it |
+| `DELETE /api/federation/together/requests/{id}?person={id}` | **Peer-to-peer.** The asker takes the request back; it leaves the host's prompt. Only the asker's own open request is removed, and the answer is always `withdrawn`, so it reveals nothing |
 | `POST /api/federation/together/{room}/join?person={id}` | **Peer-to-peer.** An admitted member coming back after a dropped connection. Nobody else |
 | `GET /api/federation/together/{room}?person={id}` | **Peer-to-peer.** Follow the room: the same snapshot as `GET /api/together/{id}` |
 | `DELETE /api/federation/together/{room}/members/me?person={id}` | **Peer-to-peer.** Leave |
