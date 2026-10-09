@@ -66,6 +66,20 @@ import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./b
 import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { isGameOnScreen, subscribeGameOnScreen } from "./retro";
+import { DOCK_WIDTHS, getDock, subscribeDock, type DockState } from "@/lib/dock";
+import "./dock.css";
+
+// The dock store, written where both halves of the card read it: a size and
+// a drag offset as custom properties, a corner as an attribute.
+function applyDock(d: DockState) {
+  const root = document.documentElement;
+  root.style.setProperty("--mini-w", `${DOCK_WIDTHS[d.size].video}px`);
+  root.style.setProperty("--mini-audio-w", `${DOCK_WIDTHS[d.size].audio}px`);
+  root.style.setProperty("--dock-dx", `${d.dx}px`);
+  root.style.setProperty("--dock-dy", `${d.dy}px`);
+  root.setAttribute("data-dock-corner", d.corner);
+  root.toggleAttribute("data-dock-dragging", d.dx !== 0 || d.dy !== 0);
+}
 import { activeCues, mpvAudioTrack, parseVTT, type Cue } from "./nativeTracks";
 import { struggling, type Sample } from "./decodeHealth";
 import { CREDITS_LEAD_SECONDS } from "@/lib/skip";
@@ -755,13 +769,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       ratio?.addEventListener("change", onRatio);
     };
     watchRatio();
+    /*
+     * And when the card moves: a new corner, a new size, or a drag in
+     * progress (lib/dock.ts). A corner keeps the box's size, so the observer
+     * above never fires for it, and a native picture left behind would sit in
+     * the old corner over whatever is there now. A frame later, so the box is
+     * measured after its new styles apply; during a drag that is also what
+     * makes the picture follow the card rather than jump on release.
+     */
+    let frame = 0;
+    const offDock = subscribeDock(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(send);
+    });
     return () => {
       backend.removeEventListener("loadedmetadata", resend);
       ro.disconnect();
       window.removeEventListener("resize", send);
       ratio?.removeEventListener("change", onRatio);
+      offDock();
+      cancelAnimationFrame(frame);
     };
   }, [surface, nativeOn, overGame]);
+
+  // The card's corner, size and drag offset onto the page, from the store
+  // (lib/dock.ts, playback/dock.css). Applied in the store's own listener
+  // rather than through a render, so they are in place by the frame the
+  // layout above measures in.
+  useEffect(() => {
+    const apply = () => applyDock(getDock());
+    apply();
+    return subscribeDock(apply);
+  }, []);
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-dock-audio", isAudio);
+  }, [isAudio]);
 
   /*
    * Total runtime: the server's measured one whenever there is one.

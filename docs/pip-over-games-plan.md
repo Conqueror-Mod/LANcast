@@ -54,6 +54,8 @@
 
 ## Stage 2: polish, after living with it
 
+**Built 2026-10-08**, with Chris's choices: drag the card by its grip and it settles into the nearest corner; Small, Medium and Large, cycled from the strip or the game menu. Both are remembered on this computer (`lib/dock.ts`). Pause, play and stop from the game menu shipped earlier, in #788.
+
 - Pause and resume the film from the game menu, so it can be done without the
   mouse.
 - Choose which corner the card sits in, and let it be dragged.
