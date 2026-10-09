@@ -1,0 +1,72 @@
+/* Fetching the emulator cores (CoreDownload): a button, then a bar. */
+.core-download {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.core-download__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-download__line--start {
+  justify-content: flex-start;
+}
+
+.core-download__btn {
+  align-self: flex-start;
+  padding: 7px 14px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.core-download__btn--go {
+  font-size: 14px;
+  padding: 9px 18px;
+}
+
+.core-download__btn:hover,
+.core-download__btn:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.core-download__bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.core-download__fill {
+  height: 100%;
+  background: var(--nebula-blue);
+  transition: width var(--dur-base) ease;
+}
+
+.core-download__note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.core-download__note--warn {
+  color: var(--danger, #ff6b6b);
+}

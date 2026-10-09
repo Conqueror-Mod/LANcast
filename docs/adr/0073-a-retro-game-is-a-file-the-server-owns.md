@@ -417,6 +417,56 @@ cannot show what another driver does. **Not proven:** a real N64 core's
 renderer, a second GPU, and a window moved between monitors with a context
 live.
 
+## Amendment: cores come from the stable archive (2026-10-08)
+
+This supersedes "No core is pinned, because none can be" above. That was true
+of single cores. It was not true of the archive.
+
+**The pin is the whole stable release.** RetroArch 1.22.2's
+`windows/x86_64/RetroArch_cores.7z` is 229,761,684 bytes with a recorded
+SHA-256, and a stable release is never rebuilt, so the pin holds. Each of the
+seven default cores is pinned as well, by its path inside the archive, its
+size and its own SHA-256. The client checks the archive before opening it and
+each DLL before renaming it into place. The archive is deleted afterwards; the
+seven DLLs are about 26 MB.
+
+**Why the archive, and not a mirror.** A mirror is the alternative this ADR
+named. It would make LANcast a distributor of GPL binaries, owing their source
+for as long as it serves them. Fetching from libretro leaves that obligation
+with libretro, who already meets it. The cost is the download: about 230 MB
+for 26 MB of cores. It happens once per machine, and only when a person
+presses a button that states the size.
+
+**One download fetches every core.** Fetching one console's core still costs
+the whole archive, so a second console's core would cost it again. The button
+offered on a game's page is therefore the same as the one in Settings.
+Pressing it is the one confirmation this ADR asked for before a first play.
+Cores already in place with the right bytes are not fetched again. A pinned
+core that is missing or wrong fetches the archive for that core alone. Not
+all seven are re-extracted.
+
+**The 7z reader is a dependency of the client and not the server.**
+`github.com/bodgit/sevenzip` and its decompressors (BSD, MIT, Apache-2.0, and
+one MPL-2.0 module, unmodified) are linked into `lancast.exe` only. CI's check
+that `lancastd` has no cgo is unaffected. The reader was checked against
+7-Zip: all seven DLLs it took from the real archive were byte-identical to
+7-Zip's own extraction. The archive is solid, so unpacking takes about a
+minute, and entries are read in the archive's order so the block is
+decompressed once.
+
+**A moved pin reads as "not installed".** `Resolve` accepts an installed
+default only if it has the pinned size. When a later release moves the pin,
+the old DLLs offer the download again rather than playing with a build
+nobody checked against the new pin.
+
+**Proven:** the package's tests run against a small solid archive built by
+7-Zip. They cover a wrong archive (never opened), a wrong DLL (never placed,
+and nothing left behind), a core the archive lacks (named in the error), a
+download a killed client left behind (swept), and a second install that
+fetches nothing. Removing the DLL check or the sweep fails a test. The real
+cores from the stable archive pass the real-core tests: every console draws,
+and N64 Continue resumes.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).

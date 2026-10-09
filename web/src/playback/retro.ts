@@ -20,7 +20,26 @@ export interface RetroAvailability {
   core?: string;
   licence?: string;
   needs_gl?: boolean;
+  /** The core is LANcast's to fetch, and is not fetched yet. */
   installable?: boolean;
+  /** What fetching it costs: the whole pinned archive, every core at once. */
+  download_bytes?: number;
+  /** The core is here and cannot boot without a BIOS from the person's console. */
+  needs_bios?: boolean;
+}
+
+/** Where fetching the cores has got to. */
+export interface RetroInstallStatus {
+  running: boolean;
+  /** "download" in bytes, then "unpack" in cores, then "done". */
+  stage: "" | "download" | "unpack" | "done";
+  done: number;
+  total: number;
+  /** Why the last attempt failed; empty when it did not. */
+  error: string;
+  /** The RetroArch stable release the cores come from. */
+  version: string;
+  bytes: number;
 }
 
 /** One core option, as the running core declared it. */
@@ -69,6 +88,10 @@ declare global {
     lancastRetroSetOption?: (platform: string, key: string, value: string) => Promise<void>;
     lancastRetroVolume?: () => Promise<number>;
     lancastRetroSetVolume?: (volume: number) => Promise<void>;
+    lancastRetroInstallCores?: () => Promise<void>;
+    lancastRetroCancelInstallCores?: () => Promise<void>;
+    lancastRetroInstallStatus?: () => Promise<RetroInstallStatus>;
+    lancastRetroOpenBIOSFolder?: () => Promise<void>;
     __lancastRetroEvent?: (e: RetroEvent) => void;
   }
 }

@@ -48,6 +48,7 @@ import { useGameSaves } from "@/api/hooks";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
+import { BiosFolder, CoreDownload } from "@/components/CoreDownload";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
@@ -1263,9 +1264,15 @@ function RetroActions({ item }: { item: Item }) {
   if (!can) return null;
   if (!can.available) {
     return (
-      <p className="detail__plays-elsewhere" role="note">
-        {can.reason ?? "Plays in the LANcast desktop app."}
-      </p>
+      <div className="detail__plays-elsewhere-group">
+        <p className="detail__plays-elsewhere" role="note">
+          {can.reason ?? "Plays in the LANcast desktop app."}
+        </p>
+        {/* LANcast can fetch this console's core: offer it here, where the
+            person found out they need it, rather than sending them to Settings. */}
+        {can.installable && <CoreDownload bytes={can.download_bytes} />}
+        {can.needs_bios && <BiosFolder />}
+      </div>
     );
   }
   const left = (saves ?? []).some((s) => s.slot === "auto");

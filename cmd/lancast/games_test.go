@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	"lancast/internal/desktopprefs"
@@ -162,5 +163,14 @@ func TestOpenFolderNeedsAFolder(t *testing.T) {
 	}
 	if err := openFolder(t.TempDir() + "/not-there"); err == nil {
 		t.Error("a missing folder should not be opened")
+	}
+}
+
+// The folder window must be shown: a hidden start leaves Explorer's window
+// open and invisible, which is how "Open folder" did nothing for months.
+func TestFolderCommandIsNotHidden(t *testing.T) {
+	cmd := folderCommand(t.TempDir())
+	if a := cmd.SysProcAttr; a != nil && !reflect.ValueOf(*a).IsZero() {
+		t.Errorf("the file manager is started with %+v", *a)
 	}
 }

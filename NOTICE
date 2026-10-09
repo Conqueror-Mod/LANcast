@@ -29,6 +29,23 @@ Go dependencies (see go.mod for exact versions):
   github.com/google/uuid              BSD 3-Clause
   github.com/remyoudompheng/bigfft    BSD 3-Clause
 
+In the desktop client only, to unpack the emulator cores it fetches:
+
+  github.com/bodgit/sevenzip          BSD 3-Clause
+  github.com/bodgit/plumbing          BSD 3-Clause
+  github.com/bodgit/windows           BSD 3-Clause
+  github.com/andybalholm/brotli       MIT
+  github.com/hashicorp/golang-lru/v2  Mozilla Public License 2.0
+                                      (unmodified; source at
+                                      https://github.com/hashicorp/golang-lru)
+  github.com/klauspost/compress       BSD 3-Clause
+  github.com/pierrec/lz4/v4           BSD 3-Clause
+  github.com/spf13/afero              Apache License 2.0
+  github.com/stangelandcl/ppmd        MIT
+  github.com/ulikunitz/xz             BSD 3-Clause
+  go4.org                             Apache License 2.0
+  golang.org/x/text                   BSD 3-Clause
+
 Built by this project and shipped beside the client:
 
   libmpv (mpv, FFmpeg, libplacebo,   GNU Lesser General Public License v2.1
@@ -57,3 +74,10 @@ Not bundled, and deliberately so:
                                       user's machine on request (ADR 0048).
                                       They are not linked into LANcast and are
                                       not redistributed with it.
+  Emulator cores (mGBA, Mesen, bsnes, GPL-2.0, GPL-3.0 or MPL-2.0 each.
+  BlastEm, Gearsystem,                LANcast downloads them from libretro's
+  Mupen64Plus-Next, SwanStation)      RetroArch stable release onto the
+                                      user's machine on request (ADR 0073),
+                                      and loads them at runtime. They are not
+                                      linked into LANcast and are not
+                                      redistributed with it.

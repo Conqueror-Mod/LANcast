@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"lancast/internal/childproc"
 	"lancast/internal/desktop"
 	"lancast/internal/desktopprefs"
 	"lancast/internal/games"
@@ -446,20 +445,29 @@ func openFolder(path string) error {
 		// unplugged since, most likely.
 		return fmt.Errorf("that folder is not there any more")
 	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("explorer", path)
-	case "darwin":
-		cmd = exec.Command("open", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
-	}
-	childproc.Hide(cmd)
 	// Explorer exits non-zero even when it opens the window, so this is
 	// fire-and-forget like OpenBrowser: Start reports "could not run it at all",
 	// which is the only failure worth showing.
-	return cmd.Start()
+	return folderCommand(path).Start()
+}
+
+/*
+ * folderCommand is the file manager, started with nothing hidden.
+ *
+ * Not childproc.Hide: that is for console tools, and Explorer takes its
+ * SW_HIDE literally — the folder window opens, invisible, and stays that way.
+ * "Open folder" did nothing visible from #604 until the BIOS folder used it
+ * and the hidden windows were found with Shell.Application.
+ */
+func folderCommand(path string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("explorer", path)
+	case "darwin":
+		return exec.Command("open", path)
+	default:
+		return exec.Command("xdg-open", path)
+	}
 }
 
 /*
