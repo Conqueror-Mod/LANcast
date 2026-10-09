@@ -54,7 +54,7 @@ beforeEach(() => {
       if (u.includes("/api/auth")) {
         return json({ user: { role: admin ? "admin" : "user" }, can_convert: true, configured: true, authenticated: true });
       }
-      if (u.includes("/api/libraries")) return json([{ id: 9, name: "Retro Games", kind: "rom" }]);
+      if (u.includes("/api/libraries")) return json([{ id: 9, name: "Retro Games", kind: "retro" }]);
       return json({});
     }),
   );

@@ -42,6 +42,9 @@ const FACET_KEYS = FILTER_PARAM_KEYS;
 // per-kind differences (sort options, copy) come in as `config`, so a movie
 // library and a TV library are the same component with different configuration
 // rather than two divergent screens.
+// Library kinds whose items a certificate describes (store/ceiling.go).
+const RATABLE_LIBRARIES = new Set(["movie", "show", "retro"]);
+
 export function LibraryView({
   library,
   config,
@@ -271,10 +274,16 @@ export function LibraryView({
   // already cached for the Home row, and shuffling them client-side gives the
   // variety without the cost.
   const isPictures = library.kind === "picture";
-  // Games are the library a ceiling empties: most predate the ESRB, so an
-  // administrator is offered the list to rate them by hand.
+  /*
+   * What a ceiling hides here for want of a rating, offered to an
+   * administrator to rate by hand. Games most of all, since most predate the
+   * ESRB, but films and shows too: a film no provider rated is hidden from a
+   * child's account exactly as a game is. Music and pictures carry no
+   * certificate, so their libraries never offer it.
+   */
   const admin = useIsAdmin();
-  const { data: unrated } = useUnrated(library.id, admin && library.kind === "rom");
+  const ratable = RATABLE_LIBRARIES.has(library.kind);
+  const { data: unrated } = useUnrated(library.id, admin && ratable);
   const { data: bannerPool } = useRecentPhotos(isPictures ? 24 : 0);
   const [shownPhoto, setShownPhoto] = useState<Item | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -448,7 +457,7 @@ export function LibraryView({
             Collections
           </button>
         )}
-        {library.kind === "rom" && unrated && unrated.total > 0 && (
+        {ratable && unrated && unrated.total > 0 && (
           <button
             className="browse__playall-btn"
             onClick={() => navigate(`/library/${libraryID}/unrated`)}
