@@ -27,3 +27,10 @@
 .ask-join__state--failed {
   color: #e08a7a;
 }
+
+/* Waiting on an answer, with the way to take the ask back beside it. */
+.ask-join__waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}

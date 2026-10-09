@@ -220,6 +220,24 @@ func (m *Manager) Decline(requestID, hostID string) error {
 }
 
 /*
+ * Withdraw takes back a request its asker no longer wants answered.
+ *
+ * Only the asker, and only while it is still open: a request belonging to
+ * somebody else, or already answered, is left alone, and nothing is said
+ * about which it was. Unlike a decline it starts no cooldown — changing your
+ * mind is not being turned down, and the asker may ask again at once. The
+ * request is removed, so it leaves the host's prompt on their next poll.
+ */
+func (m *Manager) Withdraw(requestID, fingerprint, person string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.requests[requestID]; ok &&
+		r.Peer == fingerprint && r.Person == person && r.State == RequestPending {
+		delete(m.requests, requestID)
+	}
+}
+
+/*
  * Status is the asker's view of their own request.
  *
  * Only the asker may read it: a request id is not a secret, and without the

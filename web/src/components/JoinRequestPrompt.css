@@ -1,12 +1,19 @@
-/* A friend asking to join. The together panel's popover language, fixed to
-   the corner above the docked player so it reaches the host on any screen,
-   including a fullscreen film (fullscreen is the whole document here). Gold
-   only on focus: a request is not where you are. */
+/* A friend asking to join. The together panel's popover language, at the
+   top centre so it reaches the host on any screen, including a fullscreen film
+   (fullscreen is the whole document here). Gold only on focus: a request is
+   not where you are.
+
+   Not in a corner. It used to sit just above the docked player, and in the
+   desktop client a docked film's picture is a window of its own *above* the
+   page, in a corner the person chooses: the prompt was drawn, polled and
+   answered by nobody, because the picture covered it. The centre of the top
+   edge is the one place the picture never docks. */
 
 .join-prompt {
   position: fixed;
-  right: 16px;
-  bottom: 120px;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: var(--z-prompt);
   width: 320px;
   max-width: calc(100vw - 32px);

@@ -4,6 +4,7 @@ import { apiGet, apiPost, apiSend } from "@/api/client";
 import type { TogetherRequest, TogetherSession } from "@/api/types";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useTogetherRoom } from "@/playback/TogetherProvider";
+import { clientNote } from "@/lib/clientNote";
 import "./JoinRequestPrompt.css";
 
 /*
@@ -51,7 +52,12 @@ export function JoinRequestPrompt() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!req) return;
-    if (!seen.current.has(req.id)) seen.current.set(req.id, Date.now());
+    if (!seen.current.has(req.id)) {
+      seen.current.set(req.id, Date.now());
+      // Into the desktop log, so "I saw nothing" can be told apart from
+      // "it was drawn and something covered it".
+      clientNote("info", "together", `join request shown: ${req.name}${req.server ? " on " + req.server : ""}`);
+    }
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [req]);
