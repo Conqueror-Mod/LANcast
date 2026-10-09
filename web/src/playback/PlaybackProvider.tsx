@@ -1,4 +1,5 @@
 import { clientNote } from "@/lib/clientNote";
+import { TrackGapMeter } from "@/lib/trackGap";
 import {
   createContext,
   useCallback,
@@ -1357,6 +1358,46 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     prefs.nightVideo,
     prefs.audioDevice,
   ]);
+
+  /*
+   * The silence between two tracks, written to the desktop log (lib/trackGap.ts).
+   * Music only, and only an end the queue rolled on from: the measurement
+   * gapless playback is designed against.
+   */
+  const isAudioRef = useRef(isAudio);
+  isAudioRef.current = isAudio;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const meter = new TrackGapMeter();
+    const onEnded = () => {
+      if (isAudioRef.current) meter.ended(performance.now());
+    };
+    const onLoadStart = () => meter.loadstart(performance.now());
+    const onPlaying = () => {
+      const gap = meter.playing(performance.now());
+      if (gap && isAudioRef.current) {
+        clientNote(
+          "info",
+          "playback",
+          `track gap ${gap.total} ms (to source ${gap.toSource} ms, load ${gap.load} ms)`,
+        );
+      }
+    };
+    const onPause = () => {
+      if (!v.ended) meter.reset();
+    };
+    v.addEventListener("ended", onEnded);
+    v.addEventListener("loadstart", onLoadStart);
+    v.addEventListener("playing", onPlaying);
+    v.addEventListener("pause", onPause);
+    return () => {
+      v.removeEventListener("ended", onEnded);
+      v.removeEventListener("loadstart", onLoadStart);
+      v.removeEventListener("playing", onPlaying);
+      v.removeEventListener("pause", onPause);
+    };
+  }, []);
 
   // A routed element is silent while its context is suspended, and a context
   // can be suspended by the system as well as at birth. Every play resumes it.
