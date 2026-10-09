@@ -7,7 +7,13 @@
  * forever.
  */
 import { describe, it, expect } from "vitest";
-import { expectedPosition, shouldResync, followerShouldSeek } from "./together";
+import {
+  expectedPosition,
+  shouldResync,
+  followerShouldSeek,
+  followerSeekTarget,
+  CONVERTING_TOLERANCE_MS,
+} from "./together";
 
 const at = (positionMS: number, updatedAtSeconds: number, paused = false) => ({
   position_ms: positionMS,
@@ -120,5 +126,77 @@ describe("when a follower in another household's room seeks", () => {
   it("does not seek again before the last seek has landed", () => {
     expect(followerShouldSeek(0, 600_000, true, 3_000)).toBe(false);
     expect(followerShouldSeek(0, 600_000, false, 1_000)).toBe(false);
+  });
+});
+
+/*
+ * Joining a room whose film is converted for you, on a far server slow to
+ * start: found 2026-10-09, when the conversion restarted at 94 s, 104 s and
+ * 114 s with nothing ever served, because each start took longer than the
+ * settle and every poll found the follower behind.
+ *
+ * A small simulation of exactly that: the host plays on, the follower polls
+ * the room every two seconds, and a converted stream plays nothing for
+ * `startup` after each seek, then runs from where it was asked to start.
+ */
+function simulate(startupMS: number, rules: "old" | "new") {
+  let now = 0;
+  const host = (t: number) => 94_000 + t; // the host's film position
+  let local = 0;
+  let lastSeek = 0;
+  let seekAt = -Infinity;
+  let startedSinceSeek = true;
+  let measured = 0;
+  let seeks = 0;
+  for (now = 0; now <= 90_000; now += 2000) {
+    // The stream: nothing until `startup` after a seek, then it runs.
+    if (!startedSinceSeek && now - seekAt >= startupMS) {
+      startedSinceSeek = true;
+      measured = now - seekAt;
+    }
+    const elapsedSincePlay = startedSinceSeek ? now - (seekAt + startupMS) : 0;
+    const at = seeks === 0 ? 0 : local + Math.max(0, elapsedSincePlay);
+    const should =
+      rules === "new"
+        ? followerShouldSeek(at, host(now), true, now - lastSeek, startedSinceSeek)
+        : followerShouldSeek(at, host(now), true, now - lastSeek);
+    if (seeks === 0 || should) {
+      seeks++;
+      lastSeek = now;
+      seekAt = now;
+      startedSinceSeek = false;
+      local = rules === "new" ? followerSeekTarget(host(now), true, measured) : host(now);
+    }
+  }
+  const finalAt = local + Math.max(0, now - 2000 - (seekAt + startupMS));
+  return { seeks, drift: Math.abs(host(now - 2000) - finalAt) };
+}
+
+describe("joining a converted room on a slow server", () => {
+  it("settles within two seeks, inside the tolerance, when a start takes twelve seconds", () => {
+    const r = simulate(12_000, "new");
+    expect(r.seeks).toBeLessThanOrEqual(2);
+    expect(r.drift).toBeLessThanOrEqual(CONVERTING_TOLERANCE_MS);
+  });
+
+  it("is the loop it replaces, under the old rule", () => {
+    // The positive control: the same far server, the old rule, restarting
+    // over and over as the log showed.
+    expect(simulate(12_000, "old").seeks).toBeGreaterThanOrEqual(5);
+  });
+
+  it("does not move a converted stream again until it has played", () => {
+    expect(followerShouldSeek(0, 600_000, true, 12_000, false)).toBe(false);
+    expect(followerShouldSeek(0, 600_000, true, 12_000, true)).toBe(true);
+    // A conversion that never starts is retried in the end.
+    expect(followerShouldSeek(0, 600_000, true, 31_000, false)).toBe(true);
+    // A direct file is never held back by it.
+    expect(followerShouldSeek(60_000, 64_000, false, 10_000, false)).toBe(true);
+  });
+
+  it("aims ahead by the measured start on a converted stream only", () => {
+    expect(followerSeekTarget(100_000, true, 12_000)).toBe(112_000);
+    expect(followerSeekTarget(100_000, false, 12_000)).toBe(100_000);
+    expect(followerSeekTarget(100_000, true, 90_000)).toBe(120_000);
   });
 });

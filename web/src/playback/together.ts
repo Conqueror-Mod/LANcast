@@ -273,12 +273,39 @@ export function useHostReporting(
  */
 export const CONVERTING_TOLERANCE_MS = 8000;
 
+/*
+ * The longest a converted stream is waited on after a seek before the room
+ * may move it again. Long enough for a slow first segment, short enough that a
+ * conversion which never starts is retried.
+ */
+export const CONVERTING_START_CAP_MS = 30_000;
+
+/*
+ * Two more rules for a converted stream, both found between two real servers
+ * (2026-10-09): Georgia joined Chris's room and the conversion restarted at
+ * 94 s, 104 s and 114 s, each thrown away ten seconds in with nothing served.
+ *
+ * **Wait for the picture, not a timer.** A fresh conversion there took longer
+ * than the 8 s settle to play its first frame. Eight seconds after the seek
+ * the follower was still at its starting point, more than 8 s behind a host
+ * who had moved on, so it seeked again — into another restart of the same
+ * length. So no seek is judged until the stream has actually started playing
+ * since the last one (`startedSinceSeek`), up to CONVERTING_START_CAP_MS.
+ *
+ * **Aim ahead.** Even once it plays, a stream that took T to start lands T
+ * behind the host, and if T is over the tolerance every catch-up seek
+ * reproduces the gap it was meant to close. So a converted follower seeks to
+ * where the host *will* be when the new stream starts: the expected position
+ * plus the startup it last measured (followerSeekTarget).
+ */
 export function followerShouldSeek(
   localMS: number,
   expectedMS: number,
   converting: boolean,
   msSinceLastSeek: number,
+  startedSinceSeek = true,
 ): boolean {
+  if (converting && !startedSinceSeek && msSinceLastSeek < CONVERTING_START_CAP_MS) return false;
   const settle = converting ? CONVERTING_TOLERANCE_MS : 2500;
   if (msSinceLastSeek < settle) return false;
   return shouldResync(
@@ -286,6 +313,15 @@ export function followerShouldSeek(
     expectedMS,
     converting ? CONVERTING_TOLERANCE_MS : DRIFT_TOLERANCE_MS,
   );
+}
+
+// Where a follower seeks to: ahead by the measured startup on a converted
+// stream (see above), capped so one freak start cannot throw it far forward.
+export const CONVERTING_LEAD_CAP_MS = 20_000;
+
+export function followerSeekTarget(expectedMS: number, converting: boolean, startupMS: number): number {
+  if (!converting) return expectedMS;
+  return expectedMS + Math.min(Math.max(0, startupMS), CONVERTING_LEAD_CAP_MS);
 }
 
 export interface PeerRoomState {
