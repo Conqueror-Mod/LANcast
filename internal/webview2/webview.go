@@ -69,6 +69,9 @@ type webview struct {
 	// game is the window a retro game draws into, shown while gameOn.
 	game   uintptr
 	gameOn bool
+	// loggedGame is gameOn as last logged, so a layout line is written only
+	// when something changed (overlay.go).
+	loggedGame bool
 	// iconic is set once DWM agreed to take its taskbar pictures from this
 	// window, and thumbCache is the last capture before it was minimised
 	// (thumbnail.go).
