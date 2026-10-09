@@ -21,6 +21,18 @@ import { peerRoomURL } from "./peerSource";
 
 const POLL_MS = 2000;
 const REPORT_MS = 3000;
+/*
+ * A follower on another server polls faster, and the host reports a pause or
+ * a jump the moment it happens rather than on its next three-second beat.
+ * Together the two delays were why a guest paused about two seconds after the
+ * host did, and could take five (2026-10-09). The poll is relayed through two
+ * servers, so once a second is the cost of a pause landing within one.
+ */
+const PEER_POLL_MS = 1000;
+const STATE_WATCH_MS = 250;
+// A jump the host makes is a report at once when the clock moves this far
+// from where it would have been.
+const JUMP_MS = 2000;
 
 /*
  * How far out of step is worth correcting.
@@ -243,8 +255,10 @@ export function useHostReporting(
 
   useEffect(() => {
     if (!sessionID || !isHost) return;
-    const timer = setInterval(() => {
+    let last = { positionMS: 0, paused: false, at: 0 };
+    const report = () => {
       const { positionMS, paused } = readRef.current();
+      last = { positionMS, paused, at: Date.now() };
       void apiSend(`/api/together/${sessionID}`, "PUT", {
         position_ms: Math.round(positionMS),
         paused,
@@ -253,8 +267,22 @@ export function useHostReporting(
         // Surfacing it would be an error message for a condition that fixes
         // itself before anybody finishes reading it.
       });
-    }, REPORT_MS);
-    return () => clearInterval(timer);
+    };
+    report();
+    const timer = setInterval(report, REPORT_MS);
+    // Between beats: a pause, a play or a jump is reported at once.
+    const watch = setInterval(() => {
+      if (last.at === 0) return;
+      const { positionMS, paused } = readRef.current();
+      const drifted = last.paused
+        ? positionMS - last.positionMS
+        : positionMS - (last.positionMS + (Date.now() - last.at));
+      if (paused !== last.paused || Math.abs(drifted) > JUMP_MS) report();
+    }, STATE_WATCH_MS);
+    return () => {
+      clearInterval(timer);
+      clearInterval(watch);
+    };
   }, [sessionID, isHost]);
 }
 
@@ -315,13 +343,59 @@ export function followerShouldSeek(
   );
 }
 
-// Where a follower seeks to: ahead by the measured startup on a converted
-// stream (see above), capped so one freak start cannot throw it far forward.
+// Where a follower seeks to: ahead by the lead on a converted stream (see
+// above), capped so one freak start cannot throw it far forward.
 export const CONVERTING_LEAD_CAP_MS = 20_000;
 
-export function followerSeekTarget(expectedMS: number, converting: boolean, startupMS: number): number {
+export function followerSeekTarget(expectedMS: number, converting: boolean, leadMS: number): number {
   if (!converting) return expectedMS;
-  return expectedMS + Math.min(Math.max(0, startupMS), CONVERTING_LEAD_CAP_MS);
+  return expectedMS + Math.min(Math.max(0, leadMS), CONVERTING_LEAD_CAP_MS);
+}
+
+/*
+ * Landing close, not merely starting once (2026-10-09, after the fix above).
+ *
+ * With the restarts gone, Georgia's first picture came in four seconds and
+ * then sat about eight seconds behind for the whole film: the first seek had
+ * no measured lead to aim with, and eight seconds is inside the converted
+ * tolerance, so nothing ever corrected it.
+ *
+ * **The lead is learned from where a start lands**, not from how long it took.
+ * When a converted stream starts playing, the gap between where the host is
+ * now and where the stream began is everything the lead failed to cover —
+ * the start-up, the poll that was already old, the keyframe the conversion
+ * had to begin at. The next lead is the last one plus that gap (nextLead), so
+ * it converges on whatever this pair of machines actually costs. It starts at
+ * CONVERTING_DEFAULT_LEAD_MS, the start-up measured that evening.
+ *
+ * **A close landing is worth one short pause.** Once a converted stream is
+ * playing, a gap over CONVERTING_CORRECT_MS is corrected with one more seek
+ * at the learned lead — a few seconds' pause, against watching eight seconds
+ * behind for two hours. At most MAX_CORRECTIONS per join, so a lead that will
+ * not settle costs two pauses and then stops trying; the 8 s rule above still
+ * catches anything that drifts far later.
+ */
+export const CONVERTING_DEFAULT_LEAD_MS = 4000;
+export const CONVERTING_CORRECT_MS = 3000;
+export const MAX_CORRECTIONS = 2;
+// Played for this long before a gap is judged, so the first second of a fresh
+// stream (which can stall once while it fills) is not mistaken for drift.
+export const CORRECT_AFTER_PLAYING_MS = 2000;
+
+export function nextLead(leadUsedMS: number, landingGapMS: number): number {
+  return Math.min(Math.max(0, leadUsedMS + landingGapMS), CONVERTING_LEAD_CAP_MS);
+}
+
+export function followerShouldCorrect(
+  localMS: number,
+  expectedMS: number,
+  converting: boolean,
+  msSincePlaying: number,
+  correctionsSoFar: number,
+): boolean {
+  if (!converting || correctionsSoFar >= MAX_CORRECTIONS) return false;
+  if (msSincePlaying < CORRECT_AFTER_PLAYING_MS) return false;
+  return Math.abs(expectedMS - localMS) > CONVERTING_CORRECT_MS;
 }
 
 export interface PeerRoomState {
@@ -373,7 +447,7 @@ export function usePeerRoom(fingerprint: string, roomID: string | null): PeerRoo
     const timer = setInterval(() => {
       if (over) return;
       apiGet<TogetherSession>(url).then(take).catch(fail);
-    }, POLL_MS);
+    }, PEER_POLL_MS);
 
     return () => {
       cancelled = true;

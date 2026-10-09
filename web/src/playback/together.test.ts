@@ -12,7 +12,11 @@ import {
   shouldResync,
   followerShouldSeek,
   followerSeekTarget,
+  followerShouldCorrect,
+  nextLead,
   CONVERTING_TOLERANCE_MS,
+  CONVERTING_CORRECT_MS,
+  CONVERTING_DEFAULT_LEAD_MS,
 } from "./together";
 
 const at = (positionMS: number, updatedAtSeconds: number, paused = false) => ({
@@ -130,73 +134,127 @@ describe("when a follower in another household's room seeks", () => {
 });
 
 /*
- * Joining a room whose film is converted for you, on a far server slow to
- * start: found 2026-10-09, when the conversion restarted at 94 s, 104 s and
- * 114 s with nothing ever served, because each start took longer than the
- * settle and every poll found the follower behind.
+ * Joining a room whose film is converted for you, simulated.
  *
- * A small simulation of exactly that: the host plays on, the follower polls
- * the room every two seconds, and a converted stream plays nothing for
- * `startup` after each seek, then runs from where it was asked to start.
+ * The host plays on; the follower polls the room every 500 ms. A converted
+ * stream shows nothing for `startup` after a seek, then runs from `slop`
+ * before where it was asked to start (an old poll, the keyframe it had to
+ * begin at). Both cases come from one evening between two real servers:
+ *
+ * - 12 s starts, slop 0: the conversion restarted at 94, 104 and 114 s with
+ *   nothing served (the "old" rule).
+ * - 4 s starts, 4 s slop: after #807 the picture came in four seconds and
+ *   sat eight seconds behind for the whole film (the "v0.9.71" rule).
  */
-function simulate(startupMS: number, rules: "old" | "new") {
-  let now = 0;
-  const host = (t: number) => 94_000 + t; // the host's film position
+type Rules = "old" | "v0.9.71" | "new";
+
+function simulate(startup: number, rules: Rules, slop = 0) {
+  const host = (t: number) => 94_000 + t;
+  const tick = 500;
   let local = 0;
-  let lastSeek = 0;
+  let lastSeek = -Infinity;
   let seekAt = -Infinity;
-  let startedSinceSeek = true;
-  let measured = 0;
+  let started = true;
+  let playingSince = 0;
+  let lead = rules === "new" ? CONVERTING_DEFAULT_LEAD_MS : 0;
+  let leadUsed = 0;
+  let measuredStartup = 0;
+  let corrections = 0;
   let seeks = 0;
-  for (now = 0; now <= 90_000; now += 2000) {
-    // The stream: nothing until `startup` after a seek, then it runs.
-    if (!startedSinceSeek && now - seekAt >= startupMS) {
-      startedSinceSeek = true;
-      measured = now - seekAt;
+  const at = (now: number) => (started ? local + (now - playingSince) : local);
+  let now = 0;
+  for (now = 0; now <= 120_000; now += tick) {
+    if (!started && now - seekAt >= startup) {
+      started = true;
+      playingSince = now;
+      measuredStartup = now - seekAt;
+      if (rules === "new") lead = nextLead(leadUsed, host(now) - local);
     }
-    const elapsedSincePlay = startedSinceSeek ? now - (seekAt + startupMS) : 0;
-    const at = seeks === 0 ? 0 : local + Math.max(0, elapsedSincePlay);
-    const should =
-      rules === "new"
-        ? followerShouldSeek(at, host(now), true, now - lastSeek, startedSinceSeek)
-        : followerShouldSeek(at, host(now), true, now - lastSeek);
-    if (seeks === 0 || should) {
+    const local_ = at(now);
+    const far =
+      seeks === 0 ||
+      (rules === "old"
+        ? followerShouldSeek(local_, host(now), true, now - lastSeek)
+        : followerShouldSeek(local_, host(now), true, now - lastSeek, started));
+    const close =
+      rules === "new" &&
+      !far &&
+      started &&
+      followerShouldCorrect(local_, host(now), true, now - playingSince, corrections);
+    if (far || close) {
+      if (close) corrections++;
       seeks++;
       lastSeek = now;
       seekAt = now;
-      startedSinceSeek = false;
-      local = rules === "new" ? followerSeekTarget(host(now), true, measured) : host(now);
+      started = false;
+      leadUsed = rules === "new" ? lead : rules === "v0.9.71" ? measuredStartup : 0;
+      local = followerSeekTarget(host(now), true, leadUsed) - slop;
     }
   }
-  const finalAt = local + Math.max(0, now - 2000 - (seekAt + startupMS));
-  return { seeks, drift: Math.abs(host(now - 2000) - finalAt) };
+  const end = now - tick;
+  return { seeks, corrections, drift: Math.abs(host(end) - at(end)) };
 }
 
-describe("joining a converted room on a slow server", () => {
-  it("settles within two seeks, inside the tolerance, when a start takes twelve seconds", () => {
-    const r = simulate(12_000, "new");
-    expect(r.seeks).toBeLessThanOrEqual(2);
-    expect(r.drift).toBeLessThanOrEqual(CONVERTING_TOLERANCE_MS);
-  });
-
-  it("is the loop it replaces, under the old rule", () => {
-    // The positive control: the same far server, the old rule, restarting
-    // over and over as the log showed.
+describe("joining a converted room", () => {
+  it("is the loop #807 replaced, under the old rule, when a start takes twelve seconds", () => {
+    // The positive control for the first evening.
     expect(simulate(12_000, "old").seeks).toBeGreaterThanOrEqual(5);
   });
 
+  it("starts once on a twelve-second start, and lands within the tolerance", () => {
+    for (const rules of ["v0.9.71", "new"] as const) {
+      const r = simulate(12_000, rules);
+      expect(r.seeks).toBeLessThanOrEqual(3);
+      expect(r.drift).toBeLessThanOrEqual(CONVERTING_TOLERANCE_MS);
+    }
+  });
+
+  it("sat eight seconds behind under v0.9.71 when a four-second start landed late", () => {
+    // The positive control for the second evening: never corrected, because
+    // eight seconds is inside the converted tolerance.
+    const r = simulate(4000, "v0.9.71", 4000);
+    expect(r.drift).toBeGreaterThan(CONVERTING_CORRECT_MS);
+  });
+
+  it("closes that gap with at most two more seeks", () => {
+    const r = simulate(4000, "new", 4000);
+    expect(r.seeks).toBeLessThanOrEqual(3);
+    expect(r.drift).toBeLessThanOrEqual(CONVERTING_CORRECT_MS);
+  });
+
+  it("stops correcting after two tries, whatever the landing", () => {
+    // A far server whose streams land further behind than the lead may reach
+    // (the cap is 20 s). The close-gap corrections stop at two; what remains
+    // is the ordinary 8 s rule, unchanged from before.
+    expect(simulate(4000, "new", 30_000).corrections).toBe(2);
+  });
+});
+
+describe("the follow rules on their own", () => {
   it("does not move a converted stream again until it has played", () => {
     expect(followerShouldSeek(0, 600_000, true, 12_000, false)).toBe(false);
     expect(followerShouldSeek(0, 600_000, true, 12_000, true)).toBe(true);
-    // A conversion that never starts is retried in the end.
     expect(followerShouldSeek(0, 600_000, true, 31_000, false)).toBe(true);
-    // A direct file is never held back by it.
     expect(followerShouldSeek(60_000, 64_000, false, 10_000, false)).toBe(true);
   });
 
-  it("aims ahead by the measured start on a converted stream only", () => {
+  it("aims ahead by the lead on a converted stream only, capped", () => {
     expect(followerSeekTarget(100_000, true, 12_000)).toBe(112_000);
     expect(followerSeekTarget(100_000, false, 12_000)).toBe(100_000);
     expect(followerSeekTarget(100_000, true, 90_000)).toBe(120_000);
+  });
+
+  it("learns the lead from where a start landed, either side", () => {
+    expect(nextLead(4000, 4000)).toBe(8000);
+    expect(nextLead(8000, -3000)).toBe(5000);
+    expect(nextLead(1000, -5000)).toBe(0);
+  });
+
+  it("corrects a close gap only on a converted stream that has played a moment, twice at most", () => {
+    expect(followerShouldCorrect(100_000, 108_000, true, 5000, 0)).toBe(true);
+    expect(followerShouldCorrect(100_000, 102_000, true, 5000, 0)).toBe(false);
+    expect(followerShouldCorrect(100_000, 108_000, true, 500, 0)).toBe(false);
+    expect(followerShouldCorrect(100_000, 108_000, true, 5000, 2)).toBe(false);
+    expect(followerShouldCorrect(100_000, 108_000, false, 5000, 0)).toBe(false);
   });
 });
