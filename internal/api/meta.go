@@ -10,6 +10,7 @@ import (
 
 	"lancast/internal/media"
 	"lancast/internal/meta"
+	"lancast/internal/rating"
 	"lancast/internal/scan"
 	"lancast/internal/store"
 )
@@ -81,6 +82,18 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 			var v string
 			if err := json.Unmarshal(val, &v); err != nil {
 				writeError(w, http.StatusBadRequest, "bad_request", "content_rating must be a string")
+				return
+			}
+			/*
+			 * Only a label the ladder places, exactly, or empty. A rating
+			 * typed by hand is how a household fixes what a ceiling hides,
+			 * and one the ceiling query cannot match ("PG13", "esrb m") would
+			 * look fixed and go on hiding the item — and being locked, no
+			 * provider would ever correct it.
+			 */
+			if v != "" && !rating.IsPlaced(v) {
+				writeError(w, http.StatusBadRequest, "bad_request",
+					"content_rating must be a certificate the rating ladder places, such as PG-13, TV-14 or ESRB E, or empty")
 				return
 			}
 			upd.ContentRating = &v

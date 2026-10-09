@@ -6593,6 +6593,7 @@ export interface components {
             title?: string;
             year?: number;
             overview?: string;
+            /** @description A certificate the rating ladder places, written exactly as the ladder writes it (`PG-13`, `TV-14`, `ESRB E`), or empty. Anything else is refused with `400`: a label no ceiling query can match would look set and go on hiding the item, and being locked, nothing would correct it. */
             content_rating?: string;
             series?: string;
             season?: number;
@@ -7905,6 +7906,8 @@ export interface operations {
                 min_rating?: number;
                 /** @description `watched=false` restricts to items the calling user has not finished; any other value is ignored. Keys off the leaf's own play state, so it filters movies and episodes — a container carries no watched flag and is unaffected. */
                 watched?: boolean;
+                /** @description `unrated=1` restricts to what every content-rating ceiling hides for want of a rating: kinds a certificate could describe whose effective rating (their own, else their parent's or grandparent's) is missing or is not a label the ladder places. The list an administrator rates from by hand; kinds no certificate describes never appear in it. Any other value is ignored. */
+                unrated?: "1";
                 /**
                  * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.
                  *

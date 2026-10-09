@@ -7,6 +7,8 @@ import {
   useCastByIDs,
   useFacePeople,
   useRecentPhotos,
+  useIsAdmin,
+  useUnrated,
   fetchLibraryTracks,
   playableKindFor,
   type PlayableKind,
@@ -269,6 +271,10 @@ export function LibraryView({
   // already cached for the Home row, and shuffling them client-side gives the
   // variety without the cost.
   const isPictures = library.kind === "picture";
+  // Games are the library a ceiling empties: most predate the ESRB, so an
+  // administrator is offered the list to rate them by hand.
+  const admin = useIsAdmin();
+  const { data: unrated } = useUnrated(library.id, admin && library.kind === "rom");
   const { data: bannerPool } = useRecentPhotos(isPictures ? 24 : 0);
   const [shownPhoto, setShownPhoto] = useState<Item | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -440,6 +446,14 @@ export function LibraryView({
             onClick={() => navigate(`/library/${libraryID}/collections`)}
           >
             Collections
+          </button>
+        )}
+        {library.kind === "rom" && unrated && unrated.total > 0 && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/unrated`)}
+          >
+            {unrated.total} not rated
           </button>
         )}
         {/* A picture library has a second way to be read: by when the

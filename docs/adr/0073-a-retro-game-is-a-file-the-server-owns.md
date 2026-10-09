@@ -467,6 +467,43 @@ fetches nothing. Removing the DLL check or the sweep fails a test. The real
 cores from the stable archive pass the real-core tests: every console draws,
 and N64 Continue resumes.
 
+## Amendment: games get no exception from a ceiling; they are rated by hand (2026-10-08)
+
+This settles "whether games deserve an exception", left open above.
+
+**Measured first.** On the real library, 50 of 91 games had no rating: all 20
+N64 games, the one PlayStation game, 11 of 27 NES games and 13 of 26 SNES
+games. That is worse than the coverage note predicted, and much of it is
+permanent. The ESRB began in 1994, so most NES and early SNES games were never
+rated by anyone. No future DAT will rate them.
+
+**No exception.** Exempting games would show a child account every game, and
+`Conker's Bad Fur Day` is one of the unrated ones. A per-account "show unrated
+games" switch was considered and declined for the same reason.
+
+**Rating by hand is how it is fixed.** The rule in `internal/rating` always
+said an unrated item is "fixable by rating the item". Until now that was only
+possible through a hand-written `PATCH`. Now:
+- **On a detail page,** an administrator gets a content-rating picker for any
+  kind a certificate describes. Games get ESRB, television the TV ratings,
+  and films the US certificates.
+- **On a retro library,** an administrator gets an "N not rated" button. It
+  opens a page listing what a ceiling hides there, with the same picker on
+  each row. A row leaves the list as soon as it is rated.
+- **The rating is locked when set,** as every edit is, so a rescan never
+  undoes it. The identify worker already skips a locked rating.
+
+**Unrated means one thing.** `?unrated=1` and the share warning
+(`UnratedInShare`) both use `unratedPredicate`, which is the complement of the
+highest ceiling. It covers an effective rating that is missing, `NR`, or a
+label the ladder does not place. The warning used to test only `IS NULL`, so
+it called an `NR` film rated while every ceiling hid it.
+
+**Only placed labels are accepted.** `PATCH` refuses a `content_rating` that
+the ladder does not place, written exactly as stored. The ceiling query
+matches exact strings, so `PG13` or `esrb m` would look set and go on hiding
+the item. Being locked, no provider would ever correct it.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).

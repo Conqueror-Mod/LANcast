@@ -320,6 +320,47 @@ describe("a game's detail page", () => {
     expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(false);
   });
 
+  it("offers an administrator the game's ESRB rating, and shows it once set", async () => {
+    let rated: string | null = null;
+    const inner = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/auth")) {
+          return new Response(
+            JSON.stringify({ user: { role: "admin" }, configured: true, authenticated: true }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (init?.method === "PATCH") {
+          rated = JSON.parse(String(init.body)).content_rating;
+          return new Response(JSON.stringify({ ...game, content_rating: rated }), { status: 200 });
+        }
+        if (/\/api\/items\/41$/.test(url.split("?")[0]) && rated) {
+          return new Response(JSON.stringify({ ...game, content_rating: rated }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return inner(input, init);
+      }),
+    );
+    await render("/item/41");
+    expect(host.textContent).toContain("Not rated: hidden from every account with a ceiling.");
+    const m = buttons().find((b) => b.textContent === "M" && b.className.includes("rating-pick"))!;
+    await act(async () => m.click());
+    await settle();
+    expect(rated).toBe("ESRB M");
+    expect(host.querySelector(".detail__meta")?.textContent).toContain("ESRB M");
+    expect(buttons().find((b) => b.textContent === "M" && b.className.includes("is-chosen"))).toBeDefined();
+  });
+
+  it("offers a member no rating picker", async () => {
+    await render("/item/41");
+    expect(host.querySelector(".rating-pick")).toBeNull();
+  });
+
   it("says a console needs a BIOS, opens its folder, and checks again", async () => {
     let bios = false;
     window.lancastRetroAvailable = vi.fn(async () =>

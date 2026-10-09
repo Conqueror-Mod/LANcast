@@ -1,0 +1,64 @@
+/* Rating an item by hand (ContentRatingPicker). Chosen is blue, never gold:
+   gold means where focus is. */
+.rating-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.rating-pick__label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.rating-pick__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rating-pick__choice {
+  min-width: 40px;
+  padding: 4px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+
+.rating-pick__choice.is-chosen {
+  border-color: var(--nebula-blue);
+  background: color-mix(in srgb, var(--nebula-blue) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.rating-pick__choice:hover:not(:disabled),
+.rating-pick__choice:focus {
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  outline: none;
+}
+
+.rating-pick__choice:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.rating-pick__note {
+  flex-basis: 100%;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.rating-pick__note--warn {
+  color: var(--danger, #ff6b6b);
+}

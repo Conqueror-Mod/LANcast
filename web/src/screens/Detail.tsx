@@ -49,6 +49,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
 import { BiosFolder, CoreDownload } from "@/components/CoreDownload";
+import { ContentRatingPicker } from "@/components/ContentRatingPicker";
+import { canBeRated } from "@/lib/ratings";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
@@ -809,6 +811,15 @@ export function Detail() {
                 {isAdmin && item.kind === "movie" && (
                   <RedetectCreditsButton id={item.id} />
                 )}
+              </div>
+            )}
+
+            {/* Rating by hand: a ceiling hides anything unrated, and this is
+                the way to stop it hiding something. Admin only, like the edit
+                it sends. Games most of all, since most predate the ESRB. */}
+            {isAdmin && canBeRated(item.kind) && (
+              <div className="detail__rate">
+                <ContentRatingPicker id={item.id} kind={item.kind} current={item.content_rating} />
               </div>
             )}
 
