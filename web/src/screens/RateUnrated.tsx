@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useIsAdmin, useLibraries, useUnrated } from "@/api/hooks";
 import { ContentRatingPicker } from "@/components/ContentRatingPicker";
 import { platformLabel } from "@/lib/platforms";
+import { episodeLabel } from "@/lib/format";
 import type { Item } from "@/api/types";
 import "./RateUnrated.css";
 
@@ -38,7 +39,8 @@ export function RateUnrated() {
       </div>
       <p className="unrated__lede">
         An account with a content ceiling never sees anything unrated, because LANcast cannot
-        tell whether it is suitable. Rate each one here and it appears for every account its
+        tell whether it is suitable. An episode takes its show&apos;s rating, so rating a show
+        clears its episodes from this list too. Rate each one here and it appears for every account its
         rating allows. A rating you set is locked, so a rescan never undoes it.
       </p>
       {!admin && <p className="unrated__empty">Only an administrator can rate titles.</p>}
@@ -61,8 +63,14 @@ export function RateUnrated() {
   );
 }
 
+// What the row is, under its title: a game's console, an episode's show and
+// number (an episode title alone identifies nothing), and the year.
 function subtitle(it: Item): string {
-  return [it.kind === "rom" ? platformLabel(it.platform) : "", it.year ? String(it.year) : ""]
+  return [
+    it.kind === "rom" ? platformLabel(it.platform) : "",
+    episodeLabel(it) ?? "",
+    it.year ? String(it.year) : "",
+  ]
     .filter(Boolean)
     .join(" · ");
 }
