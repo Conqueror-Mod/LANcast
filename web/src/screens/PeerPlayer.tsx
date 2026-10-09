@@ -19,6 +19,7 @@ import {
   usePeerRoom,
   expectedPosition,
   followerShouldSeek,
+  followerSeekTarget,
 } from "@/playback/together";
 import { PeerControls } from "@/components/PeerControls";
 import "./PeerPlayer.css";
@@ -338,21 +339,42 @@ export function PeerPlayer() {
    */
   const lastSeek = useRef(0);
   const convertingRef = useRef(false);
+  /*
+   * Whether the stream has played since the last seek, and how long that
+   * took. A converted stream is not moved again until it has started, and
+   * the next seek aims ahead by the startup it took (followerSeekTarget), so
+   * a slow far server costs one restart rather than a loop of them.
+   */
+  const startedSinceSeek = useRef(true);
+  const startupMS = useRef(0);
+  useEffect(() => {
+    const el = video;
+    if (!el) return;
+    const onPlaying = () => {
+      if (startedSinceSeek.current) return;
+      startedSinceSeek.current = true;
+      if (lastSeek.current > 0) startupMS.current = Date.now() - lastSeek.current;
+    };
+    el.addEventListener("playing", onPlaying);
+    return () => el.removeEventListener("playing", onPlaying);
+  }, [video]);
   useEffect(() => {
     const el = video;
     const sess = room.session;
     if (!member || !el || !sess) return;
-    const target = expectedPosition(sess, room.receivedAt, Date.now());
+    const expected = expectedPosition(sess, room.receivedAt, Date.now());
     if (
       followerShouldSeek(
         atRef.current * 1000,
-        target,
+        expected,
         convertingRef.current,
         Date.now() - lastSeek.current,
+        startedSinceSeek.current,
       )
     ) {
       lastSeek.current = Date.now();
-      seekRef.current?.(target / 1000);
+      startedSinceSeek.current = false;
+      seekRef.current?.(followerSeekTarget(expected, convertingRef.current, startupMS.current) / 1000);
     }
     if (sess.paused && !el.paused) el.pause();
     if (!sess.paused && el.paused) resume(el);
