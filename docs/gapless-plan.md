@@ -82,10 +82,11 @@ satisfies it with libmpv (`mpvBackend`). Music would get a third backend:
 
 Per device, beside night mode in the playback panel:
 - **Gapless:** on by default. Its only visible effect is the absence of a gap.
-- **Crossfade:** Off (default), 2 s, 5 s, 8 s or 12 s. Crossfade never applies
-  between two consecutive tracks of the same album, where a fade would cut into
-  a live or continuous recording. **Decide:** is that the rule, or should
-  crossfade apply everywhere?
+- **Crossfade:** Off (default), 2 s, 5 s, 8 s or 12 s. **Decided (Chris,
+  2026-10-09): crossfade never applies between consecutive tracks of the same
+  album.** Those always play gapless, because a fade would cut into a live or
+  continuous recording. It applies when the album changes, as in a shuffle, a
+  playlist or a mixed queue.
 
 ## Steps
 
