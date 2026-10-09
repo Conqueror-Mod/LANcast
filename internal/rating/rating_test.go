@@ -167,3 +167,25 @@ func TestESRBIsKeptApartFromAustralianM(t *testing.T) {
 		t.Error("rating pending is a rating that says nothing, and must be blocked")
 	}
 }
+
+// What may be set by hand is exactly what the ceiling query can match.
+func TestPlacedIsWhatAQueryCanMatch(t *testing.T) {
+	for _, l := range Placed() {
+		if !IsPlaced(l) || !Known(l) {
+			t.Errorf("%q is placed but not recognised", l)
+		}
+		if !Allowed(l, "ESRB AO") {
+			t.Errorf("%q is placed and refused by the highest ceiling", l)
+		}
+	}
+	for _, l := range []string{"NR", "UNRATED", "", "PG13", "esrb m", "US:PG", " PG"} {
+		if IsPlaced(l) {
+			t.Errorf("%q is placed, but no ceiling query matches it as stored", l)
+		}
+	}
+	for _, l := range []string{"ESRB E", "ESRB T", "ESRB M", "PG-13", "TV-14"} {
+		if !IsPlaced(l) {
+			t.Errorf("%q should be settable", l)
+		}
+	}
+}

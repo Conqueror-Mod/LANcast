@@ -992,7 +992,14 @@ type ItemFilter struct {
 	// leaf's own playback row, so this filters movies and episodes; a container
 	// (a show) carries no watched flag and is unaffected.
 	Unwatched bool
-	UserID    string
+
+	/*
+	 * Unrated keeps only what every ceiling hides for want of a rating
+	 * (unratedPredicate), so an administrator can work through the list and
+	 * rate each by hand. Kinds no certificate describes never appear in it.
+	 */
+	Unrated bool
+	UserID  string
 
 	// InProgress restricts to items this user has started and not finished.
 	// Also keyed by UserID. The complement of Unwatched rather than its
@@ -1357,6 +1364,11 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		for _, cr := range f.ContentRatings {
 			args = append(args, cr)
 		}
+	}
+	if f.Unrated {
+		pred, predArgs := unratedPredicate()
+		where += ` AND ` + pred
+		args = append(args, predArgs...)
 	}
 	if f.Unwatched {
 		// Not finished for this user: no playback row with the watched flag set.

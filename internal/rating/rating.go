@@ -99,7 +99,7 @@ var ages = map[string]int{
 	 * certificate, and ESRB's M is 17+. Storing "ESRB M" keeps the two
 	 * statements apart rather than letting whichever was entered first
 	 * decide what a game is old enough for. The retro identify worker writes
-	 * these, and nothing else does.
+	 * these, and so does an administrator rating a game by hand.
 	 */
 	"ESRB EC":   0,
 	"ESRB E":    0,
@@ -189,6 +189,32 @@ func Allowed(itemRating, ceiling string) bool {
  * what a rating means. The ordering of the result is not meaningful and callers
  * must not depend on it — it feeds an `IN` clause.
  */
+/*
+ * Placed is every label the ladder places, exactly as it must be stored.
+ *
+ * It is the set an item's own rating has to come from for any ceiling to let
+ * it through, which makes it two things at once: what "unrated" means in a
+ * query (anything outside it, which every ceiling hides), and what a person
+ * may set by hand. The ceiling query matches exact strings, so "esrb m" is a
+ * label Rank understands and a query does not — accepting it would be a
+ * rating that looks set and still hides the game.
+ */
+func Placed() []string {
+	out := make([]string, 0, len(ages))
+	for label, age := range ages {
+		if age != Unknown {
+			out = append(out, label)
+		}
+	}
+	return out
+}
+
+// IsPlaced reports whether a label is one of Placed, exactly.
+func IsPlaced(label string) bool {
+	age, ok := ages[label]
+	return ok && age != Unknown
+}
+
 func AllowedLabels(ceiling string) []string {
 	limit := Rank(ceiling)
 	if limit == Unknown {

@@ -110,6 +110,26 @@ const effectiveRating = `COALESCE(
 )`
 
 /*
+ * unratedPredicate matches what every ceiling hides for want of a rating: a
+ * kind a certificate could describe, whose effective rating is missing or is
+ * not a label the ladder places.
+ *
+ * The complement of ceilingPredicate at its highest rung, written once so the
+ * list a person rates from and the count a host is warned with are the same
+ * set the ceiling actually hides — "NR" and a misspelt certificate included,
+ * which an IS NULL test alone would have called rated.
+ */
+func unratedPredicate() (string, []any) {
+	exempt, args := exemptKindsSQL()
+	placed := rating.Placed()
+	for _, l := range placed {
+		args = append(args, l)
+	}
+	return `NOT ` + exempt + ` AND (` + effectiveRating + ` IS NULL OR ` +
+		effectiveRating + ` NOT IN (` + placeholders(len(placed)) + `))`, args
+}
+
+/*
  * ceilingPredicate restricts a listing to what a ceiling permits.
  *
  * Returns an empty string when there is no ceiling, so the ordinary case adds

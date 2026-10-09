@@ -591,6 +591,11 @@
    button would hold: bordered so it reads as deliberate rather than as a
    button that failed to render, and never gold — nothing here can be focused,
    and gold means where you are. */
+/* Rating by hand, under the metadata it belongs with (admin only). */
+.detail__rate {
+  margin-top: 14px;
+}
+
 /* The note and, where LANcast can fetch the core, the button that does. */
 .detail__plays-elsewhere-group {
   display: flex;

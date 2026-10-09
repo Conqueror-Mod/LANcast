@@ -2962,6 +2962,44 @@ export function usePlaylists(libraryID?: number, enabled = true) {
 }
 
 /**
+ * What a ceiling hides in one library for want of a rating — the list an
+ * administrator rates from by hand. `total` is the count the library page
+ * shows on its button.
+ */
+export function useUnrated(libraryID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["unrated", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?library_id=${libraryID}&unrated=1&limit=500`, signal),
+    enabled: enabled && libraryID > 0,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Rate an item by hand: PATCH /api/items/{id} with `content_rating`, which
+ * locks it so no provider refresh undoes it.
+ *
+ * What a person could be looking at that this changes: the item's own page
+ * (its rating is on the meta line), the unrated list it leaves and the count
+ * on the library's button, and every grid — a grid filtered by rating, or
+ * seen by an account with a ceiling, gains or loses it.
+ */
+export function useSetContentRating() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; rating: string }) =>
+      apiSend(`/api/items/${v.id}`, "PATCH", { content_rating: v.rating }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["item", v.id] });
+      for (const key of ["unrated", "items", "recently-added"]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
+/**
  * Rename a playlist.
  *
  * PATCH /api/items/{id} — the ordinary metadata edit, which has accepted a

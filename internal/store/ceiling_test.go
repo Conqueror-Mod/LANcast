@@ -449,3 +449,59 @@ func TestTheUnratedCountIgnoresCollections(t *testing.T) {
 			"a grouping is not an item a limit hides", before, after)
 	}
 }
+
+/*
+ * The unrated list is exactly what a ceiling hides for want of a rating, so
+ * rating everything on it is what makes a ceiling stop hiding things.
+ *
+ * Checked against the ceiling itself rather than against a list written out
+ * here: an item on the list must be hidden at the highest rung, and an item
+ * off it must be shown there. "NR" is the case an IS NULL test missed — a
+ * label that says nothing, which the ceiling hides and the old count called
+ * rated.
+ */
+func TestTheUnratedListIsWhatACeilingHides(t *testing.T) {
+	f := seedForCeiling(t)
+	ctx := context.Background()
+
+	id, err := f.st.UpsertItem(ctx, ScanFile{
+		LibraryID: f.lib.ID, Path: filepath.Join(t.TempDir(), "nr.mkv"), Kind: "movie",
+		Title: "Festival Cut", SortTitle: "Festival Cut", Container: "mkv", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	label := "NR"
+	if err := f.st.UpdateItemMetadata(ctx, id, ItemMetadata{ContentRating: &label}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, total, err := f.st.ListItems(ctx, ItemFilter{LibraryID: f.lib.ID, Unrated: true, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != len(items) {
+		t.Errorf("total = %d but %d items came back", total, len(items))
+	}
+	unrated := map[string]bool{}
+	for _, it := range items {
+		unrated[it.Title] = true
+	}
+	shown := listed(t, f.st, f.lib.ID, "NC-17")
+	everything := listed(t, f.st, f.lib.ID, "")
+	for title := range everything {
+		if unrated[title] == shown[title] {
+			t.Errorf("%q: on the unrated list = %v, shown under the highest ceiling = %v; "+
+				"exactly one should be true", title, unrated[title], shown[title])
+		}
+	}
+	if !unrated["Holiday 2004"] || !unrated["Festival Cut"] || unrated["Pilot"] {
+		t.Errorf("unrated list = %v; want the home video and the NR film, never the episode "+
+			"that inherits its show's rating", unrated)
+	}
+
+	n, _, err := f.st.UnratedInShare(ctx, f.lib.ID)
+	if err != nil || n != len(items) {
+		t.Errorf("the share warning counts %d unrated (%v), the list holds %d", n, err, len(items))
+	}
+}

@@ -531,3 +531,54 @@ func TestEnrichStatusEndpoint(t *testing.T) {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 }
+
+/*
+ * Rating by hand: only a label the ceiling query can match is accepted, and a
+ * rated item leaves the unrated list. A typo accepted here would look set and
+ * go on hiding the item behind every ceiling, locked against correction.
+ */
+func TestRatingByHandLeavesTheUnratedList(t *testing.T) {
+	h := newHarness(t)
+	id := h.addFile(t, "a.mkv", make([]byte, 16))
+
+	unrated := func() int {
+		t.Helper()
+		resp := h.do(t, "GET", "/api/items?unrated=1", nil)
+		var page struct {
+			Total int `json:"total"`
+		}
+		decode(t, resp, &page)
+		return page.Total
+	}
+	if n := unrated(); n != 1 {
+		t.Fatalf("unrated before = %d, want the one film", n)
+	}
+
+	for _, bad := range []string{"PG13", "esrb m", "NR", "Certificate 27"} {
+		resp := h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"content_rating": bad})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("content_rating %q: status %d, want 400", bad, resp.StatusCode)
+		}
+	}
+	if n := unrated(); n != 1 {
+		t.Errorf("a refused rating changed the list: %d", n)
+	}
+
+	resp := h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"content_rating": "ESRB T"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var it store.Item
+	decode(t, resp, &it)
+	locked := false
+	for _, f := range it.LockedFields {
+		locked = locked || f == "content_rating"
+	}
+	if it.ContentRating == nil || *it.ContentRating != "ESRB T" || !locked {
+		t.Errorf("content_rating = %v, locked = %v", it.ContentRating, locked)
+	}
+	if n := unrated(); n != 0 {
+		t.Errorf("unrated after rating = %d, want 0", n)
+	}
+}

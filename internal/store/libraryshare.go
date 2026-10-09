@@ -203,21 +203,21 @@ func (s *Store) CeilingFor(ctx context.Context, fingerprint string, libraryID in
  * and reporting 9,894 unrated tracks would read as a warning about nothing.
  */
 func (s *Store) UnratedInShare(ctx context.Context, libraryID int64) (unrated, total int, err error) {
-	exempt := make([]any, 0, len(unratedKinds)+1)
-	exempt = append(exempt, libraryID)
+	pred, args := unratedPredicate()
+	args = append(args, libraryID)
 	for _, k := range unratedKinds {
-		exempt = append(exempt, k)
+		args = append(args, k)
 	}
 	q := `SELECT
 			COUNT(*),
-			SUM(CASE WHEN ` + effectiveRating + ` IS NULL THEN 1 ELSE 0 END)
+			SUM(CASE WHEN ` + pred + ` THEN 1 ELSE 0 END)
 		  FROM media_item
 		  WHERE media_item.library_id = ?
 		    AND media_item.missing = 0
 		    AND media_item.kind NOT IN (` + placeholders(len(unratedKinds)) + `)`
 
 	var u sql.NullInt64
-	if err := s.db.QueryRowContext(ctx, q, exempt...).Scan(&total, &u); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&total, &u); err != nil {
 		return 0, 0, fmt.Errorf("count unrated in library %d: %w", libraryID, err)
 	}
 	return int(u.Int64), total, nil

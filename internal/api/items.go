@@ -615,8 +615,10 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		// Only the unwatched-only case is expressed; watched=true (watched-only)
 		// is not a browse affordance today, so any value but "false" is ignored.
 		Unwatched: q.Get("watched") == "false",
-		UserID:    s.userID(r),
-		Years:     years,
+		// What a ceiling hides for want of a rating, for rating by hand.
+		Unrated: q.Get("unrated") == "1",
+		UserID:  s.userID(r),
+		Years:   years,
 		// Resolution keys are not validated here. An unknown one contributes no
 		// clause in the store rather than a 400: these arrive from a bookmarked
 		// query string, and a tier that has been renamed should widen the grid
