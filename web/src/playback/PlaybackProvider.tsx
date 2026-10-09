@@ -64,6 +64,7 @@ import {
 } from "./fileTransport";
 import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
+import { MusicDeck, GAPLESS_OVERLAP_S, PRELOAD_LEAD_S } from "./musicDeck";
 import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { isGameOnScreen, subscribeGameOnScreen } from "./retro";
@@ -189,6 +190,16 @@ interface Decision {
  * it. It doubles as the tolerance for "cut at the same place twice".
  */
 const TRUNCATION_SLACK = 10;
+
+/*
+ * One deck for the window, made on first use: two plain audio elements that
+ * never join the document, because nothing about music needs a picture.
+ */
+let sharedDeck: MusicDeck | null = null;
+function musicDeck(): MusicDeck {
+  if (!sharedDeck) sharedDeck = new MusicDeck(new Audio(), new Audio());
+  return sharedDeck;
+}
 
 function sourceURL(
   id: number,
@@ -516,6 +527,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // Same reasoning for the whole object, read by the `ended` handler.
   const prefsRef = useRef<Prefs>(prefs);
   prefsRef.current = prefs;
+  // Night mode and a chosen output device are routed on the one element, so
+  // music uses the deck only without them (docs/gapless-plan.md, step 2).
+  const deckAllowedRef = useRef(true);
+  deckAllowedRef.current = !prefs.nightMusic && !prefs.audioDevice;
 
   const { data: item } = useItem(itemID);
   // Filled by NavigateBridge below when there is a router to navigate with.
@@ -544,6 +559,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * the source-selection effect; media() is what everything else talks to.
    */
   const nativeRef = useRef(false);
+  /*
+   * Music played through the deck (playback/musicDeck.ts): two elements, so
+   * the next track is already sounding when this one ends. Chosen per source,
+   * like nativeRef, and only for a directly played track while night mode and
+   * a chosen output device are off — both are routed on the one element
+   * today, and carrying them to the deck is the plan's step 2.
+   */
+  const deckRef = useRef(false);
   // The same fact as state, for the layout effect to react to.
   const [nativeOn, setNativeOn] = useState(false);
   // Whether this client's player has the audio filters at all. A fact about
@@ -559,7 +582,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   const media = useCallback(
-    (): MediaBackend | null => (nativeRef.current ? mpvBackend() : videoRef.current),
+    (): MediaBackend | null =>
+      nativeRef.current ? mpvBackend() : deckRef.current ? musicDeck() : videoRef.current,
     [],
   );
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1360,6 +1384,74 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   ]);
 
   /*
+   * Telling the deck what comes next (docs/gapless-plan.md).
+   *
+   * Only when the queue really will advance to it — Auto play on, not repeat
+   * one, no "still watching" prompt due — and only for a next track the deck
+   * can start exactly as the provider would: played directly, from the start,
+   * on its default audio track. Anything else is left to the ordinary advance,
+   * which is today's behaviour with today's gap.
+   *
+   * The item and the server's decision are fetched here, early; the item lands
+   * in the query cache, so the advance after the join finds it at once.
+   */
+  const nearEnd =
+    isAudio && totalDuration > 0 && totalDuration - current < PRELOAD_LEAD_S && !loading;
+  useEffect(() => {
+    if (!deckRef.current) return;
+    const deck = musicDeck();
+    const willAdvance =
+      nearEnd &&
+      nextItemID != null &&
+      prefsRef.current.autoPlay &&
+      repeat !== "one" &&
+      !shouldAsk(advanced(runRef.current, Date.now()));
+    if (!willAdvance || nextItemID == null) {
+      deck.queue(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const next = await qc.fetchQuery({
+          queryKey: ["item", nextItemID],
+          queryFn: ({ signal }) => apiGet<Item>(`/api/items/${nextItemID}`, signal),
+          staleTime: 30_000,
+        });
+        if (cancelled) return;
+        const fromZero =
+          entrySeconds({
+            fromStart: false,
+            liveAt: 0,
+            liveIsThisItem: false,
+            positionMs: next.progress?.position_ms,
+            watched: next.progress?.watched,
+            durationMs: next.duration_ms,
+          }) === 0;
+        if (next.kind !== "track" || !fromZero || next.track_choice?.audio_index != null) {
+          deck.queue(null);
+          return;
+        }
+        const pb = await apiGet<{ decision: Decision }>(
+          withCapabilities(`/api/items/${nextItemID}/playback`),
+        );
+        if (cancelled) return;
+        deck.queue(
+          pb.decision.method === "direct"
+            ? { url: `/api/stream/${nextItemID}`, overlap: GAPLESS_OVERLAP_S }
+            : null,
+        );
+      } catch {
+        if (!cancelled) deck.queue(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearEnd, nextItemID, repeat, itemID]);
+
+  /*
    * The silence between two tracks, written to the desktop log (lib/trackGap.ts).
    * Music only, and only an end the queue rolled on from: the measurement
    * gapless playback is designed against.
@@ -1384,18 +1476,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         );
       }
     };
-    const onPause = () => {
-      if (!v.ended) meter.reset();
+    const onPause = (e: Event) => {
+      const t = e.target as { ended?: boolean } | null;
+      if (!t?.ended) meter.reset();
     };
-    v.addEventListener("ended", onEnded);
-    v.addEventListener("loadstart", onLoadStart);
-    v.addEventListener("playing", onPlaying);
-    v.addEventListener("pause", onPause);
+    const deck = musicDeck();
+    // A join the deck made has no gap to measure: say so instead.
+    deck.onAdopt = (overlap) => {
+      meter.reset();
+      clientNote("info", "playback", `track join gapless (overlap ${Math.round(overlap * 1000)} ms)`);
+    };
+    const targets: EventTarget[] = [v, deck];
+    for (const t of targets) {
+      t.addEventListener("ended", onEnded);
+      t.addEventListener("loadstart", onLoadStart);
+      t.addEventListener("playing", onPlaying);
+      t.addEventListener("pause", onPause);
+    }
     return () => {
-      v.removeEventListener("ended", onEnded);
-      v.removeEventListener("loadstart", onLoadStart);
-      v.removeEventListener("playing", onPlaying);
-      v.removeEventListener("pause", onPause);
+      deck.onAdopt = undefined;
+      for (const t of targets) {
+        t.removeEventListener("ended", onEnded);
+        t.removeEventListener("loadstart", onLoadStart);
+        t.removeEventListener("playing", onPlaying);
+        t.removeEventListener("pause", onPause);
+      }
     };
   }, []);
 
@@ -1506,6 +1611,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         }
       }
       if (nativeRef.current && !native) mpvBackend().removeAttribute("src");
+      // A film after music: the deck lets go of its track.
+      if (native && deckRef.current) {
+        deckRef.current = false;
+        musicDeck().queue(null);
+        musicDeck().removeAttribute("src");
+        musicDeck().load();
+      }
       nativeRef.current = native;
       setNativeOn(native);
       v = native ? mpvBackend() : videoRef.current ?? v;
@@ -1598,6 +1710,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       sourceItem.current = item.id;
       clockItem.current = 0;
       hlsPlayingFrom.current = null;
+      /*
+       * Music played directly goes through the deck, so the next track can
+       * be waiting (playback/musicDeck.ts). Switching between the deck and the
+       * element releases whichever is no longer used, or both would sound.
+       */
+      const useDeck = item.kind === "track" && !transcoding.current && deckAllowedRef.current;
+      if (useDeck !== deckRef.current) {
+        const leaving: MediaBackend | null = deckRef.current ? musicDeck() : videoRef.current;
+        if (deckRef.current) musicDeck().queue(null);
+        if (leaving) {
+          leaving.pause();
+          leaving.removeAttribute("src");
+          leaving.load();
+        }
+        deckRef.current = useDeck;
+      }
+      if (useDeck) v = musicDeck();
       v.src = sourceURL(
         item.id,
         decision.current.method,
@@ -2920,6 +3049,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const v = videoRef.current;
     if (!v) return;
     const detach = attachMediaHandlers(v, () => mediaHandlersRef.current);
+    // The deck speaks only while it is the one playing, like mpv below.
+    const detachDeck = attachMediaHandlers(musicDeck(), () => mediaHandlersRef.current);
     // The native backend raises its events only while it is the one playing,
     // so listening to both is not listening twice.
     const detachNative = window.lancastMpvOpen
@@ -2927,6 +3058,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       : () => {};
     return () => {
       detach();
+      detachDeck();
       detachNative();
     };
   }, []);
