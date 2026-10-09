@@ -45,6 +45,75 @@ type retroPlayer struct {
 	session *host.Session
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	install coreInstall
+}
+
+/*
+ * coreInstall is the one download of the emulator cores (ADR 0073), run on
+ * its own goroutine because bindings are called on the UI thread and the
+ * archive is 230 MB. The page starts it and asks how it is going; a second
+ * start while one runs is the same download, not another.
+ */
+type coreInstall struct {
+	mu       sync.Mutex
+	running  bool
+	progress cores.Progress
+	err      string
+	cancel   context.CancelFunc
+}
+
+func (ci *coreInstall) start() {
+	ci.mu.Lock()
+	defer ci.mu.Unlock()
+	if ci.running {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ci.running, ci.err, ci.cancel = true, "", cancel
+	ci.progress = cores.Progress{Stage: "download", Total: cores.Stable.SizeBytes}
+	go func() {
+		began := time.Now()
+		err := cores.InstallAll(ctx, cores.Stable, retroDir("cores"), cores.All(), func(p cores.Progress) {
+			ci.mu.Lock()
+			ci.progress = p
+			ci.mu.Unlock()
+		})
+		ci.mu.Lock()
+		defer ci.mu.Unlock()
+		ci.running, ci.cancel = false, nil
+		switch {
+		case err == nil:
+			slog.Info("retro cores installed", "version", cores.Stable.Version, "took", time.Since(began).Round(time.Second))
+		case errors.Is(err, context.Canceled):
+			ci.progress = cores.Progress{}
+		default:
+			slog.Warn("retro cores not installed", "error", err)
+			ci.err = err.Error()
+		}
+	}()
+}
+
+func (ci *coreInstall) stop() {
+	ci.mu.Lock()
+	defer ci.mu.Unlock()
+	if ci.cancel != nil {
+		ci.cancel()
+	}
+}
+
+func (ci *coreInstall) status() map[string]any {
+	ci.mu.Lock()
+	defer ci.mu.Unlock()
+	return map[string]any{
+		"running": ci.running,
+		"stage":   ci.progress.Stage,
+		"done":    ci.progress.Done,
+		"total":   ci.progress.Total,
+		"error":   ci.err,
+		"version": cores.Stable.Version,
+		"bytes":   cores.Stable.SizeBytes,
+	}
 }
 
 func retroDir(parts ...string) string {
@@ -145,6 +214,7 @@ func (r *retroPlayer) availability(platform string) map[string]any {
 	case errors.Is(err, cores.ErrNotInstalled) && c.Pinned():
 		out["available"] = false
 		out["installable"] = true
+		out["download_bytes"] = cores.Stable.SizeBytes
 		out["reason"] = c.Display + " needs to be downloaded first."
 	case errors.Is(err, cores.ErrNotInstalled):
 		out["available"] = false
@@ -390,6 +460,12 @@ func (r *retroPlayer) bindings() map[string]any {
 		},
 		"lancastRetroCommand": r.command,
 		"lancastRetroStop":    func() { r.stop() },
+		// Fetching the default cores from libretro's pinned stable archive.
+		// The page names nothing: the URL, the checksums and where the files
+		// go are all this side's.
+		"lancastRetroInstallCores":       func() { r.install.start() },
+		"lancastRetroCancelInstallCores": func() { r.install.stop() },
+		"lancastRetroInstallStatus":      r.install.status,
 		// Pointing a console at a core DLL already on this machine — the
 		// ADR's advanced option, and the way to play before a build of each
 		// core is pinned. An empty path goes back to the default.

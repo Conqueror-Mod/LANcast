@@ -319,6 +319,86 @@ describe("a game's detail page", () => {
     expect(host.textContent).toContain("Games for this console play in a later release.");
     expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(false);
   });
+
+  describe("when the core is LANcast's to fetch", () => {
+    let status: Record<string, unknown>;
+    let installed: boolean;
+    beforeEach(() => {
+      installed = false;
+      status = { running: false, stage: "", done: 0, total: 0, error: "", version: "1.22.2", bytes: 229761684 };
+      window.lancastRetroAvailable = vi.fn(async () =>
+        installed
+          ? { available: true, core: "Mupen64Plus-Next" }
+          : {
+              available: false,
+              installable: true,
+              download_bytes: 229761684,
+              reason: "Mupen64Plus-Next needs to be downloaded first.",
+            },
+      );
+      window.lancastRetroInstallStatus = vi.fn(async () => status as never);
+      window.lancastRetroInstallCores = vi.fn(async () => {
+        status = { ...status, running: true, stage: "download", done: 0, total: 229761684 };
+      });
+      window.lancastRetroCancelInstallCores = vi.fn(async () => {
+        status = { ...status, running: false, stage: "" };
+      });
+    });
+    afterEach(() => {
+      delete window.lancastRetroInstallStatus;
+      delete window.lancastRetroInstallCores;
+      delete window.lancastRetroCancelInstallCores;
+    });
+
+    async function tick() {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 550));
+      });
+      await settle();
+    }
+
+    it("offers the download with its size and says where it comes from", async () => {
+      await render("/item/41");
+      expect(host.textContent).toContain("needs to be downloaded first");
+      expect(host.textContent).toContain("RetroArch 1.22.2 stable release");
+      button("Download emulator cores (219 MB)");
+    });
+
+    it("shows the download going, then offers Play without leaving the page", async () => {
+      await render("/item/41");
+      await act(async () => button("Download emulator cores (219 MB)").click());
+      await settle();
+      expect(window.lancastRetroInstallCores).toHaveBeenCalledTimes(1);
+      status = { ...status, done: 52428800 };
+      await tick();
+      expect(host.textContent).toContain("Downloading cores… 50 MB of 219 MB");
+      status = { ...status, stage: "unpack", done: 3, total: 7 };
+      await tick();
+      expect(host.textContent).toContain("Unpacking cores… 3 of 7");
+      installed = true;
+      status = { ...status, running: false, stage: "done", done: 0, total: 0 };
+      await tick();
+      expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(true);
+      expect(host.textContent).not.toContain("needs to be downloaded first");
+    });
+
+    it("can be cancelled while it downloads", async () => {
+      await render("/item/41");
+      await act(async () => button("Download emulator cores (219 MB)").click());
+      await settle();
+      await act(async () => button("Cancel").click());
+      await settle();
+      expect(window.lancastRetroCancelInstallCores).toHaveBeenCalledTimes(1);
+      button("Download emulator cores (219 MB)");
+    });
+
+    it("says why a download failed and offers it again", async () => {
+      status = { ...status, error: "the download did not match its expected checksum: got 00" };
+      await render("/item/41");
+      expect(host.textContent).toContain("did not match its expected checksum");
+      button("Try the download again");
+    });
+  });
 });
 
 describe("picture options", () => {

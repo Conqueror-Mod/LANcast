@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PLATFORMS } from "@/lib/platforms";
 import "./RetroCoreSettings.css";
+import { CoreDownload } from "./CoreDownload";
 import { retroAvailability, retroSupported, type RetroAvailability } from "@/playback/retro";
 
 /*
@@ -9,8 +10,8 @@ import { retroAvailability, retroSupported, type RetroAvailability } from "@/pla
  * A fact about this computer, so it lives in the desktop client and this
  * section appears only there. Each console shows the default core and whether
  * it is ready; a person can point a console at a core .dll already on this
- * machine — the ADR's advanced option, and the way to play before LANcast can
- * fetch a pinned build of each core itself.
+ * machine — the ADR's advanced option. LANcast's own cores come from libretro's
+ * pinned stable archive, fetched all at once from here or from a game's page.
  */
 export function RetroCoreSettings() {
   const [paths, setPaths] = useState<Record<string, string>>({});
@@ -55,6 +56,16 @@ export function RetroCoreSettings() {
         have, paste the full path of its <code>.dll</code>. Leave it empty to use LANcast&apos;s
         default.
       </p>
+      {Object.values(status).some((s) => s.installable) && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <CoreDownload
+              bytes={Object.values(status).find((s) => s.download_bytes)?.download_bytes}
+              onInstalled={() => void refresh()}
+            />
+          </div>
+        </div>
+      )}
       {PLATFORMS.map((p) => {
         const st = status[p.key];
         const value = editing[p.key] ?? paths[p.key] ?? "";
