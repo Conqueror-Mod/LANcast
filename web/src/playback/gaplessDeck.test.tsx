@@ -16,7 +16,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { PlaybackProvider, usePlayback } from "./PlaybackProvider";
+import { PlaybackProvider, usePlayback, resetMusicDeckForTests } from "./PlaybackProvider";
+import { setPrefs, resetPrefs } from "./prefs";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -115,6 +116,7 @@ const track = (id: number) => ({
 
 beforeEach(() => {
   FakeAudio.made = [];
+  resetMusicDeckForTests();
   notes = [];
   vi.stubGlobal("Audio", FakeAudio);
   window.lancastClientNote = vi.fn(async (_l: string, _a: string, m: string) => {
@@ -209,3 +211,44 @@ describe("an album played through the deck", () => {
     expect(notes.some((n) => n.startsWith("track join gapless"))).toBe(true);
   });
 });
+
+describe("the taper on the queue's start and end", () => {
+  it("fades a session in, leaves the middle alone, and fades the last track out", async () => {
+    await render();
+    await act(async () => pb.play(1, [1]));
+    await settle(80);
+    const one = playingOn("/api/stream/1")!;
+    // Just after play was pressed: well under full level.
+    expect(one.volume).toBeLessThan(0.6);
+    await settle(1700);
+    expect(one.volume).toBeCloseTo(1, 2);
+    // The only track in the queue: its last seconds fade.
+    await act(async () => one.at(28));
+    await settle(120);
+    expect(one.volume).toBeLessThan(0.9);
+    expect(one.volume).toBeGreaterThan(0);
+  });
+
+  it("does not fade a track that something follows", async () => {
+    await render();
+    await act(async () => pb.play(1, [1, 2]));
+    await settle(1800);
+    const one = playingOn("/api/stream/1")!;
+    await act(async () => one.at(28));
+    await settle(120);
+    expect(one.volume).toBeCloseTo(1, 2);
+  });
+
+  it("does nothing with the setting off", async () => {
+    setPrefs({ taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1]));
+      await settle(80);
+      expect(playingOn("/api/stream/1")!.volume).toBeCloseTo(1, 2);
+    } finally {
+      resetPrefs();
+    }
+  });
+});
+

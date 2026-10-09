@@ -1,5 +1,6 @@
 import { clientNote } from "@/lib/clientNote";
 import { TrackGapMeter } from "@/lib/trackGap";
+import { taperGain, TAPER_IN_MS } from "@/lib/taper";
 import {
   createContext,
   useCallback,
@@ -199,6 +200,11 @@ let sharedDeck: MusicDeck | null = null;
 function musicDeck(): MusicDeck {
   if (!sharedDeck) sharedDeck = new MusicDeck(new Audio(), new Audio());
   return sharedDeck;
+}
+
+/** Tests only: the next use makes a fresh deck from whatever `Audio` is now. */
+export function resetMusicDeckForTests(): void {
+  sharedDeck = null;
 }
 
 function sourceURL(
@@ -567,6 +573,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * today, and carrying them to the deck is the plan's step 2.
    */
   const deckRef = useRef(false);
+  // When play was last pressed on something, for the taper's fade-in.
+  const sessionStart = useRef<number | null>(null);
   // The same fact as state, for the layout effect to react to.
   const [nativeOn, setNativeOn] = useState(false);
   // Whether this client's player has the audio filters at all. A fact about
@@ -1008,6 +1016,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const fromStartFor = useRef(0);
   const play = useCallback((id: number, q: number[], fromStart = false) => {
     const resuming = playingRef.current === id;
+    // Pressing play on something starts a listening session: it fades in
+    // (lib/taper.ts). Re-entering the player for what is playing does not.
+    if (!resuming) sessionStart.current = performance.now();
     fromStartFor.current = fromStart && !resuming ? id : 0;
     setItemID((prev) => {
       // Re-entering the player screen for what is already playing must not
@@ -1109,6 +1120,37 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const to = nextPos(order, offPiste ? pos : idxInOrder, repeat);
     return to == null ? null : order[to];
   })();
+
+  /*
+   * The taper (lib/taper.ts): a session fades in from when play was pressed,
+   * and a track nothing will follow fades out over its last seconds. Music
+   * only, and only while the setting is on. The gain multiplies the person's
+   * own volume wherever a volume is applied, so the two never fight.
+   */
+  const taperRef = useRef({ audio: false, on: true, last: false });
+  taperRef.current = {
+    audio: isAudio,
+    on: prefs.taper,
+    last: repeat !== "one" && (nextItemID == null || !prefs.autoPlay),
+  };
+  const taperNow = useCallback((v: MediaBackend): number => {
+    const t = taperRef.current;
+    if (!t.audio || !t.on) return 1;
+    const since = sessionStart.current === null ? null : performance.now() - sessionStart.current;
+    if (since !== null && since >= TAPER_IN_MS) sessionStart.current = null;
+    const d = v.duration;
+    return taperGain({
+      msSinceStart: since !== null && since < TAPER_IN_MS ? since : null,
+      remainingS: Number.isFinite(d) && d > 0 ? d - v.currentTime : Infinity,
+      last: t.last,
+    });
+  }, []);
+  // The one place a level reaches a backend: the element's goes after night
+  // mode's graph (elementEngine.ts); the deck and mpv take it directly.
+  const applyLevel = useCallback((v: MediaBackend, level: number) => {
+    if (v === videoRef.current) setElementVolume(videoRef.current, level);
+    else v.volume = level;
+  }, []);
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
   // the caller, which reseeks rather than reloading the same source.
@@ -1382,6 +1424,26 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     prefs.nightVideo,
     prefs.audioDevice,
   ]);
+
+  /*
+   * Stepping the taper while music plays. Twenty times a second during a
+   * fade, which is smooth to the ear; a level is written only when it has
+   * moved, so outside a fade this costs a few multiplications.
+   */
+  const lastLevel = useRef(-1);
+  useEffect(() => {
+    if (!isAudio || !playing || !prefs.taper) return;
+    const id = window.setInterval(() => {
+      const v = media();
+      if (!v) return;
+      const level = volume * taperNow(v);
+      if (Math.abs(level - lastLevel.current) < 0.002) return;
+      lastLevel.current = level;
+      applyLevel(v, level);
+    }, 50);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAudio, playing, prefs.taper, volume]);
 
   /*
    * Telling the deck what comes next (docs/gapless-plan.md).
@@ -1727,6 +1789,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         deckRef.current = useDeck;
       }
       if (useDeck) v = musicDeck();
+      if (item.kind === "track") {
+        // Which path a track took, and why not the deck: the first question
+        // when a join is not gapless.
+        const why = transcoding.current
+          ? "converted"
+          : prefsRef.current.nightMusic
+            ? "night mode on"
+            : prefsRef.current.audioDevice
+              ? "output device chosen"
+              : "";
+        clientNote("info", "playback", useDeck ? "music on deck" : `music on element (${why})`);
+      }
       v.src = sourceURL(
         item.id,
         decision.current.method,
@@ -2236,8 +2310,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (!v) return;
     // The element's volume goes after night mode's graph once it is routed
     // (elementEngine.ts); mpv takes it directly.
-    if (v === videoRef.current) setElementVolume(videoRef.current, clamped);
-    else v.volume = clamped;
+    applyLevel(v, clamped * taperNow(v));
     if (clamped > 0 && v.muted) {
       v.muted = false;
       setMuted(false);
@@ -2685,8 +2758,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // The element resets to full volume on every new source, so the
       // remembered level has to be re-applied — including across a
       // transcode seek, which reloads the source.
-      if (v === videoRef.current) setElementVolume(videoRef.current, volume);
-      else v.volume = volume;
+      // Through the taper, or a fading-in session would start at full level
+      // for the instant before its first step.
+      applyLevel(v, volume * taperNow(v));
       // Same reason as volume: a fresh source resets playbackRate to 1,
       // so a chosen speed has to be re-applied or it silently reverts on
       // the next episode.
