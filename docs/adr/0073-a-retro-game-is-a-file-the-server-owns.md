@@ -504,6 +504,33 @@ the ladder does not place, written exactly as stored. The ceiling query
 matches exact strings, so `PG13` or `esrb m` would look set and go on hiding
 the item. Being locked, no provider would ever correct it.
 
+## Amendment: the pad drives the menu it opened (2026-10-08)
+
+The menu could be opened from a pad (Guide, or Select+Start held), and then
+nothing on the pad did anything. A paused session stopped reading input,
+because input was polled only inside a running frame. So the controller that
+opened the menu could not move, choose or close it. Only the keyboard and the
+mouse could.
+
+**A paused session now reads the pad every 16 ms** and sends menu moves to the
+page as `nav` events: up, down, left, right, select and back.
+- The page turns each move into the key the focus controller already obeys,
+  so the menu needs no navigation of its own.
+- The D-pad and the left stick past half way both move. The bottom face button
+  chooses, matching RetroPad B as everywhere else. The right face button,
+  Start and Guide go back, which resumes the game.
+- Anything held when the menu opened is ignored until it is released, or the
+  Guide that opened the menu would close it.
+- A held direction repeats after 400 ms, then every 130 ms.
+- **Only the pad is read, not the keyboard.** The keyboard already reaches the
+  page as real keys, so merging it in would move twice per press. `PadSource`
+  is the Xbox reader on its own.
+
+**Arrows stay inside the menu.** The focus controller gained scopes. While the
+game menu or its error panel is mounted, arrows and the pad reach only what is
+inside it. Before, the docked film's grip and size buttons sat one press below
+the menu's last item. A test reproduces that with no scope set, as its control.
+
 ## Consequences
 
 - One new library kind, one nullable column, and one new table (`rom_save`).

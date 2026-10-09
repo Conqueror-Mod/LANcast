@@ -179,6 +179,25 @@ describe("the game screen", () => {
     expect(host.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it("is driven by the pad once the client has opened it: select chooses, back resumes", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    // Guide on the pad: the client pauses and says so.
+    emit({ kind: "menu" });
+    expect(document.activeElement?.textContent).toBe("Resume");
+    // The bottom face button chooses what has focus.
+    await act(async () => emit({ kind: "nav", text: "select" }));
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("resume", "");
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+
+    emit({ kind: "menu" });
+    vi.mocked(window.lancastRetroCommand!).mockClear();
+    // The right face button, Start or Guide: back, which resumes.
+    await act(async () => emit({ kind: "nav", text: "back" }));
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("resume", "");
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it("offers to load only the slots that hold a save", async () => {
     saves = [{ slot: "state-3", updated_at: 1, size_bytes: 4 }];
     await render("/play/41");

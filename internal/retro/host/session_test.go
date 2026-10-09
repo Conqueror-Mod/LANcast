@@ -359,6 +359,37 @@ func TestMenuPauses(t *testing.T) {
 	h.stop(t)
 }
 
+// padInput is a fakeInput that can report the pad alone, as the Xbox reader
+// does, so a paused game reads it for the menu.
+type padInput struct{ fakeInput }
+
+func (in *padInput) PollPads() ([2]Pad, bool) {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return [2]Pad{in.pad}, false
+}
+
+// While the menu is open the core does not run, and the pad still moves the
+// menu: before this, the pad that opened it could do nothing else in it.
+func TestPausedMenuReadsThePad(t *testing.T) {
+	in := &padInput{}
+	h := start(t, func(c *Config) { c.Input = in })
+	h.s.Pause()
+	h.waitFor(t, "paused")
+	in.mu.Lock()
+	in.pad = press(libretro.JoypadDown)
+	in.mu.Unlock()
+	if e := h.waitFor(t, "nav"); e.Text != "down" {
+		t.Errorf("nav = %q, want down", e.Text)
+	}
+	n := h.core.counter.Load()
+	time.Sleep(30 * time.Millisecond)
+	if h.core.counter.Load() != n {
+		t.Error("reading the pad ran the game")
+	}
+	h.stop(t)
+}
+
 // An option is the core's default until chosen, a chosen value the core
 // does not offer falls back to the default, and the core is told it changed.
 func TestOptions(t *testing.T) {

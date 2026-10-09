@@ -64,7 +64,9 @@ export interface RetroEvent {
     | "sram-saved"
     | "message"
     | "error"
-    | "stopped";
+    | "stopped"
+    /** A pad move while the menu is open: up, down, left, right, select, back. */
+    | "nav";
   slot?: string;
   text?: string;
   done?: number;

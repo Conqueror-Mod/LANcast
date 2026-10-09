@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGameSaves, useItem } from "@/api/hooks";
-import { useBackHandler, useFocusable } from "@/focus/FocusController";
+import { useBackHandler, useFocusable, useFocusScope } from "@/focus/FocusController";
 import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { CORNER_LABEL, SIZE_LABEL, nextCorner, nextSize, setDock, useDock } from "@/lib/dock";
@@ -120,6 +120,11 @@ export function RetroPlay() {
               setNotice(e.text ?? "Something went wrong.");
             }
             break;
+          case "nav":
+            // The pad, while the game is paused: the client reads it and the
+            // page hears it as the keys the focus controller already obeys.
+            pressKey(e.text);
+            break;
           case "stopped":
             setRunning(false);
             qc.invalidateQueries({ queryKey: ["game-saves", itemID] });
@@ -177,6 +182,10 @@ export function RetroPlay() {
   useBackHandler(back);
 
   const filled = new Set((saves ?? []).map((s) => s.slot));
+  // The menu and the error panel keep arrows and the pad to themselves: the
+  // corner card's buttons are live behind them and otherwise one press away.
+  const menuScope = useFocusScope();
+  const errorScope = useFocusScope();
 
   return (
     <div className="retro-play" role="application" aria-label={item?.title ?? "Game"}>
@@ -192,7 +201,7 @@ export function RetroPlay() {
       )}
 
       {error && (
-        <div className="retro-play__panel" role="alert">
+        <div className="retro-play__panel" role="alert" ref={errorScope}>
           <div className="retro-play__title">This game could not start</div>
           <div className="retro-play__sub">{error}</div>
           <MenuButton label="Back" onSelect={quit} autoFocus />
@@ -200,7 +209,7 @@ export function RetroPlay() {
       )}
 
       {menu && !error && (
-        <div className="retro-play__panel retro-play__menu" role="dialog" aria-label="Game menu">
+        <div className="retro-play__panel retro-play__menu" role="dialog" aria-label="Game menu" ref={menuScope}>
           <div className="retro-play__title">{item?.title}</div>
           <div className="retro-play__sub">{platformLabel(item?.platform)}</div>
           <MenuButton label="Resume" onSelect={closeMenu} autoFocus />
@@ -280,6 +289,21 @@ export function RetroPlay() {
       )}
     </div>
   );
+}
+
+const NAV_KEYS: Record<string, string> = {
+  up: "ArrowUp",
+  down: "ArrowDown",
+  left: "ArrowLeft",
+  right: "ArrowRight",
+  select: "Enter",
+  back: "Escape",
+};
+
+// pressKey hands a pad move to the focus controller as the key it stands for.
+function pressKey(move: string | undefined) {
+  const key = move ? NAV_KEYS[move] : undefined;
+  if (key) document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
 }
 
 function MenuButton({
