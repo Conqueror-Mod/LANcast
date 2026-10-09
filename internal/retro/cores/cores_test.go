@@ -232,3 +232,25 @@ func TestInstallAllRefusesAnUnpinnedCore(t *testing.T) {
 		t.Errorf("err = %v, %d downloads", err, hits.Load())
 	}
 }
+
+// A PlayStation BIOS is found by size under any name; anything else in the
+// folder is not one, and a console that needs none always has it.
+func TestHasBIOS(t *testing.T) {
+	ps1, _ := For("ps1")
+	dir := t.TempDir()
+	if ps1.HasBIOS(dir) || ps1.HasBIOS(filepath.Join(dir, "nope")) {
+		t.Error("an empty or missing folder has a BIOS")
+	}
+	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hi"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "Mupen64plus"), 0o755)
+	if ps1.HasBIOS(dir) {
+		t.Error("a stray file counted as a BIOS")
+	}
+	os.WriteFile(filepath.Join(dir, "My PS1 BIOS.BIN"), make([]byte, 512<<10), 0o644)
+	if !ps1.HasBIOS(dir) {
+		t.Error("a BIOS under its own name was not found")
+	}
+	if n64, _ := For("n64"); !n64.HasBIOS(t.TempDir()) {
+		t.Error("a console that needs no BIOS is refused for lacking one")
+	}
+}

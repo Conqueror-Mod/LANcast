@@ -16,6 +16,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.core-download__line--start {
+  justify-content: flex-start;
+}
+
 .core-download__btn {
   align-self: flex-start;
   padding: 7px 14px;

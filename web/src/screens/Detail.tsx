@@ -48,7 +48,7 @@ import { useGameSaves } from "@/api/hooks";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
-import { CoreDownload } from "@/components/CoreDownload";
+import { BiosFolder, CoreDownload } from "@/components/CoreDownload";
 import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
@@ -1271,6 +1271,7 @@ function RetroActions({ item }: { item: Item }) {
         {/* LANcast can fetch this console's core: offer it here, where the
             person found out they need it, rather than sending them to Settings. */}
         {can.installable && <CoreDownload bytes={can.download_bytes} />}
+        {can.needs_bios && <BiosFolder />}
       </div>
     );
   }

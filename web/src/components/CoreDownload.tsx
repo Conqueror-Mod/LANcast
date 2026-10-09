@@ -98,6 +98,41 @@ export function CoreDownload({
   );
 }
 
+/*
+ * A console whose core is here but needs a BIOS (ADR 0073: LANcast never
+ * supplies one). The client opens its own BIOS folder; Check again re-asks
+ * every console, because the answer the page holds is what the person is
+ * looking at and a dropped-in file changes it.
+ */
+export function BiosFolder({ onChecked }: { onChecked?: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState("");
+  if (!window.lancastRetroOpenBIOSFolder) return null;
+  const open = async () => {
+    try {
+      await window.lancastRetroOpenBIOSFolder?.();
+      setError("");
+    } catch (err) {
+      setError(String((err as Error)?.message ?? err));
+    }
+  };
+  return (
+    <div className="core-download">
+      <div className="core-download__line core-download__line--start">
+        <Btn label="Open the BIOS folder" onPress={() => void open()} primary />
+        <Btn
+          label="Check again"
+          onPress={() => {
+            void qc.invalidateQueries({ queryKey: ["retro-available"] });
+            onChecked?.();
+          }}
+        />
+      </div>
+      {error && <p className="core-download__note core-download__note--warn">{error}</p>}
+    </div>
+  );
+}
+
 function Btn({ label, onPress, primary }: { label: string; onPress: () => void; primary?: boolean }) {
   const focusable = useFocusable(onPress);
   return (

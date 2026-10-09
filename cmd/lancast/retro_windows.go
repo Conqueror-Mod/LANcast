@@ -208,6 +208,13 @@ func (r *retroPlayer) availability(platform string) map[string]any {
 	out := map[string]any{"core": c.Display, "licence": c.Licence, "needs_gl": c.NeedsGL}
 	path, _, err := cores.Resolve(platform, retroDir("cores"), coreOverrides())
 	switch {
+	case err == nil && !c.HasBIOS(retroDir("system")):
+		// The core is here and cannot boot: it needs a BIOS from the person's
+		// own console, which LANcast never supplies (ADR 0073).
+		out["available"] = false
+		out["needs_bios"] = true
+		out["reason"] = c.Display + " needs a BIOS dumped from your own console, which LANcast cannot supply. " +
+			"Put the BIOS file (" + strings.Join(c.NeedsBIOS, ", ") + " for US, Japanese and European games) in the BIOS folder."
 	case err == nil:
 		out["available"] = true
 		out["path"] = path
@@ -335,6 +342,10 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 	for _, d := range []string{retroDir("system"), retroDir("core-saves")} {
 		_ = os.MkdirAll(d, 0o755)
 	}
+	// The first error the core reports in its own words. "Could not load this
+	// game" says nothing a person can act on; "No BIOS image found for
+	// NTSC-U/C" does.
+	coreSaid := ""
 	resumeSlot := ""
 	if resume {
 		resumeSlot = "auto"
@@ -357,6 +368,9 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		ResumeState:     resumeSlot,
 		SaveStateOnStop: true,
 		OnEvent: func(e host.Event) {
+			if e.Kind == "message" && coreSaid == "" && strings.HasPrefix(e.Text, "ERROR:") {
+				coreSaid = strings.TrimSpace(strings.TrimPrefix(e.Text, "ERROR:"))
+			}
 			out := map[string]any{"kind": e.Kind}
 			if e.Slot != "" {
 				out["slot"] = e.Slot
@@ -382,7 +396,11 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		w.SetGameLayout(false)
 	}()
 	w.SetGameLayout(true)
-	return s.Run(ctx)
+	err = s.Run(ctx)
+	if err != nil && coreSaid != "" && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("%w: %s", err, coreSaid)
+	}
+	return err
 }
 
 // gameID recovers the item a remote.Game was made for, for the cache path.
@@ -466,6 +484,14 @@ func (r *retroPlayer) bindings() map[string]any {
 		"lancastRetroInstallCores":       func() { r.install.start() },
 		"lancastRetroCancelInstallCores": func() { r.install.stop() },
 		"lancastRetroInstallStatus":      r.install.status,
+		// The folder a BIOS goes in, opened for the person to drop one into.
+		// It is this side's folder; the page cannot name another.
+		"lancastRetroOpenBIOSFolder": func() error {
+			if err := os.MkdirAll(retroDir("system"), 0o755); err != nil {
+				return err
+			}
+			return openFolder(retroDir("system"))
+		},
 		// Pointing a console at a core DLL already on this machine — the
 		// ADR's advanced option, and the way to play before a build of each
 		// core is pinned. An empty path goes back to the default.

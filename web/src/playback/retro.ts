@@ -24,6 +24,8 @@ export interface RetroAvailability {
   installable?: boolean;
   /** What fetching it costs: the whole pinned archive, every core at once. */
   download_bytes?: number;
+  /** The core is here and cannot boot without a BIOS from the person's console. */
+  needs_bios?: boolean;
 }
 
 /** Where fetching the cores has got to. */
@@ -89,6 +91,7 @@ declare global {
     lancastRetroInstallCores?: () => Promise<void>;
     lancastRetroCancelInstallCores?: () => Promise<void>;
     lancastRetroInstallStatus?: () => Promise<RetroInstallStatus>;
+    lancastRetroOpenBIOSFolder?: () => Promise<void>;
     __lancastRetroEvent?: (e: RetroEvent) => void;
   }
 }

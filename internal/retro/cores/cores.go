@@ -57,6 +57,11 @@ type Core struct {
 	// NeedsBIOS names the BIOS files a core needs from the person, by file
 	// name, in the system directory. LANcast never supplies one.
 	NeedsBIOS []string
+	// BIOSSize is the exact size of a BIOS image for this console. SwanStation
+	// finds its BIOS by content, not name, so a file of this size is what
+	// counts as "there is one" — a name check would refuse a BIOS saved under
+	// any name but the three it lists.
+	BIOSSize int64
 }
 
 // Archive is a pinned download that holds cores.
@@ -107,7 +112,7 @@ var defaults = map[string]Core{
 	"ps1": {Name: "swanstation", Display: "SwanStation", Licence: "GPL-3.0", SourceURL: "https://github.com/libretro/swanstation", DLL: "swanstation_libretro.dll",
 		ArchivePath: inArchive + "swanstation_libretro.dll", SizeBytes: 3896832,
 		SHA256:    "25b16255af154058b1d28aee279788de3a601362648bb469147130bc3b553353",
-		NeedsBIOS: []string{"scph5501.bin", "scph5500.bin", "scph5502.bin"}},
+		NeedsBIOS: []string{"scph5501.bin", "scph5500.bin", "scph5502.bin"}, BIOSSize: 512 << 10},
 }
 
 var mgba = Core{Name: "mgba", Display: "mGBA", Licence: "MPL-2.0", SourceURL: "https://github.com/libretro/mgba", DLL: "mgba_libretro.dll",
@@ -147,6 +152,31 @@ var (
 	ErrChecksumMismatch = errors.New("the download did not match its expected checksum")
 	ErrNotInstalled     = errors.New("this console's core is not installed")
 )
+
+/*
+ * HasBIOS reports whether the system directory holds something that can be
+ * this console's BIOS. It cannot tell a US BIOS from a Japanese one; the core
+ * can, and says so when the game fails to load, and that message reaches the
+ * person. What it catches is the common case: no BIOS at all, which otherwise
+ * reads as "the core could not load this game".
+ */
+func (c Core) HasBIOS(sysdir string) bool {
+	if len(c.NeedsBIOS) == 0 {
+		return true
+	}
+	entries, err := os.ReadDir(sysdir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			if info, err := e.Info(); err == nil && (c.BIOSSize == 0 || info.Size() == c.BIOSSize) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // Path is where an installed core lives under dir.
 func (c Core) Path(dir string) string { return filepath.Join(dir, c.Name, c.DLL) }

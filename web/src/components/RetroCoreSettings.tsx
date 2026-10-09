@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { PLATFORMS } from "@/lib/platforms";
 import "./RetroCoreSettings.css";
-import { CoreDownload } from "./CoreDownload";
+import { BiosFolder, CoreDownload } from "./CoreDownload";
 import { retroAvailability, retroSupported, type RetroAvailability } from "@/playback/retro";
 
 /*
@@ -63,6 +63,13 @@ export function RetroCoreSettings() {
               bytes={Object.values(status).find((s) => s.download_bytes)?.download_bytes}
               onInstalled={() => void refresh()}
             />
+          </div>
+        </div>
+      )}
+      {Object.values(status).some((s) => s.needs_bios) && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <BiosFolder onChecked={() => void refresh()} />
           </div>
         </div>
       )}

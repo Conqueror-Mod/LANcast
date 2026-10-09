@@ -320,6 +320,34 @@ describe("a game's detail page", () => {
     expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(false);
   });
 
+  it("says a console needs a BIOS, opens its folder, and checks again", async () => {
+    let bios = false;
+    window.lancastRetroAvailable = vi.fn(async () =>
+      bios
+        ? { available: true, core: "SwanStation" }
+        : {
+            available: false,
+            needs_bios: true,
+            core: "SwanStation",
+            reason: "SwanStation needs a BIOS dumped from your own console, which LANcast cannot supply.",
+          },
+    );
+    window.lancastRetroOpenBIOSFolder = vi.fn(async () => {});
+    try {
+      await render("/item/41");
+      expect(host.textContent).toContain("needs a BIOS dumped from your own console");
+      expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(false);
+      await act(async () => button("Open the BIOS folder").click());
+      expect(window.lancastRetroOpenBIOSFolder).toHaveBeenCalledTimes(1);
+      bios = true;
+      await act(async () => button("Check again").click());
+      await settle();
+      expect(buttons().some((b) => b.textContent?.trim().endsWith("Play"))).toBe(true);
+    } finally {
+      delete window.lancastRetroOpenBIOSFolder;
+    }
+  });
+
   describe("when the core is LANcast's to fetch", () => {
     let status: Record<string, unknown>;
     let installed: boolean;
