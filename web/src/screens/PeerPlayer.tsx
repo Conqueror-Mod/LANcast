@@ -20,6 +20,9 @@ import {
   expectedPosition,
   followerShouldSeek,
   followerSeekTarget,
+  followerShouldCorrect,
+  nextLead,
+  CONVERTING_DEFAULT_LEAD_MS,
 } from "@/playback/together";
 import { PeerControls } from "@/components/PeerControls";
 import "./PeerPlayer.css";
@@ -340,20 +343,31 @@ export function PeerPlayer() {
   const lastSeek = useRef(0);
   const convertingRef = useRef(false);
   /*
-   * Whether the stream has played since the last seek, and how long that
-   * took. A converted stream is not moved again until it has started, and
-   * the next seek aims ahead by the startup it took (followerSeekTarget), so
-   * a slow far server costs one restart rather than a loop of them.
+   * Whether the stream has played since the last seek, and the lead that
+   * seek used. A converted stream is not moved again until it has started;
+   * when it does, where it landed against the host teaches the next lead
+   * (nextLead), and a gap worth closing is closed with at most two more
+   * seeks (followerShouldCorrect). See together.ts for both.
    */
   const startedSinceSeek = useRef(true);
-  const startupMS = useRef(0);
+  const leadMS = useRef(CONVERTING_DEFAULT_LEAD_MS);
+  const leadUsed = useRef(0);
+  const playingSince = useRef(0);
+  const corrections = useRef(0);
+  const roomRef = useRef(room);
+  roomRef.current = room;
   useEffect(() => {
     const el = video;
     if (!el) return;
     const onPlaying = () => {
       if (startedSinceSeek.current) return;
       startedSinceSeek.current = true;
-      if (lastSeek.current > 0) startupMS.current = Date.now() - lastSeek.current;
+      playingSince.current = Date.now();
+      const r = roomRef.current;
+      if (convertingRef.current && r.session && lastSeek.current > 0) {
+        const gap = expectedPosition(r.session, r.receivedAt, Date.now()) - atRef.current * 1000;
+        leadMS.current = nextLead(leadUsed.current, gap);
+      }
     };
     el.addEventListener("playing", onPlaying);
     return () => el.removeEventListener("playing", onPlaying);
@@ -363,18 +377,30 @@ export function PeerPlayer() {
     const sess = room.session;
     if (!member || !el || !sess) return;
     const expected = expectedPosition(sess, room.receivedAt, Date.now());
-    if (
-      followerShouldSeek(
+    const now = Date.now();
+    const far = followerShouldSeek(
+      atRef.current * 1000,
+      expected,
+      convertingRef.current,
+      now - lastSeek.current,
+      startedSinceSeek.current,
+    );
+    const close =
+      !far &&
+      startedSinceSeek.current &&
+      followerShouldCorrect(
         atRef.current * 1000,
         expected,
         convertingRef.current,
-        Date.now() - lastSeek.current,
-        startedSinceSeek.current,
-      )
-    ) {
-      lastSeek.current = Date.now();
+        now - playingSince.current,
+        corrections.current,
+      );
+    if (far || close) {
+      if (close) corrections.current++;
+      lastSeek.current = now;
       startedSinceSeek.current = false;
-      seekRef.current?.(followerSeekTarget(expected, convertingRef.current, startupMS.current) / 1000);
+      leadUsed.current = convertingRef.current ? leadMS.current : 0;
+      seekRef.current?.(followerSeekTarget(expected, convertingRef.current, leadUsed.current) / 1000);
     }
     if (sess.paused && !el.paused) el.pause();
     if (!sess.paused && el.paused) resume(el);
