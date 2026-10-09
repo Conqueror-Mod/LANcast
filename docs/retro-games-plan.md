@@ -1,6 +1,29 @@
 # Retro games — build plan
 
-**Status: stage 1 in progress (2026-10-07).** The direction and stage order
+**Status: stages 1–3 built and played (2026-10-08).** Everything below was
+released in v0.9.69, or merged after it for v0.9.70. The *Status* notes under
+each stage are a record of how it went, not what is true now. What is true now:
+
+- **Played on real cores in the window:** NES, SNES, GBA, Mega Drive, N64
+  (Mario 64, GoldenEye and others) and PlayStation (Spyro, once a BIOS was in
+  place). **Game Boy, Game Boy Color and Master System have not been played**:
+  no such dumps were in the test library. They use mGBA and Gearsystem, the
+  same code path as GBA.
+- **Cores download from inside the app (#796).** The pin is libretro's
+  RetroArch 1.22.2 stable archive, with a SHA-256 for the archive and for each
+  DLL inside it. The "no core is pinned" notes under stage 2 are superseded.
+- **Since the stages:**
+  - #786: one core thread, Continue retried, OpenGL without vsync.
+  - #787 and #794/#795: a film in the corner over a game.
+  - #789: box art and Fix match.
+  - #791/#792: the Game Hub.
+  - #796: BIOS check and core download.
+  - #798: rating by hand, the content-ceiling decision.
+  - #799: the pad drives the game menu.
+- **Still open:** the browser player (below), which needs its own ADR before
+  any of it is built.
+
+The direction and stage order
 were approved on 2026-09-30. The decisions are in
 [ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md), now accepted
 with its open questions answered: desktop only, XInput, no RetroArch stop-gap,
@@ -194,7 +217,8 @@ Where the plan said **verify**, here is what was found:
   one 230 MB `.7z` of every core. So no core is pinned, and `cores.Install`
   refuses. A LANcast-hosted mirror (the ADR's fallback) is the owner's call.
   Until then, Settings → This app points a console at a core DLL already on
-  the machine.
+  the machine. *Superseded by #796: the whole stable archive is the pin, and
+  each DLL inside it is pinned too.*
 - **Licences.** All were read from the upstream repositories. mGBA is MPL-2.0.
   Mesen, bsnes, BlastEm, Gearsystem and SwanStation are GPL-3.0.
   Mupen64Plus-Next and Beetle PSX are GPL-2.0.
