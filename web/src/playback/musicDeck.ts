@@ -102,6 +102,9 @@ export class MusicDeck extends EventTarget implements MediaBackend {
   private adoptSrcSet = false;
   private level = 1;
   private readonly clock: DeckClock;
+  /** Called when the provider adopts a track that was already playing. */
+  onAdopt?: (overlapS: number) => void;
+  private adoptedOverlap = 0;
 
   constructor(a: DeckElement, b: DeckElement, clock: DeckClock = realClock) {
     super();
@@ -110,7 +113,8 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     this.clock = clock;
     for (const el of [a, b]) {
       el.preload = "auto";
-      for (const name of MEDIA_EVENTS) {
+      // loadstart too: not a provider event, but the gap meter splits on it.
+      for (const name of ["loadstart", ...MEDIA_EVENTS]) {
         el.addEventListener(name, () => this.fromElement(el, name));
       }
     }
@@ -230,6 +234,7 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     this.started = false;
     this.standbyLoaded = false;
     this.adopting = q.url;
+    this.adoptedOverlap = q.overlap;
     this.adoptSrcSet = false;
     this.adoptTimer = this.clock.setTimeout(() => this.abandonAdoption(), ADOPT_TIMEOUT_MS);
     // The provider hears the old track end, exactly as from an element.
@@ -252,6 +257,7 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     this.adoptTimer = null;
     this.adopting = null;
     this.adoptSrcSet = false;
+    this.onAdopt?.(this.adoptedOverlap);
     for (const name of OPENING) this.dispatchEvent(new Event(name));
   }
 
