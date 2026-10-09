@@ -160,7 +160,7 @@ func (s *Server) openPeerStream(r *http.Request, p store.Peer, path string) (*ht
 	}
 
 	var lastErr error
-	for _, addr := range s.addressOrder(p) {
+	for _, addr := range s.reachOrder(r.Context(), p) {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://"+addr+path, nil)
 		if err != nil {
 			lastErr = err

@@ -329,7 +329,7 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 	defer cancel()
 
 	var lastErr error
-	for _, addr := range s.addressOrder(p) {
+	for _, addr := range s.reachOrder(ctx, p) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+addr+path, nil)
 		if err != nil {
 			lastErr = err
@@ -409,6 +409,30 @@ func (s *Server) addressOrder(p store.Peer) []string {
 		}
 	}
 	return out
+}
+
+/*
+ * reachOrder is addressOrder with the addresses raced first (peer.Reach), so
+ * a dead address at the front of the list cannot spend the budget before a
+ * live one is tried. The address that last answered still starts first and
+ * usually wins before the others have begun, so a healthy peer costs one
+ * extra handshake and nothing more.
+ *
+ * Capped at peerProbe on its own: the race is a question about which door to
+ * knock on, and the request still needs time once that is answered.
+ */
+func (s *Server) reachOrder(ctx context.Context, p store.Peer) []string {
+	order := s.addressOrder(p)
+	if len(order) < 2 {
+		return order
+	}
+	cfg, err := peer.ClientConfig(s.ident, p.Fingerprint)
+	if err != nil {
+		return order
+	}
+	ctx, cancel := context.WithTimeout(ctx, peerProbe)
+	defer cancel()
+	return peer.Reach(ctx, cfg, order, peerStagger)
 }
 
 /*
@@ -519,6 +543,13 @@ func presenceTitle(it *store.Item) string {
 
 // peerDeadline caps one peer's whole turn — every address, both calls.
 const peerDeadline = 3 * time.Second
+
+// peerProbe bounds the address race inside a call, and peerStagger is how
+// long each address waits behind the one before it.
+const (
+	peerProbe   = 2 * time.Second
+	peerStagger = 150 * time.Millisecond
+)
 
 // rosterInterval is how often a peer's roster is re-fetched while it is
 // already paired. Rosters change when somebody opts in or out, which is rare

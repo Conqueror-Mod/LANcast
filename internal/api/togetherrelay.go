@@ -75,7 +75,7 @@ func (s *Server) sendPeer(ctx context.Context, p store.Peer, method, path string
 	defer cancel()
 
 	var lastErr error
-	for _, addr := range s.addressOrder(p) {
+	for _, addr := range s.reachOrder(ctx, p) {
 		req, err := http.NewRequestWithContext(ctx, method, "https://"+addr+path, bytes.NewReader(payload))
 		if err != nil {
 			lastErr = err
