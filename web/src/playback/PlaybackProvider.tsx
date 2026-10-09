@@ -1483,6 +1483,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const nearEnd =
     isAudio && totalDuration > 0 && totalDuration - current < PRELOAD_LEAD_S && !loading;
+  const deckViewRef = useRef({ nearEnd, loading, current, total: totalDuration, next: nextItemID });
+  deckViewRef.current = { nearEnd, loading, current, total: totalDuration, next: nextItemID };
   useEffect(() => {
     if (!deckRef.current) return;
     const deck = musicDeck();
@@ -1494,6 +1496,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       !shouldAsk(advanced(runRef.current, Date.now()));
     if (!willAdvance || nextItemID == null) {
       deck.queue(null);
+      // Said only once the track is near its end: that is when a missing
+      // queue costs a gap, and when the reason is worth reading.
+      if (nearEnd) {
+        const why =
+          nextItemID == null
+            ? "nothing next"
+            : !prefsRef.current.autoPlay
+              ? "auto play off"
+              : repeat === "one"
+                ? "repeat one"
+                : "still-watching prompt due";
+        clientNote("info", "playback", `deck not queued: ${why}`);
+      }
       return;
     }
     let cancelled = false;
@@ -1516,19 +1531,25 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           }) === 0;
         if (next.kind !== "track" || !fromZero || next.track_choice?.audio_index != null) {
           deck.queue(null);
+          clientNote(
+            "info",
+            "playback",
+            `deck not queued: ${next.kind !== "track" ? "next is not a track" : !fromZero ? "next resumes mid-track" : "next has a chosen audio track"}`,
+          );
           return;
         }
         const pb = await apiGet<{ decision: Decision }>(
           withCapabilities(`/api/items/${nextItemID}/playback`),
         );
         if (cancelled) return;
-        deck.queue(
-          pb.decision.method === "direct"
-            ? { url: `/api/stream/${nextItemID}`, overlap: GAPLESS_OVERLAP_S }
-            : null,
-        );
-      } catch {
-        if (!cancelled) deck.queue(null);
+        const direct = pb.decision.method === "direct";
+        deck.queue(direct ? { url: `/api/stream/${nextItemID}`, overlap: GAPLESS_OVERLAP_S } : null);
+        clientNote("info", "playback", direct ? `deck queued ${nextItemID}` : "deck not queued: next is converted");
+      } catch (e) {
+        if (!cancelled) {
+          deck.queue(null);
+          clientNote("warn", "playback", `deck not queued: ${(e as Error)?.message ?? "fetch failed"}`);
+        }
       }
     })();
     return () => {
@@ -1567,6 +1588,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!t?.ended) meter.reset();
     };
     const deck = musicDeck();
+    // A track about to end with nothing queued: what the provider believed
+    // about it, which is what decides whether it asked (see nearEnd).
+    deck.onUnqueuedEnd = () => {
+      const s = deckViewRef.current;
+      clientNote(
+        "info",
+        "playback",
+        `deck: end with nothing queued (near end ${s.nearEnd}, loading ${s.loading}, at ${s.current.toFixed(1)} of ${s.total.toFixed(1)} s, next ${s.next ?? "none"})`,
+      );
+    };
     // A join the deck made has no gap to measure: say so instead.
     deck.onAdopt = (overlap) => {
       meter.reset();
@@ -1581,6 +1612,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
     return () => {
       deck.onAdopt = undefined;
+      deck.onUnqueuedEnd = undefined;
       for (const t of targets) {
         t.removeEventListener("ended", onEnded);
         t.removeEventListener("loadstart", onLoadStart);
