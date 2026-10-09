@@ -24,10 +24,14 @@ export const RATING_RUNGS = ["G", "PG", "PG-13", "TV-14", "R"];
  * refuses anything else, because a rating the ceiling query cannot match
  * would look set and go on hiding the item. A game gets ESRB with its system's
  * name ("ESRB M" is 17+; a bare "M" is Australia's 15), television the TV
- * ratings, and a film the US film certificates. "ESRB KA" is ESRB's pre-1998
- * name for E and is not offered; a game already carrying it still shows it.
+ * ratings, and a film the US film certificates.
+ *
+ * KA is offered, beside E. It is what ESRB called E from 1994 until 1998, so
+ * it is the mark actually printed on the box of most rated SNES, Genesis and
+ * early PlayStation games — Donkey Kong Country says K-A, not E. Leaving it
+ * out made the list right only for a game the DAT had already rated KA.
  */
-const ESRB = ["ESRB EC", "ESRB E", "ESRB E10+", "ESRB T", "ESRB M", "ESRB AO"];
+const ESRB = ["ESRB EC", "ESRB KA", "ESRB E", "ESRB E10+", "ESRB T", "ESRB M", "ESRB AO"];
 const TV = ["TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14", "TV-MA"];
 const FILM = ["G", "PG", "PG-13", "R", "NC-17"];
 

@@ -133,12 +133,26 @@ describe("rating what a ceiling hides", () => {
 
 describe("what can be chosen", () => {
   it("offers ESRB for a game, TV ratings for television, film certificates for a film", () => {
-    expect(ratingChoices("rom")).toEqual(["ESRB EC", "ESRB E", "ESRB E10+", "ESRB T", "ESRB M", "ESRB AO"]);
+    expect(ratingChoices("rom")).toEqual([
+      "ESRB EC",
+      "ESRB KA",
+      "ESRB E",
+      "ESRB E10+",
+      "ESRB T",
+      "ESRB M",
+      "ESRB AO",
+    ]);
     expect(ratingChoices("episode")[0]).toBe("TV-Y");
     expect(ratingChoices("movie")).toContain("PG-13");
   });
 
+  it("offers KA in its place for every game, not only one already rated KA", () => {
+    // Donkey Kong Country (1994) is K-A on its box and E in the DAT.
+    expect(ratingChoices("rom", "ESRB E")).toEqual(ratingChoices("rom", "ESRB KA"));
+    expect(ratingChoices("rom")[1]).toBe("ESRB KA");
+  });
+
   it("keeps a rating the item already carries even if it is not offered", () => {
-    expect(ratingChoices("rom", "ESRB KA")[0]).toBe("ESRB KA");
+    expect(ratingChoices("movie", "15")[0]).toBe("15");
   });
 });
