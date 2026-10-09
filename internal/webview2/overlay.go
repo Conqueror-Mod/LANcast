@@ -4,6 +4,7 @@ package webview2
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 	"unsafe"
 
@@ -170,6 +171,18 @@ func effectiveLayout(asked VideoLayout, gameOn bool) VideoLayout {
 		return VideoMini
 	}
 	return asked
+}
+
+func layoutName(l VideoLayout) string {
+	switch l {
+	case VideoFull:
+		return "full"
+	case VideoMini:
+		return "mini"
+	case VideoPiP:
+		return "pip"
+	}
+	return "hidden"
 }
 
 // overlayWanted is whether the page belongs in the transparent overlay: over
@@ -369,7 +382,16 @@ func (w *webview) SetVideoLayout(layout VideoLayout, x, y, width, height int) er
 // applyLayout settles the overlay and every extra window for the film's asked
 // layout and whether a game is on screen.
 func (w *webview) applyLayout() error {
+	before, beforeGame := w.layout, w.loggedGame
 	w.layout = effectiveLayout(w.asked, w.gameOn)
+	// Which picture goes where, each time it changes — not each move, which a
+	// drag sends at the frame rate. With the activation line below, enough to
+	// tell from the log whether a film in the corner was ever left under the
+	// page.
+	if w.layout != before || w.gameOn != beforeGame {
+		slog.Info("native video layout", "layout", layoutName(w.layout), "game", w.gameOn)
+		w.loggedGame = w.gameOn
+	}
 	if overlayWanted(w.layout, w.gameOn) {
 		if err := w.enterOverlay(); err != nil {
 			return err
@@ -598,6 +620,23 @@ func (w *webview) overlayWindowMessage(msg, wp, lp uintptr) {
 	}
 	if wp&0xffff != w32.WAInactive {
 		w.drawCaption(true)
+		/*
+		 * Activating a window brings it to the top of its owner's windows, and
+		 * a film in the corner over a game sits *above* this one (VideoPiP).
+		 * activateOverlay re-raises the film when activation arrives through
+		 * the main window — Alt-Tab, the taskbar — but a click straight onto
+		 * the page activates this window itself and went past it. The film
+		 * was then under the page, behind the card's black box: reported as
+		 * the corner player going black after moving it, which needs exactly
+		 * such a click (grabbing the grip after a screenshot tool had focus).
+		 * Not reproduced on demand, so the log says when it happens.
+		 */
+		if w.layout == VideoPiP && w.video != 0 {
+			origin := w32.Point{}
+			_, _, _ = procClientToScreen.Call(w.hwnd, uintptr(unsafe.Pointer(&origin)))
+			w.raisePiP(origin)
+			slog.Info("native video: corner picture raised over the page after the page was activated")
+		}
 		return
 	}
 	// Leaving for the main window keeps the frame active; leaving for
