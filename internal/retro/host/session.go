@@ -55,6 +55,19 @@ type InputSource interface {
 	Poll() (pads [2]Pad, guide, escape bool)
 }
 
+/*
+ * PadSource is an InputSource that can also report the pads alone, with no
+ * keyboard merged in. The paused menu is driven from it: the keyboard already
+ * reaches the page as real keys, and merging it in would move twice for every
+ * arrow pressed.
+ */
+type PadSource interface {
+	PollPads() (pads [2]Pad, guide bool)
+}
+
+// navPoll is how often a paused game reads the pad for the menu.
+const navPoll = 16 * time.Millisecond
+
 // SaveStore is where saves go — the server, through the player's ticket. Its
 // calls may be slow and are never made from inside a frame.
 type SaveStore interface {
@@ -142,6 +155,7 @@ type Session struct {
 	bgra      []byte
 	pads      [2]Pad
 	menu      MenuRequest
+	nav       MenuNav
 	paused    bool
 	stopping  bool
 	sramSum   uint32
@@ -434,10 +448,31 @@ func clampFPS(f float64) float64 {
 
 // drain handles queued commands; while paused it waits for one.
 func (s *Session) drain(block bool) {
+	var tick <-chan time.Time
 	for {
 		var c command
 		if block {
-			c = <-s.cmds
+			// Paused: wait for a command, reading the pad for the menu while
+			// waiting, if this input can give the pad alone.
+			ps, ok := s.cfg.Input.(PadSource)
+			if !ok {
+				c = <-s.cmds
+			} else {
+				if tick == nil {
+					t := time.NewTicker(navPoll)
+					defer t.Stop()
+					tick = t.C
+				}
+				select {
+				case c = <-s.cmds:
+				case <-tick:
+					pads, guide := ps.PollPads()
+					for _, move := range s.nav.Update(pads[0], guide, time.Now()) {
+						s.cfg.OnEvent(Event{Kind: "nav", Text: move})
+					}
+					continue
+				}
+			}
 		} else {
 			select {
 			case c = <-s.cmds:
@@ -460,6 +495,7 @@ func (s *Session) handle(c command) {
 		if !s.paused {
 			s.paused = true
 			s.maybeFlushSRAM(true)
+			s.startNav()
 			s.cfg.OnEvent(Event{Kind: "paused"})
 		}
 	case "resume":
@@ -875,7 +911,16 @@ func (s *Session) InputPoll() {
 		// person sees the menu and the game stops on the same frame.
 		s.paused = true
 		s.maybeFlushSRAM(true)
+		s.startNav()
 		s.cfg.OnEvent(Event{Kind: "menu"})
+	}
+}
+
+// startNav begins reading the pad for the menu, ignoring what is held now.
+func (s *Session) startNav() {
+	if ps, ok := s.cfg.Input.(PadSource); ok {
+		pads, guide := ps.PollPads()
+		s.nav.Reset(pads[0], guide)
 	}
 }
 

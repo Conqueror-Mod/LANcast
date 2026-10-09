@@ -45,6 +45,7 @@ interface FocusAPI {
   focusFirst: () => void;
   pushBack: (fn: () => void) => () => void;
   setSuspended: (v: boolean) => void;
+  pushScope: (el: HTMLElement) => () => void;
 }
 
 const FocusContext = createContext<FocusAPI | null>(null);
@@ -66,6 +67,7 @@ function nearest(
   dir: Dir,
   entries: Map<string, Entry>,
   self: string,
+  scope: HTMLElement | null,
 ): HTMLElement | null {
   const fx = from.left + from.width / 2;
   const fy = from.top + from.height / 2;
@@ -75,6 +77,7 @@ function nearest(
 
   for (const [id, { el }] of entries) {
     if (id === self) continue;
+    if (scope && !scope.contains(el)) continue;
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
@@ -126,6 +129,24 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   // unmounts. Each push returns its own remover.
   const backHandlers = useRef<(() => void)[]>([]);
   const suspended = useRef(false);
+  /*
+   * Scopes: while one is open, arrows reach only what is inside the topmost.
+   *
+   * A menu drawn over a screen that still has live buttons — the game menu
+   * over the corner card's grip and size controls — is otherwise one arrow
+   * away from them, because nearest() scores by geometry and the card is
+   * simply the next thing down. A stack, like the back handlers, so a scope
+   * opened inside another nests.
+   */
+  const scopes = useRef<HTMLElement[]>([]);
+
+  const pushScope = useCallback((el: HTMLElement) => {
+    scopes.current.push(el);
+    return () => {
+      const i = scopes.current.lastIndexOf(el);
+      if (i >= 0) scopes.current.splice(i, 1);
+    };
+  }, []);
 
   const pushBack = useCallback((fn: () => void) => {
     backHandlers.current.push(fn);
@@ -229,9 +250,24 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     if (typing && (KEY_TO_DIR[e.key] || e.key === "Enter")) return;
 
     const id = currentID.current;
-    if (!id) return;
-    const entry = entries.current.get(id);
-    if (!entry) return;
+    const scope = scopes.current[scopes.current.length - 1] ?? null;
+    const entry = id ? entries.current.get(id) : undefined;
+    /*
+     * Focus outside the open scope (a click on the card behind a menu, or
+     * nothing focused yet): a move or a press brings it into the scope,
+     * onto its first focusable, rather than acting out there.
+     */
+    if (scope && (!entry || !scope.contains(entry.el)) && (KEY_TO_DIR[e.key] || e.key === "Enter")) {
+      for (const [, en] of entries.current) {
+        if (scope.contains(en.el)) {
+          e.preventDefault();
+          en.el.focus();
+          return;
+        }
+      }
+      return;
+    }
+    if (!id || !entry) return;
 
     if (e.key === "Enter") {
       if (entry.onSelect) {
@@ -260,7 +296,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
 
     const dir = KEY_TO_DIR[e.key];
     if (!dir) return;
-    const target = nearest(entry.el.getBoundingClientRect(), dir, entries.current, id);
+    const target = nearest(entry.el.getBoundingClientRect(), dir, entries.current, id, scope);
     if (target) {
       e.preventDefault();
       target.focus();
@@ -283,6 +319,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     focusFirst,
     pushBack,
     setSuspended,
+    pushScope,
   };
   return <FocusContext.Provider value={api}>{children}</FocusContext.Provider>;
 }
@@ -335,6 +372,23 @@ export function useFocusable(
 export function useBackHandler(fn: () => void) {
   const api = useFocusController();
   useEffect(() => api.pushBack(fn), [api, fn]);
+}
+
+/*
+ * useFocusScope keeps arrows inside an element while it is mounted: put the
+ * returned ref on a menu or dialog, and nothing behind it can take focus by
+ * arrow or pad. Removed when the element goes.
+ */
+export function useFocusScope(): (el: HTMLElement | null) => void {
+  const api = useFocusController();
+  const remove = useRef<(() => void) | undefined>(undefined);
+  return useCallback(
+    (el: HTMLElement | null) => {
+      remove.current?.();
+      remove.current = el ? api.pushScope(el) : undefined;
+    },
+    [api],
+  );
 }
 
 // useSuspendFocus turns off spatial navigation while a modal transport surface

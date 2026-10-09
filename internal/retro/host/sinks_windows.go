@@ -337,6 +337,17 @@ type Controllers struct {
 }
 
 func (c Controllers) Poll() (pads [2]Pad, guide, escape bool) {
+	pads, guide = c.PollPads()
+	if c.focused() {
+		kb := FromKeyboard(keyDown)
+		pads[0] = Merge(pads[0], kb)
+		escape = keyDown(VKEscape)
+	}
+	return pads, guide, escape
+}
+
+// PollPads reads the Xbox pads alone, for the paused menu (PadSource).
+func (c Controllers) PollPads() (pads [2]Pad, guide bool) {
 	ex := xinputGetStateEx()
 	for i := 0; i < 2; i++ {
 		var st xinputState
@@ -356,12 +367,7 @@ func (c Controllers) Poll() (pads [2]Pad, guide, escape bool) {
 			guide = true
 		}
 	}
-	if c.focused() {
-		kb := FromKeyboard(keyDown)
-		pads[0] = Merge(pads[0], kb)
-		escape = keyDown(VKEscape)
-	}
-	return pads, guide, escape
+	return pads, guide
 }
 
 func keyDown(vk int) bool {

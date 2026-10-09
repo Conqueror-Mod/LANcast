@@ -1,7 +1,9 @@
 package host
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"lancast/internal/retro/libretro"
 )
@@ -113,5 +115,73 @@ func TestMenuRequest(t *testing.T) {
 	var g MenuRequest
 	if !g.Update(Pad{}, true, false, 60) {
 		t.Error("Guide did not open the menu")
+	}
+}
+
+func press(buttons ...int) Pad {
+	var p Pad
+	for _, b := range buttons {
+		p.set(b, true)
+	}
+	return p
+}
+
+// The pad drives the paused menu: one move per press, nothing from what was
+// held when the menu opened, and a held direction repeats slowly then faster.
+func TestMenuNav(t *testing.T) {
+	t0 := time.Now()
+	var m MenuNav
+	// Guide opened the menu and is still down: it must not close it again.
+	m.Reset(Pad{}, true)
+	if got := m.Update(Pad{}, true, t0); len(got) != 0 {
+		t.Errorf("the Guide that opened the menu fired %v", got)
+	}
+	if got := m.Update(Pad{}, false, t0); len(got) != 0 {
+		t.Errorf("letting go fired %v", got)
+	}
+	if got := m.Update(Pad{}, true, t0); !reflect.DeepEqual(got, []string{"back"}) {
+		t.Errorf("Guide pressed again: %v, want back", got)
+	}
+
+	m.Reset(Pad{}, false)
+	down := press(libretro.JoypadDown)
+	if got := m.Update(down, false, t0); !reflect.DeepEqual(got, []string{"down"}) {
+		t.Errorf("D-pad down: %v", got)
+	}
+	if got := m.Update(down, false, t0.Add(300*time.Millisecond)); len(got) != 0 {
+		t.Errorf("held 300ms: %v, want nothing yet", got)
+	}
+	if got := m.Update(down, false, t0.Add(400*time.Millisecond)); !reflect.DeepEqual(got, []string{"down"}) {
+		t.Errorf("held 400ms: %v, want a repeat", got)
+	}
+	if got := m.Update(down, false, t0.Add(530*time.Millisecond)); !reflect.DeepEqual(got, []string{"down"}) {
+		t.Errorf("held 530ms: %v, want the faster repeat", got)
+	}
+	m.Update(Pad{}, false, t0.Add(600*time.Millisecond))
+
+	// The bottom face button chooses and the right one goes back, by position
+	// as everywhere else; Start goes back too.
+	if got := m.Update(press(libretro.JoypadB), false, t0); !reflect.DeepEqual(got, []string{"select"}) {
+		t.Errorf("bottom button: %v", got)
+	}
+	m.Update(Pad{}, false, t0)
+	if got := m.Update(press(libretro.JoypadA), false, t0); !reflect.DeepEqual(got, []string{"back"}) {
+		t.Errorf("right button: %v", got)
+	}
+	m.Update(Pad{}, false, t0)
+	if got := m.Update(press(libretro.JoypadStart), false, t0); !reflect.DeepEqual(got, []string{"back"}) {
+		t.Errorf("Start: %v", got)
+	}
+	m.Update(Pad{}, false, t0)
+
+	// The left stick past half way is a direction; a brush is not.
+	var stick Pad
+	stick.Analog[0][1] = -8000
+	if got := m.Update(stick, false, t0); len(got) != 0 {
+		t.Errorf("a brushed stick moved: %v", got)
+	}
+	stick.Analog[0][1] = -30000
+	if got := m.Update(stick, false, t0); !reflect.DeepEqual(got, []string{"up"}) {
+		t.Errorf("stick up: %v", got)
 	}
 }

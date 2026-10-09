@@ -1,6 +1,10 @@
 package host
 
-import "lancast/internal/retro/libretro"
+import (
+	"time"
+
+	"lancast/internal/retro/libretro"
+)
 
 /*
  * Input: whatever the person holds, as libretro's RetroPad.
@@ -218,4 +222,117 @@ func (m *MenuRequest) Update(pad Pad, guide, escape bool, fps float64) bool {
 	fire := want && !m.latched
 	m.latched = want
 	return fire
+}
+
+/*
+ * MenuNav turns a pad into menu moves while the game is paused.
+ *
+ * The game loop stops reading the pad when the menu opens, because the core
+ * is not running, so before this the pad that opened the menu with Guide
+ * could do nothing else in it. These are the moves the page's focus
+ * controller already understands as keys: the D-pad or the left stick to
+ * move, the bottom face button to choose, and the right face button, Start
+ * or Guide to go back, which closes the menu and resumes.
+ *
+ * Presses, not states: a button held when the menu opened (the Guide that
+ * opened it, or Select+Start) is ignored until it is let go, or the menu
+ * would close the instant it appeared. A held direction repeats, slowly at
+ * first, the way a held key does.
+ */
+type MenuNav struct {
+	ignore, held uint16
+	dir          uint16
+	next         time.Time
+}
+
+const (
+	navUp uint16 = 1 << iota
+	navDown
+	navLeft
+	navRight
+	navSelect
+	navBack
+
+	navDirs = navUp | navDown | navLeft | navRight
+
+	// navStick is how far the left stick must lean to count as a direction:
+	// about half way, so a resting or brushed stick does not wander the menu.
+	navStick = 16000
+	// navFirstRepeat and navRepeat pace a held direction.
+	navFirstRepeat = 400 * time.Millisecond
+	navRepeat      = 130 * time.Millisecond
+)
+
+var navNames = []struct {
+	bit  uint16
+	name string
+}{{navUp, "up"}, {navDown, "down"}, {navLeft, "left"}, {navRight, "right"}, {navSelect, "select"}, {navBack, "back"}}
+
+func navBits(p Pad, guide bool) uint16 {
+	var b uint16
+	x, y := p.Analog[0][0], p.Analog[0][1]
+	if p.Pressed(libretro.JoypadUp) || y < -navStick {
+		b |= navUp
+	}
+	if p.Pressed(libretro.JoypadDown) || y > navStick {
+		b |= navDown
+	}
+	if p.Pressed(libretro.JoypadLeft) || x < -navStick {
+		b |= navLeft
+	}
+	if p.Pressed(libretro.JoypadRight) || x > navStick {
+		b |= navRight
+	}
+	if p.Pressed(libretro.JoypadB) {
+		b |= navSelect
+	}
+	if p.Pressed(libretro.JoypadA) || p.Pressed(libretro.JoypadStart) || guide {
+		b |= navBack
+	}
+	return b
+}
+
+// Reset starts a menu: whatever is held now is ignored until released.
+func (m *MenuNav) Reset(p Pad, guide bool) {
+	m.ignore = navBits(p, guide)
+	m.held, m.dir = 0, 0
+}
+
+// Update reports the moves since the last call: "up", "down", "left",
+// "right", "select" or "back".
+func (m *MenuNav) Update(p Pad, guide bool, now time.Time) []string {
+	cur := navBits(p, guide)
+	m.ignore &= cur
+	live := cur &^ m.ignore
+	pressed := live &^ m.held
+	m.held = live
+
+	var fire uint16
+	if d := pressed & navDirs; d != 0 {
+		// A new direction wins over one still held, and only one fires.
+		for _, n := range navNames[:4] {
+			if d&n.bit != 0 {
+				m.dir, m.next = n.bit, now.Add(navFirstRepeat)
+				fire |= n.bit
+				break
+			}
+		}
+	} else if m.dir != 0 {
+		switch {
+		case live&m.dir == 0:
+			m.dir = 0
+		case !now.Before(m.next):
+			fire |= m.dir
+			m.next = now.Add(navRepeat)
+		}
+	}
+	fire |= pressed & (navSelect | navBack)
+
+	var out []string
+	for _, n := range navNames {
+		if fire&n.bit != 0 {
+			out = append(out, n.name)
+		}
+	}
+	return out
 }
