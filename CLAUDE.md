@@ -38,6 +38,11 @@ internal/plugin/   wazero sandbox, deny-by-default capabilities
 internal/api/      HTTP handlers
 internal/web/      embedded client assets (React source in web/, built to dist)
 internal/games/    installed Steam games, read locally (ADR 0066)
+internal/retro/    retro games (ADR 0073): romhash/ identifies a dump, retrodb/
+                   the pinned DATs, identify/ the worker, saves/ the server's
+                   copies, and the desktop player — libretro/ (syscall binding),
+                   host/ (the session), remote/ (files and saves by ticket),
+                   cores/ (which core plays what, fetched from libretro)
 internal/knownserver/ which servers this client trusts, and by which key (ADR 0070)
 cmd/lancast/       LANcast-Client. The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
@@ -183,9 +188,9 @@ sessions — everything else is repeatable.
 ## Before claiming done
 
 ```bash
-go test ./...          # ~2,995 test funcs
+go test ./...          # ~3,100 test funcs
 go build ./...
-npm --prefix web test  # ~580 client tests, vitest + jsdom
+npm --prefix web test  # ~1,390 client tests, vitest + jsdom
 ```
 
 All three must pass. The client suite is newer than the rest of this file: it
