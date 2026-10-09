@@ -361,6 +361,21 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+        {/* The queue's start and end (lib/taper.ts). Any music, any channel
+            count: it is a volume, not a filter. */}
+        {pb.isAudio && (
+          <Row label="Fade in and out">
+            <select
+              className="pbset__select"
+              value={prefs.taper ? "on" : "off"}
+              onChange={(e) => setPrefs({ taper: e.target.value === "on" })}
+            >
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+          </Row>
+        )}
+
         {!pb.isAudio && (
           <>
             <Row label="Subtitles">

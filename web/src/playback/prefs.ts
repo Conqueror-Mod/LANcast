@@ -94,6 +94,8 @@ export interface Prefs {
   dialogueVideo: number;
   /** Night mode on music: evened out, and sitting lower. */
   nightMusic: boolean;
+  /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
+  taper: boolean;
 }
 
 /** The dialogue-boost levels, in order. The index is what the player is sent. */
@@ -111,6 +113,7 @@ export const DEFAULTS: Prefs = {
   nightVideo: false,
   dialogueVideo: 0,
   nightMusic: false,
+  taper: true,
 };
 
 const KEY = "lancast:playback-prefs";
