@@ -1,6 +1,10 @@
 # ADR 0079 — The server says when something changed
 
-Date: 2026-10-10 · Status: **proposed**
+Date: 2026-10-10 · Status: **accepted** 2026-10-10
+
+Accepted by Chris on 2026-10-10 with the design as proposed, the peer
+intervals in §5, and Watch Together rooms left on their poll for now (§Not
+decided here). Nothing in it is built yet.
 
 ## Context
 
@@ -98,7 +102,6 @@ prefixes:
 | `peers` | `["peers"]`, `["peer-presence"]`, `["peer-libraries"]` |
 | `presence` | `["peer-presence"]`, `["people"]` |
 | `library:{id}`, `items` | `["items"]`, `["libraries"]`, `["home"]` |
-| `room:{id}` | `["together", id]` |
 | … | (the full table lives beside the hook, and in `docs/api.md`) |
 
 The table is the single place a new screen opts in. **A new query key whose
@@ -122,6 +125,18 @@ promotion to `paired` (§Context) runs there as well. When the answer differs
 from the last one it publishes `presence` or `peers` locally. One outbound call
 per peer per interval, whatever the number of windows. A pairing becomes
 mutual whether or not anybody is looking at a page.
+
+**Decided (Chris, 2026-10-10): the intervals.**
+
+- **Presence** (who is watching what) every **10 s**: the freshness the People
+  page has now.
+- **The roster**, and with it promotion to `paired`, **immediately when a peer
+  is added**, then every **5 minutes**. A roster changes when somebody joins a
+  household or changes a setting, not from minute to minute.
+
+A peer that is not answering is backed off to the roster interval for presence
+too, so a household that is switched off costs one call every five minutes and
+not one every ten seconds.
 
 ### 6. Polls that remain
 
@@ -149,8 +164,9 @@ announces that a job *started* and *finished*, and the poll runs in between.
 
 ## Not decided here
 
-- Whether the together room's 5 s follower poll becomes `room:{id}` events.
-  Probably yes, and the drift correction stays periodic, but sync timing
-  deserves its own measurement first.
+- **Watch Together rooms stay on their 5 s follower poll.** Decided (Chris,
+  2026-10-10): later, after measuring. Rooms work today and their sync timing
+  is tuned, so moving them to `room:{id}` events is its own change, once the
+  stream is proven. The drift correction would stay periodic either way.
 - Pushing between servers. If one remote peer per household ever becomes many,
   a federation stream is the obvious next step, and it would have its own ADR.
