@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -221,10 +222,16 @@ const topLevelPredicate = `parent_id IS NULL
  *
  * Trivially true for every other kind, which is what makes it safe to apply to
  * any listing rather than to the ones somebody remembered.
+ *
+ * CROSS JOIN fixes the order: the collection's memberships first, then each
+ * member by primary key. Left free, the planner once answered it from an index
+ * leading with `missing` instead — walking every present row of the table per
+ * collection, which turned a 120ms filtered page into 760ms (ADR 0057). Any
+ * index added to media_item can offer it that choice again.
  */
 const collectionIsReal = `(kind != 'collection' OR (
 		SELECT COUNT(*) FROM item_collection ic
-		JOIN media_item m2 ON m2.id = ic.item_id
+		CROSS JOIN media_item m2 ON m2.id = ic.item_id
 		WHERE ic.collection_id = media_item.id AND m2.missing = 0
 	) >= 2)`
 
@@ -1177,11 +1184,14 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			args = append(args, p)
 		}
 	}
+	// Which walk this listing is, for choosing how it is read; see `from`.
+	var gridWalk, searchWalk bool
 	switch {
 	case f.ParentID != nil:
 		where += ` AND parent_id = ?`
 		args = append(args, *f.ParentID)
 	case f.TopLevel && f.Query != "":
+		searchWalk = true
 		/*
 		 * A search reaches past the top level, which a grid does not.
 		 *
@@ -1219,6 +1229,7 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 			where += ` AND missing = 0`
 		}
 	case f.TopLevel:
+		gridWalk = true
 		where += ` AND ` + topLevelPredicate
 	default:
 		// Every other listing still gets the collection rule. A `kind=collection`
@@ -1533,8 +1544,38 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		}
 	}
 
+	/*
+	 * A listing the grid indexes cannot answer by themselves walks the rows in
+	 * the order they are stored instead (ADR 0057).
+	 *
+	 * idx_item_grid_* exist to hand back a page without visiting a row. A
+	 * filter on any other column — a genre, a resolution, a rating sort, a
+	 * search — means visiting every row anyway, and through one of those
+	 * indexes the rows come in title or date order, which is random order on
+	 * disk. Measured at 40,000 items that is two to five times slower than
+	 * reading them in rowid order: a filtered page went from 210ms to 600ms,
+	 * and a search from 100ms to 170ms. The planner cannot see the
+	 * difference, so it is told, and what it is told is the plan it chose
+	 * before those indexes existed.
+	 */
+	from := ` FROM media_item`
+	if !f.readsOnlyGridColumns() {
+		switch {
+		case (gridWalk || searchWalk) && f.LibraryID != 0:
+			from = ` FROM media_item INDEXED BY idx_item_library`
+		case gridWalk:
+			// Every library's top level: the NULL bucket of idx_item_parent
+			// is in rowid order.
+			from = ` FROM media_item INDEXED BY idx_item_parent`
+		case searchWalk:
+			// Across libraries a search is an OR of two levels, which no one
+			// index answers, and a substring match reads every row regardless.
+			from = ` FROM media_item NOT INDEXED`
+		}
+	}
+
 	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_item`+where, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count items: %w", err)
 	}
 
@@ -1623,21 +1664,119 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	}
 	args = append(args, limit, f.Offset)
 
-	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item`+where+order+` LIMIT ? OFFSET ?`, args...)
+	/*
+	 * The page is chosen by id, and only then are its rows read (ADR 0057).
+	 *
+	 * Selecting every column and sorting made SQLite carry all forty-odd
+	 * columns of every matching row through the sort, to throw away all but
+	 * sixty of them: a page 39,000 deep in a 40,000-item library cost 250ms
+	 * against a 150ms budget, and sorting by year cost more. Sorting ids is
+	 * the same walk with a fraction of the weight, and sixty rows by primary
+	 * key cost nothing.
+	 *
+	 * The order is put back in Go rather than by a second ORDER BY, because
+	 * the random sort's order depends on an argument and would have to be
+	 * written twice to be repeated, and rather than by trusting a subquery's
+	 * order to survive a join, which SQL does not promise.
+	 */
+	if listQueryHook != nil {
+		listQueryHook(`SELECT id`+from+where+order+` LIMIT ? OFFSET ?`, args)
+	}
+	idRows, err := s.db.QueryContext(ctx, `SELECT id`+from+where+order+` LIMIT ? OFFSET ?`, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list items: %w", err)
+	}
+	ids := []any{}
+	for idRows.Next() {
+		var id int64
+		if err := idRows.Scan(&id); err != nil {
+			idRows.Close()
+			return nil, 0, fmt.Errorf("list items: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	idRows.Close()
+	if err := idRows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("list items: %w", err)
+	}
+	if len(ids) == 0 {
+		return []Item{}, total, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item WHERE id IN (`+placeholders(len(ids))+`)`, ids...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list items: %w", err)
 	}
 	defer rows.Close()
-
-	out := []Item{}
+	byID := make(map[int64]Item, len(ids))
 	for rows.Next() {
 		it, err := scanItem(rows)
 		if err != nil {
 			return nil, 0, fmt.Errorf("list items: %w", err)
 		}
-		out = append(out, *it)
+		byID[it.ID] = *it
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("list items: %w", err)
+	}
+	// A row deleted between the two reads is simply not on this page.
+	out := make([]Item, 0, len(ids))
+	for _, id := range ids {
+		if it, ok := byID[id.(int64)]; ok {
+			out = append(out, it)
+		}
+	}
+	return out, total, nil
+}
+
+// listQueryHook, when a test sets it, is handed the page query ListItems is
+// about to run, so the test can ask SQLite how it would run it. The plan is the
+// thing ADR 0057's indexes exist to change, and a timing cannot tell a lost
+// index from a slow machine.
+var listQueryHook func(query string, args []any)
+
+/*
+ * gridColumns are the ItemFilter fields the grid indexes can answer without
+ * reading a row: the library, the top level, presence, kind, and a sort they
+ * hold in order or carry (ADR 0057). Every other field narrows on something
+ * else.
+ *
+ * Named by what is allowed rather than what is not, so a filter added later is
+ * outside the list until somebody decides otherwise — and outside the list is
+ * the old plan, which is never worse than it was.
+ */
+var gridColumns = map[string]bool{
+	"LibraryID": true, "Kind": true, "TopLevel": true, "ExcludeMissing": true,
+	"ExcludeKinds": true, "Scoped": true, "Scope": true, "UserID": true,
+	"Sort": true, "Seed": true, "Limit": true, "Offset": true,
+}
+
+// gridSorts are the orders the grid indexes hold (title, year, added) or can
+// compute from what they carry (track, random) without reading a row.
+var gridSorts = map[string]bool{"": true, "title": true, "year": true, "added": true,
+	"track": true, "random": true}
+
+// readsOnlyGridColumns reports whether every narrowing f asks for is one the
+// grid indexes cover. Zero values and empty lists narrow nothing.
+func (f ItemFilter) readsOnlyGridColumns() bool {
+	if !gridSorts[f.Sort] {
+		return false
+	}
+	v := reflect.ValueOf(f)
+	for i := 0; i < v.NumField(); i++ {
+		if gridColumns[v.Type().Field(i).Name] {
+			continue
+		}
+		fv := v.Field(i)
+		if fv.Kind() == reflect.Slice {
+			if fv.Len() > 0 {
+				return false
+			}
+		} else if !fv.IsZero() {
+			return false
+		}
+	}
+	return true
 }
 
 // Facets is the set of filter values present in a library — what a browse view

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 67
+const CurrentSchemaVersion = 68
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -124,6 +124,7 @@ var migrations = []migration{
 	{version: 65, sql: schemaRevision65},
 	{version: 66, sql: schemaRevision66},
 	{version: 67, sql: schemaRevision67},
+	{version: 68, sql: schemaRevision68},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2214,6 +2215,34 @@ WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
  */
 const schemaRevision67 = `
 CREATE INDEX IF NOT EXISTS idx_item_genre_genre ON item_genre(genre_id, item_id);
+`
+
+/*
+ * Revision 68 changes no shape. It indexes the browse grid in the orders it is
+ * read in (ADR 0057).
+ *
+ * The grid is every present top-level row of a library, sorted. With only a
+ * (library_id, missing) index, SQLite read every one of those rows and sorted
+ * them to hand back sixty: a first page cost 85ms at 40,000 items and a page
+ * near the end 140-250ms, against a 150ms budget. Each index here is the
+ * grid's own equality columns followed by one sort, so a page is a walk along
+ * an index with no sort at all, and it carries `kind` so the walk never has
+ * to visit the row to apply the grouping-kind exclusion.
+ *
+ * Title is the default; year and added are the other two sorts every video
+ * library offers. Added leads with parent_id rather than library_id because
+ * the home page's Recently Added shelf asks across every library at once.
+ * Rating and running time are not indexed: their first page is within budget,
+ * and their pages near the end of a 40,000-item library are not, which
+ * ADR 0057 records rather than adding an index per sort.
+ */
+const schemaRevision68 = `
+CREATE INDEX IF NOT EXISTS idx_item_grid_title
+    ON media_item(library_id, parent_id, missing, sort_title, season, episode, kind);
+CREATE INDEX IF NOT EXISTS idx_item_grid_year
+    ON media_item(library_id, parent_id, missing, year DESC, sort_title, kind);
+CREATE INDEX IF NOT EXISTS idx_item_grid_added
+    ON media_item(parent_id, missing, added_at DESC, library_id, sort_title, kind);
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or
