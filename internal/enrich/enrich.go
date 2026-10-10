@@ -57,6 +57,12 @@ type Worker struct {
 	Concurrency int
 	// BatchSize is how many items one pass claims.
 	BatchSize int
+	// OnProgress, when set, hears that a batch advanced at least one item.
+	// The server uses it to tell open windows that titles and posters changed
+	// (ADR 0079), so a grid filled by a scan fills in as enrichment lands
+	// rather than at its next refetch. Called on the worker's goroutine; it
+	// must not block.
+	OnProgress func()
 
 	mu      sync.Mutex
 	running bool
@@ -200,6 +206,10 @@ func (w *Worker) Run(ctx context.Context) error {
 		// have shifted forward by however many were enriched. Restarting from
 		// zero re-reads them, which is cheap and cannot miss anything.
 		offset = 0
+
+		if w.OnProgress != nil {
+			w.OnProgress()
+		}
 
 		if remaining, err := w.st.PendingCount(ctx); err == nil {
 			w.mu.Lock()

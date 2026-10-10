@@ -304,6 +304,38 @@ func TestThePeerGoingQuietIsAChangeInPresence(t *testing.T) {
 	}
 }
 
+/*
+ * People reports the state a peer ended in, not the one read before its
+ * refresh. Otherwise the very request that promoted a pairing still answered
+ * "added", and only the next one told the truth.
+ */
+func TestPeopleReportsThePromotionItCaused(t *testing.T) {
+	x := newTwoServers(t)
+	ctx := context.Background()
+	if err := x.guest.st.SetPeerState(ctx, x.hostFP, store.PeerAdded); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := x.guest.authed(t, "GET", "/api/people/peers", nil)
+	defer resp.Body.Close()
+	var body struct {
+		Peers []struct {
+			Fingerprint string `json:"fingerprint"`
+			State       string `json:"state"`
+		} `json:"peers"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Peers) != 1 {
+		t.Fatalf("got %d peers, want 1", len(body.Peers))
+	}
+	if body.Peers[0].State != store.PeerPaired {
+		t.Fatalf("the answer that promoted the pairing said %q, want %q",
+			body.Peers[0].State, store.PeerPaired)
+	}
+}
+
 // A call in from a peer still marked `added` asks for its roster at once.
 func TestACallFromAnAddedPeerKicksTheWatcher(t *testing.T) {
 	x := newTwoServers(t)

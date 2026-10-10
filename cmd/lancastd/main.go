@@ -817,6 +817,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Cover:         coverSoon,
 	})
 
+	// Titles and posters land batch by batch after a scan. Each batch tells
+	// open windows, so a grid fills in as it happens (ADR 0079). Set before
+	// the first enrichSoon below, so the worker goroutine sees it.
+	worker.OnProgress = func() { apiSrv.Publish(api.TopicItems) }
+
 	srv := &http.Server{
 		Addr:              listenAddr,
 		Handler:           apiSrv.Handler(),

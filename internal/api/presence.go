@@ -265,6 +265,13 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 				if refreshed, err := s.st.RemotePeople(r.Context(), p.Fingerprint); err == nil {
 					people = refreshed
 				}
+				// The refresh may have just promoted it. Report the state
+				// it ended in, not the one read before asking: otherwise the
+				// first answer after a pairing became mutual still says
+				// "added", and only the next one tells the truth.
+				if now, err := s.st.PeerByFingerprint(r.Context(), p.Fingerprint); err == nil {
+					out[i].State = now.State
+				}
 			}
 
 			seen, err := s.askPeerPresence(r.Context(), p, me)
